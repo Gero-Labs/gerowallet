@@ -1,0 +1,93 @@
+import Vue from 'vue'
+import VueRouter from 'vue-router'
+import store from "@/store";
+import Welcome from "@/views/Welcome.vue";
+import BlankLayout from "@/layouts/BlankLayout.vue"
+import Dashboard from "@/views/Dashboard.vue";
+import ContentLayout from "@/layouts/ContentLayout.vue";
+import Assets from "@/views/Assets.vue";
+
+
+Vue.use(VueRouter)
+
+const routes = [
+    {
+        path: '/',
+        name: 'dashboard',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '/welcome',
+        name: 'welcome',
+        component: Welcome,
+        meta: {
+            layout: BlankLayout,
+        },
+    },
+    {
+        path: '/assets',
+        name: 'assets',
+        component: Assets,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '/market',
+        name: 'market',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '/staking',
+        name: 'staking',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '*',
+        name: 'other',
+        redirect: '/',
+    },
+]
+
+const router = new VueRouter({
+    mode: 'history',
+    // base: process.env.BASE_URL,
+    routes,
+})
+
+router.beforeEach(async (to, from, next) => {
+    let isLoggedIn = store.getters.isLoggedIn
+    if (!isLoggedIn) {
+        await store.dispatch('login')
+        isLoggedIn = store.getters.isLoggedIn
+    }
+    if (to.matched.some(record => record.meta.requiresAuth)) {
+        // this route requires auth, check if logged in
+        // if not, redirect to login page.
+        if (!isLoggedIn) {
+            next({
+                path: '/welcome',
+            })
+        }
+    } else if (to.name === 'welcome' && isLoggedIn) {
+        next({
+            path: '/',
+        })
+    }
+    next()
+})
+
+export default router

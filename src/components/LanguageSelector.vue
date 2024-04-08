@@ -22,17 +22,30 @@
   </v-menu>
 </template>
 <script>
+import {mapGetters, mapState} from "vuex";
+
 export default {
   name: "LanguageSelector",
   computed: {
+    ...mapGetters(['getLocale']),
     currentLanguage() {
       return this.languages[this.$i18n.locale]
     }
   },
   watch: {
+    // getLocale: {
+    //   handler(val) {
+    //     console.log(val)
+    //   },
+    //   immediate: true
+    // },
     selectedLang(val) {
-      this.$i18n.locale = Object.keys(this.languages)[val];
-      localStorage.setItem("locale", this.$i18n.locale);
+      console.log('test')
+      const locale = Object.keys(this.languages)[val]
+      this.$store.dispatch('setLocale', { locale })
+
+      // this.$i18n.locale = Object.keys(this.languages)[val];
+      // this.store.save('locale', this.$i18n.locale)
     }
   },
   data: () => ({
@@ -61,11 +74,15 @@ export default {
     },
     selectedLang: -1,
   }),
-  mounted() {
-    if (localStorage.getItem("locale")) {
-      this.$i18n.locale = localStorage.getItem("locale");
-      this.selectedLang = Object.keys(this.languages).indexOf(this.$i18n.locale)
-    }
+  async mounted() {
+    this.selectedLang = Object.keys(this.languages).indexOf(this.getLocale)
+    // const locale = await store.get('locale')
+    // if (Object.keys(locale).length === 0) {
+    //   this.$i18n.locale = 'en'
+    // } else {
+    //   this.$i18n.locale = locale
+    // }
+    // this.selectedLang = Object.keys(this.languages).indexOf(this.$i18n.locale)
   }
 }
 </script>
