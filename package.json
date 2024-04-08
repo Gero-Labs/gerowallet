@@ -3,17 +3,34 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build-zip": "node scripts/build-zip.js",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "@emurgo/cardano-message-signing-browser": "^1.0.1",
+    "@emurgo/cardano-serialization-lib-browser": "^11.5.0",
+    "@mdi/font": "^6.9.96",
+    "@vueuse/core": "6.6.2",
+    "@vueuse/rxjs": "6.6.2",
+    "axios": "1.6.8",
+    "archiver": "^7.0.1",
     "bip39": "^3.1.0",
+    "cborg": "^1.10.2",
+    "highcharts": "^11.4.0",
     "core-js": "^3.35.1",
+    "crypto-random-string": "^5.0.0",
+    "crypto-ts": "^1.0.2",
+    "dexie": "^3.2.7",
     "vue": "^2.7.16",
     "vue-flag-icon": "^2.1.0",
     "vue-i18n": "^8.28.2",
-    "vuetify": "^2.7.1"
+    "vue-router": "^3.6.5",
+    "vuetify": "^2.7.1",
+    "vuex": "^3.6.2",
+    "vuex-persistedstate": "^4.1.0",
+    "webextension-polyfill": "^0.10.0"
   },
   "devDependencies": {
     "@babel/core": "^7.22.5",
@@ -22,12 +39,15 @@
     "@vue/cli-plugin-eslint": "~5.0.8",
     "@vue/cli-service": "^5.0.8",
     "buffer": "^6.0.3",
+    "copy-webpack-plugin": "^12.0.2",
     "eslint": "^7.32.0",
     "eslint-plugin-vue": "^8.0.3",
     "sass": "~1.32.13",
     "sass-loader": "^10.0.0",
     "stream-browserify": "^3.0.0",
+    "typescript": "^5.4.3",
     "vue-cli-plugin-vuetify": "~2.5.8",
+    "vue-eslint-parser": "^9.4.2",
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
     "webpack": "^5.90.3"
@@ -42,11 +62,15 @@
       "eslint:recommended"
     ],
     "parserOptions": {
-      "parser": "@babel/eslint-parser"
+      "parser": {
+        "js": "@babel/eslint-parser",
+        "ts": "@typescript-eslint/parser"
+      }
     },
     "rules": {
       "no-unused-vars": "off",
-      "no-useless-escape": "off"
+      "no-useless-escape": "off",
+      "vue/multi-word-component-names": "off"
     }
   },
   "browserslist": [

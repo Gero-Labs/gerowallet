@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable max-width="850">
+  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable max-width="850" :persistent="persistent">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -13,7 +13,6 @@
           <v-stepper-step
               :complete="step > 1"
               step="1"
-              editable
           >
             Wallet Creation
           </v-stepper-step>
@@ -21,12 +20,11 @@
           <v-stepper-step
               :complete="step > 2"
               step="2"
-              editable
           >
             Seed Phrase
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step step="3" editable>
+          <v-stepper-step step="3">
             Confirm Phrase
           </v-stepper-step>
         </v-stepper-header>
@@ -176,16 +174,6 @@
                 <v-card-actions class="px-0 pt-4">
                   <v-spacer></v-spacer>
                   <v-btn
-                      text
-                      plain
-                      :ripple="false"
-                      color="primary"
-                      @click="step = 1"
-                      elevation="0"
-                  >
-                    Back
-                  </v-btn>
-                  <v-btn
                       color="primary"
                       @click="walletCreationStep2"
                       elevation="0"
@@ -247,7 +235,8 @@
                       color="primary"
                       @click="walletCreationStep3"
                       elevation="0"
-                      :disabled="!valid3"
+                      :disabled="!valid3 || creatingWalletLoader"
+                      :loading="creatingWalletLoader"
                   >
                     Continue
                   </v-btn>
@@ -264,6 +253,8 @@
 import * as bip39 from "bip39";
 import rules from "@/plugins/rules";
 import tr from "@/plugins/i18n/tr";
+import {Theme, Blockchain, Network} from "@/models/types"
+import db from "@/db";
 
 export default {
   name: "CreateWallet",
@@ -287,7 +278,7 @@ export default {
     },
     valid3: {
       get() {
-        return this.seedPhraseToConfirm.indexOf("") === -1 && bip39.validateMnemonic(this.seedToStr())
+        return this.seedPhraseToConfirm && this.seedPhraseToConfirm.indexOf("") === -1 && bip39.validateMnemonic(this.seedToStr())
       },
       set(value) {}
     },
@@ -322,6 +313,7 @@ export default {
         this.seedPhrase = bip39.generateMnemonic(256).split(" ");
         [this.seedPhraseToConfirm, this.seedPhraseReplaced] = this.randomReplace(this.seedPhrase, 4);
         this.step = 2
+        this.persistent = true
       }
     },
     walletCreationStep2() {
@@ -330,8 +322,12 @@ export default {
         this.seedPhrase = null
       }
     },
-    walletCreationStep3() {
-      console.log(bip39.validateMnemonic(this.seedToStr()))
+    async walletCreationStep3() {
+      this.creatingWalletLoader = true
+      await db.createNewWallet(this.newWallet.name, Theme.GERO, this.seedToStr(), this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
+      this.dialogLocal = false
+      this.resetDialog()
+      await this.$router.push('/')
     },
     randomReplace(array, count) {
       const replaced = [];
@@ -370,10 +366,28 @@ export default {
         str += ' '
       })
       return str.substring(0, str.length-1)
+    },
+    resetDialog() {
+      this.newWallet = {
+        name: '',
+        password: '',
+        confirmPassword: '',
+        termsChecked: false,
+        recoverPasswordChecked: false,
+        recoverSeedChecked: false,
+      }
+      this.valid = false
+      this.valid2 = false
+      this.creatingWalletLoader = false
+      this.seedPhrase = undefined
+      this.seedPhraseToConfirm = undefined
+      this.seedPhraseReplaced = undefined
+      this.persistent = false
     }
   },
   data: () => ({
     rules,
+    db,
     step: 1,
     show1: false,
     show2: false,
@@ -387,11 +401,13 @@ export default {
     },
     valid: false,
     valid2: false,
-    seedPhrase: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x'],
-    seedPhraseToConfirm: ['a', 'b', 'c', 'd', 'e', 'f', 'g', '', 'i', 'j', 'k', '', 'm', 'n', 'o', '', 'q', 'r', 's', 't', 'u', '', 'w', 'x'],
-    seedPhraseReplaced: [{word: 'h', state: true}, {word: 'l', state: true}, {word: 'p', state: true}, {word: 'v', state: true}],
+    creatingWalletLoader: false,
+    seedPhrase: undefined,
+    seedPhraseToConfirm: undefined,
+    seedPhraseReplaced: undefined,
     overlay: true,
-    opacity: 0.8
+    opacity: 0.8,
+    persistent: false,
   })
 }
 </script>

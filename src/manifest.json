@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "GeroWallet 2.0",
+  "short_name": "GeroWallet",
+  "version": "2.0.0",
+  "description": "Your Master Key to DeFi",
+  "icons": {
+    "16": "./assets/img/logo16.png",
+    "48": "./assets/img/logo48.png",
+    "128": "./assets/img/logo128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "./assets/img/logo16.png",
+      "48": "./assets/img/logo48.png",
+      "128": "./assets/img/logo128.png"
+    },
+    "default_title": "GeroWallet | Your Master Key to DeFi"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "clipboardRead",
+    "storage",
+    "favicon"
+  ],
+  "host_permissions": [
+    "*://connect.trezor.io/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "inject.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://api.handle.me/handles/ https://o631240.ingest.sentry.io/ https://cdn.plyr.io/ https://api.cardanoshield.com/api/ https://backend.gerowallet.net/ https://preview.gerowallet.net/ https://backend.gerowallet.io/ https://preprod.gerowallet.net/ https://api.coingecko.com/ https://cardano-mainnet.blockfrost.io/ https://js.cexplorer.io/api-static/pool/; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://connect.trezor.io/; media-src https://cdn.plyr.io/ https://backend.gerowallet.net/ https://preview.gerowallet.net/ https://backend.gerowallet.io/ https://preprod.gerowallet.net/; script-src-elem 'self' https://*.ingest.sentry.io/"
+  }
+}

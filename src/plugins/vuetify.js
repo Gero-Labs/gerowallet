@@ -13,12 +13,19 @@ export default new Vuetify({
     },
     theme: {
         dark: true,
+        options: {
+            customProperties: true,
+        },
         themes: {
             dark: {
                 primary: '#2f9cac',
                 secondary: '#b0bec5',
                 accent: '#8c9eff',
                 error: '#ff6464',
+                background: "#1E1E1E",
+                navigationDrawerBackground: "#141414",
+                appBarBackground: "#141414",
+                cardBackground: "#0F0F0F"
             },
         },
     },

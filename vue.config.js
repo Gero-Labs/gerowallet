@@ -1,14 +1,30 @@
+const CopyPlugin = require('copy-webpack-plugin')
 const { defineConfig } = require('@vue/cli-service')
 const webpack = require('webpack');
 
 module.exports = defineConfig({
+  chainWebpack: config => {
+    config.plugin('html')
+        .tap(args => {
+          args[0].title = "GeroWallet | Your Master Key to DeFi";
+          return args;
+        })
+  },
   transpileDependencies: [
     'vuetify'
   ],
   configureWebpack: {
+    experiments: {
+      asyncWebAssembly: true
+    },
     plugins: [
-      // Work around for Buffer is undefined:
-      // https://github.com/webpack/changelog-v5/issues/10
+      new CopyPlugin({
+        patterns: [
+          { from: 'src/assets', to: 'assets' },
+          { from: 'src/manifest.json', to: 'manifest.json' },
+          { from: 'chrome/src/background.js', to: 'background.js' }
+        ]
+      }),
       new webpack.ProvidePlugin({
         Buffer: ['buffer', 'Buffer'],
       })
