@@ -1,17 +1,29 @@
-const HARD_DERIVATION_START = 2147483648;
+import {HARDENED} from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+const WalletType = {
+    Trezor: 'Trezor',
+    Ledger: 'Ledger',
+    Normal: 'Normal'
+}
 
 const Theme = {
     GERO: "gero"
 }
+const purpose = {
+    hdwallet: 1852,
+    minting: 1855,
+    multisig: 1854,
+    voting: 1694
+}
 
 const WalletTypePurpose = {
-    BIP44: 2147483692, // HARD_DERIVATION_START + 44;
-    CIP1852: 2147485500 // HARD_DERIVATION_START + 1852;
+    BIP44: HARDENED + 44,
+    CIP1852: HARDENED + 1852
 }
 
 const CoinTypes = {
-    CARDANO: 2147485463, // HARD_DERIVATION_START + 1815;
-    ERGO: 2147484077 // HARD_DERIVATION_START + 429;
+    CARDANO: HARDENED + 1815, // HARD_DERIVATION_START + 1815;
+    ERGO: HARDENED + 429 // HARD_DERIVATION_START + 429;
 }
 
 const Blockchain = {
@@ -24,7 +36,8 @@ const Network = {
 }
 
 export {
-    HARD_DERIVATION_START,
+    HARDENED,
+    WalletType,
     Theme,
     WalletTypePurpose,
     CoinTypes,

@@ -15,7 +15,7 @@ const filters = {
   toAda(value) {
     const n = value / 1000000
 
-    return n.toLocaleString() + ' ₳'
+    return '₳ ' + n.toLocaleString()
   },
   stateColor(state) {
     if (state === 'NOT_FOR_SALE') {

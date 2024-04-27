@@ -25,7 +25,7 @@
       <v-img
           :src="require('@/assets/gero_logo.png')"
           contain
-          style="width: 150px; position: absolute; top: 28px; right: calc(50% - 75px);"
+          style="width: 150px; position: absolute; top: 50px; right: calc(50% - 75px);"
           width="120"
       />
     </v-app-bar>

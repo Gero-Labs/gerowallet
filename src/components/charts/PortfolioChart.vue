@@ -1,5 +1,7 @@
 <template>
-  <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highstock"></vue-highcharts>
+  <div style="min-height: 250px">
+    <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highstock"></vue-highcharts>
+  </div>
 </template>
 <script>
 import VueHighcharts from './VueHighcharts'
@@ -43,28 +45,28 @@ export default {
             fontSize: '40px'
           }
         },
-        subtitle: {
-          text: '▲ 14% vs last month',
-          align: 'left',
-          style: {
-            color: "#FFF",
-            fontWeight: 'bold',
-            fontSize: '20px'
-          }
-        },
+        // subtitle: {
+        //   text: '▲ 14% vs last month',
+        //   align: 'left',
+        //   style: {
+        //     color: "#FFF",
+        //     fontWeight: 'bold',
+        //     fontSize: '20px'
+        //   }
+        // },
         chart: {
           backgroundColor: 'transparent',
-          height: 300,
+          height: 250,
           style: {
             fontFamily: 'Quicksand',
           },
         },
         rangeSelector: {
-          verticalAlign: 'bottom',
-          buttonPosition: {
-            align: 'left'
-          },
+          enabled: false,
           inputEnabled: false,
+        },
+        scrollbar: {
+          enabled: false,
         },
         navigator: {
           enabled: false,
@@ -79,29 +81,15 @@ export default {
             enabled: false,
             text: 'Time',
           },
-          // dateTimeLabelFormats: {
-          //   day: '%A',
-          //   month: '%B'
-          // },
-          // type: 'datetime',
           labels: {
             style: {
-              fontFamily: 'Quicksand',
+              fontFamily: 'Inter',
               color: '#fff'
             },
           },
-
         },
         yAxis: {
           allowDecimals: false,
-          title: {
-            text: 'Revenue [₳]',
-            style: {
-              fontSize: '12px',
-              fontFamily: 'Quicksand',
-              color: '#fff'
-            },
-          },
           labels: {
             style: {
               color: '#fff'
@@ -114,49 +102,7 @@ export default {
             color: '#3d3d3d',
           }],
         },
-        // tooltip: {
-        //   valueDecimals: 0,
-        //   crosshairs: false,
-        //   shared: true,
-        //   borderColor: '#d3d3d3',
-        // },
-        // legend: {
-        //   floating: true,
-        //   enabled: true,
-        //   backgroundColor: 'transparent',
-        //   align: 'left',
-        //   verticalAlign: 'top',
-        //   layout: 'horizontal',
-        //   x: 44,
-        // },
-        // exporting: {
-        //   enabled: false,
-        //   chartOptions: {
-        //     plotOptions: {
-        //       series: {
-        //         dataLabels: {
-        //           enabled: true,
-        //         },
-        //       },
-        //     },
-        //   },
-        // },
-        // plotOptions: {
-          // column: {
-            // stacking: 'normal'
-          // },
-        //   series: {
-        //     states: {
-        //       hover: {
-        //         halo: {
-        //           size: 2,
-        //         },
-        //       },
-        //     },
-        //     stacking: 'normal',
-        //   },
-        // },
-        colors: ['#00c7f3', '#FF5733', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+        colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
         series: [
           {
             type: 'area',
@@ -172,8 +118,8 @@ export default {
             fillColor: {
               linearGradient: {x1: 0, x2: 0, y1: 0, y2: 1},
               stops: [
-                [0, '#00c7f3'],
-                [0.8, this.hexToRgba('#00c7f3', 0)]
+                [0.1, this.hexToRgba('#00c7f3', 0.3)],
+                [1, this.hexToRgba('#00c7f3', 0)]
               ]
             }
           },
@@ -185,6 +131,26 @@ export default {
   watch: {},
   mounted() {},
   methods: {
+    setExtremes(range) {
+      let start = new Date()
+      let end = new Date()
+      if (range === '12 Months') {
+        start = new Date(start.setFullYear(end.getFullYear() - 1))
+      } else if (range === '3 Months') {
+        start = new Date(start.setUTCMonth(end.getUTCMonth() - 3))
+      } else if (range === '30 Days') {
+        start = new Date(start.setUTCDate(end.getUTCDate() - 30))
+      } else if (range === '7 Days') {
+        start = new Date(start.setUTCDate(end.getUTCDate() - 7))
+      } else if (range === '24 Hours') {
+        start = new Date(start.setUTCHours(end.getUTCHours() - 24))
+      } else {
+        start = new Date(Date.parse('27 Sep 2017 00:00:00 GMT'));
+      }
+      const startUTC = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), start.getUTCHours(), start.getUTCMinutes(), start.getUTCSeconds());
+      const endUTC = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), end.getUTCHours(), end.getUTCMinutes(), end.getUTCSeconds());
+      this.$children[0].getChart().xAxis[0].setExtremes(startUTC, endUTC)
+    },
     hexToRgba(hex, alpha) {
       const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
       return result ? 'rgba(' + parseInt(result[1], 16) + ',' + parseInt(result[2], 16) + ',' + parseInt(result[3], 16) + ',' + (alpha || 0) + ')' : null;

@@ -1,13 +1,17 @@
 import Dexie from "dexie";
 import {Wallet} from "@/models/wallet";
+import {WalletType} from "@/models/types";
 
 const db = new Dexie("GeroWalletDatabase");
 
 db.version(10).stores({
-    wallets: '++walletId, name, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network'
+    wallets: '++walletId, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network'
 });
 
 export default {
+    async getWalletById(id) {
+        return db.wallets.where("id").equalsIgnoreCase(id);
+    },
     async getAllWallets() {
       return db.wallets.toArray()
     },
@@ -18,17 +22,19 @@ export default {
         }
         return null
     },
-    async createNewWallet(name, theme, mnemonic, password, chain, network) {
+    async createNewWallet(name, icon, theme, mnemonic, password, chain, network) {
         let order = await this.getLatestWalletByOrder()
         if (order == null) {
             order = 1
         } else {
             order++
         }
-        const wallet = new Wallet(null, name, theme, order, mnemonic, password, chain, network)
+        const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, mnemonic, password, chain, network)
         // JSON.stringify(wallet, (key, value) => (value === null) ? undefined : value)
-        await db.wallets.add({
+        return await db.wallets.add({
             name: wallet.name,
+            icon: wallet.icon,
+            type: wallet.type,
             theme: wallet.theme,
             order: wallet.order,
             encryptedPrivateKey: wallet.encryptedPrivateKey,
@@ -36,6 +42,25 @@ export default {
             passwordLastUpdate: wallet.passwordLastUpdate,
             chain: wallet.chain,
             network: wallet.network
+        })
+    },
+    async createNewHardwareWallet(name, icon, type, theme, chain, network, publicKey) {
+        let order = await this.getLatestWalletByOrder()
+        if (order == null) {
+            order = 1
+        } else {
+            order++
+        }
+        return await db.wallets.add({
+            name: name,
+            icon: icon,
+            type: type,
+            theme: theme,
+            order: order,
+            publicKey: publicKey,
+            passwordLastUpdate: new Date(),
+            chain: chain,
+            network: network
         })
     }
 }

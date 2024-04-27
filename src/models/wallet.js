@@ -2,13 +2,15 @@ import * as bip39 from "bip39";
 import cryptoRandomString from 'crypto-random-string';
 import * as serialization from '@emurgo/cardano-serialization-lib-browser';
 import * as CryptoTS from 'crypto-ts';
-import {WalletTypePurpose, CoinTypes, HARD_DERIVATION_START} from '@/models/types';
+import {WalletTypePurpose, CoinTypes, HARDENED} from '@/models/types';
 
 export class Wallet {
 
-    constructor(id, name, theme, order, mnemonic, password, chain, network) {
+    constructor(id, name, icon, type, theme, order, mnemonic, password, chain, network) {
         this.id = id
         this.name = name
+        this.icon = icon
+        this.type = type
         this.theme = theme
         this.order = order
         const rootKey = this.resolveRootKey(mnemonic)
@@ -17,8 +19,8 @@ export class Wallet {
         this.publicKey = rootKey
             .derive(WalletTypePurpose.CIP1852)
             .derive(CoinTypes.CARDANO)
-            .derive(HARD_DERIVATION_START)
-            .to_public().to_bech32();
+            .derive(HARDENED)
+            .to_public().to_bech32()
         this.passwordLastUpdate = new Date()
         this.chain = chain
         this.network = network

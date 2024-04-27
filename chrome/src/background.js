@@ -30,8 +30,8 @@
 // });
 
 chrome.action.onClicked.addListener((tab) => {
-    var appUrl = chrome.runtime.getURL("index.html");
-    chrome.tabs.query({url: appUrl}, function(tabs) {
+    const appUrl = chrome.runtime.getURL("index.html");
+    chrome.tabs.query({url: appUrl}, (tabs)=> {
         if (tabs.length > 0) {
             // If a tab of your app is already opened, focus it
             chrome.tabs.update(tabs[0].id, {active: true});

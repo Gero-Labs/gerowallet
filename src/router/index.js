@@ -1,6 +1,5 @@
-import Vue from 'vue'
 import VueRouter from 'vue-router'
-import store from "@/store";
+import { useStore } from "@/store";
 import Welcome from "@/views/Welcome.vue";
 import BlankLayout from "@/layouts/BlankLayout.vue"
 import Dashboard from "@/views/Dashboard.vue";
@@ -8,7 +7,6 @@ import ContentLayout from "@/layouts/ContentLayout.vue";
 import Assets from "@/views/Assets.vue";
 
 
-Vue.use(VueRouter)
 
 const routes = [
     {
@@ -47,8 +45,35 @@ const routes = [
         },
     },
     {
+        path: '/swap',
+        name: 'swap',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
         path: '/staking',
         name: 'staking',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '/send',
+        name: 'send',
+        component: Dashboard,
+        meta: {
+            layout: ContentLayout,
+            requiresAuth: true,
+        },
+    },
+    {
+        path: '/receive',
+        name: 'receive',
         component: Dashboard,
         meta: {
             layout: ContentLayout,
@@ -69,11 +94,13 @@ const router = new VueRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-    let isLoggedIn = store.getters.isLoggedIn
-    if (!isLoggedIn) {
-        await store.dispatch('login')
-        isLoggedIn = store.getters.isLoggedIn
+    const store = useStore()
+    console.log('val')
+    let wallets = store.getWallets
+    if (Array.isArray(wallets) && !wallets.length) {
+        await store.loadWallets()
     }
+    const isLoggedIn = store.isLoggedIn
     if (to.matched.some(record => record.meta.requiresAuth)) {
         // this route requires auth, check if logged in
         // if not, redirect to login page.
