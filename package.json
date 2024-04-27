@@ -28,6 +28,7 @@
     "highcharts": "^11.4.0",
     "pinia": "^2.1.7",
     "pinia-plugin-persistedstate": "^3.2.1",
+    "qr-code-styling": "^1.6.0-rc.1",
     "vue": "^2.7.16",
     "vue-flag-icon": "^2.1.0",
     "vue-i18n": "^8.28.2",

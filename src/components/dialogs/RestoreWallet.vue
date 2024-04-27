@@ -66,8 +66,7 @@
                       </v-btn>
                     </v-btn-toggle>
                   </v-row>
-                  <v-card flat outlined class="mb-4 pa-1"
-                          :style="overlay ? {backgroundColor: 'black'} : {backgroundColor: 'transparent'}">
+                  <v-card flat outlined class="mb-4 pa-1" style="background-color: black">
                     <v-row no-gutters>
                       <v-col class="pa-1" cols="12" :md="4" v-for="index in recoverySeedPhraseLength" :key="index">
                         <mnemonic-autocomplete v-model="recoverySeedPhrase[index-1]" :index="index"></mnemonic-autocomplete>
@@ -88,6 +87,7 @@
                 </v-card-actions>
               </v-card>
             </v-form>
+            {{seedToStr}}
           </v-stepper-content>
 
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pt-0">
@@ -213,7 +213,7 @@
                       @click="walletCreationStep2"
                       elevation="0"
                       :disabled="!valid2"
-                      class=""
+                      :loading="creatingWalletLoader"
                   >
                     Continue
                   </v-btn>
@@ -234,10 +234,6 @@ import db from "@/db";
 import { useStore } from "@/store";
 import MnemonicAutocomplete from "@/components/MnemonicAutocomplete.vue";
 
-Array.prototype.diff = function(a) {
-  return this.filter(function(i) {return a.indexOf(i) < 0;});
-};
-
 export default {
   name: "RestoreWallet",
   components: {MnemonicAutocomplete},
@@ -248,6 +244,9 @@ export default {
     },
   },
   computed: {
+    seedToStr() {
+      return this.computedRecoverySeedPhrase.join(' ')
+    },
     computedRecoverySeedPhrase() {
       return this.recoverySeedPhrase.filter((item, index) => item && index < this.recoverySeedPhraseLength)
     },
@@ -270,60 +269,27 @@ export default {
     },
   },
   methods: {
-    isNextToFill(index) {
-      return index === this.seedPhraseToConfirm.indexOf("")
-    },
-    fillNext(index) {
-      this.seedPhraseToConfirm[this.seedPhraseToConfirm.indexOf("")] = this.seedPhraseReplaced[index]
-      this.seedPhraseReplaced[index].state = false
-      this.seedPhraseToConfirm = JSON.parse(JSON.stringify(this.seedPhraseToConfirm))
-    },
-    removeWord(item, index) {
-      this.seedPhraseToConfirm[index] = ''
-      item.state = false
-      const found = this.seedPhraseReplaced.find(value => value.word === item.word)
-      found.state = true
-    },
-    reset() {
-      this.seedPhraseToConfirm = this.seedPhraseToConfirm.map(value => {
-        if (typeof value === 'object') {
-          const found = this.seedPhraseReplaced.find(val => val.word === value.word)
-          found.state = true
-          return ''
-        }
-        return value
-      })
-    },
     walletCreationStep1() {
       if (this.$refs.form.validate()) {
         this.step = 2
         this.persistent = true
       }
     },
-    walletCreationStep2() {
+    async walletCreationStep2() {
       if (this.$refs.form2.validate()) {
-        this.step = 3
-      }
-    },
-    async walletCreationStep3() {
-      this.creatingWalletLoader = true
-      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, WalletType.Normal, Theme.GERO, this.seedToStr(), this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
-      await this.store.login(walletId)
-      this.dialogLocal = false
-      this.resetDialog()
-      await this.$router.push('/')
-    },
-    seedToStr() {
-      let str = ''
-      this.seedPhraseToConfirm.forEach(value => {
-        if (typeof value === 'object') {
-          str += value.word
-        } else {
-          str += value
+        this.creatingWalletLoader = true
+        try {
+          const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr, this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
+          await this.store.login(walletId)
+          this.dialogLocal = false
+          this.resetDialog()
+          await this.$router.push('/')
+          this.creatingWalletLoader = false
+        } catch (e) {
+          console.log(e)
+          this.creatingWalletLoader = false
         }
-        str += ' '
-      })
-      return str.substring(0, str.length-1)
+      }
     },
     resetDialog() {
       this.newWallet = {
@@ -337,8 +303,6 @@ export default {
       this.valid2 = false
       this.creatingWalletLoader = false
       this.recoverySeedPhrase = undefined
-      this.seedPhraseToConfirm = undefined
-      this.seedPhraseReplaced = undefined
       this.persistent = false
     }
   },
@@ -359,10 +323,6 @@ export default {
     },
     valid2: false,
     creatingWalletLoader: false,
-    seedPhraseToConfirm: undefined,
-    seedPhraseReplaced: undefined,
-    overlay: true,
-    opacity: 0.8,
     persistent: false,
     store: useStore(),
     seedPhraseLength: '24',
