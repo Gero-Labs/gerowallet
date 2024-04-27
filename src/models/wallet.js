@@ -27,6 +27,7 @@ export class Wallet {
     }
 
     resolveRootKey(mnemonic) {
+        console.log(mnemonic)
         const bip39entropy = bip39.mnemonicToEntropy(mnemonic)
         const emptyPassword = Buffer.from('');
         const entropy = Buffer.from(bip39entropy, 'hex')
