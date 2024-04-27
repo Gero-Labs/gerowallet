@@ -28,6 +28,7 @@ export default {
   data() {
     return {
       chart: null,
+      loading: true,
     }
   },
   mounted() {

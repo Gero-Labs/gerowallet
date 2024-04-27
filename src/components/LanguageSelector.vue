@@ -22,30 +22,22 @@
   </v-menu>
 </template>
 <script>
-import {mapGetters, mapState} from "vuex";
+import {mapState} from "pinia";
+import {useStore} from "@/store";
 
 export default {
   name: "LanguageSelector",
   computed: {
-    ...mapGetters(['getLocale']),
+    ...mapState(useStore, ['locale']),
     currentLanguage() {
       return this.languages[this.$i18n.locale]
     }
   },
   watch: {
-    // getLocale: {
-    //   handler(val) {
-    //     console.log(val)
-    //   },
-    //   immediate: true
-    // },
     selectedLang(val) {
-      console.log('test')
       const locale = Object.keys(this.languages)[val]
-      this.$store.dispatch('setLocale', { locale })
-
-      // this.$i18n.locale = Object.keys(this.languages)[val];
-      // this.store.save('locale', this.$i18n.locale)
+      this.store.setLocale(locale)
+      this.$i18n.locale = Object.keys(this.languages)[val];
     }
   },
   data: () => ({
@@ -73,16 +65,11 @@ export default {
       vn: { name: "Tiếng Việt", short: "Việ", iso: "vn" },
     },
     selectedLang: -1,
+    store: useStore()
   }),
   async mounted() {
-    this.selectedLang = Object.keys(this.languages).indexOf(this.getLocale)
-    // const locale = await store.get('locale')
-    // if (Object.keys(locale).length === 0) {
-    //   this.$i18n.locale = 'en'
-    // } else {
-    //   this.$i18n.locale = locale
-    // }
-    // this.selectedLang = Object.keys(this.languages).indexOf(this.$i18n.locale)
+    console.log(this.store.getLocale)
+    this.selectedLang = Object.keys(this.languages).indexOf(this.locale)
   }
 }
 </script>

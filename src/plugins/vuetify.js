@@ -21,6 +21,7 @@ export default new Vuetify({
                 primary: '#2f9cac',
                 secondary: '#b0bec5',
                 accent: '#8c9eff',
+                success: '#75E0A7',
                 error: '#ff6464',
                 background: "#1E1E1E",
                 navigationDrawerBackground: "#141414",

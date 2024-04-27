@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable max-width="850">
+  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -67,7 +67,7 @@
                                     xs="12"
                                     class="pa-2"
                                 >
-                                  <v-item v-slot="{ active, toggle }">
+                                  <v-item v-slot="{ active, toggle }" :value="item.name">
                                     <v-hover>
                                       <template v-slot:default="{ hover }">
                                         <v-card
@@ -116,9 +116,9 @@
                   <v-spacer></v-spacer>
                   <v-btn
                       color="primary"
-                      @click="walletCreationStep1"
+                      @click="step = 2"
                       elevation="0"
-                      :disabled="walletType === undefined"
+                      :disabled="!valid"
                   >
                     Continue
                   </v-btn>
@@ -130,26 +130,52 @@
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pt-0">
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
-                <v-card-text class="px-0 d-flex row justify-space-around mt-2">
-                  <img :src="require('@/assets/connect_ledger.svg')" alt="Connect Ledger">
-                </v-card-text>
-                  <v-card-title class="justify-center text-center">
-                    Connect Ledger
-                  </v-card-title>
-                <v-card-text class="px-0 d-flex row justify-space-around mt-2">
-                  <ul class="text-left">
-                    <li>Connect the hardware wallet to your computer</li>
-                    <li>Unlock the hardware wallet by entering your pin code on the device</li>
-                    <li>Open the Cardano app on the hardware wallet</li>
-                  </ul>
+                <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
+                  <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
+                  <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
+                  <v-alert
+                      color="white"
+                      dense
+                      outlined
+                      type="info"
+                      prominent
+                      border="left"
+                  >
+                    <b>Instructions</b>
+                    <ul class="text-left" style="line-height: 1.5">
+                      <li>Setup your Ledger hardware wallet if it's new.</li>
+                      <li>Install the Cardano app on your Ledger if you haven't already.</li>
+                      <li>Unlock the hardware wallet by entering your pin code on the device.</li>
+                      <li>Open the Cardano app on the hardware wallet.</li>
+                    </ul>
+                  </v-alert>
+                  <div style="display: flex;">
+                    <p class="mr-5 my-auto">USB <v-icon :color="isBluetooth ? '#ffffff' : 'primary'" small>mdi-usb</v-icon></p>
+                    <v-switch
+                        inset
+                        dense
+                        v-model="isBluetooth"
+                        color="inherit"
+                        hide-details
+                        style="margin-top: 0; align-items: center;"
+                        class="usbBluetoothSwitch"
+                    ></v-switch>
+                    <p class="my-auto"><v-icon :color="isBluetooth ? 'primary' : '#ffffff'" small>mdi-bluetooth</v-icon> Bluetooth</p>
+                  </div>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
                   <v-spacer></v-spacer>
                   <v-btn
+                      text
+                      @click="step = 1"
+                      elevation="0"
+                  >
+                    Back
+                  </v-btn>
+                  <v-btn
                       color="primary"
                       @click="walletCreationStep2"
                       elevation="0"
-                      :disabled="overlay || !valid2"
                   >
                     Continue
                   </v-btn>
@@ -157,58 +183,91 @@
               </v-card>
             </v-form>
           </v-stepper-content>
-
           <v-stepper-content step="3" style="text-align: -webkit-center;" class="pt-0">
-            <v-form ref="form" v-model="valid3" style="padding-top: 12px; padding-bottom: 12px">
-              <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
-                <v-card-text class="px-0 d-flex row justify-space-around mt-2">
-                  <v-card-text class="pa-0">
-                    <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Please click on each word in the correct order.</h2>
-                    <v-card flat class="mt-3" style="background-color: transparent">
-                      <v-row no-gutters>
-                        <v-col class="pa-2" cols="12" md="3" v-for="(item,index) in seedPhraseReplaced" :key="index">
-                          <v-chip :color="item.state ? '#2f9cac' : '#5553'" class="justify-center" large style="width: 100%; height: 30px" @click="fillNext(index)" :disabled="!item.state">
-                            <span :style="!item.state ? {color: '#515151'} : {color: 'inherit'}">{{ item.word }}</span>
-                          </v-chip>
-                        </v-col>
-                      </v-row>
-                    </v-card>
-                  </v-card-text>
-                  <v-card flat outlined class="mb-4" style="background-color: transparent">
-                    <v-row no-gutters>
-                      <v-col class="pa-2 px-1" cols="12" md="3" v-for="(item,index) in seedPhraseToConfirm" :key="index">
-                        <div style="display: flex; line-height: 2.14">
-                          <span style="color: #2f9cac; min-width: 22px">
-                            {{ (index + 1) }}&nbsp;
-                          </span>
-                          <v-chip v-if="typeof item === 'object'" color="#2f9cac" style="width: 100%; height: 30px" @click="removeWord(item, index)">
-                            {{ item.word }}
-                          </v-chip>
-                          <v-chip  v-else :color="isNextToFill(index) ? '#898989' : '#5553'" large :outlined="item === ''" style="width: 100%; height: 30px">
-                            {{ item }}
-                          </v-chip>
-                        </div>
-                      </v-col>
-                    </v-row>
-                  </v-card>
-                  <div style="width: 100%" class="text-right">
-                    <v-spacer></v-spacer>
-                    <v-btn color="primary" text plain @click="reset">
-                      <v-icon small>
-                        mdi-reload
-                      </v-icon>
-                      Reset
-                    </v-btn>
-                  </div>
+            <v-form ref="form3" v-model="valid3">
+              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px">
+                <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
+                  </h3>
+                  <v-text-field
+                      style="width: 100%"
+                      v-model="newWallet.name"
+                      dense
+                      filled
+                      label="Wallet Name"
+                      placeholder="e.g. My New Wallet"
+                      :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
+                  ></v-text-field>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
+                    <v-radio value="green">
+                      <template v-slot:label>
+                        <v-avatar size="32"  >
+                          <v-img :src="require('@/assets/svg/green.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                    <v-radio value="purple">
+                      <template v-slot:label>
+                        <v-avatar size="32" >
+                          <v-img :src="require('@/assets/svg/purple.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                    <v-radio value="pink">
+                      <template v-slot:label>
+                        <v-avatar size="32" >
+                          <v-img :src="require('@/assets/svg/pink.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                    <v-radio value="orange">
+                      <template v-slot:label>
+                        <v-avatar size="32" >
+                          <v-img :src="require('@/assets/svg/orange.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                    <v-radio value="blue">
+                      <template v-slot:label>
+                        <v-avatar size="32" >
+                          <v-img :src="require('@/assets/svg/blue.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                    <v-radio value="grey">
+                      <template v-slot:label>
+                        <v-avatar size="32" >
+                          <v-img :src="require('@/assets/svg/grey.svg')" cover></v-img>
+                        </v-avatar>
+                      </template>
+                    </v-radio>
+                  </v-radio-group>
+                  <v-checkbox
+                      style="width: 100%"
+                      class="mt-0 mb-2"
+                      hide-details
+                      v-model="newWallet.termsChecked"
+                      :rules="[(newWallet.termsChecked)]"
+                  >
+                    <template v-slot:label>
+                      <div>
+                        I have read and agree to the
+                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">Terms of Service</a>.
+                      </div>
+                    </template>
+                  </v-checkbox>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
                   <v-spacer></v-spacer>
                   <v-btn
+                      :loading="creatingWalletLoader"
                       color="primary"
                       @click="walletCreationStep3"
                       elevation="0"
-                      :disabled="!valid3 || creatingWalletLoader"
-                      :loading="creatingWalletLoader"
+                      :disabled="!valid3"
+                      class=""
                   >
                     Continue
                   </v-btn>
@@ -219,14 +278,33 @@
         </v-stepper-items>
       </v-stepper>
     </v-card>
+    <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
+      <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
+        <video :src="require('@/assets/output.webm')" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
+        </video>
+        <!--      <img :src="require('@/assets/gero_logo.png')" width="160" alt="logo" />-->
+        <v-progress-linear
+            buffer-value="0"
+            color="primary"
+            reverse
+            stream
+            value="0"
+            style="color: cyan; width: 100px; text-align: center"
+        ></v-progress-linear>
+        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
+        </v-card-title>
+      </v-card>
+
+    </v-overlay>
   </v-dialog>
 </template>
 <script>
-import * as bip39 from "bip39";
 import rules from "@/plugins/rules";
-import tr from "@/plugins/i18n/tr";
-import {Theme, Blockchain, Network} from "@/models/types"
+import {Blockchain, Network, Theme} from "@/models/types"
 import db from "@/db";
+import ledger from "@/utils/ledger";
+import hardwareLoading from "@/plugins/hardwareLoading";
+import {useStore} from "@/store";
 
 export default {
   name: "PairHardwareWallet",
@@ -237,8 +315,11 @@ export default {
     },
   },
   computed: {
-    tr() {
-      return tr
+    valid: {
+      get() {
+        return this.walletType !== undefined
+      },
+      set(val) {}
     },
     dialogLocal: {
       get() {
@@ -248,140 +329,72 @@ export default {
         this.$emit('dialogChange', value)
       },
     },
-    valid3: {
-      get() {
-        return this.seedPhraseToConfirm && this.seedPhraseToConfirm.indexOf("") === -1 && bip39.validateMnemonic(this.seedToStr())
-      },
-      set(value) {}
-    },
   },
   methods: {
-    isNextToFill(index) {
-      return index === this.seedPhraseToConfirm.indexOf("")
-    },
-    fillNext(index) {
-      this.seedPhraseToConfirm[this.seedPhraseToConfirm.indexOf("")] = this.seedPhraseReplaced[index]
-      this.seedPhraseReplaced[index].state = false
-      this.seedPhraseToConfirm = JSON.parse(JSON.stringify(this.seedPhraseToConfirm))
-    },
-    removeWord(item, index) {
-      this.seedPhraseToConfirm[index] = ''
-      item.state = false
-      const found = this.seedPhraseReplaced.find(value => value.word === item.word)
-      found.state = true
-    },
-    reset() {
-      this.seedPhraseToConfirm = this.seedPhraseToConfirm.map(value => {
-        if (typeof value === 'object') {
-          const found = this.seedPhraseReplaced.find(val => val.word === value.word)
-          found.state = true
-          return ''
+    async walletCreationStep2() {
+      console.log('ledger')
+      this.persistent = true
+      this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your Ledger device to complete the pairing process.")
+      this.hardwareLoading.setLoading(true)
+      try {
+        const coldWalletProps = await ledger.initLedger(this.isBluetooth)
+        console.log(coldWalletProps)
+        const isConnected = !!coldWalletProps
+        if (isConnected) {
+          this.newWallet.name = coldWalletProps.productName
+          this.newWallet.publicKey = coldWalletProps.hwPublicKey
+          this.step = 3
         }
-        return value
-      })
-    },
-    walletCreationStep1() {
-      if (this.$refs.form.validate()) {
-        this.seedPhrase = bip39.generateMnemonic(256).split(" ");
-        [this.seedPhraseToConfirm, this.seedPhraseReplaced] = this.randomReplace(this.seedPhrase, 4);
-        this.step = 2
-      }
-    },
-    walletCreationStep2() {
-      if (this.$refs.form2.validate()) {
-        this.step = 3
-        this.seedPhrase = null
+        this.hardwareLoading.setLoading(false)
+        this.persistent = false
+      } catch (e) {
+        this.hardwareLoading.setLoading(false)
+        this.persistent = false
       }
     },
     async walletCreationStep3() {
-      this.creatingWalletLoader = true
-      await db.createNewWallet(this.newWallet.name, Theme.GERO, this.seedToStr(), this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
-      this.dialogLocal = false
-      this.resetDialog()
-      await this.$router.push('/')
-    },
-    randomReplace(array, count) {
-      const replaced = [];
-      const indices = new Set();
-      do {
-        indices.add(Math.floor(Math.random() * array.length));
-      } while (indices.size < count)
-      const res = array.map((v, i) => {
-        if (indices.has(i)) {
-          replaced.push({ word: v, state: true })
-          return ''
-        }
-        return v
-      });
-      return [res, this.shuffleArray(replaced)]
-    },
-    shuffleArray(array) {
-      let len = array.length,
-          currentIndex;
-      for (currentIndex = len - 1; currentIndex > 0; currentIndex--) {
-        let randIndex = Math.floor(Math.random() * (currentIndex + 1) );
-        const temp = array[currentIndex];
-        array[currentIndex] = array[randIndex];
-        array[randIndex] = temp;
+      if (this.$refs.form3.validate()) {
+        this.creatingWalletLoader = true
+        const walletId = await db.createNewHardwareWallet(this.newWallet.name, this.newWallet.icon, this.walletType, Theme.GERO, Blockchain.CARDANO, Network.MAINNET, this.newWallet.publicKey)
+        await this.store.login(walletId)
+        this.dialogLocal = false
+        this.resetDialog()
+        await this.$router.push('/')
+        this.creatingWalletLoader = false
       }
-      return array
-    },
-    seedToStr() {
-      let str = ''
-      this.seedPhraseToConfirm.forEach(value => {
-        if (typeof value === 'object') {
-          str += value.word
-        } else {
-          str += value
-        }
-        str += ' '
-      })
-      return str.substring(0, str.length-1)
     },
     resetDialog() {
       this.newWallet = {
         name: '',
-        password: '',
-        confirmPassword: '',
         termsChecked: false,
-        recoverPasswordChecked: false,
-        recoverSeedChecked: false,
       }
-      this.valid = false
       this.valid2 = false
+      this.valid3 = false,
       this.creatingWalletLoader = false
-      this.seedPhrase = undefined
-      this.seedPhraseToConfirm = undefined
-      this.seedPhraseReplaced = undefined
     }
   },
   data: () => ({
     rules,
     db,
     step: 1,
-    show1: false,
-    show2: false,
     newWallet: {
       name: '',
-      password: '',
-      confirmPassword: '',
+      icon: '',
+      publicKey: '',
       termsChecked: false,
-      recoverPasswordChecked: false,
-      recoverSeedChecked: false,
     },
-    valid: false,
     valid2: false,
+    valid3: false,
     creatingWalletLoader: false,
-    seedPhrase: undefined,
-    seedPhraseToConfirm: undefined,
-    seedPhraseReplaced: undefined,
-    overlay: true,
-    opacity: 0.8,
     walletTypes: [
       {name: 'Ledger', description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.', enabled: true, icon: require('@/assets/ledger.svg'), support: 'Nano S, Nano S Plus, Nano X'},
       {name: 'Trezor', description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.', enabled: true, icon: require('@/assets/trezor.svg'), support: 'Model T, Safe 3' },
     ],
-    walletType: undefined
+    walletType: undefined,
+    isBluetooth: false,
+    hardwareLoading,
+    persistent: false,
+    store: useStore()
   })
 }
 </script>
@@ -391,5 +404,13 @@ export default {
   backdrop-filter: blur(12px);
   background: #000000ab;
   border: solid 2px #ffffff44;
+}
+.usbBluetoothSwitch .v-input--switch__track {
+  color: #ffffff2b !important;
+  opacity: 1;
+  border: 1px solid #ffffff12;
+}
+.usbBluetoothSwitch .v-input--switch__thumb {
+  color: #2f9cac!important;
 }
 </style>

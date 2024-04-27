@@ -10,7 +10,6 @@
       </v-icon>&nbsp;No Data Available</v-card-title>
     </v-card>
   </div>
-
 </template>
 <script>
 import VueHighcharts from './VueHighcharts'

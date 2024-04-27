@@ -1,76 +1,53 @@
-import Vue from 'vue'
-import Vuex from 'vuex'
-import createPersistedState from 'vuex-persistedstate'
+import { defineStore } from 'pinia'
+import loading from "@/plugins/loading";
+
+// import { ChromeSyncStorage } from '@/store/chrome-storage'
+// import { LocalPersistedStorage} from "@/store/local-storage";
+
 import db from "@/db";
 import i18n from "@/plugins/i18n";
 
-const env = process.env.VUE_APP_ENV
+// const env = process.env.VUE_APP_ENV
+// const plugin = env === 'production' ? LocalPersistedStorage:
+// Vue.use(Vuex)
 
-Vue.use(Vuex)
-
-export default new Vuex.Store({
-    namespaced: true,
-    state: {
+export const useStore = defineStore('store',{
+    persist: true,
+    state: () => ({
+        loggedWalletId: undefined,
         wallets: [],
-        loading: false,
         locale: 'en'
-    },
-    plugins: [
-        createPersistedState({
-            getState: async key => {
-                if (env === 'production') {
-                    // eslint-disable-next-line
-                    const res = await chrome.storage.sync.get([key])
-                    if (Object.keys(res).length === 0) {
-                        return null
-                    }
-                    return res[key];
-                } else {
-                    console.log(JSON.parse(localStorage.getItem(key)))
-                    return JSON.parse(localStorage.getItem(key))
-                }
-            },
-            setState: async (key, state) => {
-                if (env === 'production') {
-                    // eslint-disable-next-line
-                    await chrome.storage.sync.set({[key]: state});
-                } else {
-                    localStorage.setItem(key, JSON.stringify(state))
-                    console.log('set')
-                    console.log(JSON.parse(localStorage.getItem(key)))
-                }
-            },
-        }),
-    ],
-    mutations: {
-        async loginSuccess(state, payload) {
-            state.wallets = payload.wallets
-        },
-        setLoading(state, payload) {
-            state.loading = payload
-        },
-        setLocale(state, payload) {
-            state.locale = payload.locale
-            i18n.locale = state.locale
-        }
-    },
-    actions: {
-        async login({commit}) {
-            commit('setLoading', true)
-            const wallets = await db.getAllWallets()
-            if (Array.isArray(wallets) && wallets.length) {
-                commit('loginSuccess', {wallets})
-            }
-            commit('setLoading', false)
-        },
-        setLocale({commit}, locale) {
-            commit('setLocale', locale)
-        }
-    },
+    }),
     getters: {
-        isLoggedIn: state => !!(Array.isArray(state.wallets) && state.wallets.length),
+        isLoggedIn: state => !!(state.loggedWalletId),
+        getLoggedWalletId: state => state.loggedWalletId,
         getWallets: state => state.wallets,
         getLocale: state => state.locale
+    },
+    actions: {
+        login(walletId){
+            loading.setLoading(true)
+            console.log('loading')
+            this.loggedWalletId = walletId
+            this.loadWallets()
+            loading.setLoading(false)
+        },
+        logout() {
+            loading.setLoading(true)
+            this.loggedWalletId = undefined
+            loading.setLoading(false)
+        },
+        async loadWallets() {
+            loading.setLoading(true)
+            const wallets = await db.getAllWallets()
+            if (Array.isArray(wallets) && wallets.length) {
+                this.wallets = wallets
+            }
+            loading.setLoading(false)
+        },
+        setLocale(locale) {
+            this.locale = locale
+        },
     }
 })
 
