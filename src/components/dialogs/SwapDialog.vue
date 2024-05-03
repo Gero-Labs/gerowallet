@@ -8,8 +8,8 @@
         </v-btn>
       </v-card-title>
       <v-card-subtitle>Effortlessly exchange tokens directly from your wallet.</v-card-subtitle>
-      <v-card-text class="pb-2">
-        <number-input :value="quantity" :max="Number(maxTokens)" @updateQuantity="updateQuantity"></number-input>
+      <v-card-text class="text-center justify-center pb-2" style="width: 388px; height:600px; align-content: center; margin: auto">
+        <swap-currency-selector :value="quantity" :max="Number(maxTokens)" @updateQuantity="updateQuantity"></swap-currency-selector>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
@@ -93,12 +93,12 @@
 <script>
 import filters from '@/utils/filters'
 import api from '@/api/api'
-import NumberInput from '@/components/NumberInput.vue'
+import SwapCurrencySelector from '@/components/SwapCurrencySelector.vue'
 
 export default {
   name: 'SwapDialog',
   filters,
-  components: {NumberInput},
+  components: {SwapCurrencySelector},
   props: {
     dialog: Boolean,
     project: {
@@ -122,7 +122,7 @@ export default {
   computed: {
     maxTokens() {
       // return this.$store.getters.getAccount.wallet.balance.forge || 0
-      return 200
+      return 115110240000
     },
     dialogLocal: {
       get() {

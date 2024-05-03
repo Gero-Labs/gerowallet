@@ -12,10 +12,12 @@ const filters = {
   toIPFS(value) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value
   },
+  toCurrency(value, decimals) {
+    const n = value / Math.pow(10,decimals)
+    return n.toLocaleString()
+  },
   toAda(value) {
-    const n = value / 1000000
-
-    return '₳ ' + n.toLocaleString()
+    return '₳ ' + filters.toCurrency(value, 6)
   },
   stateColor(state) {
     if (state === 'NOT_FOR_SALE') {
