@@ -73,7 +73,7 @@ export default {
   }
 }
 </script>
-<style scoped>
+<style>
 .toggleUpDown {
   transition: transform .2s ease-in-out !important;
 }
