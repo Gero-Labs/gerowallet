@@ -8,6 +8,8 @@
     >
       <v-container class="py-0 fill-height" style="max-width: 1000px">
         <v-spacer></v-spacer>
+        <network-selector ref="networkSelector"></network-selector>
+        <language-selector></language-selector>
         <v-btn
             plain
             large
@@ -20,7 +22,6 @@
           <v-icon>mdi-lifebuoy</v-icon>&nbsp;
           {{ $t('help') }}
         </v-btn>
-        <language-selector></language-selector>
       </v-container>
       <v-img
           :src="require('@/assets/gero_logo.png')"
@@ -61,10 +62,11 @@
 <script>
 import LanguageSelector from "@/components/LanguageSelector.vue";
 import PrivacyPolicyDialog from "@/components/dialogs/PrivacyPolicyDialog.vue";
+import NetworkSelector from "@/components/NetworkSelector.vue";
 
 export default {
   name: 'BlankLayout',
-  components: {PrivacyPolicyDialog, LanguageSelector},
+  components: {NetworkSelector, PrivacyPolicyDialog, LanguageSelector},
   methods: {
     privacyPolicyDialogChange(value) {
       this.privacyPolicyDialog = value

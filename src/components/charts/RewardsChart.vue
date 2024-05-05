@@ -35,7 +35,6 @@ export default {
       const yMax = Object.values(this.chartData).reduce(function(a, b) {
         return Math.max(a, b);
       });
-      console.log(yMax)
       return {
         accessibility: {
           enabled: false,

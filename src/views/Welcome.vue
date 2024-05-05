@@ -1,9 +1,8 @@
 <template>
   <v-container class="py-0" :style="{direction: $t('rtl') === 'true' ? 'rtl' : 'ltr', maxWidth: '1000px'}">
     <v-card flat class="transparent pa-0" style="top: 40px">
-      <v-card-title class="justify-center" style="color: white; font-size: 32px;">{{$t('welcome') }}
-      </v-card-title>
-      <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="!Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
+      <v-card-title class="justify-center" style="color: white; font-size: 32px;">{{$t('welcome') }}</v-card-title>
+      <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-else>{{ $t('chooseAWallet') }}</v-card-subtitle>
       <v-card-text class="pb-12 px-12">
         <v-row class="fill-height" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
@@ -21,8 +20,16 @@
               <p slot="content">{{ $t('restoreWalletSubtitle') }}</p>
             </parallax-card>
           </v-col>
-          <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="pairHardwareWalletDialog = true">
-            <parallax-card style="margin-left: auto; margin-right: auto;"
+          <v-col cols="12" md="4" lg="4" class="d-flex align-center" :style="network.supportedHardware ? { } : { pointerEvents: 'none' }" @click="pairHardwareWalletDialog = true">
+            <v-chip large v-if="!network.supportedHardware"
+              style="position: fixed;
+              transform: translateX(50%) translateX(64px);
+              z-index: 4;"
+              color="red"
+            >
+              SOON
+            </v-chip>
+            <parallax-card :style="network.supportedHardware ? { marginLeft: 'auto', marginRight: 'auto' } : { marginLeft: 'auto', marginRight: 'auto', filter: 'brightness(0.5)' }"
                            :data-image="require('@/assets/hardware_wallet.png')">
               <h1 slot="header" style="line-height: 1">{{ $t('hardwareWallet') }}</h1>
               <p slot="content">{{ $t('hardwareWalletSubtitle') }}</p>
@@ -34,9 +41,24 @@
             <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
               <v-list-item-group v-model="selectedWallet" color="primary">
                 <v-list-item v-for="(item, i) in wallets" :key="i" @click="submitLogin(item.walletId)">
-                  <v-list-item-avatar>
-                    <v-img :src="resolveIcon(item.icon)"></v-img>
-                  </v-list-item-avatar>
+                  <v-list-item-icon>
+                    <v-badge
+                        overlap
+                        avatar
+                        bottom
+                        bordered
+                        offset-y="3"
+                    >
+                      <template v-slot:badge>
+                        <v-avatar>
+                          <v-img :src="resolveNetworkIcon(item)"></v-img>
+                        </v-avatar>
+                      </template>
+                      <v-avatar size="40">
+                        <v-img :src="resolveIcon(item.icon)"></v-img>
+                      </v-avatar>
+                    </v-badge>
+                  </v-list-item-icon>
                   <v-list-item-content>
                     <v-list-item-title>
                       {{ item.name }}
@@ -71,12 +93,13 @@ import PairHardwareWallet from "@/components/dialogs/PairHardwareWallet.vue";
 import {useStore} from "@/store"
 import {mapActions, mapState} from "pinia";
 import RestoreWallet from "@/components/dialogs/RestoreWallet.vue";
+import networks from "@/utils/networks";
 
 export default {
   name: 'welcome',
   components: {PairHardwareWallet, ParallaxCard, CreateWallet, RestoreWallet},
   computed: {
-    ...mapState(useStore, ['wallets'])
+    ...mapState(useStore, ['wallets','network'])
   },
   methods: {
     ...mapActions(useStore, ['login']),
@@ -87,6 +110,13 @@ export default {
     resolveIcon(icon) {
       if (icon) {
         return require('@/assets/svg/'+icon+'.svg')
+      }
+      return ''
+    },
+    resolveNetworkIcon(item) {
+      const network = this.networks.resolveNetwork(item.chain, item.network)
+      if (network) {
+        return network.icon
       }
       return ''
     },
@@ -101,6 +131,7 @@ export default {
     }
   },
   data: () => ({
+    networks,
     store: useStore,
     createWalletDialog: false,
     restoreWalletDialog: false,

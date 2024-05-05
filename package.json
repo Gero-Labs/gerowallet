@@ -9,7 +9,7 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
-    "@cardano-foundation/ledgerjs-hw-app-cardano": "^6.0.1",
+    "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.2",
     "@emurgo/cardano-message-signing-browser": "^1.0.1",
     "@emurgo/cardano-serialization-lib-browser": "^11.5.0",
     "@ledgerhq/hw-transport-web-ble": "^6.28.5",
