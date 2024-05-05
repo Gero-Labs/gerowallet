@@ -45,7 +45,7 @@ export default {
     if (this.network) {
       this.selectedNetwork = this.network
     } else {
-      this.selectedNetwork = this.networks[0]
+      this.selectedNetwork = this.networks.networks[0]
     }
   }
 }
