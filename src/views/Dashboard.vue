@@ -1,7 +1,7 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="9" lg="7" md="12" sm="12" class="pa-2">
         <v-card outlined>
           <v-card-title>
             Portfolio
@@ -30,7 +30,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="3" lg="5" md="12" sm="12" class="pa-2">
         <quick-actions></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
@@ -305,9 +305,9 @@ export default {
     ]
   }),
   async mounted() {
-    this.chartData = await fetch(
-        'https://demo-live-data.highcharts.com/aapl-c.json'
-    ).then(response => response.json())
+    // this.chartData = await fetch(
+    //     'https://demo-live-data.highcharts.com/aapl-c.json'
+    // ).then(response => response.json())
     this.rewardsData = {
       '463': 7,
       '464': 10.2,
