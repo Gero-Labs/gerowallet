@@ -1,6 +1,12 @@
 <template>
-  <div style="min-height: 250px">
-    <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highstock"></vue-highcharts>
+  <div style="min-height: 250px; align-content: center;" class="text-center justify-center">
+    <vue-highcharts v-if="chartData && chartData.length > 0" :options="chartOptions" :highcharts="Highstock"></vue-highcharts>
+    <v-card-text v-else style="font-size: 20px">
+      <v-avatar size="24">
+        <v-img :src="require('@/assets/svg/wallet.svg')" alt="Wallet" style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness(105%) contrast(104%);"></v-img>
+      </v-avatar>
+      There seems to be no data in this wallet
+    </v-card-text>
   </div>
 </template>
 <script>

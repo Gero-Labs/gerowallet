@@ -1,7 +1,12 @@
 <template>
   <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable max-width="850">
     <v-card class="py-0 rounded-xxl transparent fill-height">
-      <v-card-title>Receive</v-card-title>
+      <v-card-title style="word-break: break-word">Receive
+        <v-spacer></v-spacer>
+        <v-btn icon @click="dialogLocal = false">
+          <v-icon>mdi-window-close</v-icon>
+        </v-btn>
+      </v-card-title>
       <v-card-subtitle>Receive ADA by displaying your wallet address and QR code.</v-card-subtitle>
       <v-card-text style="height:600px; align-content: center;" class="justify-center text-center">
         <div style="font-size:24px; color: white; width: 335px; margin: auto;" class="text-center pb-3">Use this wallet address to receive assets / collectibles</div>
