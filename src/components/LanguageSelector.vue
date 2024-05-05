@@ -68,7 +68,6 @@ export default {
     store: useStore()
   }),
   async mounted() {
-    console.log(this.store.getLocale)
     this.selectedLang = Object.keys(this.languages).indexOf(this.locale)
   }
 }

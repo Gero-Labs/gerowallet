@@ -279,7 +279,8 @@ export default {
       if (this.$refs.form2.validate()) {
         this.creatingWalletLoader = true
         try {
-          const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr, this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
+          const network = this.store.getNetwork
+          const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr, this.newWallet.password, network.blockchain, network.network)
           await this.store.login(walletId)
           this.dialogLocal = false
           this.resetDialog()

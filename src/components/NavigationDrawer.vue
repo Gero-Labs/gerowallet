@@ -88,8 +88,8 @@
     </v-list>
     <template v-slot:append>
       <v-divider></v-divider>
-        <v-list-item class="px-0">
-          <v-list-item-avatar size="40">
+        <v-list-item three-line class="px-0">
+          <v-list-item-avatar style="margin: auto" class="mr-3" size="40" >
             <v-dialog v-model="changeAvatarDialog" scrollable width="720">
               <template v-slot:activator="{ on, attrs }">
                 <v-hover>
@@ -167,10 +167,12 @@
               </v-card>
             </v-dialog>
           </v-list-item-avatar>
-          <v-list-item-content style="align-self: initial">
+          <v-list-item-content class="py-0" style="align-self: initial">
             <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">{{ account.name }}</v-list-item-title>
+            <v-list-item-subtitle class="mb-0" style="font-size: 10px">{{ account.chain }}</v-list-item-subtitle>
+            <v-list-item-subtitle style="font-size: 8px">{{account.network }}</v-list-item-subtitle>
           </v-list-item-content>
-          <v-list-item-action>
+          <v-list-item-action style="margin: auto">
             <v-btn icon @click="submitLogout">
               <v-avatar tile size="18">
                 <v-img :src="require('@/assets/svg/log-out-01.svg')" alt="logout"></v-img>

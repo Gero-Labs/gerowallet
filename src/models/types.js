@@ -27,12 +27,14 @@ const CoinTypes = {
 }
 
 const Blockchain = {
-    CARDANO: "Cardano"
+    CARDANO: "Cardano",
+    APEX_PRIME: "Apex Fusion Prime",
 }
 
 const Network = {
     MAINNET: "Mainnet",
-    PREPROD: "Preprod"
+    PREPROD: "Preprod",
+    TESTNET: "Testnet",
 }
 
 export {

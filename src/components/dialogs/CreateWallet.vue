@@ -301,8 +301,7 @@
 <script>
 import * as bip39 from "bip39";
 import rules from "@/plugins/rules";
-import tr from "@/plugins/i18n/tr";
-import {WalletType, Theme, Blockchain, Network} from "@/models/types"
+import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";
 
@@ -315,9 +314,6 @@ export default {
     },
   },
   computed: {
-    tr() {
-      return tr
-    },
     dialogLocal: {
       get() {
         return this.dialog
@@ -374,7 +370,8 @@ export default {
     },
     async walletCreationStep3() {
       this.creatingWalletLoader = true
-      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, Blockchain.CARDANO, Network.MAINNET)
+      const network = this.store.getNetwork
+      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, network.blockchain, network.network)
       await this.store.login(walletId)
       this.dialogLocal = false
       this.resetDialog()
@@ -461,7 +458,7 @@ export default {
     opacity: 0.8,
     persistent: false,
     store: useStore()
-  })
+  }),
 }
 </script>
 <style>

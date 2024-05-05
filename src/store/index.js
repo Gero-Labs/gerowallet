@@ -16,13 +16,15 @@ export const useStore = defineStore('store',{
     state: () => ({
         loggedWalletId: undefined,
         wallets: [],
-        locale: 'en'
+        locale: 'en',
+        network: undefined
     }),
     getters: {
         isLoggedIn: state => !!(state.loggedWalletId),
         getLoggedWalletId: state => state.loggedWalletId,
         getWallets: state => state.wallets,
-        getLocale: state => state.locale
+        getLocale: state => state.locale,
+        getNetwork: state => state.network
     },
     actions: {
         login(walletId){
@@ -47,6 +49,9 @@ export const useStore = defineStore('store',{
         },
         setLocale(locale) {
             this.locale = locale
+        },
+        setNetwork(network) {
+            this.network = network
         },
     }
 })
