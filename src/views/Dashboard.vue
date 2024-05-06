@@ -2,13 +2,13 @@
   <v-layout>
     <v-row no-gutters>
       <v-col cols="12" xl="9" lg="7" md="12" sm="12" class="pa-2">
-        <v-card outlined>
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-title>
             Portfolio
           </v-card-title>
           <v-card-text>
             <portfolio-chart ref="portfolio" :chart-data="computeChartData" y-axis-title=""></portfolio-chart>
-            <v-row no-gutters>
+            <v-row no-gutters v-if="chartData && chartData.length > 0">
               <v-tabs background-color="transparent" style="width: fit-content" height="28" active-class="white--text"
                       slider-color="white">
                 <v-tab v-for="(tab,index) in tabs" :key="index"
@@ -305,9 +305,9 @@ export default {
     ]
   }),
   async mounted() {
-    // this.chartData = await fetch(
-    //     'https://demo-live-data.highcharts.com/aapl-c.json'
-    // ).then(response => response.json())
+    this.chartData = await fetch(
+        'https://demo-live-data.highcharts.com/aapl-c.json'
+    ).then(response => response.json())
     this.rewardsData = {
       '463': 7,
       '464': 10.2,

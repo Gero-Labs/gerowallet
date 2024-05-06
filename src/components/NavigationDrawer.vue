@@ -186,7 +186,6 @@
 
 <script>
 import filters from '@/utils/filters'
-import api from '@/api/api'
 import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 
@@ -235,7 +234,7 @@ export default {
       }
     },
     account() {
-      return this.wallets.find(wallet => wallet.walletId === this.loggedWalletId)
+      return this.wallets.find(wallet => wallet.id === this.loggedWalletId)
     },
   },
   methods: {
