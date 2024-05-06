@@ -40,7 +40,7 @@
           <v-card-text class="px-2 py-0" style="max-height: 177px; overflow-y: auto">
             <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
               <v-list-item-group v-model="selectedWallet" color="primary">
-                <v-list-item v-for="(item, i) in wallets" :key="i" @click="submitLogin(item.walletId)">
+                <v-list-item v-for="(item, i) in wallets" :key="i" @click="submitLogin(item.id)">
                   <v-list-item-icon>
                     <v-badge
                         overlap
@@ -104,6 +104,7 @@ export default {
   methods: {
     ...mapActions(useStore, ['login']),
     submitLogin(walletId) {
+      console.log(walletId)
       this.login(walletId)
       this.$router.push("/")
     },

@@ -1,8 +1,8 @@
 <template>
     <v-layout>
-      <v-row>
-        <v-col cols="12" md="7">
-          <v-card outlined>
+      <v-row no-gutters>
+        <v-col cols="12" md="7" class="pa-2">
+          <v-card outlined class="no-gutters fill-height">
             <v-card-title>
               Portfolio
               <v-spacer></v-spacer>
@@ -19,15 +19,15 @@
             </v-card-text>
           </v-card>
         </v-col>
-        <v-col cols="12" md="5">
-          <v-card class="transparent" flat>
+        <v-col cols="12" md="5" class="pa-2">
+          <v-card flat class="transparent row no-gutters fill-height d-flex justify-space-between align-content-space-between">
             <v-card-text>
               <assets-pie-chart :chart-data="computePieChartData"></assets-pie-chart>
             </v-card-text>
           </v-card>
         </v-col>
-        <v-col cols="12">
-          <v-card outlined class="fill-height">
+        <v-col cols="12" class="pa-2">
+          <v-card outlined class="no-gutters fill-height">
             <v-card-title>Token Allocation (3)
             <v-spacer></v-spacer>
               <v-btn-toggle mandatory active-class="highlight">

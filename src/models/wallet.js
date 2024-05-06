@@ -1,26 +1,35 @@
 import * as bip39 from "bip39";
 import cryptoRandomString from 'crypto-random-string';
 import * as serialization from '@emurgo/cardano-serialization-lib-browser';
-import * as CryptoTS from 'crypto-ts';
-import {WalletTypePurpose, CoinTypes, HARDENED} from '@/models/types';
+import {
+    WalletTypePurpose,
+    CoinTypes,
+    HARDENED,
+    ChainDerivations,
+    STAKING_KEY_INDEX,
+    Blockchain,
+    Network
+} from '@/models/types';
+import {
+    Address,
+    BaseAddress,
+    Bip32PublicKey,
+    RewardAddress,
+    StakeCredential
+} from "@emurgo/cardano-serialization-lib-browser";
+import {Buffer} from "buffer";
 
 export class Wallet {
 
-    constructor(id, name, icon, type, theme, order, mnemonic, password, chain, network) {
+    constructor(id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network) {
         this.id = id
         this.name = name
         this.icon = icon
         this.type = type
         this.theme = theme
         this.order = order
-        const rootKey = this.resolveRootKey(mnemonic)
-        const privateKey = this.encryptWithPassword(password, rootKey.as_bytes())
-        this.encryptedPrivateKey = CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString()
-        this.publicKey = rootKey
-            .derive(WalletTypePurpose.CIP1852)
-            .derive(CoinTypes.CARDANO)
-            .derive(HARDENED)
-            .to_public().to_bech32()
+        this.encryptedPrivateKey = encryptedPrivateKey
+        this.publicKey = publicKey
         this.passwordLastUpdate = new Date()
         this.chain = chain
         this.network = network
@@ -51,5 +60,35 @@ export class Wallet {
             throw new Error('Wrong Passphrase');
         }
         return Buffer.from(decryptedHex, 'hex');
+    }
+    networkId() {
+        if (this.chain === Blockchain.CARDANO) {
+            if (this.network === Network.MAINNET) {
+                return 1;
+            } else if (this.network === Network.PREPROD || this.network === Network.PREVIEW) {
+                return 0;
+            }
+        }
+    }
+    pubKey() {
+        return Bip32PublicKey.from_bech32(this.publicKey)
+            .derive(ChainDerivations.EXTERNAL)
+            .derive(0)
+            .to_raw_key()
+    }
+    stakeKey() {
+        return Bip32PublicKey.from_bech32(this.publicKey)
+            .derive(ChainDerivations.CHIMERIC_ACCOUNT)
+            .derive(STAKING_KEY_INDEX)
+            .to_raw_key()
+    }
+    baseAddress() {
+        return BaseAddress.new(this.networkId(), StakeCredential.from_keyhash(this.pubKey().hash()), StakeCredential.from_keyhash(this.stakeKey().hash())).to_address().to_bech32()
+    }
+    stakeAddress() {
+        const hash = Buffer.from(RewardAddress.new(0, StakeCredential.from_keyhash(this.stakeKey().hash())).to_address().to_bytes()).toString('hex')
+        const skh = RewardAddress.from_address(Address.from_bytes(Buffer.from(hash, 'hex'))).payment_cred().to_keyhash();
+
+        return Buffer.from(skh.to_bytes()).toString('hex');
     }
 }

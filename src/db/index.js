@@ -1,6 +1,15 @@
 import Dexie from "dexie";
 import {Wallet} from "@/models/wallet";
-import {WalletType} from "@/models/types";
+import {
+    BIP44_SCAN_SIZE,
+    ChainDerivations, CoinTypes,
+    CoreAddressTypes,
+    getInitialSeeds, HARDENED,
+    STAKING_KEY_INDEX,
+    WalletType, WalletTypePurpose
+} from "@/models/types";
+import {Bip32PublicKey, RewardAddress, StakeCredential} from "@emurgo/cardano-serialization-lib-browser";
+import * as CryptoTS from "crypto-ts";
 
 const db = new Dexie("GeroWalletDatabase");
 
@@ -29,7 +38,15 @@ export default {
         } else {
             order++
         }
-        const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, mnemonic, password, chain, network)
+        const rootKey = this.resolveRootKey(mnemonic)
+        const privateKey = this.encryptWithPassword(password, rootKey.as_bytes())
+        const encryptedPrivateKey = CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString()
+        const publicKey = rootKey
+            .derive(WalletTypePurpose.CIP1852)
+            .derive(CoinTypes.CARDANO)
+            .derive(HARDENED)
+            .to_public().to_bech32()
+        const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey, new Date(), chain, network)
         // JSON.stringify(wallet, (key, value) => (value === null) ? undefined : value)
         return await db.wallets.add({
             name: wallet.name,
@@ -62,5 +79,52 @@ export default {
             chain: chain,
             network: network
         })
+    },
+    async saveAccountDefaultDerivations(chainNetworkId, publicKey, walletId) {
+        const addressesIndex = [...Array(BIP44_SCAN_SIZE).keys()];
+        const stakingKey = publicKey
+            .derive(ChainDerivations.CHIMERIC_ACCOUNT)
+            .derive(STAKING_KEY_INDEX)
+            .to_raw_key();
+
+        const externalAddrs = addressesIndex.map((i) => {
+            const key = publicKey.derive(ChainDerivations.EXTERNAL).derive(i).to_raw_key();
+            return key.hash();
+        });
+        const internalAddrs = addressesIndex.map((i) => {
+            const key = publicKey.derive(ChainDerivations.INTERNAL).derive(i).to_raw_key();
+            return key.hash();
+        });
+        const stakingKeyAddresses = []
+        const accountAddr = RewardAddress.new(chainNetworkId, StakeCredential.from_keyhash(stakingKey.hash()));
+        stakingKeyAddresses.push({
+            type: CoreAddressTypes.CARDANO_REWARD,
+            digest: this.digestForHash(
+                Buffer.from(accountAddr.to_address().to_bytes()).toString('hex'),
+                getInitialSeeds().AddressSeed,
+            ),
+            hash: Buffer.from(accountAddr.to_address().to_bytes()).toString('hex'),
+            walletId,
+        });
+
+        addressesIndex.map((i) => {
+            const externalAddresses = this.scan.addShelleyUtxoAddress(
+                stakingKey,
+                externalAddrs[i],
+                chainNetworkId,
+                walletId,
+            );
+            db.address.bulkAdd(externalAddresses);
+        });
+        addressesIndex.map((i) => {
+            const internalAddresses = this.scan.addShelleyUtxoAddress(
+                stakingKey,
+                internalAddrs[i],
+                chainNetworkId,
+                walletId,
+            );
+            db.address.bulkAdd(internalAddresses);
+        });
+        db.address.bulkAdd(stakingKeyAddresses).catch((e) => console.log(e));
     }
 }

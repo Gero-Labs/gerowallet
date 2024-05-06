@@ -6,6 +6,8 @@ import loading from "@/plugins/loading";
 
 import db from "@/db";
 import i18n from "@/plugins/i18n";
+import createWallet from "@/components/dialogs/CreateWallet.vue";
+import {Wallet} from "@/models/wallet";
 
 // const env = process.env.VUE_APP_ENV
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -24,7 +26,11 @@ export const useStore = defineStore('store',{
         getLoggedWalletId: state => state.loggedWalletId,
         getWallets: state => state.wallets,
         getLocale: state => state.locale,
-        getNetwork: state => state.network
+        getNetwork: state => state.network,
+        getWalletAddress: state => {
+            const wallet = state.wallets.find(wallet => wallet.walletId === state.loggedWalletId)
+            console.log(wallet)
+        }
     },
     actions: {
         login(walletId){
@@ -40,10 +46,11 @@ export const useStore = defineStore('store',{
             loading.setLoading(false)
         },
         async loadWallets() {
+            const result = []
             loading.setLoading(true)
             const wallets = await db.getAllWallets()
             if (Array.isArray(wallets) && wallets.length) {
-                this.wallets = wallets
+                this.wallets = wallets.map(wallet => new Wallet(wallet.walletId, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order, wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network))
             }
             loading.setLoading(false)
         },
