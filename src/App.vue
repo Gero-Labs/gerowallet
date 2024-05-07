@@ -7,7 +7,6 @@
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="require('@/assets/output.webm')" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
-        <!--      <img :src="require('@/assets/gero_logo.png')" width="160" alt="logo" />-->
         <v-progress-linear
             buffer-value="0"
             color="primary"
@@ -31,8 +30,8 @@
 </template>
 
 <script>
-import BlankLayout from "@/layouts/BlankLayout.vue";
-import ContentLayout from "@/layouts/ContentLayout.vue";
+import BlankLayout from "@/modules/navigation/layouts/BlankLayout.vue";
+import ContentLayout from "@/modules/navigation/layouts/ContentLayout.vue";
 import {mapActions} from "pinia";
 import {useStore} from "@/store";
 import loading from "@/plugins/loading";

@@ -5,8 +5,6 @@ import loading from "@/plugins/loading";
 // import { LocalPersistedStorage} from "@/store/local-storage";
 
 import db from "@/db";
-import i18n from "@/plugins/i18n";
-import createWallet from "@/components/dialogs/CreateWallet.vue";
 import {Wallet} from "@/models/wallet";
 
 // const env = process.env.VUE_APP_ENV
