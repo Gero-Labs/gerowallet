@@ -4,7 +4,7 @@ import App from './App.vue'
 import i18n from '@/plugins/i18n';
 import vuetify from './plugins/vuetify'
 import FlagIcon from 'vue-flag-icon';
-import router from "@/router";
+import router from "@/modules/navigation/router";
 import { createPinia, PiniaVuePlugin } from 'pinia'
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
 import VueRouter from "vue-router";
