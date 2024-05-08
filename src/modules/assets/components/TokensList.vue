@@ -14,7 +14,7 @@
       <v-btn icon @click="prevPage" class="arrow-button">
         <v-icon color="#cecfd2" size="20">mdi-arrow-left</v-icon>
       </v-btn>
-      <span class="white-grey">Page 1 of 10</span>
+      <span class="white-grey">Page {{ page }} of 10</span>
       <v-btn icon @click="nextPage" class="arrow-button">
         <v-icon color="#cecfd2" size="20">mdi-arrow-right</v-icon>
       </v-btn>
@@ -41,6 +41,12 @@ export default {
   methods: {
     handleTokenClick(token) {
       this.$emit("token-click", token);
+    },
+    nextPage() {
+      this.page += 1;
+    },
+    prevPage() {
+      this.page -= 1;
     },
   },
 };

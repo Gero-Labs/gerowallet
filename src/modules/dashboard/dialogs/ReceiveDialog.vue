@@ -1,21 +1,16 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable max-width="850">
-    <v-card class="py-0 rounded-xxl transparent fill-height">
-      <v-card-title style="word-break: break-word">Receive
-        <v-spacer></v-spacer>
-        <v-btn icon @click="dialogLocal = false">
-          <v-icon>mdi-window-close</v-icon>
-        </v-btn>
-      </v-card-title>
-      <v-card-subtitle>Receive ADA by displaying your wallet address and QR code.</v-card-subtitle>
-      <v-card-text style="height:600px; align-content: center;" class="justify-center text-center">
+  <BaseDialog :isOpen="dialogLocal" @close="dialogLocal = false">
+    <v-card-title>Receive
+      <v-spacer></v-spacer>
+    </v-card-title>
+    <v-card-subtitle>Receive ADA by displaying your wallet address and QR code.</v-card-subtitle>
+    <v-card-text style="height:600px; align-content: center;" class="justify-center text-center">
         <div style="font-size:24px; color: white; width: 335px; margin: auto;" class="text-center pb-3">Use this wallet address to receive assets / collectibles</div>
         <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
         <span class="pt-3" style="width:554px; font-size: 16px; display: inline-block; font-weight: bold; color: white">{{options.data}}<copy-button small :value="walletAddress"></copy-button></span>
         {{stakeAddress}}
       </v-card-text>
-    </v-card>
-  </v-dialog>
+    </BaseDialog>
 </template>
 <script>
 import QRCodeStyling from "qr-code-styling";
@@ -23,11 +18,11 @@ import Vue from "vue";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
 import CopyButton from "@/shared/components/CopyButton.vue";
-import {Wallet} from "@/models/wallet";
+import BaseDialog from "@/shared/components/BaseDialog.vue";
 
 export default {
   name: "ReceiveDialog",
-  components: {CopyButton},
+  components: {CopyButton, BaseDialog},
   props: {
     dialog: {
       type: Boolean,

@@ -1,34 +1,31 @@
 <template>
-  <v-dialog v-model="isDialogVisible" persistent width="850" >
-    <v-card class="pa-7" height="800">
-      <Rings />
-      <img :src="require('../assets/flag-05.png')" alt="token-bundle-image" />
-      <v-btn icon @click="$emit('close')" class="close-button">
-        <v-icon color="#cecfd2">mdi-window-close</v-icon>
-      </v-btn>
-      <v-card-title class="pa-0 card-title">
-        <button class="breadcrumbs" @click="handleBreadcrumbClick">MusicBox Dimensions (21)</button>
-        <span v-if="pickedToken" class="breadcrumbs"> > </span>
-        <button v-if="pickedToken" class="breadcrumbs">{{ pickedToken }}</button>
-        <v-spacer></v-spacer>
-        <span v-if="pickedToken === null" class="white-grey policy">Policy: 85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18</span>
-      </v-card-title>
-      <v-card-subtitle class="pa-0 mt-2 mb-3"
-        >Music touches us emotionally, where images and words alone can't</v-card-subtitle
+  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')">
+    <img :src="require('../assets/flag-05.png')" alt="token-bundle-image" />
+
+    <v-card-title class="pa-0 card-title">
+      <button class="breadcrumbs" @click="handleBreadcrumbClick">MusicBox Dimensions (21)</button>
+      <span v-if="pickedToken" class="breadcrumbs"> > </span>
+      <button v-if="pickedToken" class="breadcrumbs">{{ pickedToken }}</button>
+      <v-spacer></v-spacer>
+      <span v-if="pickedToken === null" class="white-grey policy"
+        >Policy: 85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18</span
       >
-      <TokensList v-if="pickedToken === null" @token-click="handleTokenClick" />
-      <TokenPreviewCarousel v-else/>
-    </v-card>
-  </v-dialog>
+    </v-card-title>
+    <v-card-subtitle class="pa-0 mt-2 mb-3"
+      >Music touches us emotionally, where images and words alone can't</v-card-subtitle
+    >
+    <TokensList v-if="pickedToken === null" @token-click="handleTokenClick" />
+    <TokenPreviewCarousel v-else />
+  </BaseDialog>
 </template>
 <script>
-import Rings from "../components/Rings.vue";
 import TokensList from "../components/TokensList.vue";
 import TokenPreviewCarousel from "../components/TokenPreviewCarousel.vue";
+import BaseDialog from "@/shared/components/BaseDialog.vue";
 
 export default {
   name: "tokensDialog",
-  components: { Rings, TokensList, TokenPreviewCarousel },
+  components: { TokensList, TokenPreviewCarousel, BaseDialog },
   props: {
     modalData: {
       type: Object,
@@ -72,7 +69,6 @@ export default {
 }
 
 .card-title {
-  z-index: 1;
   position: relative;
   font-size: 10px;
 }
@@ -81,7 +77,7 @@ export default {
   color: #cecfd2;
 }
 
-.breadcrumbs{
+.breadcrumbs {
   font-size: 18px;
   white-space: pre-wrap;
 }
