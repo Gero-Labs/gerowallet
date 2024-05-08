@@ -17,7 +17,6 @@ const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate);
 
 Vue.use(VueRouter)
-
 new Vue({
   i18n,
   vuetify,

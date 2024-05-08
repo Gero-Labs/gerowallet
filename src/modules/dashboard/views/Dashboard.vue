@@ -59,12 +59,12 @@
   </v-layout>
 </template>
 <script>
-
 import PortfolioChart from "@/shared/components/PortfolioChart.vue";
 import StackedTokens from "@/modules/dashboard/components/StackedTokens.vue";
 import filters from "@/shared/utils/filters";
 import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
+import {useStore} from "@/store";
 
 export default {
   name: 'dashboard',
@@ -121,6 +121,7 @@ export default {
   },
   filters,
   data: () => ({
+    store: useStore,
     filters,
     chartData: [],
     rewardsData: {},

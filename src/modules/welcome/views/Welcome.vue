@@ -104,8 +104,7 @@ export default {
   methods: {
     ...mapActions(useStore, ['login']),
     submitLogin(walletId) {
-      console.log(walletId)
-      this.login(walletId)
+      this.login(walletId, 'sm5520tRetq!1')
       this.$router.push("/")
     },
     resolveIcon(icon) {
