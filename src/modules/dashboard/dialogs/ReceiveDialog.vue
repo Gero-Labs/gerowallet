@@ -12,6 +12,7 @@
         <div style="font-size:24px; color: white; width: 335px; margin: auto;" class="text-center pb-3">Use this wallet address to receive assets / collectibles</div>
         <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
         <span class="pt-3" style="width:554px; font-size: 16px; display: inline-block; font-weight: bold; color: white">{{options.data}}<copy-button small :value="walletAddress"></copy-button></span>
+        {{stakeAddress}}
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -21,7 +22,8 @@ import QRCodeStyling from "qr-code-styling";
 import Vue from "vue";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
-import CopyButton from "@/shared/components/CopyButton.vue"; 
+import CopyButton from "@/shared/components/CopyButton.vue";
+import {Wallet} from "@/models/wallet";
 
 export default {
   name: "ReceiveDialog",
@@ -42,10 +44,12 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWalletId']),
+    ...mapState(useStore, ['wallets', 'loggedWallet']),
     walletAddress() {
-      const wallet = this.wallets.find(wal => wal.id === this.loggedWalletId)
-      return wallet.baseAddress();
+      return this.store.getWallet.wallet.baseAddress().to_address().to_bech32()
+    },
+    stakeAddress() {
+      return this.store.getWallet.wallet.stakeAddress().to_address().to_bech32()
     },
     dialogLocal: {
       get() {

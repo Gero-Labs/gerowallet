@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="no-gutters fill-height">
+  <v-card outlined class="no-gutters fill-height ">
     <v-card-title
       >Token Allocation (3)
       <v-spacer></v-spacer>
@@ -8,10 +8,10 @@
         <v-btn :value="1" rounded> Collectibles </v-btn>
       </v-btn-toggle>
     </v-card-title>
-    <v-card-text>
-      <v-tabs-items v-model="currentTab">
+    <v-card-text class="pa-0">
+      <v-tabs-items v-model="currentTab" class="transparent">
         <v-tab-item>
-          <v-data-table class="token-allocation-table" :headers="assetsHeaders" :items="assetsData" @click:row="handleOnRowClick">
+          <v-data-table class="token-allocation-table transparent" :headers="assetsHeaders" :items="assetsData" @click:row="handleOnRowClick">
             <template v-slot:[`item.asset`]="{ item }">
               <v-avatar size="30" class="avatar">
                 <v-img :src="require('@/assets/GeroPool.png')" :alt="item.asset + 'Icon'"></v-img>
@@ -224,7 +224,7 @@ export default {
   .v-data-table-header th {
     height: 40px !important;
     font-size: 10px !important;
-    padding: 0px !important;
+    padding: 0 !important;
   }
 
   tbody{
