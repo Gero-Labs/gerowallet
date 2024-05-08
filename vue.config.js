@@ -22,7 +22,7 @@ module.exports = defineConfig({
         patterns: [
           { from: 'src/assets', to: 'assets' },
           { from: 'src/manifest.json', to: 'manifest.json' },
-          { from: 'chrome/src/background.js', to: 'background.js' }
+          { from: 'src/background.js', to: 'background.js' }
         ]
       }),
       new webpack.ProvidePlugin({
