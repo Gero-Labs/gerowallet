@@ -1,6 +1,6 @@
 <template>
   <div style="min-height: 250px; align-content: center" class="text-center justify-center">
-    <div  id="highstock-chart"></div>
+    <div id="highstock-chart"></div>
     <v-card-text v-if="!chartData.length" style="font-size: 20px">
       <v-avatar size="24">
         <v-img
@@ -54,9 +54,7 @@ export default {
   watch: {
     chartData: {
       handler() {
-        console.log(this.chartData.length)
         if (!this.chartData.length) {
-          console.log('happeniningignign')
           return;
         }
         const data = {
@@ -241,8 +239,7 @@ export default {
 };
 </script>
 <style>
-.highcharts-yaxis-grid .highcharts-grid-line {
-  stroke-width: 1px;
-  stroke: #282828;
+#highstock-chart {
+  min-height: 250px;
 }
 </style>
