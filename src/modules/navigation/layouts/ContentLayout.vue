@@ -5,8 +5,8 @@
         <v-layout :align-start="true">
           <navigation-drawer></navigation-drawer>
           <v-sheet style="height: 100vh; overflow-y: auto; background-color: #121212;">
-            <v-layout row class="no-gutters px-4" :justify-start="true">
-              <v-app-bar flat>
+            <v-layout row class="no-gutters px-4 transparent" :justify-start="true">
+              <v-app-bar flat class="transparent" color="transparent">
                 <span v-if="account">{{ account.name }}</span>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2">

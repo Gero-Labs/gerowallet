@@ -2,22 +2,15 @@ import * as bip39 from "bip39";
 import cryptoRandomString from 'crypto-random-string';
 import * as serialization from '@emurgo/cardano-serialization-lib-browser';
 import {
-    WalletTypePurpose,
-    CoinTypes,
-    HARDENED,
-    ChainDerivations,
-    STAKING_KEY_INDEX,
-    Blockchain,
-    Network
-} from '@/models/types';
-import {
-    Address,
     BaseAddress,
     Bip32PublicKey,
     RewardAddress,
     StakeCredential
-} from "@emurgo/cardano-serialization-lib-browser";
+} from '@emurgo/cardano-serialization-lib-browser';
+import {ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
 import {Buffer} from "buffer";
+import * as CryptoTS from "crypto-ts";
+import networks from "@/shared/utils/networks";
 
 export class Wallet {
 
@@ -35,15 +28,22 @@ export class Wallet {
         this.network = network
     }
 
-    resolveRootKey(mnemonic) {
-        console.log(mnemonic)
-        const bip39entropy = bip39.mnemonicToEntropy(mnemonic)
-        const emptyPassword = Buffer.from('');
-        const entropy = Buffer.from(bip39entropy, 'hex')
-        return serialization.Bip32PrivateKey.from_bip39_entropy(entropy, emptyPassword);
+    static class(wallet) {
+        return new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
+            wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     }
 
-    encryptWithPassword(password, rootKeyBytes) {
+    static resolvePrivateKey(mnemonic) {
+        const bip39entropy = bip39.mnemonicToEntropy(mnemonic)
+        return serialization.Bip32PrivateKey.from_bip39_entropy(Buffer.from(bip39entropy, 'hex'), Buffer.from(''));
+    }
+
+    static encryptPrivateKey(rootKey, password) {
+        const privateKey = this.encryptWithPassword(password, rootKey.as_bytes());
+        return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString()
+    }
+
+    static encryptWithPassword(password, rootKeyBytes) {
         const passwordHex = Buffer.from(password).toString('hex');
         const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
         const salt = cryptoRandomString({ length: 2 * 32 });
@@ -62,18 +62,12 @@ export class Wallet {
         return Buffer.from(decryptedHex, 'hex');
     }
     networkId() {
-        if (this.chain === Blockchain.CARDANO) {
-            if (this.network === Network.MAINNET) {
-                return 1;
-            } else if (this.network === Network.PREPROD || this.network === Network.PREVIEW) {
-                return 0;
-            }
-        }
+        return networks.resolveNetworkId(this.chain, this.network)
     }
-    pubKey() {
+    pubKey(index) {
         return Bip32PublicKey.from_bech32(this.publicKey)
             .derive(ChainDerivations.EXTERNAL)
-            .derive(0)
+            .derive(index)
             .to_raw_key()
     }
     stakeKey() {
@@ -83,12 +77,16 @@ export class Wallet {
             .to_raw_key()
     }
     baseAddress() {
-        return BaseAddress.new(this.networkId(), StakeCredential.from_keyhash(this.pubKey().hash()), StakeCredential.from_keyhash(this.stakeKey().hash())).to_address().to_bech32()
+        return BaseAddress.new(
+            this.networkId(),
+            StakeCredential.from_keyhash(this.pubKey(0).hash()),
+            StakeCredential.from_keyhash(this.stakeKey().hash())
+        );
     }
     stakeAddress() {
-        const hash = Buffer.from(RewardAddress.new(0, StakeCredential.from_keyhash(this.stakeKey().hash())).to_address().to_bytes()).toString('hex')
-        const skh = RewardAddress.from_address(Address.from_bytes(Buffer.from(hash, 'hex'))).payment_cred().to_keyhash();
-
-        return Buffer.from(skh.to_bytes()).toString('hex');
+        return RewardAddress.new(
+            this.networkId(),
+            StakeCredential.from_keyhash(this.stakeKey().hash())
+        )
     }
 }

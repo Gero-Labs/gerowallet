@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import {defineStore} from 'pinia'
 import loading from "@/plugins/loading";
 
 // import { ChromeSyncStorage } from '@/store/chrome-storage'
@@ -6,49 +6,58 @@ import loading from "@/plugins/loading";
 
 import db from "@/db";
 import {Wallet} from "@/models/wallet";
+import {Provider} from "@/models/types";
+import {Api} from "@/api/api";
 
 // const env = process.env.VUE_APP_ENV
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
 
-export const useStore = defineStore('store',{
+export const useStore = defineStore('store', {
     persist: true,
     state: () => ({
-        loggedWalletId: undefined,
+        loggedWallet: undefined,
         wallets: [],
         locale: 'en',
-        network: undefined
+        network: undefined,
+        provider: undefined,
     }),
     getters: {
-        isLoggedIn: state => !!(state.loggedWalletId),
-        getLoggedWalletId: state => state.loggedWalletId,
+        isLoggedIn: state => !!(state.loggedWallet),
+        getLoggedWallet: state => state.loggedWallet,
         getWallets: state => state.wallets,
         getLocale: state => state.locale,
         getNetwork: state => state.network,
-        getWalletAddress: state => {
-            const wallet = state.wallets.find(wallet => wallet.walletId === state.loggedWalletId)
-            console.log(wallet)
+        getWallet: state => {
+            return {
+                wallet: Wallet.class(state.loggedWallet),
+                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider.baseUrl) : null
+            }
         }
     },
     actions: {
-        login(walletId){
+        async login(walletId) {
             loading.setLoading(true)
-            console.log('loading')
-            this.loggedWalletId = walletId
-            this.loadWallets()
+            console.log('login')
+            const wallet = this.wallets.find(wal => wal.id === walletId)
+            if (!wallet) {
+                return null
+            }
+            this.provider = await db.getProvider(wallet.chain, wallet.network)
+            this.loggedWallet = wallet
             loading.setLoading(false)
         },
         logout() {
             loading.setLoading(true)
-            this.loggedWalletId = undefined
+            this.loggedWallet = undefined
+            this.provider = undefined
             loading.setLoading(false)
         },
         async loadWallets() {
-            const result = []
             loading.setLoading(true)
             const wallets = await db.getAllWallets()
             if (Array.isArray(wallets) && wallets.length) {
-                this.wallets = wallets.map(wallet => new Wallet(wallet.walletId, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order, wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network))
+                this.wallets = wallets
             }
             loading.setLoading(false)
         },

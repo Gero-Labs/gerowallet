@@ -63,6 +63,11 @@ const ChainDerivations = {
 
 const STAKING_KEY_INDEX = 0;
 
+const Provider = {
+    KOIOS: "Koios",
+    BLOCKFROST: "Blockfrost",
+}
+
 const Blockchain = {
     CARDANO: "Cardano",
     APEX_PRIME: "Apex Fusion Prime",
@@ -94,6 +99,7 @@ export {
     BIP44_SCAN_SIZE,
     ChainDerivations,
     STAKING_KEY_INDEX,
+    Provider,
     Blockchain,
     Network,
     getInitialSeeds

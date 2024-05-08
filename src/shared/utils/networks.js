@@ -7,17 +7,38 @@ export default {
             title: 'Cardano Mainnet',
             blockchain: Blockchain.CARDANO,
             network: Network.MAINNET,
-            supportedHardware: true
+            supportedHardware: true,
+            networkId: 1,
+        },
+        {
+            icon: require('@/assets/svg/cardano.svg'),
+            title: 'Cardano Preprod',
+            blockchain: Blockchain.CARDANO,
+            network: Network.PREPROD,
+            supportedHardware: false,
+            networkId: 0,
+        },
+        {
+            icon: require('@/assets/svg/cardano.svg'),
+            title: 'Cardano Preview',
+            blockchain: Blockchain.CARDANO,
+            network: Network.PREVIEW,
+            supportedHardware: false,
+            networkId: 0,
         },
         {
             icon: require('@/assets/img/apex.jpg'),
             title: 'Apex Prime Testnet',
             blockchain: Blockchain.APEX_PRIME,
             network: Network.TESTNET,
-            supportedHardware: false
+            supportedHardware: false,
+            networkId: 0,
         }
     ],
     resolveNetwork(chain, network) {
         return this.networks.find(element => element.blockchain === chain && element.network === network)
-    }
+    },
+    resolveNetworkId(chain, network) {
+        return this.resolveNetwork(chain,network).networkId
+    },
 }

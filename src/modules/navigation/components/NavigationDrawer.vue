@@ -225,7 +225,7 @@ export default {
     ],
   }),
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWalletId']),
+    ...mapState(useStore, ['wallets', 'loggedWallet']),
     avatar() {
       if (this.account.icon.includes('http')) {
         return this.account.icon
@@ -234,7 +234,7 @@ export default {
       }
     },
     account() {
-      return this.wallets.find(wallet => wallet.id === this.loggedWalletId)
+      return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
     },
   },
   methods: {

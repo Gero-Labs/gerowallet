@@ -179,7 +179,7 @@
                     <v-card flat outlined class="mb-4"
                             :style="overlay ? {backgroundColor: 'black'} : {backgroundColor: 'transparent'}">
                       <v-row no-gutters>
-                        <v-col class="pa-2" cols="12" md="3" v-for="(item,index) in seedPhrase" :key="index">
+                        <v-col class="pa-2" cols="12" md="3" sm="4" v-for="(item,index) in seedPhrase" :key="index">
                           <v-chip color="#5553" large style="width: 100%; height: 30px"><span
                               style="color: #2f9cac">{{ (index + 1) + '.' }}</span>&nbsp;&nbsp;{{ item }}
                           </v-chip>
@@ -243,7 +243,7 @@
                     <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Please click on each word in the correct order.</h2>
                     <v-card flat class="mt-3" style="background-color: transparent">
                       <v-row no-gutters>
-                        <v-col class="pa-2" cols="12" md="3" v-for="(item,index) in seedPhraseReplaced" :key="index">
+                        <v-col class="pa-2" cols="12" md="3" sm="3" v-for="(item,index) in seedPhraseReplaced" :key="index">
                           <v-chip :color="item.state ? '#2f9cac' : '#5553'" class="justify-center" large style="width: 100%; height: 30px" @click="fillNext(index)" :disabled="!item.state">
                             <span :style="!item.state ? {color: '#515151'} : {color: 'inherit'}">{{ item.word }}</span>
                           </v-chip>
@@ -253,7 +253,7 @@
                   </v-card-text>
                   <v-card flat outlined class="mb-4" style="background-color: transparent">
                     <v-row no-gutters>
-                      <v-col class="pa-2 px-1" cols="12" md="3" v-for="(item,index) in seedPhraseToConfirm" :key="index">
+                      <v-col class="pa-2 px-1" cols="12" md="3" sm="4" v-for="(item,index) in seedPhraseToConfirm" :key="index">
                         <div style="display: flex; line-height: 2.14">
                           <span style="color: #2f9cac; min-width: 22px">
                             {{ (index + 1) }}&nbsp;

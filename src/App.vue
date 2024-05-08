@@ -60,7 +60,7 @@ export default {
   background-color: var(--v-navigationDrawerBackground-base) !important;
 }
 .v-app-bar.v-toolbar.v-sheet {
-  background-color: var(--v-appBarBackground-base) !important;
+  background-color: transparent !important;
 }
 .v-card {
   background-color: var(--v-cardBackground-base) !important;
