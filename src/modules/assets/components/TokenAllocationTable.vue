@@ -82,7 +82,7 @@
           </v-data-table>
         </v-tab-item>
         <v-tab-item>
-          <v-data-table class="token-allocation-table" :headers="collectiblesHeaders" :items="collectiblesData">
+          <v-data-table class="token-allocation-table" :headers="collectiblesHeaders" :items="collectiblesData" @click:row="handleOnRowClick">
             <template v-slot:[`item.asset`]="{ item }">
               <v-avatar size="30" class="avatar">
                 <v-img :src="require('@/assets/GeroPool.png')" :alt="item.asset + 'Icon'"></v-img>

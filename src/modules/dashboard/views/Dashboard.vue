@@ -7,7 +7,6 @@
             Portfolio
           </v-card-title>
           <v-card-text>
-            <PortfolioChart :chart-data="computeChartData"></PortfolioChart>
             <v-row no-gutters v-if="chartData && chartData.length > 0">
               <div class="text-right justify-end">
                 <v-btn small
@@ -19,6 +18,7 @@
                 </v-btn>
               </div>
             </v-row>
+            <PortfolioChart :chart-data="computeChartData"></PortfolioChart>
           </v-card-text>
         </v-card>
       </v-col>

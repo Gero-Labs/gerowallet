@@ -42,12 +42,12 @@ export default {
     return {
       chartInstance: null,
       tabs: {
-        ALL: { value: "ALL", label: "All" },
-        YEAR: { value: "YEAR", label: "12 Months" },
-        QUARTER: { value: "QUARTER", label: "3 Months" },
-        MONTH: { value: "MONTH", label: "30 Days" },
-        WEEK: { value: "WEEK", label: "7 Days" },
-        DAY: { value: "DAY", label: "24 Hours" },
+        ALL: { value: "ALL", label: "All", vsLabel: "vs all time" },
+        YEAR: { value: "YEAR", label: "12 Months", vsLabel: "vs last year" },
+        QUARTER: { value: "QUARTER", label: "3 Months", vsLabel: "vs last quarter" },
+        MONTH: { value: "MONTH", label: "30 Days", vsLabel: "vs last month" },
+        WEEK: { value: "WEEK", label: "7 Days", vsLabel: "vs last week" },
+        DAY: { value: "DAY", label: "24 Hours", vsLabel: "vs last day" },
       },
     };
   },
@@ -62,24 +62,16 @@ export default {
             enabled: false,
           },
           title: {
-            text: "$138,883.35",
+            useHTML: true,
             align: "left",
+            text: this.generateTitleText(this.tabs.ALL),
             style: {
-              color: "#FFF",
-              fontWeight: "bold",
-              fontSize: "40px",
+              fontSize: "14px",
             },
           },
-          // subtitle: {
-          //   text: '▲ 14% vs last month',
-          //   align: 'left',
-          //   style: {
-          //     color: "#FFF",
-          //     fontWeight: 'bold',
-          //     fontSize: '20px'
-          //   }
-          // },
           chart: {
+            spacingLeft: 0,
+            spacingRight: 0,
             backgroundColor: "transparent",
             height: 250,
             style: {
@@ -129,6 +121,7 @@ export default {
               },
             ],
           },
+
           colors: [
             "#00DFF3",
             "#155B75",
@@ -229,6 +222,13 @@ export default {
         end.getUTCSeconds()
       );
       this.chartInstance.xAxis[0].setExtremes(startUTC, endUTC);
+      this.chartInstance.title.update({ text: this.generateTitleText(tab) });
+    },
+    generateTitleText(tab) {
+      return (
+        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$138,883.35</span>` +
+        `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${tab.vsLabel}</span></span>`
+      );
     },
   },
   beforeDestroy() {
