@@ -26,7 +26,8 @@
         <quick-actions></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard></StakingCard>
+        <StakingCard v-if="false == true"></StakingCard>
+        <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
         <v-card outlined class="fill-height">
@@ -65,29 +66,17 @@ import StackedTokens from "@/modules/dashboard/components/StackedTokens.vue";
 import filters from "@/shared/utils/filters";
 import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
+import NoTokensCard from "../components/NoTokensCard.vue";
 
 export default {
   name: 'dashboard',
-  components: {QuickActions, StackedTokens, PortfolioChart, StakingCard},
+  components: {QuickActions, StackedTokens, PortfolioChart, StakingCard, NoTokensCard},
   computed: {
     computeChartData() {
       return this.chartData
     },
-    computedRewards() {
-      return this.rewardsData
-    }
   },
   methods: {
-    resolvePoolIcon(pool_id) {
-      if (pool_id === 'asdsa')
-        return require('@/assets/GeroPool.png');
-      return ''
-    },
-    isNumeric(str) {
-      if (typeof str != "string") return false // we only process strings!
-      return !isNaN(str) && // use type coercion to parse the _entirety_ of the string (`parseFloat` alone does not do this)...
-          !isNaN(parseFloat(str)) // ...and ensure strings of whitespace fail
-    },
     getIconSize(item) {
       if (item.status === 'Pending') {
         return 22
@@ -123,7 +112,6 @@ export default {
   data: () => ({
     filters,
     chartData: [],
-    rewardsData: {},
     activityHeaders: [
       {text: 'Tx Status', align: 'start', sortable: true, value: 'time'},
       {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
@@ -139,42 +127,11 @@ export default {
       },
       {status: 'Sent', time: '21/12/2023', assets: ['ADA'], ada: '- ₳8.30'},
     ],
-    tabs: ['All', '12 Months', '3 Months', '30 Days', '7 Days', '24 Hours'],
-    rewards: [
-      { poolName: '[GERO] Gero Pool', epoch: '474', saturation: 0.2, pledge: 47000000000, ros: 0.05, fixed_fee: 340, margin_fee: 0 },
-      { poolName: '[GERO] Gero Pool', epoch: '475', saturation: 0.2, pledge: 47000000000, ros: 0.05, fixed_fee: 340, margin_fee: 0 },
-      { poolName: '[GERO] Gero Pool', epoch: '476', saturation: 0.2, pledge: 47000000000, ros: 0.05, fixed_fee: 340, margin_fee: 0 },
-    ],
-    stakingHeaders: [
-      {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_name'},
-      {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
-      {text: 'Reward', align: 'start', sortable: true, value: 'reward', width: 100},
-      {text: 'Change', align: 'start', sortable: true, value: 'change', width: 100},
-      {text: 'Date', align: 'start', sortable: true, value: 'date', width: 30},
-    ],
-    rewardsHistory: [
-      {pool_id: 'asdsa', pool_name: '[GERO] Gero Pool', epoch: '476', reward: '8000540', change: -0.2, date: '05/04/2024', time: '11:44 PM'},
-      {pool_id: 'asdsa', pool_name: '[GERO] Gero Pool', epoch: '476', reward: 'Delegated', change: 0, date: '10/04/2024', time: '12:44 AM'}
-    ]
   }),
   async mounted() {
     this.chartData = await fetch(
         'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())
-    this.rewardsData = {
-      '463': 7,
-      '464': 10.2,
-      '465': 3.9,
-      '466': 8,
-      '467': 3.5,
-      '468': 9.4,
-      '469': 7,
-      '470': 10,
-      '471': 7,
-      '472': 9,
-      '473': 10.5,
-      '474': 6
-    }
   }
 }
 </script>
