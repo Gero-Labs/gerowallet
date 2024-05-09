@@ -1,17 +1,19 @@
 <template>
-  <div style="min-height: 250px; align-content: center" class="text-center justify-center">
-    <div id="highstock-chart"></div>
-    <v-card-text v-if="!chartData.length" style="font-size: 20px">
-      <v-avatar size="24">
+  <div style="align-content: center" class="text-center justify-center">
+    <div id="highstock-chart" v-show="chartData && chartData.length > 0"></div>
+    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;min-height: 278px;align-content: center;">
+      <v-avatar size="24" v-if="!loading">
         <v-img
           :src="require('@/assets/svg/wallet.svg')"
           alt="Wallet"
           style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness(105%) contrast(104%)"
         ></v-img>
       </v-avatar>
-      There seems to be no data in this wallet
+      <v-progress-circular v-if="loading" :indeterminate="loading"></v-progress-circular>
+      <span v-else>There seems to be no data in this wallet</span>
     </v-card-text>
     <v-tabs
+        v-if="!loading"
       background-color="transparent"
       style="width: fit-content"
       height="28"
@@ -33,6 +35,10 @@ import Highstock from "highcharts/highstock";
 
 export default {
   props: {
+    loading: {
+      type: Boolean,
+      default: true
+    },
     chartData: {
       type: Array,
       default: () => [],

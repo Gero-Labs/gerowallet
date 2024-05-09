@@ -42,7 +42,7 @@
           </v-col>
           <v-col cols="6">
             <v-layout column style="align-items: center;">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="buyDialog = true" :disabled="true" style="filter: brightness(0.5)">
+              <v-btn text plain rounded class="px-0" height="100" width="100" @click="buy" :disabled="isBuyDisabled" :style=" isBuyDisabled ? {filter: 'brightness(0.5)'} : {}">
                 <v-avatar tile size="80">
                   <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Swap" contain></v-img>
                 </v-avatar>
@@ -63,11 +63,47 @@
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
 import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
+import {useStore} from "@/store";
+import {Blockchain, Network} from "@/models/types";
+import {loadMoonPay} from "@moonpay/moonpay-js";
+
 
 export default {
   name: "QuickActions",
   components: {BuyDialog, SwapDialog, ReceiveDialog},
+  computed: {
+    isBuyDisabled() {
+      return this.store.getWallet.wallet.network !== Network.MAINNET ||
+          this.store.getWallet.wallet.chain !== Blockchain.CARDANO
+    }
+  },
   methods: {
+    async buy() {
+      this.buyDialog = true
+      // const moonPay = await loadMoonPay();
+      // const widget = moonPay?.({
+      //   flow: "buy",
+      //   environment: "sandbox",
+      //   variant: 'overlay',
+      //   params: {
+      //     apiKey: "MOONPAY_API_KEY_REMOVED",
+      //     enabledPaymentMethods: "credit_debit_card",
+      //     currencyCode: "ada",
+      //     walletAddress: useStore().getWallet.wallet.baseAddress().to_address().to_bech32(),
+      //     colorCode: '#2f9cac',
+      //     baseCurrencyCode: 'usd',
+      //     theme: 'dark',
+      //   },
+      //   handlers: {
+      //     async onTransactionCompleted(props) {
+      //       console.log("onTransactionCompleted", props);
+      //     },
+      //   },
+      // });
+      //
+      // widget?.show();
+
+    },
     receiveDialogChange(val) {
       this.receiveDialog = val
     },
@@ -79,6 +115,7 @@ export default {
     }
   },
   data: () => ({
+    store: useStore(),
     receiveDialog: false,
     swapDialog: false,
     buyDialog: false,

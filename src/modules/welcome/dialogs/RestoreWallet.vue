@@ -87,7 +87,6 @@
                 </v-card-actions>
               </v-card>
             </v-form>
-            {{seedToStr}}
           </v-stepper-content>
 
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pt-0">

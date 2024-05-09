@@ -64,14 +64,18 @@ export default {
   name: 'ContentLayout',
   components: {NavigationDrawer},
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWalletId']),
+    ...mapState(useStore, ['loggedWallet']),
     account() {
-      return this.wallets.find(wallet => wallet.walletId === this.loggedWalletId)
+      return this.store.getWallet.wallet
     },
   },
   data: () => ({
-    pro: false
-  })
+    store: useStore()
+  }),
+  async mounted() {
+    const tip = await useStore().getWallet.provider.getTip()
+    console.log(tip)
+  }
 }
 </script>
 
