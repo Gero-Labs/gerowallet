@@ -10,11 +10,9 @@
       <div class="dialog-children-container">
         <slot></slot>
       </div>
-      
       <v-btn icon @click="$emit('close')" class="close-button">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>
-
     </v-card>
   </v-dialog>
 </template>

@@ -3,22 +3,20 @@
     <v-row no-gutters>
       <v-col cols="12" xl="9" lg="7" md="12" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
-          <v-card-title>
+          <v-card-title class="row no-gutters d-flex justify-space-between">
             Portfolio
+            <div v-if="chartData && chartData.length > 0">
+              <v-btn small
+                     style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
+                     to="/assets">Portfolio Breakdown&nbsp;
+                <v-icon small>
+                  mdi-arrow-right
+                </v-icon>
+              </v-btn>
+            </div>
           </v-card-title>
           <v-card-text>
-            <v-row no-gutters v-if="chartData && chartData.length > 0">
-              <div class="text-right justify-end">
-                <v-btn small
-                       style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
-                       to="/assets">Portfolio Breakdown&nbsp;
-                  <v-icon small>
-                    mdi-arrow-right
-                  </v-icon>
-                </v-btn>
-              </div>
-            </v-row>
-            <PortfolioChart :chart-data="computeChartData"></PortfolioChart>
+            <PortfolioChart :chart-data="computeChartData" :loading="loadingChart"></PortfolioChart>
           </v-card-text>
         </v-card>
       </v-col>
@@ -67,6 +65,9 @@ import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
 import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
+import socket from "@/plugins/socket";
+import {Blockchain, Network} from "@/models/types";
+import {Api} from "@/api/api";
 
 export default {
   name: 'dashboard',
@@ -112,7 +113,8 @@ export default {
   data: () => ({
     store: useStore,
     filters,
-    chartData: [],
+    loadingChart: true,
+    chartData: undefined,
     activityHeaders: [
       {text: 'Tx Status', align: 'start', sortable: true, value: 'time'},
       {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
@@ -130,9 +132,19 @@ export default {
     ],
   }),
   async mounted() {
+    console.log('mount')
+    const wallet = useStore().getWallet.wallet
+    const accountInfo = await useStore().getWallet.provider.getAccountInfo(wallet.chain,wallet.network, wallet.stakeAddress().to_address().to_bech32())
+    console.log(accountInfo)
+    socket.setAddress(wallet.stakeAddress())
+    socket.stompConnect(
+        Object.keys(Blockchain).find(key => Blockchain[key] === useStore().getWallet.wallet.chain),
+        Object.keys(Network).find(key => Network[key] === useStore().getWallet.wallet.network),
+    )
     this.chartData = await fetch(
         'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())
+    this.loadingChart = false
   }
 }
 </script>

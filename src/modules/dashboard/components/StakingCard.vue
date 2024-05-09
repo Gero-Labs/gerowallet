@@ -139,9 +139,10 @@
 </template>
 <script>
 import RewardsChart from './RewardsChart.vue';
+import filters from "@/shared/utils/filters";
 
 export default {
-  components: { RewardsChart},
+  components: {RewardsChart},
   props: {
     chartData: {
       type: Object,
@@ -173,6 +174,7 @@ export default {
       ],
     }
   },
+  filters,
   methods: {
     resolvePoolIcon(poolId) {
       if (poolId === 'asdsa') {
@@ -206,6 +208,7 @@ export default {
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }
+
 .v-data-table-header {
   background-color: rgb(22, 27, 38);
 }

@@ -1,16 +1,25 @@
 <template>
   <BaseDialog :isOpen="dialogLocal" @close="dialogLocal = false">
-    <v-card-title style="word-break: break-word">Buy
-      <v-spacer></v-spacer>
-      <v-btn icon @click="dialogLocal = false">
-        <v-icon>mdi-window-close</v-icon>
-      </v-btn>
-    </v-card-title>
+    <v-card-title style="word-break: break-word">Buy</v-card-title>
+    <v-card-text
+        class="text-center justify-center pb-2 fill-height"
+        style="width: 388px; height: 600px; align-content: center; margin: auto"
+    >
+      <iframe
+          style="border-radius: 24px"
+          allow="accelerometer; autoplay; camera; gyroscope; payment"
+          frameborder="0"
+          height="100%"
+          src="https://buy-staging.moonpay.io?apiKey=pk_test_123&showOnlyCurrencies=eth_zksync&theme=dark"
+          width="100%"
+      >
+        <p>Your browser does not support iframes.</p>
+      </iframe>
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>
 import BaseDialog from '@/shared/components/BaseDialog.vue';
-
 
 export default {
   name: 'BuyDialog',
@@ -35,6 +44,9 @@ export default {
   data: () => ({
     loading: false,
   }),
+  async mounted() {
+
+  }
 }
 </script>
 
