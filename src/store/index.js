@@ -21,6 +21,7 @@ export const useStore = defineStore('store', {
         locale: 'en',
         network: undefined,
         provider: undefined,
+        tip: undefined,
     }),
     getters: {
         isLoggedIn: state => !!(state.loggedWallet),
@@ -31,7 +32,7 @@ export const useStore = defineStore('store', {
         getWallet: state => {
             return {
                 wallet: Wallet.class(state.loggedWallet),
-                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider.baseUrl) : null
+                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider) : null
             }
         }
     },
@@ -66,6 +67,9 @@ export const useStore = defineStore('store', {
         },
         setNetwork(network) {
             this.network = network
+        },
+        setTip(tip) {
+            this.tip = tip
         },
     }
 })

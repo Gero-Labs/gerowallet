@@ -18,16 +18,18 @@ export default {
         }, e => {
             console.log(e)
             setTimeout(() => {
-                this.stompConnect()
+                this.stompConnect(chain, network)
             }, 5000)
         })
     },
     stompSuccessCallback() {
         if (this.subscription) {
             this.subscription.sub.unsubscribe()
+            this.subscription.addressSub.unsubscribe()
         }
         this.subscription = {
             sub: this.stompClient.subscribe(`/api/${this.chain}/${this.network}`, this.msgHandler),
+            addressSub: this.stompClient.subscribe(`/api/${this.chain}/${this.network}/address/${this.address}`),
             accountAddress: this.address,
         }
     },

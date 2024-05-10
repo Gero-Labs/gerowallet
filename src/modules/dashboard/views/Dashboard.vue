@@ -132,15 +132,6 @@ export default {
     ],
   }),
   async mounted() {
-    console.log('mount')
-    const wallet = useStore().getWallet.wallet
-    const accountInfo = await useStore().getWallet.provider.getAccountInfo(wallet.chain,wallet.network, wallet.stakeAddress().to_address().to_bech32())
-    console.log(accountInfo)
-    socket.setAddress(wallet.stakeAddress())
-    socket.stompConnect(
-        Object.keys(Blockchain).find(key => Blockchain[key] === useStore().getWallet.wallet.chain),
-        Object.keys(Network).find(key => Network[key] === useStore().getWallet.wallet.network),
-    )
     this.chartData = await fetch(
         'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())
