@@ -132,6 +132,14 @@ export default {
     ],
   }),
   async mounted() {
+    const wallet = useStore().getWallet.wallet
+    const provider = useStore().getWallet.provider
+    try {
+      const account_info = await provider.getAccountInfo()
+      console.log(account_info)
+    } catch (e) {
+      console.log(e)
+    }
     this.chartData = await fetch(
         'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())
