@@ -30,9 +30,10 @@ export const useStore = defineStore('store', {
         getLocale: state => state.locale,
         getNetwork: state => state.network,
         getWallet: state => {
+            const wallet = Wallet.class(state.loggedWallet)
             return {
-                wallet: Wallet.class(state.loggedWallet),
-                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider) : null
+                wallet: wallet,
+                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider,wallet.baseAddress().to_address().to_bech32()) : null
             }
         }
     },

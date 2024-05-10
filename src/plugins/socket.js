@@ -2,8 +2,13 @@ import * as SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 
 const backendBaseUrl = process.env.VUE_APP_BACKEND_URL
+const message = ''
 
 export default {
+    message,
+    setMessage(val) {
+      this.message = val
+    },
     setAddress(address) {
       this.address = address
     },
@@ -28,15 +33,12 @@ export default {
             this.subscription.addressSub.unsubscribe()
         }
         this.subscription = {
-            sub: this.stompClient.subscribe(`/api/${this.chain}/${this.network}`, this.msgHandler),
+            sub: this.stompClient.subscribe(`/api/${this.chain}/${this.network}`, val => {
+                const data = JSON.parse(val.body)
+                this.setMessage(Object.assign({}, data))
+            }),
             addressSub: this.stompClient.subscribe(`/api/${this.chain}/${this.network}/address/${this.address}`),
             accountAddress: this.address,
         }
-    },
-    msgHandler(val) {
-        console.log(val)
-        const data = JSON.parse(val.body)
-        let message = Object.assign({}, data)
-        console.log(message)
     },
 }

@@ -20,6 +20,7 @@
 </template>
 <script>
 import {useStore} from "@/store";
+import socket from "@/plugins/socket";
 
 export default {
   name: 'PriceTicker',
@@ -36,17 +37,31 @@ export default {
     setInterval(async () => {
       this.usdToILS = await provider.fetchExchangeRate();
     },86400000);
-    setInterval(async () => {
-      const data = await provider.fetchADAStatistics();
-      this.ticker.prevPrice = this.ticker.lastPrice;
-      this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
-      this.ticker.priceChange = Number(data.priceChange).toFixed(3);
-      this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-    },3000);
+    // setInterval(async () => {
+    //   const data = await provider.fetchADAStatistics();
+    //   this.ticker.prevPrice = this.ticker.lastPrice;
+    //   this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
+    //   this.ticker.priceChange = Number(data.priceChange).toFixed(3);
+    //   this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
+    // },3000);
   },
-  watch: {},
+  watch: {
+    'socket.message': {
+      handler(val) {
+        console.log(val)
+        if (val.message_type === 'PRICE') {
+          this.ticker.prevPrice = this.ticker.lastPrice;
+          this.ticker.lastPrice = Number(val.object.lastPrice).toFixed(4);
+          this.ticker.priceChange = Number(val.object.priceChange).toFixed(3);
+          this.ticker.priceChangePercent = Number(val.object.priceChangePercent).toFixed(2);
+        }
+      },
+      deep: true
+    }
+  },
   computed: {},
   data: () => ({
+    socket,
     ticker: {
       prevPrice: 0,
       lastPrice: 0,

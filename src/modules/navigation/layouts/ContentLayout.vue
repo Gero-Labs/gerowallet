@@ -9,8 +9,8 @@
               <v-app-bar flat class="transparent" color="transparent">
                 <price-ticker></price-ticker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-                <span style="font-size: 14px">{{'Epoch ' + tip.epoch}}</span>
-                <v-progress-linear
+                <span style="font-size: 14px" v-if="tip">{{'Epoch ' + tip.epoch}}</span>
+                <v-progress-linear v-if="epochSlotPercentage"
                     striped
                     :value="epochSlotPercentage"
                     height="20"
@@ -81,31 +81,43 @@ import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
 export default {
   name: 'ContentLayout',
   components: {PriceTicker, NavigationDrawer},
+  watch: {
+    'socket.message': {
+      handler(val) {
+        if (val.message_type === 'TIP') {
+          this.tip.epoch_slot = val.object.epoch_slot
+          this.tip.epoch = val.object.epoch
+        }
+      },
+      deep: true
+    }
+  },
   computed: {
     ...mapState(useStore, ['loggedWallet', 'tip']),
     epochSlotPercentage() {
-      return this.tip.epoch_slot / 432000 * 100
+      if (this.tip) {
+        return this.tip.epoch_slot / 432000 * 100
+      }
+      return ''
     },
     account() {
       return this.store.getWallet.wallet
     },
   },
   data: () => ({
+    socket,
     store: useStore(),
   }),
   async mounted() {
-    const tip = await useStore().getWallet.provider.getTip()
-    useStore().setTip(tip)
-    console.log(tip)
-    console.log('mount')
     const wallet = useStore().getWallet.wallet
-    const accountInfo = await useStore().getWallet.provider.getAccountInfo(wallet.chain,wallet.network, wallet.stakeAddress().to_address().to_bech32())
-    console.log(accountInfo)
-    socket.setAddress(wallet.stakeAddress().to_address().to_bech32())
+    const provider = useStore().getWallet.provider
+    const tip = await provider.getTip()
+    useStore().setTip(tip)
     socket.stompConnect(
-        Object.keys(Blockchain).find(key => Blockchain[key] === useStore().getWallet.wallet.chain),
-        Object.keys(Network).find(key => Network[key] === useStore().getWallet.wallet.network),
+        Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain),
+        Object.keys(Network).find(key => Network[key] === wallet.network),
     )
+
   }
 }
 </script>
