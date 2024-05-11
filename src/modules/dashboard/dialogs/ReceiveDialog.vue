@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="dialogLocal" @close="dialogLocal = false">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
     <v-card-title>Receive
       <v-spacer></v-spacer>
     </v-card-title>
@@ -24,19 +24,10 @@ export default {
   name: "ReceiveDialog",
   components: {CopyButton, BaseDialog},
   props: {
-    dialog: {
+    isOpen: {
       type: Boolean,
       default: false,
     },
-  },
-  watch: {
-    dialog(val) {
-      if (val) {
-        Vue.nextTick(() => {
-          this.qrCode.append(this.$refs.qrCode);
-        })
-      }
-    }
   },
   computed: {
     ...mapState(useStore, ['wallets', 'loggedWallet']),
@@ -45,14 +36,6 @@ export default {
     },
     stakeAddress() {
       return this.store.getWallet.wallet.stakeAddress().to_address().to_bech32()
-    },
-    dialogLocal: {
-      get() {
-        return this.dialog
-      },
-      set(value) {
-        this.$emit('dialogChange', value)
-      },
     },
     options() {
       return {
@@ -123,12 +106,21 @@ export default {
   }),
   mounted() {
     this.qrCode = new QRCodeStyling(this.options)
+    console.log('happenininginigng')
     Vue.nextTick(() => {
       this.qrCode.append(this.$refs.qrCode);
     })
     this.extension = 'svg'
-
-  }
+  },
+  watch: {
+    isOpen(val) {
+      if (val) {
+        Vue.nextTick(() => {
+          this.qrCode.append(this.$refs.qrCode);
+        })
+      }
+    }
+  },
 }
 </script>
 <style>
