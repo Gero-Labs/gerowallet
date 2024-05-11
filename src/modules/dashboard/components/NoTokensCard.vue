@@ -5,9 +5,7 @@
     <section v-if="!hasApex" class="mb-10">
       <p class="display-1">Let's start by getting some Ap3x into your wallet!</p>
       <p class="subtitle-1">Claim your Ap3x tokens with your Cardano Wallet by using the DApp below</p>
-      <button class="claim-apex-button">
-        <img :src="require('../assets/claim_ap3x_button.png')" />
-      </button>
+      <v-btn class="claim-apex-button"></v-btn>
     </section>
 
     <section
@@ -53,10 +51,12 @@ export default {
   height: 100%;
 
   .claim-apex-button {
-    width: 70%;
-    max-width: 400px;
+    width: 320px;
     opacity: 0.7;
+    height: 110px;
     transition: 0.2s all ease-in-out;
+    background-image: url('../assets/claim_ap3x_button.png');
+    background-size: contain;
 
     &:hover {
       opacity: 1;
