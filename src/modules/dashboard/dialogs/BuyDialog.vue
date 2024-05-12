@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="dialogLocal" @close="dialogLocal = false">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
     <v-card-title style="word-break: break-word">Buy</v-card-title>
     <v-card-text
         class="text-center justify-center pb-2 fill-height"
@@ -25,20 +25,9 @@ export default {
   name: 'BuyDialog',
   components: {BaseDialog},
   props: {
-    dialog: {
+    isOpen: {
       type: Boolean,
       default: false,
-    },
-  },
-  computed: {
-    dialogLocal: {
-      get() {
-        return this.dialog
-      },
-      set(value) {
-        this.$emit('dialogChange', value)
-        this.quantity = 1
-      },
     },
   },
   data: () => ({
