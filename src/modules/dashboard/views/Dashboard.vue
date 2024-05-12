@@ -135,8 +135,8 @@ export default {
     const wallet = useStore().getWallet.wallet
     const provider = useStore().getWallet.provider
     try {
-      const account_info = await provider.getAccountInfo()
-      console.log(account_info)
+      const accountInfo = await provider.getAccountInfo()
+      useStore().setAccountInfo(accountInfo)
     } catch (e) {
       console.log(e)
     }

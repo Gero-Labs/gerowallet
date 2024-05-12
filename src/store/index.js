@@ -22,6 +22,7 @@ export const useStore = defineStore('store', {
         network: undefined,
         provider: undefined,
         tip: undefined,
+        accountInfo: undefined
     }),
     getters: {
         isLoggedIn: state => !!(state.loggedWallet),
@@ -33,7 +34,7 @@ export const useStore = defineStore('store', {
             const wallet = Wallet.class(state.loggedWallet)
             return {
                 wallet: wallet,
-                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider,wallet.baseAddress().to_address().to_bech32()) : null
+                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider, wallet.baseAddress().to_address().to_bech32()) : null
             }
         }
     },
@@ -46,6 +47,13 @@ export const useStore = defineStore('store', {
                 return null
             }
             this.provider = await db.getProvider(wallet.chain, wallet.network)
+
+            setInterval(() => {
+
+            }, 60000)
+            const wall = Wallet.class(wallet)
+            new Api(this.provider, wall.baseAddress().to_address().to_bech32())
+
             this.loggedWallet = wallet
             loading.setLoading(false)
         },
@@ -72,6 +80,9 @@ export const useStore = defineStore('store', {
         setTip(tip) {
             this.tip = tip
         },
+        setAccountInfo(accountInfo) {
+            this.accountInfo = accountInfo
+        }
     }
 })
 

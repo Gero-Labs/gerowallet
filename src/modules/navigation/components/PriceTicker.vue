@@ -48,7 +48,6 @@ export default {
   watch: {
     'socket.message': {
       handler(val) {
-        console.log(val)
         if (val.message_type === 'PRICE') {
           this.ticker.prevPrice = this.ticker.lastPrice;
           this.ticker.lastPrice = Number(val.object.lastPrice).toFixed(4);
