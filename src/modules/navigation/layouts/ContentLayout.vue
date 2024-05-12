@@ -9,7 +9,7 @@
               <v-app-bar flat class="transparent" color="transparent">
                 <price-ticker></price-ticker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-                <span style="font-size: 14px" v-if="tip">{{'Epoch ' + tip.epoch}}</span>
+                <span style="font-size: 14px">{{'Epoch ' + lastSyncInfo?.epoch}}</span>
                 <v-progress-linear v-if="epochSlotPercentage"
                     striped
                     :value="epochSlotPercentage"
@@ -23,6 +23,11 @@
                     <strong style="font-size: 10px">{{ Math.ceil(value) }}%</strong>
                   </template>
                 </v-progress-linear>
+                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
+                <v-icon small :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
+                  {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
+                </v-icon>&nbsp;
+                <span style="font-size: 12px">{{wallet?.network}} - Synced {{new Date(lastSyncInfo?.time * 1000).toLocaleString()}}</span>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2">
                   <v-avatar size="20">
@@ -72,11 +77,11 @@
 
 <script>
 import NavigationDrawer from "../components/NavigationDrawer.vue";
-import {mapState} from "pinia";
 import {useStore} from "@/store";
 import socket from "@/plugins/socket";
 import {Blockchain, Network} from "@/models/types";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
+import {mapState} from "pinia";
 
 export default {
   name: 'ContentLayout',
@@ -84,40 +89,44 @@ export default {
   watch: {
     'socket.message': {
       handler(val) {
+        console.log(val)
         if (val.message_type === 'TIP') {
-          this.tip.epoch_slot = val.object.epoch_slot
-          this.tip.epoch = val.object.epoch
+          this.wallet.sync(val.object)
+          // this.tip.epoch_slot = val.object.epoch_slot
+          // this.tip.epoch = val.object.epoch
         }
       },
       deep: true
-    }
+    },
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'tip']),
+    ...mapState(useStore, ['lastSyncInfo']),
     epochSlotPercentage() {
-      if (this.tip) {
-        return this.tip.epoch_slot / 432000 * 100
+      if (this.lastSyncInfo) {
+        return this.lastSyncInfo.epoch_slot / 432000 * 100
       }
       return ''
     },
-    account() {
-      return this.store.getWallet.wallet
-    },
   },
   data: () => ({
+    wallet: undefined,
     socket,
     store: useStore(),
   }),
-  async mounted() {
-    const wallet = useStore().getWallet.wallet
-    const provider = useStore().getWallet.provider
-    const tip = await provider.getTip()
-    useStore().setTip(tip)
+  async created() {
+    this.wallet = useStore().getWallet
+    try {
+      const tip = await this.wallet.fetchTip()
+      console.log(tip)
+      useStore().getWallet.sync(tip)
+      console.log(this.wallet)
+    } catch (e) {
+      console.log(e)
+    }
     socket.stompConnect(
-        Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain),
-        Object.keys(Network).find(key => Network[key] === wallet.network),
+        Object.keys(Blockchain).find(key => Blockchain[key] === this.wallet.chain),
+        Object.keys(Network).find(key => Network[key] === this.wallet.network),
     )
-
   }
 }
 </script>

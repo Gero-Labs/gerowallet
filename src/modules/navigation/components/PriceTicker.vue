@@ -1,9 +1,9 @@
 <template>
   <div class="d-flex column">
     <v-img width="28" :src="require('@/assets/svg/cardano.svg')" class="mr-2" contain></v-img>
-    <span style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
-    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-    <div style="width: 120px">
+    <span v-if="ticker.lastPrice" style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
+    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="value.length > 0"></v-divider>
+    <div style="width: 120px" v-if="value.length > 0">
       <v-sparkline :value="value"
                    :gradient="gradient"
                    :smooth="radius || false"
@@ -25,9 +25,8 @@ import socket from "@/plugins/socket";
 export default {
   name: 'PriceTicker',
   async mounted() {
-    const provider = await useStore().getWallet.provider
+    const provider = await useStore().getWallet.api
     this.value = await provider.fetchHistory()
-    console.log(this.value)
     this.usdToILS = await provider.fetchExchangeRate();
     const data = await provider.fetchADAStatistics();
     this.ticker.prevPrice = this.ticker.lastPrice;

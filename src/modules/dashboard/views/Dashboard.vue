@@ -65,9 +65,6 @@ import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
 import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
-import socket from "@/plugins/socket";
-import {Blockchain, Network} from "@/models/types";
-import {Api} from "@/api/api";
 
 export default {
   name: 'dashboard',
@@ -111,6 +108,7 @@ export default {
   },
   filters,
   data: () => ({
+    wallet: undefined,
     store: useStore,
     filters,
     loadingChart: true,
@@ -132,14 +130,7 @@ export default {
     ],
   }),
   async mounted() {
-    const wallet = useStore().getWallet.wallet
-    const provider = useStore().getWallet.provider
-    try {
-      const accountInfo = await provider.getAccountInfo()
-      useStore().setAccountInfo(accountInfo)
-    } catch (e) {
-      console.log(e)
-    }
+    this.wallet = useStore().getWallet
     this.chartData = await fetch(
         'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())

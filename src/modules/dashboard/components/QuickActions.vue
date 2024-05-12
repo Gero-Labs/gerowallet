@@ -105,8 +105,8 @@ export default {
   computed: {
     isBuyDisabled() {
       return (
-        this.store.getWallet.wallet.network !== Network.MAINNET ||
-        this.store.getWallet.wallet.chain !== Blockchain.CARDANO
+        this.store.getWallet.network !== Network.MAINNET ||
+        this.store.getWallet.chain !== Blockchain.CARDANO
       );
     },
   },
