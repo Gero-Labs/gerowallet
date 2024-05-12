@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="dialogLocal" @close="dialogLocal = false">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
     <v-card-title style="word-break: break-word"
       >Swap
       <v-spacer></v-spacer>
@@ -17,7 +17,7 @@
     </v-card-text>
     <v-card-actions>
       <v-spacer></v-spacer>
-      <v-btn color="primary" text :disabled="loading" @click="dialogLocal = false"> Cancel </v-btn>
+      <v-btn color="primary" text :disabled="loading" @click="$emit('close')"> Cancel </v-btn>
       <v-btn :disabled="loading" color="primary" elevation="0" :loading="loading" @click="addTokens"> Add </v-btn>
       <v-spacer></v-spacer>
     </v-card-actions>
@@ -64,7 +64,7 @@
             color="green"
             @click="
               reload();
-              dialogLocal = false;
+              $emit('close');
             "
           >
             Close
@@ -101,7 +101,10 @@ export default {
   filters,
   components: { SwapCurrencySelector, BaseDialog },
   props: {
-    dialog: Boolean,
+    isOpen: {
+      type: Boolean,
+      default: false,
+    },
     project: {
       type: Object,
       default() {
@@ -124,15 +127,6 @@ export default {
     maxTokens() {
       // return this.$store.getters.getAccount.wallet.balance.forge || 0
       return 115110240000;
-    },
-    dialogLocal: {
-      get() {
-        return this.dialog;
-      },
-      set(value) {
-        this.$emit("dialogChange", value);
-        this.quantity = 1;
-      },
     },
   },
   methods: {

@@ -5,11 +5,16 @@
       <v-card-text class="d-flex justify-space-between align-content-space-between">
         <v-row no-gutters>
           <v-col cols="6">
-            <v-layout column style="align-items: center;">
-              <v-btn text plain rounded class="px-0" height="100" width="100">
+            <v-layout column style="align-items: center">
+              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SEND">
                 <v-avatar tile size="80">
-                  <v-img :src="require('@/assets/svg/send.svg')" alt="Send" contain
-                         style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
+                  <v-img
+                    :src="require('@/assets/svg/send.svg')"
+                    alt="Send"
+                    contain
+                    style="
+                      filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);
+                    "
                   ></v-img>
                 </v-avatar>
               </v-btn>
@@ -17,11 +22,16 @@
             </v-layout>
           </v-col>
           <v-col cols="6">
-            <v-layout column style="align-items: center;">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="receiveDialog = true">
+            <v-layout column style="align-items: center">
+              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.RECEIVE">
                 <v-avatar tile size="80">
-                  <v-img :src="require('@/assets/svg/qr-code.svg')" alt="Receive" contain
-                         style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
+                  <v-img
+                    :src="require('@/assets/svg/qr-code.svg')"
+                    alt="Receive"
+                    contain
+                    style="
+                      filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);
+                    "
                   ></v-img>
                 </v-avatar>
               </v-btn>
@@ -29,11 +39,16 @@
             </v-layout>
           </v-col>
           <v-col cols="6">
-            <v-layout column style="align-items: center;">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="swapDialog = true">
+            <v-layout column style="align-items: center">
+              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP">
                 <v-avatar tile size="80">
-                  <v-img :src="require('@/assets/svg/swap.svg')" alt="Swap" contain
-                         style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
+                  <v-img
+                    :src="require('@/assets/svg/swap.svg')"
+                    alt="Swap"
+                    contain
+                    style="
+                      filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);
+                    "
                   ></v-img>
                 </v-avatar>
               </v-btn>
@@ -41,8 +56,18 @@
             </v-layout>
           </v-col>
           <v-col cols="6">
-            <v-layout column style="align-items: center;">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="buy" :disabled="isBuyDisabled" :style=" isBuyDisabled ? {filter: 'brightness(0.5)'} : {}">
+            <v-layout column style="align-items: center">
+              <v-btn
+                text
+                plain
+                rounded
+                class="px-0"
+                height="100"
+                width="100"
+                @click="buy"
+                :disabled="isBuyDisabled"
+                :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
+              >
                 <v-avatar tile size="80">
                   <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Swap" contain></v-img>
                 </v-avatar>
@@ -54,32 +79,39 @@
       </v-card-text>
       <v-card-actions></v-card-actions>
     </v-card>
-    <receive-dialog :dialog="receiveDialog" @dialogChange="receiveDialogChange"></receive-dialog>
-    <swap-dialog :dialog="swapDialog" @dialogChange="swapDialogChange"></swap-dialog>
-    <buy-dialog :dialog="buyDialog" @dialogChange="buyDialogChange"></buy-dialog>
+    <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
+    <SwapDialog :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
+    <BuyDialog :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
+    <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
 </template>
 <script>
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
 import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
-import {useStore} from "@/store";
-import {Blockchain, Network} from "@/models/types";
-import {loadMoonPay} from "@moonpay/moonpay-js";
-
+import { useStore } from "@/store";
+import { Blockchain, Network } from "@/models/types";
+import { loadMoonPay } from "@moonpay/moonpay-js";
+import SendDialog from "../dialogs/SendDialog.vue";
 
 export default {
   name: "QuickActions",
-  components: {BuyDialog, SwapDialog, ReceiveDialog},
+  components: {
+    BuyDialog,
+    SwapDialog,
+    ReceiveDialog,
+    SendDialog,
+  },
   computed: {
     isBuyDisabled() {
-      return this.store.getWallet.wallet.network !== Network.MAINNET ||
-          this.store.getWallet.wallet.chain !== Blockchain.CARDANO
-    }
+      return (
+        this.store.getWallet.wallet.network !== Network.MAINNET ||
+        this.store.getWallet.wallet.chain !== Blockchain.CARDANO
+      );
+    },
   },
   methods: {
     async buy() {
-      this.buyDialog = true
       // const moonPay = await loadMoonPay();
       // const widget = moonPay?.({
       //   flow: "buy",
@@ -102,26 +134,21 @@ export default {
       // });
       //
       // widget?.show();
-
     },
-    receiveDialogChange(val) {
-      this.receiveDialog = val
+    closeDialog() {
+      this.currentDialog = null;
     },
-    swapDialogChange(val) {
-      this.swapDialog = val
-    },
-    buyDialogChange(val) {
-      this.buyDialog = val
-    }
   },
   data: () => ({
     store: useStore(),
-    receiveDialog: false,
-    swapDialog: false,
-    buyDialog: false,
+    currentDialog: null,
+    dialogs: {
+      SEND: "SEND",
+      RECEIVE: "RECEIVE",
+      SWAP: "SWAP",
+      BUY: "BUY",
+    },
   }),
-}
+};
 </script>
-<style scoped>
-
-</style>
+<style scoped></style>
