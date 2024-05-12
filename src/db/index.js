@@ -1,15 +1,11 @@
 import Dexie from "dexie";
 import {
-    BIP44_SCAN_SIZE,
     Blockchain,
-    ChainDerivations, CoinTypes,
-    CoreAddressTypes,
-    getInitialSeeds,
+    CoinTypes,
     Network,
     Provider,
-    STAKING_KEY_INDEX, WalletType, WalletTypePurpose,
+    WalletType, WalletTypePurpose,
 } from "@/models/types";
-import {RewardAddress, StakeCredential} from "@emurgo/cardano-serialization-lib-browser";
 import {HARDENED} from "@cardano-foundation/ledgerjs-hw-app-cardano";
 import {Wallet} from "@/models/wallet";
 import {useStore} from "@/store";
@@ -25,7 +21,7 @@ await db.version(10).stores({
 
 db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
-});
+})
 
 await initializeConfigTable()
 
@@ -102,7 +98,6 @@ export default {
             .derive(HARDENED + accountIndex)
             .to_public().to_bech32()
         const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey, new Date(), chain, network)
-        // JSON.stringify(wallet, (key, value) => (value === null) ? undefined : value)
         const walletId = await db.wallets.add({
             name: wallet.name,
             icon: wallet.icon,
@@ -115,6 +110,7 @@ export default {
             chain: wallet.chain,
             network: wallet.network
         })
+        await this.createNewWalletDb(walletId)
         await useStore().loadWallets()
         return walletId;
     },
@@ -136,44 +132,24 @@ export default {
             chain: chain,
             network: network
         })
+        await this.createNewWalletDb(walletId)
         await useStore().loadWallets()
         return walletId
     },
-    async saveAccountDefaultDerivations(chainNetworkId, publicKey, walletId) {
-        const addressesIndex = [...Array(BIP44_SCAN_SIZE).keys()];
-        const stakingKey = publicKey
-            .derive(ChainDerivations.CHIMERIC_ACCOUNT)
-            .derive(STAKING_KEY_INDEX)
-            .to_raw_key();
-
-    const externalAddrs = addressesIndex.map((i) => {
-      const key = publicKey.derive(ChainDerivations.EXTERNAL).derive(i).to_raw_key();
-      return key.hash();
-    });
-    const internalAddrs = addressesIndex.map((i) => {
-      const key = publicKey.derive(ChainDerivations.INTERNAL).derive(i).to_raw_key();
-      return key.hash();
-    });
-    const stakingKeyAddresses = [];
-    const accountAddr = RewardAddress.new(chainNetworkId, StakeCredential.from_keyhash(stakingKey.hash()));
-    stakingKeyAddresses.push({
-      type: CoreAddressTypes.CARDANO_REWARD,
-      digest: this.digestForHash(
-        Buffer.from(accountAddr.to_address().to_bytes()).toString("hex"),
-        getInitialSeeds().AddressSeed
-      ),
-      hash: Buffer.from(accountAddr.to_address().to_bytes()).toString("hex"),
-      walletId,
-    });
-
-    addressesIndex.map((i) => {
-      const externalAddresses = this.scan.addShelleyUtxoAddress(stakingKey, externalAddrs[i], chainNetworkId, walletId);
-      db.address.bulkAdd(externalAddresses);
-    });
-    addressesIndex.map((i) => {
-      const internalAddresses = this.scan.addShelleyUtxoAddress(stakingKey, internalAddrs[i], chainNetworkId, walletId);
-      db.address.bulkAdd(internalAddresses);
-    });
-    db.address.bulkAdd(stakingKeyAddresses).catch((e) => console.log(e));
-  },
+    async createNewWalletDb(walletId) {
+        const db = new Dexie('wallet-'+walletId)
+        await db.version(1).stores({
+            config: '++id, key, value',
+            syncInfo: '++id, walletId, blockHash, height, absSlot, time, epoch',
+            transactions: '++id, txId, transaction',
+        });
+    },
+    async scan(wallet, fromBlockHeight, tip){
+        const db = new Dexie('wallet-'+wallet.id)
+        db.open().catch(err => {
+            console.error(`Failed to open database: ${err.stack || err}`);
+        })
+        wallet.provider.getTransactions()
+        return db.wallets.where({walletId: wallet.id}).first()
+    }
 };
