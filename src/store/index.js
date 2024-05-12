@@ -13,6 +13,8 @@ import {Api} from "@/api/api";
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
 
+let appWallet = undefined
+
 export const useStore = defineStore('store', {
     persist: true,
     state: () => ({
@@ -21,8 +23,8 @@ export const useStore = defineStore('store', {
         locale: 'en',
         network: undefined,
         provider: undefined,
-        tip: undefined,
-        accountInfo: undefined
+        accountInfo: undefined,
+        lastSyncInfo: undefined
     }),
     getters: {
         isLoggedIn: state => !!(state.loggedWallet),
@@ -31,11 +33,10 @@ export const useStore = defineStore('store', {
         getLocale: state => state.locale,
         getNetwork: state => state.network,
         getWallet: state => {
-            const wallet = Wallet.class(state.loggedWallet)
-            return {
-                wallet: wallet,
-                provider: (state.provider.name === Provider.KOIOS) ? new Api(state.provider, wallet.baseAddress().to_address().to_bech32()) : null
+            if (!appWallet) {
+                appWallet = Wallet.class(state.loggedWallet, state.provider)
             }
+            return appWallet
         }
     },
     actions: {
@@ -46,15 +47,11 @@ export const useStore = defineStore('store', {
             if (!wallet) {
                 return null
             }
-            this.provider = await db.getProvider(wallet.chain, wallet.network)
-
-            setInterval(() => {
-
-            }, 60000)
-            const wall = Wallet.class(wallet)
-            new Api(this.provider, wall.baseAddress().to_address().to_bech32())
-
             this.loggedWallet = wallet
+            this.provider = await db.getProvider(wallet.chain, wallet.network)
+            appWallet = Wallet.class(wallet, this.provider)
+            const tip = await appWallet.fetchTip()
+            await appWallet.sync(tip)
             loading.setLoading(false)
         },
         logout() {
@@ -77,8 +74,8 @@ export const useStore = defineStore('store', {
         setNetwork(network) {
             this.network = network
         },
-        setTip(tip) {
-            this.tip = tip
+        setLastSyncInfo(lastSyncInfo) {
+            this.lastSyncInfo = lastSyncInfo
         },
         setAccountInfo(accountInfo) {
             this.accountInfo = accountInfo

@@ -6,8 +6,7 @@ import {Blockchain, Network, Provider} from "@/models/types";
 import {useStore} from "@/store";
 export class Api {
 
-    constructor(provider, address) {
-        this.address = address
+    constructor(provider) {
         this.chain =  Object.keys(Blockchain).find(key => Blockchain[key] === provider.chain)
         this.network = Object.keys(Network).find(key => Network[key] === provider.network)
         this.provider = Object.keys(Provider).find(key => Provider[key] === provider.name)
@@ -21,14 +20,17 @@ export class Api {
         })
     }
 
-    async getAccountInfo() {
+    async getAccountInfo(address) {
         try {
-            const rewardAddress = this.address.startsWith('addr') ? resolveRewardAddress(this.address) : this.address;
+            const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
             const {data, status} = await this.axiosInstance.get(`/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`, {
                 _stake_addresses: [rewardAddress],
             });
             if (status === 200)
                 return data
+            if (status === 404) {
+                return null
+            }
             throw parseHttpError(data);
         } catch (error) {
             throw parseHttpError(error);

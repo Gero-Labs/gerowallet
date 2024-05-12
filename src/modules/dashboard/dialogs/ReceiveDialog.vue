@@ -32,10 +32,10 @@ export default {
   computed: {
     ...mapState(useStore, ['wallets', 'loggedWallet']),
     walletAddress() {
-      return this.store.getWallet.wallet.baseAddress().to_address().to_bech32()
+      return this.store.getWallet.baseAddress().to_address().to_bech32()
     },
     stakeAddress() {
-      return this.store.getWallet.wallet.stakeAddress().to_address().to_bech32()
+      return this.store.getWallet.stakeAddress().to_address().to_bech32()
     },
     options() {
       return {
@@ -106,7 +106,6 @@ export default {
   }),
   mounted() {
     this.qrCode = new QRCodeStyling(this.options)
-    console.log('happenininginigng')
     Vue.nextTick(() => {
       this.qrCode.append(this.$refs.qrCode);
     })
