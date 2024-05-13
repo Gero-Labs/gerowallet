@@ -110,6 +110,18 @@ export class Wallet {
             })
     }
 
+    async getAccountInfo() {
+        return await this.db.open()
+            .then(async db => {
+                const accountTable = db.table('account')
+                if (accountTable) {
+                    return accountTable.where({walletId: this.id}).first()
+                }
+            }).catch(err => {
+                console.error(`Failed to open database: ${err.stack || err}`);
+            })
+    }
+
     async setLastSyncInfo(tip, lastSyncInfo) {
         const lastSyncInfoId = await this.db.open()
             .then(db => {
@@ -153,18 +165,19 @@ export class Wallet {
     }
 
     async setAccountInfo(accountInfo) {
+        const resAccount = await this.getAccountInfo(this.id)
         const acc = {
             walletId: this.id,
             ...accountInfo
         }
         const accountInfoId = await this.db.open()
             .then(db => {
-                const syncTable = db.table('sync')
-                if (syncTable) {
-                    if (accountInfo) {
-                        return syncTable.update(accountInfo.id, acc)
+                const accountTable = db.table('account')
+                if (accountTable) {
+                    if (resAccount) {
+                        return accountTable.update(resAccount.id, acc)
                     } else {
-                        return syncTable.put(acc)
+                        return accountTable.put(acc)
                     }
                 }
             }).catch(err => {
