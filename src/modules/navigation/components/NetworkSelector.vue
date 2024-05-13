@@ -46,6 +46,7 @@ export default {
       this.selectedNetwork = this.network
     } else {
       this.selectedNetwork = this.networks.networks[0]
+      useStore().setNetwork(this.selectedNetwork)
     }
   }
 }

@@ -141,5 +141,8 @@ export default {
             account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
             transactions: '++id, txId, transaction',
         });
+        db.open().catch(err => {
+            console.error(`Failed to open database: ${err.stack || err}`);
+        })
     },
 };
