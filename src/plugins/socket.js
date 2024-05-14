@@ -15,7 +15,7 @@ export default {
         this.chain = chain
         this.network = network
         this.stompClient = Stomp.over(new SockJS(`${backendBaseUrl}/sock`))
-        // this.stompClient.debug = null
+        this.stompClient.debug = null
         this.stompClient.reconnect_delay = 3000
         this.stompClient.connect({}, () => {
             this.connected = true
@@ -30,14 +30,24 @@ export default {
     },
     stompSuccessCallback() {
         if (this.subscription) {
-            this.subscription.sub.unsubscribe()
+            if (this.subscription.sub) {
+                this.subscription.sub.unsubscribe()
+            }
+            if (this.subscription.price) {
+                this.subscription.price.unsubscribe()
+            }
         }
         if (this.connected) {
             this.subscription = {
-                sub: this.stompClient.subscribe(`/topic/blocktip/${this.chain}/${this.network}`, val => {
+                tip: this.stompClient.subscribe(`/topic/blocktip/${this.chain}/${this.network}`, val => {
                     const data = JSON.parse(val.body)
                     this.setMessage(Object.assign({}, data))
                 }),
+                price: this.stompClient.subscribe(`/topic/price/${this.chain}/${this.network}`, val => {
+                    const data = JSON.parse(val.body)
+                    this.setMessage(Object.assign({}, data))
+                }),
+
             }
         }
     },

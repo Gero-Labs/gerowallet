@@ -13,7 +13,6 @@
           <v-stepper-step
               :complete="step > 1"
               step="1"
-              editable
           >
             Wallet Creation
           </v-stepper-step>
@@ -21,14 +20,12 @@
           <v-stepper-step
               :complete="step > 2"
               step="2"
-              editable
           >
             Seed Phrase
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
               step="3"
-              editable
           >
             Confirm Phrase
           </v-stepper-step>

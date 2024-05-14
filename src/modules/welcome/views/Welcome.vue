@@ -20,7 +20,7 @@
               <p slot="content">{{ $t('restoreWalletSubtitle') }}</p>
             </parallax-card>
           </v-col>
-          <v-col cols="12" md="4" lg="4" class="d-flex align-center" :style="network.supportedHardware ? { } : { pointerEvents: 'none' }" @click="pairHardwareWalletDialog = true">
+          <v-col cols="12" md="4" lg="4" v-if="network" class="d-flex align-center" :style="network.supportedHardware ? { } : { pointerEvents: 'none' }" @click="pairHardwareWalletDialog = true">
             <v-chip large v-if="!network.supportedHardware"
               style="position: fixed;
               transform: translateX(50%) translateX(64px);
@@ -104,7 +104,7 @@ export default {
   methods: {
     ...mapActions(useStore, ['login']),
     submitLogin(walletId) {
-      this.login(walletId, 'sm5520tRetq!1')
+      this.login(walletId)
       this.$router.push("/")
     },
     resolveIcon(icon) {

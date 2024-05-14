@@ -123,7 +123,7 @@ export class Wallet {
     }
 
     async setLastSyncInfo(tip, lastSyncInfo) {
-        const lastSyncInfoId = await this.db.open()
+        await this.db.open()
             .then(db => {
                 const syncTable = db.table('sync')
                 if (syncTable) {
@@ -152,16 +152,6 @@ export class Wallet {
             }).catch(err => {
                 console.error(`Failed to open database: ${err.stack || err}`);
             })
-        useStore().setLastSyncInfo({
-            id: lastSyncInfoId,
-            walletId: this.id,
-            blockHash: tip.hash,
-            height: tip.height,
-            absSlot: tip.slot,
-            time: tip.time,
-            epoch: tip.epoch,
-            epoch_slot: tip.epoch_slot
-        })
     }
 
     async setAccountInfo(accountInfo) {
@@ -183,17 +173,26 @@ export class Wallet {
             }).catch(err => {
                 console.error(`Failed to open database: ${err.stack || err}`);
             })
-        useStore().setAccountInfo({
+        return {
             id: accountInfoId,
             ...acc
-        })
+        }
     }
 
     async sync(tip) {
+        console.log('sync')
         let lastSyncInfo = await this.getLastSyncInfo()
         if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
-            await this.syncAccountInfo()
-            await this.syncAccountTransactions()
+            const accountInfo = await this.syncAccountInfo()
+            if (accountInfo) {
+                await this.syncAccountRewards() //TODO should be synced at a particular time every epoch
+            }
+
+            //TODO account transactions
+            const addresses = await this.syncAddresses()
+            await this.syncAddressesTransactions(0, addresses) //TODO lastSyncInfo.height
+            await this.syncUtxos()
+
             await this.setLastSyncInfo(tip, lastSyncInfo)
         }
     }
@@ -204,17 +203,88 @@ export class Wallet {
     async syncAccountInfo() {
         try {
             const res = await this.api.getAccountInfo(this.stakeAddress().to_address().to_bech32())
-            console.log(res)
             if (res) {
-                await this.setAccountInfo(res)
+                return await this.setAccountInfo(res)
             }
         } catch (e) {
             console.log(e)
         }
     }
 
-    async syncAccountTransactions() {
+    async syncAccountRewards() {
+        try {
+            const res = await this.api.getAccountRewards(this.stakeAddress().to_address().to_bech32())
+            if (res) {
+                console.log(res)
+                await this.setAccountRewards(res)
+            }
+        } catch (e) {
+            console.log(e)
+        }
+    }
+
+    async syncAddressesTransactions(fromBlockHeight, addresses) {
+        try {
+            const promises = []
+            addresses.forEach(address => {
+                promises.push(this.api.getAddressTransactions(address, fromBlockHeight))
+            })
+            const res = await Promise.all(promises)
+            console.log(res)
+        } catch (e) {
+            console.log(e)
+        }
+    }
+
+    async setAccountRewards(res) {
+        return await this.db.open()
+            .then(db => {
+                const rew = []
+                const rewardsTable = db.table('rewards')
+                if (rewardsTable) {
+                    res.forEach(reward => {
+                        rew.push(rewardsTable.put(reward))
+                    })
+                    return rew
+                }
+            }).catch(err => {
+                console.error(`Failed to open database: ${err.stack || err}`);
+            })
+    }
+
+    async getDb() {
+        return await this.db.open()
+    }
+
+    async syncUtxos() {
 
     }
 
+    async syncAddresses() {
+        try {
+            const res = await this.api.getAccountAddresses(this.stakeAddress().to_address().to_bech32())
+            if (res) {
+                console.log(res)
+                return await this.setAccountAddresses(res)
+            }
+        } catch (e) {
+            console.log(e)
+        }
+    }
+
+    async setAccountAddresses(res) {
+        return await this.db.open()
+            .then(db => {
+                const rew = []
+                const addressesTable = db.table('addresses')
+                if (addressesTable) {
+                    res.forEach(address => {
+                        rew.push(addressesTable.put(address.address))
+                    })
+                    return rew
+                }
+            }).catch(err => {
+                console.error(`Failed to open database: ${err.stack || err}`);
+            })
+    }
 }
