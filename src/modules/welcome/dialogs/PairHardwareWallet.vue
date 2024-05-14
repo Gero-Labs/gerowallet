@@ -13,7 +13,6 @@
           <v-stepper-step
               :complete="step > 1"
               step="1"
-              editable
           >
             Type
           </v-stepper-step>
@@ -21,12 +20,11 @@
           <v-stepper-step
               :complete="step > 2"
               step="2"
-              editable
           >
             Pairing
           </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step step="3" editable>
+          <v-stepper-step step="3">
             Confirm Phrase
           </v-stepper-step>
         </v-stepper-header>

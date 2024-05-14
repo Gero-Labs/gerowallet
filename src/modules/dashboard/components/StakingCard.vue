@@ -10,11 +10,11 @@
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Total ADA:</span>
-            <h2 style="color: white">₳42.0k</h2>
+            <h2 style="color: white">{{ account.controlled_amount | toAda}}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Rewards</span>
-            <h2 style="color: white">₳1,068</h2>
+            <h2 style="color: white">{{ account.withdrawable_amount | toAda}}</h2>
           </v-col>
         </v-row>
         <v-row no-gutters class="pt-2">
@@ -47,7 +47,9 @@
               </v-btn>
             </div>
             <h3>Pool Id</h3>
-            <span style="color: white">pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kx...</span>
+            <div style="display: flex;align-items: center;">
+              <span style="color: white; text-overflow: ellipsis; overflow: hidden;white-space: nowrap;display: flow;">{{account.pool_id}}</span><copy-button :value="account.pool_id" x-small></copy-button>
+            </div>
             <div class="d-flex justify-lg-space-around pt-4">
               <v-btn large style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">Withdraw<br>Rewards</v-btn>
               <v-btn large style="text-transform: capitalize;" outlined color="#F97066">Unstake<br>From Pool</v-btn>
@@ -140,10 +142,16 @@
 <script>
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
+import {mapState} from "pinia";
+import {useStore} from "@/store";
+import CopyButton from "@/shared/components/CopyButton.vue";
 
 export default {
-  components: {RewardsChart},
+  components: {CopyButton, RewardsChart},
   props: {
+    account: {
+      type: Object,
+    },
     chartData: {
       type: Object,
       default: () => {},
@@ -201,6 +209,9 @@ export default {
       '473': 10.5,
       '474': 6
     }
+  },
+  async created() {
+
   }
 }
 </script>

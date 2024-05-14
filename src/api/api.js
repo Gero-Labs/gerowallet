@@ -23,9 +23,51 @@ export class Api {
     async getAccountInfo(address) {
         try {
             const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
-            const {data, status} = await this.axiosInstance.get(`/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`, {
-                _stake_addresses: [rewardAddress],
-            });
+            const {data, status} = await this.axiosInstance.get(`/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`);
+            if (status === 200)
+                return data
+            if (status === 404) {
+                return null
+            }
+            throw parseHttpError(data);
+        } catch (error) {
+            throw parseHttpError(error);
+        }
+    }
+
+    async getAccountRewards(address, page, size) {
+        try {
+            const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
+            const {data, status} = await this.axiosInstance.get(`/api/account/rewards?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}&page=1&size=10000`);
+            if (status === 200)
+                return data
+            if (status === 404) {
+                return null
+            }
+            throw parseHttpError(data);
+        } catch (error) {
+            throw parseHttpError(error);
+        }
+    }
+
+    async getAccountAddresses(address) {
+        try {
+            const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
+            const {data, status} = await this.axiosInstance.get(`/api/account/addresses?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`);
+            if (status === 200)
+                return data
+            if (status === 404) {
+                return null
+            }
+            throw parseHttpError(data);
+        } catch (error) {
+            throw parseHttpError(error);
+        }
+    }
+
+    async getAddressTransactions(address, fromBlockHeight) {
+        try {
+            const {data, status} = await this.axiosInstance.get(`/api/address/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&address=${address}&from=${fromBlockHeight}`);
             if (status === 200)
                 return data
             if (status === 404) {
