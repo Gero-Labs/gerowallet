@@ -23,8 +23,6 @@ export const useStore = defineStore('store', {
         locale: 'en',
         network: undefined,
         provider: undefined,
-        accountInfo: undefined,
-        lastSyncInfo: undefined
     }),
     getters: {
         isLoggedIn: state => !!(state.loggedWallet),
@@ -74,12 +72,6 @@ export const useStore = defineStore('store', {
         setNetwork(network) {
             this.network = network
         },
-        setLastSyncInfo(lastSyncInfo) {
-            this.lastSyncInfo = lastSyncInfo
-        },
-        setAccountInfo(accountInfo) {
-            this.accountInfo = accountInfo
-        }
     }
 })
 

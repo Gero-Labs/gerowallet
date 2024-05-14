@@ -17,7 +17,6 @@
           <v-stepper-step
               :complete="step > 1"
               step="1"
-              editable
           >
             Recovery Phrase
           </v-stepper-step>
@@ -25,7 +24,6 @@
           <v-stepper-step
               :complete="step > 2"
               step="2"
-              editable
           >
             Wallet Setup
           </v-stepper-step>
@@ -91,7 +89,7 @@
 
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pt-0">
             <v-form ref="form2" v-model="valid2">
-              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px">
+              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px" :disabled="creatingWalletLoader">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
                   <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
@@ -204,6 +202,7 @@
                       text
                       @click="step = 1"
                       elevation="0"
+                      :disabled="creatingWalletLoader"
                   >
                     Back
                   </v-btn>

@@ -24,7 +24,7 @@
         <quick-actions></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard v-if="false == true"></StakingCard>
+        <StakingCard :account="accountInfo" v-if="accountInfo?.controlled_amount"></StakingCard>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
@@ -65,6 +65,8 @@ import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
 import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
+import {useObservable} from "@vueuse/rxjs";
+import {liveQuery} from "dexie";
 
 export default {
   name: 'dashboard',
@@ -113,6 +115,7 @@ export default {
     filters,
     loadingChart: true,
     chartData: undefined,
+    accountInfo: undefined,
     activityHeaders: [
       {text: 'Tx Status', align: 'start', sortable: true, value: 'time'},
       {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
@@ -129,6 +132,13 @@ export default {
       {status: 'Sent', time: '21/12/2023', assets: ['ADA'], ada: '- ₳8.30'},
     ],
   }),
+  async created() {
+    this.wallet = useStore().getWallet
+    const db = await this.wallet.getDb()
+    this.accountInfo = useObservable(liveQuery(() => {
+      return db.table('account').where({walletId: this.wallet.id}).first()
+    }))
+  },
   async mounted() {
     this.wallet = useStore().getWallet
     this.chartData = await fetch(

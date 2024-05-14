@@ -81,7 +81,8 @@ import {useStore} from "@/store";
 import socket from "@/plugins/socket";
 import {Blockchain, Network} from "@/models/types";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
-import {mapState} from "pinia";
+import { liveQuery } from "dexie";
+import { useObservable } from "@vueuse/rxjs";
 
 export default {
   name: 'ContentLayout',
@@ -89,18 +90,15 @@ export default {
   watch: {
     'socket.message': {
       handler(val) {
-        console.log(val)
         if (val.message_type === 'TIP') {
           this.wallet.sync(val.object)
-          // this.tip.epoch_slot = val.object.epoch_slot
-          // this.tip.epoch = val.object.epoch
         }
       },
       deep: true
     },
   },
   computed: {
-    ...mapState(useStore, ['lastSyncInfo']),
+    // ...mapState(useStore, ['lastSyncInfo']),
     epochSlotPercentage() {
       if (this.lastSyncInfo) {
         return this.lastSyncInfo.epoch_slot / 432000 * 100
@@ -112,14 +110,17 @@ export default {
     wallet: undefined,
     socket,
     store: useStore(),
+    lastSyncInfo: undefined,
   }),
   async created() {
     this.wallet = useStore().getWallet
+    const db = await this.wallet.getDb()
+    this.lastSyncInfo = useObservable(liveQuery(() => {
+          return db.table('sync').where({walletId: this.wallet.id}).first()
+        }))
     try {
       const tip = await this.wallet.fetchTip()
-      console.log(tip)
       useStore().getWallet.sync(tip)
-      console.log(this.wallet)
     } catch (e) {
       console.log(e)
     }

@@ -93,7 +93,6 @@ const router = new VueRouter({
 
 router.beforeEach(async (to, from, next) => {
   const store = useStore();
-  console.log("val");
   let wallets = store.getWallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
