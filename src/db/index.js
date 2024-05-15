@@ -139,7 +139,7 @@ export default {
             config: '++id, key, value',
             sync: '++id, walletId, blockHash, height, absSlot, time, epoch, epoch_slot',
             account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
-            addresses: '&address',
+            addresses: 'address',
             rewards: 'epoch, amount, pool_id, type',
             transactions: '++id, txId, transaction',
         });

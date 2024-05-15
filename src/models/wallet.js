@@ -223,19 +223,6 @@ export class Wallet {
         }
     }
 
-    async syncAddressesTransactions(fromBlockHeight, addresses) {
-        try {
-            const promises = []
-            addresses.forEach(address => {
-                promises.push(this.api.getAddressTransactions(address, fromBlockHeight))
-            })
-            const res = await Promise.all(promises)
-            console.log(res)
-        } catch (e) {
-            console.log(e)
-        }
-    }
-
     async setAccountRewards(res) {
         return await this.db.open()
             .then(db => {
@@ -250,6 +237,30 @@ export class Wallet {
             }).catch(err => {
                 console.error(`Failed to open database: ${err.stack || err}`);
             })
+    }
+
+    async syncAddressesTransactions(fromBlockHeight, addresses) {
+        try {
+            const promises = []
+            addresses.forEach(address => {
+                promises.push(this.api.getAddressTransactions(address.address, fromBlockHeight))
+            })
+            const res = await Promise.all(promises)
+            const transactions = []
+            res.forEach(value => {
+                value.forEach(tx => {
+                    transactions.push(tx)
+                })
+            })
+            console.log(transactions)
+            return transactions
+        } catch (e) {
+            console.log(e)
+        }
+    }
+
+    async setAddressTransactions(){
+
     }
 
     async getDb() {
@@ -275,13 +286,12 @@ export class Wallet {
     async setAccountAddresses(res) {
         return await this.db.open()
             .then(db => {
-                const rew = []
                 const addressesTable = db.table('addresses')
                 if (addressesTable) {
                     res.forEach(address => {
-                        rew.push(addressesTable.put(address.address))
+                        addressesTable.put({address: address.address})
                     })
-                    return rew
+                    return res
                 }
             }).catch(err => {
                 console.error(`Failed to open database: ${err.stack || err}`);
