@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build-zip": "node scripts/build-zip.js",
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "build-zip": "node scripts/build-zip.js"
   },
   "dependencies": {
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.2",
@@ -44,9 +44,16 @@
   "devDependencies": {
     "@babel/core": "^7.22.5",
     "@babel/eslint-parser": "^7.22.5",
+    "@types/sockjs-client": "^1.5.4",
+    "@types/stompjs": "^2.3.9",
+    "@types/w3c-web-usb": "^1.0.10",
+    "@typescript-eslint/eslint-plugin": "^5.4.0",
+    "@typescript-eslint/parser": "^5.4.0",
     "@vue/cli-plugin-babel": "~5.0.8",
     "@vue/cli-plugin-eslint": "~5.0.8",
+    "@vue/cli-plugin-typescript": "~5.0.0",
     "@vue/cli-service": "^5.0.8",
+    "@vue/eslint-config-typescript": "^9.1.0",
     "buffer": "^6.0.3",
     "copy-webpack-plugin": "^12.0.2",
     "crypto-browserify": "^3.12.0",
@@ -69,13 +76,11 @@
     },
     "extends": [
       "plugin:vue/essential",
-      "eslint:recommended"
+      "eslint:recommended",
+      "@vue/typescript"
     ],
     "parserOptions": {
-      "parser": {
-        "js": "@babel/eslint-parser",
-        "ts": "@typescript-eslint/parser"
-      }
+      "parser": "@typescript-eslint/parser"
     },
     "rules": {
       "no-unused-vars": "off",
