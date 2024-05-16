@@ -45,6 +45,7 @@ export default {
 .dialog-children-container {
   position: relative;
   z-index: 1;
+  height: 100%;
 }
 
 .rings-container {
