@@ -97,7 +97,7 @@ export default {
               color: '#fff'
             }
           },
-          tickInterval: 3,
+          tickInterval: yMax >= 3 ? 3: 0,
           min: 0,
           max: yMax,
           opposite: true,

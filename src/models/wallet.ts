@@ -4,12 +4,10 @@ import { Buffer } from 'buffer';
 import * as CryptoTS from 'crypto-ts';
 import cryptoRandomString from 'crypto-random-string';
 import * as serialization from '@emurgo/cardano-serialization-lib-browser';
-import { BaseAddress, Bip32PrivateKey, Bip32PublicKey, PublicKey, RewardAddress, StakeCredential } from '@emurgo/cardano-serialization-lib-browser';
-
-import { Api } from '@/api/api';
-import { useStore } from '@/store';
+import { BaseAddress, Bip32PrivateKey, Bip32PublicKey, RewardAddress, PublicKey, StakeCredential } from '@emurgo/cardano-serialization-lib-browser';
+import {Api} from '@/api/api';
 import networks from '@/shared/utils/networks';
-import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
+import {ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
 
 export class Wallet {
   db: Dexie;
@@ -43,19 +41,8 @@ export class Wallet {
   }
 
   static class(wallet, provider) {
-    const wal = new Wallet(
-      wallet.id,
-      wallet.name,
-      wallet.icon,
-      wallet.type,
-      wallet.theme,
-      wallet.order,
-      wallet.encryptedPrivateKey,
-      wallet.publicKey,
-      wallet.passwordLastUpdate,
-      wallet.chain,
-      wallet.network
-    );
+    const wal = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
+      wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     wal.api = new Api(provider);
     wal.db = new Dexie('wallet-' + wallet.id);
     return wal;
@@ -95,7 +82,10 @@ export class Wallet {
   }
 
   pubKey(index: number): PublicKey {
-    return Bip32PublicKey.from_bech32(this.publicKey).derive(ChainDerivations.EXTERNAL).derive(index).to_raw_key();
+    return Bip32PublicKey.from_bech32(this.publicKey)
+      .derive(ChainDerivations.EXTERNAL)
+      .derive(index)
+      .to_raw_key();
   }
 
   stakeKey(): PublicKey {
@@ -122,9 +112,7 @@ export class Wallet {
       .open()
       .then(async db => {
         const syncTable = db.table('sync');
-
         if (!syncTable) throw new Error('No Sync table.');
-
         return syncTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
@@ -137,9 +125,7 @@ export class Wallet {
       .open()
       .then(async db => {
         const accountTable = db.table('account');
-
         if (!accountTable) throw new Error('No Account table.');
-
         return accountTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
@@ -152,7 +138,6 @@ export class Wallet {
       .open()
       .then(db => {
         const syncTable = db.table('sync');
-
         if (!syncTable) throw new Error('No Sync table.');
 
         if (lastSyncInfo) {
@@ -163,7 +148,7 @@ export class Wallet {
             absSlot: tip.slot,
             time: tip.time,
             epoch: tip.epoch,
-            epoch_slot: tip.epoch_slot,
+            epoch_slot: tip.epoch_slot
           });
         } else {
           return syncTable.put({
@@ -173,7 +158,7 @@ export class Wallet {
             absSlot: tip.slot,
             time: tip.time,
             epoch: tip.epoch,
-            epoch_slot: tip.epoch_slot,
+            epoch_slot: tip.epoch_slot
           });
         }
       })
@@ -186,7 +171,7 @@ export class Wallet {
     const resAccount = await this.getAccountInfo();
     const acc = {
       walletId: this.id,
-      ...accountInfo,
+      ...accountInfo
     };
     const accountInfoId = await this.db
       .open()
@@ -206,7 +191,7 @@ export class Wallet {
       });
     return {
       id: accountInfoId,
-      ...acc,
+      ...acc
     };
   }
 
@@ -218,11 +203,13 @@ export class Wallet {
       if (accountInfo) {
         await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
       }
-
+      const newTxs = await this.syncAccountTransactions(lastSyncInfo.height);
+      console.log(newTxs);
+      await this.syncTxIos(newTxs);
       //TODO account transactions
-      const addresses = await this.syncAddresses();
-      await this.syncAddressesTransactions(0, addresses); //TODO lastSyncInfo.height
-      await this.syncUtxos();
+      // const addresses = await this.syncAddresses();
+      // await this.syncAddressesTransactions(0, addresses); //TODO lastSyncInfo.height
+      // await this.syncUtxos();
 
       await this.setLastSyncInfo(tip, lastSyncInfo);
     }
@@ -247,7 +234,6 @@ export class Wallet {
     try {
       const res = await this.api.getAccountRewards(this.stakeAddress().to_address().to_bech32());
       if (res) {
-        console.log(res);
         await this.setAccountRewards(res);
       }
     } catch (e) {
@@ -275,6 +261,66 @@ export class Wallet {
       });
   }
 
+  async syncAccountTransactions(height: number): Promise<any> {
+    try {
+      const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height)
+      if (res && Array.isArray(res)) {
+        const promises = []
+        res.forEach(value => {
+          promises.push(this.api.getTransactionInfo(value.tx_hash))
+        })
+        const txs = await Promise.all(promises)
+        await this.setAccountTransactions(txs)
+        return txs
+      }
+    } catch (e) {
+      console.log(e)
+    }
+  }
+
+  async setAccountTransactions(txs): Promise<any> {
+    return this.db.open()
+      .then(db => {
+        const txsTable = db.table('transactions')
+        if (txsTable) {
+          txs = txs.map(tx => {
+            return {id: tx.hash, transaction: tx}
+          })
+          txsTable.bulkPut(txs)
+        }
+      }).catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async syncTxIos(txs): Promise<any> {
+    try {
+      if (txs && Array.isArray(txs)) {
+        const promises = []
+        txs.forEach(value => {
+          console.log(value)
+          promises.push(this.api.getTransactionUtxos(value.hash))
+        })
+        const txIos = await Promise.all(promises)
+        await this.setTxIos(txIos)
+      }
+    } catch (e) {
+      console.log(e)
+    }
+  }
+
+  async setTxIos(txIos) {
+    return this.db.open()
+      .then(db => {
+        const txIoTable = db.table('tx_io')
+        if (txIoTable && txIos) {
+          txIoTable.bulkPut(txIos)
+        }
+      }).catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
   async syncAddressesTransactions(fromBlockHeight, addresses): Promise<any[] | void> {
     try {
       const promises = [];
@@ -288,7 +334,6 @@ export class Wallet {
           transactions.push(tx);
         });
       });
-      console.log(transactions);
       return transactions;
     } catch (e) {
       console.log(e);
@@ -300,8 +345,6 @@ export class Wallet {
   async getDb(): Promise<Dexie> {
     return await this.db.open();
   }
-
-  async syncUtxos(): Promise<any> {}
 
   async syncAddresses(): Promise<any> {
     try {
@@ -326,7 +369,6 @@ export class Wallet {
         res.forEach(address => {
           addressesTable.put({ address: address.address });
         });
-
         return res;
       })
       .catch(err => {
