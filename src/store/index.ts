@@ -6,8 +6,6 @@ import loading from '@/plugins/loading';
 
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
-import { Provider } from '@/models/types';
-import { Api } from '@/api/api';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -16,7 +14,6 @@ import { Api } from '@/api/api';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: true,
   state: () => ({
     loggedWallet: undefined,
     wallets: [],
@@ -38,7 +35,7 @@ export const useStore = defineStore('store', {
     },
   },
   actions: {
-    async login(walletId) {
+    async login(walletId: number) {
       loading.setLoading(true);
       console.log('login');
       const wallet = this.wallets.find(wal => wal.id === walletId);
@@ -58,7 +55,7 @@ export const useStore = defineStore('store', {
       this.provider = undefined;
       loading.setLoading(false);
     },
-    async loadWallets() {
+    async loadWallets(): Promise<any> {
       loading.setLoading(true);
       const wallets = await db.getAllWallets();
       if (Array.isArray(wallets) && wallets.length) {

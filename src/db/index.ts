@@ -40,8 +40,15 @@ async function initializeProviderTable() {
           chain: Blockchain.CARDANO,
           network: Network.MAINNET,
           baseUrl: 'https://api.koios.rest/api/v1/',
-          apiKey: null,
+          apiKey: null
         },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.APEX_PRIME,
+          network: Network.TESTNET,
+          baseUrl: 'http://apex-prime-testnet.gerowallet.io:8053/',
+          apiKey: null
+        }
       ];
       await db['provider'].bulkAdd(initialData).catch(error => {
         console.error('Error adding initial data:', error);
@@ -84,19 +91,8 @@ export default {
       .derive(HARDENED + accountIndex)
       .to_public()
       .to_bech32();
-    const wallet = new Wallet(
-      null,
-      name,
-      icon,
-      WalletType.Normal,
-      theme,
-      order,
-      encryptedPrivateKey,
-      publicKey,
-      new Date(),
-      chain,
-      network
-    );
+    const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
+      new Date(), chain, network);
     const walletId = await db['wallets'].add({
       name: wallet.name,
       icon: wallet.icon,
@@ -107,7 +103,7 @@ export default {
       publicKey: wallet.publicKey,
       passwordLastUpdate: wallet.passwordLastUpdate,
       chain: wallet.chain,
-      network: wallet.network,
+      network: wallet.network
     });
     await this.createNewWalletDb(walletId);
     await useStore().loadWallets();
@@ -129,7 +125,7 @@ export default {
       publicKey: publicKey,
       passwordLastUpdate: new Date(),
       chain: chain,
-      network: network,
+      network: network
     });
     await this.createNewWalletDb(walletId);
     await useStore().loadWallets();
@@ -144,7 +140,9 @@ export default {
         '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
       addresses: 'address',
       rewards: 'epoch, amount, pool_id, type',
-      transactions: '++id, txId, transaction',
+      transactions: 'id, transaction',
+      tx_io: 'id',
+      utxos: 'id',
     });
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);
