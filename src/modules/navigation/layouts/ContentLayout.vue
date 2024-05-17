@@ -5,7 +5,7 @@
         <v-layout :align-start="true">
           <navigation-drawer></navigation-drawer>
           <v-sheet style="height: 100vh; overflow-y: auto; background-color: #121212;">
-            <v-layout row class="no-gutters px-4 transparent" :justify-start="true">
+            <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
               <v-app-bar flat class="transparent" color="transparent">
                 <price-ticker></price-ticker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>

@@ -31,7 +31,7 @@
         <v-card outlined class="fill-height">
           <v-card-title>Recent Activity</v-card-title>
           <v-card-text class="px-0">
-            <v-data-table :items="recentActivity" :headers="activityHeaders" class="transparent">
+            <v-data-table :items="activities" :headers="activityHeaders" class="transparent">
               <template v-slot:[`item.time`]="{ item }">
                 <v-list-item two-line class="px-0">
                   <v-list-item-avatar tile :size="getIconSize(item)">
@@ -39,7 +39,7 @@
                   </v-list-item-avatar>
                   <v-list-item-content>
                     <v-list-item-title>{{ item.status }}</v-list-item-title>
-                    <v-list-item-subtitle>{{ item.time }}</v-list-item-subtitle>
+                    <v-list-item-subtitle style="font-size: 10px">{{ new Date(item.time*1000).toLocaleString() }}</v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </template>
@@ -75,6 +75,19 @@ export default {
     computeChartData() {
       return this.chartData
     },
+    activities() {
+      if (this.transactions) {
+        console.log(this.transactions)
+        const txs = this.transactions.map(el => el.transaction).map(tx => {
+          // console.log(tx.output_amount)
+          const ada = tx.output_amount.find(el => el.unit === 'lovelace').quantity
+          return {...tx, time: tx.block_time, ada: filters.toAda(ada)}
+        })
+        txs.sort((a, b) => b.time - a.time)
+        return txs
+      }
+      return []
+    }
   },
   methods: {
     getIconSize(item) {
@@ -116,8 +129,9 @@ export default {
     loadingChart: true,
     chartData: undefined,
     accountInfo: undefined,
+    transactions: undefined,
     activityHeaders: [
-      {text: 'Tx Status', align: 'start', sortable: true, value: 'time'},
+      {text: 'Activity', align: 'start', sortable: true, value: 'time'},
       {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
       {text: 'Amount', align: 'start', sortable: false, value: 'amount'},
     ],
@@ -137,6 +151,9 @@ export default {
     const db = await this.wallet.getDb()
     this.accountInfo = useObservable(liveQuery(() => {
       return db.table('account').where({walletId: this.wallet.id}).first()
+    }))
+    this.transactions = useObservable(liveQuery(() => {
+      return db.table('transactions').toArray()
     }))
   },
   async mounted() {

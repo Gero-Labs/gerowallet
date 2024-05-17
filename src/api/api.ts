@@ -1,6 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
-
-import { useStore } from '@/store';
+import axios, {AxiosError, AxiosInstance} from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { resolveRewardAddress } from '@/shared/utils/resolver';
 import { Blockchain, Network, Provider } from '@/models/types';
@@ -31,10 +29,7 @@ export class Api {
       const { data, status } = await this.axiosInstance.get(
         `/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`
       );
-
       if (status === 200) return data;
-      if (status === 404) return null;
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -47,10 +42,7 @@ export class Api {
       const { data, status } = await this.axiosInstance.get(
         `/api/account/rewards?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}&page=${page}&size=${size}`
       );
-
-      if (status === 200) return data;
-      if (status === 404) return null;
-
+      if (status === 200) return data
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -63,25 +55,65 @@ export class Api {
       const { data, status } = await this.axiosInstance.get(
         `/api/account/addresses?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`
       );
-
       if (status === 200) return data;
-      if (status === 404) return null;
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
     }
   }
 
-  async getAddressTransactions(address: string, fromBlockHeight) {
+  async getAccountTransactions(address: string, fromBlockHeight: number) {
+    try {
+      const stakeAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
+      const { data, status } = await this.axiosInstance.get(
+        `/api/account/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${stakeAddress}&from=${fromBlockHeight}`
+      );
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      if (error.response?.status === 404) {
+        return []
+      }
+      throw parseHttpError(error);
+    }
+  }
+
+  async getTransactionInfo(txHash: string) {
     try {
       const { data, status } = await this.axiosInstance.get(
-        `/api/address/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&address=${address}&from=${fromBlockHeight}`
+        `/api/transactions/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&txHash=${txHash}`
       );
-
       if (status === 200) return data;
-      if (status === 404) return null;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      console.log(error)
+      if (error.response?.status === 404) {
+        return []
+      }
+      throw parseHttpError(error);
+    }
+  }
 
+  async getTransactionUtxos(txHash: string) {
+    try {
+      const { data, status } = await this.axiosInstance.get(
+        `/api/transactions/utxos?chain=${this.chain}&network=${this.network}&provider=${this.provider}&txHash=${txHash}`
+      );
+      if (status === 200) return {id: txHash, data: data};
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getAddressTransactions(address: string, fromBlockHeight: number) {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/address/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&address=${address}&from=${fromBlockHeight}`);
+      if (status === 200)
+        return data
+      if (status === 404) {
+        return null
+      }
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -93,9 +125,7 @@ export class Api {
       const { data, status } = await this.axiosInstance.get(
         `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
       );
-
       if (status === 200) return data;
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -105,7 +135,6 @@ export class Api {
   async fetchHistory() {
     try {
       const { data, status } = await this.axiosInstance.get(`/crypto/history/ADAUSDT`);
-
       if (status === 200) {
         const chart = [];
         for (let i = 0; i < data.length; i++) {
@@ -113,7 +142,6 @@ export class Api {
         }
         return chart;
       }
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -125,9 +153,7 @@ export class Api {
       const { data, status } = await this.axiosInstance.get(
         'https://openexchangerates.org/api/latest.json?app_id=dbffdd0541a3481e93b8f5cd0b0ee214'
       );
-
       if (status === 200) return data.rates.ILS;
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -137,9 +163,7 @@ export class Api {
   async fetchADAStatistics() {
     try {
       const { data, status } = await this.axiosInstance.get('/crypto/ticker/ADAUSDT');
-
       if (status === 200) return data;
-
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
