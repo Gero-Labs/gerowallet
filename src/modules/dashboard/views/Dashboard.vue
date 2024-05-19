@@ -36,7 +36,10 @@
                 <v-list-item two-line class="px-0">
                   <v-list-item-content>
                     <v-list-item-title style="font-size: 12px">{{ item.status }}</v-list-item-title>
-                    <v-list-item-subtitle style="font-size: 10px">{{ new Date(item.time*1000).toLocaleDateString() }}</v-list-item-subtitle>
+                    <v-list-item-subtitle style="font-size: 10px">{{
+                        new Date(item.time * 1000).toLocaleDateString()
+                      }}
+                    </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </template>
@@ -45,7 +48,7 @@
                                 :style="item.status === 'Pending' ? { opacity: '0.5'} : { }"></stacked-tokens>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
-                <span :style="{color: getColor(item)}">{{ item.ada | toAda }}</span>
+                <span :style="{color: getColor(item)}">{{ item.ada | toAda(true) }}</span>
               </template>
             </v-data-table>
           </v-card-text>
@@ -75,47 +78,40 @@ export default {
     },
     activities() {
       if (this.transactions) {
-        // console.log(this.transactions)
+        const vm = this
         const txs = this.transactions.map(el => el.transaction).map(tx => {
-          const receiving = {
-            coin: 0,
-            multiAssets: []
-          }
-          const sending = {
-            coin: 0,
-            multiAssets: []
-          }
-          if (tx.out_map) {
-            Object.keys(tx.out_map).forEach(address => {
-              if (resolveRewardAddress(address) === this.wallet.stakeAddress().to_address().to_bech32()) {
-                receiving.coin += tx.out_map[address].coin
-                receiving.multiAssets.push(...tx.out_map[address].multiAssets)
-              } else {
-                sending.coin += tx.out_map[address].coin
-                sending.multiAssets.push(...tx.out_map[address].multiAssets)
-              }
-            })
-          }
-          let ada = 0
-          const multiAssets = []
+          let totalAmount;
+          totalAmount = tx.inputs.reduce((acc, input) =>
+            (input.stake_addr === vm.wallet.stakeAddress().to_address().to_bech32() ? acc - +input.value : acc), 0);
+          totalAmount = tx.outputs.reduce(
+            (acc, input) => (input.stake_addr === vm.wallet.stakeAddress().to_address().to_bech32() ? acc + +input.value : acc),
+            totalAmount
+          );
           const statuses = []
-          if (receiving.coin !== 0 || receiving.multiAssets.length > 0) {
+          if (tx.withdrawals && tx.withdrawals.length > 0) {
+            tx.withdrawals.forEach(withdrawal => {
+              totalAmount -= Number(withdrawal.amount)
+            })
+            statuses.push('Withdrawal')
+          }
+          if (totalAmount > 0) {
             statuses.push('Received')
-            ada += receiving.coin
-
-          }
-          if (sending.coin !== 0 || sending.multiAssets.length > 0) {
+          } else {
             statuses.push('Sent')
-            ada -= sending.coin
           }
-
-          return {...tx, time: tx.tx_timestamp, ada: ada, status: statuses.join(', '), assets: ['ADA'] }
+          if (tx.tx_hash === '1694a7591a457ce0c90d5899830bbfb46856dcabf6d71f5d0398792a51c4e377') {
+            console.log(filters.toAda(totalAmount, true))
+          }
+          return {...tx, time: tx.tx_timestamp, ada: totalAmount, status: statuses.join(', '), assets: ['ADA']}
         })
         txs.sort((a, b) => b.time - a.time)
         return txs
       }
       return []
     },
+    balanceOverTime() {
+      return ''
+    }
   },
   methods: {
     subtract(output, input) {
@@ -156,9 +152,9 @@ export default {
     getColor(item) {
       if (item.status === 'Pending') {
         return '#FEC84B'
-      } else if (item.status === 'Received') {
+      } else if (item.status.includes('Received')) {
         return '#17B26A'
-      } else if (item.status === 'Sent') {
+      } else if (item.status.includes('Sent')) {
         return '#F97066'
       }
       return ''
@@ -206,7 +202,7 @@ export default {
   async mounted() {
     this.wallet = useStore().getWallet
     this.chartData = await fetch(
-        'https://demo-live-data.highcharts.com/aapl-c.json'
+      'https://demo-live-data.highcharts.com/aapl-c.json'
     ).then(response => response.json())
     this.loadingChart = false
   }
@@ -216,6 +212,7 @@ export default {
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }
+
 .v-data-table-header {
   background-color: rgb(22, 27, 38);
 }
