@@ -68,6 +68,7 @@ import {useStore} from "@/store";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
 import {resolveRewardAddress} from "@/shared/utils/resolver";
+import tempTransactions from "./temp.json";
 
 export default {
   name: 'dashboard',
@@ -79,14 +80,47 @@ export default {
     activities() {
       if (this.transactions) {
         const vm = this
+        const currentStake = vm.wallet.stakeAddress().to_address().to_bech32();
         const txs = this.transactions.map(el => el.transaction).map(tx => {
-          let totalAmount;
-          totalAmount = tx.inputs.reduce((acc, input) =>
-            (input.stake_addr === vm.wallet.stakeAddress().to_address().to_bech32() ? acc - +input.value : acc), 0);
-          totalAmount = tx.outputs.reduce(
-            (acc, input) => (input.stake_addr === vm.wallet.stakeAddress().to_address().to_bech32() ? acc + +input.value : acc),
-            totalAmount
-          );
+          let totalAmount = 0;
+          const assets = {}
+
+          tx.inputs.forEach(input => {
+            if (input.stake_addr === currentStake) {
+              totalAmount -= +input.value
+              if(input.asset_list.length){
+                input.asset_list.forEach((asset)=>{
+                  const assetName = asset.policy_id + asset.asset_name;
+                  if(assets[assetName]){
+                    assets[assetName].quantity = +assets[assetName].quantity - +asset.quantity
+                  } else {
+                    assets[assetName] = structuredClone(asset)
+                    assets[assetName].quantity = -asset.quantity
+                  }
+                })
+              }
+            }
+          })
+
+          tx.outputs.forEach(output => {
+            if (output.stake_addr === currentStake) {
+              totalAmount += +output.value
+              if(output.asset_list.length){
+                output.asset_list.forEach((asset)=>{
+                  const assetName = asset.policy_id + asset.asset_name;
+                  if(assets[assetName]){
+                    assets[assetName].quantity = +assets[assetName].quantity + +asset.quantity
+                    if(assets[assetName].quantity === 0){
+                      delete assets[assetName]
+                    }
+                  } else {
+                    assets[assetName] = structuredClone(asset)
+                  }
+                })
+              }
+            }
+          })
+
           const statuses = []
           if (tx.withdrawals && tx.withdrawals.length > 0) {
             tx.withdrawals.forEach(withdrawal => {
@@ -102,9 +136,10 @@ export default {
           if (tx.tx_hash === '1694a7591a457ce0c90d5899830bbfb46856dcabf6d71f5d0398792a51c4e377') {
             console.log(filters.toAda(totalAmount, true))
           }
-          return {...tx, time: tx.tx_timestamp, ada: totalAmount, status: statuses.join(', '), assets: ['ADA']}
+          return {...tx, time: tx.tx_timestamp, ada: totalAmount, status: statuses.join(', '), assets: Object.values(assets)}
         })
         txs.sort((a, b) => b.time - a.time)
+        console.log(txs)
         return txs
       }
       return []
