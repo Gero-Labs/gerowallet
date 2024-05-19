@@ -1,14 +1,34 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')">
-    <v-btn v-if="currentStep > 1" @click="prevStep" icon class="arrow-left"><v-icon  color="#cccdd0">mdi-arrow-left</v-icon></v-btn>
+    <v-btn v-if="currentStep > 1" @click="prevStep" icon class="arrow-left"
+      ><v-icon color="#cccdd0">mdi-arrow-left</v-icon></v-btn
+    >
     <div class="titles">
       <v-card-title class="display-1">Quick Send</v-card-title>
-      <v-card-subtitle class="text--secondary">
-        Send AP3X or other assets to another wallet.
-      </v-card-subtitle>
+      <v-card-subtitle class="text--secondary"> Send AP3X or other assets to another wallet. </v-card-subtitle>
     </div>
 
-    <CustomStepper :currentStep="currentStep" @next="nextStep" @prev="prevStep" :steps="steps"></CustomStepper>
+    <CustomStepper :currentStep="currentStep" :steps="steps">
+      <v-stepper-content step="1">
+        <SendRecipientDetailsStep
+          @next="nextStep"
+          :sendData="this.sendData"
+          @selectWallet="selectWallet"
+          @updateRecipientAddress="updateRecipientAddress"
+        ></SendRecipientDetailsStep>
+      </v-stepper-content>
+      <v-stepper-content step="2">
+        <AssetsToSendStep
+          @next="nextStep"
+          @prev="prevStep"
+          @select="selectCollectible"
+          :sendData="this.sendData"
+        ></AssetsToSendStep>
+      </v-stepper-content>
+      <v-stepper-content step="3">
+        <SummaryStep :sendData="this.sendData" @next="nextStep" @prev="prevStep"></SummaryStep>
+      </v-stepper-content>
+    </CustomStepper>
   </BaseDialog>
 </template>
 <script>
@@ -20,16 +40,14 @@ import SummaryStep from '../components/SummaryStep.vue';
 
 export default {
   name: 'BuyDialog',
-  components: {BaseDialog, CustomStepper},
+  components: { BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
   props: {
     isOpen: {
       type: Boolean,
       default: false,
     },
   },
-  computed: {
-    
-  },
+  computed: {},
   data: () => ({
     loading: false,
     currentStep: 1,
@@ -37,21 +55,23 @@ export default {
       {
         name: 'recipientDetails',
         label: 'Recipient Details',
-        component: SendRecipientDetailsStep,
       },
       {
         name: 'assetsToSend',
         label: 'Assets to Send',
-        component: AssetsToSendStep,
       },
       {
         name: 'summary',
         label: 'Summary',
-        component: SummaryStep,
       },
     ],
+    sendData: {
+      selectedCollectibles: {},
+      recipientAddress: '',
+      selectedWallet: null,
+    },
   }),
-  methods:{
+  methods: {
     nextStep() {
       if (this.currentStep < this.steps.length) {
         this.currentStep++;
@@ -62,23 +82,35 @@ export default {
         this.currentStep--;
       }
     },
-  }
-}
+    selectWallet(wallet) {
+      this.sendData.selectedWallet = wallet;
+    },
+    updateRecipientAddress(address) {
+      this.sendData.recipientAddress = address;
+    },
+    selectCollectible(collectible) {
+      if (this.sendData.selectedCollectibles[collectible.name]) {
+        this.$delete(this.sendData.selectedCollectibles, collectible.name);
+      } else {
+        this.$set(this.sendData.selectedCollectibles, collectible.name, collectible);
+      }
+    },
+  },
+};
 </script>
 
 <style scoped>
-.titles{
+.titles {
   align-items: center;
   text-align: center;
   display: flex;
   flex-direction: column;
 }
 
-.arrow-left{
+.arrow-left {
   cursor: pointer;
   position: absolute;
   top: 10px;
   left: 10px;
 }
-
 </style>
