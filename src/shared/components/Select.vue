@@ -10,15 +10,15 @@
       :disabled="disabled"
       :readonly="readonly"
       :append-icon="readonly ? '' : 'mdi-menu-down'"
-      @input="$emit('update:value', $event)"
+      @input="$emit('input', $event)"
     >
       <template v-slot:item="{ item }">
-        <v-icon left>{{ item.icon }}</v-icon>
-        {{ item.text }}
+        <v-icon v-if="item.icon" left :color="item.iconColor">{{ item.icon }}</v-icon>
+        {{ item.name }}
       </template>
       <template v-slot:selection="{ item }">
-        <v-icon left>{{ item.icon }}</v-icon>
-        {{ item.text }}
+        <v-icon left v-if="item.icon" :color="item.iconColor">{{ item.icon }}</v-icon>
+        {{ item.name }}
       </template>
     </v-select>
   </div>

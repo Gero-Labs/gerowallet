@@ -2,7 +2,12 @@
   <div class="summary-container">
     <div class="sections-container">
       <section class="info-container">
-        <Select :value="from" :items="wallets" :readonly="true" label="From"></Select>
+        <Select
+        :value="sendData.selectedWallet"
+        :items="wallets"
+        label="From"
+        :readonly="true"
+      ></Select>
         <v-icon>mdi-arrow-down</v-icon>
 
         <label>To</label>
@@ -19,6 +24,7 @@
       </section>
 
       <section class="confirm-container">
+        <img src="../assets/risk-low.png" alt="risk" />
         <v-text-field class="text-field" outlined placeholder="Password"></v-text-field>
         <v-btn class="continue-button" @click="$emit('next')">Sign and confirm</v-btn>
       </section>
@@ -28,17 +34,20 @@
 
 <script>
 import Select from "@/shared/components/Select.vue";
+import { useStore } from "@/store";
 
 export default {
   components: { Select },
   name: "SummaryStep",
+  props: {
+    sendData: {
+      type: Object,
+      required: true,
+    },
+  },
   data() {
     return {
-      wallets: [
-        { text: "Wallet 1", icon: "mdi-wallet" },
-        { text: "Wallet 2", icon: "mdi-wallet" },
-        { text: "Wallet 3", icon: "mdi-wallet" },
-      ],
+      wallets: {},
       from: { text: "Wallet 1", icon: "mdi-wallet" },
     };
   },
@@ -46,13 +55,28 @@ export default {
     // Your component's methods go here
   },
   mounted() {
-    // Code to run when the component is mounted goes here
+    const colorsMapping = {
+      green: '#00685b',
+      purple: '#43269f',
+      red: '#b2105b',
+      orange: '#e14e02',
+      blue: '#125db5',
+      grey: '#415153',
+    };
+    const store = useStore();
+    this.wallets = store.wallets.map(wallet => ({
+      ...wallet,
+      icon: 'mdi-circle',
+      iconColor: colorsMapping[wallet.icon],
+    }));
   },
 };
 </script>
 
-<style scoped>
+<style>
 .summary-container {
+  margin-top: 20px;
+  
   .sections-container {
     display: flex;
     gap: 40px;
@@ -74,12 +98,13 @@ export default {
     
     .confirm-container {
       flex: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
 
       .text-field {
+        width: 100%;
         border-radius: 10px;
-        & > v-input__control > .v-input__slot > .v-text-field__slot > input {
-          padding: 10px !important;
-        }
       }
 
       .continue-button {

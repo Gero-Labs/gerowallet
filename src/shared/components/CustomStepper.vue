@@ -22,9 +22,7 @@
     </v-stepper-header>
 
     <v-stepper-items>
-      <v-stepper-content v-for="(step, index) in steps" :key="step.name" :step="index + 1">
-        <component :is="step.component" @next="$emit('next')" @prev="$emit('prev')"></component>
-      </v-stepper-content>
+      <slot></slot>
     </v-stepper-items>
   </v-stepper>
 </template>

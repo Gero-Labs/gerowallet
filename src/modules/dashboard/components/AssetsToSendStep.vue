@@ -21,8 +21,9 @@
               :key="item.name"
               class="collectible-item"
               :style="{ backgroundImage: `url(${item.image})` }"
+              @click="$emit('select', item)"
             >
-              <v-icon v-if="item.checked" class="check-icon" size="12" color="#000000">mdi-check</v-icon>
+              <v-icon v-if="sendData.selectedCollectibles[item.name]" class="check-icon" size="12" color="#000000">mdi-check</v-icon>
 
               <div class="collectible-text-container">
                 <span class="collectible-text">{{ item.name }}</span>
@@ -42,7 +43,12 @@ import SwapCurrencySelector from "@/shared/components/SwapCurrencySelector.vue";
 
 export default {
   components: { SwapCurrencySelector },
-
+  props: {
+    sendData: {
+      type: Object,
+      default: () => ({}), 
+    },
+  },
   name: "AssetsToSendStep",
   data() {
     return {
@@ -51,7 +57,6 @@ export default {
           name: "MusicBox Dimensions (30)",
           collectibles: [
             {
-              checked:true,
               name: "MusicBox Dimensions #1",
               image:
               "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
@@ -59,7 +64,6 @@ export default {
               price: 0.0001,
             },
             {
-              checked:true,
               name: "MusicBox Dimensions #2",
               image:
               "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
@@ -74,7 +78,6 @@ export default {
               price: 0.0001,
             },
             {
-              checked:true,
               name: "MusicBox Dimensions #4",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
@@ -94,35 +97,35 @@ export default {
           name: "Another dimensions (5)",
           collectibles: [
             {
-              name: "MusicBox Dimensions #1",
+              name: "MusicBox Dimensions #6",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
               quantity: 1,
               price: 0.0001,
             },
             {
-              name: "MusicBox Dimensions #2",
+              name: "MusicBox Dimensions #7",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
               quantity: 1,
               price: 0.0001,
             },
             {
-              name: "MusicBox Dimensions #3",
+              name: "MusicBox Dimensions #38",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
               quantity: 1,
               price: 0.0001,
             },
             {
-              name: "MusicBox Dimensions #4",
+              name: "MusicBox Dimensions #49",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
               quantity: 1,
               price: 0.0001,
             },
             {
-              name: "MusicBox Dimensions #5",
+              name: "MusicBox Dimensions #35",
               image:
                 "https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=100w%20100w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=300w%20300w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=500w%20500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=750w%20750w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1000w%201000w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=1500w%201500w,%20https://images.squarespace-cdn.com/content/v1/636033e6687115383adc8ea7/05a252e6-8cde-4bf4-8547-c0a60dd5d13e/HOOD.png?format=2500w%202500w",
               quantity: 1,
@@ -134,7 +137,6 @@ export default {
     };
   },
   methods: {
-    // Your component's methods go here
   },
   mounted() {
     // Code to run when the component is mounted goes here
