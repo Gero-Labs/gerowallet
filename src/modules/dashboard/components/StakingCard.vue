@@ -63,57 +63,57 @@
             <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
           </v-col>
         </v-row>
-        <v-row no-gutters>
-          <v-col cols="12" xl="4" lg="12" md="12" v-for="(epochRewards, index) in rewards2" :key="index"
-                 class="px-3 py-2">
-            <v-card outlined color="#84CAFF" style="border-radius: 12px">
-              <v-card-subtitle class="pb-0">
-                {{ 'Epoch ' + epochRewards.epoch + ' ' + (index === 0 ? '(Current)' : (index === 1 ? '(Next)' : '')) }}
-              </v-card-subtitle>
-              <v-card-title class="pt-0">[GERO] Gero Pool</v-card-title>
-              <v-card-text>
-                <v-row no-gutters>
-                  <v-col cols="5">
-                    <span style="font-size: 14px; color: white">Saturation</span>
-                  </v-col>
-                  <v-col cols="7">
-                    <v-progress-linear height="22" rounded :value="(epochRewards.saturation * 100)" color="#333741">
-                      <span>{{ (epochRewards.saturation * 100) + '%' }}</span>
-                    </v-progress-linear>
-                  </v-col>
-                </v-row>
-                <v-row no-gutters>
-                  <v-col cols="5">
-                    <span style="font-size: 14px; color: white">Pledge</span>
-                  </v-col>
-                  <v-col cols="7">
-                    <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">
-                      {{ epochRewards.pledge | toAda }}
-                    </v-chip>
-                  </v-col>
-                </v-row>
-                <v-row no-gutters>
-                  <v-col cols="5">
-                    <span style="font-size: 14px; color: white">ROS</span>
-                  </v-col>
-                  <v-col cols="7">
-                    <span style="font-size: 14px; color: white">{{ (epochRewards.ros * 100) + '%' }}</span>
-                  </v-col>
-                </v-row>
-                <v-row no-gutters>
-                  <v-col cols="5">
-                    <span style="font-size: 14px; color: white">Fees</span>
-                  </v-col>
-                  <v-col cols="7">
-                    <span style="font-size: 14px; color: white">{{
-                        epochRewards.margin_fee + '% / ₳' + epochRewards.fixed_fee
-                      }}</span>
-                  </v-col>
-                </v-row>
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
+<!--        <v-row no-gutters>-->
+<!--          <v-col cols="12" xl="4" lg="12" md="12" v-for="(epochRewards, index) in rewards2" :key="index"-->
+<!--                 class="px-3 py-2">-->
+<!--            <v-card outlined color="#84CAFF" style="border-radius: 12px">-->
+<!--              <v-card-subtitle class="pb-0">-->
+<!--                {{ 'Epoch ' + epochRewards.epoch + ' ' + (index === 0 ? '(Current)' : (index === 1 ? '(Next)' : '')) }}-->
+<!--              </v-card-subtitle>-->
+<!--              <v-card-title class="pt-0">[GERO] Gero Pool</v-card-title>-->
+<!--              <v-card-text>-->
+<!--                <v-row no-gutters>-->
+<!--                  <v-col cols="5">-->
+<!--                    <span style="font-size: 14px; color: white">Saturation</span>-->
+<!--                  </v-col>-->
+<!--                  <v-col cols="7">-->
+<!--                    <v-progress-linear height="22" rounded :value="(epochRewards.saturation * 100)" color="#333741">-->
+<!--                      <span>{{ (epochRewards.saturation * 100) + '%' }}</span>-->
+<!--                    </v-progress-linear>-->
+<!--                  </v-col>-->
+<!--                </v-row>-->
+<!--                <v-row no-gutters>-->
+<!--                  <v-col cols="5">-->
+<!--                    <span style="font-size: 14px; color: white">Pledge</span>-->
+<!--                  </v-col>-->
+<!--                  <v-col cols="7">-->
+<!--                    <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">-->
+<!--                      {{ epochRewards.pledge | toAda }}-->
+<!--                    </v-chip>-->
+<!--                  </v-col>-->
+<!--                </v-row>-->
+<!--                <v-row no-gutters>-->
+<!--                  <v-col cols="5">-->
+<!--                    <span style="font-size: 14px; color: white">ROS</span>-->
+<!--                  </v-col>-->
+<!--                  <v-col cols="7">-->
+<!--                    <span style="font-size: 14px; color: white">{{ (epochRewards.ros * 100) + '%' }}</span>-->
+<!--                  </v-col>-->
+<!--                </v-row>-->
+<!--                <v-row no-gutters>-->
+<!--                  <v-col cols="5">-->
+<!--                    <span style="font-size: 14px; color: white">Fees</span>-->
+<!--                  </v-col>-->
+<!--                  <v-col cols="7">-->
+<!--                    <span style="font-size: 14px; color: white">{{-->
+<!--                        epochRewards.margin_fee + '% / ₳' + epochRewards.fixed_fee-->
+<!--                      }}</span>-->
+<!--                  </v-col>-->
+<!--                </v-row>-->
+<!--              </v-card-text>-->
+<!--            </v-card>-->
+<!--          </v-col>-->
+<!--        </v-row>-->
         <v-row no-gutters class="pt-4">
           <v-col cols="12">
             <v-data-table :items="rewardsData" :headers="stakingHeaders" class="transparent"
