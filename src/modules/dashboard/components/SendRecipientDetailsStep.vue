@@ -2,10 +2,9 @@
   <div class="send-recipient-details-container">
     <div class="item-container">
       <Select
-        :value="wallets[0]"
-        :items="wallets"
+        :value="sendData.selectedWallet"
+        :items="[sendData.selectedWallet]"
         label="Choose Wallet"
-        @input="$emit('selectWallet', $event)"
         :readonly="true"
       ></Select>
     </div>
@@ -24,6 +23,7 @@
     <v-btn
       class="continue-button"
       @click="$emit('next')"
+      :disabled="!sendData.recipientAddress"
       >Continue <v-icon>mdi-arrow-right</v-icon></v-btn
     >
   </div>
@@ -31,7 +31,6 @@
 
 <script>
 import Select from '@/shared/components/Select.vue';
-import { useStore } from '@/store';
 
 export default {
   components: { Select },
@@ -41,26 +40,6 @@ export default {
       type: Object,
       required: true,
     },
-  },
-  data() {
-    return {
-      wallets: [],
-    };
-  },
-  mounted() {
-    const colorsMapping = {
-      green: '#00685b',
-      purple: '#43269f',
-      red: '#b2105b',
-      orange: '#e14e02',
-      blue: '#125db5',
-      grey: '#415153',
-    };
-    const store = useStore();
-    this.wallets = [{...store.loggedWallet,
-      icon: 'mdi-circle',
-      iconColor: colorsMapping[store.loggedWallet.icon],
-    }]
   },
 };
 </script>
@@ -91,10 +70,10 @@ export default {
     background: linear-gradient(to right, #00c7f3, #00fad5);
     color: black;
 
-    .continue-button {
-      background: linear-gradient(to right, #00c7f3, #00fad5);
-      color: black;
+    &:disabled {
+      opacity: 0.5;
     }
+    
   }
 }
 </style>
