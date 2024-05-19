@@ -49,7 +49,7 @@ const messages = {
 
 Vue.use(VueI18n);
 
-const i18n = new VueI18n({
+const i18n: VueI18n = new VueI18n({
   locale: 'en', // set locale
   fallbackLocale: 'en', // set fallback locale
   messages, // set locale messages

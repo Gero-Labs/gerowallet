@@ -34,12 +34,9 @@
             <v-data-table :items="activities" :headers="activityHeaders" class="transparent">
               <template v-slot:[`item.time`]="{ item }">
                 <v-list-item two-line class="px-0">
-                  <v-list-item-avatar tile :size="getIconSize(item)">
-                    <v-img :src="getIcon(item)" :alt="item.status"></v-img>
-                  </v-list-item-avatar>
                   <v-list-item-content>
-                    <v-list-item-title>{{ item.status }}</v-list-item-title>
-                    <v-list-item-subtitle style="font-size: 10px">{{ new Date(item.time*1000).toLocaleString() }}</v-list-item-subtitle>
+                    <v-list-item-title style="font-size: 12px">{{ item.status }}</v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 10px">{{ new Date(item.time*1000).toLocaleDateString() }}</v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </template>
@@ -48,7 +45,7 @@
                                 :style="item.status === 'Pending' ? { opacity: '0.5'} : { }"></stacked-tokens>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
-                <span :style="{color: getColor(item)}">{{ item.ada }}</span>
+                <span :style="{color: getColor(item)}">{{ item.ada | toAda }}</span>
               </template>
             </v-data-table>
           </v-card-text>
@@ -67,6 +64,7 @@ import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
+import {resolveRewardAddress} from "@/shared/utils/resolver";
 
 export default {
   name: 'dashboard',
@@ -77,19 +75,64 @@ export default {
     },
     activities() {
       if (this.transactions) {
-        console.log(this.transactions)
+        // console.log(this.transactions)
         const txs = this.transactions.map(el => el.transaction).map(tx => {
-          // console.log(tx.output_amount)
-          const ada = tx.output_amount.find(el => el.unit === 'lovelace').quantity
-          return {...tx, time: tx.block_time, ada: filters.toAda(ada)}
+          const receiving = {
+            coin: 0,
+            multiAssets: []
+          }
+          const sending = {
+            coin: 0,
+            multiAssets: []
+          }
+          if (tx.out_map) {
+            Object.keys(tx.out_map).forEach(address => {
+              if (resolveRewardAddress(address) === this.wallet.stakeAddress().to_address().to_bech32()) {
+                receiving.coin += tx.out_map[address].coin
+                receiving.multiAssets.push(...tx.out_map[address].multiAssets)
+              } else {
+                sending.coin += tx.out_map[address].coin
+                sending.multiAssets.push(...tx.out_map[address].multiAssets)
+              }
+            })
+          }
+          let ada = 0
+          const multiAssets = []
+          const statuses = []
+          if (receiving.coin !== 0 || receiving.multiAssets.length > 0) {
+            statuses.push('Received')
+            ada += receiving.coin
+
+          }
+          if (sending.coin !== 0 || sending.multiAssets.length > 0) {
+            statuses.push('Sent')
+            ada -= sending.coin
+          }
+
+          return {...tx, time: tx.tx_timestamp, ada: ada, status: statuses.join(', '), assets: ['ADA'] }
         })
         txs.sort((a, b) => b.time - a.time)
         return txs
       }
       return []
-    }
+    },
   },
   methods: {
+    subtract(output, input) {
+      if (output && output.amount) {
+        output.amount.forEach(outputAmount => {
+          if (input && input.amount) {
+            const foundAmount = input.amount.find(inputAmount => inputAmount.unit === outputAmount.unit)
+            const foundAmountIndex = input.amount.indexOf(foundAmount)
+            if (foundAmount) {
+              outputAmount.quantity = (Number(outputAmount.quantity) - Number(foundAmount.quantity)).toString()
+            }
+            input.amount.splice(foundAmountIndex, 1)
+          }
+        })
+      }
+      return output
+    },
     getIconSize(item) {
       if (item.status === 'Pending') {
         return 22
@@ -130,6 +173,7 @@ export default {
     chartData: undefined,
     accountInfo: undefined,
     transactions: undefined,
+    txIos: undefined,
     activityHeaders: [
       {text: 'Activity', align: 'start', sortable: true, value: 'time'},
       {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
@@ -154,6 +198,9 @@ export default {
     }))
     this.transactions = useObservable(liveQuery(() => {
       return db.table('transactions').toArray()
+    }))
+    this.txIos = useObservable(liveQuery(() => {
+      return db.table('tx_io').toArray()
     }))
   },
   async mounted() {

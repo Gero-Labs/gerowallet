@@ -1,4 +1,3 @@
-import {} from 'vuetify/lib/locale';
 import { zhHans } from 'vuetify/src/locale';
 export default {
   rtl: 'false',

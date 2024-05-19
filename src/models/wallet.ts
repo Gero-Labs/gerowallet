@@ -108,12 +108,12 @@ export class Wallet {
   }
 
   async getLastSyncInfo(): Promise<any> {
-    return await this.db
+    return this.db
       .open()
       .then(async db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.where({ walletId: this.id }).first();
+        return syncTable.where({walletId: this.id}).first();
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -121,12 +121,12 @@ export class Wallet {
   }
 
   async getAccountInfo(): Promise<any> {
-    return await this.db
+    return this.db
       .open()
       .then(async db => {
         const accountTable = db.table('account');
         if (!accountTable) throw new Error('No Account table.');
-        return accountTable.where({ walletId: this.id }).first();
+        return accountTable.where({walletId: this.id}).first();
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -203,9 +203,9 @@ export class Wallet {
       if (accountInfo) {
         await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
       }
-      const newTxs = await this.syncAccountTransactions(lastSyncInfo.height);
+      const newTxs = await this.syncAccountTransactions( 0);
       console.log(newTxs);
-      await this.syncTxIos(newTxs);
+      // await this.syncTxIos(newTxs);
       //TODO account transactions
       // const addresses = await this.syncAddresses();
       // await this.syncAddressesTransactions(0, addresses); //TODO lastSyncInfo.height
@@ -242,7 +242,7 @@ export class Wallet {
   }
 
   async setAccountRewards(res): Promise<any[] | void> {
-    return await this.db
+    return this.db
       .open()
       .then(db => {
         const rew = [];
@@ -284,7 +284,7 @@ export class Wallet {
         const txsTable = db.table('transactions')
         if (txsTable) {
           txs = txs.map(tx => {
-            return {id: tx.hash, transaction: tx}
+            return {id: tx.tx_hash, transaction: tx}
           })
           txsTable.bulkPut(txs)
         }
@@ -343,7 +343,7 @@ export class Wallet {
   async setAddressTransactions() {}
 
   async getDb(): Promise<Dexie> {
-    return await this.db.open();
+    return this.db.open();
   }
 
   async syncAddresses(): Promise<any> {
@@ -359,7 +359,7 @@ export class Wallet {
   }
 
   async setAccountAddresses(res): Promise<any> {
-    return await this.db
+    return this.db
       .open()
       .then(db => {
         const addressesTable = db.table('addresses');
@@ -367,7 +367,7 @@ export class Wallet {
         if (!addressesTable) throw new Error('No Addresses table.');
 
         res.forEach(address => {
-          addressesTable.put({ address: address.address });
+          addressesTable.put({address: address.address});
         });
         return res;
       })
