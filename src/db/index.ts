@@ -109,7 +109,7 @@ export default {
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewHardwareWallet(name, icon, type, theme, chain, network, publicKey) {
+  async createNewHardwareWallet(name: string, icon: string, type, theme, chain, network, publicKey) {
     let order = await this.getLatestWalletByOrder();
     if (order == null) {
       order = 1;
@@ -131,18 +131,16 @@ export default {
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewWalletDb(walletId) {
+  async createNewWalletDb(walletId: number) {
     const db = new Dexie('wallet-' + walletId);
-    await db.version(1).stores({
+    db.version(1).stores({
       config: '++id, key, value',
       sync: '++id, walletId, blockHash, height, absSlot, time, epoch, epoch_slot',
       account:
         '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
       addresses: 'address',
       rewards: 'epoch, amount, pool_id, type',
-      transactions: 'id, transaction',
-      tx_io: 'id',
-      utxos: 'id',
+      transactions: 'id',
     });
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);

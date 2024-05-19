@@ -203,10 +203,7 @@ export class Wallet {
       if (accountInfo) {
         await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
       }
-      const newTxs = await this.syncAccountTransactions( lastSyncInfo ? lastSyncInfo.height : 0);
-      console.log(newTxs);
-      // await this.syncTxIos(newTxs);
-      //TODO account transactions
+      await this.syncAccountTransactions(0); //lastSyncInfo ? lastSyncInfo.height : 0);
       // const addresses = await this.syncAddresses();
       // await this.syncAddressesTransactions(0, addresses); //TODO lastSyncInfo.height
       // await this.syncUtxos();
@@ -271,7 +268,6 @@ export class Wallet {
         })
         const txs = await Promise.all(promises)
         await this.setAccountTransactions(txs)
-        return txs
       }
     } catch (e) {
       console.log(e)
