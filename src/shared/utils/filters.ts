@@ -1,5 +1,5 @@
 const filters = {
-  truncate(value) {
+  truncate(value: string) {
     if (!value || value.length <= 16) return 'N/A';
     const separator = '...';
     const sepLen = separator.length;
@@ -9,17 +9,24 @@ const filters = {
 
     return value.substring(0, frontChars) + separator + value.substring(value.length - backChars);
   },
-  toIPFS(value) {
+  toIPFS(value: string) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value;
   },
-  toCurrency(value, decimals) {
-    const n = value / Math.pow(10, decimals);
-    return n.toLocaleString();
+  toCurrency(value: number, decimals: number) {
+    return value / Math.pow(10, decimals);
   },
-  toAda(value) {
-    return '₳ ' + filters.toCurrency(value, 6);
+  toAda(value: number, signs: boolean) {
+    if (value === -2266303571) {
+      console.log('t')
+    }
+    const res = filters.toCurrency(value, 6)
+    if (res >= 0) {
+      return (signs ? '+ ' : '') + '₳'+res.toLocaleString();
+    }
+    console.log(res)
+    return  '- ₳'+Math.abs(res).toLocaleString();
   },
-  stateColor(state) {
+  stateColor(state: string) {
     if (state === 'NOT_FOR_SALE') {
       return 'rgba(137,22,214,0.56)';
     }
@@ -41,7 +48,7 @@ const filters = {
 
     return '';
   },
-  stateTitle(val) {
+  stateTitle(val: string) {
     if (val === 'NOT_FOR_SALE') {
       return 'Not For Sale';
     }
@@ -63,7 +70,7 @@ const filters = {
 
     return 'N/A';
   },
-  lastIndex(val) {
+  lastIndex(val: string) {
     const tok = val.split('.');
 
     return tok[tok.length - 1];
