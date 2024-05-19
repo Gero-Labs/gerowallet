@@ -231,8 +231,10 @@ export default {
       this.chartInstance.title.update({ text: this.generateTitleText(tab) });
     },
     generateTitleText(tab) {
+      const price = ((this.chartData[this.chartData.length - 1][1] / 1000000) * 3.4).toFixed(2);
+
       return (
-        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$138,883.35</span>` +
+        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$${price}</span>` +
         `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${tab.vsLabel}</span></span>`
       );
     },

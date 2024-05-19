@@ -31,7 +31,7 @@
         <v-card outlined class="fill-height">
           <v-card-title>Recent Activity</v-card-title>
           <v-card-text class="px-0">
-            <v-data-table :items="activities" :headers="activityHeaders" class="transparent">
+            <v-data-table :items="getActivities" :headers="activityHeaders" class="transparent">
               <template v-slot:[`item.time`]="{ item }">
                 <v-list-item two-line class="px-0">
                   <v-list-item-content>
@@ -77,11 +77,30 @@ export default {
     computeChartData() {
       return this.chartData
     },
-    activities() {
+    balanceOverTime() {
+      return ''
+    },
+    getActivities() {
+      return this.activities
+    },
+  },
+  watch: {
+    transactions: {
+      handler() {
+        this.calculateTransactions()
+      },
+      deep: true
+    }
+  },
+  methods: {
+    calculateTransactions(){
+      {
       if (this.transactions) {
         const vm = this
         const currentStake = vm.wallet.stakeAddress().to_address().to_bech32();
-        const txs = this.transactions.map(el => el.transaction).map(tx => {
+        const graphData = [];
+        let currentBalance = 0;
+        const txs = structuredClone(this.transactions).sort((a, b) => a.transaction.tx_timestamp - b.transaction.tx_timestamp).map(({transaction: tx}) => {
           let totalAmount = 0;
           const assets = {}
 
@@ -121,34 +140,25 @@ export default {
             }
           })
 
+          currentBalance += totalAmount
+          graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
+
           const statuses = []
-          if (tx.withdrawals && tx.withdrawals.length > 0) {
-            tx.withdrawals.forEach(withdrawal => {
-              totalAmount -= Number(withdrawal.amount)
-            })
-            statuses.push('Withdrawal')
-          }
+
           if (totalAmount > 0) {
             statuses.push('Received')
           } else {
             statuses.push('Sent')
           }
-          if (tx.tx_hash === '1694a7591a457ce0c90d5899830bbfb46856dcabf6d71f5d0398792a51c4e377') {
-            console.log(filters.toAda(totalAmount, true))
-          }
           return {...tx, time: tx.tx_timestamp, ada: totalAmount, status: statuses.join(', '), assets: Object.values(assets)}
         })
-        txs.sort((a, b) => b.time - a.time)
-        console.log(txs)
-        return txs
+
+        this.activities = txs
+        this.chartData = graphData
       }
-      return []
-    },
-    balanceOverTime() {
-      return ''
     }
-  },
-  methods: {
+    },
+
     subtract(output, input) {
       if (output && output.amount) {
         output.amount.forEach(outputAmount => {
@@ -200,6 +210,7 @@ export default {
     wallet: undefined,
     store: useStore,
     filters,
+    activities: [],
     loadingChart: true,
     chartData: undefined,
     accountInfo: undefined,
@@ -236,9 +247,7 @@ export default {
   },
   async mounted() {
     this.wallet = useStore().getWallet
-    this.chartData = await fetch(
-      'https://demo-live-data.highcharts.com/aapl-c.json'
-    ).then(response => response.json())
+    this.calculateTransactions()
     this.loadingChart = false
   }
 }
