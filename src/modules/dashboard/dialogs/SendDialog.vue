@@ -13,7 +13,6 @@
         <SendRecipientDetailsStep
           @next="nextStep"
           :sendData="this.sendData"
-          @selectWallet="selectWallet"
           @updateRecipientAddress="updateRecipientAddress"
         ></SendRecipientDetailsStep>
       </v-stepper-content>
@@ -37,6 +36,7 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
+import { useStore } from '@/store';
 
 export default {
   name: 'BuyDialog',
@@ -48,9 +48,14 @@ export default {
     },
   },
   computed: {},
+  watch: {
+    isOpen(val) {
+      if (val) {
+        this.resetData();
+      }
+    },
+  },
   data: () => ({
-    loading: false,
-    currentStep: 1,
     steps: [
       {
         name: 'recipientDetails',
@@ -65,10 +70,11 @@ export default {
         label: 'Summary',
       },
     ],
+    currentStep: 1,
     sendData: {
       selectedCollectibles: {},
       recipientAddress: '',
-      selectedWallet: null,
+      selectedWallet: {},
     },
   }),
   methods: {
@@ -82,9 +88,6 @@ export default {
         this.currentStep--;
       }
     },
-    selectWallet(wallet) {
-      this.sendData.selectedWallet = wallet;
-    },
     updateRecipientAddress(address) {
       this.sendData.recipientAddress = address;
     },
@@ -94,6 +97,25 @@ export default {
       } else {
         this.$set(this.sendData.selectedCollectibles, collectible.name, collectible);
       }
+    },
+    resetData() {
+      const colorsMapping = {
+        green: '#00685b',
+        purple: '#43269f',
+        red: '#b2105b',
+        orange: '#e14e02',
+        blue: '#125db5',
+        grey: '#415153',
+      };
+      const store = useStore();
+      const selectedWallet = { ...store.loggedWallet, icon: 'mdi-circle', iconColor: colorsMapping[store.loggedWallet.icon] };
+
+      this.currentStep = 1;
+      this.sendData = {
+        selectedCollectibles: {},
+        recipientAddress: '',
+        selectedWallet,
+      };
     },
   },
 };

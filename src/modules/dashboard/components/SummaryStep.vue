@@ -4,7 +4,7 @@
       <section class="info-container">
         <Select
         :value="sendData.selectedWallet"
-        :items="wallets"
+        :items="[sendData.selectedWallet]"
         label="From"
         :readonly="true"
       ></Select>
@@ -34,7 +34,6 @@
 
 <script>
 import Select from "@/shared/components/Select.vue";
-import { useStore } from "@/store";
 
 export default {
   components: { Select },
@@ -50,25 +49,6 @@ export default {
       wallets: {},
       from: { text: "Wallet 1", icon: "mdi-wallet" },
     };
-  },
-  methods: {
-    // Your component's methods go here
-  },
-  mounted() {
-    const colorsMapping = {
-      green: '#00685b',
-      purple: '#43269f',
-      red: '#b2105b',
-      orange: '#e14e02',
-      blue: '#125db5',
-      grey: '#415153',
-    };
-    const store = useStore();
-    this.wallets = store.wallets.map(wallet => ({
-      ...wallet,
-      icon: 'mdi-circle',
-      iconColor: colorsMapping[wallet.icon],
-    }));
   },
 };
 </script>
