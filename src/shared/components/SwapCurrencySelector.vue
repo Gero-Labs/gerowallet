@@ -156,10 +156,6 @@ export default {
   color: #61646C !important;
 }
 
-.v-text-field.v-text-field--enclosed .v-text-field__details,
-.v-text-field.v-text-field--enclosed:not(.v-text-field--rounded) > .v-input__control > .v-input__slot {
-  padding: 0 !important;
-}
 .v-text-field.v-text-field--solo:not(.v-text-field--solo-flat) > .v-input__control > .v-input__slot {
   box-shadow: none !important;
 }

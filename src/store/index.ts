@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+import {defineStore} from 'pinia';
 import loading from '@/plugins/loading';
 
 // import { ChromeSyncStorage } from '@/store/chrome-storage'
@@ -14,6 +14,7 @@ import { Wallet } from '@/models/wallet';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
+  persist: true,
   state: () => ({
     loggedWallet: undefined,
     wallets: [],
