@@ -203,7 +203,7 @@ export class Wallet {
       if (accountInfo) {
         await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
       }
-      const newTxs = await this.syncAccountTransactions( 0);
+      const newTxs = await this.syncAccountTransactions( lastSyncInfo ? lastSyncInfo.height : 0);
       console.log(newTxs);
       // await this.syncTxIos(newTxs);
       //TODO account transactions
