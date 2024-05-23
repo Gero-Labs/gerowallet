@@ -3,13 +3,19 @@ import Stomp, { Client, Subscription } from 'stompjs';
 
 export class SocketPlugin {
 
+  public fiatRates: {} = {};
   public message: string = '';
   public connected: boolean = false;
 
   private client: Client;
   private chain: string = '';
   private network: string = '';
-  private subscription: { sub?: Subscription; price: Subscription; tip?: Subscription; }
+  private subscription: {
+    sub?: Subscription;
+    price: Subscription;
+    tip?: Subscription;
+    rates?: Subscription;
+  }
 
   setMessage(value: string) {
     this.message = value;
@@ -49,11 +55,15 @@ export class SocketPlugin {
 
     if (this.connected) {
       this.subscription = {
-        tip: this.client.subscribe(`/topic/blocktip/${this.chain}/${this.network}`, val => {
+        tip: this.client.subscribe(`/topic/blocktip/${this.chain}/${this.network}`, (val: Stomp.Message) => {
           const data = JSON.parse(val.body);
           this.setMessage(Object.assign({}, data));
         }),
-        price: this.client.subscribe(`/topic/price/${this.chain}/${this.network}`, val => {
+        price: this.client.subscribe(`/topic/price/${this.chain}/${this.network}`, (val: Stomp.Message) => {
+          const data = JSON.parse(val.body);
+          this.setMessage(Object.assign({}, data));
+        }),
+        rates: this.client.subscribe(`/topic/rates`, (val: Stomp.Message) => {
           const data = JSON.parse(val.body);
           this.setMessage(Object.assign({}, data));
         }),

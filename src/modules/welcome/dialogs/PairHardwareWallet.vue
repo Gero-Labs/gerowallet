@@ -25,7 +25,7 @@
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step step="3">
-            Confirm Phrase
+            Wallet Setup
           </v-stepper-step>
         </v-stepper-header>
 

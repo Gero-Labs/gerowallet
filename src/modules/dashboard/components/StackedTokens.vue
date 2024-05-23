@@ -6,8 +6,8 @@
           size="40"
           :color="token.img ? '' : 'black'"
       >
-        <v-img v-if="token.img" :src="token.img" :alt="token.name"></v-img>
-        <span v-else class="white--text">{{token.name}}</span>
+        <v-img v-if="token.img" :src="token.img" :alt="token.asset_name"></v-img>
+        <span v-else class="white--text">{{ token.asset_name }}</span>
       </v-avatar>
     </v-btn>
     <v-btn
@@ -25,6 +25,10 @@
   </div>
 </template>
 <script>
+import {useStore} from "@/store";
+import {useObservable} from "@vueuse/rxjs";
+import {liveQuery} from "dexie";
+
 export default {
   name: "StackedTokens",
   props: {
@@ -38,7 +42,7 @@ export default {
       if (this.tokens) {
         const arr = this.tokens.slice(0, 4);
         return arr.map(token => {
-          return {img: this.resolveTokenImage(token), name: token}
+          return {img: token.logo, name: token}
         })
       }
       return []
@@ -50,22 +54,18 @@ export default {
       return 0
     }
   },
-  methods: {
-    resolveTokenImage(tokenName) {
-      if (tokenName === 'ADA') {
-        return require('@/assets/svg/cardano.svg')
-      } else if (tokenName === 'GERO') {
-        return require('@/assets/svg/gero.svg')
-      } else if (tokenName === 'MUSICBOX') {
-        return require('@/assets/svg/musicbox.svg')
-      } else if (tokenName === 'NIDO') {
-        return require('@/assets/svg/nido.svg')
-      } else {
-        return ''
-      }
-    }
-  },
-  data: () => ({}),
+  data: () => ({
+    wallet: undefined,
+    blockchainDB: undefined,
+    assets: [],
+  }),
+  async created() {
+    this.wallet = useStore().getWallet
+    this.blockchainDB = await this.wallet.getBlockchainDb()
+    this.assets = useObservable(liveQuery(() => {
+      return this.blockchainDB.table('assets').toArray()
+    }))
+  }
 }
 </script>
 <style>
