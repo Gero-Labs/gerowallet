@@ -31,6 +31,7 @@
 
 <script>
 import Select from '@/shared/components/Select.vue';
+import {useStore} from "@/store";
 
 export default {
   components: { Select },
@@ -41,6 +42,12 @@ export default {
       required: true,
     },
   },
+  data: () => ({
+    wallet: undefined,
+  }),
+  mounted() {
+    this.wallet = useStore()
+  }
 };
 </script>
 
@@ -73,7 +80,7 @@ export default {
     &:disabled {
       opacity: 0.5;
     }
-    
+
   }
 }
 </style>

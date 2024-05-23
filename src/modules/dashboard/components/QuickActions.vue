@@ -102,6 +102,12 @@ export default {
     ReceiveDialog,
     SendDialog,
   },
+  props: {
+    utxos: {
+      type: Array,
+      default: () => [],
+    },
+  },
   computed: {
     isBuyDisabled() {
       return (
