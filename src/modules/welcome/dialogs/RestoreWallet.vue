@@ -279,9 +279,9 @@ export default {
         try {
           const network = this.store.getNetwork
           const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr, this.newWallet.password, network.blockchain, network.network)
-          await this.store.login(walletId)
           this.dialogLocal = false
           this.resetDialog()
+          await this.store.login(walletId)
           await this.$router.push('/')
           this.creatingWalletLoader = false
         } catch (e) {

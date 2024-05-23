@@ -1,6 +1,5 @@
-import Dexie from 'dexie';
+import Dexie, {DexieError} from 'dexie';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-
 import { useStore } from '@/store';
 import { Wallet } from '@/models/wallet';
 import { Blockchain, CoinTypes, Network, Provider, WalletType, WalletTypePurpose } from '@/models/types';
@@ -135,9 +134,8 @@ export default {
     const db = new Dexie('wallet-' + walletId);
     db.version(1).stores({
       config: '++id, key, value',
-      sync: '++id, walletId, blockHash, height, absSlot, time, epoch, epoch_slot',
-      account:
-        '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
+      sync: '++id, hash, height, slot, time, epoch, epoch_slot',
+      account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
       addresses: 'address',
       rewards: 'epoch, amount, pool_id, type',
       transactions: 'id',
@@ -146,4 +144,29 @@ export default {
       console.error(`Failed to open database: ${err.stack || err}`);
     });
   },
+  async checkAndCreateBlockchainDatabase(dbName: string) {
+    try {
+      // Attempt to open the database
+      const db = new Dexie(dbName);
+      return await db.open();
+    } catch (error: DexieError | any) {
+      console.log(error)
+      if (error.name === 'NoSuchDatabaseError') {
+        console.log(`Database ${dbName} does not exist. Creating now...`);
+        // Database does not exist, create it
+        const db = new Dexie(dbName);
+        db.version(1).stores({
+          pools: 'pool_id_bech32',
+          pools_sync: 'time',
+          assets: 'fingerprint, asset_name, policy_id',
+          assets_sync: 'time'
+        });
+        return await db.open();
+      } else {
+        // Handle other errors
+        console.error('Error opening database:', error);
+        return null
+      }
+    }
+  }
 };

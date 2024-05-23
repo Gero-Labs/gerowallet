@@ -5,12 +5,6 @@
         <v-card outlined class="no-gutters fill-height">
           <v-card-title>
             Portfolio
-            <v-spacer></v-spacer>
-            <span style="font-size: 14px">addr1q9hnmantdjruxqzc9</span>
-            <v-btn outlined small class="ml-2">
-              <v-icon small> mdi-content-copy </v-icon>
-              Copy
-            </v-btn>
           </v-card-title>
           <v-card-text>
             <PortfolioChart :chart-data="computeChartData"></PortfolioChart>
@@ -28,29 +22,65 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <TokenAllocationTable @click="handleOnRowClick"></TokenAllocationTable>
+        <TokenAllocationTable :assets="computedTokens" @click="handleOnRowClick"></TokenAllocationTable>
       </v-col>
     </v-row>
     <TokensDialog @close="closeDialog" :modalData="dialogData"></TokensDialog>
   </v-layout>
 </template>
 <script>
-import PortfolioChart from "@/shared/components/PortfolioChart.vue";
+import PortfolioChart from "@/modules/assets/components/PortfolioChart.vue";
 import AssetsPieChart from "@/modules/assets/components/AssetsPieChart.vue";
 import TokenAllocationTable from "../components/TokenAllocationTable.vue";
 import TokensDialog from "../dialogs/TokensDialog.vue";
+import {mapState} from "pinia";
+import {useStore} from "@/store";
 
 export default {
   name: "assets",
   components: { AssetsPieChart, PortfolioChart, TokenAllocationTable, TokensDialog },
   computed: {
+    ...mapState(useStore, ['calculatedUtxos']),
+    computedTokens() {
+      let adaBalance = 0
+      const assets = {}
+      if (this.calculatedUtxos) {
+        this.calculatedUtxos.forEach(utxo => {
+          adaBalance += Number(utxo.value)
+          if (utxo.asset_list) {
+            utxo.asset_list.forEach(asset => {
+              if (assets[asset.policy_id+asset.asset_name]) {
+                assets[asset.policy_id+asset.asset_name].quantity += asset.quantity
+              } else {
+                assets[asset.policy_id+asset.asset_name] = asset
+              }
+            })
+          }
+        })
+      }
+      assets['lovelace'] = {
+        name: 'Cardano',
+        policy_id: "",
+        asset_name: "lovelace",
+        decimals: 6,
+        quantity: adaBalance,
+        logo: require('@/assets/svg/cardano.svg')
+      }
+      return Object.values(assets)
+    },
+    computedAssets() {
+      return this.computedTokens
+    },
+    computedCollectibles() {
+      return []
+    },
     computeChartData() {
       return this.chartData;
     },
     computePieChartData() {
       return [
-        ["Assets", 70.67],
-        ["Collectibles", 29.33],
+        ["Assets", this.computedAssets.length/this.computedTokens.length*100],
+        ["Collectibles", this.computedCollectibles.length/this.computedTokens.length*100],
       ];
     },
   },

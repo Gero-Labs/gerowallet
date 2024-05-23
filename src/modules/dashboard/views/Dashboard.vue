@@ -5,7 +5,7 @@
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Portfolio
-            <div v-if="chartData && chartData.length > 0">
+            <div v-if="computeChartData && computeChartData.length > 0">
               <v-btn small
                      style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
                      to="/assets">Portfolio Breakdown&nbsp;
@@ -21,17 +21,21 @@
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" lg="5" md="12" sm="12" class="pa-2">
-        <quick-actions></quick-actions>
+        <quick-actions :utxos="calculatedUtxos"></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard :account="accountInfo" v-if="accountInfo?.controlled_amount"></StakingCard>
+        <StakingCard :account="getAccountInfo" :pools="getPools" v-if="getAccountInfo?.controlled_amount"></StakingCard>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
         <v-card outlined class="fill-height">
-          <v-card-title>Recent Activity</v-card-title>
-          <v-card-text class="px-0">
-            <v-data-table :items="getActivities" :headers="activityHeaders" class="transparent">
+          <v-card-title>Transactions</v-card-title>
+          <v-card-text class="pa-0">
+            <v-data-table :items="calculatedTransactions" :headers="activityHeaders" class="transparent"
+                          :sort-by.sync="sortBy"
+                          :sort-desc.sync="sortDesc"
+                          dense
+            >
               <template v-slot:[`item.time`]="{ item }">
                 <v-list-item two-line class="px-0">
                   <v-list-item-content>
@@ -48,7 +52,7 @@
                                 :style="item.status === 'Pending' ? { opacity: '0.5'} : { }"></stacked-tokens>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
-                <span :style="{color: getColor(item)}">{{ item.ada | toAda(true) }}</span>
+                <span :style="{color: getColor(item)}">{{ item.ada | toAda(true, 2) }}</span>
               </template>
             </v-data-table>
           </v-card-text>
@@ -58,7 +62,7 @@
   </v-layout>
 </template>
 <script>
-import PortfolioChart from "@/shared/components/PortfolioChart.vue";
+import PortfolioChart from "@/modules/dashboard/components/PortfolioChart.vue";
 import StackedTokens from "@/modules/dashboard/components/StackedTokens.vue";
 import filters from "@/shared/utils/filters";
 import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
@@ -67,123 +71,24 @@ import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
-import {resolveRewardAddress} from "@/shared/utils/resolver";
-import tempTransactions from "./temp.json";
+import {mapActions, mapState} from "pinia";
 
 export default {
   name: 'dashboard',
   components: {QuickActions, StackedTokens, PortfolioChart, StakingCard, NoTokensCard},
   computed: {
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'getAccountInfo', 'calculatedUtxos']),
     computeChartData() {
-      return this.chartData
+      const graphData = []
+      let currentBalance = 0
+      this.calculatedTransactions.forEach(tx => {
+        currentBalance += tx.ada
+        graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
+      })
+      return graphData
     },
-    balanceOverTime() {
-      return ''
-    },
-    getActivities() {
-      return this.activities
-    },
-  },
-  watch: {
-    transactions: {
-      handler() {
-        this.calculateTransactions()
-      },
-      deep: true
-    }
   },
   methods: {
-    calculateTransactions(){
-      {
-      if (this.transactions) {
-        const vm = this
-        const currentStake = vm.wallet.stakeAddress().to_address().to_bech32();
-        const graphData = [];
-        let currentBalance = 0;
-        const txs = structuredClone(this.transactions).sort((a, b) => a.transaction.tx_timestamp - b.transaction.tx_timestamp).map(({transaction: tx}) => {
-          let totalAmount = 0;
-          const assets = {}
-
-          tx.inputs.forEach(input => {
-            if (input.stake_addr === currentStake) {
-              totalAmount -= +input.value
-              if(input.asset_list.length){
-                input.asset_list.forEach((asset)=>{
-                  const assetName = asset.policy_id + asset.asset_name;
-                  if(assets[assetName]){
-                    assets[assetName].quantity = +assets[assetName].quantity - +asset.quantity
-                  } else {
-                    assets[assetName] = structuredClone(asset)
-                    assets[assetName].quantity = -asset.quantity
-                  }
-                })
-              }
-            }
-          })
-
-          tx.outputs.forEach(output => {
-            if (output.stake_addr === currentStake) {
-              totalAmount += +output.value
-              if(output.asset_list.length){
-                output.asset_list.forEach((asset)=>{
-                  const assetName = asset.policy_id + asset.asset_name;
-                  if(assets[assetName]){
-                    assets[assetName].quantity = +assets[assetName].quantity + +asset.quantity
-                    if(assets[assetName].quantity === 0){
-                      delete assets[assetName]
-                    }
-                  } else {
-                    assets[assetName] = structuredClone(asset)
-                  }
-                })
-              }
-            }
-          })
-
-          currentBalance += totalAmount
-          graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
-
-          const statuses = []
-
-          if (totalAmount > 0) {
-            statuses.push('Received')
-          } else {
-            statuses.push('Sent')
-          }
-          return {...tx, time: tx.tx_timestamp, ada: totalAmount, status: statuses.join(', '), assets: Object.values(assets)}
-        })
-
-        this.activities = txs
-        this.chartData = graphData
-      }
-    }
-    },
-
-    subtract(output, input) {
-      if (output && output.amount) {
-        output.amount.forEach(outputAmount => {
-          if (input && input.amount) {
-            const foundAmount = input.amount.find(inputAmount => inputAmount.unit === outputAmount.unit)
-            const foundAmountIndex = input.amount.indexOf(foundAmount)
-            if (foundAmount) {
-              outputAmount.quantity = (Number(outputAmount.quantity) - Number(foundAmount.quantity)).toString()
-            }
-            input.amount.splice(foundAmountIndex, 1)
-          }
-        })
-      }
-      return output
-    },
-    getIconSize(item) {
-      if (item.status === 'Pending') {
-        return 22
-      } else if (item.status === 'Received') {
-        return 18
-      } else if (item.status === 'Sent') {
-        return 18
-      }
-      return 22
-    },
     getIcon(item) {
       if (item.status === 'Pending') {
         return require('@/assets/svg/arrows-right.svg')
@@ -212,42 +117,17 @@ export default {
     filters,
     activities: [],
     loadingChart: true,
-    chartData: undefined,
-    accountInfo: undefined,
-    transactions: undefined,
-    txIos: undefined,
     activityHeaders: [
-      {text: 'Activity', align: 'start', sortable: true, value: 'time'},
-      {text: '', align: 'start', sortable: false, value: 'assets', width: 132},
-      {text: 'Amount', align: 'start', sortable: false, value: 'amount'},
+      {text: 'Activity', align: 'start', sortable: true, value: 'time', width: 100},
+      {text: '', align: 'start', sortable: false, value: 'assets'},
+      {text: 'Amount', align: 'start', sortable: false, value: 'amount', width: 130},
     ],
-    recentActivity: [
-      {status: 'Pending', time: '21/12/2023', assets: ['ADA', 'GERO'], ada: '+ ₳1.27'},
-      {
-        status: 'Received',
-        time: '21/12/2023',
-        assets: ['ADA', 'GERO', 'MUSICBOX', 'NIDO', 'GERO', 'TEST', 'TEST'],
-        ada: '+ ₳88.00'
-      },
-      {status: 'Sent', time: '21/12/2023', assets: ['ADA'], ada: '- ₳8.30'},
-    ],
+    sortBy: 'time',
+    sortDesc: true,
+    blockchainDB: undefined
   }),
-  async created() {
+  mounted() {
     this.wallet = useStore().getWallet
-    const db = await this.wallet.getDb()
-    this.accountInfo = useObservable(liveQuery(() => {
-      return db.table('account').where({walletId: this.wallet.id}).first()
-    }))
-    this.transactions = useObservable(liveQuery(() => {
-      return db.table('transactions').toArray()
-    }))
-    this.txIos = useObservable(liveQuery(() => {
-      return db.table('tx_io').toArray()
-    }))
-  },
-  async mounted() {
-    this.wallet = useStore().getWallet
-    this.calculateTransactions()
     this.loadingChart = false
   }
 }

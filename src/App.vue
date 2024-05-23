@@ -45,10 +45,14 @@ export default {
     store: useStore()
   }),
   methods: {
-    ...mapActions(useStore, ['loadWallets']),
+    ...mapActions(useStore, ['loadWallets', 'loadAccountInfo', 'loadTransactions', "loadAssets", "loadPools"]),
   },
   mounted() {
     this.loadWallets()
+    this.loadAccountInfo()
+    this.loadTransactions()
+    this.loadAssets()
+    this.loadPools()
   }
 }
 </script>

@@ -6,6 +6,9 @@ import loading from '@/plugins/loading';
 
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
+import {Blockchain} from "@/models/types";
+import {useObservable} from "@vueuse/rxjs";
+import Dexie, {liveQuery} from "dexie";
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -14,13 +17,18 @@ import { Wallet } from '@/models/wallet';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: true,
+  persist: { paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'adaPrice']},
   state: () => ({
     loggedWallet: undefined,
     wallets: [],
     locale: 'en',
     network: undefined,
     provider: undefined,
+    adaPrice: undefined,
+    transactions: [],
+    assets: [],
+    pools: [],
+    accountInfo: undefined,
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -34,6 +42,156 @@ export const useStore = defineStore('store', {
       }
       return appWallet;
     },
+    getAdaPrice: state => state.adaPrice,
+    calculatedTransactions(state) {
+      if (state.transactions) {
+        const currentStake = this.getWallet.stakeAddress().to_address().to_bech32();
+        let currentBalance: number = 0;
+        return structuredClone(state.transactions).sort((a, b) => a.tx_timestamp - b.tx_timestamp).map((tx) => {
+          let totalAmount: number = 0;
+          const assets: {} = {}
+
+          tx.inputs.forEach(input => {
+            if (input.stake_addr === currentStake) {
+              totalAmount -= +input.value
+              if (input.asset_list.length) {
+                input.asset_list.forEach((asset) => {
+                  const assetName = asset.policy_id + asset.asset_name;
+                  if (assets[assetName]) {
+                    assets[assetName].quantity = +assets[assetName].quantity - +asset.quantity
+                  } else {
+                    assets[assetName] = structuredClone(asset)
+                    assets[assetName].quantity = -asset.quantity
+                  }
+                })
+              }
+            }
+          })
+
+          tx.outputs.forEach(output => {
+            if (output.stake_addr === currentStake) {
+              totalAmount += +output.value
+              if (output.asset_list.length) {
+                output.asset_list.forEach((asset) => {
+                  const assetName = asset.policy_id + asset.asset_name;
+                  if (assets[assetName]) {
+                    assets[assetName].quantity = +assets[assetName].quantity + +asset.quantity
+                    if (assets[assetName].quantity === 0) {
+                      delete assets[assetName]
+                    }
+                  } else {
+                    assets[assetName] = structuredClone(asset)
+                  }
+                })
+              }
+            }
+          })
+
+          currentBalance += totalAmount
+
+          const statuses = []
+
+          if (totalAmount > 0) {
+            statuses.push('Received')
+          } else {
+            statuses.push('Sent')
+          }
+          if (tx.withdrawals?.length > 0) {
+            statuses.push('Withdrawal')
+          }
+          const adaAsset = {
+            policy_id: "",
+            asset_name: "lovelace",
+            decimals: 6,
+            quantity: totalAmount,
+            logo: require('@/assets/svg/cardano.svg')
+          }
+          Object.values(assets).forEach(asset => {
+            if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
+              return
+            }
+            const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+            if (!resolved) {
+              this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+            } else {
+              if (resolved?.metadata?.logo) {
+                asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+              } else if (resolved.onchain_metadata) {
+                asset['onchain_metadata'] = resolved.onchain_metadata
+                asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
+              } else {
+                console.log('No logo found for asset:', asset);
+                asset['logo'] = ''; // Set empty logo if not found
+              }
+            }
+          })
+          return {
+            ...tx,
+            time: tx.tx_timestamp,
+            ada: totalAmount,
+            status: statuses.join(', '),
+            assets: [adaAsset, ...Object.values(assets)]
+          }
+        })
+      }
+      return []
+    },
+    calculatedUtxos(state) {
+      const utxos = [];
+      const outputs = [];
+      const inputSet = new Set();
+
+      if (state.transactions && state.transactions.length > 0) {
+        // Collect all outputs and inputs
+        state.transactions.forEach(tx => {
+          if (tx.outputs) {
+            outputs.push(...tx.outputs);
+          }
+          if (tx.inputs) {
+            tx.inputs.forEach(input => {
+              inputSet.add(`${input.tx_hash}-${input.tx_index}`);
+            });
+          }
+        });
+
+        // Check outputs against inputs set
+        const walletAddress = this.getWallet.stakeAddress().to_address().to_bech32();
+        outputs.forEach(output => {
+          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && walletAddress === output.stake_addr) {
+            utxos.push(output);
+          }
+        });
+        console.log(utxos);
+      }
+      // Resolve Assets
+      if (utxos) {
+        utxos.forEach(utxo => {
+          if (utxo.asset_list) {
+            utxo.asset_list.forEach(asset => {
+              const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+              if (!resolved) {
+                this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+              } else {
+                console.log(resolved)
+                asset['total_amount'] = resolved?.quantity
+                asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
+                if (resolved?.metadata?.logo) {
+                  asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+                } else if (resolved?.onchain_metadata?.image) {
+                  asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
+                } else {
+                  console.log('No logo found for asset:', asset);
+                  asset['logo'] = ''; // Set empty logo if not found
+                }
+              }
+            })
+          }
+        })
+      }
+      return utxos;
+    },
+    getPools: state => state.pools,
+    getAccountInfo: state => state.accountInfo
   },
   actions: {
     async login(walletId: number) {
@@ -54,6 +212,7 @@ export const useStore = defineStore('store', {
       loading.setLoading(true);
       this.loggedWallet = undefined;
       this.provider = undefined;
+      this.transactions = []
       loading.setLoading(false);
     },
     async loadWallets(): Promise<any> {
@@ -70,6 +229,53 @@ export const useStore = defineStore('store', {
     setNetwork(network) {
       this.network = network;
     },
+    setPrice(price) {
+      this.adaPrice = price
+    },
+    async loadAccountInfo() {
+      const db = await this.getWallet.getDb()
+      liveQuery(() => db.table('account').where({walletId: this.loggedWallet.id}).first()).subscribe({
+        next: newAccountInfo => {
+          this.accountInfo = newAccountInfo
+        },
+        error: error => {
+          console.error('Failed to Fetch AccountInfo:', error)
+        }
+      });
+    },
+    async loadTransactions() {
+      const db: Dexie = await this.getWallet.getDb()
+      liveQuery(() => db.table('transactions').toArray()).subscribe({
+        next: newTransactions => {
+          this.transactions = newTransactions.map(tx => tx.transaction)
+        },
+        error: error => {
+          console.error('Failed to Fetch Transactions:', error)
+        }
+      });
+    },
+    async loadAssets() {
+      const db: Dexie = await this.getWallet.getBlockchainDb()
+      liveQuery(() => db.table('assets').toArray()).subscribe({
+        next: newAssets => {
+          this.assets = newAssets
+        },
+        error: error => {
+          console.error('Failed to Fetch Assets:', error)
+        }
+      });
+    },
+    async loadPools() {
+      const db: Dexie = await this.getWallet.getBlockchainDb()
+      liveQuery(() => db.table('pools').toArray()).subscribe({
+        next: newPools => {
+          this.pools = newPools
+        },
+        error: error => {
+          console.error('Failed to Fetch Pools:', error)
+        }
+      });
+    }
   },
 });
 

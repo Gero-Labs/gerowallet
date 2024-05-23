@@ -4,7 +4,7 @@
       <v-container class="pa-0" style="background-color: #141414">
         <v-layout :align-start="true">
           <navigation-drawer></navigation-drawer>
-          <v-sheet style="height: 100vh; overflow-y: auto; background-color: #121212;">
+          <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
               <v-app-bar flat class="transparent" color="transparent">
                 <price-ticker></price-ticker>
@@ -17,7 +17,7 @@
                     rounded
                     style="width: 100px"
                     class="ml-2"
-
+                    :buffer-value="100"
                 >
                   <template v-slot:default="{ value }">
                     <strong style="font-size: 10px">{{ Math.ceil(value) }}%</strong>
@@ -119,8 +119,7 @@ export default {
           return db.table('sync').where({walletId: this.wallet.id}).first()
         }))
     try {
-      const tip = await this.wallet.fetchTip()
-      useStore().getWallet.sync(tip)
+      useStore().getWallet.sync(await this.wallet.fetchTip())
     } catch (e) {
       console.log(e)
     }
