@@ -73,7 +73,6 @@ export default {
       } else if (tab.value === 'YEAR') {
         return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 365
       }
-      console.log(tab)
       return false
     },
     handleTabClick(tab) {

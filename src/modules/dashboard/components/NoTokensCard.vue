@@ -2,43 +2,70 @@
   <v-card outlined class="card-container">
     <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
 
-    <section v-if="!hasApex" class="mb-10">
-      <p class="display-1">Let's start by getting some Ap3x into your wallet!</p>
-      <p class="subtitle-1">Claim your Ap3x tokens with your Cardano Wallet by using the DApp below</p>
-      <v-btn class="claim-apex-button"></v-btn>
+    <section v-if="!hasAssets" class="mb-10">
+      <p class="display-1">Let's start by getting some {{ assetType }} into your wallet!</p>
+      <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">Claim your {{ assetType }} tokens with your Wallet by using the DApp below</p>
+      <v-btn class="claim-apex-button" v-if="assetType === Blockchain.APEX_PRIME"></v-btn>
     </section>
 
     <section
       class="text-center d-flex align-center justify-center flex-column stake-apex-section"
-      :class="{ 'no-apex': !hasApex }"
+      :class="{ 'no-apex': !hasAssets }"
     >
       <div class="stake-apex-info">
-        <h1 class="display-1">Stake Your Ap3x and Earn Rewards</h1>
+        <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
         <v-card-text class="subtitle-1"
-          >Earn rewards by staking your Ap3x tokens with Apex Fusion's extensive network of stake pools.</v-card-text
+          >Earn rewards by staking your {{assetType}} tokens with {{this.loggedWallet.chain}}'s extensive network of stake pools.</v-card-text
         >
-        <p class="subtitle-1 support-us-text">
+        <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
           Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
         </p>
 
         <div class="d-flex align-center justify-center flex-column">
-          <v-btn class="stake-button-gero">Stake with GERO</v-btn>
-          <v-btn class="stake-button-pools">Browse Stake Pools</v-btn>
+          <v-btn class="stake-button-gero" v-if="geroPoolExists">Stake with GERO</v-btn>
+          <v-btn class="stake-button-pools" to="/staking">Browse Stake Pools</v-btn>
         </div>
       </div>
 
-      <h2 class="error-message">You need to have Ap3x in your wallet before staking!</h2>
+      <h2 class="error-message">You need to have {{assetType}} in your wallet before staking!</h2>
     </section>
   </v-card>
 </template>
 <script>
+import {mapState} from "pinia";
+import {useStore} from "@/store";
+import {Blockchain, Network} from "@/models/types";
+
 export default {
-  props: {
-    hasApex: {
-      type: Boolean,
-      default: false,
+  computed: {
+    geroPoolExists() {
+      return (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) ||
+        (this.loggedWallet.chain === Blockchain.APEX_PRIME && this.loggedWallet.network === Network.TESTNET)
     },
-  },
+    assetType() {
+      if (this.loggedWallet.chain === Blockchain.CARDANO) {
+        if (this.loggedWallet.network == Network.MAINNET) {
+          return 'ADA'
+        } else {
+          return 'tADA'
+        }
+      } else if (this.loggedWallet.chain === Blockchain.APEX_PRIME) {
+        if (this.loggedWallet.network == Network.MAINNET) {
+          return 'Ap3x'
+        } else {
+          return 'tAp3x'
+        }
+      }
+      return '$'
+    },
+    hasAssets() {
+      return !!this.accountInfo
+    },
+    Blockchain() {
+      return Blockchain
+    },
+    ...mapState(useStore, ['accountInfo', 'loggedWallet']),
+  }
 };
 </script>
 <style scoped>
