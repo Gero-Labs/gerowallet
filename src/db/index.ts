@@ -43,6 +43,20 @@ async function initializeProviderTable() {
         },
         {
           name: Provider.KOIOS,
+          chain: Blockchain.CARDANO,
+          network: Network.PREPROD,
+          baseUrl: 'https://preprod.koios.rest/api/v1/',
+          apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.CARDANO,
+          network: Network.PREVIEW,
+          baseUrl: 'https://preview.koios.rest/api/v1/',
+          apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
           chain: Blockchain.APEX_PRIME,
           network: Network.TESTNET,
           baseUrl: 'http://apex-prime-testnet.gerowallet.io:8053/',
@@ -147,14 +161,13 @@ export default {
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database
-      const db = new Dexie(dbName);
+      const db: Dexie = new Dexie(dbName);
       return await db.open();
     } catch (error: DexieError | any) {
       console.log(error)
       if (error.name === 'NoSuchDatabaseError') {
-        console.log(`Database ${dbName} does not exist. Creating now...`);
         // Database does not exist, create it
-        const db = new Dexie(dbName);
+        const db: Dexie = new Dexie(dbName);
         db.version(1).stores({
           pools: 'pool_id_bech32',
           pools_sync: 'time',

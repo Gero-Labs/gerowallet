@@ -8,7 +8,6 @@
         <div style="font-size:24px; color: white; width: 335px; margin: auto;" class="text-center pb-3">Use this wallet address to receive assets / collectibles</div>
         <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
         <span class="pt-3" style="width:554px; font-size: 16px; display: inline-block; font-weight: bold; color: white">{{options.data}}<copy-button small :value="walletAddress"></copy-button></span>
-        {{stakeAddress}}
       </v-card-text>
     </BaseDialog>
 </template>

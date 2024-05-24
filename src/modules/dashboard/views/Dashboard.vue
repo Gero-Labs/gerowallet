@@ -24,7 +24,7 @@
         <quick-actions :utxos="calculatedUtxos"></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard :account="getAccountInfo" :pools="getPools" v-if="getAccountInfo?.controlled_amount"></StakingCard>
+        <StakingCard :account="getAccountInfo" :pools="getPools" v-if="getAccountInfo?.pool_id"></StakingCard>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
@@ -52,7 +52,7 @@
                                 :style="item.status === 'Pending' ? { opacity: '0.5'} : { }"></stacked-tokens>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
-                <span :style="{color: getColor(item)}">{{ item.ada | toAda(true, 2) }}</span>
+                <span :style="{color: getColor(item)}">{{ item.ada | toAda(true, 2, loggedWallet.network !== Network.MAINNET) }}</span>
               </template>
             </v-data-table>
           </v-card-text>
@@ -69,16 +69,19 @@ import QuickActions from "@/modules/dashboard/components/QuickActions.vue";
 import StakingCard from "../components/StakingCard.vue";
 import NoTokensCard from "../components/NoTokensCard.vue";
 import {useStore} from "@/store";
-import {useObservable} from "@vueuse/rxjs";
-import {liveQuery} from "dexie";
-import {mapActions, mapState} from "pinia";
+import {mapState} from "pinia";
+import {Network} from "@/models/types";
 
 export default {
   name: 'dashboard',
   components: {QuickActions, StackedTokens, PortfolioChart, StakingCard, NoTokensCard},
   computed: {
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'getAccountInfo', 'calculatedUtxos']),
+    Network() {
+      return Network
+    },
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'getAccountInfo', 'calculatedUtxos', 'loggedWallet']),
     computeChartData() {
+      console.log('computeChartData')
       const graphData = []
       let currentBalance = 0
       this.calculatedTransactions.forEach(tx => {
@@ -112,7 +115,6 @@ export default {
   },
   filters,
   data: () => ({
-    wallet: undefined,
     store: useStore,
     filters,
     activities: [],
@@ -127,7 +129,6 @@ export default {
     blockchainDB: undefined
   }),
   mounted() {
-    this.wallet = useStore().getWallet
     this.loadingChart = false
   }
 }
