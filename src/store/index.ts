@@ -193,7 +193,7 @@ export const useStore = defineStore('store', {
   actions: {
     async login(walletId: number) {
       loading.setLoading(true);
-      console.log('login');
+      console.log('log');
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
