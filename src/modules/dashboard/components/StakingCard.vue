@@ -10,7 +10,7 @@
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Total ADA:</span>
-            <h2 style="color: white">{{ account.controlled_amount | toAda }}</h2>
+            <h2 style="color: white">{{ account.controlled_amount | toAda(false, 2, loggedWallet.network !== Network.MAINNET) }}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Rewards</span>
@@ -125,6 +125,7 @@ import {useStore} from "@/store";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
+import {Network} from "@/models/types";
 
 export default {
   components: {CopyButton, RewardsChart},
@@ -148,6 +149,9 @@ export default {
     },
   },
   computed: {
+    Network() {
+      return Network
+    },
     pool() {
       if (this.pools) {
         return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)

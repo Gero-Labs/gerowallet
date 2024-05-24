@@ -73,6 +73,14 @@
                   </v-card>
                 </v-card-text>
                 <v-card-actions class="pa-0 align-self-end" style="width: 100%">
+                  <v-btn
+                    outlined
+                    color="primary"
+                    @click="pasteFromClipboard"
+                    elevation="0"
+                  >
+                    Paste from Clipboard
+                  </v-btn>
                   <v-spacer></v-spacer>
                   <v-btn
                       color="primary"
@@ -246,7 +254,10 @@ export default {
       return this.computedRecoverySeedPhrase.join(' ')
     },
     computedRecoverySeedPhrase() {
-      return this.recoverySeedPhrase.filter((item, index) => item && index < this.recoverySeedPhraseLength)
+      if (this.recoverySeedPhrase) {
+        return this.recoverySeedPhrase.filter((item, index) => item && index < this.recoverySeedPhraseLength)
+      }
+      return undefined
     },
     recoverySeedPhraseLength() {
       return Number(this.seedPhraseLength)
@@ -261,12 +272,19 @@ export default {
     },
     valid: {
       get() {
-        return this.computedRecoverySeedPhrase.length === Number(this.seedPhraseLength) && bip39.validateMnemonic(this.computedRecoverySeedPhrase.join(' '))
+        if (this.computedRecoverySeedPhrase) {
+          return this.computedRecoverySeedPhrase.length === Number(this.seedPhraseLength) && bip39.validateMnemonic(this.computedRecoverySeedPhrase.join(' '))
+        }
+        return false
       },
       set(value) {}
     },
   },
   methods: {
+    async pasteFromClipboard() {
+      const text = await navigator.clipboard.readText();
+      this.recoverySeedPhrase = text.split(" ")
+    },
     walletCreationStep1() {
       if (this.$refs.form.validate()) {
         this.step = 2
@@ -301,7 +319,7 @@ export default {
       }
       this.valid2 = false
       this.creatingWalletLoader = false
-      this.recoverySeedPhrase = undefined
+      this.recoverySeedPhrase = ['','','','','','','','','','','','','','','','','','','','','','','','']
       this.persistent = false
     }
   },

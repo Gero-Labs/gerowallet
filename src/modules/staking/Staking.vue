@@ -13,8 +13,8 @@
                   Earn rewards by staking your Ap3x tokens with Apex Fusion's extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action style="align-items: center;" class="ma-0">
-                <v-card-title style="color: #00DFF3; font-size: 18px">
+              <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists">
+                <v-card-title style="color: #00DFF3; font-size: 18px" v-if="geroPoolExists">
                   Consider supporting us
                 </v-card-title>
                 <v-card-subtitle>
@@ -111,7 +111,7 @@
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">
-                            {{ pool.pledge | toAda }}
+                            {{ pool.pledge | toAda(false, 0, loggedWallet.network !== Network.MAINNET) }}
                           </v-chip>
                         </v-col>
                       </v-row>
@@ -128,7 +128,7 @@
                           <span style="font-size: 14px; color: white">Fees</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white">{{pool.margin + '%'}} / {{pool.fixed_cost | toAda }}
+                          <span style="font-size: 14px; color: white">{{pool.margin + '%'}} / {{pool.fixed_cost | toAda(false, 0, loggedWallet.network !== Network.MAINNET) }}
                           </span>
                         </v-col>
                       </v-row>
@@ -152,12 +152,20 @@ import {useStore} from "@/store";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
 import {mapState} from "pinia";
+import {Blockchain, Network} from "@/models/types";
 
 export default {
   name: 'Staking',
   components: {},
   computed: {
-    ...mapState(useStore, ['getPools']),
+    Network() {
+      return Network
+    },
+    geroPoolExists() {
+      return (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) ||
+        (this.loggedWallet.chain === Blockchain.APEX_PRIME && this.loggedWallet.network === Network.TESTNET)
+    },
+    ...mapState(useStore, ['getPools', 'loggedWallet']),
     pools() {
       return this.getPools
     },

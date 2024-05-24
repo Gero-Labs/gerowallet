@@ -27,7 +27,7 @@
                 <v-icon small :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
                   {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
                 </v-icon>&nbsp;
-                <span style="font-size: 12px">{{wallet?.network}} - Synced {{new Date(lastSyncInfo?.time * 1000).toLocaleString()}}</span>
+                <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(lastSyncInfo?.time * 1000).toLocaleString()}}</span>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2">
                   <v-avatar size="20">
@@ -83,6 +83,7 @@ import {Blockchain, Network} from "@/models/types";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
 import { liveQuery } from "dexie";
 import { useObservable } from "@vueuse/rxjs";
+import {mapState} from "pinia";
 
 export default {
   name: 'ContentLayout',
@@ -98,7 +99,7 @@ export default {
     },
   },
   computed: {
-    // ...mapState(useStore, ['lastSyncInfo']),
+    ...mapState(useStore, ['loggedWallet']),
     epochSlotPercentage() {
       if (this.lastSyncInfo) {
         return this.lastSyncInfo.epoch_slot / 432000 * 100
@@ -116,7 +117,7 @@ export default {
     this.wallet = useStore().getWallet
     const db = await this.wallet.getDb()
     this.lastSyncInfo = useObservable(liveQuery(() => {
-          return db.table('sync').where({walletId: this.wallet.id}).first()
+          return db.table('sync').orderBy('id').last()
         }))
     try {
       useStore().getWallet.sync(await this.wallet.fetchTip())

@@ -14,6 +14,7 @@ import Table = Dexie.Table;
 export class Wallet {
   db: Dexie;
   api: Api;
+  locked: Boolean = false;
 
   id: any
   name: any
@@ -177,19 +178,25 @@ export class Wallet {
   }
 
   async sync(tip): Promise<void> {
-    console.log('sync')
-    const lastSyncInfo = await this.getLastSyncInfo();
-    if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
-      const accountInfo = await this.syncAccountInfo();
-      if (accountInfo) {
-        await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
-      }
-      await this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0);
-      await this.syncStakingPools();
-      await this.syncAssets();
-      await this.setLastSyncInfo(tip);
+    if (!this.locked) {
+      this.locked = true
+      console.log('sync')
+      this.getLastSyncInfo().then(async lastSyncInfo => {
+        if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
+          const promises = []
+          promises.push(this.syncStakingPools())
+          promises.push(this.syncAccountInfo().then(accountInfo => {
+            if (accountInfo) {
+              return [this.syncAccountRewards(), this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0), this.syncAssets()]
+            }
+            return []
+          }))
+          await Promise.all(promises)
+          await this.setLastSyncInfo(tip);
+        }
+      })
+      this.locked = false
     }
-
   }
 
   async syncAssets(): Promise<void> {
@@ -285,7 +292,7 @@ export class Wallet {
         return await this.setAccountInfo(res);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   }
 
@@ -296,7 +303,7 @@ export class Wallet {
         await this.setAccountRewards(res);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   }
 
@@ -406,6 +413,6 @@ export class Wallet {
   }
 
   public async getBlockchainDb(): Promise<Dexie> {
-    return await db.checkAndCreateBlockchainDatabase(this.chain+"_"+this.network)
+    return db.checkAndCreateBlockchainDatabase(this.chain+"_"+this.network)
   }
 }

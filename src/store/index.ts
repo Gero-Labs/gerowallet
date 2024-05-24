@@ -29,6 +29,7 @@ export const useStore = defineStore('store', {
     assets: [],
     pools: [],
     accountInfo: undefined,
+    latestTip: undefined,
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -37,7 +38,7 @@ export const useStore = defineStore('store', {
     getLocale: state => state.locale,
     getNetwork: state => state.network,
     getWallet: state => {
-      if (!appWallet) {
+      if (!appWallet && state.loggedWallet) {
         appWallet = Wallet.class(state.loggedWallet, state.provider);
       }
       return appWallet;
@@ -120,7 +121,6 @@ export const useStore = defineStore('store', {
                 asset['onchain_metadata'] = resolved.onchain_metadata
                 asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
               } else {
-                console.log('No logo found for asset:', asset);
                 asset['logo'] = ''; // Set empty logo if not found
               }
             }
@@ -161,7 +161,6 @@ export const useStore = defineStore('store', {
             utxos.push(output);
           }
         });
-        console.log(utxos);
       }
       // Resolve Assets
       if (utxos) {
@@ -172,7 +171,6 @@ export const useStore = defineStore('store', {
               if (!resolved) {
                 this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
               } else {
-                console.log(resolved)
                 asset['total_amount'] = resolved?.quantity
                 asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
                 if (resolved?.metadata?.logo) {
@@ -180,7 +178,6 @@ export const useStore = defineStore('store', {
                 } else if (resolved?.onchain_metadata?.image) {
                   asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
                 } else {
-                  console.log('No logo found for asset:', asset);
                   asset['logo'] = ''; // Set empty logo if not found
                 }
               }
@@ -202,10 +199,26 @@ export const useStore = defineStore('store', {
         return null;
       }
       this.loggedWallet = wallet;
-      this.provider = await db.getProvider(wallet.chain, wallet.network);
+      try {
+        this.provider = await db.getProvider(wallet.chain, wallet.network);
+      } catch (err) {
+        console.log(err)
+      }
+
       appWallet = Wallet.class(wallet, this.provider);
-      const tip = await appWallet.fetchTip();
-      await appWallet.sync(tip);
+      const promises = []
+      promises.push(this.loadAccountInfo())
+      promises.push(this.loadTransactions())
+      promises.push(this.loadAssets())
+      promises.push(this.loadPools())
+      await Promise.all(promises)
+      try {
+        await appWallet.fetchTip().then(tip => {
+          appWallet.sync(tip)
+        });
+      } catch (err) {
+        console.log(err)
+      }
       loading.setLoading(false);
     },
     logout() {
@@ -213,6 +226,11 @@ export const useStore = defineStore('store', {
       this.loggedWallet = undefined;
       this.provider = undefined;
       this.transactions = []
+      this.assets = []
+      this.pools = []
+      this.accountInfo = undefined
+      this.latestTip = undefined
+      appWallet = undefined
       loading.setLoading(false);
     },
     async loadWallets(): Promise<any> {
@@ -233,7 +251,10 @@ export const useStore = defineStore('store', {
       this.adaPrice = price
     },
     async loadAccountInfo() {
-      const db = await this.getWallet.getDb()
+      if (! this.getWallet) {
+        return
+      }
+      const db = await appWallet.getDb()
       liveQuery(() => db.table('account').where({walletId: this.loggedWallet.id}).first()).subscribe({
         next: newAccountInfo => {
           this.accountInfo = newAccountInfo
@@ -244,7 +265,10 @@ export const useStore = defineStore('store', {
       });
     },
     async loadTransactions() {
-      const db: Dexie = await this.getWallet.getDb()
+      if (!this.getWallet) {
+        return
+      }
+      const db: Dexie = await appWallet.getDb()
       liveQuery(() => db.table('transactions').toArray()).subscribe({
         next: newTransactions => {
           this.transactions = newTransactions.map(tx => tx.transaction)
@@ -255,7 +279,10 @@ export const useStore = defineStore('store', {
       });
     },
     async loadAssets() {
-      const db: Dexie = await this.getWallet.getBlockchainDb()
+      if (! this.getWallet) {
+        return
+      }
+      const db: Dexie = await appWallet.getBlockchainDb()
       liveQuery(() => db.table('assets').toArray()).subscribe({
         next: newAssets => {
           this.assets = newAssets
@@ -266,7 +293,10 @@ export const useStore = defineStore('store', {
       });
     },
     async loadPools() {
-      const db: Dexie = await this.getWallet.getBlockchainDb()
+      if (! this.getWallet) {
+        return
+      }
+      const db: Dexie = await appWallet.getBlockchainDb()
       liveQuery(() => db.table('pools').toArray()).subscribe({
         next: newPools => {
           this.pools = newPools
@@ -275,7 +305,7 @@ export const useStore = defineStore('store', {
           console.error('Failed to Fetch Pools:', error)
         }
       });
-    }
+    },
   },
 });
 
