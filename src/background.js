@@ -3,7 +3,7 @@ let lastFullscreenTabId = -1;
 const checkTabOpen = (tabId) => {
   return new Promise((resolve) => {
     const url = chrome.runtime.getURL("*");
-    chrome.tabs.query({ url }, function(tabList) {
+    chrome.tabs.query({url}, function (tabList) {
       let isTabOpen = false;
       for (let i = 0; i < tabList.length; i++) {
         const tmpTab = tabList[i];
@@ -36,14 +36,14 @@ const openDashboard = () => {
           return resolve(true);
         });
       } else {
-        chrome.tabs.update(lastFullscreenTabId, { selected: true });
-        chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup"] }, (list) => {
+        chrome.tabs.update(lastFullscreenTabId, {selected: true});
+        chrome.windows.getAll({populate: true, windowTypes: ["normal", "popup"]}, (list) => {
           for (const win of list) {
             console.log(win);
             if (win.id && win.tabs) {
               for (const tab of win.tabs) {
                 if (tab.id === lastFullscreenTabId) {
-                  chrome.windows.update(win.id, { focused: true });
+                  chrome.windows.update(win.id, {focused: true});
                   break;
                 }
               }
@@ -65,13 +65,13 @@ chrome.action.onClicked.addListener(openUI);
 /* CIP 30 */
 chrome.action.onClicked.addListener(tab => {
   const appUrl = chrome.runtime.getURL('index.html');
-  chrome.tabs.query({ url: appUrl }, tabs => {
+  chrome.tabs.query({url: appUrl}, tabs => {
     if (tabs.length > 0) {
       // If a tab of your app is already opened, focus it
-      chrome.tabs.update(tabs[0].id, { active: true });
+      chrome.tabs.update(tabs[0].id, {active: true});
     } else {
       // If no tab of your app is opened, open a new tab
-      chrome.tabs.create({ url: appUrl });
+      chrome.tabs.create({url: appUrl});
     }
   });
 });
@@ -86,15 +86,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       focusOrCreateWindow(popupURL);
     } else if (message.payload.action === 'isEnabled') {
-      sendResponse({ data: true })
+      sendResponse({data: true})
+    } else if (message.payload.action === 'getExtensions') {
+      sendResponse({data: []});
+    } else if (message.payload.action === 'getNetworkId') {
+      sendResponse({data: 1});
     }
   }
 
-  sendResponse({ data: undefined });
+  sendResponse({data: undefined});
 });
 
 function focusOrCreateWindow(url) {
-  chrome.windows.getAll({ populate: true }, windows => {
+  chrome.windows.getAll({populate: true}, windows => {
     let existingWindow = null;
 
     // Iterate through each window and its tabs to find the URL
@@ -110,7 +114,7 @@ function focusOrCreateWindow(url) {
 
     if (existingWindow) {
       // Focus on the existing window
-      chrome.windows.update(existingWindow.id, { focused: true });
+      chrome.windows.update(existingWindow.id, {focused: true});
     } else {
       // Create a new window with the specified URL
       chrome.windows.create({

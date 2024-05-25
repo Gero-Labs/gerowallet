@@ -16,7 +16,7 @@ window.cardano[wallet.name] = {
     try {
       await sendMessageToContentScript({
         action: 'enable',
-        data: { url: window.location.href.toString() },
+        data: {url: window.location.href.toString()},
       });
     } catch (e) {
       return Promise.resolve(e);
@@ -26,13 +26,30 @@ window.cardano[wallet.name] = {
     try {
       return await sendMessageToContentScript({
         action: 'isEnabled',
-        data: { url: window.location.href.toString() },
+        data: {url: window.location.href.toString()},
       });
     } catch (e) {
       return Promise.resolve(e)
     }
   },
-
+  getExtensions: async () => {
+    try {
+      return await sendMessageToContentScript({
+        action: 'getExtensions',
+      })
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  },
+  getNetworkId: async () => {
+    try {
+      return await sendMessageToContentScript({
+        action: 'getNetworkId',
+      })
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  }
 };
 
 function sendMessageToContentScript(payload) {
@@ -49,6 +66,6 @@ function sendMessageToContentScript(payload) {
     };
 
     window.addEventListener('message', messageListener);
-    window.postMessage({ type: 'FROM_PAGE', payload }, '*');
+    window.postMessage({type: 'FROM_PAGE', payload}, '*');
   });
 }
