@@ -4,6 +4,7 @@ import { useStore } from '@/store';
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
+import DappConnect from '@/modules/dapp-connect/views/DappConnect.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import Assets from '@/modules/assets/views/Assets.vue';
 import Staking from "@/modules/staking/Staking.vue";
@@ -81,6 +82,10 @@ const routes = [
     },
   },
   {
+    path: '/dapp-connect',
+    component: DappConnect,
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -88,7 +93,7 @@ const routes = [
 ];
 
 const router = new VueRouter({
-  mode: 'history',
+  mode: 'hash',
   // base: process.env['BASE_URL'],
   routes,
 });
