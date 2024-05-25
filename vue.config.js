@@ -22,7 +22,9 @@ module.exports = defineConfig({
         patterns: [
           { from: 'src/assets', to: 'assets' },
           { from: 'src/manifest.json', to: 'manifest.json' },
-          { from: 'src/background.js', to: 'background.js' }
+          { from: 'src/background.js', to: 'background.js' },
+          { from: 'src/content.js', to: 'content.js' },
+          { from: 'src/inject.js', to: 'inject.js' }
         ]
       }),
       new webpack.ProvidePlugin({
