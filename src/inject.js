@@ -15,7 +15,7 @@ window.cardano[wallet.name] = {
   enable: async () => {
     try {
       await sendMessageToContentScript({
-        action: 'connectWallet',
+        action: 'enable',
         data: { url: window.location.href.toString() },
       });
     } catch (e) {

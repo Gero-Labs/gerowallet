@@ -78,7 +78,7 @@ chrome.action.onClicked.addListener(tab => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FROM_CONTENT') {
-    if (message.payload.action === 'connectWallet') {
+    if (message.payload.action === 'enable') {
       // TODO: Eugeniu, encode properly the query params.
       const popupURL = chrome.runtime.getURL(
         `index.html#/dapp-connect?website=${message.payload.data.url}&walletName=MyWallet`
