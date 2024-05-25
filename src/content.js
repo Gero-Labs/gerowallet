@@ -12,7 +12,7 @@ window.addEventListener('message', async event => {
         type: 'FROM_CONTENT',
         payload: event.data.payload,
       });
-      window.postMessage({ type: 'FROM_EXTENSION', text: response.reply }, '*');
+      window.postMessage({ type: 'FROM_EXTENSION', data: response.data }, '*');
     } catch (error) {
       console.error('Error sending message to background:', error);
     }

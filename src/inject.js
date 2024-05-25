@@ -19,9 +19,20 @@ window.cardano[wallet.name] = {
         data: { url: window.location.href.toString() },
       });
     } catch (e) {
-      console.log(e);
+      return Promise.resolve(e);
     }
   },
+  isEnabled: async () => {
+    try {
+      return await sendMessageToContentScript({
+        action: 'isEnabled',
+        data: { url: window.location.href.toString() },
+      });
+    } catch (e) {
+      return Promise.resolve(e)
+    }
+  },
+
 };
 
 function sendMessageToContentScript(payload) {
@@ -33,11 +44,11 @@ function sendMessageToContentScript(payload) {
 
       if (event.data?.type == 'FROM_EXTENSION') {
         window.removeEventListener('message', messageListener);
-        resolve(event.data);
+        resolve(event.data.data);
       }
     };
 
-    window.addEventListener('message', payload);
+    window.addEventListener('message', messageListener);
     window.postMessage({ type: 'FROM_PAGE', payload }, '*');
   });
 }
