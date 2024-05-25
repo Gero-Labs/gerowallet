@@ -85,10 +85,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       );
 
       focusOrCreateWindow(popupURL);
+    } else if (message.payload.action === 'isEnabled') {
+      sendResponse({ data: true })
     }
   }
 
-  sendResponse({ reply: 'Hello from the background script!' });
+  sendResponse({ data: undefined });
 });
 
 function focusOrCreateWindow(url) {
