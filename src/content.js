@@ -12,7 +12,6 @@ window.addEventListener('message', async event => {
         type: 'FROM_CONTENT',
         payload: event.data.payload,
       });
-      // @ts-ignore
       window.postMessage({ type: 'FROM_EXTENSION', text: response.reply }, '*');
     } catch (error) {
       console.error('Error sending message to background:', error);
