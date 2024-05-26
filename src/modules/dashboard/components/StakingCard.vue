@@ -123,9 +123,8 @@ import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
 import {useStore} from "@/store";
 import CopyButton from "@/shared/components/CopyButton.vue";
-import {useObservable} from "@vueuse/rxjs";
-import {liveQuery} from "dexie";
 import {Network} from "@/models/types";
+import {mapState} from "pinia";
 
 export default {
   components: {CopyButton, RewardsChart},
@@ -149,6 +148,7 @@ export default {
     },
   },
   computed: {
+    ...mapState(useStore, ['rewards']),
     Network() {
       return Network
     },
@@ -239,14 +239,6 @@ export default {
     isNumeric(n) {
       return !isNaN(parseFloat(n)) && isFinite(n);
     }
-  },
-  async created() {
-    this.wallet = useStore().getWallet
-    const db = await this.wallet.getDb()
-    this.blockchainDB = await this.wallet.getBlockchainDb()
-    this.rewards = useObservable(liveQuery(() => {
-      return  db.table('rewards').orderBy("epoch").toArray()
-    }))
   }
 }
 </script>

@@ -9,7 +9,7 @@ const db = new Dexie('GeroWalletDatabase');
 await db.version(1).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
   config: '++id, key, value',
-  provider: '++id, name, chain, network, baseUrl, apiKey',
+  provider: '++id, [name+chain+network], baseUrl, apiKey',
 });
 
 db.open().catch(err => {
@@ -73,7 +73,7 @@ async function initializeProviderTable() {
 export default {
   async getProvider(chain, network) {
     const provider = await this.getConfiguration('provider');
-    return db['provider'].where({ name: provider.value, chain: chain, network: network }).first();
+    return db['provider'].where('[name+chain+network]').equals([provider.value, chain, network]).first();
   },
   async getConfiguration(key) {
     return db['config'].where({ key: key }).first();

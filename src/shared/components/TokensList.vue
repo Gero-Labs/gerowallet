@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="tokens-container" :style="{height: containerHeight}">
+    <div class="tokens-container">
       <img
         :src="require('../../modules/assets/assets/66.png')"
         alt="token"
@@ -10,7 +10,7 @@
         @click="handleTokenClick(token)"
       />
     </div>
-    <div class="d-flex justify-center align-center mt-3">
+    <div class="d-flex justify-center align-center mt-3" v-if="tokensData.length > 0">
       <v-btn icon @click="prevPage" class="arrow-button" :disabled="currentPage <= 1">
         <v-icon color="#cecfd2" size="20">mdi-arrow-left</v-icon>
       </v-btn>
@@ -49,9 +49,6 @@ export default {
       const end = start + this.rows * 5;
       return this.tokensData.slice(start, end);
     },
-    containerHeight() {
-      return `${132 * this.rows}px`;
-    }
   },
   methods: {
     handleTokenClick(token) {

@@ -2,9 +2,9 @@
   <div class="d-flex column">
     <v-img width="28" :src="require('@/assets/svg/cardano.svg')" class="mr-2" contain></v-img>
     <span v-if="ticker.lastPrice" style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
-    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="value.length > 0"></v-divider>
-    <div style="width: 120px" v-if="value.length > 0">
-      <v-sparkline :value="value"
+    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="chart.length > 0"></v-divider>
+    <div style="width: 120px" v-if="chart.length > 0">
+      <v-sparkline :value="chart"
                    :gradient="gradient"
                    :smooth="radius || false"
                    :padding="padding"
@@ -20,45 +20,40 @@
 </template>
 <script>
 import {useStore} from "@/store";
-import {mapActions} from "pinia";
+import {mapState} from "pinia";
 import socket from "@/plugins/socket";
 
 export default {
   name: 'PriceTicker',
-  methods: {
-    ...mapActions(useStore, ['setPrice']),
+  watch: {
+    price: {
+      handler(val) {
+        if (val) {
+          //TODO push to sparkline (this.chart) and shift
+          this.ticker.prevPrice = this.ticker.lastPrice;
+          this.ticker.lastPrice = Number(val.lastPrice).toFixed(4);
+          this.ticker.priceChange = Number(val.priceChange).toFixed(3);
+          this.ticker.priceChangePercent = Number(val.priceChangePercent).toFixed(2);
+        }
+      },
+      deep: true,
+    }
   },
   async mounted() {
     const provider = await useStore().getWallet.api
-    this.value = await provider.fetchHistory()
+    this.chart = await provider.fetchHistory()
     const data = await provider.fetchADAStatistics();
     this.ticker.prevPrice = this.ticker.lastPrice;
-    this.setPrice(Number(data.lastPrice))
     this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
     this.ticker.priceChange = Number(data.priceChange).toFixed(3);
     this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-    // setInterval(async () => {
-    //   const data = await provider.fetchADAStatistics();
-    //   this.ticker.prevPrice = this.ticker.lastPrice;
-    //   this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
-    //   this.ticker.priceChange = Number(data.priceChange).toFixed(3);
-    //   this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-    // },3000);
+    setInterval(async () => {
+      this.chart = await provider.fetchHistory()
+    },60000);
   },
-  watch: {
-    'socket.message': {
-      handler(val) {
-        if (val.message_type === 'PRICE') {
-          this.ticker.prevPrice = this.ticker.lastPrice;
-          this.ticker.lastPrice = Number(val.object.lastPrice).toFixed(4);
-          this.ticker.priceChange = Number(val.object.priceChange).toFixed(3);
-          this.ticker.priceChangePercent = Number(val.object.priceChangePercent).toFixed(2);
-        }
-      },
-      deep: true
-    }
+  computed: {
+    ...mapState(useStore, ['price']),
   },
-  computed: {},
   data: () => ({
     socket,
     ticker: {
@@ -74,7 +69,7 @@ export default {
     gradient: ['#fff'],
     type: 'trend',
     autoLineWidth: false,
-    value: [],
+    chart: [],
   })
 }
 </script>

@@ -5,10 +5,9 @@ import loading from '@/plugins/loading';
 // import { LocalPersistedStorage} from "@/store/local-storage";
 
 import db from '@/db';
-import { Wallet } from '@/models/wallet';
-import {Blockchain} from "@/models/types";
-import {useObservable} from "@vueuse/rxjs";
+import {Wallet} from '@/models/wallet';
 import Dexie, {liveQuery} from "dexie";
+import socket from "@/plugins/socket";
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -17,19 +16,21 @@ import Dexie, {liveQuery} from "dexie";
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: { paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'adaPrice']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView']},
   state: () => ({
     loggedWallet: undefined,
     wallets: [],
     locale: 'en',
     network: undefined,
     provider: undefined,
-    adaPrice: undefined,
+    price: undefined,
     transactions: [],
     assets: [],
     pools: [],
+    rewards: [],
     accountInfo: undefined,
     latestTip: undefined,
+    stakingProView: false,
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -43,96 +44,114 @@ export const useStore = defineStore('store', {
       }
       return appWallet;
     },
-    getAdaPrice: state => state.adaPrice,
+    getPrice: state => state.price,
     calculatedTransactions(state) {
       if (state.transactions) {
         const currentStake = this.getWallet.stakeAddress().to_address().to_bech32();
         let currentBalance: number = 0;
-        return structuredClone(state.transactions).sort((a, b) => a.tx_timestamp - b.tx_timestamp).map((tx) => {
-          let totalAmount: number = 0;
-          const assets: {} = {}
+        return structuredClone(state.transactions)
+          .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
+          .map((tx) => {
+            let sentAmount: number = 0;
+            let receivedAmount: number = 0;
+            const sentAssets = {};
+            const receivedAssets = {};
 
-          tx.inputs.forEach(input => {
-            if (input.stake_addr === currentStake) {
-              totalAmount -= +input.value
-              if (input.asset_list.length) {
-                input.asset_list.forEach((asset) => {
-                  const assetName = asset.policy_id + asset.asset_name;
-                  if (assets[assetName]) {
-                    assets[assetName].quantity = +assets[assetName].quantity - +asset.quantity
-                  } else {
-                    assets[assetName] = structuredClone(asset)
-                    assets[assetName].quantity = -asset.quantity
-                  }
-                })
-              }
-            }
-          })
-
-          tx.outputs.forEach(output => {
-            if (output.stake_addr === currentStake) {
-              totalAmount += +output.value
-              if (output.asset_list.length) {
-                output.asset_list.forEach((asset) => {
-                  const assetName = asset.policy_id + asset.asset_name;
-                  if (assets[assetName]) {
-                    assets[assetName].quantity = +assets[assetName].quantity + +asset.quantity
-                    if (assets[assetName].quantity === 0) {
-                      delete assets[assetName]
+            tx.inputs.forEach(input => {
+              if (input.stake_addr === currentStake) {
+                sentAmount += +input.value;
+                if (input.asset_list.length) {
+                  input.asset_list.forEach(asset => {
+                    const assetName = asset.policy_id + asset.asset_name;
+                    if (sentAssets[assetName]) {
+                      sentAssets[assetName].quantity += +sentAssets[assetName].quantity;
+                    } else {
+                      sentAssets[assetName] = structuredClone(asset);
                     }
-                  } else {
-                    assets[assetName] = structuredClone(asset)
-                  }
-                })
+                  });
+                }
               }
-            }
-          })
+            });
 
-          currentBalance += totalAmount
+            tx.outputs.forEach(output => {
+              if (output.stake_addr === currentStake) {
+                receivedAmount += +output.value;
+                if (output.asset_list.length) {
+                  output.asset_list.forEach(asset => {
+                    const assetName = asset.policy_id + asset.asset_name;
+                    if (receivedAssets[assetName]) {
+                      receivedAssets[assetName].quantity += +receivedAssets[assetName].quantity;
+                    } else {
+                      receivedAssets[assetName] = structuredClone(asset);
+                    }
+                  });
+                }
+              }
+            });
 
-          const statuses = []
+            const totalAmount = receivedAmount - sentAmount;
+            const assets = {...sentAssets};
+            Object.values(receivedAssets).forEach(receivedAsset => {
+              const assetName = receivedAsset['policy_id'] + receivedAsset['asset_name'];
 
-          if (totalAmount > 0) {
-            statuses.push('Received')
-          } else {
-            statuses.push('Sent')
-          }
-          if (tx.withdrawals?.length > 0) {
-            statuses.push('Withdrawal')
-          }
-          const adaAsset = {
-            policy_id: "",
-            asset_name: "lovelace",
-            decimals: 6,
-            quantity: totalAmount,
-            logo: require('@/assets/svg/cardano.svg')
-          }
-          Object.values(assets).forEach(asset => {
-            if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
-              return
-            }
-            const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-            if (!resolved) {
-              this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
-            } else {
-              if (resolved?.metadata?.logo) {
-                asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
-              } else if (resolved.onchain_metadata) {
-                asset['onchain_metadata'] = resolved.onchain_metadata
-                asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
+              if (assets[assetName]) {
+                assets[assetName].quantity += +receivedAsset['quantity'];
+
+                if (assets[assetName].quantity === 0) delete assets[assetName];
               } else {
-                asset['logo'] = ''; // Set empty logo if not found
+                assets[assetName] = receivedAsset;
               }
+            });
+
+            currentBalance += totalAmount
+
+            const statuses = []
+
+            if (totalAmount > 0) {
+              statuses.push('Received')
+            } else {
+              statuses.push('Sent')
+            }
+            if (tx.withdrawals?.length > 0) {
+              statuses.push('Withdrawal')
+            }
+            const adaAsset = {
+              policy_id: "",
+              asset_name: "lovelace",
+              decimals: 6,
+              quantity: totalAmount,
+              logo: require('@/assets/svg/cardano.svg')
+            }
+            Object.values(assets).forEach(asset => {
+              if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
+                return
+              }
+              const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+              if (!resolved) {
+                this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+              } else {
+                if (resolved?.metadata?.logo) {
+                  asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+                } else if (resolved.onchain_metadata) {
+                  asset['onchain_metadata'] = resolved.onchain_metadata
+                  asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
+                } else {
+                  asset['logo'] = ''; // Set empty logo if not found
+                }
+              }
+            })
+            return {
+              ...tx,
+              sentAmount,
+              receivedAmount,
+              sentAssets: Object.values(sentAssets),
+              receivedAssets: Object.values(receivedAssets),
+              time: tx.tx_timestamp,
+              ada: totalAmount,
+              status: statuses.join(', '),
+              assets: [adaAsset, ...Object.values(assets)]
             }
           })
-          return {
-            ...tx,
-            time: tx.tx_timestamp,
-            ada: totalAmount,
-            status: statuses.join(', '),
-            assets: [adaAsset, ...Object.values(assets)]
-          }
-        })
       }
       return []
     },
@@ -176,7 +195,7 @@ export const useStore = defineStore('store', {
                 if (resolved?.metadata?.logo) {
                   asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
                 } else if (resolved?.onchain_metadata?.image) {
-                  asset['logo'] = process.env['VUE_APP_BACKEND_URL']+'/api/ipfs/'+resolved.onchain_metadata.image
+                  asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
                 } else {
                   asset['logo'] = ''; // Set empty logo if not found
                 }
@@ -193,7 +212,7 @@ export const useStore = defineStore('store', {
   actions: {
     async login(walletId: number) {
       loading.setLoading(true);
-      console.log('log');
+      console.log('login');
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -206,11 +225,14 @@ export const useStore = defineStore('store', {
       }
 
       appWallet = Wallet.class(wallet, this.provider);
+      socket.stompConnect(appWallet)
       const promises = []
+      promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadTransactions())
       promises.push(this.loadAssets())
       promises.push(this.loadPools())
+      promises.push(this.loadRewards())
       await Promise.all(promises)
       try {
         await appWallet.fetchTip().then(tip => {
@@ -223,6 +245,7 @@ export const useStore = defineStore('store', {
     },
     logout() {
       loading.setLoading(true);
+      socket.stompDisconnect()
       this.loggedWallet = undefined;
       this.provider = undefined;
       this.transactions = []
@@ -248,10 +271,27 @@ export const useStore = defineStore('store', {
       this.network = network;
     },
     setPrice(price) {
-      this.adaPrice = price
+      this.price = price
+    },
+    setStakingProView(isPro) {
+      this.stakingProView = isPro
+    },
+    async loadSync() {
+      if (!this.getWallet) {
+        return
+      }
+      const db = await appWallet.getDb()
+      liveQuery(() => db.table('sync').orderBy('id').last()).subscribe({
+        next: newTip => {
+          this.latestTip = newTip
+        },
+        error: error => {
+          console.error('Failed to Fetch Tip:', error)
+        }
+      });
     },
     async loadAccountInfo() {
-      if (! this.getWallet) {
+      if (!this.getWallet) {
         return
       }
       const db = await appWallet.getDb()
@@ -271,7 +311,9 @@ export const useStore = defineStore('store', {
       const db: Dexie = await appWallet.getDb()
       liveQuery(() => db.table('transactions').toArray()).subscribe({
         next: newTransactions => {
-          this.transactions = newTransactions.map(tx => tx.transaction)
+          const newT = newTransactions.map(tx => tx.transaction)
+          if (newT !== this.transactions)
+            this.transactions = newT
         },
         error: error => {
           console.error('Failed to Fetch Transactions:', error)
@@ -279,7 +321,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadAssets() {
-      if (! this.getWallet) {
+      if (!this.getWallet) {
         return
       }
       const db: Dexie = await appWallet.getBlockchainDb()
@@ -293,7 +335,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadPools() {
-      if (! this.getWallet) {
+      if (!this.getWallet) {
         return
       }
       const db: Dexie = await appWallet.getBlockchainDb()
@@ -306,6 +348,20 @@ export const useStore = defineStore('store', {
         }
       });
     },
+    async loadRewards() {
+      if (!appWallet) {
+        return
+      }
+      const db = await appWallet.getDb()
+      liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
+        next: newRewards => {
+          this.rewards = newRewards
+        },
+        error: error => {
+          console.error('Failed to Fetch Rewards:', error)
+        }
+      });
+    }
   },
 });
 

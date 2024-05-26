@@ -165,22 +165,28 @@
                       dense
                       v-model="newWallet.password"
                       filled label="Spending Password"
-                      :type="show1 ? 'text' : 'password'"
-                      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-                      @click:append="show1 = !show1"
                       :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
-                  ></v-text-field>
+                  >
+                    <template v-slot:append>
+                      <v-icon @click="show1 = !show1" tabindex="-1">
+                        {{show1 ? 'mdi-eye' : 'mdi-eye-off'}}
+                      </v-icon>
+                    </template>
+                  </v-text-field>
                   <v-text-field
                       style="width: 100%"
                       dense
                       v-model="newWallet.confirmPassword"
                       filled
                       label="Confirm Password"
-                      :type="show2 ? 'text' : 'password'"
-                      :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
-                      @click:append="show2 = !show2"
                       :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
-                  ></v-text-field>
+                  >
+                    <template v-slot:append>
+                      <v-icon @click="show2 = !show2" tabindex="-1">
+                        {{show2 ? 'mdi-eye' : 'mdi-eye-off'}}
+                      </v-icon>
+                    </template>
+                  </v-text-field>
                   <v-checkbox
                       style="width: 100%"
                       class="mt-0 text-left"
@@ -234,8 +240,8 @@
 </template>
 <script>
 import * as bip39 from "bip39";
-import rules from "@/plugins/rules";
-import {WalletType, Theme, Blockchain, Network} from "@/models/types"
+import rules from "@/shared/utils/rules";
+import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";
 import MnemonicAutocomplete from "@/modules/welcome/components/MnemonicAutocomplete.vue";

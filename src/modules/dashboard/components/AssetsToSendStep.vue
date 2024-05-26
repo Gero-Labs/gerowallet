@@ -48,16 +48,21 @@
 
 <script>
 import SwapCurrencySelector from "@/shared/components/SwapCurrencySelector.vue";
+import {mapState} from "pinia";
+import {useStore} from "@/store";
 
 export default {
   components: { SwapCurrencySelector },
   props: {
     sendData: {
       type: Object,
-      default: () => ({}), 
+      default: () => ({}),
     },
   },
   name: "AssetsToSendStep",
+  computed: {
+    ...mapState(useStore, ['calculatedUtxos', 'assets']),
+  },
   data() {
     return {
       collectibles: [
@@ -217,7 +222,7 @@ export default {
           transition: all 0.2s ease-in-out;
           position: relative;
 
-          
+
           &:hover {
             border: 2px solid #00c7f3;
           }
