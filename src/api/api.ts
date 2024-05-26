@@ -15,7 +15,7 @@ export class Api {
     this.provider = Object.keys(Provider).find(key => Provider[key] === provider.name);
     this.axiosInstance = axios.create({
       baseURL: process.env['VUE_APP_BACKEND_URL'],
-      timeout: 60000,
+      timeout: 120000,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -94,6 +94,22 @@ export class Api {
     }
   }
 
+  async getAllPools() {
+    try {
+      const { data, status } = await this.axiosInstance.get(
+        `/api/pools/all?chain=${this.chain}&network=${this.network}`
+      );
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      console.log(error)
+      if (error.response?.status === 404) {
+        return []
+      }
+      throw parseHttpError(error);
+    }
+  }
+
   async getTransactionUtxos(txHash: string) {
     try {
       const { data, status } = await this.axiosInstance.get(
@@ -114,6 +130,18 @@ export class Api {
       if (status === 404) {
         return null
       }
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getAssetInfo(unit: string) {
+    try {
+      const { data, status } = await this.axiosInstance.get(
+        `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&unit=${unit}`
+      );
+      if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -142,18 +170,6 @@ export class Api {
         }
         return chart;
       }
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async fetchExchangeRate() {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        'https://openexchangerates.org/api/latest.json?app_id=dbffdd0541a3481e93b8f5cd0b0ee214'
-      );
-      if (status === 200) return data.rates.ILS;
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);

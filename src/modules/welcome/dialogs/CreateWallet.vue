@@ -103,10 +103,15 @@
                       v-model="newWallet.password"
                       filled label="Spending Password"
                       :type="show1 ? 'text' : 'password'"
-                      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-                      @click:append="show1 = !show1"
                       :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
-                  ></v-text-field>
+                  >
+                    <template v-slot:append>
+                        <v-icon @click="show1 = !show1" tabindex="-1">
+                          {{show1 ? 'mdi-eye' : 'mdi-eye-off'}}
+                        </v-icon>
+                    </template>
+
+                  </v-text-field>
                   <v-text-field
                       style="width: 100%"
                       dense
@@ -114,10 +119,14 @@
                       filled
                       label="Confirm Password"
                       :type="show2 ? 'text' : 'password'"
-                      :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
-                      @click:append="show2 = !show2"
                       :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
-                  ></v-text-field>
+                  >
+                    <template v-slot:append>
+                      <v-icon @click="show2 = !show2" tabindex="-1">
+                        {{show2 ? 'mdi-eye' : 'mdi-eye-off'}}
+                      </v-icon>
+                    </template>
+                  </v-text-field>
                   <v-checkbox
                       style="width: 100%"
                       class="mt-0 text-left"
@@ -369,9 +378,9 @@ export default {
       this.creatingWalletLoader = true
       const network = this.store.getNetwork
       const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, network.blockchain, network.network)
-      await this.store.login(walletId)
       this.dialogLocal = false
       this.resetDialog()
+      await this.store.login(walletId)
       await this.$router.push('/')
     },
     randomReplace(array, count) {

@@ -6,6 +6,7 @@ import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import Assets from '@/modules/assets/views/Assets.vue';
+import Staking from "@/modules/staking/Staking.vue";
 
 const routes = [
   {
@@ -55,7 +56,7 @@ const routes = [
   {
     path: '/staking',
     name: 'staking',
-    component: Dashboard,
+    component: Staking,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

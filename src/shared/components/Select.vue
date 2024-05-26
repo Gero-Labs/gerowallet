@@ -1,7 +1,6 @@
 <template>
   <div class="custom-select">
     <label v-if="label">{{ label }}</label>
-
     <v-select
       solo
       class="select"
@@ -13,11 +12,15 @@
       @input="$emit('input', $event)"
     >
       <template v-slot:item="{ item }">
-        <v-icon v-if="item.icon" left :color="item.iconColor">{{ item.icon }}</v-icon>
+        <v-avatar v-if="item.icon" size="20">
+          <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
+        </v-avatar>&nbsp;
         {{ item.name }}
       </template>
       <template v-slot:selection="{ item }">
-        <v-icon left v-if="item.icon" :color="item.iconColor">{{ item.icon }}</v-icon>
+        <v-avatar v-if="item.icon" size="20">
+          <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
+        </v-avatar>&nbsp;
         {{ item.name }}
       </template>
     </v-select>

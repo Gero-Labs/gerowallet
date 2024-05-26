@@ -1,4 +1,4 @@
-import Dexie from 'dexie';
+import Dexie, {IndexableType} from 'dexie';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import * as CryptoTS from 'crypto-ts';
@@ -7,11 +7,14 @@ import * as serialization from '@emurgo/cardano-serialization-lib-browser';
 import { BaseAddress, Bip32PrivateKey, Bip32PublicKey, RewardAddress, PublicKey, StakeCredential } from '@emurgo/cardano-serialization-lib-browser';
 import {Api} from '@/api/api';
 import networks from '@/shared/utils/networks';
-import {ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
+import {Blockchain, ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
+import db from "@/db";
+import Table = Dexie.Table;
 
 export class Wallet {
   db: Dexie;
   api: Api;
+  locked: Boolean = false;
 
   id: any
   name: any
@@ -35,7 +38,7 @@ export class Wallet {
     this.order = order;
     this.encryptedPrivateKey = encryptedPrivateKey;
     this.publicKey = publicKey;
-    this.passwordLastUpdate = new Date();
+    this.passwordLastUpdate = passwordLastUpdate;
     this.chain = chain;
     this.network = network;
   }
@@ -113,7 +116,7 @@ export class Wallet {
       .then(async db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.where({walletId: this.id}).first();
+        return syncTable.toArray()[0]
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -133,34 +136,13 @@ export class Wallet {
       });
   }
 
-  async setLastSyncInfo(tip, lastSyncInfo): Promise<void> {
+  async setLastSyncInfo(tip): Promise<void> {
     await this.db
       .open()
       .then(db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-
-        if (lastSyncInfo) {
-          return syncTable.update(lastSyncInfo.id, {
-            walletId: this.id,
-            blockHash: tip.hash,
-            height: tip.height,
-            absSlot: tip.slot,
-            time: tip.time,
-            epoch: tip.epoch,
-            epoch_slot: tip.epoch_slot
-          });
-        } else {
-          return syncTable.put({
-            walletId: this.id,
-            blockHash: tip.hash,
-            height: tip.height,
-            absSlot: tip.slot,
-            time: tip.time,
-            epoch: tip.epoch,
-            epoch_slot: tip.epoch_slot
-          });
-        }
+        return syncTable.put(tip);
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -196,19 +178,106 @@ export class Wallet {
   }
 
   async sync(tip): Promise<void> {
-    console.log('sync');
-    const lastSyncInfo = await this.getLastSyncInfo();
-    if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
-      const accountInfo = await this.syncAccountInfo();
-      if (accountInfo) {
-        await this.syncAccountRewards(); //TODO should be synced at a particular time every epoch
-      }
-      await this.syncAccountTransactions(0); //lastSyncInfo ? lastSyncInfo.height : 0);
-      // const addresses = await this.syncAddresses();
-      // await this.syncAddressesTransactions(0, addresses); //TODO lastSyncInfo.height
-      // await this.syncUtxos();
+    if (!this.locked) {
+      this.locked = true
+      console.log('sync')
+      this.getLastSyncInfo().then(async lastSyncInfo => {
+        if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
+          const promises = []
+          promises.push(this.syncStakingPools())
+          promises.push(this.syncAccountInfo().then(accountInfo => {
+            if (accountInfo) {
+              return [this.syncAccountRewards(), this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0), this.syncAssets()]
+            }
+            return []
+          }))
+          await Promise.all(promises)
+          await this.setLastSyncInfo(tip);
+        }
+      })
+      this.locked = false
+    }
+  }
 
-      await this.setLastSyncInfo(tip, lastSyncInfo);
+  async syncAssets(): Promise<void> {
+    const blockchainDB: Dexie = await this.getBlockchainDb()
+    const assetsSyncTable = blockchainDB.table('assets_sync')
+    const lastAssetsSyncArray = await assetsSyncTable.toArray()
+    if (lastAssetsSyncArray.length > 0) {
+      const lastAssetsSync = lastAssetsSyncArray[0]
+      if (lastAssetsSync?.time) {
+        const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
+        if (hoursSinceEpoch % 4 === 0) {
+          await this.setAssets(blockchainDB, assetsSyncTable)
+        }
+      }
+    }
+  }
+
+  async setAssets(blockchainDB: Dexie, assetsSyncTable) {
+    const assets = await blockchainDB.table('assets').toArray()
+    const promises = []
+    if (assets && assets.length > 0) {
+      assets.forEach(asset => {
+        promises.push(this.getAssetInfo(asset.policy_id, asset.asset_name))
+      })
+      await Promise.all(promises)
+    }
+    assetsSyncTable.put({time: new Date().getTime()})
+  }
+
+  private async getAssetInfo(policyId: string, assetName: string) {
+    try {
+      const blockchainDB: Dexie = await this.getBlockchainDb()
+      const assetsTable = blockchainDB.table('assets')
+      const asset = await assetsTable.where({policy_id: policyId, asset_name: assetName}).first()
+      if (asset) {
+        return asset
+      } else {
+        const res = await this.api.getAssetInfo(policyId+assetName);
+        if (res) {
+          assetsTable.put(res)
+          return res;
+        }
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
+  async syncStakingPools(): Promise<void> {
+    if ((this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME)) {
+      const blockchainDB: Dexie = await this.getBlockchainDb()
+      const poolSyncTable = blockchainDB.table('pools_sync')
+      const lastPoolSyncArray = await poolSyncTable.toArray()
+      if (lastPoolSyncArray.length == 0) {
+        await this.setStakingPools(blockchainDB, poolSyncTable)
+      } else if (lastPoolSyncArray.length > 0) {
+        const lastPoolSync = lastPoolSyncArray[0]
+        if (lastPoolSync?.time) {
+          const hoursSinceEpoch: number = Math.floor(lastPoolSync.time / (1000 * 60 * 60));
+          if (hoursSinceEpoch % 4 === 0) {
+            await this.setStakingPools(blockchainDB, poolSyncTable)
+          }
+        }
+      }
+    }
+  }
+
+  async setStakingPools(blockchainDB: Dexie, poolSyncTable) {
+    const pools = await this.getStakingPools()
+    blockchainDB.table('pools').bulkPut(pools)
+    poolSyncTable.put({time: new Date().getTime()})
+  }
+
+  private async getStakingPools() {
+    try {
+      const res = await this.api.getAllPools();
+      if (res) {
+        return res;
+      }
+    } catch (e) {
+      console.log(e);
     }
   }
 
@@ -223,7 +292,7 @@ export class Wallet {
         return await this.setAccountInfo(res);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   }
 
@@ -234,7 +303,7 @@ export class Wallet {
         await this.setAccountRewards(res);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   }
 
@@ -289,34 +358,6 @@ export class Wallet {
       });
   }
 
-  async syncTxIos(txs): Promise<any> {
-    try {
-      if (txs && Array.isArray(txs)) {
-        const promises = []
-        txs.forEach(value => {
-          console.log(value)
-          promises.push(this.api.getTransactionUtxos(value.hash))
-        })
-        const txIos = await Promise.all(promises)
-        await this.setTxIos(txIos)
-      }
-    } catch (e) {
-      console.log(e)
-    }
-  }
-
-  async setTxIos(txIos) {
-    return this.db.open()
-      .then(db => {
-        const txIoTable = db.table('tx_io')
-        if (txIoTable && txIos) {
-          txIoTable.bulkPut(txIos)
-        }
-      }).catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
   async syncAddressesTransactions(fromBlockHeight, addresses): Promise<any[] | void> {
     try {
       const promises = [];
@@ -346,7 +387,6 @@ export class Wallet {
     try {
       const res = await this.api.getAccountAddresses(this.stakeAddress().to_address().to_bech32());
       if (res) {
-        console.log(res);
         return await this.setAccountAddresses(res);
       }
     } catch (e) {
@@ -370,5 +410,9 @@ export class Wallet {
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
       });
+  }
+
+  public async getBlockchainDb(): Promise<Dexie> {
+    return db.checkAndCreateBlockchainDatabase(this.chain+"_"+this.network)
   }
 }

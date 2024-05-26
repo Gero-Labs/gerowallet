@@ -37,6 +37,7 @@ import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import { useStore } from '@/store';
+import {mapState} from "pinia";
 
 export default {
   name: 'BuyDialog',
@@ -47,7 +48,9 @@ export default {
       default: false,
     },
   },
-  computed: {},
+  computed: {
+    ...mapState(useStore, ['wallets', 'loggedWallet']),
+  },
   watch: {
     isOpen(val) {
       if (val) {
@@ -108,8 +111,7 @@ export default {
         grey: '#415153',
       };
       const store = useStore();
-      const selectedWallet = { ...store.loggedWallet, icon: 'mdi-circle', iconColor: colorsMapping[store.loggedWallet.icon] };
-
+      const selectedWallet = { ...store.loggedWallet, iconColor: colorsMapping[store.loggedWallet.icon] };
       this.currentStep = 1;
       this.sendData = {
         selectedCollectibles: {},
