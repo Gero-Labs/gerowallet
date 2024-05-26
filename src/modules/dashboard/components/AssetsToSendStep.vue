@@ -11,6 +11,14 @@
 
       <section class="collectibles">
         <h4>Choose Collectibles (5)</h4>
+        <v-text-field
+          v-model="search"
+          placeholder="Search for collectibles"
+          outlined
+          dense
+          hide-details
+          class="mb-4"
+        ></v-text-field>
 
         <div v-for="collectible in collectibles" :key="collectible.name" class="collectibles-collection">
           <h5>{{ collectible.name }}</h5>
