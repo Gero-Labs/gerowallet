@@ -14,12 +14,12 @@
     <v-card-subtitle class="pa-0 mt-2 mb-3"
       >Music touches us emotionally, where images and words alone can't</v-card-subtitle
     >
-    <TokensList v-if="pickedToken === null" @token-click="handleTokenClick" />
+    <TokensList :tokensData="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" v-if="pickedToken === null" @token-click="handleTokenClick" />
     <TokenPreviewCarousel v-else />
   </BaseDialog>
 </template>
 <script>
-import TokensList from "../components/TokensList.vue";
+import TokensList from "@/shared/components/TokensList.vue";
 import TokenPreviewCarousel from "../components/TokenPreviewCarousel.vue";
 import BaseDialog from "@/shared/components/BaseDialog.vue";
 
