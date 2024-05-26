@@ -32,7 +32,7 @@
 <script>
 import BlankLayout from "@/modules/navigation/layouts/BlankLayout.vue";
 import ContentLayout from "@/modules/navigation/layouts/ContentLayout.vue";
-import {mapActions} from "pinia";
+import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import loading from "@/plugins/loading";
 import snackbar from "@/plugins/snackbar";
@@ -44,11 +44,17 @@ export default {
     snackbar,
     store: useStore()
   }),
-  methods: {
-    ...mapActions(useStore, ['loadWallets']),
+  computed: {
+    ...mapState(useStore, ['loggedWallet']),
   },
-  mounted() {
-    this.loadWallets()
+  methods: {
+    ...mapActions(useStore, ['loadWallets', 'login']),
+  },
+  async mounted() {
+    if (this.loggedWallet?.id) {
+      await this.login(this.loggedWallet.id)
+    }
+    this.loading.setLoading(false)
   }
 }
 </script>

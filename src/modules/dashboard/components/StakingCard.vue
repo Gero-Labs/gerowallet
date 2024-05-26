@@ -6,11 +6,11 @@
         <v-row no-gutters style="background-color: #161B26" class="py-4">
           <v-col cols="6" class="px-4">
             <span>Staked to Pool:</span>
-            <h2 style="color: white">[GERO] Gero Pool</h2>
+            <h2 style="color: white" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Total ADA:</span>
-            <h2 style="color: white">{{ account.controlled_amount | toAda }}</h2>
+            <h2 style="color: white">{{ account.controlled_amount | toAda(false, 2, loggedWallet.network !== Network.MAINNET) }}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Rewards</span>
@@ -20,27 +20,32 @@
         <v-row no-gutters class="pt-2">
           <v-col cols="6" class="px-4">
             <div>
-              <v-btn icon small>
+              <v-btn icon small v-if="pool?.homepage" :href="pool?.homepage" target="_blank">
+                <v-icon small>
+                  mdi-web
+                </v-icon>
+              </v-btn>
+              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.facebook_handle" :href="'https://www.facebook.com/'+poolExtendedInfo?.info?.social?.facebook_handle" target="_blank">
                 <v-icon small>
                   mdi-facebook
                 </v-icon>
               </v-btn>
-              <v-btn icon small>
+              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.twitter_handle" :href="'https://x.com/'+poolExtendedInfo?.info?.social?.twitter_handle" target="_blank">
                 <v-avatar tile size="14">
                   <v-img :src="require('@/assets/svg/x.svg')" alt="x"></v-img>
                 </v-avatar>
               </v-btn>
-              <v-btn icon small>
+              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.youtube_handle" :href="'https://youtube.com/'+poolExtendedInfo?.info?.social?.youtube_handle" target="_blank">
                 <v-icon small>
                   mdi-youtube
                 </v-icon>
               </v-btn>
-              <v-btn icon small>
+              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo?.info?.social?.discord_handle" target="_blank">
                 <v-icon small>
                   mdi-discord
                 </v-icon>
               </v-btn>
-              <v-btn icon small>
+              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo?.info?.social?.telegram_handle" target="_blank">
                 <v-avatar tile size="14">
                   <v-img :src="require('@/assets/svg/telegram.svg')" alt="x"></v-img>
                 </v-avatar>
@@ -63,69 +68,24 @@
             <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
           </v-col>
         </v-row>
-<!--        <v-row no-gutters>-->
-<!--          <v-col cols="12" xl="4" lg="12" md="12" v-for="(epochRewards, index) in rewards2" :key="index"-->
-<!--                 class="px-3 py-2">-->
-<!--            <v-card outlined color="#84CAFF" style="border-radius: 12px">-->
-<!--              <v-card-subtitle class="pb-0">-->
-<!--                {{ 'Epoch ' + epochRewards.epoch + ' ' + (index === 0 ? '(Current)' : (index === 1 ? '(Next)' : '')) }}-->
-<!--              </v-card-subtitle>-->
-<!--              <v-card-title class="pt-0">[GERO] Gero Pool</v-card-title>-->
-<!--              <v-card-text>-->
-<!--                <v-row no-gutters>-->
-<!--                  <v-col cols="5">-->
-<!--                    <span style="font-size: 14px; color: white">Saturation</span>-->
-<!--                  </v-col>-->
-<!--                  <v-col cols="7">-->
-<!--                    <v-progress-linear height="22" rounded :value="(epochRewards.saturation * 100)" color="#333741">-->
-<!--                      <span>{{ (epochRewards.saturation * 100) + '%' }}</span>-->
-<!--                    </v-progress-linear>-->
-<!--                  </v-col>-->
-<!--                </v-row>-->
-<!--                <v-row no-gutters>-->
-<!--                  <v-col cols="5">-->
-<!--                    <span style="font-size: 14px; color: white">Pledge</span>-->
-<!--                  </v-col>-->
-<!--                  <v-col cols="7">-->
-<!--                    <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">-->
-<!--                      {{ epochRewards.pledge | toAda }}-->
-<!--                    </v-chip>-->
-<!--                  </v-col>-->
-<!--                </v-row>-->
-<!--                <v-row no-gutters>-->
-<!--                  <v-col cols="5">-->
-<!--                    <span style="font-size: 14px; color: white">ROS</span>-->
-<!--                  </v-col>-->
-<!--                  <v-col cols="7">-->
-<!--                    <span style="font-size: 14px; color: white">{{ (epochRewards.ros * 100) + '%' }}</span>-->
-<!--                  </v-col>-->
-<!--                </v-row>-->
-<!--                <v-row no-gutters>-->
-<!--                  <v-col cols="5">-->
-<!--                    <span style="font-size: 14px; color: white">Fees</span>-->
-<!--                  </v-col>-->
-<!--                  <v-col cols="7">-->
-<!--                    <span style="font-size: 14px; color: white">{{-->
-<!--                        epochRewards.margin_fee + '% / ₳' + epochRewards.fixed_fee-->
-<!--                      }}</span>-->
-<!--                  </v-col>-->
-<!--                </v-row>-->
-<!--              </v-card-text>-->
-<!--            </v-card>-->
-<!--          </v-col>-->
-<!--        </v-row>-->
         <v-row no-gutters class="pt-4">
           <v-col cols="12">
             <v-data-table :items="rewardsData" :headers="stakingHeaders" class="transparent"
                           :hide-default-footer="!(rewardsData?.length > 0)"
                           :sort-by.sync="sortBy"
-                          :sort-desc.sync="sortDesc"
+                          :sort-desc.sync="sortDesc" dense
+                          :items-per-page="5"
             >
               <template v-slot:[`item.pool_id`]="{ item }">
-                <v-avatar size="40">
-                  <v-img :src="resolvePoolIcon(item.pool_id)" :alt="item.pool_id+ ' Icon'"></v-img>
-                </v-avatar>&nbsp;
-                <span>{{ resolvePoolName(item.pool_id) }}</span>
+                <v-list-item two-line>
+                  <v-list-item-avatar size="40">
+                    <v-img :src="resolvePoolIcon(item.pool_id)" :alt="item.pool_id+ ' Icon'"></v-img>
+                  </v-list-item-avatar>
+                  <v-list-item-content>
+                    <v-list-item-title>{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
+                    <v-list-item-subtitle>{{ resolvePoolDescription(item.pool_id) }}</v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
@@ -137,12 +97,11 @@
               <template v-slot:[`item.change`]="{ item }">
                 <v-avatar tile size="20">
                   <v-img
-                      :src="change(item) >= 0 ? require('@/assets/svg/trend-up-01.svg') : require('@/assets/svg/trend-down-01.svg')"
+                      :src="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? require('@/assets/svg/arrow-right.svg') : change(item) >= 0 ? require('@/assets/svg/trend-up-01.svg') : require('@/assets/svg/trend-down-01.svg')"
                       alt="trend"></v-img>
                 </v-avatar>&nbsp;
-                <span :style="change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    Math.abs(change(item) * 100).toFixed(0) + '%'
-                  }}</span>
+                <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : Math.abs(change(item) * 100).toFixed(1) + '%' }}</span>
               </template>
               <template v-slot:[`item.date`]="{ item }">
                 <v-list-item two-line class="px-0">
@@ -162,17 +121,21 @@
 <script>
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
-import {mapState} from "pinia";
 import {useStore} from "@/store";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import {useObservable} from "@vueuse/rxjs";
 import {liveQuery} from "dexie";
+import {Network} from "@/models/types";
 
 export default {
   components: {CopyButton, RewardsChart},
   props: {
     account: {
       type: Object,
+    },
+    pools: {
+      type: Array,
+      default: () => []
     },
     chartData: {
       type: Object,
@@ -186,6 +149,21 @@ export default {
     },
   },
   computed: {
+    Network() {
+      return Network
+    },
+    pool() {
+      if (this.pools) {
+        return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)
+      }
+      return null
+    },
+    poolExtendedInfo() {
+      if (this.pool) {
+        return JSON.parse(this.pool.pool_extended_info)
+      }
+      return null
+    },
     rewardsData() {
       if (this.rewards && !this.hideZero) {
         let rewardsCopy = JSON.parse(JSON.stringify(this.rewards)).sort((a,b) => a.epoch - b.epoch)
@@ -216,41 +194,13 @@ export default {
       sortBy: 'epoch',
       sortDesc: true,
       rewards: [],
-      rewards2: [
-        {
-          poolName: '[GERO] Gero Pool',
-          epoch: '474',
-          saturation: 0.2,
-          pledge: 47000000000,
-          ros: 0.05,
-          fixed_fee: 340,
-          margin_fee: 0
-        },
-        {
-          poolName: '[GERO] Gero Pool',
-          epoch: '475',
-          saturation: 0.2,
-          pledge: 47000000000,
-          ros: 0.05,
-          fixed_fee: 340,
-          margin_fee: 0
-        },
-        {
-          poolName: '[GERO] Gero Pool',
-          epoch: '476',
-          saturation: 0.2,
-          pledge: 47000000000,
-          ros: 0.05,
-          fixed_fee: 340,
-          margin_fee: 0
-        },
-      ],
       stakingHeaders: [
         {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id'},
         {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
         {text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100},
-        {text: 'Change', align: 'start', sortable: true, value: 'change', width: 100},
+        {text: 'Change', align: 'start', sortable: true, value: 'change', width: 120},
       ],
+      blockchainDB: undefined
     }
   },
   filters,
@@ -260,22 +210,31 @@ export default {
       if (this.rewardsData[index-1]) {
         let previous = this.rewardsData[index-1]
         if (previous) {
+          if (previous.amount === 0) {
+            return 0
+          }
           return (Number(item.amount) - Number(previous.amount))/previous.amount
         }
       }
       return 0
     },
     resolvePoolIcon(poolId) {
-      if (poolId === 'pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kxd530f9') {
-        return require('@/assets/svg/gero.svg')
+      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+      if (pool) {
+        return JSON.parse(pool.pool_extended_info).info.url_png_icon_64x64
       }
       return ''
     },
     resolvePoolName(poolId) {
-      if (poolId === 'pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kxd530f9') {
-        return "[GERO] Gero Pool"
+      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+      if (pool) {
+        return `[${pool.ticker}] ${pool.name}`
       }
-      return ''
+      return 'N/A'
+    },
+    resolvePoolDescription(poolId) {
+      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+      return pool.description
     },
     isNumeric(n) {
       return !isNaN(parseFloat(n)) && isFinite(n);
@@ -284,6 +243,7 @@ export default {
   async created() {
     this.wallet = useStore().getWallet
     const db = await this.wallet.getDb()
+    this.blockchainDB = await this.wallet.getBlockchainDb()
     this.rewards = useObservable(liveQuery(() => {
       return  db.table('rewards').orderBy("epoch").toArray()
     }))

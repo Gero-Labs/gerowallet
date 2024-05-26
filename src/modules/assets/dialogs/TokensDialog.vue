@@ -1,5 +1,6 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')">
+    {{modalData}}
     <img :src="require('../assets/flag-05.png')" alt="token-bundle-image" />
 
     <v-card-title class="pa-0 card-title">
@@ -22,6 +23,7 @@
 import TokensList from "@/shared/components/TokensList.vue";
 import TokenPreviewCarousel from "../components/TokenPreviewCarousel.vue";
 import BaseDialog from "@/shared/components/BaseDialog.vue";
+import {model} from "@angular/core";
 
 export default {
   name: "tokensDialog",
@@ -52,6 +54,7 @@ export default {
     pickedToken: null,
   }),
   methods: {
+    model,
     handleTokenClick(token) {
       this.pickedToken = token;
     },

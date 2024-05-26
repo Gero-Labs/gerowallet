@@ -23,6 +23,9 @@ export default {
     },
   },
   watch: {
+    value(val) {
+      this.mnemonic = val
+    },
     mnemonic(val) {
       this.$emit('input', val)
     }

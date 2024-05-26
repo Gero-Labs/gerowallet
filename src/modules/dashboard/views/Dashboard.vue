@@ -69,7 +69,7 @@
   </v-layout>
 </template>
 <script>
-import PortfolioChart from '@/shared/components/PortfolioChart.vue';
+import PortfolioChart from '../components/PortfolioChart.vue';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import QuickActions from '@/modules/dashboard/components/QuickActions.vue';
@@ -79,7 +79,6 @@ import TransactionDetailsDialog from '../dialogs/TransactionDetailsDialog.vue';
 import { useStore } from '@/store';
 import { useObservable } from '@vueuse/rxjs';
 import { liveQuery } from 'dexie';
-import tempTransactions from './temp.json';
 
 export default {
   name: 'dashboard',

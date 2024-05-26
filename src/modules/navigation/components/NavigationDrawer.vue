@@ -1,9 +1,9 @@
 <template>
   <v-navigation-drawer
       v-model="drawer"
-      width="220"
+      width="280"
       height="100vh"
-      style="min-width: 210px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
+      style="min-width: 270px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
       permanent
       floating
       class="px-3"
@@ -35,7 +35,7 @@
             link
             class="menuItem"
         >
-          <v-list-item-avatar tile size="18">
+          <v-list-item-avatar tile size="18" :style="item.soon ? { filter: 'opacity(0.5)'} : {}">
             <v-img width="18" height="18" :src="item.icon" :alt="item.title" contain style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"></v-img>
           </v-list-item-avatar>
 
@@ -47,6 +47,7 @@
                   class="ma-2"
                   color="primary"
                   x-small
+                  outlined
               >
                 Soon
               </v-chip>
@@ -73,6 +74,7 @@
                   class="ma-2"
                   color="primary"
                   x-small
+                  outlined
               >
                 Soon
               </v-chip>
@@ -210,11 +212,14 @@ export default {
       // { header: 'Home' },
       {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/'},
       {title: 'Assets', icon: require('@/assets/svg/box.svg'), link: '/assets'},
-      {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
-      {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap'},
       {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking'},
+      {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap'},
       {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
       {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
+      // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
+      {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', soon: true},
+      {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
+      {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},
       // { header: 'Tools' },
       // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
       // { title: 'IPFS Cache', icon: 'mdi-cube', link: '/ipfs-cache', soon: true },
