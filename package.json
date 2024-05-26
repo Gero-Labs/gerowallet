@@ -67,7 +67,8 @@
     "vue-eslint-parser": "^9.4.2",
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
-    "webpack": "^5.90.3"
+    "webpack": "^5.90.3",
+    "@types/chrome": "^0.0.268"
   },
   "eslintConfig": {
     "root": true,
