@@ -37,6 +37,7 @@
     ],
     "types": [
       "webpack-env",
+      "chrome",
       // "vuetify",
     ],
     "paths": {
