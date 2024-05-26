@@ -8,7 +8,7 @@
   </v-autocomplete>
 </template>
 <script>
-import rules from "@/plugins/rules";
+import rules from "@/shared/utils/rules";
 import * as bip39 from "bip39";
 
 export default {

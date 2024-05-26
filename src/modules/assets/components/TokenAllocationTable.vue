@@ -49,7 +49,7 @@
 <!--              </div>-->
             </template>
             <template v-slot:[`item.value`]="{ item }">
-              <div v-if="item.name === 'Cardano'">{{getAdaPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}}</div>
+              <div v-if="item.name === 'Cardano'">{{Number(price.lastPrice).toLocaleString(undefined, {maximumFractionDigits: 2})}}</div>
               <v-chip outlined x-small color="#F97066" v-else>Soon</v-chip>
               <div v-if="item.value">
                 <span class="table-text">${{ item.value[0].toLocaleString() }}</span>
@@ -178,7 +178,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['getAdaPrice']),
+    ...mapState(useStore, ['price']),
   },
   data: () => ({
     currentTab: 0,

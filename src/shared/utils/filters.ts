@@ -15,9 +15,24 @@ const filters = {
   toCurrency(value: number, decimals: number) {
     return value / Math.pow(10, decimals);
   },
-  toAda(value: number, signs: boolean, decimalPlaces, test) {
+  toAda(value: number, signs: boolean, decimalPlaces: number, test: boolean, human: boolean) {
     const symbol = test ? 't₳' : '₳'
-    const res = filters.toCurrency(value, 6)
+    const res: number = filters.toCurrency(value, 6)
+    if (human) {
+      const lookup = [
+        {value: 1, symbol: ""},
+        {value: 1e3, symbol: "K"},
+        {value: 1e6, symbol: "M"},
+        {value: 1e9, symbol: "B"},
+        {value: 1e12, symbol: "T"},
+        {value: 1e15, symbol: "Q"}
+      ];
+      const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
+      const item = lookup.slice().reverse().find(function (item) {
+        return res >= item.value;
+      });
+      return symbol+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0");
+    }
     if (res >= 0) {
       return (signs ? '+ ' : '') + symbol+ (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString());
     }

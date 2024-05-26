@@ -9,7 +9,7 @@
               <v-app-bar flat class="transparent" color="transparent">
                 <price-ticker></price-ticker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-                <span style="font-size: 14px">{{'Epoch ' + lastSyncInfo?.epoch}}</span>
+                <span style="font-size: 14px">{{'Epoch ' + latestTip?.epoch}}</span>
                 <v-progress-linear v-if="epochSlotPercentage"
                     striped
                     :value="epochSlotPercentage"
@@ -27,7 +27,7 @@
                 <v-icon small :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
                   {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
                 </v-icon>&nbsp;
-                <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(lastSyncInfo?.time * 1000).toLocaleString()}}</span>
+                <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(latestTip?.time * 1000).toLocaleString()}}</span>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2">
                   <v-avatar size="20">
@@ -79,56 +79,24 @@
 import NavigationDrawer from "../components/NavigationDrawer.vue";
 import {useStore} from "@/store";
 import socket from "@/plugins/socket";
-import {Blockchain, Network} from "@/models/types";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
-import { liveQuery } from "dexie";
-import { useObservable } from "@vueuse/rxjs";
 import {mapState} from "pinia";
 
 export default {
   name: 'ContentLayout',
   components: {PriceTicker, NavigationDrawer},
-  watch: {
-    'socket.message': {
-      handler(val) {
-        if (val.message_type === 'TIP') {
-          this.wallet.sync(val.object)
-        }
-      },
-      deep: true
-    },
-  },
   computed: {
-    ...mapState(useStore, ['loggedWallet']),
+    ...mapState(useStore, ['loggedWallet', "latestTip"]),
     epochSlotPercentage() {
-      if (this.lastSyncInfo) {
-        return this.lastSyncInfo.epoch_slot / 432000 * 100
+      if (this.latestTip) {
+        return this.latestTip.epoch_slot / 432000 * 100
       }
       return ''
     },
   },
   data: () => ({
-    wallet: undefined,
     socket,
-    store: useStore(),
-    lastSyncInfo: undefined,
   }),
-  async created() {
-    this.wallet = useStore().getWallet
-    const db = await this.wallet.getDb()
-    this.lastSyncInfo = useObservable(liveQuery(() => {
-          return db.table('sync').orderBy('id').last()
-        }))
-    try {
-      useStore().getWallet.sync(await this.wallet.fetchTip())
-    } catch (e) {
-      console.log(e)
-    }
-    socket.stompConnect(
-        Object.keys(Blockchain).find(key => Blockchain[key] === this.wallet.chain),
-        Object.keys(Network).find(key => Network[key] === this.wallet.network),
-    )
-  }
 }
 </script>
 

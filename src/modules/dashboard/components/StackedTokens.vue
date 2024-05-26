@@ -25,9 +25,6 @@
   </div>
 </template>
 <script>
-import {useStore} from "@/store";
-import {useObservable} from "@vueuse/rxjs";
-import {liveQuery} from "dexie";
 
 export default {
   name: "StackedTokens",
@@ -55,17 +52,7 @@ export default {
     }
   },
   data: () => ({
-    wallet: undefined,
-    blockchainDB: undefined,
-    assets: [],
-  }),
-  async created() {
-    this.wallet = useStore().getWallet
-    this.blockchainDB = await this.wallet.getBlockchainDb()
-    this.assets = useObservable(liveQuery(() => {
-      return this.blockchainDB.table('assets').toArray()
-    }))
-  }
+  })
 }
 </script>
 <style>

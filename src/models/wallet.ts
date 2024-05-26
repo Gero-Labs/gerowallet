@@ -187,7 +187,12 @@ export class Wallet {
           promises.push(this.syncStakingPools())
           promises.push(this.syncAccountInfo().then(accountInfo => {
             if (accountInfo) {
-              return [this.syncAccountRewards(), this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0), this.syncAssets()]
+              if (Number(accountInfo.rewards_sum) > 0) {
+                promises.push(this.syncAccountRewards())
+              }
+              if (Number(accountInfo.controlled_amount) > 0) {
+                promises.push([this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0), this.syncAssets()])
+              }
             }
             return []
           }))
