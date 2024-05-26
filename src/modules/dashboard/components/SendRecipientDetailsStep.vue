@@ -15,6 +15,7 @@
         :value="sendData.recipientAddress"
         rows="3"
         outlined
+        :rules="[rules.required, rules.paymentAddress(loggedWallet.network !== Network.MAINNET)]"
         class="recipient-address"
         @input="$emit('updateRecipientAddress', $event)"
       ></v-textarea>
@@ -31,7 +32,10 @@
 
 <script>
 import Select from '@/shared/components/Select.vue';
+import rules from "@/shared/utils/rules";
+import {mapState} from "pinia";
 import {useStore} from "@/store";
+import {Network} from "@/models/types";
 
 export default {
   components: { Select },
@@ -42,12 +46,15 @@ export default {
       required: true,
     },
   },
+  computed: {
+    Network() {
+      return Network
+    },
+    ...mapState(useStore, ['loggedWallet']),
+  },
   data: () => ({
-    wallet: undefined,
-  }),
-  mounted() {
-    this.wallet = useStore()
-  }
+    rules,
+  })
 };
 </script>
 

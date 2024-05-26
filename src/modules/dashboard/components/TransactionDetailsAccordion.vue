@@ -8,17 +8,21 @@
         <div v-else class="sent-arrow-container">
           <v-icon color="#ffc2da">mdi-arrow-top-right</v-icon>
         </div>
-        <h2>{{ type === 'RECEIVED' ? 'Received' : 'Sent' }} Assets (9)</h2>
+        <h2>{{ type === 'RECEIVED' ? 'Received' : 'Sent' }} {{assets.length > 0 ? ` Assets (${assets.length})` : '' }}</h2>
       </div>
     </v-expansion-panel-header>
     <v-expansion-panel-content class="content-container">
-      <div :class="amountClass">Â{{ amount }}</div>
-      <TokensList :rows="2" :tokensData="[1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 13, 15]"></TokensList>
+      <div :class="amountClass">{{ amount | toAda(false, 0, loggedWallet.network !== Network.MAINNET) }}</div>
+      <TokensList :rows="2" :tokensData="[]"></TokensList>
     </v-expansion-panel-content>
   </v-expansion-panel>
 </template>
 <script>
 import TokensList from '@/shared/components/TokensList.vue';
+import filters from "@/shared/utils/filters";
+import {mapState} from "pinia";
+import {useStore} from "@/store";
+import {Network} from "@/models/types";
 
 export default {
   name: 'transactionDetailsAccordion',
@@ -37,7 +41,12 @@ export default {
       default: Array,
     },
   },
+  filters,
   computed: {
+    Network() {
+      return Network
+    },
+    ...mapState(useStore, ['loggedWallet']),
     amountClass() {
       return this.type === 'RECEIVED' ? 'received-text' : 'sent-text';
     },

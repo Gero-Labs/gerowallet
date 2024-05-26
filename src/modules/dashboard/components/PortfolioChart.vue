@@ -50,13 +50,31 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['adaPrice']),
-    price() {
+    ...mapState(useStore, ['price']),
+    adaPrice() {
+      console.log('price')
       const price = this.chartData[this.chartData.length - 1][1]
-      return (this.adaPrice * price).toFixed(5)
+      return (this.price.lastPrice * price).toLocaleString(undefined, {maximumFractionDigits: 2})
     },
   },
   methods: {
+    arraysEqual(a, b) {
+      if (a === b) return true;
+      if (a == null || b == null) return false;
+      if (a.length !== b.length) return false;
+
+      // If you don't care about the order of the elements inside
+      // the array, you should sort both arrays here.
+      // Please note that calling sort on an array will modify that array.
+      // you might want to clone your array first.
+
+      for (let i = 0; i < a.length; ++i) {
+        if (Array.isArray(a[i]) && Array.isArray(b[i])) {
+          return this.arraysEqual(a[i], b[i])
+        } else if (a[i] !== b[i]) return false;
+      }
+      return true;
+    },
     isDisabled(tab) {
       if (!this.chartData || !this.chartData[this.chartData.length-1]) {
         return true
@@ -107,12 +125,14 @@ export default {
         end.getUTCMinutes(),
         end.getUTCSeconds()
       );
-      this.chartInstance.xAxis[0].setExtremes(startUTC, endUTC);
-      this.chartInstance.title.update({ text: this.generateTitleText(tab) });
+      if (this.chartInstance) {
+        this.chartInstance.xAxis[0].setExtremes(startUTC, endUTC);
+        this.chartInstance.title.update({ text: this.generateTitleText(tab) });
+      }
     },
     generateTitleText(tab) {
       return (
-        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$${this.price}</span>` +
+        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$${this.adaPrice}</span>` +
         `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${tab.vsLabel}</span></span>`
       );
     },
@@ -132,7 +152,10 @@ export default {
   },
   watch: {
     chartData: {
-      handler() {
+      handler(newVal,oldVal) {
+        if (this.arraysEqual(newVal,oldVal)) {
+          return;
+        }
         if (!this.chartData.length) {
           return;
         }

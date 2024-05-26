@@ -49,7 +49,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWallet']),
+    ...mapState(useStore, ['loggedWallet']),
   },
   watch: {
     isOpen(val) {

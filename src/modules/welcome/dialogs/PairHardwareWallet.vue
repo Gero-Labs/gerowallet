@@ -296,7 +296,7 @@
   </v-dialog>
 </template>
 <script>
-import rules from "@/plugins/rules";
+import rules from "@/shared/utils/rules";
 import {Blockchain, Network, Theme} from "@/models/types"
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";

@@ -1,5 +1,8 @@
 import SockJS from 'sockjs-client';
 import Stomp, { Client, Subscription } from 'stompjs';
+import {Wallet} from "@/models/wallet";
+import {Blockchain, Network} from "@/models/types";
+import {useStore} from "@/store";
 
 export class SocketPlugin {
 
@@ -8,8 +11,7 @@ export class SocketPlugin {
   public connected: boolean = false;
 
   private client: Client;
-  private chain: string = '';
-  private network: string = '';
+  private wallet: Wallet = undefined;
   private subscription: {
     sub?: Subscription;
     price: Subscription;
@@ -19,11 +21,16 @@ export class SocketPlugin {
 
   setMessage(value: string) {
     this.message = value;
+    if (value['message_type'] === 'TIP') {
+      this.wallet.sync(value['object'])
+    }
+    if (value['message_type'] === 'PRICE') {
+      useStore().setPrice(value['object'])
+    }
   }
 
-  stompConnect(chain: string, network: string) {
-    this.chain = chain;
-    this.network = network;
+  stompConnect(wallet: Wallet) {
+    this.wallet = wallet;
 
     this.client = Stomp.over(new SockJS(`${process.env['VUE_APP_BACKEND_URL']}/sock`));
     this.client.debug = null;
@@ -37,10 +44,18 @@ export class SocketPlugin {
         this.connected = false;
         console.log(error);
         setTimeout(() => {
-          this.stompConnect(chain, network);
+          this.stompConnect(wallet);
         }, 10000);
       }
     );
+  }
+
+  stompDisconnect() {
+    this.client.disconnect(() => {
+      if (this.client && this.client.connected) {
+        console.log('Disconnected')
+      }
+    })
   }
 
   stompSuccessCallback() {
@@ -54,12 +69,14 @@ export class SocketPlugin {
     }
 
     if (this.connected) {
+      const chain = Object.keys(Blockchain).find(key => Blockchain[key] === this.wallet.chain);
+      const network = Object.keys(Network).find(key => Network[key] === this.wallet.network)
       this.subscription = {
-        tip: this.client.subscribe(`/topic/blocktip/${this.chain}/${this.network}`, (val: Stomp.Message) => {
+        tip: this.client.subscribe(`/topic/blocktip/${chain}/${network}`, (val: Stomp.Message) => {
           const data = JSON.parse(val.body);
           this.setMessage(Object.assign({}, data));
         }),
-        price: this.client.subscribe(`/topic/price/${this.chain}/${this.network}`, (val: Stomp.Message) => {
+        price: this.client.subscribe(`/topic/price/${chain}/${network}`, (val: Stomp.Message) => {
           const data = JSON.parse(val.body);
           this.setMessage(Object.assign({}, data));
         }),

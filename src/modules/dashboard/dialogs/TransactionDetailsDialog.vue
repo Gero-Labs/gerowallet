@@ -9,16 +9,16 @@
         Received from: <span class="value-text">{{ transactionInfo.address }}</span>
       </div>
       <div>
-        Transaction Fee: <span class="fee">-Â {{ transactionInfo.fee }}</span>
+        Transaction Fee: <span class="fee">{{ transactionInfo.fee | toAda }}</span>
       </div>
       <div>
-        TransactionId: <a :href="`https://explorer.cardano.org/en/transaction?id=${transactionInfo.id}`" target="_blank">{{ transactionInfo.id }}</a>
+        TransactionId: <a :href="`https://explorer.cardano.org/en/transaction?id=${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
       </div>
       <div>
         Block: <span class="value-text">{{ transactionInfo.block_height }}</span>
       </div>
     </div>
-    <v-expansion-panels>
+    <v-expansion-panels v-model="panels" multiple>
       <TransactionDetailsAccordion
         v-if="transactionInfo.receivedAmount"
         type="RECEIVED"
@@ -37,6 +37,7 @@
 <script>
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import TransactionDetailsAccordion from '../components/TransactionDetailsAccordion.vue';
+import filters from "@/shared/utils/filters";
 
 export default {
   name: 'transactionDetailsDialog',
@@ -47,6 +48,7 @@ export default {
       default: null,
     },
   },
+  filters,
   computed: {
     isDialogVisible: {
       get() {
@@ -54,6 +56,9 @@ export default {
       },
     },
   },
+  data: () => ({
+    panels: [0]
+  })
 };
 </script>
 <style scoped>

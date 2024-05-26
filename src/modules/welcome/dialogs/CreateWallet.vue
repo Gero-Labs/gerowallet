@@ -110,7 +110,6 @@
                           {{show1 ? 'mdi-eye' : 'mdi-eye-off'}}
                         </v-icon>
                     </template>
-
                   </v-text-field>
                   <v-text-field
                       style="width: 100%"
@@ -306,7 +305,7 @@
 </template>
 <script>
 import * as bip39 from "bip39";
-import rules from "@/plugins/rules";
+import rules from "@/shared/utils/rules";
 import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";

@@ -93,6 +93,7 @@ import { useStore } from "@/store";
 import { Blockchain, Network } from "@/models/types";
 import { loadMoonPay } from "@moonpay/moonpay-js";
 import SendDialog from "../dialogs/SendDialog.vue";
+import {mapState} from "pinia";
 
 export default {
   name: "QuickActions",
@@ -109,10 +110,11 @@ export default {
     },
   },
   computed: {
+    ...mapState(useStore, ['loggedWallet']),
     isBuyDisabled() {
       return (
-        this.store.getWallet.network !== Network.MAINNET ||
-        this.store.getWallet.chain !== Blockchain.CARDANO
+        this.loggedWallet.network !== Network.MAINNET ||
+        this.loggedWallet.chain !== Blockchain.CARDANO
       );
     },
   },
@@ -146,7 +148,6 @@ export default {
     },
   },
   data: () => ({
-    store: useStore(),
     currentDialog: null,
     dialogs: {
       SEND: "SEND",
