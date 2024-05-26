@@ -20,22 +20,23 @@
 </template>
 <script>
 import {useStore} from "@/store";
+import {mapActions} from "pinia";
 import socket from "@/plugins/socket";
 
 export default {
   name: 'PriceTicker',
+  methods: {
+    ...mapActions(useStore, ['setPrice']),
+  },
   async mounted() {
     const provider = await useStore().getWallet.api
     this.value = await provider.fetchHistory()
-    this.usdToILS = await provider.fetchExchangeRate();
     const data = await provider.fetchADAStatistics();
     this.ticker.prevPrice = this.ticker.lastPrice;
+    this.setPrice(Number(data.lastPrice))
     this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
     this.ticker.priceChange = Number(data.priceChange).toFixed(3);
     this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-    setInterval(async () => {
-      this.usdToILS = await provider.fetchExchangeRate();
-    },86400000);
     // setInterval(async () => {
     //   const data = await provider.fetchADAStatistics();
     //   this.ticker.prevPrice = this.ticker.lastPrice;
@@ -66,7 +67,6 @@ export default {
       priceChange: 0,
       priceChangePercent: 0,
     },
-    usdToILS: 3.2,
     width: 2,
     radius: 0,
     padding: 0,
