@@ -71,7 +71,7 @@ export default {
   margin-bottom: 1rem;
 }
 
-v-tab {
-  font-size: 0.1rem !important;
+.v-tab {
+  font-size: 0.75rem !important;
 }
 </style>
