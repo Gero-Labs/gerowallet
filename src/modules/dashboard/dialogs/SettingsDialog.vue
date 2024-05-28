@@ -16,9 +16,9 @@
       />
       <v-card class="col-12 align-content-start">
         <v-tabs
-          class="d-flex justify-lg-space-around"
-          bg-color="primary"
-          fixed-tabs
+          color="white"
+          class="v-tabs-border-bottom"
+          background-color="transparent"
         >
           <v-tab
             v-for="tab in tabs"
@@ -66,5 +66,12 @@ export default {
 };
 </script>
 <style>
+.v-tabs-border-bottom {
+  border-bottom: 2px #333333 solid;
+  margin-bottom: 1rem;
+}
 
+v-tab {
+  font-size: 0.1rem !important;
+}
 </style>
