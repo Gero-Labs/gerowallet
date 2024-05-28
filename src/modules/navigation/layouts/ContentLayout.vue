@@ -53,7 +53,7 @@
                     >
                   </v-avatar>
                 </v-btn>
-                <v-btn icon class="">
+                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/settings-02.svg')"
@@ -62,6 +62,7 @@
                   </v-avatar>
                 </v-btn>
               </v-app-bar>
+              <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
               <v-sheet class="transparent">
                 <keep-alive>
                   <router-view></router-view>
@@ -81,10 +82,11 @@ import {useStore} from "@/store";
 import socket from "@/plugins/socket";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
 import {mapState} from "pinia";
+import SettingsDialog from "@/modules/dashboard/dialogs/SettingsDialog.vue";
 
 export default {
   name: 'ContentLayout',
-  components: {PriceTicker, NavigationDrawer},
+  components: {PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     ...mapState(useStore, ['loggedWallet', "latestTip"]),
     epochSlotPercentage() {
@@ -96,8 +98,17 @@ export default {
   },
   data: () => ({
     socket,
+    currentDialog: null,
+    dialogs: {
+      SETTINGS: 'SETTINGS',
+    },
   }),
-}
+  methods: {
+    closeDialog() {
+      this.currentDialog = null;
+    },
+  },
+};
 </script>
 
 <style scoped>
