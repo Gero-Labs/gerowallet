@@ -19,11 +19,12 @@ export default new Vuetify({
     },
     themes: {
       dark: {
-        primary: '#2f9cac',
-        secondary: '#b0bec5',
-        accent: '#8c9eff',
+        anchor: "#7ED8FF",
+        primary: '#00DFF3', // #2F9CAC
+        secondary: '#B0BEC5',
+        accent: '#8C9EFF',
         success: '#75E0A7',
-        error: '#ff6464',
+        error: '#FF7777', // #FF6464
         background: '#1E1E1E',
         navigationDrawerBackground: '#141414',
         appBarBackground: '#141414',

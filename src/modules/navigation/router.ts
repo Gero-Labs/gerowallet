@@ -8,6 +8,8 @@ import DappConnect from '@/modules/dapp-connect/views/DappConnect.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import Assets from '@/modules/assets/views/Assets.vue';
 import Staking from "@/modules/staking/Staking.vue";
+import DappSignData from '../dapp-connect/views/DappSignData.vue';
+import DappTransactionSummary from '../dapp-connect/views/DappTransactionSummary.vue';
 
 const routes = [
   {
@@ -84,6 +86,14 @@ const routes = [
   {
     path: '/dapp-connect',
     component: DappConnect,
+  },
+  {
+    path: '/dapp-sign',
+    component: DappSignData,
+  },
+  {
+    path: '/dapp-transaction',
+    component: DappTransactionSummary,
   },
   {
     path: '*',

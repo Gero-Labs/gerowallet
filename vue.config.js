@@ -35,9 +35,10 @@ module.exports = defineConfig({
     resolve: {
       extensions: ['.ts', '.js'],
       fallback: {
-        "crypto": require.resolve("crypto-browserify"),
-        "stream": require.resolve("stream-browserify"),
-        "buffer": require.resolve("buffer")
+        crypto: require.resolve("crypto-browserify"),
+        stream: require.resolve("stream-browserify"),
+        vm: require.resolve("vm-browserify"),
+        buffer: require.resolve("buffer"),
       }
     },
   }

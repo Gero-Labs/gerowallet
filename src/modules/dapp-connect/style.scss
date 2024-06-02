@@ -1,0 +1,31 @@
+* {
+  color: white;
+  font-family: Inter;
+}
+
+section {
+  margin: 12px 0;
+}
+
+#dapp-heading {
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  line-height: 18px;
+  font-family: Inter;
+}
+
+#filler {
+  flex: auto;
+  display: flex;
+}
+
+#dapp-host .custom-select {
+  * {
+    color: white !important;
+  }
+
+  .v-input__control > .v-text-field__details {
+    display: none !important;
+  }
+}
