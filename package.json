@@ -5,6 +5,7 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
+    "build:background": "rollup -c",
     "lint": "vue-cli-service lint",
     "build-zip": "node scripts/build-zip.js"
   },
@@ -44,6 +45,7 @@
   "devDependencies": {
     "@babel/core": "^7.22.5",
     "@babel/eslint-parser": "^7.22.5",
+    "@types/chrome": "^0.0.268",
     "@types/sockjs-client": "^1.5.4",
     "@types/stompjs": "^2.3.9",
     "@types/w3c-web-usb": "^1.0.10",
@@ -68,7 +70,8 @@
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
     "webpack": "^5.90.3",
-    "@types/chrome": "^0.0.268"
+    "rollup": "^4.18.0",
+    "@rollup/plugin-node-resolve": "^15.2.3"
   },
   "eslintConfig": {
     "root": true,
