@@ -1,3 +1,5 @@
+import Dexie from "dexie";
+
 let lastFullscreenTabId = -1;
 
 const checkTabOpen = (tabId) => {
@@ -76,7 +78,7 @@ chrome.action.onClicked.addListener(tab => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === 'FROM_CONTENT') {
     if (message.payload.action === 'enable') {
       // TODO: Eugeniu, encode properly the query params.
@@ -91,6 +93,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({data: []});
     } else if (message.payload.action === 'getNetworkId') {
       sendResponse({data: 1});
+    }
+  } else if (message.type === 'FROM_POPUP') {
+    if (message.action === 'initializeConfigTable') {
+      await initializeConfigTable();
+      sendResponse(true);
+    } else if (message.action === 'initializeProviderTable') {
+      await initializeProviderTable();
+      sendResponse(true);
     }
   }
 
@@ -125,5 +135,75 @@ function focusOrCreateWindow(url) {
       });
     }
   });
+};
+
+/* DEXIE */
+
+async function initializeDexieDatabase() {
+  const db = new Dexie('GeroWalletDatabase');
+
+  await db.version(1).stores({
+    wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
+    config: '++id, key, value',
+    provider: '++id, [name+chain+network], baseUrl, apiKey',
+  });
+
+  db.open().catch(err => {
+    console.error(`Failed to open database: ${err.stack || err}`);
+  });
 }
+
+async function initializeConfigTable() {
+  await db['config'].toArray().then(async rows => {
+    if (rows.length === 0) {
+      const initialData = [{key: 'provider', value: Provider.KOIOS}];
+      await db['config'].bulkAdd(initialData).catch(error => {
+        console.error('Error adding initial data:', error);
+      });
+    }
+  });
+}
+
+async function initializeProviderTable() {
+  await db['provider'].toArray().then(async rows => {
+    if (rows.length === 0) {
+      const initialData = [
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.CARDANO,
+          network: Network.MAINNET,
+          baseUrl: 'https://api.koios.rest/api/v1/',
+          apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.CARDANO,
+          network: Network.PREPROD,
+          baseUrl: 'https://preprod.koios.rest/api/v1/',
+          apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.CARDANO,
+          network: Network.PREVIEW,
+          baseUrl: 'https://preview.koios.rest/api/v1/',
+          apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.APEX_PRIME,
+          network: Network.TESTNET,
+          baseUrl: 'http://apex-prime-testnet.gerowallet.io:8053/',
+          apiKey: null
+        }
+      ];
+      await db['provider'].bulkAdd(initialData).catch(error => {
+        console.error('Error adding initial data:', error);
+      });
+    }
+  });
+}
+
+
+await initializeDexieDatabase();
 
