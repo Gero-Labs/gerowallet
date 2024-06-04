@@ -45,6 +45,8 @@
   "devDependencies": {
     "@babel/core": "^7.22.5",
     "@babel/eslint-parser": "^7.22.5",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
     "@types/chrome": "^0.0.268",
     "@types/sockjs-client": "^1.5.4",
     "@types/stompjs": "^2.3.9",
@@ -61,6 +63,7 @@
     "crypto-browserify": "^3.12.0",
     "eslint": "^7.32.0",
     "eslint-plugin-vue": "^8.0.3",
+    "rollup": "^4.18.0",
     "sass": "~1.32.13",
     "sass-loader": "^10.0.0",
     "stream-browserify": "^3.0.0",
@@ -69,9 +72,7 @@
     "vue-eslint-parser": "^9.4.2",
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
-    "webpack": "^5.90.3",
-    "rollup": "^4.18.0",
-    "@rollup/plugin-node-resolve": "^15.2.3"
+    "webpack": "^5.90.3"
   },
   "eslintConfig": {
     "root": true,

@@ -1,4 +1,5 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
+import typescript from '@rollup/plugin-typescript';
 
 export default {
   input: 'src/background.js',
@@ -7,6 +8,7 @@ export default {
     format: 'es'
   },
   plugins: [
-    nodeResolve()
+    nodeResolve(),
+    typescript()
   ]
 };
