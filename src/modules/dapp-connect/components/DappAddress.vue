@@ -8,7 +8,16 @@
       whitelist: risk == DappRisk.Whitelist,
     }"
   >
-    <div id="dapp-receiver-label">To address</div>
+    <div id="dapp-receiver-header">
+      <div id="dapp-receiver-label">To address</div>
+      <img
+        alt="Hint"
+        width="12"
+        height="12"
+        :src="require('@/assets/svg/hint.svg')"
+        v-tooltip.bottom="tooltipContent"
+      />
+    </div>
 
     <div id="dapp-receiver-details">
       <img id="dapp-receiver-check" alt="Trusted Address" height="18" width="16" :src="icon" />
@@ -22,6 +31,7 @@
 
 <script>
 import { DappRisk } from '@/models/dapp/statuses.enum';
+import TooltipAddress from './tooltips/TooltipAddress.ts';
 
 export default {
   data() {
@@ -57,6 +67,12 @@ export default {
     icon() {
       return require(`@/assets/img/cardano-shield/${this.getIcon(this.risk)}`);
     },
+    tooltipContent() {
+      return {
+        html: true,
+        content: TooltipAddress(),
+      };
+    },
   },
 };
 </script>
@@ -69,12 +85,19 @@ export default {
   background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);
 }
 
+#dapp-receiver-header {
+  display: flex;
+  margin-bottom: 6px;
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
 #dapp-receiver-label {
   color: white;
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
-  margin-bottom: 6px;
 }
 
 #dapp-receiver-details {

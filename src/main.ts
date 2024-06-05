@@ -4,6 +4,7 @@ import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
 
 import Vue from 'vue';
+import VTooltip from 'v-tooltip';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
 import { createPinia, Pinia, PiniaVuePlugin } from 'pinia';
@@ -18,6 +19,7 @@ import App from './App.vue';
 Vue.config.productionTip = false;
 
 Vue.use(FlagIcon);
+Vue.use(VTooltip);
 Vue.use(PiniaVuePlugin);
 
 const pinia: Pinia = createPinia();

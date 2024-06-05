@@ -1,0 +1,157 @@
+// More: https://floating-vue.starpad.dev/legacy/v2/#style-examples
+
+.tooltip {
+  $borders: #C4C4C4;
+  $background: #0F1315;
+
+  display: block !important;
+  z-index: 10000;
+
+  .tooltip-inner {
+    color: white;
+    padding: 8px 10px;
+    background: $background;
+    border: 1px solid $borders;
+  }
+
+  .tooltip-arrow {
+    width: 0;
+    height: 0;
+    z-index: 1;
+    margin: 5px;
+    position: absolute;
+    border-style: solid;
+    border-color: $borders;
+  }
+
+  &[x-placement^="top"] {
+    margin-bottom: 5px;
+
+    .tooltip-arrow {
+      border-width: 5px 5px 0 5px;
+      border-left-color: transparent !important;
+      border-right-color: transparent !important;
+      border-bottom-color: transparent !important;
+      bottom: -5px;
+      left: calc(50% - 5px);
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+  }
+
+  &[x-placement^="bottom"] {
+    margin-top: 5px;
+
+    .tooltip-arrow {
+      border-width: 0 5px 5px 5px;
+      border-top-color: transparent !important;
+      border-left-color: transparent !important;
+      border-right-color: transparent !important;
+      top: -5px;
+      left: calc(50% - 5px);
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+  }
+
+  &[x-placement^="right"] {
+    margin-left: 5px;
+
+    .tooltip-arrow {
+      border-width: 5px 5px 5px 0;
+      border-top-color: transparent !important;
+      border-left-color: transparent !important;
+      border-bottom-color: transparent !important;
+      left: -5px;
+      top: calc(50% - 5px);
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
+
+  &[x-placement^="left"] {
+    margin-right: 5px;
+
+    .tooltip-arrow {
+      border-width: 5px 0 5px 5px;
+      border-top-color: transparent !important;
+      border-right-color: transparent !important;
+      border-bottom-color: transparent !important;
+      right: -5px;
+      top: calc(50% - 5px);
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
+
+  &.popover {
+    $color: #C4C4C4;
+
+    .popover-inner {
+      background: $color;
+      color: black;
+      padding: 24px;
+      border-radius: 5px;
+      box-shadow: 0 5px 30px rgba(black, .1);
+    }
+
+    .popover-arrow {
+      border-color: $color;
+    }
+  }
+
+  &[aria-hidden='true'] {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s, visibility .15s;
+  }
+
+  &[aria-hidden='false'] {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .15s;
+  }
+}
+
+// Custom Content Styling
+
+.tooltip-wrap {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.tooltip-row {
+  display: flex;
+  margin-bottom: 7px;
+  align-items: center;
+  flex-direction: row;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  & > img {
+    margin-right: 4px;
+    max-height: 18px;
+  }
+}
+
+.tooltip-text {
+  display: block;
+  line-height: 14px;
+  word-wrap: break-word;
+  white-space: pre-line;
+
+  & > b {
+    font-weight: 900;
+
+    &.red {
+      color: $--text-red;
+    }
+
+    &.green {
+      color: $--text-green;
+    }
+  }
+}

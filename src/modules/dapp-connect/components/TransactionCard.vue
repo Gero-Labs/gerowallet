@@ -2,7 +2,13 @@
   <div v-if="transaction" class="tx-card" :class="{ risk: risk }">
     <div class="tx-header">
       <slot />
-      <img alt="Hint" height="12" width="12" :src="require('@/assets/svg/hint.svg')" />
+      <img
+        alt="Hint"
+        height="12"
+        width="12"
+        :src="require('@/assets/svg/hint.svg')"
+        v-tooltip.bottom="tooltipContent"
+      />
     </div>
 
     <div class="tx-details">
@@ -46,6 +52,10 @@ export default {
     transaction: {
       type: Object,
     },
+    tooltip: {
+      type: Function,
+      default: () => '',
+    },
   },
   methods: {
     toggleAllAssets() {
@@ -61,6 +71,14 @@ export default {
         this.shownAssets = this.transaction?.assets.slice(0, 5);
         this.hiddenAssets = this.transaction?.assets.length - 5;
       }
+    },
+  },
+  computed: {
+    tooltipContent() {
+      return {
+        html: true,
+        content: this.tooltip(),
+      };
     },
   },
   async mounted() {

@@ -9,13 +9,13 @@
     </section>
 
     <section>
-      <TransactionCard :transaction="transaction.give" :risk="risks?.givingRisk">
+      <TransactionCard :transaction="transaction.give" :risk="risks?.givingRisk" :tooltip="tooltipFrom">
         You're giving
       </TransactionCard>
     </section>
 
     <section>
-      <TransactionCard :transaction="transaction.receive" :risk="risks?.receivingRisk">
+      <TransactionCard :transaction="transaction.receive" :risk="risks?.receivingRisk" :tooltip="tooltipTo">
         You're receiving
       </TransactionCard>
     </section>
@@ -48,6 +48,8 @@
 import { useStore } from '@/store';
 
 import { DappRisk, DappScore } from '@/models/dapp/statuses.enum';
+import TooltipSentFrom from '../components/tooltips/TooltipSentFrom';
+import TooltipSentTo from '../components/tooltips/TooltipSentTo';
 
 import Select from '@/shared/components/Select.vue';
 import DappModal from '../components/DappModal.vue';
@@ -63,11 +65,13 @@ export default {
   data() {
     return {
       password: '',
-      store: useStore,
       risks: {},
       wallet: {},
       queryParams: {},
       transaction: {},
+      store: useStore,
+      tooltipTo: TooltipSentTo,
+      tooltipFrom: TooltipSentFrom,
     };
   },
   methods: {

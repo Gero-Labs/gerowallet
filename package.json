@@ -34,6 +34,7 @@
     "qr-code-styling": "^1.6.0-rc.1",
     "sockjs-client": "^1.6.1",
     "stompjs": "^2.3.3",
+    "v-tooltip": "^2.1.3",
     "vm-browserify": "^1.1.2",
     "vue": "^2.7.16",
     "vue-flag-icon": "^2.1.0",

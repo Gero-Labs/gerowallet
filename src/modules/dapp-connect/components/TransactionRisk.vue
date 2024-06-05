@@ -2,7 +2,13 @@
   <div id="risk-wrap">
     <div id="risk-title">
       Transaction Risk
-      <img alt="Hint" height="12" width="12" :src="require('@/assets/svg/hint.svg')" />
+      <img
+        alt="Hint"
+        height="12"
+        width="12"
+        :src="require('@/assets/svg/hint.svg')"
+        v-tooltip.bottom="tooltipContent"
+      />
     </div>
 
     <div id="risk-indicator">
@@ -20,6 +26,8 @@
 
 <script>
 import { DappScore } from '@/models/dapp/statuses.enum';
+
+import TooltipCardanoShield from './tooltips/TooltipCardanoShield';
 
 export default {
   props: {
@@ -62,6 +70,12 @@ export default {
     },
     label() {
       return this.getLabel(this.risk);
+    },
+    tooltipContent() {
+      return {
+        html: true,
+        content: TooltipCardanoShield(),
+      };
     },
   },
 };

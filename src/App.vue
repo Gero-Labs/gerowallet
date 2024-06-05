@@ -59,6 +59,8 @@ export default {
 }
 </script>
 <style lang="scss">
+@import "@/styles.scss";
+
 .v-application {
   background-color: var(--v-background-base) !important;
 }
