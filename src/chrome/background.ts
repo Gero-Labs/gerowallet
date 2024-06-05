@@ -1,10 +1,12 @@
 import { Database } from '@/chrome/database';
+import { PopupMessageAction } from '@/chrome/messaging';
 
 let lastFullscreenTabId = -1;
 
 const db = new Database('GeroWallet');
 await db.init();
 
+/* Window Management */
 
 const checkTabOpen = (tabId) => {
   return new Promise((resolve) => {
@@ -67,6 +69,35 @@ const openUI = async () => {
 };
 chrome.action.onClicked.addListener(openUI);
 
+function focusOrCreateWindow(url) {
+  chrome.windows.getAll({populate: true}, windows => {
+    let existingWindow = null;
+
+    // Iterate through each window and its tabs to find the URL
+    for (const window of windows) {
+      for (const tab of window.tabs) {
+        if (tab.url === url) {
+          existingWindow = window;
+          break;
+        }
+      }
+      if (existingWindow) break;
+    }
+
+    if (existingWindow) {
+      // Focus on the existing window
+      chrome.windows.update(existingWindow.id, {focused: true});
+    } else {
+      // Create a new window with the specified URL
+      chrome.windows.create({
+        url: url,
+        type: 'popup',
+        width: 400,
+        height: 600,
+      });
+    }
+  });
+}
 
 /* CIP 30 */
 chrome.action.onClicked.addListener(tab => {
@@ -102,46 +133,48 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       sendResponse({data: 1});
     }
   } else if (message.type === 'FROM_POPUP') {
-    if (message.action === 'initializeConfigTable') {
+    const action: PopupMessageAction = message.action;
+
+    if (action === 'initializeConfigTable') {
       await db.initializeConfigTable();
       sendResponse(true);
-    } else if (message.action === 'initializeProviderTable') {
+    } else if (action === 'initializeProviderTable') {
       await db.initializeProviderTable();
       sendResponse(true);
-    } else if (message.action === 'getProvider') {
+    } else if (action === 'getProvider') {
       const provider = await db.getProvider(message.payload.data.chain, message.payload.data.network);
       sendResponse(provider);
-    } else if (message.action === 'getConfiguration') {
+    } else if (action === 'getConfiguration') {
       const configuration = await db.getConfiguration(message.payload.data.key);
       sendResponse(configuration);
-    } else if (message.action === 'getAllWallets') {
+    } else if (action === 'getAllWallets') {
       const wallets = db.getAllWallets();
       sendResponse(wallets);
-    } else if (message.action === 'getLatestWalletByOrder') {
+    } else if (action === 'getLatestWalletByOrder') {
       const wallet = db.getLatestWalletByOrder();
       sendResponse(wallet);
-    } else if (message.action === 'createNewWallet') {
+    } else if (action === 'createNewWallet') {
       const walletId = db.createNewWallet(message.payload.data);
       sendResponse(walletId);
-    } else if (message.action === 'createNewHardwareWallet') {
+    } else if (action === 'createNewHardwareWallet') {
       const walletId = db.createNewHardwareWallet(data);
       sendResponse(walletId);
-    } else if (message.action === 'createNewWalletDb') {
+    } else if (action === 'createNewWalletDb') {
       await db.createNewWalletDb(message.action.payload.data.walletId);
       sendResponse(true);
-    } else if (message.action === 'loadSync') {
+    } else if (action === 'loadSync') {
       // TODO: Implement via long lived connection
       sendResponse(true);
-    } else if (message.action === 'loadRewards') {
+    } else if (action === 'loadRewards') {
       // TODO: Implement via long lived connection
       sendResponse(true);
-    } else if (message.action === 'loadAccountInfo') {
+    } else if (action === 'loadAccountInfo') {
       // TODO: Implement via long lived connection
       sendResponse(true);
-    } else if (message.action === 'loadTransactions') {
+    } else if (action === 'loadTransactions') {
       // TODO: Implement via long lived connection
       sendResponse(true);
-    } else if (message.action === 'loadPools') {
+    } else if (action === 'loadPools') {
       // TODO: Implement via long lived connection
       sendResponse(true);
     }
@@ -149,33 +182,3 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
   sendResponse({data: undefined});
 });
-
-function focusOrCreateWindow(url) {
-  chrome.windows.getAll({populate: true}, windows => {
-    let existingWindow = null;
-
-    // Iterate through each window and its tabs to find the URL
-    for (const window of windows) {
-      for (const tab of window.tabs) {
-        if (tab.url === url) {
-          existingWindow = window;
-          break;
-        }
-      }
-      if (existingWindow) break;
-    }
-
-    if (existingWindow) {
-      // Focus on the existing window
-      chrome.windows.update(existingWindow.id, {focused: true});
-    } else {
-      // Create a new window with the specified URL
-      chrome.windows.create({
-        url: url,
-        type: 'popup',
-        width: 400,
-        height: 600,
-      });
-    }
-  });
-};

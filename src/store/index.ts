@@ -281,6 +281,8 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
+
+      /* TODO: Replace with messaging */
       liveQuery(() => db.table('sync').orderBy('id').last()).subscribe({
         next: newTip => {
           this.latestTip = newTip
@@ -295,6 +297,8 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
+
+      /* TODO: Replace with messaging */
       liveQuery(() => db.table('account').where({walletId: this.loggedWallet.id}).first()).subscribe({
         next: newAccountInfo => {
           this.accountInfo = newAccountInfo
@@ -324,6 +328,7 @@ export const useStore = defineStore('store', {
       if (!this.getWallet) {
         return
       }
+      /* TODO: Replace with messaging */
       const db: Dexie = await appWallet.getBlockchainDb()
       liveQuery(() => db.table('assets').toArray()).subscribe({
         next: newAssets => {
@@ -338,6 +343,7 @@ export const useStore = defineStore('store', {
       if (!this.getWallet) {
         return
       }
+      /* TODO: Replace with messaging */
       const db: Dexie = await appWallet.getBlockchainDb()
       liveQuery(() => db.table('pools').toArray()).subscribe({
         next: newPools => {
@@ -353,6 +359,7 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
+      /* TODO: Replace with messaging */
       liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
         next: newRewards => {
           this.rewards = newRewards
