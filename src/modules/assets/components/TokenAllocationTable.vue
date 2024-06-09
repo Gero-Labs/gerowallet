@@ -19,7 +19,7 @@
               <span class="table-text">{{ item.name }}</span>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ (Number(item.quantity) / Math.pow(10, item.decimals)).toLocaleString(undefined, {minimumFractionDigits: 2}) }}</span>
+              <span class="table-text">{{ (parseInt(Number(item.quantity) / Math.pow(10, item.decimals) * 100) / 100).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
             </template>
             <template v-slot:[`item.last_price`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>

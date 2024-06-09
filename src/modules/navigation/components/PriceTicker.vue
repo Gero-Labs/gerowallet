@@ -5,7 +5,7 @@
     <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="chart.length > 0"></v-divider>
     <div style="width: 120px" v-if="chart.length > 0">
       <v-sparkline :value="chart"
-                   :gradient="gradient"
+                   :gradient="ticker.priceChange > 0 ? ['#47cd89'] : ['#f97066']"
                    :smooth="radius || false"
                    :padding="padding"
                    :line-width="width"

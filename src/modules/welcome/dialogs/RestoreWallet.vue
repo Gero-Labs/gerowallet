@@ -67,7 +67,7 @@
                   <v-card flat outlined class="mb-4 pa-1" style="background-color: black">
                     <v-row no-gutters>
                       <v-col class="pa-1" cols="12" :md="4" v-for="index in recoverySeedPhraseLength" :key="index">
-                        <mnemonic-autocomplete v-model="recoverySeedPhrase[index-1]" :index="index"></mnemonic-autocomplete>
+                        <mnemonic-autocomplete v-model="recoverySeedPhrase[index-1]" :index="index" @next="focusNextCell"></mnemonic-autocomplete>
                       </v-col>
                     </v-row>
                   </v-card>
@@ -165,6 +165,7 @@
                       dense
                       v-model="newWallet.password"
                       filled label="Spending Password"
+                      :type="show1 ? 'text' : 'password'"
                       :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
                   >
                     <template v-slot:append>
@@ -179,6 +180,7 @@
                       v-model="newWallet.confirmPassword"
                       filled
                       label="Confirm Password"
+                      :type="show2 ? 'text' : 'password'"
                       :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
                   >
                     <template v-slot:append>
@@ -287,6 +289,17 @@ export default {
     },
   },
   methods: {
+    focusNextCell(el) {
+      console.log('nextCell')
+      const currentCell = el.closest('.v-input');
+      const nextCell = currentCell.nextElementSibling;
+      if (nextCell) {
+        const nextAutocomplete = nextCell.querySelector('.v-autocomplete input');
+        if (nextAutocomplete) {
+          nextAutocomplete.focus();
+        }
+      }
+    },
     async pasteFromClipboard() {
       const text = await navigator.clipboard.readText();
       this.recoverySeedPhrase = text.split(" ")

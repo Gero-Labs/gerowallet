@@ -50,7 +50,7 @@ export default {
           if (utxo.asset_list) {
             utxo.asset_list.forEach(asset => {
               if (assets[asset.policy_id+asset.asset_name]) {
-                assets[asset.policy_id+asset.asset_name].quantity += asset.quantity
+                assets[asset.policy_id+asset.asset_name].quantity += Number(asset.quantity)
               } else {
                 assets[asset.policy_id+asset.asset_name] = asset
               }
