@@ -311,7 +311,7 @@ export default {
         {
           text: 'Saturation', sortable: true, align: 'center', value: 'live_saturation', width: 128, filter: value => {
             if (!this.hideSaturated) return true
-            return value < 100
+            return value < 99
           }
         },
         {text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },

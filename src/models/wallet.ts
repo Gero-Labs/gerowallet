@@ -191,7 +191,7 @@ export class Wallet {
                 promises.push(this.syncAccountRewards())
               }
               if (Number(accountInfo.controlled_amount) > 0) {
-                promises.push([this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0), this.syncAssets()])
+                promises.push(this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0))
               }
             }
             return []
@@ -231,19 +231,31 @@ export class Wallet {
     assetsSyncTable.put({time: new Date().getTime()})
   }
 
+  private async getAssetsInfo(units) {
+    if (!units || units.length == 0) {
+      return
+    }
+    try {
+      const blockchainDB: Dexie = await this.getBlockchainDb()
+      const assetsTable = blockchainDB.table('assets')
+      const res = await this.api.getAssetsInfo(units);
+      if (res) {
+        assetsTable.put(res)
+        return res;
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
   private async getAssetInfo(policyId: string, assetName: string) {
     try {
       const blockchainDB: Dexie = await this.getBlockchainDb()
       const assetsTable = blockchainDB.table('assets')
-      const asset = await assetsTable.where({policy_id: policyId, asset_name: assetName}).first()
-      if (asset) {
-        return asset
-      } else {
-        const res = await this.api.getAssetInfo(policyId+assetName);
-        if (res) {
-          assetsTable.put(res)
-          return res;
-        }
+      const res = await this.api.getAssetInfo(policyId+assetName);
+      if (res) {
+        assetsTable.put(res)
+        return res;
       }
     } catch (e) {
       console.log(e);

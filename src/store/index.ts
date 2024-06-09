@@ -16,7 +16,7 @@ import socket from "@/plugins/socket";
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'transactions', 'pools', 'assets']},
   state: () => ({
     loggedWallet: undefined,
     wallets: [],
@@ -64,7 +64,7 @@ export const useStore = defineStore('store', {
                   input.asset_list.forEach(asset => {
                     const assetName = asset.policy_id + asset.asset_name;
                     if (sentAssets[assetName]) {
-                      sentAssets[assetName].quantity += +sentAssets[assetName].quantity;
+                      sentAssets[assetName].quantity += Number(sentAssets[assetName].quantity);
                     } else {
                       sentAssets[assetName] = structuredClone(asset);
                     }
@@ -80,7 +80,7 @@ export const useStore = defineStore('store', {
                   output.asset_list.forEach(asset => {
                     const assetName = asset.policy_id + asset.asset_name;
                     if (receivedAssets[assetName]) {
-                      receivedAssets[assetName].quantity += +receivedAssets[assetName].quantity;
+                      receivedAssets[assetName].quantity += Number(receivedAssets[assetName].quantity);
                     } else {
                       receivedAssets[assetName] = structuredClone(asset);
                     }
@@ -95,7 +95,7 @@ export const useStore = defineStore('store', {
               const assetName = receivedAsset['policy_id'] + receivedAsset['asset_name'];
 
               if (assets[assetName]) {
-                assets[assetName].quantity += +receivedAsset['quantity'];
+                assets[assetName].quantity += Number(receivedAsset['quantity']);
 
                 if (assets[assetName].quantity === 0) delete assets[assetName];
               } else {
@@ -122,24 +122,46 @@ export const useStore = defineStore('store', {
               quantity: totalAmount,
               logo: require('@/assets/svg/cardano.svg')
             }
-            Object.values(assets).forEach(asset => {
-              if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
-                return
-              }
-              const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-              if (!resolved) {
-                this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
-              } else {
-                if (resolved?.metadata?.logo) {
-                  asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
-                } else if (resolved.onchain_metadata) {
-                  asset['onchain_metadata'] = resolved.onchain_metadata
-                  asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
-                } else {
-                  asset['logo'] = ''; // Set empty logo if not found
-                }
-              }
-            })
+            // const unresolved = []
+            // const resolvedAssets = []
+            // Object.values(assets).forEach(asset => {
+            //   const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+            //   if (!resolved) {
+            //     unresolved.push(asset)
+            //   } else {
+            //     resolvedAssets.push(resolved)
+            //   }
+            // });
+            // appWallet.getAssetsInfo(unresolved)
+
+            // Object.values(resolvedAssets).forEach(asset => {
+            //   const assetName = Buffer.from(asset['asset_name'], 'hex').toString('ascii')
+            //   if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
+            //     return
+            //   }
+            //   let resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+            //   if (!resolved) {
+            //     resolved = appWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+            //   }
+            //   if (resolved?.metadata?.logo) {
+            //     asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+            //   } else if (resolved.onchain_metadata) {
+            //     asset['onchain_metadata'] = resolved.onchain_metadata
+            //     if (resolved.onchain_metadata.image) {
+            //       asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image.replace('ipfs://', '')
+            //     } else if (resolved.onchain_metadata['721'] && resolved.onchain_metadata['721'][asset['policy_id']] && resolved.onchain_metadata['721'][asset['policy_id']][assetName]) { // NFT
+            //       const element = resolved.onchain_metadata['721'][asset['policy_id']][assetName]
+            //       if (element['image']) {
+            //         asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + element['image'].replace('ipfs://', '')
+            //       }
+            //       if (element['files']) {
+            //         asset['files'] = element['files']
+            //       }
+            //     }
+            //   } else {
+            //     asset['logo'] = ''; // Set empty logo if not found
+            //   }
+            // })
             return {
               ...tx,
               sentAmount,

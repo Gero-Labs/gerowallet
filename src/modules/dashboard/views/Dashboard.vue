@@ -29,15 +29,16 @@
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
         <v-card outlined class="fill-height">
-          <v-card-title>Transactions</v-card-title>
+          <v-card-title>Transactions (Last 10)</v-card-title>
           <v-card-text class="pa-0">
             <v-data-table
-              :items="calculatedTransactions"
+              :items="lastTenTransactions"
               :headers="activityHeaders"
               class="transparent transactions-table"
               :sort-by.sync="sortBy"
               :sort-desc.sync="sortDesc"
               dense @click:row="handleOnTransactionsRowClick"
+              hide-default-footer
             >
               <template v-slot:[`item.time`]="{ item }">
                 <v-list-item two-line class="px-0">
@@ -60,6 +61,11 @@
               </template>
             </v-data-table>
           </v-card-text>
+          <v-card-actions class="justify-end">
+            <v-btn style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">
+              Show All Transactions
+            </v-btn>
+          </v-card-actions>
         </v-card>
       </v-col>
     </v-row>
@@ -89,7 +95,13 @@ export default {
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'getAccountInfo', 'calculatedUtxos', 'loggedWallet']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'calculatedUtxos', 'loggedWallet']),
+    lastTenTransactions() {
+      if (this.calculatedTransactions) {
+        return this.calculatedTransactions.slice(this.calculatedTransactions.length-10,this.calculatedTransactions.length)
+      }
+      return []
+    },
     computeChartData() {
       const graphData = []
       let currentBalance = 0
@@ -137,7 +149,6 @@ export default {
     loadingChart: true,
     transactionInfo: null,
     chartData: undefined,
-    accountInfo: undefined,
     transactions: undefined,
     txIos: undefined,
     activityHeaders: [

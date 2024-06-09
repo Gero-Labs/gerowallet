@@ -89,7 +89,7 @@
               </template>
               <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
-                      :style="item.change >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
+                      :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
                     item.amount | toAda
                   }}</span>
                 <span v-else>{{ item.amount }}</span>
@@ -101,7 +101,7 @@
                       alt="trend"></v-img>
                 </v-avatar>&nbsp;
                 <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : Math.abs(change(item) * 100).toFixed(1) + '%' }}</span>
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toAda(change(item), false) }}</span>
               </template>
               <template v-slot:[`item.date`]="{ item }">
                 <v-list-item two-line class="px-0">
@@ -132,10 +132,6 @@ export default {
     account: {
       type: Object,
     },
-    pools: {
-      type: Array,
-      default: () => []
-    },
     chartData: {
       type: Object,
       default: () => {
@@ -148,7 +144,10 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['rewards']),
+    filters() {
+      return filters
+    },
+    ...mapState(useStore, ['rewards','loggedWallet','pools']),
     Network() {
       return Network
     },
@@ -193,7 +192,6 @@ export default {
       hideZero: false,
       sortBy: 'epoch',
       sortDesc: true,
-      rewards: [],
       stakingHeaders: [
         {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id'},
         {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
@@ -213,7 +211,7 @@ export default {
           if (previous.amount === 0) {
             return 0
           }
-          return (Number(item.amount) - Number(previous.amount))/previous.amount
+          return Number(item.amount) - Number(previous.amount)
         }
       }
       return 0
@@ -234,7 +232,10 @@ export default {
     },
     resolvePoolDescription(poolId) {
       const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      return pool.description
+      if (pool) {
+        return pool.description
+      }
+      return ''
     },
     isNumeric(n) {
       return !isNaN(parseFloat(n)) && isFinite(n);
