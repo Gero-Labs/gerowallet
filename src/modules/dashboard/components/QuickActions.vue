@@ -1,10 +1,9 @@
 <template>
   <div class="fill-height">
     <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
-      <v-card-title>Quick Actions</v-card-title>
-      <v-card-text class="d-flex justify-space-between align-content-space-between">
+      <v-card-text class="d-flex justify-space-between align-content-space-between pa-0 fill-height">
         <v-row no-gutters>
-          <v-col cols="6">
+          <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
               <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SEND">
                 <v-avatar tile size="80">
@@ -21,7 +20,7 @@
               <span>Send</span>
             </v-layout>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
               <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.RECEIVE">
                 <v-avatar tile size="80">
@@ -38,7 +37,7 @@
               <span>Receive</span>
             </v-layout>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
               <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP">
                 <v-avatar tile size="80">
@@ -55,7 +54,7 @@
               <span>Swap</span>
             </v-layout>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
               <v-btn
                 text

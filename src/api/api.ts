@@ -136,6 +136,20 @@ export class Api {
     }
   }
 
+  async getAssetsInfo(units) {
+    try {
+      const { data, status } = await this.axiosInstance.post(
+        `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
+        units
+      );
+      console.log(data)
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async getAssetInfo(unit: string) {
     try {
       const { data, status } = await this.axiosInstance.get(

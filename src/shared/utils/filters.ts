@@ -36,7 +36,7 @@ const filters = {
     if (res >= 0) {
       return (signs ? '+ ' : '') + symbol+ (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString());
     }
-    return  '- '+symbol+(decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString());
+    return (signs ? '- ' : '') + symbol+(decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString());
   },
   stateColor(state: string) {
     if (state === 'NOT_FOR_SALE') {
