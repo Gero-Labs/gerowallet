@@ -142,7 +142,7 @@ export class Wallet {
       .then(db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.put(tip);
+        return syncTable.put({id: 1, ...tip});
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -431,5 +431,22 @@ export class Wallet {
 
   public async getBlockchainDb(): Promise<Dexie> {
     return db.checkAndCreateBlockchainDatabase(this.chain+"_"+this.network)
+  }
+
+  async scanUrl(url: string): Promise<any> {
+    return await this.api.scanUrl(url)
+  }
+
+  async addConnectedDapp(domain: string) {
+    await this.db
+      .open()
+      .then(db => {
+        const dappsTable = db.table('connected_dapps');
+        if (!dappsTable) throw new Error('No Connected Dapps Table.');
+        return dappsTable.put({domain: domain});
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
   }
 }

@@ -199,4 +199,14 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async scanUrl(url: string) {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/url/scan?url=${url}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }

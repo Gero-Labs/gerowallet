@@ -232,6 +232,16 @@ export const useStore = defineStore('store', {
     getAccountInfo: state => state.accountInfo
   },
   actions: {
+    async setLoggedWallet(wallet) {
+      this.loggedWallet = wallet;
+      if (chrome?.storage) {
+        if (wallet) {
+          await chrome.storage.local.set({'loggedWallet': wallet});
+        } else {
+          await chrome.storage.local.remove('loggedWallet');
+        }
+      }
+    },
     async login(walletId: number) {
       loading.setLoading(true);
       console.log('login');
@@ -239,7 +249,7 @@ export const useStore = defineStore('store', {
       if (!wallet) {
         return null;
       }
-      this.loggedWallet = wallet;
+      this.setLoggedWallet(wallet);
       try {
         this.provider = await db.getProvider(wallet.chain, wallet.network);
       } catch (err) {
@@ -265,10 +275,10 @@ export const useStore = defineStore('store', {
       }
       loading.setLoading(false);
     },
-    logout() {
+    async logout() {
       loading.setLoading(true);
-      socket.stompDisconnect()
-      this.loggedWallet = undefined;
+      socket.stompDisconnect();
+      await this.setLoggedWallet(undefined)
       this.provider = undefined;
       this.transactions = []
       this.assets = []
@@ -278,7 +288,7 @@ export const useStore = defineStore('store', {
       appWallet = undefined
       loading.setLoading(false);
     },
-    async loadWallets(): Promise<any> {
+    async loadWallets(): Promise<void> {
       loading.setLoading(true);
       const wallets = await db.getAllWallets();
       if (Array.isArray(wallets) && wallets.length) {
@@ -303,7 +313,7 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
-      liveQuery(() => db.table('sync').orderBy('id').last()).subscribe({
+      liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
         next: newTip => {
           this.latestTip = newTip
         },

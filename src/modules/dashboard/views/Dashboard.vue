@@ -61,7 +61,7 @@
               </template>
             </v-data-table>
           </v-card-text>
-          <v-card-actions class="justify-end">
+          <v-card-actions class="justify-end" v-if="lastTenTransactions.length > 0">
             <v-btn style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">
               Show All Transactions
             </v-btn>

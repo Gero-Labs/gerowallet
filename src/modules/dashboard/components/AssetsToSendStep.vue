@@ -65,6 +65,7 @@ export default {
   },
   data() {
     return {
+      search: '',
       collectibles: [
         {
           name: "MusicBox Dimensions (30)",
