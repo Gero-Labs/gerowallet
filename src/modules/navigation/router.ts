@@ -1,13 +1,15 @@
-import VueRouter from 'vue-router';
+import VueRouter, {NavigationGuardNext, Route} from 'vue-router';
 
 import { useStore } from '@/store';
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
-import DappConnect from '@/modules/dapp-connect/views/DappConnect.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import Assets from '@/modules/assets/views/Assets.vue';
 import Staking from "@/modules/staking/Staking.vue";
+import DappConnect from "@/popup/modules/views/DappConnect.vue";
+import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
+import Vue from "vue";
 
 const routes = [
   {
@@ -83,7 +85,12 @@ const routes = [
   },
   {
     path: '/dapp-connect',
+    name: 'dapp-connect',
     component: DappConnect,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
   },
   {
     path: '*',
@@ -98,12 +105,15 @@ const router = new VueRouter({
   routes,
 });
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
+  console.log('routerBeforeEach')
   const store = useStore();
+  await store.loadWallets();
   const wallets = store.getWallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
   }
+  console.log(store.isLoggedIn)
   const isLoggedIn = store.isLoggedIn;
   if (to.matched.some(record => record.meta['requiresAuth'])) {
     // this route requires auth, check if logged in

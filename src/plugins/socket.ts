@@ -51,11 +51,11 @@ export class SocketPlugin {
   }
 
   stompDisconnect() {
-    this.client.disconnect(() => {
-      if (this.client && this.client.connected) {
+    if (this.client && this.client.connected) {
+      this.client.disconnect(() => {
         console.log('Disconnected')
-      }
-    })
+      })
+    }
   }
 
   stompSuccessCallback() {
