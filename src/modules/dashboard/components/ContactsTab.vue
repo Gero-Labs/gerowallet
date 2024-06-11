@@ -4,7 +4,6 @@
     <v-row no-gutters>
 
       <v-data-table
-        value=""
         :headers="headers"
         :items="contacts"
         class="elevation-1 text-wrap"
@@ -98,6 +97,7 @@
                     color="blue darken-1"
                     text
                     @click="save"
+                    :disabled="saveButtonIsDisabled(editedItem)"
                   >
                     Save
                   </v-btn>
@@ -174,9 +174,6 @@ export default {
     formTitle() {
       return this.editedIndex === -1 ? 'New Contact' : 'Edit Contact'
     },
-    // truncateAddress(address) {
-    //   return address.substring(0, 20) + ' ..... ' + address.substring(address.length - 20, address.length)
-    // }
   },
 
   watch: {
@@ -254,6 +251,10 @@ export default {
 
     truncateAddress(address) {
       return address.substring(0, 20) + ' ..... ' + address.substring(address.length - 20, address.length)
+    },
+
+    saveButtonIsDisabled(editItem){
+      return editItem.name?.length === 0 || editItem.address?.length === 0 || editItem.$handle?.length === 0;
     }
   },
 }
