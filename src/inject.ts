@@ -1,18 +1,18 @@
 const wallet = {
-  name: 'GeroWallet',
+  name: 'gero',
   icon: '',
 };
 
-if (!window.cardano) {
-  window.cardano = {};
+if (!window['cardano']) {
+  window['cardano'] = {};
 }
 
-window.cardano[wallet.name] = {
+window['cardano'][wallet.name] = {
   apiVersion: '0.1',
   version: '0.1',
   name: wallet.name,
   icon: wallet.icon,
-  enable: async () => {
+  enable: async (): Promise<Awaited<any>> => {
     try {
       await sendMessageToContentScript({
         action: 'enable',
@@ -59,7 +59,7 @@ function sendMessageToContentScript(payload) {
         return;
       }
 
-      if (event.data?.type == 'FROM_EXTENSION') {
+      if (event.data?.type === 'FROM_EXTENSION') {
         window.removeEventListener('message', messageListener);
         resolve(event.data.data);
       }

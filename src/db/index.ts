@@ -75,6 +75,13 @@ export default {
     const provider = await this.getConfiguration('provider');
     return db['provider'].where('[name+chain+network]').equals([provider.value, chain, network]).first();
   },
+  async setConfiguration(key, value) {
+    if (value) {
+      db['config'].put({ key: key, value: value });
+    } else {
+      db['config'].where({ key: key}).delete();
+    }
+  },
   async getConfiguration(key) {
     return db['config'].where({ key: key }).first();
   },
@@ -153,6 +160,7 @@ export default {
       addresses: 'address',
       rewards: 'epoch, amount, pool_id, type',
       transactions: 'id',
+      connected_dapps: '++id, domain',
     });
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);
