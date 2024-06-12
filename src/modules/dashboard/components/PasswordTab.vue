@@ -67,7 +67,9 @@
     <hr class="mt-0 mb-5">
     <div class="d-flex justify-end ">
       <v-btn><span class="capitalize">Cancel</span></v-btn>
-      <v-btn color="primary" class="ml-2"><span class="capitalize">Update Password</span></v-btn>
+      <v-btn
+        style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
+        class="ml-2"><span class="capitalize">Update Password</span></v-btn>
     </div>
 
   </div>
