@@ -14,7 +14,7 @@
         hide-details
         class="mb-4"
       />
-      <v-card class="col-12 align-content-start">
+      <v-card class="col-12 align-content-start no-shadow">
         <v-tabs
           color="white"
           class="v-tabs-border-bottom"
@@ -73,5 +73,8 @@ export default {
 
 .v-tab {
   font-size: 0.75rem !important;
+}
+.no-shadow{
+  box-shadow: none !important;
 }
 </style>
