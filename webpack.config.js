@@ -10,14 +10,14 @@ const HtmlWebpackPlugin = require('html-webpack-plugin')
 module.exports = {
   context: __dirname + '/src',
   entry: {
-    background: './chrome/background.js',
-    config: './chrome/config.js',
-    content: './chrome/content.js',
-    eventRegistration: './chrome/eventRegistration.js',
-    extension: './chrome/extension.js',
-    inject: './chrome/inject.js',
-    messaging: './chrome/messaging.js',
-    webpage: './chrome/webpage.js',
+    background: './chrome/background.ts',
+    config: './chrome/config.ts',
+    content: './chrome/content.ts',
+    eventRegistration: './chrome/eventRegistration.ts',
+    extension: './chrome/extension.ts',
+    inject: './chrome/inject.ts',
+    messaging: './chrome/messaging.ts',
+    webpage: './chrome/webpage.ts',
   },
   output: {
     path: __dirname + '/dist',
@@ -155,7 +155,7 @@ module.exports = {
     new CopyPlugin({
       patterns: [
         {
-          from: 'assets',
+          from: 'assets/img/bkp',
           to: 'assets',
         },
         {

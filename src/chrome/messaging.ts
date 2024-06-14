@@ -1,38 +1,52 @@
 import { APIError, METHOD, SENDER, TARGET } from './config';
 
-/**
- * Message Object
- * {
- *  ?method: METHOD,
- *  ?data: DATA,
- *  ?error: ERROR,
- *  sender: SENDER (extension || webpage),
- *  target: TARGET,
- *  ?id: requestId,
- *  ?origin: window.origin
- *  ?event: EVENT
- * }
- */
+interface Message {
+  method?: string;
+  data?: any;
+  error?: string;
+  sender?: string;
+  target?: string;
+  id?: string;
+  origin?: string;
+  event?: string;
+}
 
 class InternalController {
+  port: chrome.runtime.Port;
+  tabId: Promise<number>;
+
   constructor() {
     this.port = chrome.runtime.connect({
       name: 'internal-background-popup-communication',
     });
-    this.tabId = new Promise((_res, _rej) =>
-      chrome.tabs.getCurrent((tab) => _res(tab.id))
+    this.tabId = new Promise((resolve, reject) =>
+      chrome.tabs.getCurrent((tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(tab.id!);
+        }
+      })
     );
   }
+
   requestData = () => {
-    return new Promise((res, rej) => {
+    return new Promise((resolve, reject) => {
       chrome.tabs.getCurrent((tab) => {
+        if (!tab) {
+          reject('Tab not found');
+          return;
+        }
+
         const tabId = tab.id;
         const self = this;
 
-        self.port.onMessage.addListener(function messageHandler(response) {
+        function messageHandler(response: any) {
           self.port.onMessage.removeListener(messageHandler);
-          res(response);
-        });
+          resolve(response);
+        }
+
+        self.port.onMessage.addListener(messageHandler);
 
         self.port.postMessage({
           tabId: tabId,
@@ -42,7 +56,7 @@ class InternalController {
     });
   };
 
-  returnData = async ({ data, error }) => {
+  returnData = async ({ data, error }: { data: any; error: any }) => {
     this.port.postMessage({
       data,
       error,
@@ -53,25 +67,9 @@ class InternalController {
 }
 
 class BackgroundController {
-  constructor() {
-    /**
-     * @private
-     */
-    this._methodList = {};
-  }
+  private _methodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
 
-  /**
-   * @callback methodCallback
-   * @param {object} request
-   * @param {function} sendResponse
-   */
-  /**
-
-   /**
-   * @param {string} method
-   * @param {methodCallback} func
-   */
-  add = (method, func) => {
+  add = (method: string, func: (request: any, sendResponse: any) => void) => {
     this._methodList[method] = func;
   };
 
@@ -88,18 +86,18 @@ class BackgroundController {
 }
 
 export const Messaging = {
-  sendToBackground: async function (request) {
-    return new Promise((res, rej) =>
+  sendToBackground: async function (request: Message) {
+    return new Promise((resolve, reject) =>
       chrome.runtime.sendMessage(
         { ...request, target: TARGET, sender: SENDER.webpage },
-        (response) => res(response)
+        (response) => resolve(response)
       )
     );
   },
-  sendToContent: function ({ method, data }) {
-    return new Promise((res, rej) => {
+  sendToContent: function ({ method, data }: { method: string; data: any }) {
+    return new Promise((resolve, reject) => {
       const requestId = Math.random().toString(36).substr(2, 9);
-      window.addEventListener('message', function responseHandler(e) {
+      function responseHandler(e: MessageEvent) {
         const response = e.data;
         if (
           typeof response !== 'object' ||
@@ -113,9 +111,10 @@ export const Messaging = {
         )
           return;
         window.removeEventListener('message', responseHandler);
-        if (response.error) rej(response.error);
-        else res(response);
-      });
+        if (response.error) reject(response.error);
+        else resolve(response);
+      }
+      window.addEventListener('message', responseHandler);
       window.postMessage(
         {
           method,
@@ -128,20 +127,20 @@ export const Messaging = {
       );
     });
   },
-  sendToPopupInternal: function (tab, request) {
-    return new Promise((res, rej) => {
+  sendToPopupInternal: function (tab: chrome.tabs.Tab, request: Message) {
+    return new Promise((resolve, reject) => {
       chrome.runtime.onConnect.addListener(function connetionHandler(port) {
-        port.onMessage.addListener(function messageHandler(response) {
+        function messageHandler(response: any) {
           if (response.tabId !== tab.id) return;
           if (response.method === METHOD.requestData) {
             port.postMessage(request);
           }
           if (response.method === METHOD.returnData) {
-            res(response);
+            resolve(response);
           }
           chrome.tabs.onRemoved.addListener(function tabsHandler(tabId) {
             if (tab.id !== tabId) return;
-            res({
+            resolve({
               target: TARGET,
               sender: SENDER.extension,
               error: APIError.Refused,
@@ -152,13 +151,14 @@ export const Messaging = {
             port.onMessage.removeListener(messageHandler);
             chrome.tabs.onRemoved.removeListener(tabsHandler);
           });
-        });
+        }
+        port.onMessage.addListener(messageHandler);
       });
     });
   },
   createInternalController: () => new InternalController(),
   createProxyController: () => {
-    //listen to events from background
+    // listen to events from background
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener(async (response) => {
         if (
@@ -176,8 +176,9 @@ export const Messaging = {
           method: METHOD.isWhitelisted,
           origin: window.origin,
         });
+
         // protect background by not allowing not whitelisted
-        if (!whitelisted || whitelisted.error) return;
+        if (!whitelisted || (whitelisted as any).error) return;
 
         const event = new CustomEvent(`${TARGET}${response.event}`, {
           detail: response.data,
@@ -186,7 +187,7 @@ export const Messaging = {
         window.dispatchEvent(event);
       });
     }
-    //listen to function calls from webpage
+    // listen to function calls from webpage
     window.addEventListener('message', async function (e) {
       const request = e.data;
       if (
@@ -199,7 +200,7 @@ export const Messaging = {
       )
         return;
       request.origin = window.origin;
-      //only allow enable function, before checking for whitelisted
+      // only allow enable function, before checking for whitelisted
       if (
         request.method === METHOD.enable ||
         request.method === METHOD.isEnabled
@@ -216,8 +217,8 @@ export const Messaging = {
       });
 
       // protect background by not allowing not whitelisted
-      if (!whitelisted || whitelisted.error) {
-        window.postMessage({ ...whitelisted, id: request.id });
+      if (!whitelisted || (whitelisted as any).error) {
+        window.postMessage({ ...whitelisted as object, id: request.id });
         return;
       }
       await Messaging.sendToBackground(request).then((response) => {
