@@ -39,18 +39,24 @@ import {Blockchain, Network} from "@/models/types";
 export default {
   computed: {
     geroPoolExists() {
+      if (!this.loggedWallet) {
+        return false
+      }
       return (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) ||
         (this.loggedWallet.chain === Blockchain.APEX_PRIME && this.loggedWallet.network === Network.TESTNET)
     },
     assetType() {
+      if (!this.loggedWallet) {
+        return ''
+      }
       if (this.loggedWallet.chain === Blockchain.CARDANO) {
-        if (this.loggedWallet.network == Network.MAINNET) {
+        if (this.loggedWallet.network === Network.MAINNET) {
           return 'ADA'
         } else {
           return 'tADA'
         }
       } else if (this.loggedWallet.chain === Blockchain.APEX_PRIME) {
-        if (this.loggedWallet.network == Network.MAINNET) {
+        if (this.loggedWallet.network === Network.MAINNET) {
           return 'Ap3x'
         } else {
           return 'tAp3x'

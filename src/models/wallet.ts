@@ -9,7 +9,7 @@ import {Api} from '@/api/api';
 import networks from '@/shared/utils/networks';
 import {Blockchain, ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
 import db from "@/db";
-import Table = Dexie.Table;
+import {chunkArray} from 'array-chunk-by-size';
 
 export class Wallet {
   db: Dexie;
@@ -110,13 +110,18 @@ export class Wallet {
     return RewardAddress.new(this.networkId(), StakeCredential.from_keyhash(this.stakeKey().hash()));
   }
 
-  async getLastSyncInfo(): Promise<any> {
+  async getLastSyncInfo() {
     return this.db
       .open()
       .then(async db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.toArray()[0]
+        const rows = await syncTable.toArray()
+        if (rows.length > 0) {
+          return rows[0]
+        } else {
+          return null
+        }
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -181,40 +186,63 @@ export class Wallet {
     if (!this.locked) {
       this.locked = true
       console.log('sync')
-      this.getLastSyncInfo().then(async lastSyncInfo => {
-        if (!lastSyncInfo || tip.height > lastSyncInfo.height) {
-          const promises = []
-          promises.push(this.syncStakingPools())
-          promises.push(this.syncAccountInfo().then(accountInfo => {
-            if (accountInfo) {
-              if (Number(accountInfo.rewards_sum) > 0) {
-                promises.push(this.syncAccountRewards())
-              }
-              if (Number(accountInfo.controlled_amount) > 0) {
-                promises.push(this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0))
-              }
+      const lastSyncInfo = await this.getLastSyncInfo()
+      if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+        const promises = []
+        promises.push(this.syncStakingPools())
+        promises.push(this.syncAccountInfo().then(accountInfo => {
+          if (accountInfo) {
+            if (Number(accountInfo.rewards_sum) > 0) {
+              promises.push(this.syncAccountRewards())
             }
-            return []
-          }))
-          await Promise.all(promises)
-          await this.setLastSyncInfo(tip);
-        }
-      })
+            if (Number(accountInfo.controlled_amount) > 0) {
+              promises.push(this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0).then(txs => {
+                if (txs) {
+                  const units: Set<string> = new Set()
+                  txs.forEach(tx => {
+                    tx.inputs.forEach(input => {
+                      if (input.asset_list) {
+                        input.asset_list.forEach(asset => {
+                          units.add(asset.policy_id + asset.asset_name);
+                        })
+                      }
+                    })
+                    tx.outputs.forEach(output => {
+                      if (output.asset_list) {
+                        output.asset_list.forEach(asset => {
+                          units.add(asset.policy_id + asset.asset_name);
+                        })
+                      }
+                    })
+                  })
+                  promises.push(this.syncAssets(Array.from(units)))
+                }
+              }))
+            }
+          }
+          return []
+        }))
+        await Promise.all(promises)
+        await this.setLastSyncInfo(tip);
+      }
+
       this.locked = false
     }
   }
 
-  async syncAssets(): Promise<void> {
+  async syncAssets(units?: string[]): Promise<void> {
     const blockchainDB: Dexie = await this.getBlockchainDb()
     const assetsSyncTable = blockchainDB.table('assets_sync')
     const lastAssetsSyncArray = await assetsSyncTable.toArray()
-    if (lastAssetsSyncArray.length > 0) {
-      const lastAssetsSync = lastAssetsSyncArray[0]
-      if (lastAssetsSync?.time) {
+    if (!lastAssetsSyncArray || lastAssetsSyncArray.length > 0) {
+      if (lastAssetsSyncArray.length > 0) {
+        const lastAssetsSync = lastAssetsSyncArray[0]
         const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
         if (hoursSinceEpoch % 4 === 0) {
           await this.setAssets(blockchainDB, assetsSyncTable)
         }
+      } else {
+        await this.setAssets(blockchainDB, assetsSyncTable)
       }
     }
   }
@@ -349,11 +377,14 @@ export class Wallet {
       const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height)
       if (res && Array.isArray(res)) {
         const promises = []
-        res.forEach(value => {
-          promises.push(this.api.getTransactionInfo(value.tx_hash))
+        const txHashes: string[] = res.map(tx => tx.tx_hash)
+        const smallerArrays = chunkArray({input: txHashes, bytesSize: 5 * 1024});
+        smallerArrays.forEach(smallerArray => {
+          promises.push(this.api.getTransactionsInfo(smallerArray))
         })
-        const txs = await Promise.all(promises)
+        const txs = (await Promise.all(promises)).flat()
         await this.setAccountTransactions(txs)
+        return txs
       }
     } catch (e) {
       console.log(e)

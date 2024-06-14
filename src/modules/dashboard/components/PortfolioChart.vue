@@ -54,6 +54,9 @@ export default {
     adaPrice() {
       console.log('price')
       const price = this.chartData[this.chartData.length - 1][1]
+      if (!this.price) {
+        return null
+      }
       return (this.price.lastPrice * price).toLocaleString(undefined, {maximumFractionDigits: 2})
     },
   },
@@ -132,7 +135,7 @@ export default {
     },
     generateTitleText(tab) {
       return (
-        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">$${this.adaPrice}</span>` +
+        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${this.adaPrice}</span>` +
         `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${tab.vsLabel}</span></span>`
       );
     },
