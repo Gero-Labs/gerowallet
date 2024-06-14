@@ -42,6 +42,7 @@ import ContactsTab from '@/modules/dashboard/components/ContactsTab.vue';
 import PasswordTab from '@/modules/dashboard/components/PasswordTab.vue';
 import CollateralTab from '@/modules/dashboard/components/CollateralTab.vue';
 import ProfileTab from '@/modules/dashboard/components/ProfileTab.vue';
+
 export default {
   name: 'SettingsDialog',
   components: { BaseDialog, ContactsTab, PasswordTab, CollateralTab, ProfileTab },
@@ -51,6 +52,7 @@ export default {
       default: false,
     },
   },
+
   data: () => ({
     activeTab: 'profile',
     search: null,
@@ -68,6 +70,7 @@ export default {
   border-bottom: 2px #333333 solid;
   margin-bottom: 1rem;
 }
+
 .v-tab {
   font-size: 0.75rem !important;
 }
