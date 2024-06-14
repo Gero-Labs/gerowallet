@@ -8,6 +8,7 @@ import db from '@/db';
 import {Wallet} from '@/models/wallet';
 import Dexie, {liveQuery} from "dexie";
 import socket from "@/plugins/socket";
+import { STORAGE } from '@/chrome/config';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -28,6 +29,7 @@ export const useStore = defineStore('store', {
     assets: [],
     pools: [],
     rewards: [],
+    connectedDapps: [],
     accountInfo: undefined,
     latestTip: undefined,
     stakingProView: false,
@@ -255,7 +257,6 @@ export const useStore = defineStore('store', {
       } catch (err) {
         console.log(err)
       }
-
       appWallet = Wallet.class(wallet, this.provider);
       socket.stompConnect(appWallet)
       const promises = []
@@ -265,6 +266,7 @@ export const useStore = defineStore('store', {
       promises.push(this.loadAssets())
       promises.push(this.loadPools())
       promises.push(this.loadRewards())
+      promises.push(this.loadConnectedDapps())
       await Promise.all(promises)
       try {
         await appWallet.fetchTip().then(tip => {
@@ -279,6 +281,9 @@ export const useStore = defineStore('store', {
       loading.setLoading(true);
       socket.stompDisconnect();
       await this.setLoggedWallet(undefined)
+      if (chrome?.storage) {
+        await chrome.storage.local.remove(STORAGE.whitelisted);
+      }
       this.provider = undefined;
       this.transactions = []
       this.assets = []
@@ -391,6 +396,29 @@ export const useStore = defineStore('store', {
         },
         error: error => {
           console.error('Failed to Fetch Rewards:', error)
+        }
+      });
+    },
+    async loadConnectedDapps() {
+      if (!appWallet) {
+        return
+      }
+      const db = await appWallet.getDb()
+      console.log('test')
+      liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
+        next: newConnectedDapps => {
+          this.connectedDapps = newConnectedDapps
+          if (chrome?.storage) {
+            if (newConnectedDapps) {
+              console.log('newDapps', newConnectedDapps)
+              chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
+            } else {
+              chrome.storage.local.remove(STORAGE.whitelisted);
+            }
+          }
+        },
+        error: error => {
+          console.error('Failed to Fetch Connected Dapps:', error)
         }
       });
     }

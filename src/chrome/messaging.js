@@ -76,12 +76,14 @@ class BackgroundController {
   };
 
   listen = () => {
-    chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
-      if (request.sender === SENDER.webpage) {
-        this._methodList[request.method](request, sendResponse);
-      }
-      return true;
-    });
+    if (chrome?.runtime) {
+      chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+        if (request.sender === SENDER.webpage) {
+          this._methodList[request.method](request, sendResponse);
+        }
+        return true;
+      });
+    }
   };
 }
 
@@ -144,7 +146,9 @@ export const Messaging = {
               sender: SENDER.extension,
               error: APIError.Refused,
             });
-            chrome.runtime.onConnect.removeListener(connetionHandler);
+            if (chrome?.runtime) {
+              chrome.runtime.onConnect.removeListener(connetionHandler);
+            }
             port.onMessage.removeListener(messageHandler);
             chrome.tabs.onRemoved.removeListener(tabsHandler);
           });
@@ -155,31 +159,33 @@ export const Messaging = {
   createInternalController: () => new InternalController(),
   createProxyController: () => {
     //listen to events from background
-    chrome.runtime.onMessage.addListener(async (response) => {
-      if (
-        typeof response !== 'object' ||
-        response === null ||
-        !response.target ||
-        response.target !== TARGET ||
-        !response.sender ||
-        response.sender !== SENDER.extension ||
-        !response.event
-      )
-        return;
+    if (chrome?.runtime) {
+      chrome.runtime.onMessage.addListener(async (response) => {
+        if (
+          typeof response !== 'object' ||
+          response === null ||
+          !response.target ||
+          response.target !== TARGET ||
+          !response.sender ||
+          response.sender !== SENDER.extension ||
+          !response.event
+        )
+          return;
 
-      const whitelisted = await Messaging.sendToBackground({
-        method: METHOD.isWhitelisted,
-        origin: window.origin,
+        const whitelisted = await Messaging.sendToBackground({
+          method: METHOD.isWhitelisted,
+          origin: window.origin,
+        });
+        // protect background by not allowing not whitelisted
+        if (!whitelisted || whitelisted.error) return;
+
+        const event = new CustomEvent(`${TARGET}${response.event}`, {
+          detail: response.data,
+        });
+
+        window.dispatchEvent(event);
       });
-      // protect background by not allowing not whitelisted
-      if (!whitelisted || whitelisted.error) return;
-
-      const event = new CustomEvent(`${TARGET}${response.event}`, {
-        detail: response.data,
-      });
-
-      window.dispatchEvent(event);
-    });
+    }
     //listen to function calls from webpage
     window.addEventListener('message', async function (e) {
       const request = e.data;
