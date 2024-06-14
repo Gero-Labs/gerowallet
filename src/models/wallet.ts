@@ -1,4 +1,4 @@
-import Dexie, {IndexableType} from 'dexie';
+import Dexie from 'dexie';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import * as CryptoTS from 'crypto-ts';

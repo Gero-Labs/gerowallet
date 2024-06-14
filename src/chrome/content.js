@@ -4,7 +4,9 @@ import { Messaging } from './messaging';
 const injectScript = () => {
   const script = document.createElement('script');
   script.async = false;
-  script.src = chrome.runtime.getURL('injected.bundle.js');
+  if (chrome?.runtime) {
+    script.src = chrome.runtime.getURL('js/inject.js');
+  }
   script.onload = function () {
     this.remove();
   };

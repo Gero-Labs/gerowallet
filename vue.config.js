@@ -38,13 +38,14 @@ module.exports = defineConfig({
         patterns: [
           { from: 'src/assets', to: 'assets' },
           { from: 'src/manifest.json', to: 'manifest.json' },
-          { from: 'src/chrome/background.js', to: 'js/background.js' },
-          { from: 'src/chrome/config.js', to: 'js/config.js' },
-          { from: 'src/chrome/content.js', to: 'js/content.js' },
-          { from: 'src/chrome/extension.js', to: 'js/extension.js' },
-          { from: 'src/chrome/inject.js', to: 'js/inject.js' },
-          { from: 'src/chrome/messaging.js', to: 'js/messaging.js' },
-          { from: 'src/chrome/webpage.js', to: 'js/webpage.js' },
+          // { from: 'src/chrome/background.js', to: 'js/background.js' },
+          // { from: 'src/chrome/config.js', to: 'js/config.js' },
+          // { from: 'src/chrome/content.js', to: 'js/content.js' },
+          // { from: 'src/chrome/eventRegistration.js', to: 'js/eventRegistration.js' },
+          // { from: 'src/chrome/extension.js', to: 'js/extension.js' },
+          // { from: 'src/chrome/inject.js', to: 'js/inject.js' },
+          // { from: 'src/chrome/messaging.js', to: 'js/messaging.js' },
+          // { from: 'src/chrome/webpage.js', to: 'js/webpage.js' },
         ]
       }),
       new webpack.ProvidePlugin({
