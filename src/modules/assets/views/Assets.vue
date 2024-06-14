@@ -58,13 +58,15 @@ export default {
           }
         })
       }
-      assets['lovelace'] = {
-        name: 'Cardano',
-        policy_id: "",
-        asset_name: "lovelace",
-        decimals: 6,
-        quantity: adaBalance,
-        logo: require('@/assets/svg/cardano.svg')
+      if (adaBalance > 0) {
+        assets['lovelace'] = {
+          name: 'Cardano',
+          policy_id: "",
+          asset_name: "lovelace",
+          decimals: 6,
+          quantity: adaBalance,
+          logo: require('@/assets/svg/cardano.svg')
+        }
       }
       return Object.values(assets)
     },

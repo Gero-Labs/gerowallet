@@ -19,6 +19,7 @@
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
     "archiver": "^7.0.1",
+    "array-chunk-by-size": "^2.1.1",
     "axios": "1.6.8",
     "bip39": "^3.1.0",
     "cborg": "^1.10.2",
@@ -64,18 +65,18 @@
     "sass": "~1.32.13",
     "sass-loader": "^10.0.0",
     "stream-browserify": "^3.0.0",
-    "ts-loader": "^9.5.1",
     "typescript": "^5.4.3",
     "vue-cli-plugin-vuetify": "~2.5.8",
     "vue-eslint-parser": "^9.4.2",
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
-    "webpack": "^5.91.0"
+    "webpack": "^5.92.0"
   },
   "eslintConfig": {
     "root": true,
     "env": {
-      "node": true
+      "node": true,
+      "webextensions": true
     },
     "extends": [
       "plugin:vue/essential",
