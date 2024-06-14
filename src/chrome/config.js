@@ -25,6 +25,10 @@ export const APIError = {
     code: -1,
     info: 'Inputs do not conform to this spec or are otherwise invalid.',
   },
+  AccountNotSet: {
+    code: -2,
+    info: 'No Account Set.',
+  },
   InternalError: {
     code: -2,
     info: 'An error occurred during execution of this API call.',
@@ -51,7 +55,15 @@ export const POPUP = {
   internal: 'internalPopup',
 };
 
+export const POPUP_WINDOW = {
+  top: 50,
+  left: 100,
+  width: 400,
+  height: 600,
+};
+
 export const STORAGE = {
+  loggedWallet: 'loggedWallet',
   whitelisted: 'whitelisted',
   encryptedKey: 'encryptedKey',
   accounts: 'accounts',

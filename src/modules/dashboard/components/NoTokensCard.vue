@@ -14,7 +14,7 @@
     >
       <div class="stake-apex-info">
         <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
-        <v-card-text class="subtitle-1"
+        <v-card-text class="subtitle-1" v-if="this.loggedWallet"
           >Earn rewards by staking your {{assetType}} tokens with {{this.loggedWallet.chain}}'s extensive network of stake pools.</v-card-text
         >
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">

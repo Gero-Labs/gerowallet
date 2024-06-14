@@ -1,5 +1,5 @@
-import { APIError, SENDER, STORAGE, TARGET } from './config';
-import { mnemonicToEntropy } from 'bip39';
+import { APIError, SENDER, STORAGE, TARGET,POPUP_WINDOW } from './config';
+// import { mnemonicToEntropy } from 'bip39';
 // import Loader from '../loader';
 // import { createAvatar } from '@dicebear/avatars';
 // import * as style from '@dicebear/avatars-bottts-sprites';
@@ -17,8 +17,8 @@ import { mnemonicToEntropy } from 'bip39';
 //   toAssetUnit,
 //   Data,
 // } from '../util';
-import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
-import Ada, { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+// import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
+// import Ada, { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 // import TrezorConnect from '@trezor/connect-web';
 // import AssetFingerprint from '@emurgo/cip14-js';
 // import { isAddress } from 'web3-validator';
@@ -83,8 +83,10 @@ export const getWhitelisted = async () => {
 
 export const isWhitelisted = async (_origin) => {
   const whitelisted = await getWhitelisted();
+  console.log(_origin)
+  console.log(whitelisted)
   let access = false;
-  if (whitelisted.includes(_origin)) access = true;
+  if (whitelisted.find(el => _origin.includes(el.domain))) access = true;
   return access;
 };
 
@@ -530,62 +532,62 @@ export const setCurrency = (currency) =>
 //   return await setStorage({ [STORAGE.accounts]: accounts });
 // };
 //
-// export const createPopup = async (popup) => {
-//   let left = 0;
-//   let top = 0;
-//   try {
-//     const lastFocused = await new Promise((res, rej) => {
-//       chrome.windows.getLastFocused((windowObject) => {
-//         return res(windowObject);
-//       });
-//     });
-//     top = lastFocused.top;
-//     left =
-//       lastFocused.left +
-//       Math.round((lastFocused.width - POPUP_WINDOW.width) / 2);
-//   } catch (_) {
-//     // The following properties are more than likely 0, due to being
-//     // opened from the background chrome process for the extension that
-//     // has no physical dimensions
-//     const { screenX, screenY, outerWidth } = window;
-//     top = Math.max(screenY, 0);
-//     left = Math.max(screenX + (outerWidth - POPUP_WINDOW.width), 0);
-//   }
-//
-//   const { popupWindow, tab } = await new Promise((res, rej) =>
-//     chrome.tabs.create(
-//       {
-//         url: chrome.runtime.getURL(popup + '.html'),
-//         active: false,
-//       },
-//       function (tab) {
-//         chrome.windows.create(
-//           {
-//             tabId: tab.id,
-//             type: 'popup',
-//             focused: true,
-//             ...POPUP_WINDOW,
-//             left,
-//             top,
-//           },
-//           function (newWindow) {
-//             return res({ popupWindow: newWindow, tab });
-//           }
-//         );
-//       }
-//     )
-//   );
-//
-//   if (popupWindow.left !== left && popupWindow.state !== 'fullscreen') {
-//     await new Promise((res, rej) => {
-//       chrome.windows.update(popupWindow.id, { left, top }, () => {
-//         return res();
-//       });
-//     });
-//   }
-//   return tab;
-// };
-//
+export const createPopup = async (popup) => {
+  let left = 0;
+  let top = 0;
+  try {
+    const lastFocused = await new Promise((res, rej) => {
+      chrome.windows.getLastFocused((windowObject) => {
+        return res(windowObject);
+      });
+    });
+    top = lastFocused.top;
+    left =
+      lastFocused.left +
+      Math.round((lastFocused.width - POPUP_WINDOW.width) / 2);
+  } catch (_) {
+    // The following properties are more than likely 0, due to being
+    // opened from the background chrome process for the extension that
+    // has no physical dimensions
+    const { screenX, screenY, outerWidth } = window;
+    top = Math.max(screenY, 0);
+    left = Math.max(screenX + (outerWidth - POPUP_WINDOW.width), 0);
+  }
+
+  const { popupWindow, tab } = await new Promise((res, rej) =>
+    chrome.tabs.create(
+      {
+        url: chrome.runtime.getURL(popup + '.html'),
+        active: false,
+      },
+      function (tab) {
+        chrome.windows.create(
+          {
+            tabId: tab.id,
+            type: 'popup',
+            focused: true,
+            ...POPUP_WINDOW,
+            left,
+            top,
+          },
+          function (newWindow) {
+            return res({ popupWindow: newWindow, tab });
+          }
+        );
+      }
+    )
+  );
+
+  if (popupWindow.left !== left && popupWindow.state !== 'fullscreen') {
+    await new Promise((res, rej) => {
+      chrome.windows.update(popupWindow.id, { left, top }, () => {
+        return res();
+      });
+    });
+  }
+  return tab;
+};
+
 // export const createTab = (tab, query = '') =>
 //   new Promise((res, rej) =>
 //     chrome.tabs.create(
