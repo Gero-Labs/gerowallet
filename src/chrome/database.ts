@@ -1,129 +1,128 @@
-// Open the database and create an object store
-let db;
+let db: IDBDatabase;
 
-function openDatabase(dbName, version) {
+function openDatabase(dbName: string, version: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = self.indexedDB.open(dbName, version);
+    const request = indexedDB.open(dbName, version);
 
     request.onupgradeneeded = function(event) {
-      db = event.target.result;
+      db = (event.target as IDBOpenDBRequest).result;
       // const objectStore = db.createObjectStore("myStore", { keyPath: "id", autoIncrement: true });
       // objectStore.createIndex("name", "name", { unique: false });
       // objectStore.createIndex("age", "age", { unique: false });
     };
 
     request.onsuccess = function(event) {
-      db = event.target.result;
+      db = (event.target as IDBOpenDBRequest).result;
       resolve(db);
     };
 
     request.onerror = function(event) {
-      reject("Error opening database", event);
+      reject(new Error("Error opening database"));
     };
   });
 }
 
 // Add a record
-function addRecord(storeName, record) {
+function addRecord(storeName: string, record: any): Promise<IDBValidKey> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readwrite");
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.add(record);
 
     request.onsuccess = function(event) {
-      resolve(event.target.result);
+      resolve((event.target as IDBRequest).result);
     };
 
     request.onerror = function(event) {
-      reject("Error adding record", event);
+      reject(new Error("Error adding record"));
     };
   });
 }
 
 // Get a record
-function getRecord(storeName, id) {
+function getRecord(storeName: string, id: IDBValidKey): Promise<any> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readonly");
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.get(id);
 
     request.onsuccess = function(event) {
-      resolve(event.target.result);
+      resolve((event.target as IDBRequest).result);
     };
 
     request.onerror = function(event) {
-      reject("Error retrieving record", event);
+      reject(new Error("Error retrieving record"));
     };
   });
 }
 
 // Update a record
-function updateRecord(storeName, id, updatedRecord) {
+function updateRecord(storeName: string, id: IDBValidKey, updatedRecord: any): Promise<IDBValidKey> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readwrite");
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.get(id);
 
     request.onsuccess = function(event) {
-      const data = event.target.result;
+      const data = (event.target as IDBRequest).result;
       Object.assign(data, updatedRecord);
       const updateRequest = objectStore.put(data);
 
       updateRequest.onsuccess = function(event) {
-        resolve(event.target.result);
+        resolve((event.target as IDBRequest).result);
       };
 
       updateRequest.onerror = function(event) {
-        reject("Error updating record", event);
+        reject(new Error("Error updating record"));
       };
     };
 
     request.onerror = function(event) {
-      reject("Error retrieving record for update", event);
+      reject(new Error("Error retrieving record for update"));
     };
   });
 }
 
 // Delete a record
-function deleteRecord(storeName, id) {
+function deleteRecord(storeName: string, id: IDBValidKey): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readwrite");
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.delete(id);
 
     request.onsuccess = function(event) {
-      resolve(event.target.result);
+      resolve();
     };
 
     request.onerror = function(event) {
-      reject("Error deleting record", event);
+      reject(new Error("Error deleting record"));
     };
   });
 }
 
 // Get all records
-function getAllRecords(storeName) {
+function getAllRecords(storeName: string): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], "readonly");
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.getAll();
 
     request.onsuccess = function(event) {
-      resolve(event.target.result);
+      resolve((event.target as IDBRequest).result);
     };
 
     request.onerror = function(event) {
-      reject("Error retrieving all records", event);
+      reject(new Error("Error retrieving all records"));
     };
   });
 }
 
 // Live query with basic polling (simplified)
-function liveQuery(callback, interval = 1000) {
-  let lastRecords = [];
+function liveQuery(storeName: string, callback: (records: any[]) => void, interval = 1000) {
+  let lastRecords: any[] = [];
 
   async function poll() {
-    const records = await getAllRecords();
+    const records = await getAllRecords(storeName);
     if (JSON.stringify(records) !== JSON.stringify(lastRecords)) {
       lastRecords = records;
       callback(records);
@@ -134,16 +133,17 @@ function liveQuery(callback, interval = 1000) {
   poll();
 }
 
-function getProvider(chain, network) {
+// Get provider
+function getProvider(chain: string, network: string): Promise<any[]> {
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(['provider', 'readonly'])
+    const transaction = db.transaction(['provider'], 'readonly');
     const providerStore = transaction.objectStore("provider");
-    const index = providerStore.index("chain")
+    const index = providerStore.index("chain");
     const request = index.openCursor();
-    const results = [];
+    const results: any[] = [];
 
     request.onsuccess = function(event) {
-      const cursor = event.target.result;
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
       if (cursor) {
         if (cursor.value.chain === chain && cursor.value.network === network) {
           results.push(cursor.value);
@@ -155,38 +155,11 @@ function getProvider(chain, network) {
     };
 
     request.onerror = function(event) {
-      reject("Error retrieving records", event);
+      reject(new Error("Error retrieving records"));
     };
   });
-
 }
 
-// // Usage example
-// (async function() {
-//   await openDatabase();
-//
-//   // Add a record
-//   await addRecord({ name: "John Doe", age: 30 });
-//
-//   // Get a record
-//   const record = await getRecord(1);
-//   console.log("Record:", record);
-//
-//   // Update a record
-//   await updateRecord(1, { name: "Jane Doe", age: 31 });
-//
-//   // Delete a record
-//   await deleteRecord(1);
-//
-//   // Get all records
-//   const allRecords = await getAllRecords();
-//   console.log("All Records:", allRecords);
-//
-//   // Live query
-//   liveQuery(records => {
-//     console.log("Live query records:", records);
-//   });
-// })();
 export {
   openDatabase,
   addRecord,

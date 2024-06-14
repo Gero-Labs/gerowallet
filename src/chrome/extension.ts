@@ -24,6 +24,11 @@ import { APIError, SENDER, STORAGE, TARGET,POPUP_WINDOW } from './config';
 // import { isAddress } from 'web3-validator';
 // import { milkomedaNetworks } from '@dcspark/milkomeda-constants';
 
+interface WhitelistedEntry {
+  domain: string;
+  id: number;
+}
+
 export const getStorage = (key) =>
   new Promise((res, rej) =>
     chrome.storage.local.get(key, (result) => {
@@ -76,31 +81,18 @@ export const removeStorage = (item) =>
 //   return decryptedHex;
 // };
 
-export const getWhitelisted = async () => {
+export const getWhitelisted = async (): Promise<WhitelistedEntry[]> => {
   const result = await getStorage(STORAGE.whitelisted);
-  return result ? result : [];
+  return Array.isArray(result) ? result : [];
 };
 
-export const isWhitelisted = async (_origin) => {
-  const whitelisted = await getWhitelisted();
-  console.log(_origin)
-  console.log(whitelisted)
+export const isWhitelisted = async (_origin: string): Promise<boolean> => {
+  const whitelisted: WhitelistedEntry[] = await getWhitelisted();
+  console.log(_origin);
+  console.log(whitelisted);
   let access = false;
   if (whitelisted.find(el => _origin.includes(el.domain))) access = true;
   return access;
-};
-
-export const setWhitelisted = async (origin) => {
-  let whitelisted = await getWhitelisted();
-  whitelisted ? whitelisted.push(origin) : (whitelisted = [origin]);
-  return await setStorage({ [STORAGE.whitelisted]: whitelisted });
-};
-
-export const removeWhitelisted = async (origin) => {
-  const whitelisted = await getWhitelisted();
-  const index = whitelisted.indexOf(origin);
-  whitelisted.splice(index, 1);
-  return await setStorage({ [STORAGE.whitelisted]: whitelisted });
 };
 
 export const getCurrency = () => getStorage(STORAGE.currency);
@@ -532,61 +524,92 @@ export const setCurrency = (currency) =>
 //   return await setStorage({ [STORAGE.accounts]: accounts });
 // };
 //
-export const createPopup = async (popup) => {
-  let left = 0;
-  let top = 0;
-  try {
-    const lastFocused = await new Promise((res, rej) => {
-      chrome.windows.getLastFocused((windowObject) => {
-        return res(windowObject);
-      });
-    });
-    top = lastFocused.top;
-    left =
-      lastFocused.left +
-      Math.round((lastFocused.width - POPUP_WINDOW.width) / 2);
-  } catch (_) {
-    // The following properties are more than likely 0, due to being
-    // opened from the background chrome process for the extension that
-    // has no physical dimensions
-    const { screenX, screenY, outerWidth } = window;
-    top = Math.max(screenY, 0);
-    left = Math.max(screenX + (outerWidth - POPUP_WINDOW.width), 0);
-  }
 
-  const { popupWindow, tab } = await new Promise((res, rej) =>
-    chrome.tabs.create(
-      {
-        url: chrome.runtime.getURL(popup + '.html'),
-        active: false,
-      },
-      function (tab) {
-        chrome.windows.create(
-          {
-            tabId: tab.id,
-            type: 'popup',
-            focused: true,
-            ...POPUP_WINDOW,
-            left,
-            top,
-          },
-          function (newWindow) {
-            return res({ popupWindow: newWindow, tab });
-          }
-        );
+export async function focusOrCreatePopup(url: string): Promise<chrome.tabs.Tab> {
+  const windows = await chrome.windows.getAll({populate: true});
+  let existingWindow = null;
+  let tabb: chrome.tabs.Tab
+  // Iterate through each window and its tabs to find the URL
+  for (const window of windows) {
+    if (window.type === 'popup') {
+      for (const tab of window.tabs) {
+        if (tab.url === url) {
+          existingWindow = window;
+          tabb = tab
+          break;
+        }
       }
-    )
-  );
+      if (existingWindow) break;
+    }
+  }
 
-  if (popupWindow.left !== left && popupWindow.state !== 'fullscreen') {
-    await new Promise((res, rej) => {
-      chrome.windows.update(popupWindow.id, { left, top }, () => {
-        return res();
-      });
+  if (existingWindow) {
+    // Focus on the existing window
+    chrome.windows.update(existingWindow.id, {focused: true});
+  } else {
+    // Create a new window with the specified URL
+    chrome.windows.create({
+      url: url,
+      type: 'popup',
+      focused: true,
+      ...POPUP_WINDOW,
     });
   }
-  return tab;
-};
+  return tabb;
+}
+
+// export const createPopup = async (popup: string, origin?: string): Promise<chrome.tabs.Tab> => {
+//   console.log('createPopup')
+//   let left = 0;
+//   let top = 0;
+//   try {
+//     const lastFocused: chrome.windows.Window = await new Promise((res, rej) => {
+//       chrome.windows.getLastFocused((windowObject) => {
+//         if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
+//         res(windowObject);
+//       });
+//     });
+//     top = lastFocused.top!;
+//     left = lastFocused.left! + Math.round((lastFocused.width! - POPUP_WINDOW.width) / 2);
+//   } catch (_) {
+//     const { screenX, screenY, outerWidth } = window;
+//     top = Math.max(screenY, 0);
+//     left = Math.max(screenX + (outerWidth - POPUP_WINDOW.width), 0);
+//   }
+//
+//   const { popupWindow, tab } = await new Promise<{ popupWindow: chrome.windows.Window, tab: chrome.tabs.Tab }>((res, rej) =>
+//     chrome.tabs.create(
+//       {
+//         url: chrome.runtime.getURL(`index.html#/${popup}?website=${origin}`),
+//         active: false,
+//       },
+//       function (tab) {
+//         chrome.windows.create(
+//           {
+//             tabId: tab.id,
+//             type: 'popup',
+//             focused: true,
+//             ...POPUP_WINDOW,
+//             left,
+//             top,
+//           },
+//           function (newWindow) {
+//             res({ popupWindow: newWindow, tab });
+//           }
+//         );
+//       }
+//     )
+//   );
+//
+//   if (popupWindow.left !== left && popupWindow.state !== 'fullscreen') {
+//     await new Promise<void>((res, rej) => {
+//       chrome.windows.update(popupWindow.id!, { left, top }, () => {
+//         res();
+//       });
+//     });
+//   }
+//   return tab;
+// };
 
 // export const createTab = (tab, query = '') =>
 //   new Promise((res, rej) =>

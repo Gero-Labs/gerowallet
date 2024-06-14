@@ -1,13 +1,16 @@
 <template>
   <v-card outlined class="dapp-host pa-4 d-flex flex-column fill-height transparent">
     <div style="width: 52px; margin: auto">
-      <v-img contain alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/img/logo128.png')" class="pb-4"></v-img>
+      <v-img contain alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/svg/gero-logo.svg')" class="pb-4"></v-img>
       <v-img contain alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"></v-img>
     </div>
     <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
-      <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white">Connect with Gero Wallet</v-card-title>
-      <v-card-title class="justify-center pt-0" style="font-size: 16px;">
+      <v-card-title class="justify-center pb-0" style="font-size: 20px; font-weight: bold; color: white">Connect with Gero Wallet</v-card-title>
+      <v-card-title class="justify-center py-0" style="font-size: 16px;">
         <span style="color: #ccc">Website:&nbsp;</span>
+        <v-avatar size="16">
+          <v-img :src="favicon" contain></v-img>
+        </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white" width="3"></v-progress-circular>
         <v-avatar v-else tile size="16" class="ml-1"><v-img :src="websiteRiskIcon" contain></v-img></v-avatar>
@@ -41,7 +44,7 @@
             </div>
           </section>
     </v-card-text>
-    <v-card-actions class="justify-center pa-5">
+    <v-card-actions class="justify-center pa-2">
       <v-layout>
         <v-row>
           <v-col cols="6">
@@ -78,6 +81,9 @@ export default {
     };
   },
   computed: {
+    favicon() {
+      return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${this.queryParams.website}&size=16`
+    },
     domain() {
       return psl.get(this.extractHostname(this.queryParams.website))
     },

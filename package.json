@@ -4,17 +4,17 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
-    "buildVue": "vue-cli-service build",
-    "build": "run-s lint build:prod",
-    "build:prod": "webpack --mode=production",
-    "build:dev": "webpack --mode=development",
-    "build:zip": "run-s build zip",
-    "watch:prod": "npm run build:prod -- --watch",
-    "watch:dev": "npm run build:dev -- --watch",
-    "dev": "npm run watch:dev",
-    "zip": "node scripts/build-zip.js",
+    "build": "vue-cli-service build & run-s lint build:prod",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore src",
-    "lint:fix": "eslint --fix --ext .js,.vue --ignore-path .gitignore src"
+    "build:dev": "webpack --mode=development",
+    "build:prod": "webpack --mode=production",
+    "build:zip": "run-s build zip",
+    "buildVue": "vue-cli-service build",
+    "dev": "npm run watch:dev",
+    "lint:fix": "eslint --fix --ext .js,.vue --ignore-path .gitignore src",
+    "watch:dev": "npm run build:dev -- --watch",
+    "watch:prod": "npm run build:prod -- --watch",
+    "zip": "node scripts/build-zip.js"
   },
   "dependencies": {
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.2",
@@ -45,8 +45,10 @@
     "sockjs-client": "^1.6.1",
     "stompjs": "^2.3.3",
     "vue": "^2.7.16",
+    "vue-class-component": "^7.2.3",
     "vue-flag-icon": "^2.1.0",
     "vue-i18n": "^8.28.2",
+    "vue-property-decorator": "^9.1.2",
     "vue-router": "^3.6.5",
     "vuetify": "^2.7.1",
     "webextension-polyfill": "^0.10.0"

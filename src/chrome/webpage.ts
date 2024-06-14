@@ -2,18 +2,18 @@ import { METHOD } from './config';
 import { Messaging } from './messaging';
 
 export const getBalance = async () => {
-  const result = await Messaging.sendToContent({ method: METHOD.getBalance });
-  return result.data;
+  const result = await Messaging.sendToContent({ method: METHOD.getBalance,data: {} });
+  return result['data'];
 };
 
 export const enable = async () => {
-  const result = await Messaging.sendToContent({ method: METHOD.enable });
-  return result.data;
+  const result = await Messaging.sendToContent({ method: METHOD.enable,data: {} });
+  return result['data'];
 };
 
 export const isEnabled = async () => {
-  const result = await Messaging.sendToContent({ method: METHOD.isEnabled });
-  return result.data;
+  const result = await Messaging.sendToContent({ method: METHOD.isEnabled,data: {} });
+  return result['data'];
 };
 
 //deprecated soon
@@ -22,7 +22,7 @@ export const signData = async (address, payload) => {
     method: METHOD.signData,
     data: { address, payload },
   });
-  return result.data;
+  return result['data'];
 };
 
 export const signDataCIP30 = async (address, payload) => {
@@ -30,7 +30,7 @@ export const signDataCIP30 = async (address, payload) => {
     method: METHOD.signData,
     data: { address, payload, CIP30: true },
   });
-  return result.data;
+  return result['data'];
 };
 
 export const signTx = async (tx, partialSign = false) => {
@@ -38,28 +38,31 @@ export const signTx = async (tx, partialSign = false) => {
     method: METHOD.signTx,
     data: { tx, partialSign },
   });
-  return result.data;
+  return result['data'];
 };
 
 export const getAddress = async () => {
   const result = await Messaging.sendToContent({
     method: METHOD.getAddress,
+    data: {}
   });
-  return result.data;
+  return result['data'];
 };
 
 export const getRewardAddress = async () => {
   const result = await Messaging.sendToContent({
     method: METHOD.getRewardAddress,
+    data: {}
   });
-  return result.data;
+  return result['data'];
 };
 
 export const getNetworkId = async () => {
   const result = await Messaging.sendToContent({
     method: METHOD.getNetworkId,
+    data: {}
   });
-  return result.data;
+  return result['data'];
 };
 
 export const getUtxos = async (amount = undefined, paginate = undefined) => {
@@ -67,14 +70,15 @@ export const getUtxos = async (amount = undefined, paginate = undefined) => {
     method: METHOD.getUtxos,
     data: { amount, paginate },
   });
-  return result.data;
+  return result['data'];
 };
 
 export const getCollateral = async () => {
-  const result = await Messaging.sendToContent({
+  const result = await Messaging.sendToContent( {
     method: METHOD.getCollateral,
+    data: {}
   });
-  return result.data;
+  return result['data'];
 };
 
 export const submitTx = async (tx) => {
@@ -82,7 +86,7 @@ export const submitTx = async (tx) => {
     method: METHOD.submitTx,
     data: tx,
   });
-  return result.data;
+  return result['data'];
 };
 
 export { on, off } from './eventRegistration';
