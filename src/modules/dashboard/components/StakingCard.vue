@@ -83,7 +83,9 @@
                   </v-list-item-avatar>
                   <v-list-item-content>
                     <v-list-item-title>{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
-                    <v-list-item-subtitle>{{ resolvePoolDescription(item.pool_id) }}</v-list-item-subtitle>
+                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+                      {{ resolvePoolDescription(item.pool_id) }}
+                    </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </template>

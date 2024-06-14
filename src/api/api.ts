@@ -78,11 +78,9 @@ export class Api {
     }
   }
 
-  async getTransactionInfo(txHash: string) {
+  async getTransactionsInfo(txHashes: string[]) {
     try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/transactions/info?chain=${this.chain}&network=${this.network}&txHash=${txHash}`
-      );
+      const { data, status } = await this.axiosInstance.post(`/api/transactions/info?chain=${this.chain}&network=${this.network}`, txHashes);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {

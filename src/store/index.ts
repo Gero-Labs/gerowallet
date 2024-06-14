@@ -76,7 +76,7 @@ export const useStore = defineStore('store', {
             tx.outputs.forEach(output => {
               if (output.stake_addr === currentStake) {
                 receivedAmount += +output.value;
-                if (output.asset_list.length) {
+                if (output.asset_list.length > 0) {
                   output.asset_list.forEach(asset => {
                     const assetName = asset.policy_id + asset.asset_name;
                     if (receivedAssets[assetName]) {

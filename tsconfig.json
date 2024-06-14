@@ -29,8 +29,8 @@
     "skipLibCheck": true,
     "allowJs": true,
     "jsx": "preserve",
-    "target": "esnext",
-    "module": "esnext",
+    "target": "es2017",
+    "module": "es2022",
     "typeRoots": [
       "./node_modules/@types",
       "./node_modules/vuetify/types"

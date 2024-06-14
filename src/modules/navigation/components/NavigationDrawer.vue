@@ -239,7 +239,10 @@ export default {
       }
     },
     account() {
-      return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
+      if (this.loggedWallet) {
+        return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
+      }
+      return null
     },
   },
   methods: {

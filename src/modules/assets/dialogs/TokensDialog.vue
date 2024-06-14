@@ -23,7 +23,6 @@
 import TokensList from "@/shared/components/TokensList.vue";
 import TokenPreviewCarousel from "../components/TokenPreviewCarousel.vue";
 import BaseDialog from "@/shared/components/BaseDialog.vue";
-import {model} from "@angular/core";
 
 export default {
   name: "tokensDialog",
@@ -54,7 +53,6 @@ export default {
     pickedToken: null,
   }),
   methods: {
-    model,
     handleTokenClick(token) {
       this.pickedToken = token;
     },
