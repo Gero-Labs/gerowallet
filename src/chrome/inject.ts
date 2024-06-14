@@ -16,55 +16,63 @@ import {
 } from './webpage';
 import { EVENT } from './config';
 
-//Initial version (deprecated soon)
+// Extend the Window interface
+declare global {
+  interface Window {
+    cardano?: any;
+  }
+}
+
+// Initial version (deprecated soon)
 window.cardano = {
   ...(window.cardano || {}),
   enable: () => enable(),
   isEnabled: () => isEnabled(),
   getBalance: () => getBalance(),
-  signData: (address, payload) => signData(address, payload),
-  signTx: (tx, partialSign) => signTx(tx, partialSign),
-  submitTx: (tx) => submitTx(tx),
-  getUtxos: (amount, paginate) => getUtxos(amount, paginate),
+  signData: (address: string, payload: string) => signData(address, payload),
+  signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
+  submitTx: (tx: string) => submitTx(tx),
+  getUtxos: (amount?: number, paginate?: boolean) => getUtxos(amount, paginate),
   getCollateral: () => getCollateral(),
   getUsedAddresses: async () => [await getAddress()],
   getUnusedAddresses: async () => [],
   getChangeAddress: () => getAddress(),
   getRewardAddress: () => getRewardAddress(),
   getNetworkId: () => getNetworkId(),
-  onAccountChange: (callback) =>
+  onAccountChange: (callback: Function) =>
     on(EVENT.accountChange, callback),
-  onNetworkChange: (callback) =>
+  onNetworkChange: (callback: Function) =>
     on(EVENT.networkChange, callback),
   off,
   _events: {},
 };
 
-// // CIP-30
-
+// CIP-30
 window.cardano = {
   ...(window.cardano || {}),
   gero: {
     enable: async () => {
-      if (await enable()) {
+      const enabled = await enable();
+      if (enabled) {
         return {
           getBalance: () => getBalance(),
-          signData: (address, payload) => signDataCIP30(address, payload),
-          signTx: (tx, partialSign) => signTx(tx, partialSign),
-          submitTx: (tx) => submitTx(tx),
-          getUtxos: (amount, paginate) => getUtxos(amount, paginate),
+          signData: (address: string, payload: string) => signDataCIP30(address, payload),
+          signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
+          submitTx: (tx: string) => submitTx(tx),
+          getUtxos: (amount?: number, paginate?: boolean) => getUtxos(amount, paginate),
           getUsedAddresses: async () => [await getAddress()],
           getUnusedAddresses: async () => [],
           getChangeAddress: () => getAddress(),
           getRewardAddresses: async () => [await getRewardAddress()],
           getNetworkId: () => getNetworkId(),
           experimental: {
-            on: (eventName, callback) => on(eventName, callback),
-            off: (eventName, callback) => off(eventName, callback),
+            on: (eventName: string, callback: Function) => on(eventName, callback),
+            off: (eventName: string, callback: Function) => off(eventName, callback),
             getCollateral: () => getCollateral(),
           },
         };
       }
+      return null;
     },
     isEnabled: () => isEnabled(),
     apiVersion: '0.1.0',

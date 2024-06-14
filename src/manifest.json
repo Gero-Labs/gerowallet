@@ -5,15 +5,15 @@
   "version": "2.0.0",
   "description": "Your Master Key to DeFi",
   "icons": {
-    "16": "./assets/img/logo16.png",
-    "48": "./assets/img/logo48.png",
-    "128": "./assets/img/logo128.png"
+    "16": "./assets/logo16.png",
+    "48": "./assets/logo48.png",
+    "128": "./assets/logo128.png"
   },
   "action": {
     "default_icon": {
-      "16": "./assets/img/logo16.png",
-      "48": "./assets/img/logo48.png",
-      "128": "./assets/img/logo128.png"
+      "16": "./assets/logo16.png",
+      "48": "./assets/logo48.png",
+      "128": "./assets/logo128.png"
     },
     "default_title": "GeroWallet | Your Master Key to DeFi"
   },

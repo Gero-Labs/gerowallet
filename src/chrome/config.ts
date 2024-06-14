@@ -53,12 +53,13 @@ export const NETWORKD_ID_NUMBER = {
 export const POPUP = {
   main: 'mainPopup',
   internal: 'internalPopup',
+  dappConnect: 'dapp-connect'
 };
 
 export const POPUP_WINDOW = {
   top: 50,
   left: 100,
-  width: 400,
+  width: 470,
   height: 600,
 };
 
