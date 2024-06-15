@@ -16,44 +16,49 @@ class InternalController {
   tabId: Promise<number>;
 
   constructor() {
-    this.port = chrome.runtime.connect({
-      name: 'internal-background-popup-communication',
-    });
-    this.tabId = new Promise((resolve, reject) =>
-      chrome.tabs.getCurrent((tab) => {
-        if (chrome.runtime.lastError || !tab) {
-          reject(chrome.runtime.lastError);
-        } else {
-          resolve(tab.id!);
-        }
-      })
-    );
+    if (chrome?.runtime) {
+      this.port = chrome.runtime.connect({
+        name: 'internal-background-popup-communication',
+      });
+      this.tabId = new Promise((resolve, reject) =>
+        chrome.tabs.getCurrent((tab) => {
+          if (chrome.runtime.lastError || !tab) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(tab.id!);
+          }
+        })
+      );
+    }
   }
 
   requestData = () => {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.getCurrent((tab) => {
-        if (!tab) {
-          reject('Tab not found');
-          return;
-        }
+    if (chrome?.tabs) {
+      return new Promise((resolve, reject) => {
+        chrome.tabs.getCurrent((tab) => {
+          if (!tab) {
+            reject('Tab not found');
+            return;
+          }
 
-        const tabId = tab.id;
-        const self = this;
+          const tabId = tab.id;
+          const self = this;
 
-        function messageHandler(response: any) {
-          self.port.onMessage.removeListener(messageHandler);
-          resolve(response);
-        }
+          function messageHandler(response: any) {
+            self.port.onMessage.removeListener(messageHandler);
+            resolve(response);
+          }
 
-        self.port.onMessage.addListener(messageHandler);
+          self.port.onMessage.addListener(messageHandler);
 
-        self.port.postMessage({
-          tabId: tabId,
-          method: METHOD.requestData,
+          self.port.postMessage({
+            tabId: tabId,
+            method: METHOD.requestData,
+          });
         });
       });
-    });
+    }
+    return null
   };
 
   returnData = async ({ data, error }: { data: any; error: any }) => {
@@ -76,6 +81,7 @@ class BackgroundController {
   listen = () => {
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+        console.log(request)
         if (request.sender === SENDER.webpage) {
           this._methodList[request.method](request, sendResponse);
         }
@@ -133,6 +139,7 @@ export const Messaging = {
         function messageHandler(response: any) {
           if (response.tabId !== tab.id) return;
           if (response.method === METHOD.requestData) {
+            console.log('sending Request', request)
             port.postMessage(request);
           }
           if (response.method === METHOD.returnData) {
@@ -161,6 +168,7 @@ export const Messaging = {
     // listen to events from background
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener(async (response) => {
+        console.log(response)
         if (
           typeof response !== 'object' ||
           response === null ||

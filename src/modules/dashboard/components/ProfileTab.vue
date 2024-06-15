@@ -1,22 +1,21 @@
 <template>
-  <div>
-    <div class="d-flex">
-      <div class="col-6">
-        <h2>Wallet Name</h2>
-        <p class="helper  my-0">Edit your wallet name</p>
-      </div>
-      <div class="col-6">
-        <v-text-field disabled outlined dense v-model="walletName"></v-text-field>
-      </div>
-    </div>
-
-    <div class="d-flex">
-      <div class="col-6">
-        <h2>Wallet Profile Picture</h2>
-        <p class="helper">Choose a profile picture for your wallet</p>
-      </div>
-      <div class="col-6 d-flex justify-space-between">
-        <div>
+  <v-tab-item>
+    <v-layout class="py-2" column>
+      <v-row no-gutters class="py-2">
+        <v-col cols="6">
+          <h3>Wallet Name</h3>
+          <span class="helper  my-0">Edit your wallet name</span>
+        </v-col>
+        <v-col cols="6">
+          <v-text-field disabled outlined dense v-model="walletName" hide-details></v-text-field>
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="6">
+          <h3>Wallet Profile Picture</h3>
+          <span class="helper">Choose a profile picture for your wallet</span>
+        </v-col>
+        <v-col cols="6" class="d-flex justify-space-between">
           <v-btn
             width="11.25rem"
             outlined
@@ -30,9 +29,6 @@
             > mdi-cloud-upload-outline
             </v-icon>
           </v-btn>
-
-        </div>
-        <div>
           <v-btn
             width="11.25rem"
             outlined
@@ -46,59 +42,61 @@
               mdi-account-box-outline
             </v-icon>
           </v-btn>
-        </div>
-
-
-      </div>
-    </div>
-
-    <div class="d-flex">
-      <div class="col-6">
-        <h2>Currency Preference</h2>
-        <p class="helper">Choose your preferred currency</p>
-      </div>
-      <div class="col-6">
-        <v-select
-          :items="currencies"
-          outlined
-          dense
-          v-model="selectedCurrency"
-        ></v-select>
-      </div>
-    </div>
-
-    <div class="d-flex">
-      <div class="col-6">
-        <h2>Display Language</h2>
-        <p class="helper">Set the language for Gero Dashboard</p>
-      </div>
-      <div class="col-6">
-        <v-text-field disabled outlined dense value="English"></v-text-field>
-      </div>
-    </div>
-
-    <div class="d-flex">
-      <div class="col-6">
-        <h2>Region</h2>
-        <p class="helper">Choose region, affects dates & time</p>
-      </div>
-      <div class="col-6">
-        <v-text-field outlined disabled dense value="English (US)"></v-text-field>
-      </div>
-    </div>
-
-
-  </div>
-
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="6">
+          <h3>Currency Preference</h3>
+          <span class="helper">Choose your preferred currency</span>
+        </v-col>
+        <v-col cols="6">
+          <v-select
+            :items="currencies"
+            outlined
+            dense
+            v-model="selectedCurrency"
+            hide-details
+          ></v-select>
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="6">
+          <h3>Display Language</h3>
+          <span class="helper">Set the language for Gero Dashboard</span>
+        </v-col>
+        <v-col cols="6">
+          <v-text-field disabled outlined dense value="English" hide-details></v-text-field>
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="6">
+          <h3>Region</h3>
+          <span class="helper">Choose region, affects dates & time</span>
+        </v-col>
+        <v-col cols="6">
+          <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
+        </v-col>
+      </v-row>
+    </v-layout>
+  </v-tab-item>
 </template>
-
 <script>
+import { mapActions, mapState } from 'pinia';
+import { useStore } from '@/store';
+
 export default {
+  computed: {
+    ...mapState(useStore, ['loggedWallet']),
+  },
   data: () => ({
     currencies: ['USD', 'AUD', 'CAD', 'EUR', 'GBP'],
     selectedCurrency: 'USD',
     walletName:'MyWalletName'
   }),
+  created() {
+    console.log(this.loggedWallet)
+    this.walletName = this.loggedWallet.name
+  }
 };
 </script>
 

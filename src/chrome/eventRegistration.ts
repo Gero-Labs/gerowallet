@@ -10,7 +10,6 @@ export const on = (eventName, callback) => {
   const events = window.cardano.gero._events[eventName] || [];
 
   window.cardano.gero._events[eventName] = [...events, [callback, handler]];
-
   window.addEventListener(`${TARGET}${eventName}`, handler);
 };
 

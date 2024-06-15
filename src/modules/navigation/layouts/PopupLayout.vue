@@ -7,20 +7,13 @@
 </template>
 
 <script>
-import LanguageSelector from "../components/LanguageSelector.vue";
-import PrivacyPolicyDialog from "../dialogs/PrivacyPolicyDialog.vue";
-import NetworkSelector from "../components/NetworkSelector.vue";
-import Select from "@/shared/components/Select.vue";
-
 export default {
   name: 'PopupLayout',
   methods: {
-    privacyPolicyDialogChange(value) {
-      this.privacyPolicyDialog = value
-    }
+
   },
   data: () => ({
-    privacyPolicyDialog: false
+
   }),
 }
 </script>

@@ -10,6 +10,8 @@
       :readonly="readonly"
       :append-icon="readonly ? '' : 'mdi-menu-down'"
       @input="$emit('input', $event)"
+      hide-details
+      dense
     >
       <template v-slot:item="{ item }">
         <v-avatar v-if="item.icon" size="20">

@@ -1,5 +1,4 @@
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import crypto from 'crypto';
 
 const WalletType = {
   Trezor: 'Trezor',
@@ -81,14 +80,16 @@ const Network = {
   TESTNET: 'Testnet',
 };
 
-function getInitialSeeds() {
-  return {
-    AddressSeed: crypto.randomBytes(4).readUInt32BE(0),
-    TransactionSeed: crypto.randomBytes(4).readUInt32BE(0),
-    BlockSeed: crypto.randomBytes(4).readUInt32BE(0),
-    TokenSeed: crypto.randomBytes(4).readUInt32BE(0),
-  };
-}
+const ERROR = {
+  accessDenied: 'Access denied',
+  wrongPassword: 'Wrong password',
+  txTooBig: 'Transaction too big',
+  txNotPossible: 'Transaction not possible',
+  storeNotEmpty: 'Storage key is already set',
+  onlyOneAccount: 'Only one account exist in the wallet',
+  fullMempool: 'fullMempool',
+  submit: 'submit',
+};
 
 export {
   HARDENED,
@@ -103,5 +104,5 @@ export {
   Provider,
   Blockchain,
   Network,
-  getInitialSeeds,
+  ERROR
 };
