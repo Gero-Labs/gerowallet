@@ -1,6 +1,11 @@
 import {
-  focusOrCreatePopup, getStorage,
+  focusOrCreatePopup,
+  extractKeyHash,
+  getAddress,
+  getNetwork,
+  getStorage,
   isWhitelisted,
+  verifyPayload,
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -11,6 +16,7 @@ import {
   STORAGE,
   TARGET,
 } from './config';
+import networks from '@/shared/utils/networks';
 
 console.log('Background Loaded');
 
@@ -101,6 +107,25 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
     });
 });
 
+app.add(METHOD.getAddress, async (request, sendResponse) => {
+  const address = await getAddress();
+  if (address) {
+    sendResponse({
+      id: request.id,
+      data: address,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
   const whitelisted = await isWhitelisted(request.origin);
   if (whitelisted) {
@@ -112,6 +137,72 @@ app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
   } else {
     sendResponse({
       error: APIError.Refused,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getNetworkId, async (request, sendResponse) => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  if (!loggedWallet) {
+    sendResponse({
+      id: request.id,
+      error: APIError.AccountNotSet,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      data: networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.signData, async (request, sendResponse) => {
+  try {
+    console.log(request)
+    verifyPayload(request.data.payload);
+    try {
+      await extractKeyHash(request.data.address);
+    } catch (e) {
+      console.log(e)
+      throw e
+    }
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
+    const response: Response = await focusOrCreatePopup(popupURL)
+      .then((tab) => Messaging.sendToPopupInternal(tab, request))
+      .then((response) => response);
+
+    if (response.data) {
+      sendResponse({
+        id: request.id,
+        data: response.data,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (response.error) {
+      sendResponse({
+        id: request.id,
+        error: response.error,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        error: APIError.InternalError,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
       target: TARGET,
       sender: SENDER.extension,
     });

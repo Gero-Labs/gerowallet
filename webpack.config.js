@@ -5,7 +5,6 @@ const { VueLoaderPlugin } = require('vue-loader')
 const { version } = require('./package.json')
 const { VuetifyLoaderPlugin } = require('vuetify-loader')
 const ESLintPlugin = require('eslint-webpack-plugin')
-const HtmlWebpackPlugin = require('html-webpack-plugin')
 
 module.exports = {
   context: __dirname + '/src',
@@ -142,11 +141,6 @@ module.exports = {
       emitWarning: true,
       emitError: true,
       formatter: undefined
-    }),
-    new HtmlWebpackPlugin({
-      filename: '../public/index.html',
-      template: '../public/index.html',
-      chunks: ['index/index']
     }),
     new webpack.ProvidePlugin({
       process: 'process/browser',

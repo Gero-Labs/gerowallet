@@ -25,7 +25,7 @@ export const signData = async (address, payload) => {
   return result['data'];
 };
 
-export const signDataCIP30 = async (address, payload) => {
+export const signDataCIP30 = async (address: string, payload) => {
   const result = await Messaging.sendToContent({
     method: METHOD.signData,
     data: { address, payload, CIP30: true },

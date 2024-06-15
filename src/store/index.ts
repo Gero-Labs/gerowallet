@@ -421,6 +421,13 @@ export const useStore = defineStore('store', {
           console.error('Failed to Fetch Connected Dapps:', error)
         }
       });
+    },
+    async disconnectDapp(id: number) {
+      if (!appWallet) {
+        return
+      }
+      const db = await appWallet.getDb()
+      db.table('connected_dapps').delete(id)
     }
   },
 });

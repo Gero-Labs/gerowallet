@@ -14,25 +14,24 @@
         hide-details
         class="mb-4"
       />
-      <v-card class="col-12 align-content-start no-shadow">
-        <v-tabs
-          color="white"
-          class="v-tabs-border-bottom"
-          background-color="transparent"
-        >
-          <v-tab
-            v-for="tab in tabs"
-            :key="tab.value"
-            @click="activeTab=tab.value"
-            :value="tab.value">{{ tab.label }}
-          </v-tab>
-        </v-tabs>
-
-        <ProfileTab v-if="activeTab === 'profile'" />
-        <PasswordTab v-if="activeTab === 'password'" />
-        <CollateralTab v-if="activeTab === 'collateral'" />
-        <ContactsTab v-if="activeTab === 'contacts'" />
-      </v-card>
+      <v-tabs
+        v-model="tab"
+        color="white"
+        class="v-tabs-border-bottom"
+        background-color="transparent"
+      >
+        <v-tab
+          v-for="tab in tabs"
+          :key="tab.value">{{ tab.label }}
+        </v-tab>
+      </v-tabs>
+      <v-tabs-items v-model="tab" class="transparent">
+        <ProfileTab />
+        <PasswordTab />
+        <CollateralTab />
+        <ContactsTab />
+        <ConnectedDappsTab />
+      </v-tabs-items>
     </v-card-text>
   </BaseDialog>
 </template>
@@ -42,10 +41,11 @@ import ContactsTab from '@/modules/dashboard/components/ContactsTab.vue';
 import PasswordTab from '@/modules/dashboard/components/PasswordTab.vue';
 import CollateralTab from '@/modules/dashboard/components/CollateralTab.vue';
 import ProfileTab from '@/modules/dashboard/components/ProfileTab.vue';
+import ConnectedDappsTab from '@/modules/dashboard/components/ConnectedDappsTab.vue';
 
 export default {
   name: 'SettingsDialog',
-  components: { BaseDialog, ContactsTab, PasswordTab, CollateralTab, ProfileTab },
+  components: { BaseDialog, ContactsTab, PasswordTab, CollateralTab, ProfileTab, ConnectedDappsTab },
   props: {
     isOpen: {
       type: Boolean,
@@ -54,13 +54,14 @@ export default {
   },
 
   data: () => ({
-    activeTab: 'profile',
     search: null,
+    tab: null,
     tabs: [
       { label: 'Profile', value: 'profile' },
       { label: 'Password', value: 'password' },
       { label: 'Collateral', value: 'collateral' },
       { label: 'Contacts', value: 'contacts' },
+      { label: 'Connected Dapps', value: 'connectedDapps' }
     ],
   }),
 };

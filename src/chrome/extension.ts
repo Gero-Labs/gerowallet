@@ -1,6 +1,16 @@
-import { APIError, SENDER, STORAGE, TARGET,POPUP_WINDOW } from './config';
+import { APIError, DataSignError, NETWORK_ID, STORAGE, TARGET,POPUP_WINDOW } from './config';
 // import { mnemonicToEntropy } from 'bip39';
-// import Loader from '../loader';
+import {
+  Address,
+  BaseAddress, Bip32PublicKey,
+  ByronAddress,
+  EnterpriseAddress,
+  PointerAddress, RewardAddress, StakeCredential,
+} from '@emurgo/cardano-serialization-lib-browser';
+import networks from '@/shared/utils/networks';
+import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
+// import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
+// import networks from '@/shared/utils/networks';
 // import { createAvatar } from '@dicebear/avatars';
 // import * as style from '@dicebear/avatars-bottts-sprites';
 // import { initTx } from './wallet';
@@ -27,6 +37,10 @@ import { APIError, SENDER, STORAGE, TARGET,POPUP_WINDOW } from './config';
 interface WhitelistedEntry {
   domain: string;
   id: number;
+}
+
+interface Network {
+  id: string;
 }
 
 export const getStorage = (key) =>
@@ -88,8 +102,6 @@ export const getWhitelisted = async (): Promise<WhitelistedEntry[]> => {
 
 export const isWhitelisted = async (_origin: string): Promise<boolean> => {
   const whitelisted: WhitelistedEntry[] = await getWhitelisted();
-  console.log(_origin);
-  console.log(whitelisted);
   let access = false;
   if (whitelisted.find(el => _origin.includes(el.domain))) access = true;
   return access;
@@ -414,15 +426,22 @@ export const setCurrency = (currency) =>
 //   );
 // };
 //
-// export const getAddress = async () => {
-//   await Loader.load();
-//   const currentAccount = await getCurrentAccount();
-//   const paymentAddr = Buffer.from(
-//     Loader.Cardano.Address.from_bech32(currentAccount.paymentAddr).to_bytes(),
-//     'hex'
-//   ).toString('hex');
-//   return paymentAddr;
-// };
+export const getAddress = async () => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+    .derive(ChainDerivations.EXTERNAL)
+    .derive(0)
+    .to_raw_key()
+  const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+    .derive(ChainDerivations.CHIMERIC_ACCOUNT)
+    .derive(STAKING_KEY_INDEX)
+    .to_raw_key();
+  return BaseAddress.new(
+    networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
+    StakeCredential.from_keyhash(pubKey.hash()),
+    StakeCredential.from_keyhash(stakeKey.hash()),
+  ).to_address().to_hex()
+};
 //
 // export const getRewardAddress = async () => {
 //   await Loader.load();
@@ -435,9 +454,12 @@ export const setCurrency = (currency) =>
 // };
 //
 // export const getCurrentAccountIndex = () => getStorage(STORAGE.currentAccount);
-//
-// export const getNetwork = () => getStorage(STORAGE.network);
-//
+
+export const getNetwork = async (): Promise<any> => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  return loggedWallet['network'].toLowerCase()
+}
+
 // export const setNetwork = async (network) => {
 //   const currentNetwork = await getNetwork();
 //   let id;
@@ -545,17 +567,18 @@ export async function focusOrCreatePopup(url: string): Promise<chrome.tabs.Tab> 
 
   if (existingWindow) {
     // Focus on the existing window
-    chrome.windows.update(existingWindow.id, {focused: true});
+    await chrome.windows.update(existingWindow.id, { focused: true });
+    return tabb;
   } else {
     // Create a new window with the specified URL
-    chrome.windows.create({
+    const window: chrome.windows.Window = await chrome.windows.create({
       url: url,
       type: 'popup',
       focused: true,
       ...POPUP_WINDOW,
     });
+    return window.tabs[0]
   }
-  return tabb;
 }
 
 // export const createPopup = async (popup: string, origin?: string): Promise<chrome.tabs.Tab> => {
@@ -688,70 +711,70 @@ export async function focusOrCreatePopup(url: string): Promise<chrome.tabs.Tab> 
 //   return false;
 // };
 //
-// const isValidAddressBytes = async (address) => {
-//   await Loader.load();
-//   const network = await getNetwork();
-//   try {
-//     const addr = Loader.Cardano.Address.from_bytes(address);
-//     if (
-//       (addr.network_id() === 1 && network.id === NETWORK_ID.mainnet) ||
-//       (addr.network_id() === 0 &&
-//         (network.id === NETWORK_ID.testnet ||
-//           network.id === NETWORK_ID.preview ||
-//           network.id === NETWORK_ID.preprod))
-//     )
-//       return true;
-//     return false;
-//   } catch (e) {}
-//   try {
-//     const addr = Loader.Cardano.ByronAddress.from_bytes(address);
-//     if (
-//       (addr.network_id() === 1 && network.id === NETWORK_ID.mainnet) ||
-//       (addr.network_id() === 0 &&
-//         (network.id === NETWORK_ID.testnet ||
-//           network.id === NETWORK_ID.preview ||
-//           network.id === NETWORK_ID.preprod))
-//     )
-//       return true;
-//     return false;
-//   } catch (e) {}
-//   return false;
-// };
+const isValidAddressBytes = async (address: Buffer) => {
+  console.log('isValidAddressBytes')
+  const network = await getNetwork();
+  try {
+    const addr: Address = Address.from_bytes(address);
+    return (addr.network_id() === 1 && network === NETWORK_ID.mainnet) ||
+      (addr.network_id() === 0 &&
+        (network === NETWORK_ID.testnet ||
+          network === NETWORK_ID.preview ||
+          network === NETWORK_ID.preprod));
+
+  } catch (e) {
+    console.log(e)
+  }
+  try {
+    const addr: ByronAddress = ByronAddress.from_bytes(address);
+    return (addr.network_id() === 1 && network === NETWORK_ID.mainnet) ||
+      (addr.network_id() === 0 &&
+        (network === NETWORK_ID.testnet ||
+          network=== NETWORK_ID.preview ||
+          network === NETWORK_ID.preprod));
+
+  } catch (e) {
+    console.log(e)
+  }
+  return false;
+};
 //
 // export const isValidEthAddress = function (address) {
 //   return isAddress(address);
 // };
 //
-// export const extractKeyHash = async (address) => {
-//   await Loader.load();
-//   if (!(await isValidAddressBytes(Buffer.from(address, 'hex'))))
-//     throw DataSignError.InvalidFormat;
-//   try {
-//     const addr = Loader.Cardano.BaseAddress.from_address(
-//       Loader.Cardano.Address.from_bytes(Buffer.from(address, 'hex'))
-//     );
-//     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
-//   } catch (e) {}
-//   try {
-//     const addr = Loader.Cardano.EnterpriseAddress.from_address(
-//       Loader.Cardano.Address.from_bytes(Buffer.from(address, 'hex'))
-//     );
-//     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
-//   } catch (e) {}
-//   try {
-//     const addr = Loader.Cardano.PointerAddress.from_address(
-//       Loader.Cardano.Address.from_bytes(Buffer.from(address, 'hex'))
-//     );
-//     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
-//   } catch (e) {}
-//   try {
-//     const addr = Loader.Cardano.RewardAddress.from_address(
-//       Loader.Cardano.Address.from_bytes(Buffer.from(address, 'hex'))
-//     );
-//     return addr.payment_cred().to_keyhash().to_bech32('stake_vkh');
-//   } catch (e) {}
-//   throw DataSignError.AddressNotPK;
-// };
+export const extractKeyHash = async (address: string) => {
+  console.log(address)
+  const uint8Array: Buffer = Buffer.from(address, 'hex')
+  if (!(await isValidAddressBytes(uint8Array)))
+    throw DataSignError.InvalidFormat;
+  const addressObject: Address = Address.from_bytes(uint8Array);
+  try {
+    const addr: BaseAddress = BaseAddress.from_address(addressObject);
+    return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
+  } catch (e) {
+    console.log(e)
+  }
+  try {
+    const addr: EnterpriseAddress = EnterpriseAddress.from_address(addressObject);
+    return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
+  } catch (e) {
+    console.log(e)
+  }
+  try {
+    const addr: PointerAddress = PointerAddress.from_address(addressObject);
+    return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
+  } catch (e) {
+    console.log(e)
+  }
+  try {
+    const addr: RewardAddress = RewardAddress.from_address(addressObject);
+    return addr.payment_cred().to_keyhash().to_bech32('stake_vkh');
+  } catch (e) {
+    console.log(e)
+  }
+  throw DataSignError.AddressNotPK;
+};
 //
 // export const extractKeyOrScriptHash = async (address) => {
 //   await Loader.load();
@@ -810,10 +833,10 @@ export async function focusOrCreatePopup(url: string): Promise<chrome.tabs.Tab> 
 //   }
 // };
 //
-// export const verifyPayload = (payload) => {
-//   if (Buffer.from(payload, 'hex').length <= 0)
-//     throw DataSignError.InvalidFormat;
-// };
+export const verifyPayload = (payload) => {
+  if (Buffer.from(payload, 'hex').length <= 0)
+    throw DataSignError.InvalidFormat;
+};
 //
 // export const verifyTx = async (tx) => {
 //   await Loader.load();
@@ -842,130 +865,7 @@ export async function focusOrCreatePopup(url: string): Promise<chrome.tabs.Tab> 
 //  * @returns
 //  */
 //
-// //deprecated soon
-// export const signData = async (address, payload, password, accountIndex) => {
-//   await Loader.load();
-//   const keyHash = await extractKeyHash(address);
-//   const prefix = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
-//   let { paymentKey, stakeKey } = await requestAccountKey(
-//     password,
-//     accountIndex
-//   );
-//   const accountKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
-//
-//   const publicKey = accountKey.to_public();
-//   if (keyHash !== publicKey.hash().to_bech32(prefix))
-//     throw DataSignError.ProofGeneration;
-//
-//   const protectedHeaders = Loader.Message.HeaderMap.new();
-//   protectedHeaders.set_algorithm_id(
-//     Loader.Message.Label.from_algorithm_id(Loader.Message.AlgorithmId.EdDSA)
-//   );
-//   protectedHeaders.set_key_id(publicKey.as_bytes());
-//   protectedHeaders.set_header(
-//     Loader.Message.Label.new_text('address'),
-//     Loader.Message.CBORValue.new_bytes(Buffer.from(address, 'hex'))
-//   );
-//   const protectedSerialized =
-//     Loader.Message.ProtectedHeaderMap.new(protectedHeaders);
-//   const unprotectedHeaders = Loader.Message.HeaderMap.new();
-//   const headers = Loader.Message.Headers.new(
-//     protectedSerialized,
-//     unprotectedHeaders
-//   );
-//   const builder = Loader.Message.COSESign1Builder.new(
-//     headers,
-//     Buffer.from(payload, 'hex'),
-//     false
-//   );
-//   const toSign = builder.make_data_to_sign().to_bytes();
-//
-//   const signedSigStruc = accountKey.sign(toSign).to_bytes();
-//   const coseSign1 = builder.build(signedSigStruc);
-//
-//   stakeKey.free();
-//   stakeKey = null;
-//   paymentKey.free();
-//   paymentKey = null;
-//
-//   return Buffer.from(coseSign1.to_bytes(), 'hex').toString('hex');
-// };
-//
-// export const signDataCIP30 = async (
-//   address,
-//   payload,
-//   password,
-//   accountIndex
-// ) => {
-//   await Loader.load();
-//   const keyHash = await extractKeyHash(address);
-//   const prefix = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
-//   let { paymentKey, stakeKey } = await requestAccountKey(
-//     password,
-//     accountIndex
-//   );
-//   const accountKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
-//
-//   const publicKey = accountKey.to_public();
-//   if (keyHash !== publicKey.hash().to_bech32(prefix))
-//     throw DataSignError.ProofGeneration;
-//   const protectedHeaders = Loader.Message.HeaderMap.new();
-//   protectedHeaders.set_algorithm_id(
-//     Loader.Message.Label.from_algorithm_id(Loader.Message.AlgorithmId.EdDSA)
-//   );
-//   // protectedHeaders.set_key_id(publicKey.as_bytes()); // Removed to adhere to CIP-30
-//   protectedHeaders.set_header(
-//     Loader.Message.Label.new_text('address'),
-//     Loader.Message.CBORValue.new_bytes(Buffer.from(address, 'hex'))
-//   );
-//   const protectedSerialized =
-//     Loader.Message.ProtectedHeaderMap.new(protectedHeaders);
-//   const unprotectedHeaders = Loader.Message.HeaderMap.new();
-//   const headers = Loader.Message.Headers.new(
-//     protectedSerialized,
-//     unprotectedHeaders
-//   );
-//   const builder = Loader.Message.COSESign1Builder.new(
-//     headers,
-//     Buffer.from(payload, 'hex'),
-//     false
-//   );
-//   const toSign = builder.make_data_to_sign().to_bytes();
-//
-//   const signedSigStruc = accountKey.sign(toSign).to_bytes();
-//   const coseSign1 = builder.build(signedSigStruc);
-//
-//   stakeKey.free();
-//   stakeKey = null;
-//   paymentKey.free();
-//   paymentKey = null;
-//
-//   const key = Loader.Message.COSEKey.new(
-//     Loader.Message.Label.from_key_type(Loader.Message.KeyType.OKP)
-//   );
-//   key.set_algorithm_id(
-//     Loader.Message.Label.from_algorithm_id(Loader.Message.AlgorithmId.EdDSA)
-//   );
-//   key.set_header(
-//     Loader.Message.Label.new_int(
-//       Loader.Message.Int.new_negative(Loader.Message.BigNum.from_str('1'))
-//     ),
-//     Loader.Message.CBORValue.new_int(
-//       Loader.Message.Int.new_i32(6) //Loader.Message.CurveType.Ed25519
-//     )
-//   ); // crv (-1) set to Ed25519 (6)
-//   key.set_header(
-//     Loader.Message.Label.new_int(
-//       Loader.Message.Int.new_negative(Loader.Message.BigNum.from_str('2'))
-//     ),
-//     Loader.Message.CBORValue.new_bytes(publicKey.as_bytes())
-//   ); // x (-2) set to public key
-//
-//   return {
-//     signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
-//     key: Buffer.from(key.to_bytes()).toString('hex'),
-//   };
-// };
+
 //
 // /**
 //  *

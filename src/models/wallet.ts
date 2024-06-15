@@ -3,31 +3,49 @@ import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import * as CryptoTS from 'crypto-ts';
 import cryptoRandomString from 'crypto-random-string';
-import * as serialization from '@emurgo/cardano-serialization-lib-browser';
-import { BaseAddress, Bip32PrivateKey, Bip32PublicKey, RewardAddress, PublicKey, StakeCredential } from '@emurgo/cardano-serialization-lib-browser';
-import {Api} from '@/api/api';
+import {
+  BaseAddress,
+  Bip32PrivateKey,
+  Bip32PublicKey,
+  RewardAddress,
+  PublicKey,
+  StakeCredential, encrypt_with_password, decrypt_with_password, PrivateKey,
+} from '@emurgo/cardano-serialization-lib-browser';
+import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
-import {Blockchain, ChainDerivations, STAKING_KEY_INDEX} from '@/models/types';
-import db from "@/db";
-import {chunkArray} from 'array-chunk-by-size';
+import { Blockchain, ChainDerivations, CoinTypes, ERROR, STAKING_KEY_INDEX, WalletTypePurpose } from '@/models/types';
+import db from '@/db';
+import { chunkArray } from 'array-chunk-by-size';
+import { extractKeyHash } from '@/chrome/extension';
+import { DataSignError } from '@/chrome/config';
+import {
+  AlgorithmId,
+  CBORValue,
+  HeaderMap,
+  Label,
+  ProtectedHeaderMap,
+  Headers,
+  COSESign1Builder, COSEKey, KeyType, Int, BigNum,
+} from '@emurgo/cardano-message-signing-browser';
+import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 
 export class Wallet {
   db: Dexie;
   api: Api;
   locked: Boolean = false;
 
-  id: any
-  name: any
-  icon: any
-  type: any
-  theme: any
-  order: any
-  chain: any
-  network: any
-  publicKey: string
+  id: any;
+  name: any;
+  icon: any;
+  type: any;
+  theme: any;
+  order: any;
+  chain: any;
+  network: any;
+  publicKey: string;
 
-  encryptedPrivateKey: any
-  passwordLastUpdate: Date
+  encryptedPrivateKey: any;
+  passwordLastUpdate: Date;
 
   constructor(id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network) {
     this.id = id;
@@ -53,7 +71,7 @@ export class Wallet {
 
   static resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
     const bip39entropy = bip39.mnemonicToEntropy(mnemonic);
-    return serialization.Bip32PrivateKey.from_bip39_entropy(Buffer.from(bip39entropy, 'hex'), Buffer.from(''));
+    return Bip32PrivateKey.from_bip39_entropy(Buffer.from(bip39entropy, 'hex'), Buffer.from(''));
   }
 
   static encryptPrivateKey(rootKey, password): string {
@@ -66,14 +84,48 @@ export class Wallet {
     const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
     const salt = cryptoRandomString({ length: 2 * 32 });
     const nonce = cryptoRandomString({ length: 2 * 12 });
-    return serialization.encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
+    return encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
   }
 
-  decryptWithPassword(password, encryptedKeyHex): Buffer {
+  verifySpendingPassword(password: string) {
+    try {
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  requestAccountKey(password: string, accountIndex: number): {
+    accountKey: Bip32PrivateKey,
+    paymentKey: PrivateKey,
+    stakeKey: PrivateKey
+  } {
+    let accountKey: Bip32PrivateKey;
+    try {
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      const buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      accountKey = Bip32PrivateKey.from_bytes(buffer)
+        .derive(WalletTypePurpose.CIP1852) // purpose
+        .derive(CoinTypes.CARDANO) // coin type;
+        .derive(HARDENED + accountIndex);
+    } catch (e) {
+      throw ERROR.wrongPassword;
+    }
+
+    return {
+      accountKey,
+      paymentKey: accountKey.derive(0).derive(0).to_raw_key(),
+      stakeKey: accountKey.derive(2).derive(0).to_raw_key(),
+    };
+  }
+
+  decryptWithPassword(password: string, privateKey): Buffer {
     const passwordHex = Buffer.from(password).toString('hex');
     let decryptedHex;
     try {
-      decryptedHex = serialization.decrypt_with_password(passwordHex, encryptedKeyHex);
+      decryptedHex = decrypt_with_password(passwordHex, privateKey);
     } catch (err) {
       throw new Error('Wrong Passphrase');
     }
@@ -102,12 +154,46 @@ export class Wallet {
     return BaseAddress.new(
       this.networkId(),
       StakeCredential.from_keyhash(this.pubKey(0).hash()),
-      StakeCredential.from_keyhash(this.stakeKey().hash())
+      StakeCredential.from_keyhash(this.stakeKey().hash()),
     );
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), StakeCredential.from_keyhash(this.stakeKey().hash()));
+  }
+
+  async signData(address: string, payload: string, password: string, accountIndex: number) {
+    const keyHash = await extractKeyHash(address);
+    const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
+    let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
+    const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
+    const publicKey = accountKey.to_public();
+    console.log('t')
+    if (keyHash !== publicKey.hash().to_bech32(prefix))
+      throw DataSignError.ProofGeneration;
+    const protectedHeaders = HeaderMap.new();
+    protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+    // protectedHeaders.set_key_id(publicKey.as_bytes()); // Removed to adhere to CIP-30
+    protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(address, 'hex')));
+    const protectedSerialized = ProtectedHeaderMap.new(protectedHeaders);
+    const unprotectedHeaders = HeaderMap.new();
+    const headers = Headers.new(protectedSerialized, unprotectedHeaders);
+    const builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
+    const toSign = builder.make_data_to_sign().to_bytes();
+    const signedSigStruc = accountKey.sign(toSign).to_bytes();
+    const coseSign1 = builder.build(signedSigStruc);
+    stakeKey.free();
+    stakeKey = null;
+    paymentKey.free();
+    paymentKey = null;
+    const key = COSEKey.new(Label.from_key_type(KeyType.OKP));
+    key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+    key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
+    key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(publicKey.as_bytes())); // x (-2) set to public key
+    return {
+      signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
+      key: Buffer.from(key.to_bytes()).toString('hex'),
+    };
   }
 
   async getLastSyncInfo() {
@@ -116,11 +202,11 @@ export class Wallet {
       .then(async db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        const rows = await syncTable.toArray()
+        const rows = await syncTable.toArray();
         if (rows.length > 0) {
-          return rows[0]
+          return rows[0];
         } else {
-          return null
+          return null;
         }
       })
       .catch(err => {
@@ -134,7 +220,7 @@ export class Wallet {
       .then(async db => {
         const accountTable = db.table('account');
         if (!accountTable) throw new Error('No Account table.');
-        return accountTable.where({walletId: this.id}).first();
+        return accountTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -147,7 +233,7 @@ export class Wallet {
       .then(db => {
         const syncTable = db.table('sync');
         if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.put({id: 1, ...tip});
+        return syncTable.put({ id: 1, ...tip });
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -158,7 +244,7 @@ export class Wallet {
     const resAccount = await this.getAccountInfo();
     const acc = {
       walletId: this.id,
-      ...accountInfo
+      ...accountInfo,
     };
     const accountInfoId = await this.db
       .open()
@@ -178,97 +264,97 @@ export class Wallet {
       });
     return {
       id: accountInfoId,
-      ...acc
+      ...acc,
     };
   }
 
   async sync(tip): Promise<void> {
     if (!this.locked) {
-      this.locked = true
-      console.log('sync')
-      const lastSyncInfo = await this.getLastSyncInfo()
+      this.locked = true;
+      console.log('sync');
+      const lastSyncInfo = await this.getLastSyncInfo();
       if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
-        const promises = []
-        promises.push(this.syncStakingPools())
+        const promises = [];
+        promises.push(this.syncStakingPools());
         promises.push(this.syncAccountInfo().then(accountInfo => {
           if (accountInfo) {
             if (Number(accountInfo.rewards_sum) > 0) {
-              promises.push(this.syncAccountRewards())
+              promises.push(this.syncAccountRewards());
             }
             if (Number(accountInfo.controlled_amount) > 0) {
               promises.push(this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0).then(txs => {
                 if (txs) {
-                  const units: Set<string> = new Set()
+                  const units: Set<string> = new Set();
                   txs.forEach(tx => {
                     tx.inputs.forEach(input => {
                       if (input.asset_list) {
                         input.asset_list.forEach(asset => {
                           units.add(asset.policy_id + asset.asset_name);
-                        })
+                        });
                       }
-                    })
+                    });
                     tx.outputs.forEach(output => {
                       if (output.asset_list) {
                         output.asset_list.forEach(asset => {
                           units.add(asset.policy_id + asset.asset_name);
-                        })
+                        });
                       }
-                    })
-                  })
-                  promises.push(this.syncAssets(Array.from(units)))
+                    });
+                  });
+                  promises.push(this.syncAssets(Array.from(units)));
                 }
-              }))
+              }));
             }
           }
-          return []
-        }))
-        await Promise.all(promises)
+          return [];
+        }));
+        await Promise.all(promises);
         await this.setLastSyncInfo(tip);
       }
 
-      this.locked = false
+      this.locked = false;
     }
   }
 
   async syncAssets(units?: string[]): Promise<void> {
-    const blockchainDB: Dexie = await this.getBlockchainDb()
-    const assetsSyncTable = blockchainDB.table('assets_sync')
-    const lastAssetsSyncArray = await assetsSyncTable.toArray()
+    const blockchainDB: Dexie = await this.getBlockchainDb();
+    const assetsSyncTable = blockchainDB.table('assets_sync');
+    const lastAssetsSyncArray = await assetsSyncTable.toArray();
     if (!lastAssetsSyncArray || lastAssetsSyncArray.length > 0) {
       if (lastAssetsSyncArray.length > 0) {
-        const lastAssetsSync = lastAssetsSyncArray[0]
+        const lastAssetsSync = lastAssetsSyncArray[0];
         const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
         if (hoursSinceEpoch % 4 === 0) {
-          await this.setAssets(blockchainDB, assetsSyncTable)
+          await this.setAssets(blockchainDB, assetsSyncTable);
         }
       } else {
-        await this.setAssets(blockchainDB, assetsSyncTable)
+        await this.setAssets(blockchainDB, assetsSyncTable);
       }
     }
   }
 
   async setAssets(blockchainDB: Dexie, assetsSyncTable) {
-    const assets = await blockchainDB.table('assets').toArray()
-    const promises = []
+    const assets = await blockchainDB.table('assets').toArray();
+    const promises = [];
     if (assets && assets.length > 0) {
       assets.forEach(asset => {
-        promises.push(this.getAssetInfo(asset.policy_id, asset.asset_name))
-      })
-      await Promise.all(promises)
+        promises.push(this.getAssetInfo(asset.policy_id, asset.asset_name));
+      });
+      await Promise.all(promises);
     }
-    assetsSyncTable.put({time: new Date().getTime()})
+    assetsSyncTable.put({ time: new Date().getTime() });
   }
 
   private async getAssetsInfo(units) {
     if (!units || units.length == 0) {
-      return
+      return;
     }
     try {
-      const blockchainDB: Dexie = await this.getBlockchainDb()
-      const assetsTable = blockchainDB.table('assets')
+      const blockchainDB: Dexie = await this.getBlockchainDb();
+      const assetsTable = blockchainDB.table('assets');
       const res = await this.api.getAssetsInfo(units);
       if (res) {
-        assetsTable.put(res)
+        assetsTable.put(res);
         return res;
       }
     } catch (e) {
@@ -278,11 +364,11 @@ export class Wallet {
 
   private async getAssetInfo(policyId: string, assetName: string) {
     try {
-      const blockchainDB: Dexie = await this.getBlockchainDb()
-      const assetsTable = blockchainDB.table('assets')
-      const res = await this.api.getAssetInfo(policyId+assetName);
+      const blockchainDB: Dexie = await this.getBlockchainDb();
+      const assetsTable = blockchainDB.table('assets');
+      const res = await this.api.getAssetInfo(policyId + assetName);
       if (res) {
-        assetsTable.put(res)
+        assetsTable.put(res);
         return res;
       }
     } catch (e) {
@@ -292,17 +378,17 @@ export class Wallet {
 
   async syncStakingPools(): Promise<void> {
     if ((this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME)) {
-      const blockchainDB: Dexie = await this.getBlockchainDb()
-      const poolSyncTable = blockchainDB.table('pools_sync')
-      const lastPoolSyncArray = await poolSyncTable.toArray()
+      const blockchainDB: Dexie = await this.getBlockchainDb();
+      const poolSyncTable = blockchainDB.table('pools_sync');
+      const lastPoolSyncArray = await poolSyncTable.toArray();
       if (lastPoolSyncArray.length == 0) {
-        await this.setStakingPools(blockchainDB, poolSyncTable)
+        await this.setStakingPools(blockchainDB, poolSyncTable);
       } else if (lastPoolSyncArray.length > 0) {
-        const lastPoolSync = lastPoolSyncArray[0]
+        const lastPoolSync = lastPoolSyncArray[0];
         if (lastPoolSync?.time) {
           const hoursSinceEpoch: number = Math.floor(lastPoolSync.time / (1000 * 60 * 60));
           if (hoursSinceEpoch % 4 === 0) {
-            await this.setStakingPools(blockchainDB, poolSyncTable)
+            await this.setStakingPools(blockchainDB, poolSyncTable);
           }
         }
       }
@@ -310,9 +396,9 @@ export class Wallet {
   }
 
   async setStakingPools(blockchainDB: Dexie, poolSyncTable) {
-    const pools = await this.getStakingPools()
-    blockchainDB.table('pools').bulkPut(pools)
-    poolSyncTable.put({time: new Date().getTime()})
+    const pools = await this.getStakingPools();
+    blockchainDB.table('pools').bulkPut(pools);
+    poolSyncTable.put({ time: new Date().getTime() });
   }
 
   private async getStakingPools() {
@@ -374,32 +460,32 @@ export class Wallet {
 
   async syncAccountTransactions(height: number): Promise<any> {
     try {
-      const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height)
+      const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height);
       if (res && Array.isArray(res)) {
-        const promises = []
-        const txHashes: string[] = res.map(tx => tx.tx_hash)
-        const smallerArrays = chunkArray({input: txHashes, bytesSize: 5 * 1024});
+        const promises = [];
+        const txHashes: string[] = res.map(tx => tx.tx_hash);
+        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 5 * 1024 });
         smallerArrays.forEach(smallerArray => {
-          promises.push(this.api.getTransactionsInfo(smallerArray))
-        })
-        const txs = (await Promise.all(promises)).flat()
-        await this.setAccountTransactions(txs)
-        return txs
+          promises.push(this.api.getTransactionsInfo(smallerArray));
+        });
+        const txs = (await Promise.all(promises)).flat();
+        await this.setAccountTransactions(txs);
+        return txs;
       }
     } catch (e) {
-      console.log(e)
+      console.log(e);
     }
   }
 
   async setAccountTransactions(txs): Promise<any> {
     return this.db.open()
       .then(db => {
-        const txsTable = db.table('transactions')
+        const txsTable = db.table('transactions');
         if (txsTable) {
           txs = txs.map(tx => {
-            return {id: tx.tx_hash, transaction: tx}
-          })
-          txsTable.bulkPut(txs)
+            return { id: tx.tx_hash, transaction: tx };
+          });
+          txsTable.bulkPut(txs);
         }
       }).catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -425,8 +511,6 @@ export class Wallet {
     }
   }
 
-  async setAddressTransactions() {}
-
   async getDb(): Promise<Dexie> {
     return this.db.open();
   }
@@ -451,7 +535,7 @@ export class Wallet {
         if (!addressesTable) throw new Error('No Addresses table.');
 
         res.forEach(address => {
-          addressesTable.put({address: address.address});
+          addressesTable.put({ address: address.address });
         });
         return res;
       })
@@ -461,11 +545,11 @@ export class Wallet {
   }
 
   public async getBlockchainDb(): Promise<Dexie> {
-    return db.checkAndCreateBlockchainDatabase(this.chain+"_"+this.network)
+    return db.checkAndCreateBlockchainDatabase(this.chain + '_' + this.network);
   }
 
   async scanUrl(url: string): Promise<any> {
-    return await this.api.scanUrl(url)
+    return await this.api.scanUrl(url);
   }
 
   async addConnectedDapp(domain: string) {
@@ -474,7 +558,7 @@ export class Wallet {
       .then(db => {
         const dappsTable = db.table('connected_dapps');
         if (!dappsTable) throw new Error('No Connected Dapps Table.');
-        return dappsTable.put({domain: domain});
+        return dappsTable.put({ domain: domain, time: new Date().getTime() });
       })
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
