@@ -1,6 +1,6 @@
 <template>
 
-  <v-container>
+  <v-tab-item>
     <v-row no-gutters>
       <v-col cols="9" class="pa-2">
           <p class="title">Set collateral to interact with DApps</p>
@@ -22,7 +22,7 @@
         <p class="subtitle">{{transaction}}</p>
       </v-col>
     </v-row>
-  </v-container>
+  </v-tab-item>
 
 </template>
 

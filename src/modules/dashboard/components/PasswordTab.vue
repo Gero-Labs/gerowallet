@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <v-tab-item>
     <h2>Spending Password</h2>
     <p class="subtitle my-0">Please enter your current password to change your password.</p>
 
@@ -72,7 +72,7 @@
         class="ml-2"><span class="capitalize">Update Password</span></v-btn>
     </div>
 
-  </div>
+  </v-tab-item>
 </template>
 
 <script>

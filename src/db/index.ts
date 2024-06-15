@@ -160,7 +160,7 @@ export default {
       addresses: 'address',
       rewards: 'epoch, amount, pool_id, type',
       transactions: 'id',
-      connected_dapps: '++id, domain',
+      connected_dapps: '++id, domain, time',
     });
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);

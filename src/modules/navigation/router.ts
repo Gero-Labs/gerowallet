@@ -9,7 +9,10 @@ import Assets from '@/modules/assets/views/Assets.vue';
 import Staking from "@/modules/staking/Staking.vue";
 import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
-import Vue from "vue";
+import DappSignData from '@/popup/modules/views/DappSignData.vue';
+import { Messaging } from '@/chrome/messaging';
+
+const controller = Messaging.createInternalController();
 
 const routes = [
   {
@@ -87,6 +90,15 @@ const routes = [
     path: '/dapp-connect',
     name: 'dapp-connect',
     component: DappConnect,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/dapp-sign',
+    name: 'dapp-sign',
+    component: DappSignData,
     meta: {
       layout: PopupLayout,
       requiresAuth: true,
