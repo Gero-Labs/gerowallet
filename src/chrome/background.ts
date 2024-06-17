@@ -2,10 +2,10 @@ import {
   focusOrCreatePopup,
   extractKeyHash,
   getAddress,
-  getNetwork,
   getStorage,
   isWhitelisted,
   verifyPayload,
+  verifyTx
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -50,7 +50,7 @@ app.add(METHOD.enable, async (request, sendResponse) => {
         });
       } else {
         const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(request.origin)}`);
-        const response: Response = await focusOrCreatePopup(popupURL)
+        const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
           .then(tab => Messaging.sendToPopupInternal(tab, request))
           .then(response => response);
         if (response.data === true) {
@@ -173,10 +173,49 @@ app.add(METHOD.signData, async (request, sendResponse) => {
       throw e
     }
     const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
-    const response: Response = await focusOrCreatePopup(popupURL)
+    const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
       .then((tab) => Messaging.sendToPopupInternal(tab, request))
       .then((response) => response);
 
+    if (response.data) {
+      sendResponse({
+        id: request.id,
+        data: response.data,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else if (response.error) {
+      sendResponse({
+        id: request.id,
+        error: response.error,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        error: APIError.InternalError,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.signTx, async (request, sendResponse) => {
+  try {
+    await verifyTx(request.data.tx);
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
+    const response: Response = await focusOrCreatePopup(popupURL, 788, 852)
+      .then((tab) => Messaging.sendToPopupInternal(tab, request))
+      .then((response) => response);
     if (response.data) {
       sendResponse({
         id: request.id,

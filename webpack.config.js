@@ -12,7 +12,6 @@ module.exports = {
     background: './chrome/background.ts',
     config: './chrome/config.ts',
     content: './chrome/content.ts',
-    eventRegistration: './chrome/eventRegistration.ts',
     extension: './chrome/extension.ts',
     inject: './chrome/inject.ts',
     messaging: './chrome/messaging.ts',

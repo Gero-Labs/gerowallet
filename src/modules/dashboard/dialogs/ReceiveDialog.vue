@@ -7,7 +7,7 @@
     <v-card-text style="height:600px; align-content: center;" class="justify-center text-center">
         <div style="font-size:24px; color: white; width: 335px; margin: auto;" class="text-center pb-3">Use this wallet address to receive assets / collectibles</div>
         <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
-        <span class="pt-3" style="width:554px; font-size: 16px; display: inline-block; font-weight: bold; color: white">{{options.data}}<copy-button small :value="walletAddress"></copy-button></span>
+        <span class="pt-3" style="width:554px; font-size: 16px; display: inline-block; font-weight: bold; color: white">{{options.data}}<copy-button small :value="baseAddress"></copy-button></span>
       </v-card-text>
     </BaseDialog>
 </template>
@@ -29,20 +29,17 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWallet']),
-    walletAddress() {
-      return this.store.getWallet.baseAddress().to_address().to_bech32()
-    },
+    ...mapState(useStore, ['wallets', 'loggedWallet', 'baseAddress']),
     stakeAddress() {
-      return this.store.getWallet.stakeAddress().to_address().to_bech32()
+      return useStore().getWallet.stakeAddress().to_address().to_bech32()
     },
     options() {
       return {
         width: 300,
         height: 300,
         type: 'svg',
-        data: this.walletAddress,
-        image: '/assets/img/logo128.png',
+        data: this.baseAddress,
+        image: '/assets/img/bkp/logo128.png',
         margin: 2,
         qrOptions: {
           typeNumber: 0,
@@ -99,7 +96,6 @@ export default {
     }
   },
   data: () => ({
-    store: useStore(),
     qrCode: undefined,
     extension: 'svg',
   }),
