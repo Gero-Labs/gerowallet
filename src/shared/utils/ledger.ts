@@ -4,7 +4,7 @@ import Ada from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { HARDENED, WalletTypePurpose, CoinTypes } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
+import { AuxiliaryData, Bip32PublicKey, TransactionBody } from '@emurgo/cardano-serialization-lib-browser';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -129,5 +129,9 @@ export default {
     if (!this._transport && this._ledger) {
       this._ledger = null;
     }
+  },
+  async txToLedger(txBody: TransactionBody, address: string, index: number = 0, txAuxiliaryData: AuxiliaryData, isDapp?: boolean, usedUtxos?: any[]) {
+
+    return undefined;
   },
 };

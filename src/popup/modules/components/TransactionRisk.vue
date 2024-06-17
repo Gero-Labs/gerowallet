@@ -89,7 +89,7 @@ export default {
   align-items: center;
   flex-direction: column;
   justify-content: center;
-  margin: 0 auto 24px;
+  margin: 0 auto 0;
   width: 192px;
 }
 #risk-title {

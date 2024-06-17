@@ -5,13 +5,14 @@ import {
   getCollateral,
   getNetworkId,
   getRewardAddresses,
+  getUsedAddresses,
   getUtxos,
   isEnabled,
   signData,
   signTx,
   submitTx,
 } from './webpage';
-import { Cardano } from '@/models/types';
+import { Cardano, Paginate } from '@/models/types';
 
 declare global {
   interface Window {
@@ -34,7 +35,7 @@ window.cardano = {
           getNetworkId: () => getNetworkId(),
           getRewardAddresses: () => getRewardAddresses(),
           getUnusedAddresses: () => [],
-          getUsedAddresses: () => getAddress(),
+          getUsedAddresses: (paginate: Paginate = undefined) => getUsedAddresses(paginate),
           getUtxos: (amount?: number, paginate?: boolean) => getUtxos(amount, paginate),
           signData: (address: string, payload: string) => signData(address, payload),
           signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),

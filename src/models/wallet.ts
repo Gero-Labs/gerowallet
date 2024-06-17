@@ -15,7 +15,14 @@ import {
   PrivateKey,
   Transaction,
   TransactionWitnessSet,
-  Vkeywitnesses, hash_transaction, make_vkey_witness,
+  Vkeywitnesses,
+  hash_transaction,
+  make_vkey_witness,
+  FixedTransaction,
+  Address,
+  EnterpriseAddress,
+  PointerAddress,
+  TransactionHash,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -24,7 +31,7 @@ import {
   ChainDerivations,
   CoinTypes,
   ERROR,
-  STAKING_KEY_INDEX,
+  STAKING_KEY_INDEX, WalletType,
   WalletTypePurpose,
 } from '@/models/types';
 import db from '@/db';
@@ -42,6 +49,10 @@ import {
 } from '@emurgo/cardano-message-signing-browser';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
+import ledger from '@/shared/utils/ledger';
+import trezor from '@/shared/utils/trezor';
+
+const blake2b = require('blake2b');
 
 export class Wallet {
   db: Dexie;
@@ -176,6 +187,56 @@ export class Wallet {
     return RewardAddress.new(this.networkId(), StakeCredential.from_keyhash(this.stakeKey().hash()));
   }
 
+  paymentKeyHash(address: string) {
+    const keyAddress = Address.from_bech32(address);
+    try {
+      const baseKeyAddress = BaseAddress.from_address(keyAddress)
+        .payment_cred()
+        .to_keyhash();
+      return baseKeyAddress.to_bytes();
+    } catch (e) {
+      // I want application to not crush, but don't care about the message
+    }
+    try {
+      const enterpriseKeyAddress = EnterpriseAddress.from_address(keyAddress)
+        .payment_cred()
+        .to_keyhash();
+      return enterpriseKeyAddress.to_bytes();
+    } catch (e) {
+      // I want application to not crush, but don't care about the message
+    }
+    try {
+      const pointerKeyAddress = PointerAddress.from_address(keyAddress)
+        .payment_cred()
+        .to_keyhash();
+      return pointerKeyAddress.to_bytes();
+    } catch (e) {
+      // I want application to not crush, but don't care about the message
+    }
+    try {
+      const rewardKeyAddress = RewardAddress.from_address(keyAddress)
+        .payment_cred()
+        .to_keyhash();
+      return rewardKeyAddress.to_bytes();
+    } catch (e) {
+      // I want application to not crush, but don't care about the message
+    }
+    return undefined;
+  }
+
+  stakeKeyHash(address) {
+    const keyAddress = Address.from_bech32(address);
+    try {
+      const baseKeyAddress = BaseAddress.from_address(keyAddress)
+        .stake_cred()
+        .to_keyhash();
+      return baseKeyAddress.to_bytes();
+    } catch (e) {
+      // I want application to not crush, but don't care about the message
+    }
+    return undefined;
+  }
+
   async signData(address: string, payload: string, password: string, accountIndex: number) {
     const keyHash = await extractKeyHash(address);
     const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
@@ -210,29 +271,118 @@ export class Wallet {
     };
   }
 
-  async signTx(tx, keyHashes, password: string, accountIndex: number, partialSign = false) {
-    let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
-    const paymentKeyHash = Buffer.from(paymentKey.to_public().hash().to_bytes()).toString('hex');
-    const stakeKeyHash = Buffer.from(stakeKey.to_public().hash().to_bytes()).toString('hex');
-    const rawTx = Transaction.from_bytes(Buffer.from(tx, 'hex'));
-    const txWitnessSet = TransactionWitnessSet.new();
+  async signTx(txCbor: string, partialSign = false, password: string, accountIndex: number, utxos, addresses: string[]) {
+    const rawTx = FixedTransaction.from_hex(txCbor);
     const vkeyWitnesses = Vkeywitnesses.new();
-    const txHash = hash_transaction(rawTx.body());
-    keyHashes.forEach((keyHash) => {
-      let signingKey;
-      if (keyHash === paymentKeyHash) signingKey = paymentKey;
-      else if (keyHash === stakeKeyHash) signingKey = stakeKey;
-      else if (!partialSign) throw TxSignError.ProofGeneration;
-      else return;
-      const vkey = make_vkey_witness(txHash, signingKey);
-      vkeyWitnesses.add(vkey);
-    });
-    stakeKey.free();
-    stakeKey = null;
-    paymentKey.free();
-    paymentKey = null;
-    txWitnessSet.set_vkeys(vkeyWitnesses);
-    return txWitnessSet;
+    const txBody = rawTx.body();
+    const deduped = [];
+    const keyHashes = [];
+
+    const txHashHex = blake2b(new Uint8Array(32).length).update(rawTx.raw_body()).digest('hex');
+
+    const changeAddress = this.baseAddress().to_address().to_bech32()
+    let paymentKeyHash = this.paymentKeyHash(changeAddress);
+    let paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
+
+    let stakeKeyHash = this.stakeKeyHash(changeAddress);
+    let stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
+
+    for (let i = 0; i < txBody.inputs().len(); i++) {
+      const input = txBody.inputs().get(i);
+      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
+      const inputTxIndex = input.index();
+      const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
+
+      if (utxo) {
+        paymentKeyHash = this.paymentKeyHash(utxo.payment_addr.bech32);
+        paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
+
+        stakeKeyHash = this.stakeKeyHash(utxo.payment_addr.bech32);
+        stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
+
+        if (!keyHashes.includes(paymentkeyHex)) {
+          keyHashes.push(paymentkeyHex);
+          deduped.push(utxo);
+        }
+      }
+    }
+
+    const paymentKeyHashes = addresses.map(address => this.paymentKeyHash(address))
+      .filter((hash) => !!hash)
+      .map((keyHash) => Buffer.from(keyHash).toString('hex'));
+
+    //get keyHashes from required signers
+    const requiredSigners = txBody.required_signers();
+    if (requiredSigners) {
+      for (let i = 0; i < requiredSigners.len(); i++) {
+        const requiredKeyHash = Buffer.from(requiredSigners.get(i).to_bytes()).toString('hex');
+        if (!keyHashes.includes(requiredKeyHash)) {
+          if (paymentKeyHashes.includes(requiredKeyHash)) {
+            keyHashes.push(requiredKeyHash);
+            deduped.push({ addressing: { type: 0, path: 0 } });
+          } else if (requiredKeyHash === stakeKeyHex) {
+            keyHashes.push(requiredKeyHash);
+            deduped.push({ addressing: { type: 2, path: 0 } });
+          }
+        }
+      }
+    }
+
+    if (this.type === WalletType.Trezor) {
+      const wit: TransactionWitnessSet = <TransactionWitnessSet>(
+        await trezor.txToTrezor(txBody, this.baseAddress().to_address().to_bech32(), 0, true, utxos)
+      );
+      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
+    } else if (this.type === WalletType.Ledger) {
+      const wit: TransactionWitnessSet = <TransactionWitnessSet>(
+        await ledger.txToLedger(txBody, this.baseAddress().to_address().to_bech32(), 0, null, true, utxos)
+      );
+      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
+    } else {
+      // const privateKey = await this.sendNewTransactionService.getPrivateKey(password);
+      // const decodedHash = await this.passwordCipher.decryptWithPassword(password, privateKey as string);
+
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)))
+
+      if (!decodedHash && partialSign === false) {
+        throw TxSignError.ProofGeneration;
+      }
+      const txHash = TransactionHash.from_bytes(Buffer.from(txHashHex, 'hex'));
+
+      deduped.forEach((utxo) => {
+        const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
+          .derive(WalletTypePurpose.CIP1852)
+          .derive(CoinTypes.CARDANO)
+          .derive(HARDENED + accountIndex) // TODO: move this logic on a separate variable (Account key)
+          .derive(utxo.addressing ? utxo.addressing.type : 0)
+          .derive(utxo.addressing ? utxo.addressing.path : 0)
+          .to_raw_key();
+        const vKeyWitness = make_vkey_witness(txHash, prvKey);
+        vkeyWitnesses.add(vKeyWitness);
+      });
+      if (
+        !keyHashes.includes(stakeKeyHash) &&
+        ((txBody.certs() && txBody.certs().len() > 0) ||
+          (txBody.withdrawals() && txBody.withdrawals().len() > 0))
+      ) {
+        const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
+          .derive(WalletTypePurpose.CIP1852)
+          .derive(CoinTypes.CARDANO)
+          .derive(HARDENED + accountIndex)
+          .derive(2)
+          .derive(0)
+          .to_raw_key();
+        const vKeyWitness = make_vkey_witness(txHash, prvKey);
+        vkeyWitnesses.add(vKeyWitness);
+      }
+      const witnesses = TransactionWitnessSet.new();
+      witnesses.set_vkeys(vkeyWitnesses);
+      if (!witnesses && partialSign === false) {
+        throw TxSignError.ProofGeneration;
+      }
+      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex'), };
+    }
   }
 
   // async signTxHW(tx, keyHashes, account, hw, partialSign = false)  {
