@@ -1,4 +1,4 @@
-import { APIError, DataSignError, NETWORK_ID, STORAGE, TARGET,POPUP_WINDOW } from './config';
+import { APIError, DataSignError, NETWORK_ID, STORAGE, TARGET, POPUP_WINDOW } from './config';
 // import { mnemonicToEntropy } from 'bip39';
 import {
   Address,
@@ -8,7 +8,7 @@ import {
   PointerAddress, RewardAddress, StakeCredential, Transaction,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
-import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
+import { ChainDerivations, Paginate, STAKING_KEY_INDEX } from '@/models/types';
 // import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
 // import networks from '@/shared/utils/networks';
 // import { createAvatar } from '@dicebear/avatars';
@@ -44,18 +44,18 @@ interface Network {
 }
 
 export const getStorage = (key) =>
-  new Promise((res, rej) =>
+  new Promise<any>((res, rej) =>
     chrome.storage.local.get(key, (result) => {
       if (chrome.runtime.lastError) rej(undefined);
       res(key ? result[key] : result);
-    })
+    }),
   );
 export const setStorage = (item) =>
   new Promise((res, rej) =>
     chrome.storage.local.set(item, () => {
       if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
       res(true);
-    })
+    }),
   );
 
 export const removeStorage = (item) =>
@@ -63,7 +63,7 @@ export const removeStorage = (item) =>
     chrome.storage.local.remove(item, () => {
       if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
       res(true);
-    })
+    }),
   );
 
 // export const encryptWithPassword = async (password, rootKeyBytes) => {
@@ -431,7 +431,7 @@ export const getAddress = async () => {
   const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
     .derive(ChainDerivations.EXTERNAL)
     .derive(0)
-    .to_raw_key()
+    .to_raw_key();
   const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
     .derive(ChainDerivations.CHIMERIC_ACCOUNT)
     .derive(STAKING_KEY_INDEX)
@@ -440,24 +440,43 @@ export const getAddress = async () => {
     networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
     StakeCredential.from_keyhash(pubKey.hash()),
     StakeCredential.from_keyhash(stakeKey.hash()),
-  ).to_address().to_hex()
+  ).to_address().to_hex();
 };
-//
-// export const getRewardAddress = async () => {
-//   await Loader.load();
-//   const currentAccount = await getCurrentAccount();
-//   const rewardAddr = Buffer.from(
-//     Loader.Cardano.Address.from_bech32(currentAccount.rewardAddr).to_bytes(),
-//     'hex'
-//   ).toString('hex');
-//   return rewardAddr;
-// };
-//
-// export const getCurrentAccountIndex = () => getStorage(STORAGE.currentAccount);
+
+export const getRewardAddresses = async () => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+    .derive(ChainDerivations.CHIMERIC_ACCOUNT)
+    .derive(STAKING_KEY_INDEX)
+    .to_raw_key();
+  const networkId = networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network'])
+  return [RewardAddress.new(networkId, StakeCredential.from_keyhash(stakeKey.hash())).to_address().to_hex()]
+};
 
 export const getNetwork = async (): Promise<any> => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  return loggedWallet['network'].toLowerCase()
+  return loggedWallet['network'].toLowerCase();
+};
+
+export const getUsedAddresses = async (paginate?: Paginate): Promise<any> => {
+  let addresses: string[] = await getStorage(STORAGE.addresses);
+  if (Array.isArray(addresses)) {
+    addresses = addresses.map(address => Address.from_bech32(address).to_hex())
+    return paginateArray(addresses, paginate);
+  }
+  return []
+};
+
+function paginateArray(array: any[], paginate?: Paginate): any[] {
+  let page = 0;
+  let limit = array.length;
+  if (paginate) {
+    page = paginate.page;
+    limit = paginate.limit;
+  }
+  const start = page * limit;
+  const end = start + limit;
+  return array.slice(start, end);
 }
 
 // export const setNetwork = async (network) => {
@@ -548,16 +567,16 @@ export const getNetwork = async (): Promise<any> => {
 //
 
 export async function focusOrCreatePopup(url: string, width: number, height: number): Promise<chrome.tabs.Tab> {
-  const windows = await chrome.windows.getAll({populate: true});
+  const windows = await chrome.windows.getAll({ populate: true });
   let existingWindow = null;
-  let tabb: chrome.tabs.Tab
+  let tabb: chrome.tabs.Tab;
   // Iterate through each window and its tabs to find the URL
   for (const window of windows) {
     if (window.type === 'popup') {
       for (const tab of window.tabs) {
         if (tab.url === url) {
           existingWindow = window;
-          tabb = tab
+          tabb = tab;
           break;
         }
       }
@@ -577,9 +596,9 @@ export async function focusOrCreatePopup(url: string, width: number, height: num
       focused: true,
       ...POPUP_WINDOW,
       width: width,
-      height: height
+      height: height,
     });
-    return window.tabs[0]
+    return window.tabs[0];
   }
 }
 
@@ -724,18 +743,18 @@ const isValidAddressBytes = async (address: Buffer) => {
           network === NETWORK_ID.preprod));
 
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   try {
     const addr: ByronAddress = ByronAddress.from_bytes(address);
     return (addr.network_id() === 1 && network === NETWORK_ID.mainnet) ||
       (addr.network_id() === 0 &&
         (network === NETWORK_ID.testnet ||
-          network=== NETWORK_ID.preview ||
+          network === NETWORK_ID.preview ||
           network === NETWORK_ID.preprod));
 
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   return false;
 };
@@ -745,8 +764,8 @@ const isValidAddressBytes = async (address: Buffer) => {
 // };
 //
 export const extractKeyHash = async (address: string) => {
-  console.log(address)
-  const uint8Array: Buffer = Buffer.from(address, 'hex')
+  console.log(address);
+  const uint8Array: Buffer = Buffer.from(address, 'hex');
   if (!(await isValidAddressBytes(uint8Array)))
     throw DataSignError.InvalidFormat;
   const addressObject: Address = Address.from_bytes(uint8Array);
@@ -754,25 +773,25 @@ export const extractKeyHash = async (address: string) => {
     const addr: BaseAddress = BaseAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   try {
     const addr: EnterpriseAddress = EnterpriseAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   try {
     const addr: PointerAddress = PointerAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   try {
     const addr: RewardAddress = RewardAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('stake_vkh');
   } catch (e) {
-    console.log(e)
+    console.log(e);
   }
   throw DataSignError.AddressNotPK;
 };

@@ -5,7 +5,9 @@ import {
   getStorage,
   isWhitelisted,
   verifyPayload,
-  verifyTx
+  verifyTx,
+  getUsedAddresses,
+  getRewardAddresses
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -162,6 +164,26 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
   }
 });
 
+app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
+  const addresses = await getRewardAddresses();
+  sendResponse({
+    id: request.id,
+    data: addresses,
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
+  const addresses = await getUsedAddresses(request?.data?.paginate);
+  sendResponse({
+    id: request.id,
+    data: addresses,
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
 app.add(METHOD.signData, async (request, sendResponse) => {
   try {
     console.log(request)
@@ -213,7 +235,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   try {
     await verifyTx(request.data.tx);
     const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
-    const response: Response = await focusOrCreatePopup(popupURL, 788, 852)
+    const response: Response = await focusOrCreatePopup(popupURL, 470, 852)
       .then((tab) => Messaging.sendToPopupInternal(tab, request))
       .then((response) => response);
     if (response.data) {

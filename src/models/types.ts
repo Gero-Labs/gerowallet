@@ -109,6 +109,10 @@ export type DataSignature = {
   signature: string;
   key: string;
 };
+export type Paginate = {
+  page: number,
+  limit: number,
+};
 export type WalletInstance = {
   experimental: ExperimentalFeatures;
   getBalance(): Promise<string>;
@@ -116,7 +120,7 @@ export type WalletInstance = {
   getNetworkId(): Promise<number>;
   getRewardAddresses(): Promise<string[]>;
   getUnusedAddresses(): Promise<string[]>;
-  getUsedAddresses(): Promise<string[]>;
+  getUsedAddresses(paginate: Paginate | undefined): Promise<string[]>;
   getUtxos(amount: string | undefined): Promise<string[] | undefined>;
   signData(address: string, payload: string): Promise<DataSignature>;
   signTx(tx: string, partialSign: boolean): Promise<string>;

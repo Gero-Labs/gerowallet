@@ -17,7 +17,7 @@ import { STORAGE } from '@/chrome/config';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'pools', 'assets', 'baseAddress', 'utxos']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'pools', 'assets', 'baseAddress', 'utxos', 'addresses']},
   state: () => ({
     loggedWallet: undefined,
     baseAddress: undefined,
@@ -34,7 +34,8 @@ export const useStore = defineStore('store', {
     accountInfo: undefined,
     latestTip: undefined,
     stakingProView: false,
-    utxos: undefined
+    utxos: undefined,
+    addresses: undefined
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -246,10 +247,33 @@ export const useStore = defineStore('store', {
         }
       }
     },
-    setUtxos(transactions) {
+    async setAddresses(addresses: string[]) {
+      this.addresses = addresses
+      if (chrome?.storage) {
+        if (addresses) {
+          await chrome.storage.local.set({ [STORAGE.addresses]: addresses });
+        } else {
+          await chrome.storage.local.remove(STORAGE.addresses);
+        }
+      }
+    },
+    async setUtxos(utxos) {
+      this.utxos = utxos
+      if (chrome?.storage) {
+        if (utxos) {
+          await chrome.storage.local.set({ [STORAGE.utxos]: utxos });
+        } else {
+          await chrome.storage.local.remove(STORAGE.utxos);
+        }
+      }
+    },
+    async setUtxosAndAddresses(transactions) {
       const utxos = [];
       const outputs = [];
       const inputSet = new Set();
+      const addresses: Set<string> = new Set();
+      const stakeAddress = appWallet.stakeAddress().to_address().to_bech32()
+      console.log('setUtxosAndAddresses')
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -260,6 +284,9 @@ export const useStore = defineStore('store', {
           if (tx.inputs) {
             tx.inputs.forEach(input => {
               inputSet.add(`${input.tx_hash}-${input.tx_index}`);
+              if (input.stake_addr && input.stake_addr === stakeAddress) {
+                addresses.add(input.payment_addr.bech32)
+              }
             });
           }
         });
@@ -269,6 +296,9 @@ export const useStore = defineStore('store', {
         outputs.forEach(output => {
           if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && walletAddress === output.stake_addr) {
             utxos.push(output);
+          }
+          if (output.stake_addr && output.stake_addr === stakeAddress) {
+            addresses.add(output.payment_addr.bech32)
           }
         });
       }
@@ -295,7 +325,8 @@ export const useStore = defineStore('store', {
       //     }
       //   })
       // }
-      this.utxos = utxos;
+      await this.setAddresses(Array.from(addresses))
+        .then(() => this.setUtxos(utxos))
     },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
@@ -307,7 +338,7 @@ export const useStore = defineStore('store', {
       if (!wallet) {
         return null;
       }
-      this.setLoggedWallet(wallet);
+      await this.setLoggedWallet(wallet);
       try {
         this.provider = await db.getProvider(wallet.chain, wallet.network);
       } catch (err) {
@@ -371,7 +402,7 @@ export const useStore = defineStore('store', {
       this.stakingProView = isPro
     },
     async loadSync() {
-      if (!this.getWallet) {
+      if (!appWallet) {
         return
       }
       const db = await appWallet.getDb()
@@ -385,7 +416,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadAccountInfo() {
-      if (!this.getWallet) {
+      if (!appWallet) {
         return
       }
       const db = await appWallet.getDb()
@@ -399,7 +430,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadTransactions() {
-      if (!this.getWallet) {
+      if (!appWallet) {
         return
       }
       const db: Dexie = await appWallet.getDb()
@@ -408,7 +439,7 @@ export const useStore = defineStore('store', {
           const newT = newTransactions.map(tx => tx.transaction)
           if (newT !== this.transactions) {
             this.transactions = newT
-            this.setUtxos(newT)
+            this.setUtxosAndAddresses(newT)
           }
 
           console.log('newTransactions', newT)
@@ -419,7 +450,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadAssets() {
-      if (!this.getWallet) {
+      if (!appWallet) {
         return
       }
       const db: Dexie = await appWallet.getBlockchainDb()
@@ -433,7 +464,7 @@ export const useStore = defineStore('store', {
       });
     },
     async loadPools() {
-      if (!this.getWallet) {
+      if (!appWallet) {
         return
       }
       const db: Dexie = await appWallet.getBlockchainDb()
