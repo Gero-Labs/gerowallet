@@ -91,6 +91,48 @@ const ERROR = {
   submit: 'submit',
 };
 
+export type Cardano = {
+  [key: string]: {
+    name: string;
+    icon: string;
+    apiVersion: string;
+    enable: () => Promise<WalletInstance>;
+    isEnabled: () => Promise<boolean>;
+    supportedExtensions: Extension[];
+  };
+};
+export type TransactionSignatureRequest = {
+  cbor: string;
+  partialSign: boolean;
+};
+export type DataSignature = {
+  signature: string;
+  key: string;
+};
+export type WalletInstance = {
+  experimental: ExperimentalFeatures;
+  getBalance(): Promise<string>;
+  getChangeAddress(): Promise<string>;
+  getNetworkId(): Promise<number>;
+  getRewardAddresses(): Promise<string[]>;
+  getUnusedAddresses(): Promise<string[]>;
+  getUsedAddresses(): Promise<string[]>;
+  getUtxos(amount: string | undefined): Promise<string[] | undefined>;
+  signData(address: string, payload: string): Promise<DataSignature>;
+  signTx(tx: string, partialSign: boolean): Promise<string>;
+  signTxs?(txs: TransactionSignatureRequest[]): Promise<string[]>;
+  signTxs?(txs: string[], partialSign: boolean): Promise<string[]>;
+  submitTx(tx: string): Promise<string>;
+};
+export type ExperimentalFeatures = {
+  getCollateral(): Promise<string[] | undefined>;
+  signTxs?(txs: TransactionSignatureRequest[]): Promise<string[]>;
+  signTxs?(txs: string[], partialSign: boolean): Promise<string[]>;
+};
+export type Extension = {
+  cip: number
+}
+
 export {
   HARDENED,
   CoreAddressTypes,

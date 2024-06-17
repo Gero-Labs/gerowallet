@@ -29,6 +29,16 @@
     height: 5px;
   }
 
+  .geroButton {
+    text-transform: capitalize;
+    background: linear-gradient(45deg, #00c7f3, #00ffd1);
+    color: black!important;
+    &:disabled {
+      filter: brightness(0.5);
+      color: black!important;
+    }
+  }
+
   /* Track */
   ::-webkit-scrollbar-track {
     background: #121212;

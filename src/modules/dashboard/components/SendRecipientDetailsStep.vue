@@ -25,7 +25,7 @@
       class="continue-button"
       @click="$emit('next')"
       :disabled="!sendData.recipientAddress"
-      >Continue <v-icon>mdi-arrow-right</v-icon></v-btn
+      >Continue <v-icon style="color: black!important;">mdi-arrow-right</v-icon></v-btn
     >
   </div>
 </template>
@@ -86,6 +86,7 @@ export default {
 
     &:disabled {
       opacity: 0.5;
+      color: black!important;
     }
 
   }

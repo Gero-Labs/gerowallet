@@ -1,21 +1,21 @@
 <template>
   <v-card outlined class="pa-4 d-flex flex-column fill-height transparent">
     <div style="width: 52px; margin: auto">
-      <v-img contain alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/svg/gero-logo.svg')" class="pb-4"></v-img>
-      <v-img contain alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"></v-img>
+      <img alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/svg/gero-logo.svg')"/>
+      <img alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"/>
     </div>
-    <v-card-title class="justify-center pb-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
+    <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;">
       <span style="color: #ccc">Website:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
-          <v-img :src="favicon" contain></v-img>
+          <img :src="favicon" alt="Dapp Website favicon" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
                              width="3"></v-progress-circular>
         <v-avatar v-else tile size="16" class="ml-1">
-          <v-img :src="websiteRiskIcon" contain></v-img>
+          <img :src="websiteRiskIcon" alt="Website Risk Icon" />
         </v-avatar>
       </div>
       <div v-else>
@@ -32,7 +32,7 @@
   </v-card>
 </template>
 <script>
-import { DappRisk } from '@/models/dapp-statuses';
+import { DappRisk } from '@/models/tx-scan';
 import Select from '@/shared/components/Select.vue';
 import { useStore } from '@/store';
 import { mapState } from 'pinia';

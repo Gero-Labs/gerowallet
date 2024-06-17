@@ -111,10 +111,13 @@ export default {
   computed: {
     ...mapState(useStore, ['loggedWallet']),
     isBuyDisabled() {
-      return (
-        this.loggedWallet.network !== Network.MAINNET ||
-        this.loggedWallet.chain !== Blockchain.CARDANO
-      );
+      if (this.loggedWallet) {
+        return (
+          this.loggedWallet.network !== Network.MAINNET ||
+          this.loggedWallet.chain !== Blockchain.CARDANO
+        );
+      }
+      return null
     },
   },
   methods: {

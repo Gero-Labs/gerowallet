@@ -33,7 +33,7 @@
             </v-btn>
           </v-col>
           <v-col cols="6">
-            <v-btn block style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black" :disabled="!consent" @click="confirm">
+            <v-btn block class="geroButton" style="color: black!important;" :disabled="!consent" @click="confirm">
               Confirm
             </v-btn>
           </v-col>

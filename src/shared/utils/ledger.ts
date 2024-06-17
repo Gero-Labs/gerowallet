@@ -1,5 +1,3 @@
-/// <reference types="w3c-web-usb" />
-
 import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import BluetoothTransport from '@ledgerhq/hw-transport-web-ble';
 import Ada from '@cardano-foundation/ledgerjs-hw-app-cardano';

@@ -11,6 +11,7 @@ import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 import DappSignData from '@/popup/modules/views/DappSignData.vue';
 import { Messaging } from '@/chrome/messaging';
+import SignTx from '@/popup/modules/views/SignTx.vue';
 
 const controller = Messaging.createInternalController();
 
@@ -99,6 +100,15 @@ const routes = [
     path: '/dapp-sign',
     name: 'dapp-sign',
     component: DappSignData,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/sign-tx',
+    name: 'sign-tx',
+    component: SignTx,
     meta: {
       layout: PopupLayout,
       requiresAuth: true,

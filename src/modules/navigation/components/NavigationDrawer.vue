@@ -171,8 +171,8 @@
           </v-list-item-avatar>
           <v-list-item-content class="py-0" style="align-self: initial">
             <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">{{ account.name }}</v-list-item-title>
-            <v-list-item-subtitle class="mb-0" style="font-size: 10px">{{ account.chain }}</v-list-item-subtitle>
-            <v-list-item-subtitle style="font-size: 8px">{{account.network }}</v-list-item-subtitle>
+            <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">{{ account.chain }}</v-list-item-subtitle>
+            <v-list-item-subtitle style="font-size: 8px" v-if="account">{{account.network }}</v-list-item-subtitle>
           </v-list-item-content>
           <v-list-item-action style="margin: auto">
             <v-btn icon @click="submitLogout">

@@ -1,7 +1,8 @@
 import { METHOD } from './config';
 import { Messaging } from './messaging';
+import { DataSignature } from '@/models/types';
 
-export const getBalance = async () => {
+export const getBalance = async (): Promise<string> => {
   const result = await Messaging.sendToContent({ method: METHOD.getBalance,data: {} });
   return result['data'];
 };
@@ -11,13 +12,12 @@ export const enable = async () => {
   return result['data'];
 };
 
-export const isEnabled = async () => {
+export const isEnabled = async (): Promise<boolean> => {
   const result = await Messaging.sendToContent({ method: METHOD.isEnabled,data: {} });
   return result['data'];
 };
 
-//deprecated soon
-export const signData = async (address, payload) => {
+export const signData = async (address: string, payload: string): Promise<DataSignature> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signData,
     data: { address, payload },
@@ -25,15 +25,7 @@ export const signData = async (address, payload) => {
   return result['data'];
 };
 
-export const signDataCIP30 = async (address: string, payload) => {
-  const result = await Messaging.sendToContent({
-    method: METHOD.signData,
-    data: { address, payload, CIP30: true },
-  });
-  return result['data'];
-};
-
-export const signTx = async (tx, partialSign = false) => {
+export const signTx = async (tx: string, partialSign: boolean = false): Promise<string> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signTx,
     data: { tx, partialSign },
@@ -41,20 +33,20 @@ export const signTx = async (tx, partialSign = false) => {
   return result['data'];
 };
 
-export const getAddress = async () => {
+export const getAddress = async (): Promise<string[]> => {
   const result = await Messaging.sendToContent({
     method: METHOD.getAddress,
     data: {}
   });
-  return result['data'];
+  return [result['data']];
 };
 
-export const getRewardAddress = async () => {
+export const getRewardAddresses = async (): Promise<string[]> => {
   const result = await Messaging.sendToContent({
     method: METHOD.getRewardAddress,
     data: {}
   });
-  return result['data'];
+  return [result['data']];
 };
 
 export const getNetworkId = async () => {
@@ -88,5 +80,3 @@ export const submitTx = async (tx) => {
   });
   return result['data'];
 };
-
-export { on, off } from './eventRegistration';
