@@ -178,9 +178,9 @@ export default {
         const db: Dexie = new Dexie(dbName);
         db.version(1).stores({
           pools: 'pool_id_bech32',
-          pools_sync: 'time',
-          assets: 'fingerprint, asset_name, policy_id',
-          assets_sync: 'time'
+          pools_sync: '++id, time',
+          assets: 'asset, fingerprint, asset_name, policy_id',
+          assets_sync: '++id, time'
         });
         return await db.open();
       } else {

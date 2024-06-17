@@ -38,7 +38,7 @@ export default {
   resolveNetwork(chain: string, network: string) {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
   },
-  resolveNetworkId(chain: string, network: string) {
+  resolveNetworkId(chain: string, network: string): number {
     return this.resolveNetwork(chain, network).networkId;
   },
 };

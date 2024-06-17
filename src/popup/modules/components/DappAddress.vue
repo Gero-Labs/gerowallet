@@ -1,0 +1,100 @@
+<template>
+  <v-card flat id="dapp-receiver-wrap" :class="{
+      unknown: DappRisk[risk] === DappRisk.unknown,
+      suspicious: DappRisk[risk] === DappRisk.suspicious,
+      blacklist: DappRisk[risk] === DappRisk.blacklist,
+      whitelist: DappRisk[risk] === DappRisk.whitelist,
+    }">
+    <v-card-title id="dapp-receiver-label" class="pa-0">
+      To address
+    </v-card-title>
+    <v-card-subtitle id="dapp-receiver-address" class="pa-0 pt-5" style="display: flex; flex-direction: row;">
+      <div style="width: 18px; height: 18px" id="dapp-receiver-check">
+        <img alt="Trusted Address" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
+        <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>
+      </div>
+      {{ address }}
+    </v-card-subtitle>
+  </v-card>
+</template>
+<script>
+import { DappRisk } from '@/models/tx-scan';
+
+export default {
+  name: 'DappAddress',
+  props: {
+    address: {
+      type: String,
+    },
+    risk: {
+      type: String,
+    },
+  },
+  computed: {
+    DappRisk() {
+      return DappRisk
+    },
+    riskIcon() {
+      switch (DappRisk[this.risk]) {
+        case DappRisk.whitelist:
+          return require('@/assets/img/cardano-shield/dapp-safe.png');
+        case DappRisk.blacklist:
+          return require('@/assets/img/cardano-shield/dapp-phishing.png');
+        case DappRisk.suspicious:
+          return require('@/assets/img/cardano-shield/dapp-suspicious.png');
+        case DappRisk.timeout:
+          return require('@/assets/img/cardano-shield/dapp-timeout.png');
+        case DappRisk.unknown:
+        default:
+          return require('@/assets/img/cardano-shield/dapp-unknown.png');
+      }
+    },
+  },
+  data: () => ({
+    loading: true,
+  }),
+}
+</script>
+<style scoped>
+#dapp-receiver-wrap {
+  padding: 8px 10px;
+  background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);
+}
+#dapp-receiver-header {
+  display: flex;
+  margin-bottom: 6px;
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}
+#dapp-receiver-label {
+  color: white;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+#dapp-receiver-details {
+  display: flex;
+  flex-direction: row;
+}
+#dapp-receiver-check {
+  margin: 2px 6px 2px 0;
+}
+#dapp-receiver-address {
+  color: white;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 12px;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+#dapp-receiver-wrap.suspicious {
+  background: linear-gradient(269.92deg, #552900 1.73%, #915a28 97.85%);
+}
+#dapp-receiver-wrap.blacklist {
+  background: linear-gradient(269.92deg, #250303 1.73%, #5d0101 97.85%);
+}
+#dapp-receiver-wrap.whitelist {
+  background: linear-gradient(91.2deg, #00615b 40.76%, #00221c 103.06%);
+}
+</style>

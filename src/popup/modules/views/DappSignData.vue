@@ -44,7 +44,8 @@
             </v-col>
             <v-col cols="6">
               <v-btn block
-                     style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
+                     class="geroButton"
+                     style="color: black!important;"
                      @click="confirm" :disabled="!valid">
                 Sign & Confirm
               </v-btn>
@@ -68,7 +69,7 @@ export default {
   components: { PopupHeader },
   methods: {
     async decline() {
-      await this.controller.returnData({ data: {}, error: DataSignError.UserDeclined })
+      await this.controller.returnData({ data: undefined, error: DataSignError.UserDeclined })
       window.close();
     },
     async confirm() {
@@ -77,11 +78,11 @@ export default {
         if (wallet.verifySpendingPassword(this.spendingPassword)) {
           try {
             const res = await wallet.signData(this.request.data.address, this.request.data.payload, this.spendingPassword, 0)
-            await this.controller.returnData({ data: res, error: {} })
+            await this.controller.returnData({ data: res, error: undefined })
             console.log(res)
           } catch (e) {
             console.log(e)
-            await this.controller.returnData({ data: {}, error: e })
+            await this.controller.returnData({ data: undefined, error: e })
           }
           window.close();
         } else {

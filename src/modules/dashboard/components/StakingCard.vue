@@ -10,7 +10,7 @@
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Total ADA:</span>
-            <h2 style="color: white">{{ account.controlled_amount | toAda(false, 2, loggedWallet.network !== Network.MAINNET) }}</h2>
+            <h2 style="color: white" v-if="loggedWallet">{{ account.controlled_amount | toAda(false, 2, loggedWallet.network !== Network.MAINNET) }}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Rewards</span>

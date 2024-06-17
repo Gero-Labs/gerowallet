@@ -9,15 +9,28 @@ import {
   Bip32PublicKey,
   RewardAddress,
   PublicKey,
-  StakeCredential, encrypt_with_password, decrypt_with_password, PrivateKey,
+  StakeCredential,
+  encrypt_with_password,
+  decrypt_with_password,
+  PrivateKey,
+  Transaction,
+  TransactionWitnessSet,
+  Vkeywitnesses, hash_transaction, make_vkey_witness,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
-import { Blockchain, ChainDerivations, CoinTypes, ERROR, STAKING_KEY_INDEX, WalletTypePurpose } from '@/models/types';
+import {
+  Blockchain,
+  ChainDerivations,
+  CoinTypes,
+  ERROR,
+  STAKING_KEY_INDEX,
+  WalletTypePurpose,
+} from '@/models/types';
 import db from '@/db';
 import { chunkArray } from 'array-chunk-by-size';
 import { extractKeyHash } from '@/chrome/extension';
-import { DataSignError } from '@/chrome/config';
+import { DataSignError, TxSignError } from '@/chrome/config';
 import {
   AlgorithmId,
   CBORValue,
@@ -28,6 +41,7 @@ import {
   COSESign1Builder, COSEKey, KeyType, Int, BigNum,
 } from '@emurgo/cardano-message-signing-browser';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
 
 export class Wallet {
   db: Dexie;
@@ -196,6 +210,121 @@ export class Wallet {
     };
   }
 
+  async signTx(tx, keyHashes, password: string, accountIndex: number, partialSign = false) {
+    let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
+    const paymentKeyHash = Buffer.from(paymentKey.to_public().hash().to_bytes()).toString('hex');
+    const stakeKeyHash = Buffer.from(stakeKey.to_public().hash().to_bytes()).toString('hex');
+    const rawTx = Transaction.from_bytes(Buffer.from(tx, 'hex'));
+    const txWitnessSet = TransactionWitnessSet.new();
+    const vkeyWitnesses = Vkeywitnesses.new();
+    const txHash = hash_transaction(rawTx.body());
+    keyHashes.forEach((keyHash) => {
+      let signingKey;
+      if (keyHash === paymentKeyHash) signingKey = paymentKey;
+      else if (keyHash === stakeKeyHash) signingKey = stakeKey;
+      else if (!partialSign) throw TxSignError.ProofGeneration;
+      else return;
+      const vkey = make_vkey_witness(txHash, signingKey);
+      vkeyWitnesses.add(vkey);
+    });
+    stakeKey.free();
+    stakeKey = null;
+    paymentKey.free();
+    paymentKey = null;
+    txWitnessSet.set_vkeys(vkeyWitnesses);
+    return txWitnessSet;
+  }
+
+  // async signTxHW(tx, keyHashes, account, hw, partialSign = false)  {
+  //   const rawTx: Transaction = Transaction.from_bytes(Buffer.from(tx, 'hex'));
+  //   const address = Address.from_bech32(account.paymentAddr);
+  //   const network = address.network_id();
+  //   const keys = {
+  //     payment: { hash: null, path: null },
+  //     stake: { hash: null, path: null },
+  //   };
+  //   if (hw.device === WalletType.Ledger.toLowerCase()) {
+  //     const appAda = hw.appAda;
+  //     keyHashes.forEach((keyHash) => {
+  //       if (keyHash === account.paymentKeyHash)
+  //         keys.payment = {
+  //           hash: keyHash,
+  //           path: [HARDENED + 1852, HARDENED + 1815, HARDENED + hw.account, 0, 0],
+  //         };
+  //       else if (keyHash === account.stakeKeyHash)
+  //         keys.stake = {
+  //           hash: keyHash,
+  //           path: [HARDENED + 1852, HARDENED + 1815, HARDENED + hw.account, 2, 0],
+  //         };
+  //       else if (!partialSign) throw TxSignError.ProofGeneration;
+  //       else return;
+  //     });
+  //     const ledgerTx = await ledger.txToLedger(rawTx, network, keys, Buffer.from(address.to_bytes()).toString('hex'), hw.account);
+  //     const result = await appAda.signTransaction(ledgerTx);
+  //     // getting public keys
+  //     const witnessSet = TransactionWitnessSet.new();
+  //     const vkeys = Vkeywitnesses.new();
+  //     result.witnesses.forEach((witness) => {
+  //       if (
+  //         witness.path[3] == 0 // payment key
+  //       ) {
+  //         const vkey = Vkey.new(Bip32PublicKey.from_bytes(Buffer.from(account.publicKey, 'hex'))
+  //             .derive(0)
+  //             .derive(0)
+  //             .to_raw_key());
+  //         const signature = Ed25519Signature.from_hex(
+  //           witness.witnessSignatureHex
+  //         );
+  //         vkeys.add(Vkeywitness.new(vkey, signature));
+  //       } else if (
+  //         witness.path[3] == 2 // stake key
+  //       ) {
+  //         const vkey = Vkey.new(Bip32PublicKey.from_bytes(Buffer.from(account.publicKey, 'hex'))
+  //             .derive(2)
+  //             .derive(0)
+  //             .to_raw_key()
+  //         );
+  //         const signature = Ed25519Signature.from_hex(
+  //           witness.witnessSignatureHex
+  //         );
+  //         vkeys.add(Vkeywitness.new(vkey, signature));
+  //       }
+  //     });
+  //     witnessSet.set_vkeys(vkeys);
+  //     return witnessSet;
+  //   } else {
+  //     keyHashes.forEach((keyHash) => {
+  //       if (keyHash === account.paymentKeyHash)
+  //         keys.payment = {
+  //           hash: keyHash,
+  //           path: `m/1852'/1815'/${hw.account}'/0/0`,
+  //         };
+  //       else if (keyHash === account.stakeKeyHash)
+  //         keys.stake = {
+  //           hash: keyHash,
+  //           path: `m/1852'/1815'/${hw.account}'/2/0`,
+  //         };
+  //       else if (!partialSign) throw TxSignError.ProofGeneration;
+  //       else return;
+  //     });
+  //     const trezorTx = await txToTrezor(rawTx, network, keys, Buffer.from(address.to_bytes()).toString('hex'), hw.account);
+  //     const result = await TrezorConnect.cardanoSignTransaction(trezorTx);
+  //     if (!result.success) throw new Error('Trezor could not sign tx');
+  //     // getting public keys
+  //     const witnessSet = TransactionWitnessSet.new();
+  //     const vkeys = Vkeywitnesses.new();
+  //     result.payload.witnesses.forEach((witness) => {
+  //       const vkey = Vkey.new(PublicKey.from_bytes(Buffer.from(witness.pubKey, 'hex')));
+  //       const signature = Ed25519Signature.from_hex(
+  //         witness.signature
+  //       );
+  //       vkeys.add(Vkeywitness.new(vkey, signature));
+  //     });
+  //     witnessSet.set_vkeys(vkeys);
+  //     return witnessSet;
+  //   }
+  // };
+
   async getLastSyncInfo() {
     return this.db
       .open()
@@ -274,14 +403,16 @@ export class Wallet {
       console.log('sync');
       const lastSyncInfo = await this.getLastSyncInfo();
       if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+        const prevAccountInfo = await this.getAccountInfo()
+        console.log(prevAccountInfo)
         const promises = [];
         promises.push(this.syncStakingPools());
         promises.push(this.syncAccountInfo().then(accountInfo => {
           if (accountInfo) {
-            if (Number(accountInfo.rewards_sum) > 0) {
+            if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
               promises.push(this.syncAccountRewards());
             }
-            if (Number(accountInfo.controlled_amount) > 0) {
+            if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
               promises.push(this.syncAccountTransactions(lastSyncInfo ? lastSyncInfo.height : 0).then(txs => {
                 if (txs) {
                   const units: Set<string> = new Set();
@@ -320,41 +451,37 @@ export class Wallet {
     const blockchainDB: Dexie = await this.getBlockchainDb();
     const assetsSyncTable = blockchainDB.table('assets_sync');
     const lastAssetsSyncArray = await assetsSyncTable.toArray();
-    if (!lastAssetsSyncArray || lastAssetsSyncArray.length > 0) {
-      if (lastAssetsSyncArray.length > 0) {
-        const lastAssetsSync = lastAssetsSyncArray[0];
-        const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
-        if (hoursSinceEpoch % 4 === 0) {
-          await this.setAssets(blockchainDB, assetsSyncTable);
-        }
-      } else {
-        await this.setAssets(blockchainDB, assetsSyncTable);
+    if (lastAssetsSyncArray.length > 0) {
+      const lastAssetsSync = lastAssetsSyncArray[0];
+      const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
+      if (hoursSinceEpoch % 4 === 0) {
+        await this.setAssets(units, blockchainDB, assetsSyncTable);
       }
+    } else {
+      await this.setAssets(units, blockchainDB, assetsSyncTable);
     }
   }
 
-  async setAssets(blockchainDB: Dexie, assetsSyncTable) {
-    const assets = await blockchainDB.table('assets').toArray();
+  async setAssets(units: string[], blockchainDB: Dexie, assetsSyncTable) {
     const promises = [];
-    if (assets && assets.length > 0) {
-      assets.forEach(asset => {
-        promises.push(this.getAssetInfo(asset.policy_id, asset.asset_name));
-      });
-      await Promise.all(promises);
-    }
+    const smallerArrays = chunkArray({ input: units, bytesSize: 5 * 1024 });
+    smallerArrays.forEach(smallerArray => {
+      promises.push(this.getAssetsInfo(smallerArray, blockchainDB));
+    });
+    const assets = (await Promise.all(promises)).flat();
+    console.log(assets)
     assetsSyncTable.put({ time: new Date().getTime() });
   }
 
-  private async getAssetsInfo(units) {
+  private async getAssetsInfo(units: string[], blockchainDB: Dexie) {
     if (!units || units.length == 0) {
       return;
     }
     try {
-      const blockchainDB: Dexie = await this.getBlockchainDb();
       const assetsTable = blockchainDB.table('assets');
       const res = await this.api.getAssetsInfo(units);
       if (res) {
-        assetsTable.put(res);
+        assetsTable.bulkPut(res);
         return res;
       }
     } catch (e) {
@@ -362,11 +489,11 @@ export class Wallet {
     }
   }
 
-  private async getAssetInfo(policyId: string, assetName: string) {
+  private async resolveAssetInfo(policyId: string, assetName: string) {
     try {
       const blockchainDB: Dexie = await this.getBlockchainDb();
       const assetsTable = blockchainDB.table('assets');
-      const res = await this.api.getAssetInfo(policyId + assetName);
+      const res = await this.api.getAssetsInfo([policyId + assetName]);
       if (res) {
         assetsTable.put(res);
         return res;
@@ -377,7 +504,7 @@ export class Wallet {
   }
 
   async syncStakingPools(): Promise<void> {
-    if ((this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME)) {
+    if (this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME) {
       const blockchainDB: Dexie = await this.getBlockchainDb();
       const poolSyncTable = blockchainDB.table('pools_sync');
       const lastPoolSyncArray = await poolSyncTable.toArray();
@@ -550,6 +677,10 @@ export class Wallet {
 
   async scanUrl(url: string): Promise<any> {
     return await this.api.scanUrl(url);
+  }
+
+  async scanTx(txScanRequest: TxScanRequest): Promise<TxScanResponse> {
+    return await this.api.scanTx(txScanRequest)
   }
 
   async addConnectedDapp(domain: string) {

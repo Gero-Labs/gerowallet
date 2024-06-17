@@ -17,9 +17,10 @@ import { STORAGE } from '@/chrome/config';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'transactions', 'pools', 'assets']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'pools', 'assets', 'baseAddress', 'utxos']},
   state: () => ({
     loggedWallet: undefined,
+    baseAddress: undefined,
     wallets: [],
     locale: 'en',
     network: undefined,
@@ -33,6 +34,7 @@ export const useStore = defineStore('store', {
     accountInfo: undefined,
     latestTip: undefined,
     stakingProView: false,
+    utxos: undefined
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -244,6 +246,60 @@ export const useStore = defineStore('store', {
         }
       }
     },
+    setUtxos(transactions) {
+      const utxos = [];
+      const outputs = [];
+      const inputSet = new Set();
+
+      if (transactions && transactions.length > 0) {
+        // Collect all outputs and inputs
+        transactions.forEach(tx => {
+          if (tx.outputs) {
+            outputs.push(...tx.outputs);
+          }
+          if (tx.inputs) {
+            tx.inputs.forEach(input => {
+              inputSet.add(`${input.tx_hash}-${input.tx_index}`);
+            });
+          }
+        });
+
+        // Check outputs against inputs set
+        const walletAddress = this.getWallet.stakeAddress().to_address().to_bech32();
+        outputs.forEach(output => {
+          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && walletAddress === output.stake_addr) {
+            utxos.push(output);
+          }
+        });
+      }
+      // Resolve Assets
+      // if (utxos) {
+      //   utxos.forEach(utxo => {
+      //     if (utxo.asset_list) {
+      //       utxo.asset_list.forEach(asset => {
+      //         const resolved = this.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+      //         if (!resolved) {
+      //           this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+      //         } else {
+      //           asset['total_amount'] = resolved?.quantity
+      //           asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
+      //           if (resolved?.metadata?.logo) {
+      //             asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+      //           } else if (resolved?.onchain_metadata?.image) {
+      //             asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
+      //           } else {
+      //             asset['logo'] = ''; // Set empty logo if not found
+      //           }
+      //         }
+      //       })
+      //     }
+      //   })
+      // }
+      this.utxos = utxos;
+    },
+    setBaseAddress(baseAddress) {
+      this.baseAddress = baseAddress
+    },
     async login(walletId: number) {
       loading.setLoading(true);
       console.log('login');
@@ -258,6 +314,7 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
+      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())
@@ -349,8 +406,12 @@ export const useStore = defineStore('store', {
       liveQuery(() => db.table('transactions').toArray()).subscribe({
         next: newTransactions => {
           const newT = newTransactions.map(tx => tx.transaction)
-          if (newT !== this.transactions)
+          if (newT !== this.transactions) {
             this.transactions = newT
+            this.setUtxos(newT)
+          }
+
+          console.log('newTransactions', newT)
         },
         error: error => {
           console.error('Failed to Fetch Transactions:', error)
@@ -408,9 +469,9 @@ export const useStore = defineStore('store', {
       liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
         next: newConnectedDapps => {
           this.connectedDapps = newConnectedDapps
+          console.log('newDapps', newConnectedDapps)
           if (chrome?.storage) {
             if (newConnectedDapps) {
-              console.log('newDapps', newConnectedDapps)
               chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
             } else {
               chrome.storage.local.remove(STORAGE.whitelisted);

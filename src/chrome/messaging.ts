@@ -62,12 +62,14 @@ class InternalController {
   };
 
   returnData = async ({ data, error }: { data: any; error: any }) => {
-    this.port.postMessage({
-      data,
-      error,
-      method: METHOD.returnData,
-      tabId: await this.tabId,
-    });
+    if (this.port) {
+      this.port.postMessage({
+        data,
+        error,
+        method: METHOD.returnData,
+        tabId: await this.tabId,
+      });
+    }
   };
 }
 

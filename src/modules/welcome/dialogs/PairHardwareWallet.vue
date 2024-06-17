@@ -329,7 +329,6 @@ export default {
   },
   methods: {
     async walletCreationStep2() {
-      console.log('ledger')
       this.persistent = true
       this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your Ledger device to complete the pairing process.")
       this.hardwareLoading.setLoading(true)
