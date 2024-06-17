@@ -1,6 +1,6 @@
 import { METHOD } from './config';
 import { Messaging } from './messaging';
-import { DataSignature } from '@/models/types';
+import { DataSignature, Paginate } from '@/models/types';
 
 export const getBalance = async (): Promise<string> => {
   const result = await Messaging.sendToContent({ method: METHOD.getBalance,data: {} });
@@ -43,10 +43,18 @@ export const getAddress = async (): Promise<string[]> => {
 
 export const getRewardAddresses = async (): Promise<string[]> => {
   const result = await Messaging.sendToContent({
-    method: METHOD.getRewardAddress,
+    method: METHOD.getRewardAddresses,
     data: {}
   });
-  return [result['data']];
+  return result['data'];
+};
+
+export const getUsedAddresses = async (paginate: Paginate = undefined): Promise<string[]> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getUsedAddresses,
+    data: { paginate }
+  });
+  return result['data'];
 };
 
 export const getNetworkId = async () => {

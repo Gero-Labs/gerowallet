@@ -10,7 +10,8 @@ export const METHOD = {
   getDelegation: 'getDelegation',
   getUtxos: 'getUtxos',
   getCollateral: 'getCollateral',
-  getRewardAddress: 'getRewardAddress',
+  getRewardAddresses: 'getRewardAddresses',
+  getUsedAddresses: 'getUsedAddresses',
   getAddress: 'getAddress',
   signData: 'signData',
   signTx: 'signTx',
@@ -74,6 +75,8 @@ export const STORAGE = {
   analyticsConsent: 'analytics',
   userId: 'userId',
   acceptedLegalDocsVersion: 'acceptedLegalDocsVersion',
+  addresses: 'addresses',
+  utxos: 'utxos',
 };
 
 export const EVENT = {

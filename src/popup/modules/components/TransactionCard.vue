@@ -18,8 +18,8 @@
       </div>
     </v-card>
 
-    <div class="tx-footer">
-      <template v-if="transaction.txFee">
+    <div class="tx-footer" v-if="transaction.txFee">
+      <template>
         Tx Fee&nbsp;<span> {{ 0-transaction?.txFee | toAda(true) }}</span>
       </template>
     </div>
