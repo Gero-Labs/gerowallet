@@ -39,7 +39,7 @@ export default {
         height: 300,
         type: 'svg',
         data: this.baseAddress,
-        image: '/assets/img/bkp/logo128.png',
+        image: require('@/assets/img/bkp/logo128.png'),
         margin: 2,
         qrOptions: {
           typeNumber: 0,

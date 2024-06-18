@@ -22,8 +22,9 @@
   </v-menu>
 </template>
 <script>
-import {mapState} from "pinia";
+import { mapActions, mapState } from 'pinia';
 import {useStore} from "@/store";
+import languages from '@/plugins/languages';
 
 export default {
   name: "LanguageSelector",
@@ -33,41 +34,21 @@ export default {
       return this.languages[this.$i18n.locale]
     }
   },
+  methods: {
+    ...mapActions(useStore, ['setLocale']),
+  },
   watch: {
     selectedLang(val) {
       const locale = Object.keys(this.languages)[val]
-      this.store.setLocale(locale)
+      this.setLocale(locale)
       this.$i18n.locale = Object.keys(this.languages)[val];
     }
   },
   data: () => ({
-    languages: {
-      cn: { name: "中国人", short: "中国人", iso: "cn" },
-      cz: { name: "Čeština", short: "Češ", iso: "cz" },
-      de: { name: "Deutsch", short: "Deu", iso: "de" },
-      en: { name: "English", short: "Eng", iso: "us" },
-      es: { name: "Español", short: "Esp", iso: "es" },
-      fr: { name: "Français", short: "Fra", iso: "fr" },
-      gr: { name: "Ελληνικά", short: "Ελλ", iso: "gr" },
-      he: { name: "עברית", short: "עבר", iso: "il" },
-      hr: { name: "Hrvatski", short: "Hrv", iso: "hr" },
-      id: { name: "Indonesia", short: "Ind", iso: "id" },
-      in: { name: "हिंदी", short: "हिंदी", iso: "in" },
-      it: { name: "Italiano", short: "Ita", iso: "it" },
-      jp: { name: "日本語", short: "日本語", iso: "jp" },
-      nl: { name: "Nederlands", short: "Ned", iso: "nl" },
-      pk: { name: "اردو", short: "ارد", iso: "pk" },
-      pt: { name: "Português", short: "Por", iso: "pt" },
-      ru: { name: "Русский", short: "Рус", iso: "ru" },
-      th: { name: "ภาษาไทย", short: "ภาษ", iso: "th" },
-      tr: { name: "Türkçe", short: "Tür", iso: "tr" },
-      tz: { name: "Kiswahili", short: "Kis", iso: "tz" },
-      vn: { name: "Tiếng Việt", short: "Việ", iso: "vn" },
-    },
+    languages,
     selectedLang: -1,
-    store: useStore()
   }),
-  async mounted() {
+  mounted() {
     this.selectedLang = Object.keys(this.languages).indexOf(this.locale)
   }
 }
