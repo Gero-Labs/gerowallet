@@ -133,6 +133,7 @@
                                 :disabled="loading"
                             >
                               <v-img :src="avatar.image | toIPFS" alt="" contain
+                                     @error="fallbackImage"
                                      onerror="this.onerror=null; this.src='https://d1zjrpdfxjmowk.cloudfront.net/assets/images/1x1.webp';"
                                      aspect-ratio="1">
                                 <template v-slot:placeholder>
@@ -228,6 +229,7 @@ export default {
       // { title: 'Guides', icon: 'mdi-book-open-variant', href: 'https://docs.adabox.io/'},
       // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper'},
     ],
+    errorImage: require('@/assets/img/1x1.png')
   }),
   computed: {
     ...mapState(useStore, ['wallets', 'loggedWallet']),
@@ -270,6 +272,7 @@ export default {
       //   }
       //   this.loading = false
       // }
+
     },
     async getAvatars() {
 
@@ -277,10 +280,9 @@ export default {
     closeChangeAvatarDialog() {
       this.changeAvatarDialog = false
     },
-    changeTheme() {
-      this.$vuetify.theme.dark = !this.$vuetify.theme.isDark
-      localStorage.setItem('theme-dark', this.$vuetify.theme.isDark)
-    },
+    fallbackImage(e) {
+      e.target.src = this.errorImage
+    }
   },
   watch: {}
 }

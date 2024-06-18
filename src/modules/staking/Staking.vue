@@ -67,7 +67,7 @@
               <template v-slot:[`item.name`]="{ item }">
                 <v-list-item three-line style="min-height: 68px" class="px-0">
                   <v-list-item-avatar size="24" style="place-self: center;">
-                    <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" onerror="this.onerror=null;this.src='img/1x1.png';"></v-img>
+                    <img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="fallbackImage"/>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
                     <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name}` }}&nbsp;
@@ -388,6 +388,9 @@ export default {
         return JSON.parse(pool.pool_extended_info);
       }
       return undefined
+    },
+    fallbackImage(e) {
+      e.target.src = this.errorImage
     }
   },
   filters,
@@ -401,7 +404,8 @@ export default {
     pledgeMet: true,
     pageCount: 0,
     xLogo: require('@/assets/svg/x.svg'),
-    telegramLogo: require('@/assets/svg/telegram.svg')
+    telegramLogo: require('@/assets/svg/telegram.svg'),
+    errorImage: require('@/assets/img/1x1.png')
   })
 }
 </script>

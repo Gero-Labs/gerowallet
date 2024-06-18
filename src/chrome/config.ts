@@ -77,6 +77,7 @@ export const STORAGE = {
   acceptedLegalDocsVersion: 'acceptedLegalDocsVersion',
   addresses: 'addresses',
   utxos: 'utxos',
+  collateral: 'collateral'
 };
 
 export const EVENT = {

@@ -49,7 +49,7 @@ export const getRewardAddresses = async (): Promise<string[]> => {
   return result['data'];
 };
 
-export const getUsedAddresses = async (paginate: Paginate = undefined): Promise<string[]> => {
+export const getUsedAddresses = async (paginate?: Paginate): Promise<string[]> => {
   const result = await Messaging.sendToContent({
     method: METHOD.getUsedAddresses,
     data: { paginate }
@@ -65,7 +65,7 @@ export const getNetworkId = async () => {
   return result['data'];
 };
 
-export const getUtxos = async (amount = undefined, paginate = undefined) => {
+export const getUtxos = async (amount?: string, paginate?: Paginate) => {
   const result = await Messaging.sendToContent({
     method: METHOD.getUtxos,
     data: { amount, paginate },

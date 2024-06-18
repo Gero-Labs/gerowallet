@@ -1,14 +1,21 @@
-import { APIError, DataSignError, NETWORK_ID, STORAGE, TARGET, POPUP_WINDOW } from './config';
+import { APIError, DataSignError, NETWORK_ID, POPUP_WINDOW, STORAGE } from './config';
 // import { mnemonicToEntropy } from 'bip39';
 import {
   Address,
-  BaseAddress, Bip32PublicKey,
+  BaseAddress,
+  Bip32PublicKey,
   ByronAddress,
   EnterpriseAddress,
-  PointerAddress, RewardAddress, StakeCredential, Transaction,
+  PointerAddress,
+  RewardAddress,
+  StakeCredential,
+  Transaction,
+  TransactionUnspentOutput,
+  Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
 import { ChainDerivations, Paginate, STAKING_KEY_INDEX } from '@/models/types';
+import { toUTxO, toValue } from '@/shared/utils/converter';
 // import { ChainDerivations, STAKING_KEY_INDEX } from '@/models/types';
 // import networks from '@/shared/utils/networks';
 // import { createAvatar } from '@dicebear/avatars';
@@ -152,20 +159,19 @@ export const setCurrency = (currency) =>
 //   };
 // };
 
-// export const getBalance = async () => {
-//   await Loader.load();
-//   const currentAccount = await getCurrentAccount();
-//   const result = await blockfrostRequest(
-//     `/addresses/${currentAccount.paymentKeyHashBech32}`
-//   );
-//   if (result.error) {
-//     if (result.status_code === 400) throw APIError.InvalidRequest;
-//     else if (result.status_code === 500) throw APIError.InternalError;
-//     else return Loader.Cardano.Value.new(Loader.Cardano.BigNum.from_str('0'));
-//   }
-//   const value = await assetsToValue(result.amount);
-//   return value;
-// };
+export const getBalance = async (): Promise<Value> => {
+  const utxos = await getStorage(STORAGE.utxos)
+  console.log(utxos)
+  const amount = []
+  let lovelace = 0
+  utxos.forEach(utxo => {
+    amount.push(...utxo.asset_list)
+    lovelace += Number(utxo.value)
+  })
+  const balance = toValue(amount, lovelace.toString());
+  console.log(balance.to_json())
+  return balance;
+};
 
 // export const getBalanceExtended = async () => {
 //   const currentAccount = await getCurrentAccount();
@@ -271,73 +277,34 @@ export const setCurrency = (currency) =>
 //   if (!result || result.error) return null;
 //   return result.outputs[txId];
 // };
-//
-// /**
-//  *
-//  * @param {string} amount - cbor value
-//  * @param {Object} paginate
-//  * @param {number} paginate.page
-//  * @param {number} paginate.limit
-//  * @returns
-//  */
-// export const getUtxos = async (amount = undefined, paginate = undefined) => {
-//   const currentAccount = await getCurrentAccount();
-//   let result = [];
-//   let page = paginate && paginate.page ? paginate.page + 1 : 1;
-//   const limit = paginate && paginate.limit ? `&count=${paginate.limit}` : '';
-//   while (true) {
-//     let pageResult = await blockfrostRequest(
-//       `/addresses/${currentAccount.paymentKeyHashBech32}/utxos?page=${page}${limit}`
-//     );
-//     if (pageResult.error) {
-//       if (result.status_code === 400) throw APIError.InvalidRequest;
-//       else if (result.status_code === 500) throw APIError.InternalError;
-//       else {
-//         pageResult = [];
-//       }
-//     }
-//     result = result.concat(pageResult);
-//     if (pageResult.length <= 0 || paginate) break;
-//     page++;
-//   }
-//
-//   // exclude collateral input from overall utxo set
-//   if (currentAccount.collateral) {
-//     result = result.filter(
-//       (utxo) =>
-//         !(
-//           utxo.tx_hash === currentAccount.collateral.txHash &&
-//           utxo.output_index === currentAccount.collateral.txId
-//         )
-//     );
-//   }
-//
-//   const address = await getAddress();
-//   let converted = await Promise.all(
-//     result.map(async (utxo) => await utxoFromJson(utxo, address))
-//   );
-//   // filter utxos
-//   if (amount) {
-//     await Loader.load();
-//     let filterValue;
-//     try {
-//       filterValue = Loader.Cardano.Value.from_bytes(Buffer.from(amount, 'hex'));
-//     } catch (e) {
-//       throw APIError.InvalidRequest;
-//     }
-//
-//     converted = converted.filter(
-//       (unspent) =>
-//         !unspent.output().amount().compare(filterValue) ||
-//         unspent.output().amount().compare(filterValue) !== -1
-//     );
-//   }
-//   if ((amount || paginate) && converted.length <= 0) {
-//     return null;
-//   }
-//   return converted;
-// };
-//
+
+export const getUtxos = async (amount = undefined, paginate = undefined): Promise<TransactionUnspentOutput[] | null> => {
+  let utxos = await getStorage(STORAGE.utxos)
+  const collateral = await getStorage(STORAGE.collateral)
+
+  // exclude collateral input from overall utxo set
+  if (collateral) {
+    utxos = utxos.filter((utxo) => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index));
+  }
+
+  const address = await getAddress();
+  let converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo, address));
+  // filter utxos
+  if (amount) {
+    let filterValue;
+    try {
+      filterValue = Value.from_bytes(Buffer.from(amount, 'hex'));
+    } catch (e) {
+      throw APIError.InvalidRequest;
+    }
+    converted = converted.filter((unspent) => !unspent.output().amount().compare(filterValue) || unspent.output().amount().compare(filterValue) !== -1);
+  }
+  if ((amount || paginate) && converted.length <= 0) {
+    return null;
+  }
+  return converted;
+};
+
 // const checkCollateral = async (currentAccount, network, checkTx) => {
 //   if (checkTx) {
 //     const transactions = await getTransactions();

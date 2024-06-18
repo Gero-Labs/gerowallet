@@ -22,7 +22,7 @@ export const useStore = defineStore('store', {
     loggedWallet: undefined,
     baseAddress: undefined,
     wallets: [],
-    locale: 'en',
+    locale: 'us',
     network: undefined,
     provider: undefined,
     price: undefined,

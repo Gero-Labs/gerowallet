@@ -2,12 +2,14 @@ import {
   focusOrCreatePopup,
   extractKeyHash,
   getAddress,
+  getBalance,
   getStorage,
   isWhitelisted,
   verifyPayload,
   verifyTx,
   getUsedAddresses,
-  getRewardAddresses
+  getRewardAddresses,
+  getUtxos
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -19,6 +21,7 @@ import {
   TARGET,
 } from './config';
 import networks from '@/shared/utils/networks';
+import { TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
 
 console.log('Background Loaded');
 
@@ -30,6 +33,27 @@ interface Response {
   data?: any;
   error?: any;
 }
+
+app.add(METHOD.getBalance, (request, sendResponse) => {
+  console.log('getBalance')
+  getBalance()
+    .then((value) => {
+      sendResponse({
+        id: request.id,
+        data: Buffer.from(value.to_bytes()).toString('hex'),
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch((e) => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
 
 app.add(METHOD.enable, async (request, sendResponse) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
@@ -172,6 +196,33 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
     target: TARGET,
     sender: SENDER.extension,
   });
+});
+
+app.add(METHOD.getUtxos, (request, sendResponse) => {
+  getUtxos(request.data.amount, request.data.paginate)
+    .then((utxos: TransactionUnspentOutput[]) => {
+      let res: string[] | null;
+      if (utxos) {
+        // LEGACY support => TODO change in the future
+        res = utxos.map((utxo) => Buffer.from(utxo.to_bytes()).toString('hex'))
+      } else {
+        res = null
+      }
+      sendResponse({
+        id: request.id,
+        data: res,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch((e) => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
