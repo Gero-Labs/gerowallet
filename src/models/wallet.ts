@@ -13,10 +13,8 @@ import {
   encrypt_with_password,
   decrypt_with_password,
   PrivateKey,
-  Transaction,
   TransactionWitnessSet,
   Vkeywitnesses,
-  hash_transaction,
   make_vkey_witness,
   FixedTransaction,
   Address,
@@ -639,13 +637,13 @@ export class Wallet {
     }
   }
 
-  private async resolveAssetInfo(policyId: string, assetName: string) {
+  private async getDetailedAssetsInfo(policyId: string, assetName: string) {
     try {
       const blockchainDB: Dexie = await this.getBlockchainDb();
       const assetsTable = blockchainDB.table('assets');
-      const res = await this.api.getAssetsInfo([policyId + assetName]);
+      const res = await this.api.getDetailedAssetsInfo(policyId, assetName);
       if (res) {
-        assetsTable.put(res);
+        // assetsTable.bulkPut(res);
         return res;
       }
     } catch (e) {
