@@ -34,6 +34,7 @@
     "cborg": "^1.10.2",
     "core-js": "^3.35.1",
     "cors": "^2.8.5",
+    "crc": "^4.3.2",
     "crypto-random-string": "^5.0.0",
     "crypto-ts": "^1.0.2",
     "dexie": "^4.0.7",

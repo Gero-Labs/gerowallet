@@ -75,6 +75,7 @@
                           :sort-by.sync="sortBy"
                           :sort-desc.sync="sortDesc" dense
                           :items-per-page="5"
+                          :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             >
               <template v-slot:[`item.pool_id`]="{ item }">
                 <v-list-item two-line>

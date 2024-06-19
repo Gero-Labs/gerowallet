@@ -1,7 +1,7 @@
 <template>
   <div style="align-content: center" class="text-center justify-center">
     <div id="highstock-chart" v-show="chartData && chartData.length > 0"></div>
-    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;min-height: 278px;align-content: center;">
+    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
       <v-avatar size="24" v-if="!loading">
         <v-img
           :src="require('@/assets/svg/wallet.svg')"
@@ -13,7 +13,7 @@
       <span v-else>There seems to be no data in this wallet</span>
     </v-card-text>
     <v-tabs
-        v-if="!loading"
+      v-if="!loading"
       background-color="transparent"
       style="width: fit-content"
       height="28"
@@ -39,10 +39,6 @@ import {useStore} from "@/store";
 
 export default {
   props: {
-    loading: {
-      type: Boolean,
-      default: true
-    },
     chartData: {
       type: Array,
       default: () => [],
@@ -54,13 +50,131 @@ export default {
     adaPrice() {
       console.log('price')
       const price = this.chartData[this.chartData.length - 1][1]
-      if (!this.price) {
+      if (this.lastPrice === -1) {
         return null
       }
-      return (this.price.lastPrice * price).toLocaleString(undefined, {maximumFractionDigits: 2})
+      return (this.lastPrice * price).toLocaleString(undefined, {maximumFractionDigits: 2})
     },
   },
   methods: {
+    loadChart(newVal) {
+      if (!newVal.length) {
+        return;
+      }
+      const yMax =this.chartData.reduce((max, current) => {
+        return current[1] > max ? current[1] : max
+      }, -Infinity);
+      console.log(yMax)
+      const data = {
+        accessibility: {
+          enabled: false,
+        },
+        title: {
+          useHTML: true,
+          floating: true,
+          align: "left",
+          text: this.generateTitleText(this.tabs.ALL),
+          style: {
+            fontSize: "14px",
+          },
+        },
+        chart: {
+          spacingLeft: 0,
+          spacingRight: 0,
+          backgroundColor: "transparent",
+          height: 184,
+          style: {
+            fontFamily: "Quicksand",
+          },
+        },
+        rangeSelector: {
+          enabled: false,
+          inputEnabled: false,
+        },
+        scrollbar: {
+          enabled: false,
+        },
+        navigator: {
+          enabled: false,
+        },
+        credits: {
+          enabled: false,
+        },
+        xAxis: {
+          crosshair: true,
+          allowDecimals: false,
+          title: {
+            enabled: false,
+            text: "Time",
+          },
+          labels: {
+            style: {
+              fontFamily: "Inter",
+              color: "#fff",
+            },
+          },
+        },
+        yAxis: {
+          allowDecimals: false,
+          labels: {
+            style: {
+              color: "#fff",
+            },
+          },
+          opposite: true,
+          plotLines: [
+            {
+              value: 0,
+              width: 1,
+              color: "#3d3d3d",
+            },
+          ],
+          max: yMax,
+        },
+        colors: [
+          "#00DFF3",
+          "#155B75",
+          "#167dd6",
+          "#900C3F",
+          "#511849",
+          "#3D3D6B",
+          "#2A7B9B",
+          "#00BAAD",
+          "#57C785",
+          "#ADD45C",
+        ],
+        legend: {
+          align: "right",
+          verticalAlign: "middle",
+          layout: "vertical",
+        },
+        series: [
+          {
+            type: "area",
+            name: "$",
+            data: newVal,
+            showInLegend: true,
+            marker: {
+              symbol: "circle",
+              enabled: null,
+              radius: 3,
+              lineWidth: 1,
+              lineColor: null,
+            },
+            fillColor: {
+              linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
+              stops: [
+                [0.1, "#00c7f333"],
+                [1, "#00c7f300"],
+              ],
+            },
+          },
+        ],
+        useUTC: true,
+      };
+      this.chartInstance = Highstock.stockChart("highstock-chart", data);
+      this.loading = false
+    },
     arraysEqual(a, b) {
       if (a === b) return true;
       if (a == null || b == null) return false;
@@ -97,6 +211,7 @@ export default {
       return false
     },
     handleTabClick(tab) {
+      this.tab = tab
       let start = new Date();
       const end = new Date();
       if (tab.value === this.tabs.YEAR.value) {
@@ -128,20 +243,23 @@ export default {
         end.getUTCMinutes(),
         end.getUTCSeconds()
       );
-      if (this.chartInstance) {
+      if (this.chartInstance?.title && this.chartInstance?.xAxis) {
         this.chartInstance.xAxis[0].setExtremes(startUTC, endUTC);
-        this.chartInstance.title.update({ text: this.generateTitleText(tab) });
+        this.chartInstance.title.update({ text: this.generateTitleText() });
       }
     },
-    generateTitleText(tab) {
+    generateTitleText() {
       return (
         `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${this.adaPrice}</span>` +
-        `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${tab.vsLabel}</span></span>`
+        `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${this.tab.vsLabel}</span></span>`
       );
     },
   },
   data() {
     return {
+      tab: { value: "ALL", label: "All", vsLabel: "vs all time" },
+      lastPrice: -1,
+      loading: true,
       chartInstance: null,
       tabs: {
         ALL: { value: "ALL", label: "All", vsLabel: "vs all time" },
@@ -154,121 +272,19 @@ export default {
     };
   },
   watch: {
+    price: {
+      handler(newVal) {
+        this.lastPrice = newVal.lastPrice
+        this.chartInstance.title.update({ text: this.generateTitleText() });
+      },
+      deep: true,
+    },
     chartData: {
       handler(newVal,oldVal) {
         if (this.arraysEqual(newVal,oldVal)) {
           return;
         }
-        if (!this.chartData.length) {
-          return;
-        }
-        const data = {
-          accessibility: {
-            enabled: false,
-          },
-          title: {
-            useHTML: true,
-            align: "left",
-            text: this.generateTitleText(this.tabs.ALL),
-            style: {
-              fontSize: "14px",
-            },
-          },
-          chart: {
-            spacingLeft: 0,
-            spacingRight: 0,
-            backgroundColor: "transparent",
-            height: 250,
-            style: {
-              fontFamily: "Quicksand",
-            },
-          },
-          rangeSelector: {
-            enabled: false,
-            inputEnabled: false,
-          },
-          scrollbar: {
-            enabled: false,
-          },
-          navigator: {
-            enabled: false,
-          },
-          credits: {
-            enabled: false,
-          },
-          xAxis: {
-            crosshair: true,
-            allowDecimals: false,
-            title: {
-              enabled: false,
-              text: "Time",
-            },
-            labels: {
-              style: {
-                fontFamily: "Inter",
-                color: "#fff",
-              },
-            },
-          },
-          yAxis: {
-            allowDecimals: false,
-            labels: {
-              style: {
-                color: "#fff",
-              },
-            },
-            opposite: true,
-            plotLines: [
-              {
-                value: 0,
-                width: 1,
-                color: "#3d3d3d",
-              },
-            ],
-          },
-
-          colors: [
-            "#00DFF3",
-            "#155B75",
-            "#167dd6",
-            "#900C3F",
-            "#511849",
-            "#3D3D6B",
-            "#2A7B9B",
-            "#00BAAD",
-            "#57C785",
-            "#ADD45C",
-          ],
-          legend: {
-            align: "right",
-            verticalAlign: "middle",
-            layout: "vertical",
-          },
-          series: [
-            {
-              type: "area",
-              name: "$",
-              data: this.chartData,
-              showInLegend: true,
-              marker: {
-                symbol: "circle",
-                enabled: null,
-                radius: 3,
-                lineWidth: 1,
-                lineColor: null,
-              },
-              fillColor: {
-                linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
-                stops: [
-                  [0.1, "#00c7f333"],
-                  [1, "#00c7f300"],
-                ],
-              },
-            },
-          ],
-          useUTC: true,
-        };
-        this.chartInstance = Highstock.stockChart("highstock-chart", data);
+        this.loadChart(newVal)
       },
       deep: true,
     },
@@ -278,10 +294,14 @@ export default {
       this.chartInstance.destroy();
     }
   },
+  mounted() {
+    console.log('tes')
+    this.loadChart(this.chartData)
+  }
 };
 </script>
-<style>
+<style scoped>
 #highstock-chart {
-  min-height: 250px;
+  min-height: 184px;
 }
 </style>

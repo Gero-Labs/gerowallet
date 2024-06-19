@@ -149,11 +149,10 @@ export class Api {
     }
   }
 
-  async getAssetInfo(unit: string) {
+  async getDetailedAssetsInfo(policyId: string, assetName: string) {
     try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&unit=${unit}`
-      );
+      const { data, status } = await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+      console.log(data)
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {

@@ -137,6 +137,15 @@ export type Extension = {
   cip: number
 }
 
+const Currency = {
+  AUD: { short: 'aud', description: 'Australian Dollar', symbol: 'A$' },
+  CAD: { short: 'cad', description: 'Canadian Dollar', symbol: 'C$' },
+  EUR: { short: 'eur', description: 'Euro', symbol: '€' },
+  GBP: { short: 'gbp', description: 'Sterling', symbol: '£' },
+  USD: { short: 'usd', description: 'United States Dollar', symbol: '$' },
+  ILS: { short: 'ils', description: 'Israeli Shekel', symbol: '₪' },
+};
+
 export {
   HARDENED,
   CoreAddressTypes,
@@ -150,5 +159,6 @@ export {
   Provider,
   Blockchain,
   Network,
-  ERROR
+  ERROR,
+  Currency
 };
