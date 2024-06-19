@@ -2,7 +2,7 @@ import Dexie, {DexieError} from 'dexie';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { useStore } from '@/store';
 import { Wallet } from '@/models/wallet';
-import { Blockchain, CoinTypes, Network, Provider, WalletType, WalletTypePurpose } from '@/models/types';
+import { Blockchain, CoinTypes, Currency, Network, Provider, WalletType, WalletTypePurpose } from '@/models/types';
 
 const db = new Dexie('GeroWalletDatabase');
 
@@ -154,7 +154,7 @@ export default {
   async createNewWalletDb(walletId: number) {
     const db = new Dexie('wallet-' + walletId);
     db.version(1).stores({
-      config: '++id, key, value',
+      config: 'key, value',
       sync: '++id, hash, height, slot, time, epoch, epoch_slot',
       account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
       addresses: 'address',
@@ -164,6 +164,14 @@ export default {
     });
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);
+    });
+    await db['config'].toArray().then(async rows => {
+      if (rows.length === 0) {
+        const initialData = [{ key: 'currency', value: Currency.USD.short }];
+        await db['config'].bulkAdd(initialData).catch(error => {
+          console.error('Error adding initial data:', error);
+        });
+      }
     });
   },
   async checkAndCreateBlockchainDatabase(dbName: string) {

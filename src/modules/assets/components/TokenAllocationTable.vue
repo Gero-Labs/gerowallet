@@ -1,7 +1,7 @@
 <template>
   <v-card outlined class="no-gutters fill-height">
     <v-card-title>
-      Token Allocation ({{assets.length}})
+      Token Allocation ({{assets.length + collectibles.length}})
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn :value="0" rounded> Assets </v-btn>
@@ -11,15 +11,33 @@
     <v-card-text class="pa-0">
       <v-tabs-items v-model="currentTab" class="transparent">
         <v-tab-item>
-          <v-data-table class="token-allocation-table transparent" :headers="assetsHeaders" :items="assets" @click:row="handleOnRowClick">
+          <v-data-table
+            class="token-allocation-table transparent"
+            :headers="assetsHeaders"
+            :items="assets"
+            @click:row="handleOnRowClick"
+            :sort-by.sync="assetsSortBy"
+            :sort-desc.sync="assetsSortDesc"
+            :items-per-page="5"
+            :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+          >
             <template v-slot:[`item.name`]="{ item }">
-              <v-avatar size="30" class="avatar">
-                <v-img :src="item.logo" :alt="item.logo + 'Icon'"></v-img>
-              </v-avatar>
-              <span class="table-text">{{ item.name }}</span>
+              <v-list-item dense>
+                <v-list-item-avatar class="my-0" size="32">
+                  <v-img :src="item.img" :alt="item.name + ' Logo'"></v-img>
+                </v-list-item-avatar>
+                <v-list-item-content>
+                  <v-list-item-title>
+                    {{item.name}}
+                  </v-list-item-title>
+                  <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+                    {{item?.metadata?.description}}
+                  </v-list-item-subtitle>
+                </v-list-item-content>
+              </v-list-item>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ (parseInt(Number(item.quantity) / Math.pow(10, item.decimals) * 100) / 100).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
+              <span class="table-text">{{ (Number(item.quantity) / Math.pow(10, item.metadata.decimals)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
             </template>
             <template v-slot:[`item.last_price`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
@@ -94,70 +112,92 @@
           </v-data-table>
         </v-tab-item>
         <v-tab-item>
-          <v-data-table class="token-allocation-table transparent" :headers="collectiblesHeaders" :items="collectiblesData" @click:row="handleOnRowClick">
-            <template v-slot:[`item.asset`]="{ item }">
-              <v-avatar size="30" class="avatar">
-                <v-img :src="require('@/assets/GeroPool.png')" :alt="item.asset + 'Icon'"></v-img>
-              </v-avatar>
-              <span class="table-text">{{ item.asset }}</span>
+          <v-data-table
+            class="token-allocation-table transparent"
+            :headers="collectiblesHeaders"
+            :items="collectibles"
+            @click:row="handleOnRowClick"
+            :items-per-page="5"
+            :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+            :sort-by.sync="collectiblesSortBy"
+            :sort-desc.sync="collectiblesSortDesc"
+          >
+            <template v-slot:[`item.name`]="{ item }">
+              <v-list-item dense>
+                <v-list-item-avatar class="my-0" size="32">
+                  <img :src="item.img" :alt="item.name + ' Logo'" />
+                </v-list-item-avatar>
+                <v-list-item-content>
+                  <v-list-item-title>
+                    {{ item.name }}
+                  </v-list-item-title>
+                </v-list-item-content>
+              </v-list-item>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text" v-if="item.quantity">{{ item.quantity.toLocaleString() }}</span>
+              <span class="table-text">{{ Number(item.quantity).toLocaleString() }}</span>
             </template>
-            <template v-slot:[`item.floor`]="{ item }">
-              <div>
-                <span class="table-text">${{ item.floor[0].toLocaleString() }}</span>
-                <span class="table-text-opacity">Â{{ item.floor[1].toLocaleString() }}</span>
-              </div>
+            <template v-slot:[`item.floor`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <div>-->
+<!--                <span class="table-text">${{ item.floor[0].toLocaleString() }}</span>-->
+<!--                <span class="table-text-opacity">Â{{ item.floor[1].toLocaleString() }}</span>-->
+<!--              </div>-->
             </template>
-            <template v-slot:[`item.change`]="{ item }">
-              <v-avatar tile size="20">
-                <v-img
-                  :src="
-                    item.change >= 0
-                      ? require('@/assets/svg/trend-up-01.svg')
-                      : require('@/assets/svg/trend-down-01.svg')
-                  "
-                  alt="trend"
-                ></v-img>
-              </v-avatar>
-              <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{
-                Math.abs(item.change * 100) + "%"
-              }}</span>
+            <template v-slot:[`item.change`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <v-avatar tile size="20">-->
+<!--                <v-img-->
+<!--                  :src="-->
+<!--                    item.change >= 0-->
+<!--                      ? require('@/assets/svg/trend-up-01.svg')-->
+<!--                      : require('@/assets/svg/trend-down-01.svg')-->
+<!--                  "-->
+<!--                  alt="trend"-->
+<!--                ></v-img>-->
+<!--              </v-avatar>-->
+<!--              <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{-->
+<!--                Math.abs(item.change * 100) + "%"-->
+<!--              }}</span>-->
             </template>
-            <template v-slot:[`item.cost_basis`]="{ item }">
-              <div v-if="item.cost_basis">
-                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>
-                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>
-              </div>
+            <template v-slot:[`item.cost_basis`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <div v-if="item.cost_basis">-->
+<!--                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>-->
+<!--                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>-->
+<!--              </div>-->
             </template>
-            <template v-slot:[`item.avg_price`]="{ item }">
-              <div v-if="item.avg_price">
-                <span class="table-text">${{ item.avg_price[0].toLocaleString() }}</span>
-                <span class="table-text-opacity">Â{{ item.avg_price[1].toLocaleString() }}</span>
-              </div>
+            <template v-slot:[`item.avg_price`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <div v-if="item.avg_price">-->
+<!--                <span class="table-text">${{ item.avg_price[0].toLocaleString() }}</span>-->
+<!--                <span class="table-text-opacity">Â{{ item.avg_price[1].toLocaleString() }}</span>-->
+<!--              </div>-->
             </template>
-            <template v-slot:[`item.pnl`]="{ item }">
-              <div v-if="item.pnl">
-                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text"
-                  >${{ item.pnl[0].toLocaleString() }}</span
-                >
-                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text-opacity"
-                  >Â{{ item.pnl[1].toLocaleString() }}</span
-                >
-              </div>
+            <template v-slot:[`item.pnl`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <div v-if="item.pnl">-->
+<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text"-->
+<!--                  >${{ item.pnl[0].toLocaleString() }}</span-->
+<!--                >-->
+<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text-opacity"-->
+<!--                  >Â{{ item.pnl[1].toLocaleString() }}</span-->
+<!--                >-->
+<!--              </div>-->
             </template>
-            <template v-slot:[`item.allocation`]="{ item }">
-              <v-progress-linear
-                class="progress-bar"
-                height="8"
-                :value="item.allocation"
-                color="#00dff3"
-              ></v-progress-linear>
-              <span class="table-text">{{ item.allocation }}%</span>
+            <template v-slot:[`item.allocation`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <v-progress-linear-->
+<!--                class="progress-bar"-->
+<!--                height="8"-->
+<!--                :value="item.allocation"-->
+<!--                color="#00dff3"-->
+<!--              ></v-progress-linear>-->
+<!--              <span class="table-text">{{ item.allocation }}%</span>-->
             </template>
-            <template v-slot:[`item.last_7_days`]="{ item }">
-              <span>{{ item.last_7_days }}</span>
+            <template v-slot:[`item.last_7_days`]="{  }">
+              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+<!--              <span>{{ item.last_7_days }}</span>-->
             </template>
           </v-data-table>
         </v-tab-item>
@@ -175,12 +215,28 @@ export default {
     assets: {
       type: Array,
       default: () => [],
+    },
+    collectibles: {
+      type: Array,
+      default: () => [],
     }
+  },
+  methods: {
+    handleSwitchTab(tab) {
+      this.currentTab = tab;
+    },
+    handleOnRowClick(row) {
+      this.$emit("click", row);
+    },
   },
   computed: {
     ...mapState(useStore, ['price']),
   },
   data: () => ({
+    assetsSortBy: 'name',
+    assetsSortDesc: false,
+    collectiblesSortBy: 'name',
+    collectiblesSortDesc: false,
     currentTab: 0,
     chartData: [],
     assetsHeaders: [
@@ -196,7 +252,7 @@ export default {
       { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days" },
     ],
     collectiblesHeaders: [
-      { text: "Asset", align: "start", sortable: true, value: "asset" },
+      { text: "Asset", align: "start", sortable: true, value: "name" },
       { text: "Quantity", align: "center", sortable: true, value: "quantity" },
       { text: "Floor", align: "center", sortable: true, value: "floor" },
       { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis" },
@@ -219,14 +275,7 @@ export default {
       },
     ],
   }),
-  methods: {
-    handleSwitchTab(tab) {
-      this.currentTab = tab;
-    },
-    handleOnRowClick(row) {
-      this.$emit("click", row);
-    },
-  },
+
 };
 </script>
 <style>

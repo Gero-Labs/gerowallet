@@ -32,6 +32,7 @@
           <v-card-title>Transactions (Last 10)</v-card-title>
           <v-card-text class="pa-0">
             <v-data-table
+              :header-props="{ 'sort-icon': 'mdi-menu-up' }"
               :items="lastTenTransactions"
               :headers="activityHeaders"
               class="transparent transactions-table"
@@ -161,7 +162,7 @@ export default {
     blockchainDB: undefined
   }),
   mounted() {
-    this.loadingChart = false
+    // this.loadingChart = false
   }
 }
 </script>

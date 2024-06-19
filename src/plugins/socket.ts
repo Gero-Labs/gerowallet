@@ -6,7 +6,6 @@ import {useStore} from "@/store";
 
 export class SocketPlugin {
 
-  public fiatRates: {} = {};
   public message: string = '';
   public connected: boolean = false;
 
@@ -26,6 +25,9 @@ export class SocketPlugin {
     }
     if (value['message_type'] === 'PRICE') {
       useStore().setPrice(value['object'])
+    }
+    if (value['message_type'] === 'FIAT_RATES') {
+      useStore().setFiatRates(value['object'])
     }
   }
 

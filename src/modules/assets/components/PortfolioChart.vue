@@ -246,7 +246,7 @@ export default {
   },
 };
 </script>
-<style>
+<style scoped>
 #highstock-chart {
   min-height: 250px;
 }

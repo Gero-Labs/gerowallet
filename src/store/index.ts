@@ -17,7 +17,7 @@ import { STORAGE } from '@/chrome/config';
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'pools', 'assets', 'baseAddress', 'utxos', 'addresses']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses']},
   state: () => ({
     loggedWallet: undefined,
     baseAddress: undefined,
@@ -35,7 +35,9 @@ export const useStore = defineStore('store', {
     latestTip: undefined,
     stakingProView: false,
     utxos: undefined,
-    addresses: undefined
+    addresses: undefined,
+    fiatRates: undefined,
+    currency: undefined,
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -127,46 +129,6 @@ export const useStore = defineStore('store', {
               quantity: totalAmount,
               logo: require('@/assets/svg/cardano.svg')
             }
-            // const unresolved = []
-            // const resolvedAssets = []
-            // Object.values(assets).forEach(asset => {
-            //   const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-            //   if (!resolved) {
-            //     unresolved.push(asset)
-            //   } else {
-            //     resolvedAssets.push(resolved)
-            //   }
-            // });
-            // appWallet.getAssetsInfo(unresolved)
-
-            // Object.values(resolvedAssets).forEach(asset => {
-            //   const assetName = Buffer.from(asset['asset_name'], 'hex').toString('ascii')
-            //   if (asset['asset_name'] === 'lovelace' || asset['asset_name'] === '') {
-            //     return
-            //   }
-            //   let resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-            //   if (!resolved) {
-            //     resolved = appWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
-            //   }
-            //   if (resolved?.metadata?.logo) {
-            //     asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
-            //   } else if (resolved.onchain_metadata) {
-            //     asset['onchain_metadata'] = resolved.onchain_metadata
-            //     if (resolved.onchain_metadata.image) {
-            //       asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image.replace('ipfs://', '')
-            //     } else if (resolved.onchain_metadata['721'] && resolved.onchain_metadata['721'][asset['policy_id']] && resolved.onchain_metadata['721'][asset['policy_id']][assetName]) { // NFT
-            //       const element = resolved.onchain_metadata['721'][asset['policy_id']][assetName]
-            //       if (element['image']) {
-            //         asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + element['image'].replace('ipfs://', '')
-            //       }
-            //       if (element['files']) {
-            //         asset['files'] = element['files']
-            //       }
-            //     }
-            //   } else {
-            //     asset['logo'] = ''; // Set empty logo if not found
-            //   }
-            // })
             return {
               ...tx,
               sentAmount,
@@ -209,28 +171,28 @@ export const useStore = defineStore('store', {
         });
       }
       // Resolve Assets
-      if (utxos) {
-        utxos.forEach(utxo => {
-          if (utxo.asset_list) {
-            utxo.asset_list.forEach(asset => {
-              const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-              if (!resolved) {
-                this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
-              } else {
-                asset['total_amount'] = resolved?.quantity
-                asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
-                if (resolved?.metadata?.logo) {
-                  asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
-                } else if (resolved?.onchain_metadata?.image) {
-                  asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
-                } else {
-                  asset['logo'] = ''; // Set empty logo if not found
-                }
-              }
-            })
-          }
-        })
-      }
+      // if (utxos) {
+      //   utxos.forEach(utxo => {
+      //     if (utxo.asset_list) {
+      //       utxo.asset_list.forEach(asset => {
+      //         const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
+      //         if (!resolved) {
+      //           this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
+      //         } else {
+      //           asset['total_amount'] = resolved?.quantity
+      //           asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
+      //           if (resolved?.metadata?.logo) {
+      //             asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
+      //           } else if (resolved?.onchain_metadata?.image) {
+      //             asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
+      //           } else {
+      //             asset['logo'] = ''; // Set empty logo if not found
+      //           }
+      //         }
+      //       })
+      //     }
+      //   })
+      // }
       return utxos;
     },
     getPools: state => state.pools,
@@ -398,6 +360,9 @@ export const useStore = defineStore('store', {
     setPrice(price) {
       this.price = price
     },
+    async setFiatRates(fiatRates) {
+      this.fiatRates = fiatRates
+    },
     setStakingProView(isPro) {
       this.stakingProView = isPro
     },
@@ -441,8 +406,6 @@ export const useStore = defineStore('store', {
             this.transactions = newT
             this.setUtxosAndAddresses(newT)
           }
-
-          console.log('newTransactions', newT)
         },
         error: error => {
           console.error('Failed to Fetch Transactions:', error)
