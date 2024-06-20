@@ -10,11 +10,12 @@
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Total ADA:</span>
-            <h2 style="color: white" v-if="loggedWallet">{{ account.controlled_amount | toAda(false, 2, loggedWallet.network !== Network.MAINNET) }}</h2>
+            <h2 style="color: white" v-if="loggedWallet">{{ account.controlled_amount | toCurrency(false, 2, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
+              }}</h2>
           </v-col>
           <v-col cols="3" class="px-4">
             <span>Rewards</span>
-            <h2 style="color: white">{{ account.withdrawable_amount | toAda }}</h2>
+            <h2 style="color: white">{{ account.withdrawable_amount | toCurrency }}</h2>
           </v-col>
         </v-row>
         <v-row no-gutters class="pt-2">
@@ -93,7 +94,7 @@
               <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
                       :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toAda
+                    item.amount | toCurrency
                   }}</span>
                 <span v-else>{{ item.amount }}</span>
               </template>
@@ -104,7 +105,8 @@
                       alt="trend"></v-img>
                 </v-avatar>&nbsp;
                 <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toAda(change(item), false) }}</span>
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false)
+                  }}</span>
               </template>
               <template v-slot:[`item.date`]="{ item }">
                 <v-list-item two-line class="px-0">

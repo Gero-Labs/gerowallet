@@ -5,7 +5,7 @@ export default {
   $vuetify: { ...en },
   help: 'Help',
   welcome: 'Welcome!',
-  chooseAnOption: 'Choose an option to get started',
+  chooseAnOption: 'Select chain and network',
   chooseAWallet: 'Choose a wallet to sign in',
   termsOfService: 'Terms of Service',
   privacyPolicy: 'Privacy Policy',
@@ -15,4 +15,5 @@ export default {
   restoreWalletSubtitle: 'Restore your existing wallet using a seed phrase',
   hardwareWallet: 'Hardware Wallet',
   hardwareWalletSubtitle: 'Connect your hardware wallet (Cold Wallet) via USB or Bluetooth',
+  startWalletSetup: 'Start Wallet Setup'
 };

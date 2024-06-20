@@ -2,29 +2,18 @@
   <div class="d-flex column">
     <v-img width="28" :src="require('@/assets/svg/cardano.svg')" class="mr-2" contain></v-img>
     <span v-if="ticker.lastPrice" style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
-    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="chart.length > 0"></v-divider>
-    <div style="width: 120px" v-if="chart.length > 0">
-      <v-sparkline :value="chart"
-                   :gradient="ticker.priceChange > 0 ? ['#47cd89'] : ['#f97066']"
-                   :smooth="radius || false"
-                   :padding="padding"
-                   :line-width="width"
-                   :stroke-linecap="lineCap"
-                   :type="type"
-                   :auto-line-width="autoLineWidth"
-                   height="30"
-                   style="max-width: 120px; height: 50px">
-      </v-sparkline>
-    </div>
+    <sparkline :divider="true"></sparkline>
   </div>
 </template>
 <script>
 import {useStore} from "@/store";
 import {mapState} from "pinia";
 import socket from "@/plugins/socket";
+import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 
 export default {
   name: 'PriceTicker',
+  components: { Sparkline },
   watch: {
     price: {
       handler(val) {
@@ -41,15 +30,11 @@ export default {
   },
   async mounted() {
     const provider = await useStore().getWallet.api
-    this.chart = await provider.fetchHistory()
     const data = await provider.fetchADAStatistics();
     this.ticker.prevPrice = this.ticker.lastPrice;
     this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
     this.ticker.priceChange = Number(data.priceChange).toFixed(3);
     this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-    setInterval(async () => {
-      this.chart = await provider.fetchHistory()
-    },60000);
   },
   computed: {
     ...mapState(useStore, ['price']),
@@ -69,7 +54,6 @@ export default {
     gradient: ['#fff'],
     type: 'trend',
     autoLineWidth: false,
-    chart: [],
   })
 }
 </script>

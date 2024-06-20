@@ -9,7 +9,7 @@
         <v-icon class="toggleUpDown" :class='{ "rotate": value }' small>mdi-chevron-down</v-icon>
       </v-btn>
     </template>
-    <v-list dense class="pa-0" dark style="background-color: #00000088;">
+    <v-list dense class="pa-0" dark style="background-color: #000000EE;">
       <v-list-item-group v-model="selectedNetwork" mandatory>
         <v-list-item v-for="(item, index) in networks.networks" :key="index" :value="item">
           <v-list-item-avatar size="20" v-if="item.icon">
@@ -34,6 +34,11 @@ export default {
   watch: {
     selectedNetwork(val) {
       this.store.setNetwork(val)
+      // if (val.blockchain.includes("Apex")) {
+      //   this.$vuetify.theme.themes.dark.primary ='#dc753e'
+      // } else {
+      //   this.$vuetify.theme.themes.dark.primary ='#2f9cac'
+      // }
     }
   },
   data: () => ({

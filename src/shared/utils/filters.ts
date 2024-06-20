@@ -12,12 +12,17 @@ const filters = {
   toIPFS(value: string) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value;
   },
-  toCurrency(value: number, decimals: number) {
-    return value / Math.pow(10, decimals);
-  },
-  toAda(value: number, signs: boolean, decimalPlaces: number, test: boolean, human: boolean) {
-    const symbol = test ? 't₳' : '₳'
-    const res: number = filters.toCurrency(value, 6)
+  toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbol?: string, human?: boolean, decimals?: number) {
+    if (decimals == 1) {
+      console.log('toCurrency')
+    }
+    if (symbol == undefined) {
+      symbol = '₳'
+    }
+    if (decimals == undefined) {
+      decimals = 6
+    }
+    const res: number = Number(value) / Math.pow(10, decimals);
     if (human) {
       const lookup = [
         {value: 1, symbol: ""},

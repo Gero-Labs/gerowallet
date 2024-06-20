@@ -4,18 +4,19 @@
       <v-card-title class="justify-center" style="color: white; font-size: 32px;">{{$t('welcome') }}</v-card-title>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-else>{{ $t('chooseAWallet') }}</v-card-subtitle>
+      <v-card-title class="justify-center pt-0" v-if="walletSetup"><network-selector ref="networkSelector"></network-selector></v-card-title>
       <v-card-text class="pb-12 px-12">
         <v-row class="fill-height" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
           <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">
             <parallax-card style="margin-left: auto; margin-right: auto;"
-                           :data-image="require('../assets/wallet_new.png')">
+                           :data-image="walletCreateCardBg">
               <h1 slot="header" style="line-height: 1;">{{ $t('createWallet') }}</h1>
               <p slot="content">{{ $t('createWalletSubtitle') }}</p>
             </parallax-card>
           </v-col>
           <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="restoreWalletDialog = true">
             <parallax-card style="margin-left: auto; margin-right: auto;"
-                           :data-image="require('../assets/wallet_restore.png')">
+                           :data-image="walletRestoreCardBg">
               <h1 slot="header" style="line-height: 1">{{ $t('restoreWallet') }}</h1>
               <p slot="content">{{ $t('restoreWalletSubtitle') }}</p>
             </parallax-card>
@@ -30,7 +31,7 @@
               SOON
             </v-chip>
             <parallax-card :style="network.supportedHardware ? { marginLeft: 'auto', marginRight: 'auto' } : { marginLeft: 'auto', marginRight: 'auto', filter: 'brightness(0.5)' }"
-                           :data-image="require('../assets/hardware_wallet.png')">
+                           :data-image="hardwarePairCardBg">
               <h1 slot="header" style="line-height: 1">{{ $t('hardwareWallet') }}</h1>
               <p slot="content">{{ $t('hardwareWalletSubtitle') }}</p>
             </parallax-card>
@@ -76,7 +77,7 @@
           </v-card-text>
           <v-divider></v-divider>
           <v-card-actions class="justify-center pt-10">
-            <v-btn text plain style="text-transform: capitalize" @click="walletSetup = true">Start Wallet Setup</v-btn>
+            <v-btn text plain style="text-transform: capitalize" @click="walletSetup = true">{{$t('startWalletSetup')}}</v-btn>
           </v-card-actions>
         </v-card>
       </v-card-text>
@@ -94,12 +95,31 @@ import {useStore} from "@/store"
 import {mapActions, mapState} from "pinia";
 import RestoreWallet from "@/modules/welcome/dialogs/RestoreWallet.vue";
 import networks from "@/shared/utils/networks";
+import NetworkSelector from '@/modules/navigation/components/NetworkSelector.vue';
 
 export default {
   name: 'welcome',
-  components: {PairHardwareWallet, ParallaxCard, CreateWallet, RestoreWallet},
+  components: { NetworkSelector, PairHardwareWallet, ParallaxCard, CreateWallet, RestoreWallet},
   computed: {
-    ...mapState(useStore, ['wallets','network'])
+    ...mapState(useStore, ['wallets','network']),
+    walletCreateCardBg() {
+      if (this.network?.blockchain?.includes("Apex")) {
+        return this.walletCreateApexBg
+      }
+      return this.walletCreateBg
+    },
+    walletRestoreCardBg() {
+      if (this.network?.blockchain?.includes("Apex")) {
+        return this.walletRestoreApexBg
+      }
+      return this.walletRestoreBg
+    },
+    hardwarePairCardBg() {
+      if (this.network?.blockchain?.includes("Apex")) {
+        return this.hardwareWalletApexBg
+      }
+      return this.hardwareWalletBg
+    }
   },
   methods: {
     ...mapActions(useStore, ['login']),
@@ -138,6 +158,12 @@ export default {
     pairHardwareWalletDialog: false,
     walletSetup: false,
     selectedWallet: {},
+    walletCreateBg: require('@/modules/welcome/assets/wallet_new.png'),
+    walletRestoreBg: require('@/modules/welcome/assets/wallet_restore.png'),
+    hardwareWalletBg: require('@/modules/welcome/assets/hardware_wallet.png'),
+    walletCreateApexBg: require('@/modules/welcome/assets/wallet_new_apex.png'),
+    walletRestoreApexBg: require('@/modules/welcome/assets/wallet_restore_apex.png'),
+    hardwareWalletApexBg: require('@/modules/welcome/assets/hardware_wallet_apex.png')
   }),
   mounted() {
 

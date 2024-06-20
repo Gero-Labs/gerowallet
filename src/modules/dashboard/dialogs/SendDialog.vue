@@ -3,7 +3,7 @@
     <v-btn v-if="currentStep > 1" @click="prevStep" icon class="arrow-left"
       ><v-icon color="#cccdd0">mdi-arrow-left</v-icon></v-btn
     >
-    <div class="titles">
+    <div>
       <v-card-title class="display-1">Quick Send</v-card-title>
       <v-card-subtitle class="text--secondary"> Send AP3X or other assets to another wallet. </v-card-subtitle>
     </div>
@@ -102,21 +102,11 @@ export default {
       }
     },
     resetData() {
-      const colorsMapping = {
-        green: '#00685b',
-        purple: '#43269f',
-        red: '#b2105b',
-        orange: '#e14e02',
-        blue: '#125db5',
-        grey: '#415153',
-      };
-      const store = useStore();
-      const selectedWallet = { ...store.loggedWallet, iconColor: colorsMapping[store.loggedWallet.icon] };
       this.currentStep = 1;
       this.sendData = {
         selectedCollectibles: {},
         recipientAddress: '',
-        selectedWallet,
+        selectedWallet: this.loggedWallet,
       };
     },
   },

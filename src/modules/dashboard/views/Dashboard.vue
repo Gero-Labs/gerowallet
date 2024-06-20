@@ -5,7 +5,7 @@
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Portfolio
-            <div v-if="chartData && chartData.length > 0">
+            <div v-if="computeChartData && computeChartData.length > 0">
               <v-btn
                 small
                 style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
@@ -58,7 +58,7 @@
                 ></stacked-tokens>
               </template>
               <template v-slot:[`item.amount`]="{ item }">
-                <span :style="{ color: getColor(item) }">{{ item.ada | toAda(true) }}</span>
+                <span :style="{ color: getColor(item) }">{{ item.ada | toCurrency(true) }}</span>
               </template>
             </v-data-table>
           </v-card-text>
@@ -104,12 +104,16 @@ export default {
       return []
     },
     computeChartData() {
-      const graphData = []
+      console.log('computeChartData')
+      let graphData = undefined
       let currentBalance = 0
-      this.calculatedTransactions.forEach(tx => {
-        currentBalance += tx.ada
-        graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
-      })
+      if (this.calculatedTransactions) {
+        graphData = []
+        this.calculatedTransactions.forEach(tx => {
+          currentBalance += tx.ada
+          graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
+        })
+      }
       return graphData
     },
   },
@@ -149,7 +153,6 @@ export default {
     activities: [],
     loadingChart: true,
     transactionInfo: null,
-    chartData: undefined,
     transactions: undefined,
     txIos: undefined,
     activityHeaders: [

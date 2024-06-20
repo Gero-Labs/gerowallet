@@ -9,7 +9,7 @@
         Received from: <span class="value-text">{{ transactionInfo.address }}</span>
       </div>
       <div>
-        Transaction Fee: <span class="fee">{{ transactionInfo.fee | toAda }}</span>
+        Transaction Fee: <span class="fee">{{ transactionInfo.fee | toCurrency }}</span>
       </div>
       <div>
         TransactionId: <a :href="`https://explorer.cardano.org/en/transaction?id=${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
