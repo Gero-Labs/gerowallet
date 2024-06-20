@@ -5,7 +5,7 @@
     </div>
     <v-card flat class="tx-details">
       <div class="provider">{{ transaction?.provider }}</div>
-      <div class="total">{{ transaction?.total | toAda(true) }}</div>
+      <div class="total">{{ transaction?.total | toCurrency(true) }}</div>
       <div class="assets" v-if="transaction?.assets?.length">Assets:</div>
       <div v-if="transaction?.assets?.length">
         <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
@@ -20,7 +20,7 @@
 
     <div class="tx-footer" v-if="transaction.txFee">
       <template>
-        Tx Fee&nbsp;<span> {{ 0-transaction?.txFee | toAda(true) }}</span>
+        Tx Fee&nbsp;<span> {{ 0 - transaction?.txFee | toCurrency(true) }}</span>
       </template>
     </div>
   </v-card>

@@ -1,6 +1,5 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')">
-    {{modalData}}
     <img :src="require('../assets/flag-05.png')" alt="token-bundle-image" />
 
     <v-card-title class="pa-0 card-title">

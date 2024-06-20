@@ -12,7 +12,8 @@
       </div>
     </v-expansion-panel-header>
     <v-expansion-panel-content class="content-container">
-      <div :class="amountClass">{{ amount | toAda(false, 0, loggedWallet.network !== Network.MAINNET) }}</div>
+      <div :class="amountClass">{{ amount | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
+        }}</div>
       <TokensList :rows="2" :tokensData="[]"></TokensList>
     </v-expansion-panel-content>
   </v-expansion-panel>

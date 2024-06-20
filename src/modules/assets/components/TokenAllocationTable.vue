@@ -4,8 +4,12 @@
       Token Allocation ({{assets.length + collectibles.length}})
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
-        <v-btn :value="0" rounded> Assets </v-btn>
-        <v-btn :value="1" rounded> Collectibles </v-btn>
+        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Assets&nbsp;
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{assets.length}}</v-chip>
+        </v-btn>
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize"> Collectibles&nbsp;
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{collectibles.length}}</v-chip>
+        </v-btn>
       </v-btn-toggle>
     </v-card-title>
     <v-card-text class="pa-0">
@@ -39,8 +43,9 @@
             <template v-slot:[`item.quantity`]="{ item }">
               <span class="table-text">{{ (Number(item.quantity) / Math.pow(10, item.metadata.decimals)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
             </template>
-            <template v-slot:[`item.last_price`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
+            <template v-slot:[`item.last_price`]="{ item }">
+              <span v-if="item.name === 'ADA'" class="table-text">{{Number(price.lastPrice).toFixed(4)}}</span>
+              <v-chip v-else outlined x-small color="#F97066">Soon</v-chip>
 <!--              <span class="table-text">${{ item.last_price }}</span>-->
             </template>
             <template v-slot:[`item.change`]="{ }">
@@ -105,9 +110,11 @@
                 </template>
               </v-progress-linear>
             </template>
-            <template v-slot:[`item.last_7_days`]="{ }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <span>{{ item.last_7_days }}</span>-->
+            <template v-slot:[`item.last_7_days`]="{ item }">
+              <div v-if="item.name === 'ADA'">
+                <sparkline :width="3"></sparkline>
+              </div>
+              <v-chip v-else outlined x-small color="#F97066">Soon</v-chip>
             </template>
           </v-data-table>
         </v-tab-item>
@@ -208,9 +215,11 @@
 <script>
 import {mapState} from "pinia";
 import {useStore} from "@/store";
+import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 
 export default {
   name: "tokenAllocationTable",
+  components: { Sparkline },
   props: {
     assets: {
       type: Array,
