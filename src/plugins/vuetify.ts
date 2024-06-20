@@ -28,7 +28,7 @@ export default new Vuetify({
         navigationDrawerBackground: '#141414',
         appBarBackground: '#141414',
         cardBackground: '#0F0F0F',
-      },
+      }
     },
   },
 });

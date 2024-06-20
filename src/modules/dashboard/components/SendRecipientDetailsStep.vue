@@ -4,7 +4,7 @@
       <Select
         :value="sendData.selectedWallet"
         :items="[sendData.selectedWallet]"
-        label="Choose Wallet"
+        label="Wallet"
         :readonly="true"
       ></Select>
     </div>
@@ -12,6 +12,7 @@
     <div class="item-container">
       <label>Recipient Address</label>
       <v-textarea
+        v-if="loggedWallet"
         :value="sendData.recipientAddress"
         rows="3"
         outlined

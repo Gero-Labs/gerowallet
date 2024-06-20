@@ -5,7 +5,7 @@
         <v-col cols="12" style="display: flex">
           <span style="color: #fda29b">Selling</span>
           <v-spacer></v-spacer>
-          <span style="color: #667085">Balance: {{ maxQuantity | toCurrency(6) }}</span>
+          <span style="color: #667085">Balance: {{ maxQuantity | toCurrency(false,2,'') }}</span>
         </v-col>
       </v-row>
       <v-card class="card-container" outlined>

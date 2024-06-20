@@ -66,9 +66,8 @@ export default {
           itemHoverStyle: {
             color: this.$vuetify.theme.isDark ? '#ccc' : '#ccc'
           },
-          labelFormatter: function() {
-            // '<b>{point.name}</b>: {point.percentage:.1f} %',
-            return this.name + ' ' + (this.y ? this.y : 0)
+          labelFormatter() {
+            return `<b>${this.name}</b>`
           }
         },
         accessibility: {
@@ -99,7 +98,7 @@ export default {
           },
         },
         tooltip: {
-          pointFormat: '{point.name}: <b>{point.y}</b>',
+          pointFormat: '{point.name}: <b>{point.percentage:.1f}%</b>'
         },
         exporting: {
           enabled: false,

@@ -53,7 +53,7 @@ export default {
       if (this.lastPrice === -1) {
         return null
       }
-      return (this.lastPrice * price).toLocaleString(undefined, {maximumFractionDigits: 2})
+      return (this.lastPrice * price)
     },
   },
   methods: {
@@ -64,7 +64,6 @@ export default {
       const yMax =this.chartData.reduce((max, current) => {
         return current[1] > max ? current[1] : max
       }, -Infinity);
-      console.log(yMax)
       const data = {
         accessibility: {
           enabled: false,
@@ -249,10 +248,14 @@ export default {
       }
     },
     generateTitleText() {
-      return (
-        `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${this.adaPrice}</span>` +
-        `<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${this.tab.vsLabel}</span></span>`
-      );
+      if (this.adaPrice) {
+        return (
+          `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${filters.toCurrency(this.adaPrice, false, 2, '$', true, 0)}</span>`
+          /*+`<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${this.tab.vsLabel}</span></span>`*/
+        );
+      } else {
+        return ''
+      }
     },
   },
   data() {
@@ -275,7 +278,9 @@ export default {
     price: {
       handler(newVal) {
         this.lastPrice = newVal.lastPrice
-        this.chartInstance.title.update({ text: this.generateTitleText() });
+        if (this.chartInstance?.title) {
+          this.chartInstance.title.update({ text: this.generateTitleText() });
+        }
       },
       deep: true,
     },
