@@ -69,6 +69,7 @@ export default {
 
   & .item-container {
     width: 60%;
+    text-align: left;
   }
 
   .recipient-address > .v-input__control > .v-input__slot {
