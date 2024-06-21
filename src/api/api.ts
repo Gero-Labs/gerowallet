@@ -85,7 +85,6 @@ export class Api {
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
-      console.log(error)
       if (error.response?.status === 404) {
         return []
       }
@@ -101,7 +100,6 @@ export class Api {
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
-      console.log(error)
       if (error.response?.status === 404) {
         return []
       }
@@ -141,7 +139,6 @@ export class Api {
         `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
         units
       );
-      console.log(data)
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -152,7 +149,6 @@ export class Api {
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
-      console.log(data)
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {

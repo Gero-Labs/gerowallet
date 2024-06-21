@@ -9,6 +9,19 @@ const filters = {
 
     return value.substring(0, frontChars) + separator + value.substring(value.length - backChars);
   },
+  shortenStringWithEllipsis(str, maxLength) {
+    // Check if the string length is less than or equal to the maximum length
+    if (str.length <= maxLength) {
+      return str;
+    }
+    // Calculate the length of each part (start and end)
+    const partLength = Math.floor((maxLength - 3) / 2);
+    // Get the start and end parts of the string
+    const startPart = str.slice(0, partLength);
+    const endPart = str.slice(-partLength);
+    // Concatenate the start part, ellipsis, and end part
+    return `${startPart}...${endPart}`;
+  },
   toIPFS(value: string) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value;
   },

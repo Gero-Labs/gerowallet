@@ -1,19 +1,8 @@
 <template>
-  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')">
-    <img :src="require('../assets/flag-05.png')" alt="token-bundle-image" />
-
-    <v-card-title class="pa-0 card-title">
-      <button class="breadcrumbs" @click="handleBreadcrumbClick">MusicBox Dimensions (21)</button>
-      <span v-if="pickedToken" class="breadcrumbs"> > </span>
-      <button v-if="pickedToken" class="breadcrumbs">{{ pickedToken }}</button>
-      <v-spacer></v-spacer>
-      <span v-if="pickedToken === null" class="white-grey policy"
-        >Policy: 85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18</span
-      >
-    </v-card-title>
-    <v-card-subtitle class="pa-0 mt-2 mb-3"
-      >Music touches us emotionally, where images and words alone can't</v-card-subtitle
-    >
+  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')"
+              :img="collectionImg.toString()"
+              title="MusicBox Dimensions (21)"
+              subtitle="Policy: 85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18">
     <TokensList :tokensData="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" v-if="pickedToken === null" @token-click="handleTokenClick" />
     <TokenPreviewCarousel v-else />
   </BaseDialog>
@@ -48,6 +37,7 @@ export default {
     },
   },
   data: () => ({
+    collectionImg: require('../assets/flag-05.png'),
     tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
     pickedToken: null,
   }),

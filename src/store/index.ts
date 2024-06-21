@@ -26,7 +26,8 @@ export const useStore = defineStore('store', {
     network: undefined,
     provider: undefined,
     price: undefined,
-    transactions: [],
+    transactions: undefined,
+    loadingTxs: true,
     assets: [],
     pools: [],
     rewards: [],
@@ -109,7 +110,6 @@ export const useStore = defineStore('store', {
                 assets[assetName] = receivedAsset;
               }
             });
-
             currentBalance += totalAmount
 
             const statuses = []
@@ -199,6 +199,9 @@ export const useStore = defineStore('store', {
     getAccountInfo: state => state.accountInfo
   },
   actions: {
+    setLoadingTxs(value) {
+      this.loadingTxs = value
+    },
     async setLoggedWallet(wallet) {
       this.loggedWallet = wallet;
       if (chrome?.storage) {
@@ -235,7 +238,6 @@ export const useStore = defineStore('store', {
       const inputSet = new Set();
       const addresses: Set<string> = new Set();
       const stakeAddress = appWallet.stakeAddress().to_address().to_bech32()
-      console.log('setUtxosAndAddresses')
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -295,7 +297,6 @@ export const useStore = defineStore('store', {
     },
     async login(walletId: number) {
       loading.setLoading(true);
-      console.log('login');
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -335,11 +336,11 @@ export const useStore = defineStore('store', {
         await chrome.storage.local.remove(STORAGE.whitelisted);
       }
       this.provider = undefined;
-      this.transactions = []
+      this.transactions = undefined;
       this.assets = []
       this.pools = []
-      this.accountInfo = undefined
-      this.latestTip = undefined
+      this.accountInfo = undefined;
+      this.latestTip = undefined;
       appWallet = undefined
       loading.setLoading(false);
     },
@@ -459,11 +460,9 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
-      console.log('test')
       liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
         next: newConnectedDapps => {
           this.connectedDapps = newConnectedDapps
-          console.log('newDapps', newConnectedDapps)
           if (chrome?.storage) {
             if (newConnectedDapps) {
               chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});

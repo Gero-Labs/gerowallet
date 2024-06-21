@@ -1,19 +1,9 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
-    <v-card-title style="word-break: break-word"
-      >Swap
-      <v-spacer></v-spacer>
-    </v-card-title>
-    <v-card-subtitle>Effortlessly exchange tokens directly from your wallet.</v-card-subtitle>
-    <v-card-text
-      class="text-center justify-center pb-2"
-      style="width: 388px; height: 600px; align-content: center; margin: auto"
-    >
-      <swap-currency-selector
-        :value="quantity"
-        @updateQuantity="updateQuantity"
-      ></swap-currency-selector>
-    </v-card-text>
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet.">
+    <swap-currency-selector
+      :value="quantity"
+      @updateQuantity="updateQuantity"
+    ></swap-currency-selector>
   </BaseDialog>
 </template>
 <script>

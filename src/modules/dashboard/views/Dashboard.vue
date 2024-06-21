@@ -24,7 +24,7 @@
         <quick-actions></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard :account="accountInfo" v-if="accountInfo?.controlled_amount"></StakingCard>
+        <StakingCard :account="accountInfo" v-if="accountInfo?.controlled_amount && accountInfo.pool"></StakingCard>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
@@ -104,7 +104,6 @@ export default {
       return []
     },
     computeChartData() {
-      console.log('computeChartData')
       let graphData = undefined
       let currentBalance = 0
       if (this.calculatedTransactions) {

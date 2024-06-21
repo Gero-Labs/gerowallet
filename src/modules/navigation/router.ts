@@ -10,10 +10,7 @@ import Staking from "@/modules/staking/Staking.vue";
 import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 import DappSignData from '@/popup/modules/views/DappSignData.vue';
-import { Messaging } from '@/chrome/messaging';
 import SignTx from '@/popup/modules/views/SignTx.vue';
-
-const controller = Messaging.createInternalController();
 
 const routes = [
   {
@@ -128,14 +125,12 @@ const router = new VueRouter({
 });
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
-  console.log('routerBeforeEach')
   const store = useStore();
   await store.loadWallets();
   const wallets = store.getWallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
   }
-  console.log(store.isLoggedIn)
   const isLoggedIn = store.isLoggedIn;
   if (to.matched.some(record => record.meta['requiresAuth'])) {
     // this route requires auth, check if logged in
