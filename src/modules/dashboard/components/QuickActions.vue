@@ -37,68 +37,68 @@
               <span>Receive</span>
             </v-layout>
           </v-col>
-          <v-col cols="6" class="pa-2" style="align-content: center;">
-            <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP">
-                <v-avatar tile size="80">
-                  <v-img
-                    :src="require('@/assets/svg/swap.svg')"
-                    alt="Swap"
-                    contain
-                    style="
-                      filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);
-                    "
-                  ></v-img>
-                </v-avatar>
-              </v-btn>
-              <span>Swap</span>
-            </v-layout>
-          </v-col>
-          <v-col cols="6" class="pa-2" style="align-content: center;">
-            <v-layout column style="align-items: center">
-              <v-btn
-                text
-                plain
-                rounded
-                class="px-0"
-                height="100"
-                width="100"
-                @click="buy"
-                :disabled="isBuyDisabled"
-                :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
-              >
-                <v-avatar tile size="80">
-                  <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Swap" contain></v-img>
-                </v-avatar>
-              </v-btn>
-              <span>Buy</span>
-            </v-layout>
-          </v-col>
+<!--          <v-col cols="6" class="pa-2" style="align-content: center;">-->
+<!--            <v-layout column style="align-items: center">-->
+<!--              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP">-->
+<!--                <v-avatar tile size="80">-->
+<!--                  <v-img-->
+<!--                    :src="require('@/assets/svg/swap.svg')"-->
+<!--                    alt="Swap"-->
+<!--                    contain-->
+<!--                    style="-->
+<!--                      filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);-->
+<!--                    "-->
+<!--                  ></v-img>-->
+<!--                </v-avatar>-->
+<!--              </v-btn>-->
+<!--              <span>Swap</span>-->
+<!--            </v-layout>-->
+<!--          </v-col>-->
+<!--          <v-col cols="6" class="pa-2" style="align-content: center;">-->
+<!--            <v-layout column style="align-items: center">-->
+<!--              <v-btn-->
+<!--                text-->
+<!--                plain-->
+<!--                rounded-->
+<!--                class="px-0"-->
+<!--                height="100"-->
+<!--                width="100"-->
+<!--                @click="buy"-->
+<!--                :disabled="isBuyDisabled"-->
+<!--                :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"-->
+<!--              >-->
+<!--                <v-avatar tile size="80">-->
+<!--                  <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Swap" contain></v-img>-->
+<!--                </v-avatar>-->
+<!--              </v-btn>-->
+<!--              <span>Buy</span>-->
+<!--            </v-layout>-->
+<!--          </v-col>-->
         </v-row>
       </v-card-text>
       <v-card-actions></v-card-actions>
     </v-card>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
-    <SwapDialog :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
-    <BuyDialog :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
+<!--    <SwapDialog :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>-->
+<!--    <BuyDialog :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>-->
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
 </template>
 <script>
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
-import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
-import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
+// import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
+// import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
 import { useStore } from "@/store";
 import { Blockchain, Network } from "@/models/types";
-import { loadMoonPay } from "@moonpay/moonpay-js";
+// import { loadMoonPay } from "@moonpay/moonpay-js";
 import SendDialog from "../dialogs/SendDialog.vue";
 import {mapState} from "pinia";
 
 export default {
   name: "QuickActions",
   components: {
-    BuyDialog,
-    SwapDialog,
+    // BuyDialog,
+    // SwapDialog,
     ReceiveDialog,
     SendDialog,
   },
