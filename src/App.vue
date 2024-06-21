@@ -44,11 +44,24 @@ export default {
     snackbar,
     store: useStore()
   }),
+  watch: {
+    transactions: {
+      handler(newVal, oldVal) {
+        if (!oldVal && newVal) {
+          this.setLoadingTxs(false)
+        }
+        if (oldVal && !newVal) {
+          this.setLoadingTxs(true)
+        }
+      },
+      deep: true,
+    },
+  },
   computed: {
-    ...mapState(useStore, ['loggedWallet']),
+    ...mapState(useStore, ['loggedWallet', 'transactions']),
   },
   methods: {
-    ...mapActions(useStore, ['loadWallets', 'login']),
+    ...mapActions(useStore, ['loadWallets', 'login', 'setLoadingTxs']),
   },
   async mounted() {
     if (this.loggedWallet?.id) {

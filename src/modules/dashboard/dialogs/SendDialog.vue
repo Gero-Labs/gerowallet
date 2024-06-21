@@ -1,13 +1,8 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" subtitle="Send AP3X or other assets to another wallet.">
     <v-btn v-if="currentStep > 1" @click="prevStep" icon class="arrow-left"
       ><v-icon color="#cccdd0">mdi-arrow-left</v-icon></v-btn
     >
-    <div>
-      <v-card-title class="display-1">Quick Send</v-card-title>
-      <v-card-subtitle class="text--secondary"> Send AP3X or other assets to another wallet. </v-card-subtitle>
-    </div>
-
     <CustomStepper :currentStep="currentStep" :steps="steps">
       <v-stepper-content step="1">
         <SendRecipientDetailsStep

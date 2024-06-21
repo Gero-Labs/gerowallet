@@ -1,19 +1,19 @@
 <template>
-  <div style="align-content: center" class="text-center justify-center">
+  <div style="align-content: center; height: 212px" class="text-center justify-center">
     <div id="highstock-chart" v-show="chartData && chartData.length > 0"></div>
     <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
-      <v-avatar size="24" v-if="!loading">
+      <v-avatar size="24" v-if="!loadingTxs">
         <v-img
           :src="require('@/assets/svg/wallet.svg')"
           alt="Wallet"
           style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness(105%) contrast(104%)"
         ></v-img>
       </v-avatar>
-      <v-progress-circular v-if="loading" :indeterminate="loading"></v-progress-circular>
+      <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
       <span v-else>There seems to be no data in this wallet</span>
     </v-card-text>
     <v-tabs
-      v-if="!loading"
+      v-if="chartData && chartData.length > 0"
       background-color="transparent"
       style="width: fit-content"
       height="28"
@@ -46,9 +46,8 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['price']),
+    ...mapState(useStore, ['price', 'transactions', 'loadingTxs']),
     adaPrice() {
-      console.log('price')
       const price = this.chartData[this.chartData.length - 1][1]
       if (this.lastPrice === -1) {
         return null
@@ -172,7 +171,6 @@ export default {
         useUTC: true,
       };
       this.chartInstance = Highstock.stockChart("highstock-chart", data);
-      this.loading = false
     },
     arraysEqual(a, b) {
       if (a === b) return true;
@@ -262,7 +260,6 @@ export default {
     return {
       tab: { value: "ALL", label: "All", vsLabel: "vs all time" },
       lastPrice: -1,
-      loading: true,
       chartInstance: null,
       tabs: {
         ALL: { value: "ALL", label: "All", vsLabel: "vs all time" },
@@ -300,7 +297,6 @@ export default {
     }
   },
   mounted() {
-    console.log('tes')
     this.loadChart(this.chartData)
   }
 };

@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="isDialogOpen" persistent width="850">
+  <v-dialog v-model="isDialogOpen" persistent width="850" scrollable>
     <v-card class="pa-7" height="800">
       <div class="rings-container">
         <div class="rings"></div>
@@ -7,9 +7,24 @@
         <div class="rings"></div>
         <div class="rings"></div>
       </div>
-      <div class="dialog-children-container">
+      <v-card-title class="pa-0 px-3 pb-2">
+        <v-list-item class="px-0" two-line style="z-index: 1">
+          <v-list-item-avatar v-if="img" size="54">
+            <v-img :src="img" contain></v-img>
+          </v-list-item-avatar>
+          <v-list-item-content>
+            <v-list-item-title style="font-size: 18px">
+              {{ title }}
+            </v-list-item-title>
+            <v-list-item-subtitle>
+              {{subtitle}}
+            </v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+      </v-card-title>
+      <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
         <slot></slot>
-      </div>
+      </v-card-text>
       <v-btn icon @click="$emit('close')" class="close-button">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>
@@ -24,6 +39,15 @@ export default {
       type: Boolean,
       default: false,
     },
+    img: {
+      type: String,
+    },
+    title: {
+      type: String,
+    },
+    subtitle: {
+      type: String
+    }
   },
   computed: {
     isDialogOpen: {
@@ -62,6 +86,7 @@ export default {
     border: 1px solid #1d212a;
     border-radius: 50%;
     position: absolute;
+    z-index: 0;
 
     &:first-child {
       width: 90px;
