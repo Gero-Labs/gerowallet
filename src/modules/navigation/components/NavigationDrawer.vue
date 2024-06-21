@@ -249,9 +249,9 @@ export default {
   },
   methods: {
     ...mapActions(useStore, ['logout']),
-    submitLogout() {
-      this.logout();
-      this.$router.push("/welcome")
+    async submitLogout() {
+      await this.logout();
+      await this.$router.push("/welcome")
     },
     resolveIcon(icon) {
       return require('@/assets/svg/' + icon + '.svg')

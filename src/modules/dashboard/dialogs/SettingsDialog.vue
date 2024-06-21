@@ -1,38 +1,32 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')">
-    <v-card-title>Settings
-      <v-spacer></v-spacer>
-    </v-card-title>
-    <v-card-subtitle>Modify wallet and extension configuration settings</v-card-subtitle>
-    <v-card-text>
-      <v-text-field
-        v-model="search"
-        placeholder="Search"
-        prepend-inner-icon="mdi-magnify"
-        outlined
-        dense
-        hide-details
-        class="mb-4"
-      />
-      <v-tabs
-        v-model="tab"
-        color="white"
-        class="v-tabs-border-bottom"
-        background-color="transparent"
-      >
-        <v-tab
-          v-for="tab in tabs"
-          :key="tab.value">{{ tab.label }}
-        </v-tab>
-      </v-tabs>
-      <v-tabs-items v-model="tab" class="transparent">
-        <ProfileTab />
-        <PasswordTab />
-        <CollateralTab />
-        <ContactsTab />
-        <ConnectedDappsTab />
-      </v-tabs-items>
-    </v-card-text>
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings">
+    <v-text-field
+      v-model="search"
+      placeholder="Search"
+      prepend-inner-icon="mdi-magnify"
+      outlined
+      dense
+      hide-details
+      class="mb-4"
+    />
+    <v-tabs
+      v-model="tab"
+      color="white"
+      class="v-tabs-border-bottom"
+      background-color="transparent"
+    >
+      <v-tab
+        v-for="tab in tabs"
+        :key="tab.value">{{ tab.label }}
+      </v-tab>
+    </v-tabs>
+    <v-tabs-items v-model="tab" class="transparent">
+      <ProfileTab />
+      <PasswordTab />
+      <CollateralTab />
+      <ContactsTab />
+      <ConnectedDappsTab />
+    </v-tabs-items>
   </BaseDialog>
 </template>
 <script>

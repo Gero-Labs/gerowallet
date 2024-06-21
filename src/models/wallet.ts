@@ -241,7 +241,6 @@ export class Wallet {
     let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
     const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
     const publicKey = accountKey.to_public();
-    console.log('t')
     if (keyHash !== publicKey.hash().to_bech32(prefix))
       throw DataSignError.ProofGeneration;
     const protectedHeaders = HeaderMap.new();
@@ -552,7 +551,6 @@ export class Wallet {
       const lastSyncInfo = await this.getLastSyncInfo();
       if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const prevAccountInfo = await this.getAccountInfo()
-        console.log(prevAccountInfo)
         const promises = [];
         promises.push(this.syncStakingPools());
         promises.push(this.syncAccountInfo().then(accountInfo => {

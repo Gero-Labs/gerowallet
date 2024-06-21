@@ -69,6 +69,9 @@ export default {
 </script>
 
 <style scoped>
+.token-image {
+  width: 50px;
+}
 .tokens-container {
   display: flex;
   flex-wrap: wrap;

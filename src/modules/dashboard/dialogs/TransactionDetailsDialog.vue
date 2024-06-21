@@ -1,10 +1,7 @@
 <template>
-  <BaseDialog :isOpen="isDialogVisible" @close="$emit('close')">
-    <v-card-title class="display-1">Transaction</v-card-title>
-    <v-card-subtitle class="text--secondary">{{
-      new Date(transactionInfo.tx_timestamp * 1000).toLocaleString()
-    }}</v-card-subtitle>
-    <div class="transaction-info">
+  <BaseDialog :isOpen="isDialogVisible" @close="$emit('close')" title="Transaction" :subtitle="new Date(transactionInfo.tx_timestamp * 1000).toLocaleString()">
+    <div class="transaction-info text-left">
+      {{transactionInfo}}
       <div>
         Received from: <span class="value-text">{{ transactionInfo.address }}</span>
       </div>
@@ -12,7 +9,7 @@
         Transaction Fee: <span class="fee">{{ transactionInfo.fee | toCurrency }}</span>
       </div>
       <div>
-        TransactionId: <a :href="`https://explorer.cardano.org/en/transaction?id=${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
+        TransactionId: <a :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
       </div>
       <div>
         Block: <span class="value-text">{{ transactionInfo.block_height }}</span>
@@ -38,6 +35,8 @@
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import TransactionDetailsAccordion from '../components/TransactionDetailsAccordion.vue';
 import filters from "@/shared/utils/filters";
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
 
 export default {
   name: 'transactionDetailsDialog',
@@ -50,6 +49,7 @@ export default {
   },
   filters,
   computed: {
+    ...mapState(useStore, ['network']),
     isDialogVisible: {
       get() {
         return !!this.transactionInfo;
@@ -63,8 +63,6 @@ export default {
 </script>
 <style scoped>
 .transaction-info{
-  margin-left: 20px;
-  margin-bottom: 20px;
 
   & > div {
     font-size: 13px;
