@@ -14,18 +14,18 @@
               :complete="step > 1"
               step="1"
           >
-            Type
+            {{$t('welcome.dialogs.pairHardwareWallet.type')}}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
               :complete="step > 2"
               step="2"
           >
-            Pairing
+            {{$t('welcome.dialogs.pairHardwareWallet.pairing')}}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step step="3">
-            Wallet Setup
+            {{$t('welcome.dialogs.pairHardwareWallet.walletSetup')}}
           </v-stepper-step>
         </v-stepper-header>
 
@@ -49,10 +49,10 @@
                               prominent
                               border="left"
                           >
-                            Hardware wallets, a type of cold wallet, provide one of the most secure ways to keep cryptocurrencies. They work by storing your private keys in an external, physical device (usually a USB or Bluetooth device)
+                            {{$t('welcome.dialogs.pairHardwareWallet.hardwareWallets')}}
                           </v-alert>
                           <v-card-title class="justify-center" style="font-weight: 700; word-break: break-word">
-                            What Type of Hardware Wallet Would You Like to Connect With?
+                            {{$t('welcome.dialogs.pairHardwareWallet.connectType')}}
                           </v-card-title>
                           <v-card-text class="text-center">
                             <v-item-group v-model="walletType" active-class="primary" class="pb-10">
@@ -118,7 +118,7 @@
                       elevation="0"
                       :disabled="!valid"
                   >
-                    Continue
+                    {{ $t('common.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -129,8 +129,8 @@
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
-                  <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
-                  <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
+                  <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" :alt="$t('welcome.dialogs.pairHardwareWallet.image.alt.connectLedger')">
+                  <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" :alt="$t('welcome.dialogs.pairHardwareWallet.image.alt.connectTrezor')">
                   <v-alert
                       color="white"
                       dense
@@ -139,12 +139,12 @@
                       prominent
                       border="left"
                   >
-                    <b>Instructions</b>
+                    <b>{{ $t('welcome.dialogs.pairHardwareWallet.instructions') }}</b>
                     <ul class="text-left" style="line-height: 1.5">
-                      <li>Setup your Ledger hardware wallet if it's new.</li>
-                      <li>Install the Cardano app on your Ledger if you haven't already.</li>
-                      <li>Unlock the hardware wallet by entering your pin code on the device.</li>
-                      <li>Open the Cardano app on the hardware wallet.</li>
+                      <li>{{ $t('welcome.dialogs.pairHardwareWallet.setup') }}</li>
+                      <li>{{ $t('welcome.dialogs.pairHardwareWallet.install') }}</li>
+                      <li>{{ $t('welcome.dialogs.pairHardwareWallet.unlock') }}</li>
+                      <li>{{ $t('welcome.dialogs.pairHardwareWallet.open') }}</li>
                     </ul>
                   </v-alert>
                   <div style="display: flex;">
@@ -158,7 +158,7 @@
                         style="margin-top: 0; align-items: center;"
                         class="usbBluetoothSwitch"
                     ></v-switch>
-                    <p class="my-auto"><v-icon :color="isBluetooth ? 'primary' : '#ffffff'" small>mdi-bluetooth</v-icon> Bluetooth</p>
+                    <p class="my-auto"><v-icon :color="isBluetooth ? 'primary' : '#ffffff'" small>mdi-bluetooth</v-icon> {{ $t('welcome.dialogs.pairHardwareWallet.bluetooth') }}</p>
                   </div>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
@@ -168,14 +168,14 @@
                       @click="step = 1"
                       elevation="0"
                   >
-                    Back
+                    {{ $t('common.back') }}
                   </v-btn>
                   <v-btn
                       color="primary"
                       @click="walletCreationStep2"
                       elevation="0"
                   >
-                    Continue
+                    {{ $t('common.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -185,19 +185,18 @@
             <v-form ref="form3" v-model="valid3">
               <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
-                  </h3>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.dialogs.pairHardwareWallet.setupWalletName') }}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.dialogs.pairHardwareWallet.chooseName') }}</h3>
                   <v-text-field
                       style="width: 100%"
                       v-model="newWallet.name"
                       dense
                       filled
-                      label="Wallet Name"
-                      placeholder="e.g. My New Wallet"
+                      :label="$t('welcome.dialogs.pairHardwareWallet.label.walletName')"
+                      :placeholder="$t('welcome.dialogs.pairHardwareWallet.label.walletNamePlaceholder')"
                       :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.dialogs.pairHardwareWallet.walletIcon') }}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
                     <v-radio value="green">
                       <template v-slot:label>
@@ -251,8 +250,8 @@
                   >
                     <template v-slot:label>
                       <div>
-                        I have read and agree to the
-                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">Terms of Service</a>.
+                        {{$t('welcome.dialogs.pairHardwareWallet.agree')}}
+                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">{{$t('welcome.dialogs.pairHardwareWallet.terms')}}</a>{{$t('common.period')}}
                       </div>
                     </template>
                   </v-checkbox>
@@ -267,7 +266,7 @@
                       :disabled="!valid3"
                       class=""
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>

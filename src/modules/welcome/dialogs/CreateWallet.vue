@@ -14,20 +14,20 @@
               :complete="step > 1"
               step="1"
           >
-            Wallet Creation
+            {{$t('welcome.dialogs.createWallet.wallerCreation')}}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
               :complete="step > 2"
               step="2"
           >
-            Seed Phrase
+            {{$t('welcome.dialogs.createWallet.seedPhrase')}}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
               step="3"
           >
-            Confirm Phrase
+            {{$t('welcome.dialogs.createWallet.confirmSeedPhrase')}}
           </v-stepper-step>
         </v-stepper-header>
 
@@ -36,19 +36,18 @@
             <v-form ref="form" v-model="valid">
               <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
-                  </h3>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.createWallet.setupWalletName')}}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{$t('welcome.dialogs.createWallet.setupWalletNameHelper')}}</h3>
                   <v-text-field
                       style="width: 100%"
                       v-model="newWallet.name"
                       dense
                       filled
-                      label="Wallet Name"
-                      placeholder="e.g. My New Wallet"
+                      :label="$t('welcome.dialogs.createWallet.label.walletName')"
+                      :placeholder="$t('welcome.dialogs.createWallet.label.walletNamePlaceholder')"
                       :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.createWallet.walletIcon')}}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
                     <v-radio value="green">
                       <template v-slot:label>
@@ -93,15 +92,15 @@
                       </template>
                     </v-radio>
                   </v-radio-group>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.
-                  </h3>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.createWallet.spendingPassword')}}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{$t('welcome.dialogs.createWallet.spendingPasswordHelper')}}</h3>
                   <v-text-field
                       style="width: 100%"
                       block
                       dense
                       v-model="newWallet.password"
-                      filled label="Spending Password"
+                      filled
+                      :label="$t('welcome.dialogs.createWallet.label.spendingPassword')"
                       :type="show1 ? 'text' : 'password'"
                       :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
                   >
@@ -116,7 +115,7 @@
                       dense
                       v-model="newWallet.confirmPassword"
                       filled
-                      label="Confirm Password"
+                      :label="$t('welcome.dialogs.createWallet.label.confirmPassword')"
                       :type="show2 ? 'text' : 'password'"
                       :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
                   >
@@ -131,7 +130,7 @@
                       class="mt-0 text-left"
                       hide-details
                       v-model="newWallet.recoverPasswordChecked"
-                      label="I understand that GeroWallet cannot recover this password for me."
+                      :label="$t('welcome.dialogs.createWallet.label.noRecoverPassword')"
                       :rules="[(newWallet.recoverPasswordChecked)]"
                   ></v-checkbox>
                   <v-checkbox
@@ -143,8 +142,9 @@
                   >
                     <template v-slot:label>
                       <div>
-                        I have read and agree to the
-                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">Terms of Service</a>.
+                        {{$t('welcome.dialogs.createWallet.agree')}}
+                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">{{$t('welcome.dialogs.createWallet.terms')}}</a>
+                        {{$t('common.period')}}
                       </div>
                     </template>
                   </v-checkbox>
@@ -156,9 +156,8 @@
                       @click="walletCreationStep1"
                       elevation="0"
                       :disabled="!valid"
-                      class=""
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -177,8 +176,7 @@
                       prominent
                       border="left"
                   >
-                    Write down or copy these words in the following order.<br>You will need
-                    these to back up and restore your wallet.
+                    {{$t('welcome.dialogs.createWallet.writeDown')}}
                   </v-alert>
                   <v-hover v-slot="{ hover }">
                     <v-card flat outlined class="mb-4"
@@ -202,7 +200,7 @@
                             @click="overlay = false"
                         >
                           <v-icon>mdi-key</v-icon>&nbsp;
-                          Unlock
+                          {{$t('welcome.dialogs.createWallet.unlock')}}
                         </v-btn>
                       </v-overlay>
                     </v-card>
@@ -214,13 +212,13 @@
                       border="left"
                       class="text-left"
                   >
-                    Save the seed phrase somewhere safe and never share it with anyone.
+                    {{$t('welcome.dialogs.createWallet.savePhrase')}}
                   </v-alert>
                   <v-checkbox
                       class="mt-0"
                       hide-details
                       v-model="newWallet.recoverSeedChecked"
-                      label="I understand that if I lose my secret backup phrase, I will not be able to access my funds."
+                      :label="$t('welcome.dialogs.createWallet.label.noRecoverPhrase')"
                       :rules="[(newWallet.recoverSeedChecked)]"
                   >
                   </v-checkbox>
@@ -233,7 +231,7 @@
                       elevation="0"
                       :disabled="overlay || !valid2"
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -245,7 +243,7 @@
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 534px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row justify-space-around mt-2">
                   <v-card-text class="pa-0">
-                    <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Please click on each word in the correct order.</h2>
+                    <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.createWallet.clickWord')}}</h2>
                     <v-card flat class="mt-3" style="background-color: transparent">
                       <v-row no-gutters>
                         <v-col class="pa-2" cols="12" md="3" sm="3" v-for="(item,index) in seedPhraseReplaced" :key="index">
@@ -279,7 +277,7 @@
                       <v-icon small>
                         mdi-reload
                       </v-icon>
-                      Reset
+                      {{$t('common.reset')}}
                     </v-btn>
                   </div>
                 </v-card-text>
@@ -292,7 +290,7 @@
                       :disabled="!valid3 || creatingWalletLoader"
                       :loading="creatingWalletLoader"
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>

@@ -18,14 +18,14 @@
               :complete="step > 1"
               step="1"
           >
-            Recovery Phrase
+            {{ $t('welcome.dialogs.restoreWallet.recoveryPhrase') }}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
               :complete="step > 2"
               step="2"
           >
-            Wallet Setup
+            {{ $t('welcome.dialogs.restoreWallet.walletSetup') }}
           </v-stepper-step>
         </v-stepper-header>
 
@@ -43,11 +43,11 @@
                       border="left"
                       class="mb-2"
                   >
-                    Enter your wallet recovery phrase word for word.<br>Make sure you enter the words in the correct order.
-                    Also ensure nobody is looking at your screen.
+                    {{$t('welcome.dialogs.restoreWallet.enterPhase')}}
                   </v-alert>
+                    {{$t('welcome.dialogs.restoreWallet.enterPhase')}}
                   <v-row no-gutters class="pb-2">
-                    <strong style="align-content: center; color: white">Choose recovery phrase length</strong>
+                    <strong style="align-content: center; color: white">{{$t('welcome.dialogs.restoreWallet.enterPhase')}}</strong>
                     <v-spacer></v-spacer>
                     <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
                       <v-btn small value="12">
@@ -79,7 +79,7 @@
                     @click="pasteFromClipboard"
                     elevation="0"
                   >
-                    Paste from Clipboard
+                    {{$t('welcome.dialogs.restoreWallet.paste')}}
                   </v-btn>
                   <v-spacer></v-spacer>
                   <v-btn
@@ -88,7 +88,7 @@
                       elevation="0"
                       :disabled="!valid"
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -99,19 +99,18 @@
             <v-form ref="form2" v-model="valid2">
               <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px" :disabled="creatingWalletLoader">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
-                  </h3>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.restoreWallet.setupWalletName')}}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{$t('welcome.dialogs.restoreWallet.setupWalletNameHelper')}}</h3>
                   <v-text-field
                       style="width: 100%"
                       v-model="newWallet.name"
                       dense
                       filled
-                      label="Wallet Name"
-                      placeholder="e.g. My New Wallet"
+                      :label="$t('welcome.dialogs.restoreWallet.label.walletName')"
+                      :placeholder="$t('welcome.dialogs.restoreWallet.label.walletNamePlaceholder')"
                       :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.restoreWallet.walletIcon')}}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
                     <v-radio value="green">
                       <template v-slot:label>
@@ -156,15 +155,14 @@
                       </template>
                     </v-radio>
                   </v-radio-group>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.
-                  </h3>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{$t('welcome.dialogs.restoreWallet.spendingPassword')}}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{$t('welcome.dialogs.restoreWallet.spendingPasswordHelper')}}</h3>
                   <v-text-field
                       style="width: 100%"
                       block
                       dense
                       v-model="newWallet.password"
-                      filled label="Spending Password"
+                      filled :label="$t('welcome.dialogs.restoreWallet.label.spendingPassword')"
                       :type="show1 ? 'text' : 'password'"
                       :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
                   >
@@ -179,9 +177,9 @@
                       dense
                       v-model="newWallet.confirmPassword"
                       filled
-                      label="Confirm Password"
+                      :label="$t('welcome.dialogs.restoreWallet.label.confirmPassword')"
                       :type="show2 ? 'text' : 'password'"
-                      :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
+                      :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || $t('welcome.dialogs.restoreWallet.match')]"
                   >
                     <template v-slot:append>
                       <v-icon @click="show2 = !show2" tabindex="-1">
@@ -194,7 +192,7 @@
                       class="mt-0 text-left"
                       hide-details
                       v-model="newWallet.recoverPasswordChecked"
-                      label="I understand that GeroWallet cannot recover this password for me."
+                      :label="$t('welcome.dialogs.restoreWallet.label.noRecoverPassword')"
                       :rules="[(newWallet.recoverPasswordChecked)]"
                   ></v-checkbox>
                   <v-checkbox
@@ -206,8 +204,8 @@
                   >
                     <template v-slot:label>
                       <div>
-                        I have read and agree to the
-                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">Terms of Service</a>.
+                        {{$t('welcome.dialogs.restoreWallet.agree')}}
+                        <a @click.stop href="https://gerowallet.io/assets/downloads/UserAgreement.pdf" target="_blank">{{$t('welcome.dialogs.restoreWallet.terms')}}</a>{{$t('common.period')}}
                       </div>
                     </template>
                   </v-checkbox>
@@ -220,7 +218,7 @@
                       elevation="0"
                       :disabled="creatingWalletLoader"
                   >
-                    Back
+                    {{$t('common.back')}}
                   </v-btn>
                   <v-btn
                       color="primary"
@@ -229,7 +227,7 @@
                       :disabled="!valid2"
                       :loading="creatingWalletLoader"
                   >
-                    Continue
+                    {{$t('common.continue')}}
                   </v-btn>
                 </v-card-actions>
               </v-card>
