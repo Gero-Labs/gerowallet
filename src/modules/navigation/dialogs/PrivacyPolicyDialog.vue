@@ -8,42 +8,35 @@
           style="text-transform: capitalize"
           v-bind="attrs" v-on="on"
       >
-        {{ $t('privacyPolicy') }}
+        {{ $t('navigation.dialogs.privacyPolicy.privacyPolicy') }}
       </v-btn>
     </template>
     <v-card class="py-0 transparent">
       <v-card-title><h2>
-        PRIVACY POLICY
+        {{ $t('navigation.dialogs.privacyPolicy.lastModified').toUpperCase() }}
       </h2></v-card-title>
       <v-card-subtitle>
-        Last updated May 20, 2022
+        {{ $t('navigation.dialogs.privacyPolicy.lastModified') }}
       </v-card-subtitle>
       <v-card-text>
-        <p>This privacy notice for Gero Labs Inc. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;),
-          describes how and why we might collect, store, use, and/or share (&quot;process&quot;) your information when
-          you use our services (&quot;Services&quot;), such as when you:</p>
+        <p>{{ $t('navigation.dialogs.privacyPolicy.notice') }}</p>
         <ul id="l1">
           <li data-list-text="">
-            <p>Visit our website at
-              <a href="https://gerowallet.io/" class="s2" target="_blank">https://gerowallet.io</a>,
-              or any website of ours that links to this privacy notice.
+            <p>{{ $t('navigation.dialogs.privacyPolicy.visitAt') }}
+              <a href="https://gerowallet.io/" class="s2" target="_blank">{{ $t('navigation.dialogs.privacyPolicy.url') }}</a>,
+              {{ $t('navigation.dialogs.privacyPolicy.anyOther') }}
             </p>
           </li>
           <li data-list-text="">
-            <p>Download and use our mobile application (GeroWallet), or any other application of ours that links to this
-              privacy notice</p>
+            <p>{{ $t('navigation.dialogs.privacyPolicy.downloadMobileApp') }}</p>
           </li>
           <li data-list-text="">
-            <p>Engage with us in
-              other related ways, including any sales, marketing, or events</p>
+            <p>{{ $t('navigation.dialogs.privacyPolicy.engage') }}</p>
           </li>
         </ul>
-        <p>Questions or
-          concerns? Reading this privacy notice will help you understand your privacy rights and choices. If you do not
-          agree with our policies and practices, please do not use our Services. If you still have any questions or
-          concerns, please contact us at <a href="mailto:support@gerowallet.io" class="s2" target="_blank">support@gerowallet.io.</a>
+        <p>{{ $t('navigation.dialogs.privacyPolicy.questions') }} <a href="mailto:support@gerowallet.io" class="s2" target="_blank">{{ $t('navigation.dialogs.privacyPolicy.supportMail') }}</a>
         </p>
-
+        <!--todo-->
         <h2>SUMMARY OF KEY POINTS</h2>
 
         <p style="font-weight: 500; font-style: italic">This

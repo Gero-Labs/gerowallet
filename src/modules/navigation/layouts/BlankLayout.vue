@@ -24,7 +24,7 @@
           :ripple="false"
         >
           <v-icon>mdi-lifebuoy</v-icon>&nbsp;
-          {{ $t('help') }}
+          {{ $t('navigation.layouts.blank.help') }}
         </v-btn>
       </v-container>
       <div
@@ -65,7 +65,7 @@
           href="https://gerowallet.io/assets/downloads/UserAgreement.pdf"
           target="_blank"
         >
-          {{ $t('termsOfService') }}
+          {{ $t('navigation.layouts.blank.termsOfService') }}
         </v-btn>
       </v-container>
     </v-footer>

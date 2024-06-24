@@ -13,7 +13,7 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-                :src="require('../assets/gero_dashboards.png')" width="100" alt="logo"
+                :src="require('../assets/gero_dashboards.png')" width="100" :alt="$t('navigation.components.image.alt.logo')"
                 style="-webkit-filter: drop-shadow(-8px 3px 6px #B71C1C2D);
               filter: drop-shadow(-8px 3px 6px #B71C1C2D);"
             />
@@ -49,7 +49,7 @@
                   x-small
                   outlined
               >
-                Soon
+                {{$t('common.soon')}}
               </v-chip>
             </v-list-item-title>
           </v-list-item-content>
@@ -76,7 +76,7 @@
                   x-small
                   outlined
               >
-                Soon
+                {{$t('common.soon')}}
               </v-chip>
             </v-list-item-title>
           </v-list-item-content>
@@ -107,7 +107,7 @@
               </template>
               <v-card :loading="avatarsLoading">
                 <v-card-title class="justify-center">
-                  Change Your Profile Picture
+                {{$t('navigation.components.drawer.changeProfilePicture')}}
                 </v-card-title>
                 <v-card-text>
                   <v-item-group v-model="selectedAvatar">
@@ -178,7 +178,7 @@
           <v-list-item-action style="margin: auto">
             <v-btn icon @click="submitLogout">
               <v-avatar tile size="18">
-                <v-img :src="require('@/assets/svg/log-out-01.svg')" alt="logout"></v-img>
+                <v-img :src="require('@/assets/svg/log-out-01.svg')" :alt="$t('navigation.components.image.alt.logout')"></v-img>
               </v-avatar>
             </v-btn>
           </v-list-item-action>

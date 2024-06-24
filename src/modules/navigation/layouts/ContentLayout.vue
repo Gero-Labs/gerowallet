@@ -33,7 +33,7 @@
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/bell-03.svg')"
-                        alt="Notifications"
+                        :alt="$t('navigation.layouts.content.image.alt.notifications')"
                     >
                   </v-avatar>
                 </v-btn>
@@ -41,7 +41,7 @@
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/eye.svg')"
-                        alt="Notifications"
+                        :alt="$t('navigation.layouts.content.image.alt.notifications')"
                     >
                   </v-avatar>
                 </v-btn>
@@ -49,7 +49,7 @@
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/life-buoy-01.svg')"
-                        alt="Notifications"
+                        :alt="$t('navigation.layouts.content.image.alt.notifications')"
                     >
                   </v-avatar>
                 </v-btn>
@@ -57,7 +57,7 @@
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/settings-02.svg')"
-                        alt="Notifications"
+                        :alt="$t('navigation.layouts.content.image.alt.notifications')"
                     >
                   </v-avatar>
                 </v-btn>

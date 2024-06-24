@@ -28,7 +28,7 @@
               z-index: 4;"
               color="red"
             >
-              {{ $t('common.soon') }}
+              {{ $t('common.soon').toUpperCase() }}
             </v-chip>
             <parallax-card :style="network.supportedHardware ? { marginLeft: 'auto', marginRight: 'auto' } : { marginLeft: 'auto', marginRight: 'auto', filter: 'brightness(0.5)' }"
                            :data-image="hardwarePairCardBg">
