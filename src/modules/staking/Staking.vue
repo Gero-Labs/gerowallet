@@ -7,7 +7,7 @@
             <v-list-item two-line>
               <v-list-item-content>
                 <v-list-item-title style="display: flex">
-                  Available Stake Pools
+                  {{$t('staking.views.availableStakePools')}}
                   <v-spacer></v-spacer>
                   <div style="display: flex;">
                     <p class="mr-5 my-auto">PRO</p>
@@ -22,17 +22,17 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  Earn rewards by staking your Ap3x tokens with Apex Fusion's extensive network of stake pools.
+                  {{$t('staking.views.rewards')}}
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists">
                 <v-card-title style="color: #00DFF3; font-size: 18px" v-if="geroPoolExists">
-                  Consider supporting us
+                  {{$t('staking.views.supportUs')}}
                 </v-card-title>
                 <v-card-subtitle>
                   <v-btn small
                          style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">
-                    Stake with GERO
+                    {{$t('staking.views.geroStake')}}
                   </v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
@@ -46,17 +46,17 @@
                   clearable
                   outlined
                   dense
-                  label="Search by pool name or ticker"
+                  :label="$t('staking.views.label.search')"
                   prepend-inner-icon="mdi-magnify"
                   hide-details
                 >
                 </v-text-field>
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
-                <v-switch dense v-model="hideSaturated" label="Hide Saturated" hide-details style="margin: auto"></v-switch>
+                <v-switch dense v-model="hideSaturated" :label="$t('staking.views.label.saturation')" hide-details style="margin: auto"></v-switch>
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
-                <v-switch dense v-model="pledgeMet" label="Pledge Met" hide-details style="margin: auto"></v-switch>
+                <v-switch dense v-model="pledgeMet" :label="$t('staking.views.label.pledge')" hide-details style="margin: auto"></v-switch>
               </v-col>
             </v-row>
           </v-card-subtitle>
@@ -235,7 +235,7 @@
                     <v-card-text class="pt-0">
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Saturation</span>
+                          <span style="font-size: 14px; color: white">{{$t('staking.views.saturation')}}</span>
                         </v-col>
                         <v-col cols="7">
                           <v-progress-linear height="20" rounded :value="pool.live_saturation" color="#333741">
@@ -245,7 +245,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Pledge</span>
+                          <span style="font-size: 14px; color: white">{{$t('staking.views.pledge')}}</span>
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">
@@ -256,7 +256,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">ROS</span>
+                          <span style="font-size: 14px; color: white">{{$t('staking.views.ros')}}</span>
                         </v-col>
                         <v-col cols="7">
                           <span style="font-size: 14px; color: white">{{ (pool.ros).toFixed(2) + '%' }}</span>
@@ -264,7 +264,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Fees</span>
+                          <span style="font-size: 14px; color: white">{{$t('staking.views.fees')}}</span>
                         </v-col>
                         <v-col cols="7">
                           <span style="font-size: 14px; color: white" v-if="pool">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')

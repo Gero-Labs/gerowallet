@@ -107,4 +107,21 @@ export default {
       welcome: 'Welcome!',
     },
   },
+  staking: {
+    views: {
+      availableStakePools: 'Available Stake Pools',
+      rewards: 'Earn rewards by staking your Ap3x tokens with Apex Fusion\'s extensive network of stake pools.',
+      supportUs: 'Consider supporting us',
+      geroStake: 'Stake with GERO',
+      saturation: 'Saturation',
+      pledge: 'Pledge',
+      ros: 'ROS',
+      fees: 'Fees',
+      label:{
+        search:'Search by pool name or ticker',
+        saturation:'Hide Saturated',
+        pledge:'Pledge Met'
+      }
+    },
+  },
 };
