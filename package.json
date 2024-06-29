@@ -20,6 +20,8 @@
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.2",
     "@emurgo/cardano-message-signing-browser": "^1.0.1",
     "@emurgo/cardano-serialization-lib-browser": "^11.5.0",
+    "@keystonehq/animated-qr": "^0.9.0",
+    "@keystonehq/keystone-sdk": "^0.6.0",
     "@ledgerhq/hw-transport-web-ble": "^6.28.5",
     "@ledgerhq/hw-transport-webusb": "^6.28.5",
     "@mdi/font": "^6.9.96",
