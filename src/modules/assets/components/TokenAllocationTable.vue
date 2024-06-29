@@ -8,7 +8,7 @@
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{assets.length}}</v-chip>
         </v-btn>
         <v-btn color="black" :value="1" rounded style="text-transform: capitalize"> Collectibles&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{collectibles.length}}</v-chip>
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{collectiblesLength}}</v-chip>
         </v-btn>
       </v-btn-toggle>
     </v-card-title>
@@ -41,7 +41,7 @@
               </v-list-item>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ (Number(item.quantity) / Math.pow(10, item.metadata.decimals)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
+              <span class="table-text">{{ (Number(item.quantity) / (item.metadata.decimals ? Math.pow(10, item.metadata.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
             </template>
             <template v-slot:[`item.last_price`]="{ item }">
               <span v-if="item.name === 'ADA'" class="table-text">{{Number(price.lastPrice).toFixed(4)}}</span>
@@ -132,12 +132,15 @@
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
                 <v-list-item-avatar class="my-0" size="32">
-                  <img :src="item.img" :alt="item.name + ' Logo'" />
+                  <v-img :src="item.img" :alt="item.name + ' Logo'"></v-img>
                 </v-list-item-avatar>
                 <v-list-item-content>
                   <v-list-item-title>
-                    {{ item.name }}
+                    {{item.name}}
                   </v-list-item-title>
+                  <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+                    {{item.description}}
+                  </v-list-item-subtitle>
                 </v-list-item-content>
               </v-list-item>
             </template>
@@ -228,6 +231,10 @@ export default {
     collectibles: {
       type: Array,
       default: () => [],
+    },
+    collectiblesLength: {
+      type: Number,
+      default: 0,
     }
   },
   methods: {

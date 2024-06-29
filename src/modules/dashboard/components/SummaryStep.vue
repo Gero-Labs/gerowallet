@@ -26,6 +26,7 @@
       <section class="confirm-container">
         <img src="../assets/risk-low.png" alt="risk" />
         <v-text-field class="text-field" outlined placeholder="Password"></v-text-field>
+        <v-btn class="back-button" @click="$emit('prev')">Back</v-btn>
         <v-btn class="continue-button" @click="$emit('next')">Sign and confirm</v-btn>
       </section>
     </div>
@@ -56,7 +57,7 @@ export default {
 <style>
 .summary-container {
   margin-top: 20px;
-  
+
   .sections-container {
     display: flex;
     gap: 40px;
@@ -65,7 +66,7 @@ export default {
       flex: 3;
       display: flex;
       flex-direction: column;
-      
+
       .recipient-box {
         display: flex;
         gap: 10px;
@@ -75,7 +76,7 @@ export default {
         background: linear-gradient(to right, #005d65, #0000003d);
       }
     }
-    
+
     .confirm-container {
       flex: 2;
       display: flex;
@@ -90,9 +91,6 @@ export default {
       .continue-button {
         background: linear-gradient(to right, #00c7f3, #00fad5);
         color: black;
-        padding: 20px;
-        border-radius: 10px;
-        width: 100%;
       }
     }
   }
