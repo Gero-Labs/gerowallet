@@ -185,7 +185,10 @@ export default {
     };
   },
   mounted() {
-    this.selectedTokens.find(token => token.ticker === 'ADA').balance = this.resolvedAssets.find(asset => asset.name === 'ADA').quantity
+    const foundAdaAsset = this.resolvedAssets.find(asset => asset.name === 'ADA')
+    if (foundAdaAsset) {
+      this.selectedTokens.find(token => token.ticker === 'ADA').balance = foundAdaAsset.quantity
+    }
     console.log(this.sendData)
   },
 };
