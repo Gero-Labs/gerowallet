@@ -61,7 +61,7 @@
                                     v-for="(item) in walletTypes"
                                     :key="item.name"
                                     cols="12"
-                                    sm="6"
+                                    sm="4"
                                     xs="12"
                                     class="pa-2"
                                 >
@@ -74,6 +74,7 @@
                                             class="justify-center text-center pa-4 shadow"
                                             :style="$vuetify.theme.isDark ? { backgroundColor: '#00000080', alignContent: 'center' } : { backgroundColor: '#ffffff80', alignContent: 'center'}"
                                             @click="toggle"
+                                            :disabled="!item.enabled"
                                         >
                                           <div style="height: 90px; align-content: center;" >
                                             <img
@@ -85,6 +86,9 @@
 
                                           <v-card-subtitle class="pa-0">
                                             {{ item.support }}
+                                          </v-card-subtitle>
+                                          <v-card-subtitle v-if="!item.enabled">
+                                            <v-chip color="red">Soon</v-chip>
                                           </v-card-subtitle>
                                           <v-scroll-y-transition>
                                             <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
@@ -131,6 +135,7 @@
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
                   <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
                   <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
+                  <img v-if="walletType === 'Keystone'" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
                   <v-alert
                       color="white"
                       dense
@@ -140,14 +145,23 @@
                       border="left"
                   >
                     <b>Instructions</b>
-                    <ul class="text-left" style="line-height: 1.5">
-                      <li>Setup your Ledger hardware wallet if it's new.</li>
-                      <li>Install the Cardano app on your Ledger if you haven't already.</li>
+                    <ul class="text-left" style="line-height: 1.5" v-if="walletType === 'Ledger'">
+                      <li>Setup your {{walletType}} hardware wallet if it's new.</li>
+                      <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
                       <li>Unlock the hardware wallet by entering your pin code on the device.</li>
                       <li>Open the Cardano app on the hardware wallet.</li>
                     </ul>
+                    <ul class="text-left" style="line-height: 1.5" v-else-if="walletType === 'Keystone'">
+                      <li>Unlock your Keystone device.</li>
+                      <li>Select the option to scan a QR code.</li>
+                      <li>Use your Keystone device to scan the QR code.</li>
+                      <li>Sign the transaction on the Keystone device and then click 'Next' to scan it with Gero.</li>
+
+
+
+                    </ul>
                   </v-alert>
-                  <div style="display: flex;">
+                  <div style="display: flex;" v-if="walletType === 'Ledger'">
                     <p class="mr-5 my-auto">USB <v-icon :color="isBluetooth ? '#ffffff' : 'primary'" small>mdi-usb</v-icon></p>
                     <v-switch
                         inset
@@ -297,7 +311,7 @@
 </template>
 <script>
 import rules from "@/shared/utils/rules";
-import {Blockchain, Network, Theme} from "@/models/types"
+import {Blockchain, Network, Theme, WalletType} from "@/models/types"
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
@@ -312,6 +326,9 @@ export default {
     },
   },
   computed: {
+    WalletType() {
+      return WalletType
+    },
     valid: {
       get() {
         return this.walletType !== undefined
@@ -330,23 +347,30 @@ export default {
   methods: {
     async walletCreationStep2() {
       this.persistent = true
-      this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your Ledger device to complete the pairing process.")
+      this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
       this.hardwareLoading.setLoading(true)
-      try {
-        const coldWalletProps = await ledger.initLedger(this.isBluetooth)
-        console.log(coldWalletProps)
-        const isConnected = !!coldWalletProps
-        if (isConnected) {
-          this.newWallet.name = coldWalletProps.productName
-          this.newWallet.publicKey = coldWalletProps.hwPublicKey
-          this.step = 3
+      if (this.walletType === 'Ledger') {
+        try {
+          const coldWalletProps = await ledger.initLedger(this.isBluetooth)
+          console.log(coldWalletProps)
+          const isConnected = !!coldWalletProps
+          if (isConnected) {
+            this.newWallet.name = coldWalletProps.productName
+            this.newWallet.publicKey = coldWalletProps.hwPublicKey
+            this.step = 3
+          }
+          this.hardwareLoading.setLoading(false)
+          this.persistent = false
+        } catch (e) {
+          this.hardwareLoading.setLoading(false)
+          this.persistent = false
         }
-        this.hardwareLoading.setLoading(false)
-        this.persistent = false
-      } catch (e) {
-        this.hardwareLoading.setLoading(false)
-        this.persistent = false
+      } else if (this.walletType === 'Keystone') {
+        //TODO
       }
+      console.log('ledger')
+
+
     },
     async walletCreationStep3() {
       if (this.$refs.form3.validate()) {
@@ -383,8 +407,27 @@ export default {
     valid3: false,
     creatingWalletLoader: false,
     walletTypes: [
-      {name: 'Ledger', description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.', enabled: true, icon: require('@/assets/ledger.svg'), support: 'Nano S, Nano S Plus, Nano X'},
-      {name: 'Trezor', description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.', enabled: true, icon: require('@/assets/trezor.svg'), support: 'Model T, Safe 3' },
+      {
+        name: 'Ledger',
+        description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.',
+        enabled: true,
+        icon: require('@/assets/ledger.svg'),
+        support: 'Nano S, Nano S Plus, Nano X'
+      },
+      {
+        name: 'Trezor',
+        description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.',
+        enabled: false,
+        icon: require('@/assets/trezor.svg'),
+        support: 'Model T, Safe 3'
+      },
+      {
+        name: 'Keystone',
+        description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
+        enabled: false,
+        icon: require('@/assets/svg/keystone-3-pro.svg'),
+        support: '3 Pro'
+      },
     ],
     walletType: undefined,
     isBluetooth: false,
