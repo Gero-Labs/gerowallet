@@ -61,6 +61,13 @@ async function initializeProviderTable() {
           network: Network.TESTNET,
           baseUrl: 'http://apex-prime-testnet.gerowallet.io:8053/',
           apiKey: null
+        },
+        {
+          name: Provider.KOIOS,
+          chain: Blockchain.APEX_VECTOR,
+          network: Network.TESTNET,
+          baseUrl: 'http://apex-vector-testnet.gerowallet.io:8053/',
+          apiKey: null
         }
       ];
       await db['provider'].bulkAdd(initialData).catch(error => {
