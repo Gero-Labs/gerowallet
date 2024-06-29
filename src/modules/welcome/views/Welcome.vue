@@ -4,7 +4,9 @@
       <v-card-title class="justify-center" style="color: white; font-size: 32px;">{{$t('welcome') }}</v-card-title>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-else>{{ $t('chooseAWallet') }}</v-card-subtitle>
-      <v-card-title class="justify-center pt-0" v-if="walletSetup"><network-selector ref="networkSelector"></network-selector></v-card-title>
+      <v-card-title class="justify-center pt-0" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
+        <network-selector ref="networkSelector"></network-selector>
+      </v-card-title>
       <v-card-text class="pb-12 px-12">
         <v-row class="fill-height" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
           <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">

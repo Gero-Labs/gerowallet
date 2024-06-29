@@ -34,6 +34,14 @@ export default {
       supportedHardware: false,
       networkId: 0,
     },
+    {
+      icon: require('@/assets/img/apex.jpg'),
+      title: 'Apex Vector Testnet',
+      blockchain: Blockchain.APEX_VECTOR,
+      network: Network.TESTNET,
+      supportedHardware: false,
+      networkId: 0,
+    },
   ],
   resolveNetwork(chain: string, network: string) {
     return this.networks.find(element => element.blockchain === chain && element.network === network);

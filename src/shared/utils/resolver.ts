@@ -37,6 +37,7 @@ export async function resolveAsset(assets, token) {
   let img;
   let name = Buffer.from(token.asset_name, 'hex').toString('ascii');
   let metadata = null;
+  let onchain_metadata = null;
   const quantity = token.quantity ? token.quantity : undefined;
   if (token.asset_name === 'lovelace') {
     img = token.logo;
@@ -57,6 +58,7 @@ export async function resolveAsset(assets, token) {
         img = `${baseUrl}/api/ipfs/${asset.onchain_metadata.image.replace('ipfs://', '')}`;
       } else if (asset?.onchain_metadata['721'] && asset?.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
         const obj = asset.onchain_metadata['721'][asset.policy_id][name];
+        onchain_metadata = obj
         if (obj.image) {
           img = `${baseUrl}/api/ipfs/${obj.image.replace('ipfs://', '').replace('ipfs/', '')}`;
         }
@@ -67,6 +69,9 @@ export async function resolveAsset(assets, token) {
           if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
             const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
             const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
+            if (label == 333) {
+              metadata = metadataJson
+            }
             img = `${baseUrl}/api/ipfs/${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
             name = metadataJson.name
           }
@@ -77,7 +82,48 @@ export async function resolveAsset(assets, token) {
   return {
     img,
     name,
+    policy_id: token.policy_id,
     metadata,
+    onchain_metadata,
     quantity,
   };
+}
+
+export function findCollectionName(collectible) {
+  let projectName
+  if (collectible?.onchain_metadata?.collection) {
+    return collectible.onchain_metadata.collection
+  }
+  if (collectible?.onchain_metadata?.project) {
+    return collectible.onchain_metadata.project
+  }
+  return projectName
+}
+
+export function findCollectionDescription(collectible) {
+  if (collectible?.onchain_metadata?.description) {
+    return collectible.onchain_metadata.description
+  }
+  return null
+}
+
+export function longestCommonStartingSubstring(array) {
+  if (array.length == 0) {
+    return
+  }
+  const sortedArray = [...array].sort();
+  const firstItem = sortedArray[0];
+  const lastItem = sortedArray[sortedArray.length - 1];
+  const firstItemLength = firstItem.length;
+  let i = 0;
+
+  while (i < firstItemLength && firstItem.charAt(i) === lastItem.charAt(i)) {
+    i++;
+  }
+
+  let subString = firstItem.substring(0, i);
+  if (subString.endsWith('#')) {
+    subString = firstItem.substring(0, i-1)
+  }
+  return subString.trim();
 }

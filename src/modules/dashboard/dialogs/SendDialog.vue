@@ -1,8 +1,5 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" subtitle="Send AP3X or other assets to another wallet.">
-    <v-btn v-if="currentStep > 1" @click="prevStep" icon class="arrow-left"
-      ><v-icon color="#cccdd0">mdi-arrow-left</v-icon></v-btn
-    >
     <CustomStepper :currentStep="currentStep" :steps="steps">
       <v-stepper-content step="1">
         <SendRecipientDetailsStep
@@ -13,10 +10,10 @@
       </v-stepper-content>
       <v-stepper-content step="2">
         <AssetsToSendStep
+          v-model="this.sendData"
           @next="nextStep"
           @prev="prevStep"
           @select="selectCollectible"
-          :sendData="this.sendData"
         ></AssetsToSendStep>
       </v-stepper-content>
       <v-stepper-content step="3">
@@ -70,7 +67,8 @@ export default {
     ],
     currentStep: 1,
     sendData: {
-      selectedCollectibles: {},
+      selectedTokens: [],
+      selectedCollectibles: [],
       recipientAddress: '',
       selectedWallet: {},
     },

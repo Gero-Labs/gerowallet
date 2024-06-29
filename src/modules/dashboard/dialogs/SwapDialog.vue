@@ -1,20 +1,20 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet.">
-    <swap-currency-selector
+    <TokenSelector
       :value="quantity"
       @updateQuantity="updateQuantity"
-    ></swap-currency-selector>
+    ></TokenSelector>
   </BaseDialog>
 </template>
 <script>
 import filters from "@/shared/utils/filters";
-import SwapCurrencySelector from "@/shared/components/SwapCurrencySelector.vue";
 import BaseDialog from "@/shared/components/BaseDialog.vue";
+import TokenSelector from '@/shared/components/TokenSelector.vue';
 
 export default {
   name: "SwapDialog",
   filters,
-  components: { SwapCurrencySelector, BaseDialog },
+  components: { TokenSelector, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,

@@ -325,8 +325,8 @@ export default {
       return Network
     },
     geroPoolExists() {
-      return (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) ||
-        (this.loggedWallet.chain === Blockchain.APEX_PRIME && this.loggedWallet.network === Network.TESTNET)
+      return (this.loggedWallet?.chain === Blockchain.CARDANO && this.loggedWallet?.network === Network.MAINNET) ||
+        (this.loggedWallet?.chain === Blockchain.APEX_PRIME && this.loggedWallet?.network === Network.TESTNET)
     },
     ...mapState(useStore, ['getPools', 'loggedWallet']),
     pools() {
