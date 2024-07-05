@@ -149,6 +149,7 @@ export default {
     margin-left: 2px;
   }
 }
+
 .v-tooltip__content {
   background: rgba(15, 19, 21, 1);
   border:1px solid #C4C4C4;

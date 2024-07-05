@@ -21,13 +21,6 @@
         @input="$emit('updateRecipientAddress', $event)"
       ></v-textarea>
     </div>
-
-    <v-btn
-      class="continue-button"
-      @click="$emit('next')"
-      :disabled="!sendData.recipientAddress"
-      >Continue&nbsp;<v-icon style="color: black!important;" small>mdi-arrow-right</v-icon></v-btn
-    >
   </div>
 </template>
 
@@ -65,7 +58,7 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: space-around;
-  height: 500px;
+  height: 496px;
 
   & .item-container {
     width: 60%;
@@ -80,17 +73,6 @@ export default {
     & textarea {
       resize: none;
     }
-  }
-
-  .continue-button {
-    background: linear-gradient(to right, #00c7f3, #00fad5);
-    color: black;
-
-    &:disabled {
-      opacity: 0.5;
-      color: black!important;
-    }
-
   }
 }
 </style>

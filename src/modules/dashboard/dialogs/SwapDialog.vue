@@ -1,9 +1,11 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet.">
-    <TokenSelector
-      :value="quantity"
-      @updateQuantity="updateQuantity"
-    ></TokenSelector>
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <TokenSelector
+        :value="quantity"
+        @updateQuantity="updateQuantity"
+      ></TokenSelector>
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>

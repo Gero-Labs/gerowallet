@@ -1,33 +1,35 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Receive" subtitle="Receive ADA by displaying your wallet address and QR code.">
-    <v-list-item three-line class="px-0">
-      <v-list-item-avatar size="160" rounded>
-        <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
-      </v-list-item-avatar>
-      <v-list-item-content style="align-self: normal;">
-        <v-list-item-title style="max-width: -webkit-fill-available; font-size: 20px; display: inline-block; font-weight: bold; color: white;flex: 1 1 100%; overflow: visible; text-overflow: unset; white-space: normal; text-align: left;">
-          {{options.data}}<copy-button small :value="baseAddress"></copy-button>
-        </v-list-item-title>
-        <v-list-item-subtitle style="text-align: left; font-size: 16px">
-          Your wallet address
-        </v-list-item-subtitle>
-        <v-list-item-title style="max-width: -webkit-fill-available; font-size: 18px; display: inline-block; color: white;flex: 1 1 100%; overflow: visible; text-overflow: unset; white-space: normal; text-align: left;">
-          Share this wallet address to receive payments. To protect privacy, new addresses are generated automatically once you use them.
-        </v-list-item-title>
-<!--        <v-list-item-title class="pt-2">-->
-<!--          <v-btn color="primary">Generate new Address</v-btn>-->
-<!--        </v-list-item-title>-->
-      </v-list-item-content>
-    </v-list-item>
-    <v-card-title class="px-0 pb-0">Used Addresses
-<!--      <v-spacer></v-spacer>-->
-<!--      <v-switch v-model="showUsed" label="Show Used" inset dense></v-switch>-->
-    </v-card-title>
-    <v-data-table :headers="[{text: 'Address', sortable: true, align: 'left', value: 'address'},]" :items="allAddresses" hide-default-footer hide-default-header>
-      <template v-slot:[`item.address`]="{ item }">
-        {{ item.address | shortenStringWithEllipsis(40)  }}<copy-button small :value="item.address"></copy-button>
-      </template>
-    </v-data-table>
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <v-list-item three-line class="px-0">
+        <v-list-item-avatar size="160" rounded>
+          <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
+        </v-list-item-avatar>
+        <v-list-item-content style="align-self: normal;">
+          <v-list-item-title style="max-width: -webkit-fill-available; font-size: 20px; display: inline-block; font-weight: bold; color: white;flex: 1 1 100%; overflow: visible; text-overflow: unset; white-space: normal; text-align: left;">
+            {{options.data}}<copy-button small :value="baseAddress"></copy-button>
+          </v-list-item-title>
+          <v-list-item-subtitle style="text-align: left; font-size: 16px">
+            Your wallet address
+          </v-list-item-subtitle>
+          <v-list-item-title style="max-width: -webkit-fill-available; font-size: 18px; display: inline-block; color: white;flex: 1 1 100%; overflow: visible; text-overflow: unset; white-space: normal; text-align: left;">
+            Share this wallet address to receive payments. To protect privacy, new addresses are generated automatically once you use them.
+          </v-list-item-title>
+          <!--        <v-list-item-title class="pt-2">-->
+          <!--          <v-btn color="primary">Generate new Address</v-btn>-->
+          <!--        </v-list-item-title>-->
+        </v-list-item-content>
+      </v-list-item>
+      <v-card-title class="px-0 pb-0">Used Addresses
+        <!--      <v-spacer></v-spacer>-->
+        <!--      <v-switch v-model="showUsed" label="Show Used" inset dense></v-switch>-->
+      </v-card-title>
+      <v-data-table :headers="[{text: 'Address', sortable: true, align: 'left', value: 'address'},]" :items="allAddresses" hide-default-footer hide-default-header>
+        <template v-slot:[`item.address`]="{ item }">
+          {{ item.address | shortenStringWithEllipsis(40)  }}<copy-button small :value="item.address"></copy-button>
+        </template>
+      </v-data-table>
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>

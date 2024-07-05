@@ -1,32 +1,34 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings">
-    <v-text-field
-      v-model="search"
-      placeholder="Search"
-      prepend-inner-icon="mdi-magnify"
-      outlined
-      dense
-      hide-details
-      class="mb-4"
-    />
-    <v-tabs
-      v-model="tab"
-      color="white"
-      class="v-tabs-border-bottom"
-      background-color="transparent"
-    >
-      <v-tab
-        v-for="tab in tabs"
-        :key="tab.value">{{ tab.label }}
-      </v-tab>
-    </v-tabs>
-    <v-tabs-items v-model="tab" class="transparent">
-      <ProfileTab />
-      <PasswordTab />
-      <CollateralTab />
-      <ContactsTab />
-      <ConnectedDappsTab />
-    </v-tabs-items>
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <v-text-field
+        v-model="search"
+        placeholder="Search"
+        prepend-inner-icon="mdi-magnify"
+        outlined
+        dense
+        hide-details
+        class="mb-4"
+      />
+      <v-tabs
+        v-model="tab"
+        color="white"
+        class="v-tabs-border-bottom"
+        background-color="transparent"
+      >
+        <v-tab
+          v-for="tab in tabs"
+          :key="tab.value">{{ tab.label }}
+        </v-tab>
+      </v-tabs>
+      <v-tabs-items v-model="tab" class="transparent">
+        <ProfileTab />
+        <PasswordTab />
+        <CollateralTab />
+        <ContactsTab />
+        <ConnectedDappsTab />
+      </v-tabs-items>
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>

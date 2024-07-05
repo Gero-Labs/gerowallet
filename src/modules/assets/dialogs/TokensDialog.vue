@@ -3,8 +3,10 @@
               :img="collectionImg.toString()"
               title="MusicBox Dimensions (21)"
               subtitle="Policy: 85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18">
-    <TokensList :tokensData="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" v-if="pickedToken === null" @token-click="handleTokenClick" />
-    <TokenPreviewCarousel v-else />
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <TokensList :tokensData="[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" v-if="pickedToken === null" @token-click="handleTokenClick" />
+      <TokenPreviewCarousel v-else />
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>

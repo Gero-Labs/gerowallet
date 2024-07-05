@@ -147,6 +147,28 @@ const Currency = {
   ILS: { short: 'ils', description: 'Israeli Shekel', symbol: '₪' },
 };
 
+export type TransactionToken = {
+  unit: string;
+  quantity: string;
+};
+
+export const TX = {
+  invalid_hereafter: 3600 * 2, //2h from current slot
+};
+
+export type TxOutput = {
+  recipientAddress: string;
+  value: string;
+  tokens?: TransactionToken[];
+};
+
+export type Withdrawal = {
+  address: string;
+  amount: string;
+}
+
+export const DEFAULT_TTL: number = 14400;
+
 export {
   HARDENED,
   CoreAddressTypes,

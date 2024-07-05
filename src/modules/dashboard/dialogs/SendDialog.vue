@@ -1,26 +1,77 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" subtitle="Send AP3X or other assets to another wallet.">
-    <CustomStepper :currentStep="currentStep" :steps="steps">
-      <v-stepper-content step="1">
-        <SendRecipientDetailsStep
-          @next="nextStep"
-          :sendData="sendData"
-          @updateRecipientAddress="updateRecipientAddress"
-        ></SendRecipientDetailsStep>
-      </v-stepper-content>
-      <v-stepper-content step="2">
-        {{sendData.selectedTokens[1]?.quantity}}
-        <AssetsToSendStep
-          v-model="sendData"
-          @next="nextStep"
-          @prev="prevStep"
-          @select="selectCollectible"
-        ></AssetsToSendStep>
-      </v-stepper-content>
-      <v-stepper-content step="3">
-        <SummaryStep :sendData="sendData" @next="nextStep" @prev="prevStep"></SummaryStep>
-      </v-stepper-content>
-    </CustomStepper>
+    <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+    <v-stepper-header>
+      <template v-for="(item, index) in steps">
+        <div
+          class="custom-step"
+          :key="item.name"
+          :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+        >
+          <div class="icon-container">
+            <v-icon
+              class="step-icon"
+              :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+              size="20"
+            >{{ currentStep > index + 1 ? "mdi-check" : "mdi-circle-medium" }}</v-icon
+            >
+          </div>
+          <span class="step-label">{{ item.label }}</span>
+        </div>
+        <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index" v-if="index < steps.length - 1" ></div>
+      </template>
+    </v-stepper-header>
+    </v-stepper>
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <CustomStepper :currentStep="currentStep" :steps="steps">
+        <v-stepper-content step="1">
+          <SendRecipientDetailsStep
+            :sendData="sendData"
+            @updateRecipientAddress="updateRecipientAddress"
+          ></SendRecipientDetailsStep>
+        </v-stepper-content>
+        <v-stepper-content step="2">
+          <AssetsToSendStep
+            v-model="sendData"
+            @select="selectCollectible"
+          ></AssetsToSendStep>
+        </v-stepper-content>
+        <v-stepper-content step="3">
+          <SummaryStep ref="summary" :sendData="sendData" :tx-data="txData"  @next="signTx" @prev="prevStep"></SummaryStep>
+        </v-stepper-content>
+      </CustomStepper>
+    </v-card-text>
+    <v-card-actions class="text-center justify-center" style="flex-flow: column;">
+      <div class="" v-if="currentStep === 3">
+        <v-text-field
+          flat
+          style="width: 295px"
+          block
+          dense
+          v-model="spendingPassword"
+          outlined label="Spending Password"
+          :type="show1 ? 'text' : 'password'"
+          :rules="[rules.required]"
+          hide-details
+          class="mb-2"
+        >
+          <template v-slot:append>
+            <v-icon @click="show1 = !show1" tabindex="-1">
+              {{show1 ? 'mdi-eye' : 'mdi-eye-off'}}
+            </v-icon>
+          </template>
+        </v-text-field>
+      </div>
+      <div>
+        <v-btn text @click="prevStep" v-if="this.currentStep > 1" class="mr-2"><v-icon small>mdi-arrow-left</v-icon>&nbsp;Back</v-btn>
+        <v-btn
+          class="continue-button"
+          @click="nextStep"
+          :disabled="!isValid"
+        >{{ this.currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}<v-icon style="color: black!important;" small v-if="currentStep !==3">mdi-arrow-right</v-icon></v-btn
+        >
+      </div>
+    </v-card-actions>
   </BaseDialog>
 </template>
 <script>
@@ -31,9 +82,15 @@ import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import { useStore } from '@/store';
 import {mapState} from "pinia";
+import { assetsToValue, toUTxO } from '@/shared/utils/converter';
+import { buildTx } from '@/shared/utils/builder';
+import rules from '@/shared/utils/rules';
+import { Network } from '@/models/types';
+import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
+import { Address, TransactionOutput } from '@emurgo/cardano-serialization-lib-browser';
 
 export default {
-  name: 'BuyDialog',
+  name: 'SendDialog',
   components: { BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
   props: {
     isOpen: {
@@ -42,7 +99,27 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'utxos']),
+    isValid() {
+      if (this.currentStep === 1) {
+        if (this.loggedWallet.network !== Network.MAINNET) {
+          return this.sendData.recipientAddress.startsWith('addr_test1')
+        } else {
+          return this.sendData.recipientAddress.startsWith('addr1')
+        }
+      } else if (this.currentStep === 2) {
+        let found
+        if (this.sendData.selectedTokens) {
+          found = this.sendData.selectedTokens.find(token => !token.quantity || Number(token.quantity) === 0)
+        } else if (this.sendData.selectedCollectibles) {
+          found = this.sendData.selectedCollectibles.find(collectible => Number(collectible.quantity) === 0)
+        }
+        return !found;
+      } else if (this.currentStep === 3) {
+        return !!this.spendingPassword
+      }
+      return false;
+    }
   },
   watch: {
     isOpen(val) {
@@ -67,6 +144,10 @@ export default {
       },
     ],
     currentStep: 1,
+    txData: undefined,
+    spendingPassword: '',
+    show1: false,
+    rules,
     sendData: {
       selectedTokens: [
         {
@@ -84,9 +165,57 @@ export default {
     },
   }),
   methods: {
+    signTx() {
+
+    },
+    buildTx() {
+      console.log(this.sendData);
+      const recipientAddress = this.sendData.recipientAddress
+      let value = "0"
+      const tokens = []
+      if (this.sendData.selectedTokens.length > 0) {
+        this.sendData.selectedTokens.forEach(token => {
+          if (token.ticker === 'ADA') {
+            tokens.push({
+              unit: 'lovelace',
+              quantity: (Number(token.quantity) * Math.pow(10,token.decimals)).toString()
+            })
+          } else {
+            tokens.push({
+              unit: token.unit,
+              quantity: (Number(token.quantity) * Math.pow(10,token.decimals)).toString()
+            })
+          }
+        })
+      }
+      if (this.sendData.selectedCollectibles.length > 0) {
+        this.sendData.selectedCollectibles.forEach(collectible => {
+          tokens.push({
+            unit: collectible.unit,
+            quantity: collectible.quantity.toString()
+          })
+        })
+      }
+      const outputs = TransactionOutputs.new();
+      outputs.add(TransactionOutput.new(Address.from_bech32(recipientAddress), assetsToValue(tokens)));
+      const utxos = this.utxos.map((utxo) => toUTxO(utxo));
+      try {
+        this.txData = buildTx(this.sendData.selectedWallet, outputs, utxos, this.latestTip.slot, this.baseAddress)
+        this.$refs.summary.scanTx(this.txData)
+        if (this.currentStep < this.steps.length) {
+          this.currentStep++;
+        }
+      } catch (e) {
+        console.log(e)
+      }
+    },
     nextStep() {
       if (this.currentStep < this.steps.length) {
-        this.currentStep++;
+        if (this.currentStep === 1) {
+          this.currentStep++;
+        } else if (this.currentStep === 2) {
+          this.buildTx()
+        }
       }
     },
     prevStep() {
@@ -117,7 +246,7 @@ export default {
             decimals: 6
           }
         ],
-        selectedCollectibles: {},
+        selectedCollectibles: [],
         recipientAddress: '',
         selectedWallet: this.loggedWallet,
       };
@@ -149,5 +278,75 @@ export default {
   position: absolute;
   top: 10px;
   left: 10px;
+}
+
+.continue-button {
+  background: linear-gradient(to right, #00c7f3, #00fad5);
+  color: black;
+
+  &:disabled {
+    opacity: 0.5;
+    color: black!important;
+  }
+
+}
+
+.stepper-container {
+  background-color: transparent;
+
+  & .v-stepper__header {
+    box-shadow: none;
+  }
+
+  .custom-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 5px;
+    width: 150px;
+
+    &.active .icon-container {
+      box-shadow: 0 0 0 5px #00dff327;
+    }
+
+    &.next .icon-container {
+      background-color: #292929;
+    }
+
+    .icon-container {
+      background-color: #00dff3;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 24px;
+      width: 24px;
+      padding-left: 1px;
+    }
+  }
+
+  .step-label {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    font-weight: 600;
+    color: #CECFD2;
+  }
+
+  .divider {
+    flex: 1;
+    height: 2px;
+    width: 100%;
+    margin-left: -75px;
+    margin-right: -75px;
+    margin-top: 16px;
+    background-color: #292929;
+
+    &.active-divider {
+      background-color: #00dff3;
+    }
+  }
 }
 </style>
