@@ -3,6 +3,7 @@
     <label v-if="label">{{ label }}</label>
     <v-select
       solo
+      flat
       class="select"
       :items="items"
       :value="value"
@@ -12,6 +13,7 @@
       @input="$emit('input', $event)"
       hide-details
       dense
+      style="cursor: pointer!important;"
     >
       <template v-slot:item="{ item }">
         <v-avatar v-if="item.icon" size="20">
@@ -63,7 +65,7 @@ export default {
   }
 
   .v-input__control > .v-input__slot {
-    background-color: transparent !important;
+    background-color: #0F0F0F !important;
     border: 1px solid #272930 !important;
     border-radius: 10px;
 

@@ -1,20 +1,22 @@
 <template>
-  <v-card flat id="dapp-receiver-wrap" :class="{
+  <v-card flat class="transparent">
+    <v-card-title id="dapp-receiver-label" class="pa-0">
+      To
+    </v-card-title>
+    <v-card-text id="dapp-receiver-wrap" :class="withBg ? {
       unknown: DappRisk[risk] === DappRisk.unknown,
       suspicious: DappRisk[risk] === DappRisk.suspicious,
       blacklist: DappRisk[risk] === DappRisk.blacklist,
       whitelist: DappRisk[risk] === DappRisk.whitelist,
-    }">
-    <v-card-title id="dapp-receiver-label" class="pa-0">
-      To address
-    </v-card-title>
-    <v-card-subtitle id="dapp-receiver-address" class="pa-0 pt-5" style="display: flex; flex-direction: row;">
-      <div style="width: 18px; height: 18px" id="dapp-receiver-check">
-        <img alt="Trusted Address" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
-        <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>
-      </div>
-      {{ address }}
-    </v-card-subtitle>
+    } : {}">
+      <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row;">
+        <div style="width: 18px; height: 18px" id="dapp-receiver-check">
+          <img alt="Trusted Address" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
+          <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>
+        </div>
+        {{ address }}
+      </v-card-subtitle>
+    </v-card-text>
   </v-card>
 </template>
 <script>
@@ -29,6 +31,10 @@ export default {
     risk: {
       type: String,
     },
+    withBg: {
+      type: Boolean,
+      default: () => true
+    }
   },
   computed: {
     DappRisk() {
@@ -58,7 +64,8 @@ export default {
 <style scoped>
 #dapp-receiver-wrap {
   padding: 8px 10px;
-  background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);
+  background-color: #0F0F0F;
+  border-radius: 4px;
 }
 #dapp-receiver-header {
   display: flex;
@@ -69,9 +76,8 @@ export default {
 }
 #dapp-receiver-label {
   color: white;
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
+  font-size: 14px;
+  font-weight: 500;
 }
 #dapp-receiver-details {
   display: flex;
@@ -87,6 +93,9 @@ export default {
   line-height: 12px;
   word-wrap: break-word;
   word-break: break-all;
+}
+#dapp-receiver-wrap.unknown {
+  background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);
 }
 #dapp-receiver-wrap.suspicious {
   background: linear-gradient(269.92deg, #552900 1.73%, #915a28 97.85%);

@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="isDialogOpen" persistent width="850" scrollable>
-    <v-card class="pa-7" height="800">
+    <v-card class="pa-7" height="800" style="background-color: #141414!important;">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -22,9 +22,7 @@
           </v-list-item-content>
         </v-list-item>
       </v-card-title>
-      <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-        <slot></slot>
-      </v-card-text>
+      <slot></slot>
       <v-btn icon @click="$emit('close')" class="close-button">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>

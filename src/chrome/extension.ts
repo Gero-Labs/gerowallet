@@ -286,9 +286,7 @@ export const getUtxos = async (amount = undefined, paginate = undefined): Promis
   if (collateral) {
     utxos = utxos.filter((utxo) => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index));
   }
-
-  const address = await getAddress();
-  let converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo, address));
+  let converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
   // filter utxos
   if (amount) {
     let filterValue;

@@ -15,21 +15,21 @@ import {
   BigInt,
   PlutusList,
   PlutusMap,
-  ConstrPlutusData,
+  ConstrPlutusData, ByronAddress,
 } from '@emurgo/cardano-serialization-lib-browser';
 
 export const toAddress = bech32 => Address.from_bech32(bech32);
 
 export const toBaseAddress = bech32 => BaseAddress.from_address(toAddress(bech32));
 
-export function toUTxO(output, address): TransactionUnspentOutput {
+export function toUTxO(output): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
     TransactionInput.new(
-      TransactionHash.from_bytes(Buffer.from(output.tx_hash || output.txHash, 'hex')),
-      output.output_index ?? output.txId
+      TransactionHash.from_bytes(Buffer.from(output.tx_hash, 'hex')),
+      output.tx_index
     ),
     TransactionOutput.new(
-      Address.from_bytes(Buffer.from(address, 'hex')),
+      Address.from_bech32(output.payment_addr.bech32),
       toValue(output.asset_list, output.value)
     )
   );
@@ -94,3 +94,56 @@ export function jsonToPlutusData(jsonObj): PlutusData {
 
   return parsePlutusData(jsonObj);
 }
+
+export function normalizeToAddress(addr: string): Address {
+  // in Shelley, addresses can be base16, bech32 or base58
+  // this function, we try parsing in all encodings possible
+
+  // 1) Try converting from base58
+  if (ByronAddress.is_valid(addr)) {
+    return ByronAddress.from_base58(addr).to_address();
+  }
+
+  // 2) If already base16, simply return
+  try {
+    return Address.from_bytes(Buffer.from(addr, 'hex'));
+  } catch (_e) {} // eslint-disable-line no-empty
+
+  // 3) Try converting from base32
+  try {
+    return Address.from_bech32(addr);
+  } catch (_e) {} // eslint-disable-line no-empty
+
+  return undefined;
+}
+
+export const assetsToValue = (assets) => {
+  const multiAsset = MultiAsset.new();
+  const lovelace = assets.find((asset) => asset.unit === 'lovelace');
+  const policies: any[] = [
+    ...new Set(
+      assets
+        .filter((asset) => asset.unit !== 'lovelace')
+        .map((asset) => asset.unit.slice(0, 56))
+    ),
+  ];
+  policies.forEach((policy) => {
+    const policyAssets = assets.filter(
+      (asset) => asset.unit.slice(0, 56) === policy
+    );
+    const assetsValue = Assets.new();
+    policyAssets.forEach((asset) => {
+      assetsValue.insert(
+        AssetName.new(Buffer.from(asset.unit.slice(56), 'hex')),
+        BigNum.from_str(asset.quantity)
+      );
+    });
+    multiAsset.insert(
+      ScriptHash.from_bytes(Buffer.from(policy, 'hex')),
+      assetsValue
+    );
+  });
+  const value = Value.new(BigNum.from_str(lovelace ? lovelace.quantity : '0'));
+  if (assets.length > 1 || !lovelace) value.set_multiasset(multiAsset);
+  return value;
+};

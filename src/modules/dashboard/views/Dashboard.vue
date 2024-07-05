@@ -28,9 +28,9 @@
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
-        <v-card outlined class="fill-height">
+        <v-card outlined class="fill-height" :loading="loadingTxs">
           <v-card-title>Transactions (Last 10)</v-card-title>
-          <v-card-text class="pa-0">
+          <v-card-text class="pa-0 text-center">
             <v-data-table
               :header-props="{ 'sort-icon': 'mdi-menu-up' }"
               :items="lastTenTransactions"
@@ -96,7 +96,7 @@ export default {
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'calculatedUtxos', 'loggedWallet']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'calculatedUtxos', 'loggedWallet', 'loadingTxs']),
     lastTenTransactions() {
       if (this.calculatedTransactions) {
         return this.calculatedTransactions.slice(this.calculatedTransactions.length-10,this.calculatedTransactions.length)
@@ -164,7 +164,7 @@ export default {
     blockchainDB: undefined
   }),
   mounted() {
-    // this.loadingChart = false
+
   }
 }
 </script>

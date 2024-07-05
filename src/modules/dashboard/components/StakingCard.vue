@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined>
+  <v-card outlined :loading="loadingTxs">
     <v-card-title>Staking</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
@@ -152,7 +152,7 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs']),
     Network() {
       return Network
     },

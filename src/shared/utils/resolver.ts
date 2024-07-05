@@ -80,6 +80,7 @@ export async function resolveAsset(assets, token) {
     }
   }
   return {
+    unit: token.policy_id + token.asset_name,
     img,
     name,
     policy_id: token.policy_id,

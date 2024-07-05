@@ -3,7 +3,7 @@
     <v-card-text class="pa-0">
       <v-row no-gutters>
         <v-col cols="6" class="selectors-container px-2">
-          <v-card flat outlined class="pa-2 fill-height" style="height: 487px; overflow: auto">
+          <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto">
             <template v-for="index in selectedTokens?.length">
               <TokenSelector
                 class="pb-1"
@@ -45,11 +45,11 @@
                         v-for="(item) in collection.items"
                         :key="item.name"
                         cols="12"
-                        sm="3"
+                        sm="4"
                         xs="12"
                         class="pa-1"
                       >
-                        <v-item v-slot="{ active, toggle }" :value="item.name">
+                        <v-item v-slot="{ active, toggle }" :value="item">
                           <div>
                             <v-hover>
                               <template v-slot:default="{ hover }">
@@ -81,11 +81,11 @@
                             </v-hover>
                             <div style="display: inline-flex; place-items: center;" v-if="item.quantity > 1 && active">
                               <v-btn icon x-small>
-                                <v-icon color="#00DFF3" x-small>mdi-minus-box-outline</v-icon>
+                                <v-icon color="#00DFF3" small>mdi-minus-box-outline</v-icon>
                               </v-btn>
-                              <input type="number" min="1" :max="item.quantity"  style="text-align:center; height:12px; color: white; width: 28px; font-size: 9px"/>
+                              <input type="number" min="1" :max="item.quantity"  style="text-align:center; height:16px; color: white; width: 54px; font-size: 10px"/>
                               <v-btn icon x-small>
-                                <v-icon color="#00DFF3" x-small>mdi-plus-box-outline</v-icon>
+                                <v-icon color="#00DFF3" small>mdi-plus-box-outline</v-icon>
                               </v-btn>
                             </div>
                           </div>
@@ -101,10 +101,6 @@
         </v-col>
       </v-row>
     </v-card-text>
-    <v-card-actions class="justify-center pt-4 pb-0">
-      <v-btn text @click="$emit('prev')"><v-icon small>mdi-arrow-left</v-icon>&nbsp;Back</v-btn>
-      <v-btn class="continue-button" @click="$emit('next')">Continue&nbsp;<v-icon small>mdi-arrow-right</v-icon></v-btn>
-    </v-card-actions>
   </v-card>
 </template>
 <script>
@@ -118,12 +114,14 @@ export default {
     value: {
       type: Object
     },
+
   },
   name: "AssetsToSendStep",
   computed: {
     ...mapState(useStore, ['resolvedAssets', 'resolvedCollections']),
     tokens() {
       const tokens = this.resolvedAssets.map(token => {
+        console.log(token)
         return {
           name: token.metadata.name,
           ticker: token.metadata.ticker,
@@ -161,14 +159,22 @@ export default {
       deep: true
     },
     selectedTokens: {
-      handler(newVal, oldVal) {
+      handler(newVal) {
         this.$emit('input', {
           ...this.value,
-          selectedTokens: newVal
+          selectedTokens: newVal,
+          selectedCollectibles: this.selectedCollectibles,
         })
-        if (newVal !== oldVal) {
-          console.log(newVal)
-        }
+      },
+      deep: true,
+    },
+    selectedCollectibles: {
+      handler(newVal) {
+        this.$emit('input', {
+          ...this.value,
+          selectedTokens: this.selectedTokens,
+          selectedCollectibles: newVal,
+        })
       },
       deep: true,
     }
@@ -215,6 +221,12 @@ export default {
 .continue-button {
   background: linear-gradient(to right, #00c7f3, #00fad5);
   color: black;
+
+  &:disabled {
+    opacity: 0.5;
+    color: black!important;
+  }
+
 }
 
 .sections-container {
@@ -252,7 +264,7 @@ export default {
   }
 }
 .collectible-item {
-  height: 68px;
+  height: 94px;
   background-position: center;
   align-content: end;
   background-size: cover;
@@ -264,7 +276,7 @@ export default {
   white-space: normal;
 }
 .collectible-text {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   text-align: center;
   line-height: 1.00;
