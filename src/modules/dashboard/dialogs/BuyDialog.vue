@@ -1,20 +1,22 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')">
-    <v-card-title style="word-break: break-word">Buy</v-card-title>
-    <v-card-text
-        class="text-center justify-center pb-2 fill-height"
-        style="width: 388px; height: 600px; align-content: center; margin: auto"
-    >
-      <iframe
-          style="border-radius: 24px"
-          allow="accelerometer; autoplay; camera; gyroscope; payment"
-          frameborder="0"
-          height="100%"
-          src="https://buy-staging.moonpay.io?apiKey=pk_test_123&showOnlyCurrencies=eth_zksync&theme=dark"
-          width="100%"
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <v-card-title style="word-break: break-word">Buy</v-card-title>
+      <v-card-text
+          class="text-center justify-center pb-2 fill-height"
+          style="width: 388px; height: 600px; align-content: center; margin: auto"
       >
-        <p>Your browser does not support iframes.</p>
-      </iframe>
+        <iframe
+            style="border-radius: 24px"
+            allow="accelerometer; autoplay; camera; gyroscope; payment"
+            frameborder="0"
+            height="100%"
+            src="https://buy-staging.moonpay.io?apiKey=pk_test_123&showOnlyCurrencies=eth_zksync&theme=dark"
+            width="100%"
+        >
+          <p>Your browser does not support iframes.</p>
+        </iframe>
+      </v-card-text>
     </v-card-text>
   </BaseDialog>
 </template>

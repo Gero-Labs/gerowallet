@@ -108,6 +108,11 @@ import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
+import {
+  cardanoValueFromRemoteFormat,
+  diffAssetsFromIncomingToOutgoing,
+  getAssetsFromMultiAsset, getPayAndReceiveTokens,
+} from '@/shared/utils/builder';
 
 export default {
   name: 'DappConnect',
@@ -197,11 +202,11 @@ export default {
         const inputTxIndex = input.index();
         const utxo = this.utxos.find(utxo => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
         if (utxo) {
-          inputValue = inputValue.checked_add(this.cardanoValueFromRemoteFormat(utxo));
+          inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
         }
       }
 
-      const inputValueAssets = this.getAssetsFromMultiAsset(inputValue.multiasset());
+      const inputValueAssets = getAssetsFromMultiAsset(inputValue.multiasset());
       inputValueAssets.push(new AssetWithQuantity('cardano', inputValue.coin().to_str()));
 
       let outputValue = Value.new(BigNum.from_str('0'));
@@ -213,11 +218,11 @@ export default {
         }
       }
 
-      const outputValueAssets = this.getAssetsFromMultiAsset(outputValue.multiasset());
+      const outputValueAssets = getAssetsFromMultiAsset(outputValue.multiasset());
       outputValueAssets.push(new AssetWithQuantity('cardano', outputValue.coin().to_str()));
 
-      const diff = this.diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
-      const { payTokens, receiveTokens } = this.getPayAndReceiveTokens(diff);
+      const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
+      const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
 
       const totalGive = payTokens.find(token => token.name === 'cardano').amount;
       const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
@@ -253,92 +258,6 @@ export default {
       setTimeout(() => {
         this.tooltip.enabled = false;
       }, 3000);
-    },
-    getAssetsFromMultiAsset(multiAsset) {
-      if (!multiAsset) return [];
-      const result = [];
-      const hashes = multiAsset.keys();
-      for (let i = 0; i < hashes.len(); i++) {
-        const policyId = hashes.get(i);
-        const assetsForPolicy = multiAsset.get(policyId);
-        if (assetsForPolicy == null) continue;
-        const policies = assetsForPolicy.keys();
-        for (let j = 0; j < policies.len(); j++) {
-          const assetName = policies.get(j);
-          const amount = assetsForPolicy.get(assetName);
-          if (amount == null) continue;
-          const parsedQuantity = amount.to_str();
-          const parsedName = Buffer.from(assetName.name()).toString('hex');
-          const parsedPolicyId = Buffer.from(policyId.to_bytes()).toString('hex');
-          const parsedAssetId = `${parsedPolicyId}${parsedName}`;
-          result.push(new AssetWithQuantity(parsedName, parsedQuantity, parsedAssetId, parsedPolicyId));
-        }
-      }
-      return result;
-    },
-    diffAssetsFromIncomingToOutgoing(inputAssets, outputAssets) {
-      if (!inputAssets || !outputAssets) {
-        return null;
-      }
-      const allAssets = new Set([
-        ...inputAssets.map(input => input.asset.name),
-        ...outputAssets.map(output => output.asset.name),
-      ]);
-      return Array.from(allAssets)
-        .map(assetName => {
-          const inValue = inputAssets.find(input => input.asset.name === assetName);
-          const outValue = outputAssets.find(output => output.asset.name === assetName);
-          const difference = BigInt(inValue ? inValue.quantity : '') - BigInt(outValue ? outValue.quantity : '');
-          if (assetName === 'cardano') {
-            return { assetName, quantity: difference, id: 'cardano' };
-          }
-          const policy = assetName.slice(0, 56);
-          return {
-            assetName,
-            quantity: difference,
-            policy,
-            id: inValue ? inValue.asset.id : outValue?.asset.id,
-          };
-        }).filter(asset => asset.quantity !== BigInt(0));
-    },
-    getPayAndReceiveTokens(diff) {
-      const payTokens = [];
-      const receiveTokens = [];
-      for (let i = 0; i < diff.length; i++) {
-        if (diff[i].quantity > BigInt(0)) {
-          payTokens.push({
-            name: diff[i].assetName,
-            amount: diff[i].quantity.toString(),
-            id: diff[i].id,
-          });
-        } else if (diff[i].quantity < BigInt(0)) {
-          receiveTokens.push({
-            name: diff[i].assetName,
-            amount: (diff[i].quantity * BigInt(-1)).toString(),
-            id: diff[i].id,
-          });
-        }
-      }
-      return { payTokens, receiveTokens };
-    },
-    cardanoValueFromRemoteFormat(utxo) {
-      const cardanoValue = Value.new(BigNum.from_str(utxo.value));
-      if (!utxo.asset_list || utxo.asset_list.length === 0) {
-        return cardanoValue;
-      }
-      const assets = MultiAsset.new();
-      utxo.asset_list.forEach(asset => {
-        const policyId = ScriptHash.from_bytes(Buffer.from(asset.policy_id, 'hex'));
-        const assetName = AssetName.new(Buffer.from(asset.asset_name || '', 'hex'));
-        const quantity = BigNum.from_str(asset.quantity);
-        const policyContent = assets.get(policyId) ?? Assets.new();
-        policyContent.insert(assetName, quantity);
-        assets.insert(policyId, policyContent);
-      });
-      if (assets.len() > 0) {
-        cardanoValue.set_multiasset(assets);
-      }
-      return cardanoValue;
     },
     async decline() {
       await this.controller.returnData({ data: undefined, error: TxSignError.UserDeclined });

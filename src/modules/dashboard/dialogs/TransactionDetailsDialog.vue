@@ -1,34 +1,35 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" @close="$emit('close')" title="Transaction" :subtitle="new Date(transactionInfo.tx_timestamp * 1000).toLocaleString()">
-    <div class="transaction-info text-left">
-      {{transactionInfo}}
-      <div>
-        Received from: <span class="value-text">{{ transactionInfo.address }}</span>
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <div class="transaction-info text-left">
+        <div>
+          Received from: <span class="value-text">{{ transactionInfo.address }}</span>
+        </div>
+        <div>
+          Transaction Fee: <span class="fee">{{ transactionInfo.fee | toCurrency }}</span>
+        </div>
+        <div>
+          TransactionId: <a :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
+        </div>
+        <div>
+          Block: <span class="value-text">{{ transactionInfo.block_height }}</span>
+        </div>
       </div>
-      <div>
-        Transaction Fee: <span class="fee">{{ transactionInfo.fee | toCurrency }}</span>
-      </div>
-      <div>
-        TransactionId: <a :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash }}</a>
-      </div>
-      <div>
-        Block: <span class="value-text">{{ transactionInfo.block_height }}</span>
-      </div>
-    </div>
-    <v-expansion-panels v-model="panels" multiple>
-      <TransactionDetailsAccordion
-        v-if="transactionInfo.receivedAmount"
-        type="RECEIVED"
-        :amount="transactionInfo.receivedAmount"
-        :assets="transactionInfo.receivedAssets"
-      ></TransactionDetailsAccordion>
-      <TransactionDetailsAccordion
-        v-if="transactionInfo.sentAmount"
-        type="SENT"
-        :amount="transactionInfo.sentAmount"
-        :assets="transactionInfo.sentAssets"
-      ></TransactionDetailsAccordion>
-    </v-expansion-panels>
+      <v-expansion-panels v-model="panels" multiple>
+        <TransactionDetailsAccordion
+          v-if="transactionInfo.receivedAmount"
+          type="RECEIVED"
+          :amount="transactionInfo.receivedAmount"
+          :assets="transactionInfo.receivedAssets"
+        ></TransactionDetailsAccordion>
+        <TransactionDetailsAccordion
+          v-if="transactionInfo.sentAmount"
+          type="SENT"
+          :amount="transactionInfo.sentAmount"
+          :assets="transactionInfo.sentAssets"
+        ></TransactionDetailsAccordion>
+      </v-expansion-panels>
+    </v-card-text>
   </BaseDialog>
 </template>
 <script>

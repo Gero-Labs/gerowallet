@@ -1,13 +1,13 @@
 <template>
-  <v-card flat v-if="transaction" class="tx-card transparent" :class="{ risk: risk }">
+  <v-card flat v-if="amount" class="tx-card transparent" :class="{ risk: risk }">
     <div class="tx-header">
       <slot />
     </div>
-    <v-card flat class="tx-details">
-      <div class="provider">{{ transaction?.provider }}</div>
-      <div class="total">{{ transaction?.total | toCurrency(true) }}</div>
-      <div class="assets" v-if="transaction?.assets?.length">Assets:</div>
-      <div v-if="transaction?.assets?.length">
+    <v-card flat :class="withBg ? 'tx-details bg' : 'tx-details'">
+      <div class="provider">{{ amount?.provider }}</div>
+      <div class="total">{{ amount?.total | toCurrency(true) }}</div>
+      <div class="assets" v-if="amount?.assets?.length">Assets:&nbsp;</div>
+      <div v-if="amount?.assets?.length">
         <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
           <div>{{ asset.currency }}</div>
           <div>{{ asset.amount }}</div>
@@ -18,9 +18,9 @@
       </div>
     </v-card>
 
-    <div class="tx-footer" v-if="transaction.txFee">
+    <div class="tx-footer" v-if="amount.txFee">
       <template>
-        Tx Fee&nbsp;<span> {{ 0 - transaction?.txFee | toCurrency(true) }}</span>
+        Tx Fee&nbsp;<span> {{ 0 - amount?.txFee | toCurrency(true) }}</span>
       </template>
     </div>
   </v-card>
@@ -30,20 +30,40 @@ import filters from '@/shared/utils/filters';
 
 export default {
   name: 'TransactionCard',
-  data() {
-    return {
-      showAllAssets: true,
-      hiddenAssets: 0,
-      shownAssets: [],
-    };
-  },
   props: {
     risk: {
       type: Boolean,
     },
     transaction: {
       type: Object,
+    },
+    withBg: {
+      type: Boolean,
+      default: () => true
     }
+  },
+  watch: {
+    transaction: {
+      handler(newVal) {
+        this.amount = newVal
+        if (this.amount?.assets?.length < 5) {
+          this.shownAssets = this.amount?.assets;
+          this.hiddenAssets = 0;
+        } else {
+          this.shownAssets = this.amount?.assets.slice(0, 5);
+          this.hiddenAssets = this.amount?.assets.length - 5;
+        }
+      },
+      deep: true,
+    },
+  },
+  data() {
+    return {
+      amount: undefined,
+      showAllAssets: true,
+      hiddenAssets: 0,
+      shownAssets: [],
+    };
   },
   filters,
   methods: {
@@ -51,19 +71,16 @@ export default {
       this.showAllAssets = !this.showAllAssets;
     },
   },
-  watch: {
-    showAllAssets(value) {
-      if (this.transaction?.assets?.length < 5 || value) {
-        this.shownAssets = this.transaction?.assets;
-        this.hiddenAssets = 0;
-      } else {
-        this.shownAssets = this.transaction?.assets.slice(0, 5);
-        this.hiddenAssets = this.transaction?.assets.length - 5;
-      }
-    },
-  },
-  async mounted() {
+  mounted() {
     this.showAllAssets = false;
+    this.amount = this.transaction
+    if (this.amount?.assets?.length < 5) {
+      this.shownAssets = this.amount?.assets;
+      this.hiddenAssets = 0;
+    } else {
+      this.shownAssets = this.amount?.assets.slice(0, 5);
+      this.hiddenAssets = this.amount?.assets.length - 5;
+    }
   },
 };
 </script>
@@ -89,7 +106,10 @@ export default {
   display: grid;
   grid-template-columns: 1fr 6fr;
   grid-auto-rows: minmax(32px, auto);
-  background: linear-gradient(93.33deg, #000000 6.91%, #006a57 185.93%);
+
+  .bg {
+    background: linear-gradient(93.33deg, #000000 6.91%, #006a57 185.93%);
+  }
 
   .total,
   .assets,
@@ -205,7 +225,6 @@ a.asset-entry {
   }
 
   .tx-details {
-    background: linear-gradient(93.33deg, rgba(0, 0, 0, 0.9) 6.91%, #4c0000 185.93%);
 
     .total {
       color: var(--v-error-base);
