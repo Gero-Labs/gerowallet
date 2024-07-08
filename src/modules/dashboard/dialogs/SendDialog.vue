@@ -196,6 +196,7 @@ export default {
           })
         })
       }
+      console.log(tokens)
       const outputs = TransactionOutputs.new();
       outputs.add(TransactionOutput.new(Address.from_bech32(recipientAddress), assetsToValue(tokens)));
       const utxos = this.utxos.map((utxo) => toUTxO(utxo));
