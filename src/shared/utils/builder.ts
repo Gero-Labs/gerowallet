@@ -2,42 +2,32 @@ import {
   Address,
   AssetName,
   Assets,
-  BigNum,
-  Certificate,
-  Certificates,
-  CoinSelectionStrategyCIP2,
+  BigNum, CoinSelectionStrategyCIP2,
   DataCost,
   ExUnitPrices,
-  hash_transaction,
   LinearFee,
   min_ada_for_output,
   MultiAsset,
   RewardAddress,
   ScriptHash,
-  StakeCredential, Transaction,
-  TransactionBody,
+  StakeCredential,
   TransactionBuilder,
-  TransactionBuilderConfigBuilder, TransactionHash, TransactionInput,
-  TransactionOutput,
-  TransactionUnspentOutput,
-  TransactionUnspentOutputs, TransactionWitnessSet,
+  TransactionBuilderConfigBuilder, TransactionOutput,
+  TransactionUnspentOutput, TransactionUnspentOutputs,
   UnitInterval,
   Value,
-  Withdrawals,
+
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
-import { DEFAULT_TTL, ERROR, TransactionToken, TX, TxOutput, Withdrawal } from '@/models/types';
-import { normalizeToAddress } from '@/shared/utils/converter';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
-import CoinSelection from '@/shared/utils/coinSelection';
-import coinSelection from '@/shared/utils/coinSelection';
+import {DEFAULT_TTL} from "@/models/types";
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, StakeCredential.from_keyhash(stakeKeyHash));
 };
 
-export function getTransactionBuilder(chain: string, network: string): TransactionBuilder {
+export function  getTransactionBuilder(chain: string, network: string): TransactionBuilder {
   const pp = networks.resolveNetwork(chain, network).protocolParams;
 
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()
@@ -69,102 +59,94 @@ export function getTransactionBuilder(chain: string, network: string): Transacti
 }
 
 export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutput[], currentSlot: number, changeAddress: string) {
-    const protocolParameters = networks.resolveNetwork(senderWallet.chain, senderWallet.network).protocolParams;
-    coinSelection.setProtocolParameters(protocolParameters.min_utxo_value, protocolParameters.min_fee_a, protocolParameters.min_fee_b, protocolParameters.max_tx_size, protocolParameters.coins_per_utxo_size)
-    const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
-    const totalAssets = multiAssetCount(outputs.get(0).amount().multiasset());
-    const selection = CoinSelection.randomImprove(utxos, outputs, 20 + totalAssets);
-    const inputs: TransactionUnspentOutput[] = selection.input;
+  const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
 
-    for (let i = 0; i < inputs.length; i++) {
-      const utxo = inputs[i];
-      txBuilder.add_input(
-        utxo.output().address(),
-        utxo.input(),
-        utxo.output().amount()
-      );
-    }
+  const hasMetadata = false // !(metadata == null || metadata === undefined);
 
-  for (let i = 0; i < selection.output.len(); i++) {
-    const utxo = selection.output.get(i);
-    txBuilder.add_output(utxo);
+  // add certificates
+  // addCertificates(txBuilder, certificates);
+
+  // add withdrawal
+  // addWithdrawals(txBuilder, withdrawals);
+
+  // add metadata
+  if (hasMetadata) {
+    // txBuilder.set_auxiliary_data(metadata);
   }
 
-    // console.log('output', outputs.get(0).to_json())
-    // txBuilder.add_output(outputs.get(0));
+  // set ttl
+  const ttlValue = currentSlot + DEFAULT_TTL;
+  txBuilder.set_ttl_bignum(BigNum.from_str(ttlValue.toString()));
+  // add outputs
+  addOutputs(txBuilder, outputs);
 
-    const change = selection.change;
-    const changeMultiAssets = change.multiasset();
-    console.log(change.to_json())
-    // check if change value is too big for single output
-    if (changeMultiAssets && change.to_bytes().length * 2 > protocolParameters.max_val_size) {
-      const partialChange = Value.new(BigNum.from_str('0'));
-
-      const partialMultiAssets = MultiAsset.new();
-      const policies = changeMultiAssets.keys();
-      const makeSplit = () => {
-        for (let j = 0; j < changeMultiAssets.len(); j++) {
-          const policy = policies.get(j);
-          const policyAssets = changeMultiAssets.get(policy);
-          const assetNames = policyAssets.keys();
-          const assets = Assets.new();
-          for (let k = 0; k < assetNames.len(); k++) {
-            const policyAsset = assetNames.get(k);
-            const quantity = policyAssets.get(policyAsset);
-            assets.insert(policyAsset, quantity);
-            //check size
-            const checkMultiAssets = MultiAsset.from_bytes(partialMultiAssets.to_bytes());
-            checkMultiAssets.insert(policy, assets);
-            const checkValue = Value.new(BigNum.from_str('0'));
-            checkValue.set_multiasset(checkMultiAssets);
-            if (checkValue.to_bytes().length * 2 >= protocolParameters.max_val_size) {
-              partialMultiAssets.insert(policy, assets);
-              return;
-            }
-          }
-          partialMultiAssets.insert(policy, assets);
-        }
-      };
-      makeSplit();
-      partialChange.set_multiasset(partialMultiAssets);
-      const minAda = min_ada_for_output(
-        TransactionOutput.new(Address.from_bech32(changeAddress), partialChange),
-        DataCost.new_coins_per_byte(BigNum.from_str(protocolParameters.coins_per_utxo_size))
-      );
-
-      partialChange.set_coin(minAda);
-
-      txBuilder.add_output(TransactionOutput.new(Address.from_bech32(changeAddress), partialChange));
+  // add utxos to the transaction as inputs
+  const shouldUseAllUtxos = false //TODO certificates.length > 0 || withdrawals.length > 0;
+  try {
+    addInputUtxos(txBuilder, utxos, outputs, shouldUseAllUtxos);
+    const calcChangeAddress = Address.from_bech32(changeAddress);
+    txBuilder.add_change_if_needed(calcChangeAddress);
+  }
+  catch (e: unknown) {
+    const error = e as string;
+    if (isNotEnoughBalanceError(error) && !shouldUseAllUtxos) {
+      addInputUtxos(txBuilder, utxos, outputs, true);
+      const calcChangeAddress = Address.from_bech32(changeAddress);
+      txBuilder.add_change_if_needed(calcChangeAddress);
     }
-
-    txBuilder.set_ttl(currentSlot + TX.invalid_hereafter);
-    txBuilder.add_change_if_needed(Address.from_bech32(changeAddress));
-
-    const transaction = Transaction.new(
-      txBuilder.build(),
-      TransactionWitnessSet.new()
-    );
-
-    const size = transaction.to_bytes().length * 2;
-    if (size > protocolParameters.max_tx_size) throw ERROR.txTooBig;
-
-    return transaction;
+  }
+  // tx build
+  return txBuilder.build_tx()
 }
 
-export const multiAssetCount = (multiAsset) => {
-  if (!multiAsset) return 0;
-  let count = 0;
-  const policies = multiAsset.keys();
-  for (let j = 0; j < multiAsset.len(); j++) {
-    const policy = policies.get(j);
-    const policyAssets = multiAsset.get(policy);
-    const assetNames = policyAssets.keys();
-    for (let k = 0; k < assetNames.len(); k++) {
-      count++;
+function isNotEnoughBalanceError(error: string) {
+  const balanceErrors = [
+    'not enough ada',
+    'insufficient input',
+    'utxo balance insufficient',
+  ];
+  return balanceErrors.some(balanceError => error.toLowerCase().includes(balanceError));
+}
+
+function addOutputs(txBuilder: TransactionBuilder, outputs: TransactionOutputs): number {
+  let minAdaRequired = 0;
+  for (let i = 0 ; i< outputs.len() ; i++) {
+    minAdaRequired += Number(min_ada_for_output(outputs.get(i), DataCost.new_coins_per_word(BigNum.from_str('34482'))).to_str());
+    txBuilder.add_output(outputs.get(i));
+  }
+  return minAdaRequired;
+}
+
+function addInputUtxos(
+    txBuilder: TransactionBuilder,
+    utxos: TransactionUnspentOutput[],
+    outputs: TransactionOutputs,
+    useAllUtxos = false
+) {
+  const utxosCIP  = TransactionUnspentOutputs.new();
+  utxos.forEach(utxo => {
+    utxosCIP.add(utxo);
+  })
+  if (!useAllUtxos) {
+    const strategy = outputHasAssets(outputs) ? CoinSelectionStrategyCIP2.RandomImproveMultiAsset : CoinSelectionStrategyCIP2.RandomImprove;
+    txBuilder.add_inputs_from(utxosCIP, strategy);
+  } else {
+    utxos.forEach(utxo => {
+      txBuilder.add_input(utxo.output().address(), utxo.input(), utxo.output().amount());
+    });
+  }
+}
+
+function outputHasAssets(outputs: TransactionOutputs) {
+  if (outputs?.len() > 0) {
+    for (let i = 0 ; i< outputs.len() ; i++) {
+      if (outputs.get(i).amount().multiasset()?.len() > 0) {
+        return true
+      }
     }
   }
-  return count;
-};
+  return false;
+}
 
 export function cardanoValueFromRemoteFormat(utxo) {
   const cardanoValue = Value.new(BigNum.from_str(utxo.value));
