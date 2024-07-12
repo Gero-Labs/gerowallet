@@ -94,11 +94,8 @@ import { Messaging } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
 import rules from '@/shared/utils/rules';
 import {
-  AssetName, Assets,
   BigNum,
   decode_metadatum_to_json_str,
-  MultiAsset,
-  ScriptHash,
   Transaction,
   Value,
 } from '@emurgo/cardano-serialization-lib-browser';

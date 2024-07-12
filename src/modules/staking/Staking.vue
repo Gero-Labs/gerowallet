@@ -168,7 +168,7 @@
                 </div>
               </template>
               <template v-slot:[`item.fixed_cost`]="{ item }">
-                <span style="font-size: 14px; color: white">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
+                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
                   }}</span>
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
@@ -248,7 +248,7 @@
                           <span style="font-size: 14px; color: white">Pledge</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; ">
+                          <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; " v-if="loggedWallet">
                             {{ pool.pledge | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
                             }}
                           </v-chip>
@@ -267,7 +267,7 @@
                           <span style="font-size: 14px; color: white">Fees</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white" v-if="pool">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
+                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
                             }}</span>
                         </v-col>
                       </v-row>
@@ -283,6 +283,7 @@
         </v-card>
       </v-col>
     </v-row>
+    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
   </v-layout>
 </template>
 <script>
@@ -291,10 +292,19 @@ import {useStore} from "@/store";
 import {mapActions, mapState} from "pinia";
 import {Blockchain, Network} from "@/models/types";
 import CopyButton from "@/shared/components/CopyButton.vue";
+import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
+import {
+  Certificate, Ed25519KeyHash,
+  StakeCredential,
+  StakeDelegation,
+  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
+} from '@emurgo/cardano-serialization-lib-browser';
+import { buildTx } from '@/shared/utils/builder';
+import { toUTxO } from '@/shared/utils/converter';
 
 export default {
   name: 'Staking',
-  components: {CopyButton},
+  components: { DelegateDialog, CopyButton},
   computed: {
     ...mapState(useStore, ['stakingProView']),
     isPro: {
@@ -328,7 +338,7 @@ export default {
       return (this.loggedWallet?.chain === Blockchain.CARDANO && this.loggedWallet?.network === Network.MAINNET) ||
         (this.loggedWallet?.chain === Blockchain.APEX_PRIME && this.loggedWallet?.network === Network.TESTNET)
     },
-    ...mapState(useStore, ['getPools', 'loggedWallet']),
+    ...mapState(useStore, ['getPools', 'loggedWallet', 'accountInfo', 'utxos', 'latestTip', 'baseAddress']),
     pools() {
       return this.getPools
     },
@@ -385,6 +395,23 @@ export default {
     },
     delegate(row) {
       console.log('delegate', row)
+      this.selectedPool = row
+      const wallet = useStore().getWallet;
+      const certificates = [];
+      if (!this.accountInfo?.active) {
+        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(StakeCredential.from_keyhash(wallet.stakeKey().hash())))
+        certificates.push(registrationCertificate);
+      }
+      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(StakeCredential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
+      certificates.push(delegationCertificate);
+      console.log(certificates)
+      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
+      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
+      console.log(txBody.to_json())
+      console.log(this.txData)
+      this.isDelegateDialogOpen = true
     },
     poolExtendedInfo(pool) {
       if (pool && pool.pool_extended_info) {
@@ -408,7 +435,10 @@ export default {
     pageCount: 0,
     xLogo: require('@/assets/svg/x.svg'),
     telegramLogo: require('@/assets/svg/telegram.svg'),
-    errorImage: require('@/assets/img/1x1.png')
+    errorImage: require('@/assets/img/1x1.png'),
+    isDelegateDialogOpen: false,
+    selectedPool: undefined,
+    txData: undefined,
   })
 }
 </script>

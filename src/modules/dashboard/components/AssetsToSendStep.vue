@@ -120,19 +120,22 @@ export default {
   computed: {
     ...mapState(useStore, ['resolvedAssets', 'resolvedCollections']),
     tokens() {
-      const tokens = this.resolvedAssets.map(token => {
-        console.log(token)
-        return {
-          name: token.metadata.name,
-          ticker: token.metadata.ticker,
-          img: token.img,
-          quantity: "0",
-          balance: token.quantity,
-          decimals: token.metadata.decimals
-        }
-      })
-      tokens.sort((a,b) => a.ticker > b.ticker ? 1 : -1)
-      return tokens
+      if (this.resolvedAssets) {
+        const tokens = this.resolvedAssets.map(token => {
+          console.log(token)
+          return {
+            name: token.metadata.name,
+            ticker: token.metadata.ticker,
+            img: token.img,
+            quantity: "0",
+            balance: token.quantity,
+            decimals: token.metadata.decimals
+          }
+        })
+        tokens.sort((a,b) => a.ticker > b.ticker ? 1 : -1)
+        return tokens
+      }
+      return {}
     },
     collections() {
       let collections = structuredClone(this.resolvedCollections)
