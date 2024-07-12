@@ -152,57 +152,6 @@ export const useStore = defineStore('store', {
       }
       return []
     },
-    calculatedUtxos(state) {
-      const utxos = [];
-      const outputs = [];
-      const inputSet = new Set();
-
-      if (state.transactions && state.transactions.length > 0) {
-        // Collect all outputs and inputs
-        state.transactions.forEach(tx => {
-          if (tx.outputs) {
-            outputs.push(...tx.outputs);
-          }
-          if (tx.inputs) {
-            tx.inputs.forEach(input => {
-              inputSet.add(`${input.tx_hash}-${input.tx_index}`);
-            });
-          }
-        });
-
-        // Check outputs against inputs set
-        const walletAddress = this.getWallet.stakeAddress().to_address().to_bech32();
-        outputs.forEach(output => {
-          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && walletAddress === output.stake_addr) {
-            utxos.push(output);
-          }
-        });
-      }
-      // Resolve Assets
-      // if (utxos) {
-      //   utxos.forEach(utxo => {
-      //     if (utxo.asset_list) {
-      //       utxo.asset_list.forEach(asset => {
-      //         const resolved = state.assets.find(ast => ast['policy_id'] === asset['policy_id'] && ast['asset_name'] === asset['asset_name'])
-      //         if (!resolved) {
-      //           this.getWallet.getAssetInfo(asset['policy_id'], asset['asset_name'])
-      //         } else {
-      //           asset['total_amount'] = resolved?.quantity
-      //           asset['name'] = Buffer.from(resolved.asset_name, 'hex').toString('ascii')
-      //           if (resolved?.metadata?.logo) {
-      //             asset['logo'] = 'data:image/png;base64,' + resolved.metadata.logo;
-      //           } else if (resolved?.onchain_metadata?.image) {
-      //             asset['logo'] = process.env['VUE_APP_BACKEND_URL'] + '/api/ipfs/' + resolved.onchain_metadata.image
-      //           } else {
-      //             asset['logo'] = ''; // Set empty logo if not found
-      //           }
-      //         }
-      //       })
-      //     }
-      //   })
-      // }
-      return utxos;
-    },
     getPools: state => state.pools,
     getAccountInfo: state => state.accountInfo
   },
@@ -350,7 +299,6 @@ export const useStore = defineStore('store', {
                 }
               }
             })
-            console.log(collections)
             this.resolvedCollections = Object.values(collections)
         }))
     },

@@ -9,7 +9,7 @@
       blacklist: DappRisk[risk] === DappRisk.blacklist,
       whitelist: DappRisk[risk] === DappRisk.whitelist,
     } : {}">
-      <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row;">
+      <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row; text-align: left;">
         <div style="width: 18px; height: 18px" id="dapp-receiver-check">
           <img alt="Trusted Address" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
           <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>

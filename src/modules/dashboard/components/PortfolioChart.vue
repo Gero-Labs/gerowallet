@@ -60,9 +60,6 @@ export default {
       if (!newVal.length) {
         return;
       }
-      const yMax =this.chartData.reduce((max, current) => {
-        return current[1] > max ? current[1] : max
-      }, -Infinity);
       const data = {
         accessibility: {
           enabled: false,
@@ -127,7 +124,6 @@ export default {
               color: "#3d3d3d",
             },
           ],
-          max: yMax,
         },
         colors: [
           "#00DFF3",
@@ -149,7 +145,7 @@ export default {
         series: [
           {
             type: "area",
-            name: "$",
+            name: "Balance",
             data: newVal,
             showInLegend: true,
             marker: {

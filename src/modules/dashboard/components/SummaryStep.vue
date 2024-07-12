@@ -90,7 +90,6 @@ export default {
       if (!this.tx || !this.utxos || this.utxos.length === 0) {
         return null;
       }
-      console.log(this.tx.to_json());
       const txBody = this.tx.body();
       let inputValue = Value.new(BigNum.from_str('0'));
       for (let i = 0; i < txBody.inputs().len(); i++) {

@@ -23,14 +23,12 @@ export const toAddress = bech32 => Address.from_bech32(bech32);
 export const toBaseAddress = bech32 => BaseAddress.from_address(toAddress(bech32));
 
 export function toUTxO(output): TransactionUnspentOutput {
+  if (output.tx_hash === '167e232bc0fa82e96b992d13df9336a543c2b3e8c5cc234aa55f3a32af195037') {
+    console.log(output.tx_hash)
+  }
   return TransactionUnspentOutput.new(
-    TransactionInput.new(
-      TransactionHash.from_bytes(Buffer.from(output.tx_hash, 'hex')),
-      output.tx_index
-    ),
-    TransactionOutput.new(
-      Address.from_bech32(output.payment_addr.bech32),
-      toValue(output.asset_list, output.value)
+    TransactionInput.new(TransactionHash.from_bytes(Buffer.from(output.tx_hash, 'hex')), output.tx_index),
+    TransactionOutput.new(Address.from_bech32(output.payment_addr.bech32), toValue(output.asset_list, output.value)
     )
   );
 }
@@ -42,17 +40,12 @@ export function toValue(assets, lovelace) {
     const policyAssets = assets.filter((asset) => asset.policy_id === policy);
     const assetsValue = Assets.new();
     policyAssets.forEach((asset) => {
-      assetsValue.insert(
-        AssetName.new(Buffer.from(asset.asset_name, 'hex')), BigNum.from_str(asset.quantity)
-      );
+      assetsValue.insert(AssetName.new(Buffer.from(asset.asset_name, 'hex')), BigNum.from_str(asset.quantity));
     });
-    multiAsset.insert(
-      ScriptHash.from_bytes(Buffer.from(policy, 'hex')),
-      assetsValue
-    );
+    multiAsset.insert(ScriptHash.from_bytes(Buffer.from(policy, 'hex')), assetsValue);
   });
   const value = Value.new(BigNum.from_str(lovelace));
-  if (assets.length > 1 || !lovelace) value.set_multiasset(multiAsset);
+  if (assets.length > 0 || !lovelace) value.set_multiasset(multiAsset);
   return value;
 }
 

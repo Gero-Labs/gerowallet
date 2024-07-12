@@ -52,6 +52,9 @@ export default {
       get() {
         return this.isOpen;
       },
+      set(val) {
+        console.log(val)
+      }
     },
   },
 };
