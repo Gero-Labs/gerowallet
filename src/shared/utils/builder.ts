@@ -2,26 +2,27 @@ import {
   Address,
   AssetName,
   Assets,
-  BigNum, CoinSelectionStrategyCIP2,
-  DataCost,
+  BigNum,
+  Certificate,
+  Certificates,
+  CoinSelectionStrategyCIP2,
   ExUnitPrices,
   LinearFee,
-  min_ada_for_output,
   MultiAsset,
   RewardAddress,
   ScriptHash,
-  StakeCredential,
+  StakeCredential, TransactionBody,
   TransactionBuilder,
-  TransactionBuilderConfigBuilder, TransactionOutput,
-  TransactionUnspentOutput, TransactionUnspentOutputs,
+  TransactionBuilderConfigBuilder,
+  TransactionUnspentOutputs,
   UnitInterval,
-  Value,
+  Value, Withdrawals,
 
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
-import {DEFAULT_TTL} from "@/models/types";
+import { DEFAULT_TTL, Withdrawal } from '@/models/types';
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, StakeCredential.from_keyhash(stakeKeyHash));
@@ -31,43 +32,47 @@ export function  getTransactionBuilder(chain: string, network: string): Transact
   const pp = networks.resolveNetwork(chain, network).protocolParams;
 
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()
-    .fee_algo(
-      LinearFee.new(
-        BigNum.from_str(pp.min_fee_a.toString()),
-        BigNum.from_str(pp.min_fee_b.toString()),
-      ),
-    )
+    .fee_algo(LinearFee.new(BigNum.from_str(pp.min_fee_a.toString()), BigNum.from_str(pp.min_fee_b.toString())))
     .pool_deposit(BigNum.from_str(pp.pool_deposit))
     .key_deposit(BigNum.from_str(pp.key_deposit))
     .max_value_size(pp.max_val_size)
     .max_tx_size(pp.max_tx_size)
-    .coins_per_utxo_byte(BigNum.from_str(pp.coins_per_utxo_size))
-    .ex_unit_prices(
-      ExUnitPrices.new(
-        UnitInterval.new(
-          BigNum.from_str('577'),
-          BigNum.from_str('10000'),
-        ),
-        UnitInterval.new(
-          BigNum.from_str('721'),
-          BigNum.from_str('10000000'),
-        ),
-      ),
-    )
+    .coins_per_utxo_word(BigNum.from_str('34482'))
+    .ex_unit_prices(ExUnitPrices.new(UnitInterval.new(BigNum.from_str('577'), BigNum.from_str('10000')), UnitInterval.new(BigNum.from_str('721'), BigNum.from_str('10000000'))))
     .prefer_pure_change(true)
     .build());
 }
 
-export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutput[], currentSlot: number, changeAddress: string) {
+export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = []): TransactionBody {
   const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
 
   const hasMetadata = false // !(metadata == null || metadata === undefined);
 
-  // add certificates
-  // addCertificates(txBuilder, certificates);
+  // Add Certificates
+  if (certificates.length > 0) {
+    const certsArray = certificates.reduce((certs, cert) => {
+      certs.add(cert);
+      return certs;
+    }, Certificates.new());
+    txBuilder.set_certs(certsArray);
+  }
 
-  // add withdrawal
-  // addWithdrawals(txBuilder, withdrawals);
+  // Add Withdrawals
+  if (withdrawals.length > 0) {
+    const processed = withdrawals.map((withdrawal) => {
+      const address = Address.from_bech32(withdrawal.address);
+      return {
+        address: RewardAddress.from_address(address),
+        amount: BigNum.from_str(withdrawal.amount),
+      };
+    });
+
+    const withdrawalArray = processed.reduce((withs, withdrawal) => {
+      withs.insert(withdrawal.address, withdrawal.amount);
+      return withs;
+    }, Withdrawals.new());
+    txBuilder.set_withdrawals(withdrawalArray);
+  }
 
   // add metadata
   if (hasMetadata) {
@@ -77,8 +82,13 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
   // set ttl
   const ttlValue = currentSlot + DEFAULT_TTL;
   txBuilder.set_ttl_bignum(BigNum.from_str(ttlValue.toString()));
+
   // add outputs
-  addOutputs(txBuilder, outputs);
+  if (outputs) {
+    for (let i = 0 ; i< outputs.len() ; i++) {
+      txBuilder.add_output(outputs.get(i));
+    }
+  }
 
   // add utxos to the transaction as inputs
   const shouldUseAllUtxos = false //TODO certificates.length > 0 || withdrawals.length > 0;
@@ -96,7 +106,7 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
     }
   }
   // tx build
-  return txBuilder.build_tx()
+  return txBuilder.build()
 }
 
 function isNotEnoughBalanceError(error: string) {
@@ -108,32 +118,20 @@ function isNotEnoughBalanceError(error: string) {
   return balanceErrors.some(balanceError => error.toLowerCase().includes(balanceError));
 }
 
-function addOutputs(txBuilder: TransactionBuilder, outputs: TransactionOutputs): number {
-  let minAdaRequired = 0;
-  for (let i = 0 ; i< outputs.len() ; i++) {
-    minAdaRequired += Number(min_ada_for_output(outputs.get(i), DataCost.new_coins_per_word(BigNum.from_str('34482'))).to_str());
-    txBuilder.add_output(outputs.get(i));
-  }
-  return minAdaRequired;
-}
-
 function addInputUtxos(
     txBuilder: TransactionBuilder,
-    utxos: TransactionUnspentOutput[],
+    utxos: TransactionUnspentOutputs,
     outputs: TransactionOutputs,
     useAllUtxos = false
 ) {
-  const utxosCIP  = TransactionUnspentOutputs.new();
-  utxos.forEach(utxo => {
-    utxosCIP.add(utxo);
-  })
   if (!useAllUtxos) {
     const strategy = outputHasAssets(outputs) ? CoinSelectionStrategyCIP2.RandomImproveMultiAsset : CoinSelectionStrategyCIP2.RandomImprove;
-    txBuilder.add_inputs_from(utxosCIP, strategy);
+    txBuilder.add_inputs_from(utxos, strategy);
   } else {
-    utxos.forEach(utxo => {
+    for (let i = 0 ; i < utxos.len() ; i++) {
+      const utxo = utxos.get(i)
       txBuilder.add_input(utxo.output().address(), utxo.input(), utxo.output().amount());
-    });
+    }
   }
 }
 
@@ -192,7 +190,6 @@ export function getAssetsFromMultiAsset(multiAsset) {
 }
 
 export function diffAssetsFromIncomingToOutgoing(inputAssets, outputAssets) {
-  console.log('test')
   if (!inputAssets || !outputAssets) {
     return null;
   }

@@ -107,18 +107,6 @@ export class Api {
     }
   }
 
-  async getTransactionUtxos(txHash: string) {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/transactions/utxos?chain=${this.chain}&network=${this.network}&provider=${this.provider}&txHash=${txHash}`
-      );
-      if (status === 200) return {id: txHash, data: data};
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getAddressTransactions(address: string, fromBlockHeight: number) {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/address/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&address=${address}&from=${fromBlockHeight}`);
@@ -207,6 +195,16 @@ export class Api {
   async scanTx(txScanRequest: TxScanRequest): Promise<TxScanResponse> {
     try {
       const { data, status } = await this.axiosInstance.post(`/api/tx/scan`, txScanRequest);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async submitTx(body: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, body);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {

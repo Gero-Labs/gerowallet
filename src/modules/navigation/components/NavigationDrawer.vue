@@ -199,11 +199,6 @@ export default {
     avatarsLoading: true,
     loading: false,
     drawer: true,
-    balance: {
-      assets: [],
-      coin: 0,
-      forge: 0,
-    },
     network: 'mainnet',
     assets: [],
     selectedAvatar: undefined,

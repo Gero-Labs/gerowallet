@@ -1,12 +1,4 @@
 import { Blockchain, Network } from '@/models/types';
-import {
-  BigNum,
-  ExUnitPrices,
-  LinearFee,
-  TransactionBuilder,
-  TransactionBuilderConfigBuilder,
-  UnitInterval,
-} from '@emurgo/cardano-serialization-lib-browser';
 
 export default {
   networks: [
@@ -37,6 +29,18 @@ export default {
       network: Network.PREPROD,
       supportedHardware: false,
       networkId: 0,
+      protocolParams: {
+        min_fee_a: 44,
+        min_fee_b: 155381,
+        max_tx_size: 16384,
+        min_utxo_value: "0",
+        key_deposit: "2000000",
+        pool_deposit: "500000000",
+        max_val_size: 5000,
+        price_mem: 0.0577,
+        price_step: 0.0000721,
+        coins_per_utxo_size: "4310"
+      }
     },
     {
       icon: require('@/assets/svg/cardano.svg'),

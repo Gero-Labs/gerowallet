@@ -96,7 +96,7 @@ export default {
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'calculatedUtxos', 'loggedWallet', 'loadingTxs']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'loggedWallet', 'loadingTxs']),
     lastTenTransactions() {
       if (this.calculatedTransactions) {
         return this.calculatedTransactions.slice(this.calculatedTransactions.length-10,this.calculatedTransactions.length)

@@ -35,7 +35,7 @@ import {
 import db from '@/db';
 import { chunkArray } from 'array-chunk-by-size';
 import { extractKeyHash } from '@/chrome/extension';
-import { DataSignError, TxSignError } from '@/chrome/config';
+import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import {
   AlgorithmId,
   CBORValue,
@@ -471,6 +471,24 @@ export class Wallet {
   //     return witnessSet;
   //   }
   // };
+
+  async submitTx(body: string) {
+    const response = await this.api.submitTx(body)
+    if (response.error) {
+      if (response.status_code === 400) {
+        throw new Error(TxSendError.Failure.info.concat('.', ' ', response.message));
+      } else if (response.status_code === 500) {
+        throw new Error(APIError.InternalError.info);
+      } else if (response.status_code === 429) {
+        throw new Error(TxSendError.Refused.info);
+      } else if (response.status_code === 425) {
+        throw new Error(ERROR.fullMempool);
+      } else {
+        throw new Error(APIError.InvalidRequest.info);
+      }
+    }
+    return response
+  }
 
   async getLastSyncInfo() {
     return this.db
