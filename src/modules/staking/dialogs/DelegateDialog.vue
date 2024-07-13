@@ -159,8 +159,7 @@ export default {
   computed: {
     ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses']),
     depositFee() {
-      console.log('test')
-      let depositFee = BigNum.zero();
+      let depositFee = 0;
       const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
       let totalAdaOutput = 0
       if (this.tx?.body()?.inputs()) {

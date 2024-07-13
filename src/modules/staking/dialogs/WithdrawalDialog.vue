@@ -1,15 +1,20 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :height="300" title="Unstake from Pool"
-              subtitle="Deregister from your current staking pool delegation and withdraw your stake.">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :height="300" title="Withdraw Staking Rewards"
+              subtitle="Claim your accumulated rewards from staking. Confirm the details and enter your password to proceed.">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         border="left"
-        color="warning"
-        type="warning"
+        color="primary"
+        type="info"
         prominent
         class="text-left"
       >
-        Unstaking will also claim your rewards.<br>Please verify your unstake details and enter your spending password to proceed.
+        <ul>
+          <li>Staking rewards are earned by delegating your ADA to a stake pool.</li>
+          <li>Staking allows ADA holders to earn passive income.</li>
+          <li>Rewards are typically distributed every epoch (about every 5 days).</li>
+          <li>Rewards are automatically re-staked, so you don’t need to withdraw them for your earnings to compound.</li>
+        </ul>
       </v-alert>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0" v-if="accountInfo && tx">
@@ -23,17 +28,13 @@
             </h4>
             <h4><strong>{{ withdrawals | toCurrency }}</strong></h4>
           </v-col>
-          <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>Deposit Fee Return</h4>
-            <h4><strong>{{ depositFee | toCurrency }}</strong></h4>
-          </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
             <h4><strong>{{ Number(tx.body().fee().to_str()) | toCurrency }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Total</h4>
-            <h4><strong>{{ (withdrawals+depositFee-Number(tx.body().fee().to_str())) | toCurrency }}</strong></h4>
+            <h4><strong>{{ (withdrawals-Number(tx.body().fee().to_str())) | toCurrency }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: ruby">
             <v-tooltip
@@ -65,8 +66,8 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Unstake
+            <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+              Withdraw
             </v-btn>
           </v-col>
         </v-row>
@@ -83,7 +84,7 @@ import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-seri
 import rules from '@/shared/utils/rules';
 
 export default {
-  name: 'UnstakeDialog',
+  name: 'WithdrawalDialog',
   components: { BaseDialog },
   props: {
     isOpen: {
@@ -124,32 +125,8 @@ export default {
       }
       return withdrawals;
     },
-    depositFee() {
-      let depositFee = 0;
-      const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
-      let totalAdaOutput = 0
-      if (this.tx?.body()?.inputs()) {
-        for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
-          const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          totalAdaOutput -= Number(utxo.value)
-          console.log(utxo)
-        }
-      }
-      if (this.tx?.body()?.outputs()) {
-        for (let i = 0; i < this.tx?.body()?.outputs().len(); i++) {
-          const output = this.tx?.body()?.outputs().get(i)
-          totalAdaOutput += Number(output.amount().coin().to_str())
-        }
-        console.log('totalAdaBalance', totalAdaBalance.to_str())
-        console.log('totalAdaOutput', totalAdaOutput)
-        depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str()) - this.withdrawals
-        return depositFee;
-      }
-      return 0
-    },
     cols() {
-      return 3
+      return 4
     }
   },
   methods: {
@@ -159,7 +136,7 @@ export default {
         this.tooltip.enabled = false;
       }, 3000);
     },
-    async signUnStakeTx() {
+    async signWithdrawalTx() {
       this.loading = true
       const wallet = useStore().getWallet;
       this.passwordRules.push(wallet.verifySpendingPassword(this.spendingPassword))
