@@ -24,7 +24,7 @@
         <quick-actions></quick-actions>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard :account="accountInfo" v-if="accountInfo?.controlled_amount && accountInfo?.pool_id"></StakingCard>
+        <StakingCard v-if="accountInfo?.controlled_amount && accountInfo?.pool_id"></StakingCard>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">

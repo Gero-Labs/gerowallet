@@ -4,18 +4,21 @@
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters style="background-color: #161B26" class="py-4">
-          <v-col cols="6" class="px-4">
-            <span>Staked to Pool:</span>
+          <v-col cols="6" class="px-2 text-center">
+            <span>Delegating to</span>
             <h2 style="color: white" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h2>
+            <v-btn x-small text color="#F97066" @click="unstake">Unstake</v-btn>
           </v-col>
-          <v-col cols="3" class="px-4">
-            <span>Total ADA:</span>
-            <h2 style="color: white" v-if="loggedWallet">{{ account.controlled_amount | toCurrency(false, 2, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
-              }}</h2>
+          <v-col cols="3" class="px-2 text-center">
+            <span>Total</span>
+            <h2 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳') }}</h2>
           </v-col>
-          <v-col cols="3" class="px-4">
+          <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>
-            <h2 style="color: white">{{ account.withdrawable_amount | toCurrency }}</h2>
+            <h2 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency }}</h2>
+            <v-btn v-if="accountInfo.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
+              Withdraw
+            </v-btn>
           </v-col>
         </v-row>
         <v-row no-gutters class="pt-2">
@@ -52,18 +55,42 @@
                 </v-avatar>
               </v-btn>
             </div>
-            <h3>Pool Id</h3>
-            <div style="display: flex;align-items: center;">
-              <span style="color: white; text-overflow: ellipsis; overflow: hidden;white-space: nowrap;display: flow;">{{ account.pool_id }}</span>
-              <copy-button :value="account.pool_id" x-small></copy-button>
-            </div>
-            <div class="d-flex justify-lg-space-around pt-4">
-              <v-btn large
-                     style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">
-                Withdraw<br>Rewards
-              </v-btn>
-              <v-btn large style="text-transform: capitalize;" outlined color="#F97066">Unstake<br>From Pool</v-btn>
-            </div>
+            <v-row no-gutters class="pt-2 pb-1">
+              <v-col cols="6" style="display: block;text-align: center;">
+                <h4>Pool Id</h4>
+                <span style="color: white;">{{ accountInfo.pool_id | truncate }}</span>
+                <copy-button :value="accountInfo.pool_id" x-small></copy-button>
+              </v-col>
+              <v-col cols="6" style="display: block;text-align: center;">
+                <h4>ROS</h4>
+                <span style="color: white;">{{ pool?.ros ? pool.ros.toFixed(2)+'%' : '0%' }}</span>
+              </v-col>
+            </v-row>
+            <v-row no-gutters>
+              <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
+                <h4>Fees</h4>
+                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳') }}</span>
+              </v-col>
+              <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
+                <h4>Saturation</h4>
+                <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
+                  <template v-slot:default="{ value }">
+                    <strong>{{ Math.ceil(value) }}%</strong>
+                  </template>
+                </v-progress-linear>
+                <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
+                  <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', true) }}</strong>
+                  <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
+                    <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
+                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, '₳', true) }}
+                  </strong>
+                  <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
+                    <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
+                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, '₳', true) }}
+                  </strong>
+                </div>
+              </v-col>
+            </v-row>
           </v-col>
           <v-col cols="6" class="px-4">
             <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
@@ -121,6 +148,7 @@
         </v-row>
       </v-layout>
     </v-card-text>
+    <UnstakeDialog :is-open="unstakeDialog" @close="unstakeDialog = false" :tx="txData"></UnstakeDialog>
   </v-card>
 </template>
 <script>
@@ -130,13 +158,19 @@ import {useStore} from "@/store";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import {Network} from "@/models/types";
 import {mapState} from "pinia";
+import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
+import {
+  Certificate, Ed25519KeyHash,
+  StakeCredential,
+  StakeDelegation, StakeDeregistration,
+  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
+} from '@emurgo/cardano-serialization-lib-browser';
+import { toUTxO } from '@/shared/utils/converter';
+import { buildTx } from '@/shared/utils/builder';
 
 export default {
-  components: {CopyButton, RewardsChart},
+  components: { UnstakeDialog, CopyButton, RewardsChart},
   props: {
-    account: {
-      type: Object,
-    },
     chartData: {
       type: Object,
       default: () => {
@@ -152,13 +186,13 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'utxos', 'latestTip', 'baseAddress', 'stakeAddress']),
     Network() {
       return Network
     },
     pool() {
       if (this.pools) {
-        return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)
+        return this.pools.find(pool => pool.pool_id_bech32 === this.accountInfo.pool_id)
       }
       return null
     },
@@ -203,11 +237,51 @@ export default {
         {text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100},
         {text: 'Change', align: 'start', sortable: true, value: 'change', width: 120},
       ],
-      blockchainDB: undefined
+      blockchainDB: undefined,
+      unstakeDialog: false,
+      txData: undefined,
     }
   },
   filters,
   methods: {
+    withdraw() {
+
+    },
+    unstake() {
+      console.log('test')
+      const wallet = useStore().getWallet;
+      const certificates = [];
+      if (this.accountInfo?.active) {
+        // DeRegistration Certificate
+        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(StakeCredential.from_keyhash(wallet.stakeKey().hash())))
+        certificates.push(deRegistrationCertificate);
+        // Withdrawals
+        const withdrawals = []
+        if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo.withdrawable_amount) > 0) {
+          withdrawals.push({
+            address: this.stakeAddress,
+            amount: this.accountInfo.withdrawable_amount
+          })
+        }
+        // if (this.accountInfo)
+        const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+        this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+        const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)
+        this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
+        console.log(txBody.to_json())
+        console.log(this.txData)
+        this.unstakeDialog = true
+      }
+    },
+    getColor(value) {
+      if (value > 100) {
+        value = 100
+      }
+      value = value / 100
+      //value from 0 to 1
+      const hue = ((1 - value) * 120).toString(10);
+      return ["hsl(", hue, ",57.26%,54.12%)"].join("");
+    },
     change(item) {
       const index = this.rewardsData.indexOf(item)
       if (this.rewardsData[index-1]) {

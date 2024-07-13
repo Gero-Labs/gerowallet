@@ -207,9 +207,6 @@ export default {
         this.tooltip.enabled = false;
       }, 3000);
     },
-    sleep(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    },
     async signAndSubmitTx() {
       const wallet = useStore().getWallet;
       if (wallet.verifySpendingPassword(this.spendingPassword)) {
@@ -228,10 +225,8 @@ export default {
         );
         try {
           this.txSubmitLoading = true
-          console.log(signedTx)
-          await this.sleep(3000); // sleep for 3 seconds
-          // const response = await wallet.submitTx(signedTx.to_hex().toString());
-          // console.log(response)
+          const response = await wallet.submitTx(signedTx.to_hex().toString());
+          console.log(response)
           this.txSubmitLoading = false
           this.$emit('close')
         } catch (e) {
