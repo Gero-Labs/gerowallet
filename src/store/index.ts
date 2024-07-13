@@ -23,10 +23,11 @@ import {
 let appWallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress']},
   state: () => ({
     loggedWallet: undefined,
     baseAddress: undefined,
+    stakeAddress: undefined,
     wallets: [],
     locale: 'us',
     network: undefined,
@@ -305,6 +306,9 @@ export const useStore = defineStore('store', {
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
     },
+    setStakeAddress(stakeAddress) {
+      this.stakeAddress = stakeAddress
+    },
     async login(walletId: number) {
       loading.setLoading(true);
       const wallet = this.wallets.find(wal => wal.id === walletId);
@@ -319,6 +323,7 @@ export const useStore = defineStore('store', {
       }
       appWallet = Wallet.class(wallet, this.provider);
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
+      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())

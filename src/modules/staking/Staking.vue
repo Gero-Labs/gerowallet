@@ -1,6 +1,9 @@
 <template>
   <v-layout>
     <v-row no-gutters>
+      <v-col cols="12" class="pa-2" v-if="accountInfo?.controlled_amount && accountInfo?.pool_id">
+        <StakingCard></StakingCard>
+      </v-col>
       <v-col cols="12" class="pa-2">
         <v-card outlined>
           <v-card-title class="pa-0">
@@ -301,10 +304,11 @@ import {
 } from '@emurgo/cardano-serialization-lib-browser';
 import { buildTx } from '@/shared/utils/builder';
 import { toUTxO } from '@/shared/utils/converter';
+import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 
 export default {
   name: 'Staking',
-  components: { DelegateDialog, CopyButton},
+  components: { StakingCard, DelegateDialog, CopyButton},
   computed: {
     ...mapState(useStore, ['stakingProView']),
     isPro: {
@@ -397,14 +401,16 @@ export default {
       console.log('delegate', row)
       this.selectedPool = row
       const wallet = useStore().getWallet;
+      // Registration Certificate
       const certificates = [];
       if (!this.accountInfo?.active) {
         const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(StakeCredential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
       }
+      // Delegation Certificate
       const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(StakeCredential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
       certificates.push(delegationCertificate);
-      console.log(certificates)
+      // UTxOs
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();
       this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
       const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
