@@ -94,7 +94,7 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
   const hasDeregistrationCert = !!certificates.find(certificate => certificate.kind() == 1)
   console.log(hasDeregistrationCert) // TODO Fix
   // add utxos to the transaction as inputs
-  const shouldUseAllUtxos = hasDeregistrationCert; // length > 0 || withdrawals.length > 0;
+  const shouldUseAllUtxos = hasDeregistrationCert || withdrawals.length > 0; // length > 0 || withdrawals.length > 0;
   try {
     addInputUtxos(txBuilder, utxos, outputs, shouldUseAllUtxos);
     const calcChangeAddress = Address.from_bech32(changeAddress);
