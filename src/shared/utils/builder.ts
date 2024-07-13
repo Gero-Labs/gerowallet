@@ -44,6 +44,7 @@ export function  getTransactionBuilder(chain: string, network: string): Transact
 }
 
 export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = []): TransactionBody {
+  console.log('buildTx')
   const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
 
   const hasMetadata = false // !(metadata == null || metadata === undefined);
@@ -90,8 +91,10 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
     }
   }
 
+  const hasDeregistrationCert = !!certificates.find(certificate => certificate.kind() == 1)
+  console.log(hasDeregistrationCert) // TODO Fix
   // add utxos to the transaction as inputs
-  const shouldUseAllUtxos = false //TODO certificates.length > 0 || withdrawals.length > 0;
+  const shouldUseAllUtxos = hasDeregistrationCert; // length > 0 || withdrawals.length > 0;
   try {
     addInputUtxos(txBuilder, utxos, outputs, shouldUseAllUtxos);
     const calcChangeAddress = Address.from_bech32(changeAddress);

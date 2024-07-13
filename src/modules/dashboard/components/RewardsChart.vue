@@ -43,9 +43,9 @@ export default {
         legend:{ enabled:false },
         title: {
           text: 'Rewards History',
+          floating: true,
           align: 'center',
-          verticalAlign: 'bottom',
-          y: 10,
+          verticalAlign: 'top',
           style: {
             color: "#FFF",
             fontWeight: 'bold',

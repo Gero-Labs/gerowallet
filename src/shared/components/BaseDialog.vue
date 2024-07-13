@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="isDialogOpen" persistent width="850" scrollable>
-    <v-card class="pa-7" height="800" style="background-color: #141414!important;">
+    <v-card class="pa-7" :min-height="height" style="background-color: #141414!important;">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -45,6 +45,10 @@ export default {
     },
     subtitle: {
       type: String
+    },
+    height: {
+      type: Number,
+      default: 800
     }
   },
   computed: {

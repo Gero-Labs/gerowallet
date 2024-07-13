@@ -1,79 +1,39 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake"
-              subtitle="Secure the network and earn rewards by delegating your AP3X to a stake pool.">
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :height="300" title="Unstake from Pool"
+              subtitle="Deregister from your current staking pool delegation and withdraw your stake.">
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         border="left"
-        color="primary"
-        type="info"
+        color="warning"
+        type="warning"
         prominent
         class="text-left"
       >
-        <ul>
-          <li>You can only delegate to one stake pool at a time</li>
-          <li>You can switch to delegate to a different stake pool at any time</li>
-          <li>You can cancel your delegation at any time</li>
-        </ul>
+        Unstaking will also claim your rewards.<br>Please verify your unstake details and enter your spending password to proceed.
       </v-alert>
-      <v-list-item three-line>
-        <v-list-item-content class="text-left">
-          <v-list-item-title class="text-h5 mb-1">
-            {{ `[${pool.ticker}] ${pool.name}` }}
-          </v-list-item-title>
-          <v-list-item-subtitle>{{ pool.description }}</v-list-item-subtitle>
-          <v-list-item-subtitle>{{ pool.pool_id_bech32 | truncate }}&nbsp;<copy-button :value="pool.pool_id_hex" x-small></copy-button></v-list-item-subtitle>
-        </v-list-item-content>
-
-        <v-list-item-avatar
-          size="80"
-          v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64"
-        >
-          <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage"/>
-        </v-list-item-avatar>
-      </v-list-item>
-      <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString() }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_stake | toCurrency}}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString(undefined, {maximumFractionDigits: 2}) }}%</v-card-title>
-      <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">
-        <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="32" :value="pool.live_saturation" striped>
-          <template v-slot:default="{ value }">
-            <strong>{{ Math.ceil(value) }}%</strong>
-          </template>
-        </v-progress-linear>
-      </v-card-title>
-      <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0" v-if="pool && accountInfo">
+    <v-card-actions class="justify-center text-center pt-0" v-if="accountInfo && tx">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
-            <h4>Delegation Amt.
+            <h4>Rewards Amount
               <v-btn x-small icon>
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4><strong>{{ accountInfo.controlled_amount | toCurrency}}</strong></h4>
-          </v-col>
-          <v-col :cols="cols">
-            <h4>Epoch Yield
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
-            </h4>
-            <h4>~<strong>{{ accountInfo.controlled_amount * pool.ros/100/73 | toCurrency}}</strong></h4>
+            <h4><strong>{{ withdrawals | toCurrency }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>Deposit Fee</h4>
+            <h4>Deposit Fee Return</h4>
             <h4><strong>{{ depositFee | toCurrency }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
-            <h4><strong>{{ tx.body().fee().to_str() | toCurrency }}</strong></h4>
+            <h4><strong>{{ Number(tx.body().fee().to_str()) | toCurrency }}</strong></h4>
+          </v-col>
+          <v-col :cols="cols">
+            <h4>Total</h4>
+            <h4><strong>{{ (withdrawals+depositFee-Number(tx.body().fee().to_str())) | toCurrency }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: ruby">
             <v-tooltip
@@ -105,8 +65,8 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <v-btn color="primary" elevation="0" @click="signDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Delegate
+            <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+              Unstake
             </v-btn>
           </v-col>
         </v-row>
@@ -117,23 +77,18 @@
 <script>
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
-import CopyButton from '@/shared/components/CopyButton.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
 
 export default {
-  name: 'DelegateDialog',
-  components: { CopyButton, BaseDialog },
+  name: 'UnstakeDialog',
+  components: { BaseDialog },
   props: {
     isOpen: {
       type: Boolean,
       default: false,
-    },
-    pool: {
-      type: Object,
-      default: () => {},
     },
     tx: {
       type: Transaction,
@@ -148,7 +103,6 @@ export default {
           this.$refs.form.resetValidation()
         }
       }
-      console.log(val)
     },
     spendingPassword(val) {
       this.passwordRules = [
@@ -157,38 +111,37 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses']),
-    depositFee() {
-      console.log('test')
-      let depositFee = BigNum.zero();
-      const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
-      let totalAdaOutput = 0
-      if (this.tx?.body()?.inputs()) {
-        for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
-          const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          totalAdaOutput -= Number(utxo.value)
-          console.log(utxo)
+    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses', 'stakeAddress']),
+    withdrawals() {
+      let withdrawals = 0
+      if (this.tx?.body()?.withdrawals()?.keys()) {
+        for (let i = 0 ; i < this.tx.body().withdrawals().keys().len() ; i++) {
+          const rewardAddress = this.tx.body().withdrawals().keys().get(i);
+          if (rewardAddress.to_address().to_bech32() === this.stakeAddress) {
+            withdrawals += Number(this.tx.body().withdrawals().get(rewardAddress).to_str())
+          }
         }
       }
+      return withdrawals;
+    },
+    depositFee() {
+      let depositFee = BigNum.zero();
+      const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
+      let totalAdaOutput = BigNum.zero()
       if (this.tx?.body()?.outputs()) {
         for (let i = 0; i < this.tx?.body()?.outputs().len(); i++) {
           const output = this.tx?.body()?.outputs().get(i)
-          totalAdaOutput += Number(output.amount().coin().to_str())
+          totalAdaOutput = totalAdaOutput.checked_add(output.amount().coin())
         }
         console.log('totalAdaBalance', totalAdaBalance.to_str())
-        console.log('totalAdaOutput', totalAdaOutput)
-        depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str())
-        return depositFee*-1;
+        console.log('totalAdaOutput', totalAdaOutput.to_str())
+        depositFee = totalAdaOutput.checked_add(this.tx.body().fee()).checked_sub(BigNum.from_str(this.withdrawals.toString()))
+        return Number(depositFee.to_str());
       }
       return 0
     },
     cols() {
-      if (this.depositFee > 0) {
-        return 3
-      } else {
-        return 4
-      }
+      return 3
     }
   },
   methods: {
@@ -198,7 +151,10 @@ export default {
         this.tooltip.enabled = false;
       }, 3000);
     },
-    async signDelegationTx() {
+    sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    },
+    async signUnStakeTx() {
       this.loading = true
       const wallet = useStore().getWallet;
       this.passwordRules.push(wallet.verifySpendingPassword(this.spendingPassword))
