@@ -149,6 +149,7 @@
       </v-layout>
     </v-card-text>
     <UnstakeDialog :is-open="unstakeDialog" @close="unstakeDialog = false" :tx="txData"></UnstakeDialog>
+    <WithdrawalDialog :is-open="withdrawalDialog" @close="withdrawalDialog = false" :tx="txData"></WithdrawalDialog>
   </v-card>
 </template>
 <script>
@@ -167,9 +168,10 @@ import {
 } from '@emurgo/cardano-serialization-lib-browser';
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
+import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 
 export default {
-  components: { UnstakeDialog, CopyButton, RewardsChart},
+  components: {WithdrawalDialog, UnstakeDialog, CopyButton, RewardsChart},
   props: {
     chartData: {
       type: Object,
@@ -239,13 +241,30 @@ export default {
       ],
       blockchainDB: undefined,
       unstakeDialog: false,
+      withdrawalDialog: false,
       txData: undefined,
     }
   },
   filters,
   methods: {
     withdraw() {
-
+      console.log('test')
+      const wallet = useStore().getWallet;
+      // Withdrawals
+      const withdrawals = []
+      if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo.withdrawable_amount) > 0) {
+        withdrawals.push({
+          address: this.stakeAddress,
+          amount: this.accountInfo.withdrawable_amount
+        })
+      }
+      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], withdrawals)
+      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
+      console.log(txBody.to_json())
+      console.log(this.txData)
+      this.withdrawalDialog = true
     },
     unstake() {
       console.log('test')
