@@ -29,7 +29,7 @@ export default {
     }
   },
   async mounted() {
-    const provider = await useStore().getWallet.api
+    const provider = useStore().getWallet.api
     const data = await provider.fetchADAStatistics();
     this.ticker.prevPrice = this.ticker.lastPrice;
     this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);

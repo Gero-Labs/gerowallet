@@ -48,7 +48,7 @@ import { BigNum, Value } from '@emurgo/cardano-serialization-lib-browser';
 import { Buffer } from 'buffer';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import networks from '@/shared/utils/networks';
 import {
   cardanoValueFromRemoteFormat,
@@ -153,7 +153,7 @@ export default {
       this.loading = true
       this.tx = txData
       try {
-        this.risks = await useStore().getWallet.scanTx({
+        this.risks = await appWallet.api.scanTx({
           cborHex: txData.to_hex(),
           toAddress: this.sendData.recipientAddress,
           fromAddress: this.changeAddress,

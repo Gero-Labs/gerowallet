@@ -140,3 +140,13 @@ export const assetsToValue = (assets) => {
   if (assets.length > 1 || !lovelace) value.set_multiasset(multiAsset);
   return value;
 };
+
+export function getColor(value) {
+  if (value > 100) {
+    value = 100
+  }
+  value = value / 100
+  //value from 0 to 1
+  const hue = ((1 - value) * 120).toString(10);
+  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
+}

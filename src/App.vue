@@ -45,6 +45,13 @@ export default {
     store: useStore()
   }),
   watch: {
+    assets: {
+      handler(newVal, oldVal) {
+        // console.log(this.resolvedCollections)
+        // console.log(newVal)
+      },
+      deep: true,
+    },
     transactions: {
       handler(newVal, oldVal) {
         if (!oldVal && newVal) {
@@ -58,7 +65,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'transactions']),
+    ...mapState(useStore, ['loggedWallet', 'transactions', 'assets', 'resolvedAssets', 'resolvedCollections']),
   },
   methods: {
     ...mapActions(useStore, ['loadWallets', 'login', 'setLoadingTxs']),

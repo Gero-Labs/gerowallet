@@ -10,12 +10,12 @@
                  :type="type"
                  :auto-line-width="autoLineWidth"
                  height="30"
-                 style="max-width: 120px; height: 50px">
+                 style="max-width: 120px">
     </v-sparkline>
   </div>
 </template>
 <script>
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { mapState } from 'pinia';
 
 export default {
@@ -49,7 +49,7 @@ export default {
     chart: [],
   }),
   async mounted() {
-    const provider = await useStore().getWallet.api
+    const provider = useStore().getWallet.api
     this.chart = await provider.fetchHistory()
     setInterval(async () => {
       this.chart = await provider.fetchHistory()

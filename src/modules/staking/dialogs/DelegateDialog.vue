@@ -119,7 +119,7 @@ import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
 
@@ -150,7 +150,7 @@ export default {
       }
       console.log(val)
     },
-    spendingPassword(val) {
+    spendingPassword() {
       this.passwordRules = [
         rules.required
       ]
@@ -166,8 +166,9 @@ export default {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
           const input = this.tx?.body()?.inputs().get(i)
           const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          totalAdaOutput -= Number(utxo.value)
-          console.log(utxo)
+          if (utxo) {
+            totalAdaOutput -= Number(utxo.value)
+          }
         }
       }
       if (this.tx?.body()?.outputs()) {
@@ -199,8 +200,8 @@ export default {
     },
     async signDelegationTx() {
       this.loading = true
-      const wallet = useStore().getWallet;
-      this.passwordRules.push(wallet.verifySpendingPassword(this.spendingPassword))
+      const wallet = appWallet;
+      this.passwordRules.push(() => wallet.verifySpendingPassword(this.spendingPassword))
       if (!wallet.verifySpendingPassword(this.spendingPassword)) {
         this.enableToolTip()
       }

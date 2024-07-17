@@ -52,10 +52,7 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWallet', 'baseAddress', 'addresses']),
-    stakeAddress() {
-      return useStore().getWallet.stakeAddress().to_address().to_bech32();
-    },
+    ...mapState(useStore, ['baseAddress', 'addresses', 'stakeAddress']),
     allAddresses() {
       if (this.showUsed) {
         console.log('used')

@@ -78,7 +78,7 @@
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
 
@@ -161,8 +161,8 @@ export default {
     },
     async signUnStakeTx() {
       this.loading = true
-      const wallet = useStore().getWallet;
-      this.passwordRules.push(wallet.verifySpendingPassword(this.spendingPassword))
+      const wallet = appWallet;
+      this.passwordRules.push(() => wallet.verifySpendingPassword(this.spendingPassword))
       if (!wallet.verifySpendingPassword(this.spendingPassword)) {
         this.enableToolTip()
       }
