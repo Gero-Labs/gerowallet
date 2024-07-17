@@ -596,10 +596,11 @@ export class Wallet {
                       }
                     });
                   });
-                  promises.push(this.syncAssets(Array.from(units)));
+                  promises.push(this.syncAssets(Array.from(units), false));
                 }
               }));
             }
+
           }
           return [];
         }));
@@ -611,18 +612,23 @@ export class Wallet {
     }
   }
 
-  async syncAssets(units?: string[]): Promise<void> {
+  async syncAssets(units: string[], force?: boolean): Promise<void> {
+    console.log('syncAssets')
     const blockchainDB: Dexie = await this.getBlockchainDb();
     const assetsSyncTable = blockchainDB.table('assets_sync');
     const lastAssetsSyncArray = await assetsSyncTable.toArray();
-    if (lastAssetsSyncArray.length > 0) {
-      const lastAssetsSync = lastAssetsSyncArray[0];
-      const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
-      if (hoursSinceEpoch % 4 === 0) {
+    if (force) {
+      await this.setAssets(units, blockchainDB, assetsSyncTable);
+    } else {
+      if (lastAssetsSyncArray.length > 0) {
+        const lastAssetsSync = lastAssetsSyncArray[0];
+        const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
+        if (hoursSinceEpoch % 4 === 0) {
+          await this.setAssets(units, blockchainDB, assetsSyncTable);
+        }
+      } else {
         await this.setAssets(units, blockchainDB, assetsSyncTable);
       }
-    } else {
-      await this.setAssets(units, blockchainDB, assetsSyncTable);
     }
   }
 
@@ -653,10 +659,10 @@ export class Wallet {
     }
   }
 
-  private async getDetailedAssetsInfo(policyId: string, assetName: string) {
+  public async getDetailedAssetsInfo(policyId: string, assetName: string) {
     try {
-      const blockchainDB: Dexie = await this.getBlockchainDb();
-      const assetsTable = blockchainDB.table('assets');
+      // const blockchainDB: Dexie = await this.getBlockchainDb();
+      // const assetsTable = blockchainDB.table('assets');
       const res = await this.api.getDetailedAssetsInfo(policyId, assetName);
       if (res) {
         // assetsTable.bulkPut(res);
@@ -783,25 +789,6 @@ export class Wallet {
       });
   }
 
-  async syncAddressesTransactions(fromBlockHeight, addresses): Promise<any[] | void> {
-    try {
-      const promises = [];
-      addresses.forEach(address => {
-        promises.push(this.api.getAddressTransactions(address.address, fromBlockHeight));
-      });
-      const res = await Promise.all(promises);
-      const transactions = [];
-      res.forEach(value => {
-        value.forEach(tx => {
-          transactions.push(tx);
-        });
-      });
-      return transactions;
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
   async getDb(): Promise<Dexie> {
     return this.db.open();
   }
@@ -837,14 +824,6 @@ export class Wallet {
 
   public async getBlockchainDb(): Promise<Dexie> {
     return db.checkAndCreateBlockchainDatabase(this.chain + '_' + this.network);
-  }
-
-  async scanUrl(url: string): Promise<any> {
-    return await this.api.scanUrl(url);
-  }
-
-  async scanTx(txScanRequest: TxScanRequest): Promise<TxScanResponse> {
-    return await this.api.scanTx(txScanRequest)
   }
 
   async addConnectedDapp(domain: string) {

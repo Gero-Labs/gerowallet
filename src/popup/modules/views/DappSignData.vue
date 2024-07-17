@@ -60,7 +60,7 @@
 <script>
 import rules from '@/shared/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 
@@ -74,7 +74,7 @@ export default {
     },
     async confirm() {
       if (this.$refs.form.validate()) {
-        const wallet = useStore().getWallet
+        const wallet = appWallet
         if (wallet.verifySpendingPassword(this.spendingPassword)) {
           try {
             const res = await wallet.signData(this.request.data.address, this.request.data.payload, this.spendingPassword, 0)

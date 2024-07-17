@@ -15,12 +15,13 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
+import app from '@/App.vue';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
 
-let appWallet = undefined;
+export let appWallet: Wallet = undefined;
 
 export const useStore = defineStore('store', {
   persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress']},
@@ -123,10 +124,28 @@ export const useStore = defineStore('store', {
 
             const statuses = []
 
+            if (tx.certificates?.length > 0) {
+              tx.certificates.forEach(certificate => {
+                if (certificate.type === 'stake_registration') {
+                  statuses.push('Stake Registration')
+                } else if (certificate.type === 'delegation') {
+                  const poolId = certificate.info.pool_id_bech32
+                  const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+                  if (pool) {
+                    statuses.push('Delegating to '+pool.ticker)
+                  }
+                } else if (certificate.type === 'stake_deregistration') {
+                  statuses.push('Stake Deregistration')
+                }
+              })
+              console.log(this.pools)
+            }
             if (totalAmount > 0) {
               statuses.push('Received')
             } else {
-              statuses.push('Sent')
+              if (tx.certificates.length === 0) {
+                statuses.push('Sent')
+              }
             }
             if (tx.withdrawals?.length > 0) {
               statuses.push('Withdrawal')
@@ -251,9 +270,8 @@ export const useStore = defineStore('store', {
         });
 
         // Check outputs against inputs set
-        const walletAddress = this.getWallet.stakeAddress().to_address().to_bech32();
         outputs.forEach(output => {
-          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && walletAddress === output.stake_addr) {
+          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && stakeAddress === output.stake_addr) {
             utxos.push(output);
           }
           if (output.stake_addr && output.stake_addr === stakeAddress) {
@@ -264,11 +282,16 @@ export const useStore = defineStore('store', {
       await this.setAddresses(Array.from(addresses))
         .then(() => this.setUtxos(utxos))
         .then(() => this.setResolvedAssets()
-          .then(assets => {
+          .then(async assets => {
             this.resolvedAssets = assets.filter(asset => asset?.metadata || asset?.name === "ADA")
             const collectibles = assets.filter(asset => !asset?.metadata && asset?.name !== "ADA");
-            const collections = { }
+            const unresolvedUnits = []
+            const collections = {}
             collectibles.forEach(collectible => {
+              const asset = this.assets.find(asset => asset.asset === collectible.unit)
+              if (!asset) {
+                unresolvedUnits.push(collectible.unit)
+              }
               if (collections[collectible.policy_id]) {
                 collections[collectible.policy_id]['items'].push(collectible)
                 collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
@@ -281,6 +304,9 @@ export const useStore = defineStore('store', {
                 collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
               }
             })
+            if (unresolvedUnits.length > 0) {
+              await appWallet.syncAssets(unresolvedUnits, true)
+            }
             Object.values(collections).forEach(collection => {
               if (collection['name'] == null) {
                 const items = collection['items']
@@ -301,7 +327,7 @@ export const useStore = defineStore('store', {
               }
             })
             this.resolvedCollections = Object.values(collections)
-        }))
+          }))
     },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
@@ -328,9 +354,9 @@ export const useStore = defineStore('store', {
       const promises = []
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
+      promises.push(this.loadPools())
       promises.push(this.loadTransactions())
       promises.push(this.loadAssets())
-      promises.push(this.loadPools())
       promises.push(this.loadRewards())
       promises.push(this.loadConnectedDapps())
       await Promise.all(promises)
@@ -352,7 +378,7 @@ export const useStore = defineStore('store', {
       }
       this.provider = undefined;
       this.transactions = undefined;
-      this.assets = [];
+      this.assets = undefined;
       this.utxos = undefined
       this.resolvedAssets = undefined
       this.pools = []

@@ -15,6 +15,8 @@
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
 
 Highcharts3D(Highcharts)
 
@@ -22,12 +24,6 @@ export default {
   name: 'assetsPieChart',
   components: {
     VueHighcharts,
-  },
-  props: {
-    chartData: {
-      type: Array,
-      default: () => [],
-    },
   },
   mode: 'production',
   data() {
@@ -41,6 +37,28 @@ export default {
     },
   },
   computed: {
+    ...mapState(useStore, ['resolvedAssets', 'resolvedCollections']),
+    collectiblesAmount() {
+      let amount = 0;
+      if (this.resolvedCollections) {
+        this.resolvedCollections.forEach(collection => {
+          if (collection.items) {
+            amount += collection.items.length
+          }
+        })
+      }
+      return amount
+    },
+    chartData() {
+      if (this.resolvedAssets && this.resolvedCollections) {
+        const totalTokens = (this.resolvedAssets.length + this.collectiblesAmount) || 1; // Avoid division by zero
+        return [
+          ["Assets", (this.resolvedAssets.length / totalTokens) * 100],
+          ["Collectibles", (this.collectiblesAmount / totalTokens) * 100],
+        ];
+      }
+      return []
+    },
     computedColors() {
       const colors = []
       this.chartData.forEach(data => {
@@ -83,7 +101,7 @@ export default {
           plotBackgroundColor: null,
           plotBorderWidth: null,
           plotShadow: false,
-          height: 310,
+          height: 250,
           style: {
             fontFamily: 'Quicksand',
           },

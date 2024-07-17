@@ -291,7 +291,7 @@
 </template>
 <script>
 import filters from "@/shared/utils/filters";
-import {useStore} from "@/store";
+import { appWallet, useStore } from '@/store';
 import {mapActions, mapState} from "pinia";
 import {Blockchain, Network} from "@/models/types";
 import CopyButton from "@/shared/components/CopyButton.vue";
@@ -400,7 +400,7 @@ export default {
     delegate(row) {
       console.log('delegate', row)
       this.selectedPool = row
-      const wallet = useStore().getWallet;
+      const wallet = appWallet;
       // Registration Certificate
       const certificates = [];
       if (!this.accountInfo?.active) {
