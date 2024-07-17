@@ -88,7 +88,7 @@
 </template>
 
 <script>
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
@@ -262,10 +262,9 @@ export default {
     },
     async confirm() {
       if (this.$refs.form.validate()) {
-        const wallet = useStore().getWallet;
-        if (wallet.verifySpendingPassword(this.spendingPassword)) {
+        if (appWallet.verifySpendingPassword(this.spendingPassword)) {
           try {
-            const res = await wallet.signTx(
+            const res = await appWallet.signTx(
               this.request.data.tx,
               this.request.data.partialSign,
               this.spendingPassword,
@@ -273,7 +272,7 @@ export default {
               this.utxos,
               this.addresses,
             );
-            console.log(res)
+            console.log(res) // TODO Submit
             await this.controller.returnData({ data: res, error: undefined });
           } catch (e) {
             console.log(e)
@@ -284,49 +283,29 @@ export default {
           this.enableToolTip()
         }
       }
-    },
-    async init() {
-      const request = await this.controller.requestData();
-      if (request?.data?.tx) {
-        this.tx = Transaction.from_bytes(Buffer.from(request.data.tx, 'hex'));
-        this.queryParams = this.$route.query;
-        try {
-          this.risks = await useStore().getWallet.scanTx({
-            cborHex: request.data.tx,
-            toAddress: this.recipient,
-            fromAddress: this.changeAddress,
-            url: this.queryParams['website'],
-          });
-        } catch (e) {
-          this.risks = {
-            addressRisk: 'unknown',
-          };
-        }
-        this.loading = false;
-      }
-      this.request = request;
-    },
+    }
   },
   async created() {
-    await this.init();
-    // this.tx = Transaction.from_bytes(Buffer.from(this.txCbor, 'hex'));
-    // this.queryParams = this.$route.query;
-    // try {
-    //   const risks = await useStore().getWallet.scanTx({
-    //     cborHex: this.txCbor,
-    //     toAddress: this.recipient,
-    //     fromAddress: this.changeAddress,
-    //     url: this.queryParams['website'],
-    //   });
-    //   console.log(risks);
-    //   this.risks = risks;
-    // } catch (e) {
-    //   this.risks = {
-    //     receivingRisk: 'unknown',
-    //   };
-    //   console.log(e);
-    // }
-    // this.loading = false;
+    const request = await this.controller.requestData();
+    const api = useStore().getWallet.api
+    if (request?.data?.tx) {
+      this.tx = Transaction.from_bytes(Buffer.from(request.data.tx, 'hex'));
+      this.queryParams = this.$route.query;
+      try {
+        this.risks = await api.scanTx({
+          cborHex: request.data.tx,
+          toAddress: this.recipient,
+          fromAddress: this.changeAddress,
+          url: this.queryParams['website'],
+        });
+      } catch (e) {
+        this.risks = {
+          addressRisk: 'unknown',
+        };
+      }
+      this.loading = false;
+    }
+    this.request = request;
   },
 };
 </script>

@@ -1,13 +1,13 @@
 <template>
   <v-card outlined class="no-gutters fill-height">
     <v-card-title>
-      Token Allocation ({{assets.length + collectibles.length}})
+      Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Assets&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{assets.length}}</v-chip>
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{assets?.length}}</v-chip>
         </v-btn>
-        <v-btn color="black" :value="1" rounded style="text-transform: capitalize"> Collectibles&nbsp;
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="collectiblesLength === 0"> Collectibles&nbsp;
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{collectiblesLength}}</v-chip>
         </v-btn>
       </v-btn-toggle>
@@ -28,7 +28,7 @@
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
                 <v-list-item-avatar class="my-0" size="32">
-                  <v-img :src="item.img" :alt="item.name + ' Logo'"></v-img>
+                  <img :src="item.img" :alt="item.name + ' Logo'"/>
                 </v-list-item-avatar>
                 <v-list-item-content>
                   <v-list-item-title>
@@ -132,7 +132,7 @@
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
                 <v-list-item-avatar class="my-0" size="32">
-                  <v-img :src="item.img" :alt="item.name + ' Logo'"></v-img>
+                  <img :src="item.img" :alt="item.name + ' Logo'"/>
                 </v-list-item-avatar>
                 <v-list-item-content>
                   <v-list-item-title>
@@ -213,40 +213,48 @@
         </v-tab-item>
       </v-tabs-items>
     </v-card-text>
+    <TokensDialog @close="closeDialog" :modalData="dialogData"></TokensDialog>
   </v-card>
 </template>
 <script>
 import {mapState} from "pinia";
 import {useStore} from "@/store";
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
+import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 
 export default {
   name: "tokenAllocationTable",
-  components: { Sparkline },
-  props: {
-    assets: {
-      type: Array,
-      default: () => [],
-    },
-    collectibles: {
-      type: Array,
-      default: () => [],
-    },
-    collectiblesLength: {
-      type: Number,
-      default: 0,
-    }
-  },
+  components: { TokensDialog, Sparkline },
   methods: {
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
+    closeDialog() {
+      this.dialogData = null;
+    },
     handleOnRowClick(row) {
-      this.$emit("click", row);
+      this.dialogData = row;
     },
   },
   computed: {
-    ...mapState(useStore, ['price']),
+    ...mapState(useStore, ['resolvedAssets', 'resolvedCollections', 'price']),
+    collectiblesLength() {
+      let amount = 0;
+      if (this.resolvedCollections) {
+        this.resolvedCollections.forEach(collection => {
+          if (collection.items) {
+            amount += collection.items.length
+          }
+        })
+      }
+      return amount
+    },
+    assets() {
+      return this.resolvedAssets
+    },
+    collectibles() {
+      return this.resolvedCollections
+    }
   },
   data: () => ({
     assetsSortBy: 'name',
@@ -258,24 +266,24 @@ export default {
     assetsHeaders: [
       { text: "Asset", align: "start", sortable: true, value: "name" },
       { text: "Quantity", align: "center", sortable: true, value: "quantity" },
-      { text: "Last Price", align: "center", sortable: true, value: "last_price" },
-      { text: "Change", align: "center", sortable: true, value: "change" },
-      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis" },
-      { text: "Value", align: "center", sortable: true, value: "value" },
-      { text: "AVG Price", align: "center", sortable: true, value: "avg_price" },
+      { text: "Last Price", align: "center", sortable: true, value: "last_price", width: "100"  },
+      { text: "Change", align: "center", sortable: true, value: "change", width: "85" },
+      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis", width: "102" },
+      { text: "Value", align: "center", sortable: true, value: "value", width: "72" },
+      { text: "AVG Price", align: "center", sortable: true, value: "avg_price", width: "98" },
       { text: "P&L", align: "center", sortable: true, value: "pnl" },
       { text: "Allocation", align: "center", sortable: true, value: "total_amount", width: "150" },
       { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days" },
     ],
     collectiblesHeaders: [
       { text: "Asset", align: "start", sortable: true, value: "name" },
-      { text: "Quantity", align: "center", sortable: true, value: "quantity" },
+      { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "90" },
       { text: "Floor", align: "center", sortable: true, value: "floor" },
-      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis" },
-      { text: "AVG Price", align: "center", sortable: true, value: "avg_price" },
+      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis", width: "102" },
+      { text: "AVG Price", align: "center", sortable: true, value: "avg_price", width: "98" },
       { text: "P&L", align: "center", sortable: true, value: "pnl" },
       { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
-      { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days" },
+      { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days", width: "140" },
     ],
     collectiblesData: [
       {
@@ -290,6 +298,7 @@ export default {
         last_7_days: 0.2,
       },
     ],
+    dialogData: null,
   }),
 
 };

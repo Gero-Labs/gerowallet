@@ -9,6 +9,8 @@ export default {
       network: Network.MAINNET,
       supportedHardware: true,
       networkId: 1,
+      currencySymbol: '₳',
+      currencyName: 'ADA',
       protocolParams: {
         min_fee_a: 44,
         min_fee_b: 155381,
@@ -29,6 +31,8 @@ export default {
       network: Network.PREPROD,
       supportedHardware: false,
       networkId: 0,
+      currencySymbol: 't₳',
+      currencyName: 'tADA',
       protocolParams: {
         min_fee_a: 44,
         min_fee_b: 155381,
@@ -49,6 +53,8 @@ export default {
       network: Network.PREVIEW,
       supportedHardware: false,
       networkId: 0,
+      currencySymbol: 't₳',
+      currencyName: 'tADA',
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -57,7 +63,8 @@ export default {
       network: Network.TESTNET,
       supportedHardware: false,
       networkId: 0,
-
+      currencySymbol: 'tÂ',
+      currencyName: 'tAP3X',
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -66,6 +73,8 @@ export default {
       network: Network.TESTNET,
       supportedHardware: false,
       networkId: 0,
+      currencySymbol: 'tÂ',
+      currencyName: 'tAP3X',
     },
   ],
   resolveNetwork(chain: string, network: string) {
@@ -73,5 +82,8 @@ export default {
   },
   resolveNetworkId(chain: string, network: string): number {
     return this.resolveNetwork(chain, network).networkId;
+  },
+  resolveCurrencySymbol(chain: string, network: string): string {
+    return this.resolveNetwork(chain, network).currencySymbol
   }
 };

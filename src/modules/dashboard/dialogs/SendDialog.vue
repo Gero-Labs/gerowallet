@@ -106,7 +106,7 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { mapState } from 'pinia';
 import { assetsToValue, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
@@ -208,9 +208,8 @@ export default {
       }, 3000);
     },
     async signAndSubmitTx() {
-      const wallet = useStore().getWallet;
-      if (wallet.verifySpendingPassword(this.spendingPassword)) {
-        const witness = await wallet.signTx(
+      if (appWallet.verifySpendingPassword(this.spendingPassword)) {
+        const witness = await appWallet.signTx(
           this.txData.to_hex(),
           false,
           this.spendingPassword,
@@ -225,7 +224,7 @@ export default {
         );
         try {
           this.txSubmitLoading = true
-          const response = await wallet.submitTx(signedTx.to_hex().toString());
+          const response = await appWallet.submitTx(signedTx.to_hex().toString());
           console.log(response)
           this.txSubmitLoading = false
           this.$emit('close')
@@ -331,9 +330,11 @@ export default {
     },
   },
   mounted() {
-    const adaAssetFound = this.resolvedAssets.find(asset => asset.name === 'ADA');
-    if (adaAssetFound) {
-      this.sendData.selectedTokens.find(token => token.ticker === 'ADA').balance = adaAssetFound.quantity;
+    if (this.resolvedAssets) {
+      const adaAssetFound = this.resolvedAssets.find(asset => asset.name === 'ADA');
+      if (adaAssetFound) {
+        this.sendData.selectedTokens.find(token => token.ticker === 'ADA').balance = adaAssetFound.quantity;
+      }
     }
   },
 };

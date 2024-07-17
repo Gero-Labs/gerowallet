@@ -111,8 +111,9 @@ export default{
   }),
   async created() {
     this.queryParams = this.$route.query;
+    const api = useStore().getWallet.api
     try {
-      this.dappRisk = DappRisk[await useStore().getWallet.scanUrl(this.queryParams['website'])];
+      this.dappRisk = DappRisk[await api.scanUrl(this.queryParams['website'])];
     } catch (e) {
       console.log(e);
     }

@@ -5,7 +5,6 @@ import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
-import Assets from '@/modules/assets/views/Assets.vue';
 import Staking from "@/modules/staking/Staking.vue";
 import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
@@ -28,15 +27,6 @@ const routes = [
     component: Welcome,
     meta: {
       layout: BlankLayout,
-    },
-  },
-  {
-    path: '/assets',
-    name: 'assets',
-    component: Assets,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
     },
   },
   {

@@ -109,7 +109,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
     isBuyDisabled() {
       if (this.loggedWallet) {
         return (
@@ -131,7 +131,7 @@ export default {
       //     apiKey: "MOONPAY_API_KEY_REMOVED",
       //     enabledPaymentMethods: "credit_debit_card",
       //     currencyCode: "ada",
-      //     walletAddress: useStore().getWallet.wallet.baseAddress().to_address().to_bech32(),
+      //     walletAddress: baseAddress,
       //     colorCode: '#2f9cac',
       //     baseCurrencyCode: 'usd',
       //     theme: 'dark',

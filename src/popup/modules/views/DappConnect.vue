@@ -43,7 +43,7 @@
   </PopupHeader>
 </template>
 <script>
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
@@ -63,7 +63,7 @@ export default {
       window.close();
     },
     async confirm() {
-      await useStore().getWallet.addConnectedDapp(this.$refs.popupHeader.domain);
+      await appWallet.addConnectedDapp(this.$refs.popupHeader.domain);
       await this.controller.returnData({ data: true, error: {} })
       window.close();
     },
