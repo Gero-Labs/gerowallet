@@ -1,7 +1,7 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" xl="9" lg="6" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Portfolio
@@ -11,9 +11,9 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="false">
-        <AssetsPieChart></AssetsPieChart>
-      </v-col>
+<!--      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="false">-->
+<!--        <AssetsPieChart></AssetsPieChart>-->
+<!--      </v-col>-->
       <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
         <quick-actions></quick-actions>
       </v-col>
@@ -38,7 +38,7 @@ import NoTokensCard from '../components/NoTokensCard.vue';
 import { useStore } from '@/store';
 import {Network} from "@/models/types";
 import {mapState} from "pinia";
-import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
+// import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
@@ -46,7 +46,9 @@ import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vu
 export default {
   name: 'dashboard',
   components: {
-    TransactionsCard, StakingCard2, TokenAllocationTable, AssetsPieChart, QuickActions, PortfolioChart, NoTokensCard },
+    TransactionsCard, StakingCard2, TokenAllocationTable,
+    // AssetsPieChart,
+    QuickActions, PortfolioChart, NoTokensCard },
   computed: {
     Network() {
       return Network

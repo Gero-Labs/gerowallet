@@ -35,6 +35,7 @@
 import {mapState} from "pinia";
 import {useStore} from "@/store";
 import {Blockchain, Network} from "@/models/types";
+import networks from "@/shared/utils/networks";
 
 export default {
   computed: {
@@ -49,20 +50,7 @@ export default {
       if (!this.loggedWallet) {
         return ''
       }
-      if (this.loggedWallet.chain === Blockchain.CARDANO) {
-        if (this.loggedWallet.network === Network.MAINNET) {
-          return 'ADA'
-        } else {
-          return 'tADA'
-        }
-      } else if (this.loggedWallet.chain === Blockchain.APEX_PRIME) {
-        if (this.loggedWallet.network === Network.MAINNET) {
-          return 'Ap3x'
-        } else {
-          return 'tAp3x'
-        }
-      }
-      return '$'
+      return networks.resolveCurrencyName(this.loggedWallet.chain, this.loggedWallet.network)
     },
     hasAssets() {
       return !!this.accountInfo
