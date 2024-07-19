@@ -65,6 +65,18 @@ export default {
       networkId: 0,
       currencySymbol: 'tÂ',
       currencyName: 'tAP3X',
+      protocolParams: {
+        min_fee_a: 44,
+        min_fee_b: 155381,
+        max_tx_size: 16384,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 5000,
+        price_mem: 0.0577,
+        price_step: 0.0000721,
+        coins_per_utxo_size: "4310"
+      }
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -85,5 +97,8 @@ export default {
   },
   resolveCurrencySymbol(chain: string, network: string): string {
     return this.resolveNetwork(chain, network).currencySymbol
+  },
+  resolveCurrencyName(chain: string, network: string): string {
+    return this.resolveNetwork(chain, network).currencyName
   }
 };

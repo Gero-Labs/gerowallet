@@ -24,7 +24,7 @@
                   </v-icon>
                 </template>
                 <div class="tooltip-content">
-                  <span>AP3X and/or tokens<br>shown here will be </span>
+                  <span>{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} and/or tokens<br>shown here will be </span>
                   <span style="color: #FF7777">sent<br>from your wallet</span>
                   <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
                 </div>
@@ -69,7 +69,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['utxos', 'addresses', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
     changeAddress() {
       return this.baseAddress;
     },
@@ -135,12 +135,12 @@ export default {
         give: {
           total: Number(0 - totalGive),
           txFee,
-          provider: 'AP3X',
+          provider: networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network),
           assets: assetsGive,
         },
         receive: {
           total: totalReceive,
-          provider: 'AP3X',
+          provider: networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network),
           assets: assetsReceive,
         },
         recipient: this.recipient,

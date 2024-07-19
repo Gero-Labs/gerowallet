@@ -25,7 +25,7 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  Earn rewards by staking your Ap3x tokens with Apex Fusion's extensive network of stake pools.
+                  Earn rewards by staking your {{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} tokens with {{ loggedWallet.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists">
@@ -305,6 +305,7 @@ import {
 import { buildTx } from '@/shared/utils/builder';
 import { toUTxO } from '@/shared/utils/converter';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
+import networks from "@/shared/utils/networks";
 
 export default {
   name: 'Staking',
@@ -445,6 +446,7 @@ export default {
     isDelegateDialogOpen: false,
     selectedPool: undefined,
     txData: undefined,
+    networks,
   })
 }
 </script>
