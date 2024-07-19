@@ -2,7 +2,7 @@
   <v-autocomplete v-model="mnemonic" outlined dense hide-details hide-no-data
                   :search-input.sync="search"
                   :items="englishWords" auto-select-first :rules="[rules.required]"
-                  @keydown.tab="handleTab"
+                  @keydown.tab.exact="handleTab" @keydown.shift.tab="handleShiftTab"
   >
     <template v-slot:prepend>
       <span style="color: #2f9cac;margin-top: 4px; min-width: 22px">{{index}}.</span>
@@ -26,7 +26,6 @@ export default {
   },
   methods: {
     handleTab(event) {
-      console.log('event')
       event.preventDefault();
       if (this.search) {
         this.mnemonic = this.search
@@ -36,6 +35,32 @@ export default {
         // this.$emit('next', this.$el)
         this.focusNextCell();
       });
+    },
+    handleShiftTab(event) {
+      console.log('shiftTab')
+      event.preventDefault();
+      if (this.search) {
+        this.mnemonic = this.search
+        // this.autocomplete(this.search);
+      }
+      this.$nextTick(() => {
+        // this.$emit('next', this.$el)
+        this.focusPreviousCell();
+      });
+    },
+    focusPreviousCell() {
+      const currentCell = this.$el.closest('.v-input'); // Find the closest .v-input parent element
+      const parentRow = currentCell.closest('.row'); // Find the parent row
+      const cells = Array.from(parentRow.querySelectorAll('.v-input')); // Get all .v-input elements in the row
+      const currentIndex = cells.indexOf(currentCell); // Find the current cell's index
+      const previousCell = cells[Math.max(currentIndex - 1, 0)]; // Get the previous cell
+
+      if (previousCell) {
+        const previousAutocomplete = previousCell.querySelector('input[type="text"]'); // Find the input element in the next cell
+        if (previousAutocomplete) {
+          previousAutocomplete.focus(); // Focus the input element
+        }
+      }
     },
     focusNextCell() {
       const currentCell = this.$el.closest('.v-input'); // Find the closest .v-input parent element

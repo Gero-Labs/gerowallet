@@ -1,6 +1,6 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send"
-              subtitle="Send AP3X or other assets to another wallet.">
+              :subtitle="`Send ${networks.resolveCurrencyName(loggedWallet.chain, loggedWallet.network)} or other assets to another wallet.`">
     <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
       <v-stepper-header>
         <template v-for="(item, index) in steps">
@@ -118,6 +118,7 @@ import {
   TransactionOutput,
   TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
+import networks from "@/shared/utils/networks";
 
 export default {
   name: 'SendDialog',
@@ -129,6 +130,9 @@ export default {
     },
   },
   computed: {
+    networks() {
+      return networks
+    },
     ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'utxos', 'addresses']),
     isValid() {
       if (this.currentStep === 1) {

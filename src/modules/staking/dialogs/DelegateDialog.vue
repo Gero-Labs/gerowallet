@@ -1,6 +1,6 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake"
-              subtitle="Secure the network and earn rewards by delegating your AP3X to a stake pool.">
+              :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)} to a stake pool.`">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert
         border="left"
@@ -122,6 +122,7 @@ import { mapState } from 'pinia';
 import { appWallet, useStore } from '@/store';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
+import networks from "@/shared/utils/networks";
 
 export default {
   name: 'DelegateDialog',
@@ -251,6 +252,7 @@ export default {
   },
   filters,
   data: () => ({
+    networks,
     loading: false,
     spendingPassword: '',
     showPassword: false,

@@ -12,7 +12,7 @@
               </v-icon>
             </template>
             <div class="tooltip-content">
-              <span>AP3X and/or tokens<br>shown here will be </span>
+              <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
               <span class="warning">sent<br>from your wallet</span>
               <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
             </div>
@@ -27,7 +27,7 @@
               </v-icon>
             </template>
             <div class="tooltip-content">
-              <span>AP3X and/or tokens shown here will be </span>
+              <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens shown here will be </span>
               <span class="success">sent to your wallet<br /><br /></span>
               <span>Once signed, this action is irreversible.</span>
             </div>
@@ -110,12 +110,14 @@ import {
   diffAssetsFromIncomingToOutgoing,
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'DappConnect',
   components: { TransactionRisk, TransactionCard, DappAddress, PopupHeader },
   data() {
     return {
+      networks,
       risks: undefined,
       rules,
       spendingPassword: '',
@@ -133,7 +135,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(useStore, ['utxos', 'addresses', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
     txFee() {
       return this.tx ? this.tx.body().fee().to_str() : null;
     },
@@ -236,12 +238,12 @@ export default {
         give: {
           total: Number(0 - totalGive),
           txFee: this.txFee,
-          provider: 'AP3X',
+          provider: networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network),
           assets: assetsGive,
         },
         receive: {
           total: totalReceive,
-          provider: 'AP3X',
+          provider: networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network),
           assets: assetsReceive,
         },
         recipient: this.recipient,
