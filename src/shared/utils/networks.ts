@@ -76,7 +76,8 @@ export default {
         price_mem: 0.0577,
         price_step: 0.0000721,
         coins_per_utxo_size: "4310"
-      }
+      },
+      geroPool: 'pool1kvdf7svevc4d5j5ll0l0094s5m9xmpvkhtq9up0j3nlwytnyq8f'
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -100,5 +101,8 @@ export default {
   },
   resolveCurrencyName(chain: string, network: string): string {
     return this.resolveNetwork(chain, network).currencyName
+  },
+  resolvePool(chain: string, network: string): string {
+    return this.resolveNetwork(chain, network).geroPool
   }
 };
