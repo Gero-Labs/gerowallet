@@ -1,6 +1,6 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send"
-              :subtitle="`Send ${networks.resolveCurrencyName(loggedWallet.chain, loggedWallet.network)} or other assets to another wallet.`">
+              :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
     <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
       <v-stepper-header>
         <template v-for="(item, index) in steps">

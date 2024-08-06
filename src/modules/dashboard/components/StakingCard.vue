@@ -15,12 +15,11 @@
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Total</span>
-                    <h4 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true)
-                      }}</h4>
+                    <h4 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}</h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Rewards</span>
-                    <h4 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency }}</h4>
+                    <h4 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}</h4>
                     <v-btn v-if="accountInfo.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
                       Withdraw
                     </v-btn>
@@ -74,7 +73,7 @@
                 <v-row no-gutters>
                   <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
                     <h5>Fees</h5>
-                    <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳') }}</span>
+                    <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</span>
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
                     <h5>Saturation</h5>
@@ -84,21 +83,23 @@
                       </template>
                     </v-progress-linear>
                     <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
-                      <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', true) }}</strong>
+                      <strong>{{ pool.active_stake | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}</strong>
                       <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                         <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                        {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, '₳', true) }}
+                        {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                       </strong>
                       <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                         <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                        {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, '₳', true) }}
+                        {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                       </strong>
                     </div>
                   </v-col>
                 </v-row>
                 <v-row no-gutters class="pt-2">
                   <v-col cols="12" style="display: block;text-align: center;">
-                    <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
+                    <div style="min-height: 155px" v-if="rewardsChartData && Object.values(rewardsChartData).length > 0">
+                      <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
+                    </div>
                   </v-col>
                 </v-row>
               </v-card-text>
@@ -132,7 +133,7 @@
                     <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
                       :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toCurrency
+                    item.amount | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true)
                   }}</span>
                       <span v-else>{{ item.amount }}</span>
                     </template>
@@ -143,7 +144,7 @@
                           alt="trend"></v-img>
                       </v-avatar>&nbsp;
                       <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false)
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
                         }}</span>
                     </template>
                     <template v-slot:[`item.date`]="{ item }">
@@ -175,10 +176,10 @@ import {Network} from "@/models/types";
 import {mapState} from "pinia";
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import {
-  Certificate, Ed25519KeyHash,
+  Certificate,
   StakeCredential,
-  StakeDelegation, StakeDeregistration,
-  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
+  StakeDeregistration,
+  Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { getColor, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';

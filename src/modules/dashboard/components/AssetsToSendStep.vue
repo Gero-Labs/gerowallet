@@ -135,7 +135,7 @@ export default {
         tokens.sort((a,b) => a.ticker > b.ticker ? 1 : -1)
         return tokens
       }
-      return {}
+      return []
     },
     collections() {
       let collections = structuredClone(this.resolvedCollections)

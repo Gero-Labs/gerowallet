@@ -23,13 +23,13 @@
             </v-list-item>
           </template>
           <template v-slot:[`item.assets`]="{ item }">
-            <stacked-tokens
+            <StackedTokens
               :tokens="item.assets"
               :style="item.status === 'Pending' ? { opacity: '0.5' } : {}"
-            ></stacked-tokens>
+            ></StackedTokens>
           </template>
           <template v-slot:[`item.amount`]="{ item }">
-            <span :style="{ color: getColor(item) }">{{ item.ada | toCurrency(true) }}</span>
+            <span :style="{ color: getColor(item) }">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), false) }}</span>
           </template>
         </v-data-table>
       </v-card-text>
@@ -49,13 +49,17 @@ import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
+import networks from '@/shared/utils/networks';
 
 export default defineComponent({
   name: 'TransactionsCard',
   components: { TransactionDetailsDialog, StackedTokens },
   filters,
   computed: {
-    ...mapState(useStore, ['calculatedTransactions','loadingTxs', 'pools']),
+    networks() {
+      return networks
+    },
+    ...mapState(useStore, ['calculatedTransactions','loadingTxs', 'pools', 'loggedWallet']),
     lastTenTransactions() {
       if (this.calculatedTransactions) {
         return this.calculatedTransactions//.slice(this.calculatedTransactions.length-10,this.calculatedTransactions.length)
