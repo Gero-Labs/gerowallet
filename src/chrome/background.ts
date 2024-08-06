@@ -22,6 +22,12 @@ import {
 } from './config';
 import networks from '@/shared/utils/networks';
 import { TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
+import { bringInitBackground } from '@bringweb3/sdk'
+
+bringInitBackground({
+  identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
+  apiEndpoint: 'sandbox'
+})
 
 console.log('Background Loaded');
 

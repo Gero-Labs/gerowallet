@@ -3,10 +3,11 @@
     <v-main>
       <v-container class="pa-0" style="background-color: #141414">
         <v-layout :align-start="true">
-          <navigation-drawer></navigation-drawer>
+          <navigation-drawer v-model="drawer"></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
               <v-app-bar flat class="transparent" color="transparent">
+                <v-app-bar-nav-icon v-show="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
                 <price-ticker></price-ticker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
                 <span style="font-size: 14px">{{'Epoch ' + latestTip?.epoch}}</span>
@@ -39,10 +40,7 @@
                 </v-btn>
                 <v-btn icon class="">
                   <v-avatar size="20">
-                    <img
-                        :src="require('@/assets/svg/eye.svg')"
-                        alt="Notifications"
-                    >
+                    <img :src="require('@/assets/svg/eye.svg')" alt="Notifications">
                   </v-avatar>
                 </v-btn>
                 <v-btn icon class="">
@@ -102,6 +100,7 @@ export default {
     dialogs: {
       SETTINGS: 'SETTINGS',
     },
+    drawer: false,
   }),
   methods: {
     closeDialog() {

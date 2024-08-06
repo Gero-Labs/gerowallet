@@ -1,7 +1,7 @@
 import {
   Address,
   AssetName,
-  Assets,
+  Assets, AuxiliaryData,
   BigNum,
   Certificate,
   Certificates,
@@ -43,11 +43,11 @@ export function  getTransactionBuilder(chain: string, network: string): Transact
     .build());
 }
 
-export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = []): TransactionBody {
+export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = [], metadata = undefined): TransactionBody {
   console.log('buildTx')
   const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
 
-  const hasMetadata = false // !(metadata == null || metadata === undefined);
+  const hasMetadata = !(metadata == null || metadata === undefined);
 
   // Add Certificates
   if (certificates.length > 0) {
@@ -77,7 +77,8 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
 
   // add metadata
   if (hasMetadata) {
-    // txBuilder.set_auxiliary_data(metadata);
+    console.log('hasMetadata')
+    txBuilder.add_json_metadatum(BigNum.from_str("721"), JSON.stringify(metadata));
   }
 
   // set ttl

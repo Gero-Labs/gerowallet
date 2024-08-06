@@ -10,6 +10,8 @@ import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 import DappSignData from '@/popup/modules/views/DappSignData.vue';
 import SignTx from '@/popup/modules/views/SignTx.vue';
+import zkFiat from "@/modules/zkFiat/zkFiat.vue";
+import Cashback from "@/modules/cashback/Cashback.vue";
 
 const routes = [
   {
@@ -51,6 +53,24 @@ const routes = [
     path: '/staking',
     name: 'staking',
     component: Staking,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/cashback',
+    name: 'cashback',
+    component: Cashback,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/zkFiat',
+    name: 'zkFiat',
+    component: zkFiat,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
