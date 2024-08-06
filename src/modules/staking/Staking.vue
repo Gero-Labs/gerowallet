@@ -34,7 +34,9 @@
                 </v-card-title>
                 <v-card-subtitle>
                   <v-btn small
-                         style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">
+                         style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
+                         @click="delegateToGero"
+                  >
                     Stake with GERO
                   </v-btn>
                 </v-card-subtitle>
@@ -75,32 +77,32 @@
                   <v-list-item-content class="py-1">
                     <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name}` }}&nbsp;
                       <div>
-                        <v-btn icon x-small v-if="item?.homepage" :href="item?.homepage" target="_blank">
+                        <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
                           <v-icon small>
                             mdi-web
                           </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.facebook_handle" :href="'https://www.facebook.com/'+poolExtendedInfo(item)?.info?.social?.facebook_handle" target="_blank">
+                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.facebook_handle" @click.stop="" :href="'https://www.facebook.com/'+poolExtendedInfo(item)?.info?.social?.facebook_handle" target="_blank">
                           <v-icon small>
                             mdi-facebook
                           </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle" :href="'https://x.com/'+poolExtendedInfo(item)?.info?.social?.twitter_handle" target="_blank">
+                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(item)?.info?.social?.twitter_handle" target="_blank">
                           <v-avatar tile size="14">
                             <v-img :src="xLogo" alt="x"></v-img>
                           </v-avatar>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle" :href="'https://youtube.com/'+poolExtendedInfo(item)?.info?.social?.youtube_handle" target="_blank">
+                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(item)?.info?.social?.youtube_handle" target="_blank">
                           <v-icon small>
                             mdi-youtube
                           </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo(item)?.info?.social?.discord_handle" target="_blank">
+                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(item)?.info?.social?.discord_handle" target="_blank">
                           <v-icon small>
                             mdi-discord
                           </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo(item)?.info?.social?.telegram_handle" target="_blank">
+                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(item)?.info?.social?.telegram_handle" target="_blank">
                           <v-avatar tile size="14">
                             <v-img :src="telegramLogo" alt="x"></v-img>
                           </v-avatar>
@@ -114,34 +116,6 @@
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
-              </template>
-              <template v-slot:[`item.socials`]="{ item }">
-                <div style="display: inline-flex;">
-                  <v-btn x-small icon :href="item.homepage" target="_blank" v-if="item.homepage">
-                    <v-icon small>mdi-web</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://twitter.com/'+item.pool_extended_info.info.social.twitter_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.twitter_handle">
-                    <v-icon small>mdi-twitter</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://t.me/'+item.pool_extended_info.info.social.telegram_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.telegram_handle">
-                    <v-icon small>mdi-telegram</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://fb.me/'+item.pool_extended_info.info.social.facebook_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.facebook_handle">
-                    <v-icon small>mdi-facebook</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://youtube.com/'+item.pool_extended_info.info.social.youtube_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.youtube_handle">
-                    <v-icon small>mdi-youtube</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://twitch.com/'+item.pool_extended_info.info.social.twitch_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.twitch_handle">
-                    <v-icon small>mdi-twitch</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://discord.gg/'+item.pool_extended_info.info.social.discord_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.discord_handle">
-                    <v-icon small>mdi-discord</v-icon>
-                  </v-btn>
-                  <v-btn x-small icon :href="'https://github.com/'+item.pool_extended_info.info.social.github_handle" target="_blank" v-if="item.pool_extended_info && item.pool_extended_info.info && item.pool_extended_info.info.social && item.pool_extended_info.info.social.github_handle">
-                    <v-icon small>mdi-github</v-icon>
-                  </v-btn>
-                </div>
               </template>
               <template v-slot:[`item.live_delegators`]="{ item }">
                 {{ (item.live_delegators).toLocaleString() }}
@@ -159,23 +133,23 @@
                   </template>
                 </v-progress-linear>
                 <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify;">
-                  <strong>{{ item.active_stake | toCurrency(false, 1, '₳', true) }}</strong>
+                  <strong>{{ item.active_stake | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}</strong>
                   <strong v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, '₳', true) }}
+                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                   </strong>
                   <strong v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, '₳', true) }}
+                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                   </strong>
                 </div>
               </template>
               <template v-slot:[`item.fixed_cost`]="{ item }">
-                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
+                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
                   }}</span>
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
-                {{ item.pledge | toCurrency(false, 2, '₳', true) }}
+                {{ item.pledge | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                 <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)">mdi-check</v-icon>
                 <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
               </template>
@@ -199,32 +173,32 @@
                           {{`[${pool.ticker}] ${pool.name}` }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
-                          <v-btn icon x-small v-if="pool?.homepage" :href="pool?.homepage" target="_blank">
+                          <v-btn icon x-small v-if="pool?.homepage" @click.stop="" :href="pool?.homepage" target="_blank">
                             <v-icon small>
                               mdi-web
                             </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.facebook_handle" :href="'https://www.facebook.com/'+poolExtendedInfo(pool)?.info?.social?.facebook_handle" target="_blank">
+                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.facebook_handle" @click.stop="" :href="'https://www.facebook.com/'+poolExtendedInfo(pool)?.info?.social?.facebook_handle" target="_blank">
                             <v-icon small>
                               mdi-facebook
                             </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle" :href="'https://x.com/'+poolExtendedInfo(pool)?.info?.social?.twitter_handle" target="_blank">
+                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(pool)?.info?.social?.twitter_handle" target="_blank">
                             <v-avatar tile size="14">
                               <v-img :src="xLogo" alt="x"></v-img>
                             </v-avatar>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle" :href="'https://youtube.com/'+poolExtendedInfo(pool)?.info?.social?.youtube_handle" target="_blank">
+                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(pool)?.info?.social?.youtube_handle" target="_blank">
                             <v-icon small>
                               mdi-youtube
                             </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo(pool)?.info?.social?.discord_handle" target="_blank">
+                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(pool)?.info?.social?.discord_handle" target="_blank">
                             <v-icon small>
                               mdi-discord
                             </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo(pool)?.info?.social?.telegram_handle" target="_blank">
+                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(pool)?.info?.social?.telegram_handle" target="_blank">
                             <v-avatar tile size="14">
                               <v-img :src="telegramLogo" alt="x"></v-img>
                             </v-avatar>
@@ -252,8 +226,7 @@
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; " v-if="loggedWallet">
-                            {{ pool.pledge | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
-                            }}
+                            {{ pool.pledge | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}
                           </v-chip>
                         </v-col>
                       </v-row>
@@ -270,8 +243,7 @@
                           <span style="font-size: 14px; color: white">Fees</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
-                            }}</span>
+                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</span>
                         </v-col>
                       </v-row>
                     </v-card-text>
@@ -293,7 +265,6 @@
 import filters from "@/shared/utils/filters";
 import { appWallet, useStore } from '@/store';
 import {mapActions, mapState} from "pinia";
-import {Blockchain, Network} from "@/models/types";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import {
@@ -336,17 +307,10 @@ export default {
         {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 84 }
       ]
     },
-    Network() {
-      return Network
-    },
     geroPoolExists() {
-      return (this.loggedWallet?.chain === Blockchain.CARDANO && this.loggedWallet?.network === Network.MAINNET) ||
-        (this.loggedWallet?.chain === Blockchain.APEX_PRIME && this.loggedWallet?.network === Network.TESTNET)
+      return !!networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
     },
-    ...mapState(useStore, ['getPools', 'loggedWallet', 'accountInfo', 'utxos', 'latestTip', 'baseAddress']),
-    pools() {
-      return this.getPools
-    },
+    ...mapState(useStore, ['pools', 'loggedWallet', 'accountInfo', 'utxos', 'latestTip', 'baseAddress']),
     numPages() {
       // calculate the number of pages we have
       return Math.ceil(this.stakePools.length / this.pageSize);
@@ -397,6 +361,15 @@ export default {
       //value from 0 to 1
       const hue = ((1 - value) * 120).toString(10);
       return ["hsl(", hue, ",57.26%,54.12%)"].join("");
+    },
+    delegateToGero() {
+      const poolId = networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+      if (!pool) {
+        console.log('Pool Not Found')
+        return;
+      }
+      this.delegate(pool)
     },
     delegate(row) {
       console.log('delegate', row)

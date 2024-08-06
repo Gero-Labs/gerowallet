@@ -44,7 +44,10 @@ export function  getTransactionBuilder(chain: string, network: string): Transact
 }
 
 export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = []): TransactionBody {
-  console.log('buildTx')
+  if (!changeAddress) {
+    console.log('Change Address', changeAddress)
+    return null;
+  }
   const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
 
   const hasMetadata = false // !(metadata == null || metadata === undefined);

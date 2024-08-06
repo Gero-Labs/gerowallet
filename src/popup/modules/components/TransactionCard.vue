@@ -5,7 +5,7 @@
     </div>
     <v-card flat :class="withBg ? 'tx-details bg' : 'tx-details'">
       <div class="provider">{{ amount?.provider }}</div>
-      <div class="total">{{ amount?.total | toCurrency(true) }}</div>
+      <div class="total">{{ amount?.total | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</div>
       <div class="assets" v-if="amount?.assets?.length">Assets:&nbsp;</div>
       <div v-if="amount?.assets?.length">
         <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
@@ -20,13 +20,16 @@
 
     <div class="tx-footer" v-if="amount.txFee">
       <template>
-        Tx Fee&nbsp;<span> {{ 0 - amount?.txFee | toCurrency(true) }}</span>
+        Tx Fee&nbsp;<span> {{ 0 - amount?.txFee | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
       </template>
     </div>
   </v-card>
 </template>
 <script>
 import filters from '@/shared/utils/filters';
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'TransactionCard',
@@ -41,6 +44,9 @@ export default {
       type: Boolean,
       default: () => true
     }
+  },
+  computed: {
+    ...mapState(useStore, ['loggedWallet']),
   },
   watch: {
     transaction: {
@@ -59,6 +65,7 @@ export default {
   },
   data() {
     return {
+      networks,
       amount: undefined,
       showAllAssets: true,
       hiddenAssets: 0,

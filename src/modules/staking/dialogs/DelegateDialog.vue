@@ -35,7 +35,7 @@
       <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
       <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_stake | toCurrency}}</v-card-title>
+      <v-card-title class="pt-0" style="color: white">{{ pool.live_stake | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))}}</v-card-title>
       <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString(undefined, {maximumFractionDigits: 2}) }}%</v-card-title>
       <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
@@ -57,7 +57,7 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4><strong>{{ accountInfo.controlled_amount | toCurrency}}</strong></h4>
+            <h4><strong>{{ accountInfo.controlled_amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))}}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Epoch Yield
@@ -65,15 +65,15 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4>~<strong>{{ accountInfo.controlled_amount * pool.ros/100/73 | toCurrency}}</strong></h4>
+            <h4>~<strong>{{ accountInfo.controlled_amount * pool.ros/100/73 | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>Deposit Fee</h4>
-            <h4><strong>{{ depositFee | toCurrency }}</strong></h4>
+            <h4><strong>{{ depositFee | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
-            <h4><strong>{{ tx.body().fee().to_str() | toCurrency }}</strong></h4>
+            <h4><strong>{{ tx.body().fee().to_str() | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: ruby">
             <v-tooltip

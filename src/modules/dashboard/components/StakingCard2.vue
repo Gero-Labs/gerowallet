@@ -11,11 +11,11 @@
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Total</span>
-            <h2 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳') }}</h2>
+            <h2 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</h2>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>
-            <h2 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency }}</h2>
+            <h2 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</h2>
             <v-btn v-if="accountInfo.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
               Withdraw
             </v-btn>
@@ -69,7 +69,7 @@
             <v-row no-gutters>
               <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
                 <h4>Fees</h4>
-                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳') }}</span>
+                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</span>
               </v-col>
               <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
                 <h4>Saturation</h4>
@@ -82,18 +82,24 @@
                   <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', true) }}</strong>
                   <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, '₳', true) }}
+                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                   </strong>
                   <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, '₳', true) }}
+                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
                   </strong>
                 </div>
               </v-col>
             </v-row>
           </v-col>
-          <v-col cols="6" class="px-4">
-            <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
+          <v-col cols="6" class="px-4" style="align-content: center">
+            <v-card-text v-if="!rewardsChartData || Object.values(rewardsChartData).length === 0" style="font-size: 20px;align-content: center;" class="text-center">
+              <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
+              <span v-else>No Rewards Yet</span>
+            </v-card-text>
+            <div style="min-height: 155px" v-else>
+              <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
+            </div>
           </v-col>
         </v-row>
         <v-row no-gutters class="pt-4">
@@ -121,7 +127,7 @@
               <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
                       :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toCurrency
+                    item.amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
                   }}</span>
                 <span v-else>{{ item.amount }}</span>
               </template>
@@ -132,7 +138,7 @@
                     alt="trend"></v-img>
                 </v-avatar>&nbsp;
                 <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false)
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
                   }}</span>
               </template>
               <template v-slot:[`item.date`]="{ item }">
@@ -168,6 +174,7 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'StakingCard2',
@@ -185,6 +192,9 @@ export default {
     },
   },
   computed: {
+    networks() {
+      return networks
+    },
     filters() {
       return filters
     },

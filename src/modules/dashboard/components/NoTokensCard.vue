@@ -14,8 +14,8 @@
     >
       <div class="stake-apex-info">
         <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
-        <v-card-text class="subtitle-1" v-if="this.loggedWallet"
-          >Earn rewards by staking your {{assetType}} tokens with {{this.loggedWallet.chain}}'s extensive network of stake pools.</v-card-text
+        <v-card-text class="subtitle-1" v-if="loggedWallet"
+          >Earn rewards by staking your {{assetType}} tokens with {{loggedWallet.chain}}'s extensive network of stake pools.</v-card-text
         >
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
           Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
@@ -29,6 +29,7 @@
 
       <h2 class="error-message">You need to have {{assetType}} in your wallet before staking!</h2>
     </section>
+    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
   </v-card>
 </template>
 <script>
@@ -45,18 +46,23 @@ import {
 } from '@emurgo/cardano-serialization-lib-browser';
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
+import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 
 export default {
   name: "NoTokensCard",
+  components: { DelegateDialog },
   computed: {
     geroPoolExists() {
-      return !!networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+      if (this.loggedWallet) {
+        return !!networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+      }
+      return false
     },
     assetType() {
       if (!this.loggedWallet) {
         return ''
       }
-      return networks.resolveCurrencyName(this.loggedWallet.chain, this.loggedWallet.network)
+      return networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
     },
     hasAssets() {
       return !!this.accountInfo
@@ -64,12 +70,16 @@ export default {
     Blockchain() {
       return Blockchain
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet']),
+    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'pools', 'utxos', 'latestTip', 'baseAddress']),
   },
   methods: {
     delegateToGero() {
-      console.log('delegate', row)
-      this.selectedPool = row
+      const poolId = networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+      this.selectedPool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+      if (!this.selectedPool) {
+        console.log('Pool Not Found')
+        return;
+      }
       const wallet = appWallet;
       // Registration Certificate
       const certificates = [];
@@ -78,7 +88,7 @@ export default {
         certificates.push(registrationCertificate);
       }
       // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(StakeCredential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
+      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(StakeCredential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(poolId)));
       certificates.push(delegationCertificate);
       // UTxOs
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();
