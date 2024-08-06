@@ -12,8 +12,7 @@
       </div>
     </v-expansion-panel-header>
     <v-expansion-panel-content class="content-container">
-      <div :class="amountClass">{{ amount | toCurrency(false, 0, loggedWallet.network !== Network.MAINNET ? 't₳' : '₳')
-        }}</div>
+      <div :class="amountClass">{{ amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</div>
       <TokensList :rows="2" :tokensData="[]"></TokensList>
     </v-expansion-panel-content>
   </v-expansion-panel>
@@ -23,7 +22,7 @@ import TokensList from '@/shared/components/TokensList.vue';
 import filters from "@/shared/utils/filters";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
-import {Network} from "@/models/types";
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'transactionDetailsAccordion',
@@ -44,8 +43,8 @@ export default {
   },
   filters,
   computed: {
-    Network() {
-      return Network
+    networks() {
+      return networks
     },
     ...mapState(useStore, ['loggedWallet']),
     amountClass() {

@@ -678,13 +678,17 @@ export class Wallet {
       const blockchainDB: Dexie = await this.getBlockchainDb();
       const poolSyncTable = blockchainDB.table('pools_sync');
       const lastPoolSyncArray = await poolSyncTable.toArray();
+      const currentTime = new Date();
+
       if (lastPoolSyncArray.length == 0) {
         await this.setStakingPools(blockchainDB, poolSyncTable);
       } else if (lastPoolSyncArray.length > 0) {
         const lastPoolSync = lastPoolSyncArray[0];
         if (lastPoolSync?.time) {
-          const hoursSinceEpoch: number = Math.floor(lastPoolSync.time / (1000 * 60 * 60));
-          if (hoursSinceEpoch % 4 === 0) {
+          const lastSyncTime = new Date(lastPoolSync.time);
+          const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
+
+          if (hoursSinceLastSync >= 4) {
             await this.setStakingPools(blockchainDB, poolSyncTable);
           }
         }

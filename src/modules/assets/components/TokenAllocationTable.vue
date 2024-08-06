@@ -233,7 +233,7 @@ export default {
       this.dialogData = null;
     },
     handleOnRowClick(row) {
-      this.dialogData = row;
+      // this.dialogData = row; TODO
     },
   },
   computed: {

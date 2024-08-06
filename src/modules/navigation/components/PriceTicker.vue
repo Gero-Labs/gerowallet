@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex column">
+  <div class="d-flex column" v-if="networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)?.blockchain === Blockchain.CARDANO">
     <v-img width="28" :src="require('@/assets/svg/cardano.svg')" class="mr-2" contain></v-img>
     <span v-if="ticker.lastPrice" style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
     <sparkline :divider="true"></sparkline>
@@ -10,6 +10,8 @@ import {useStore} from "@/store";
 import {mapState} from "pinia";
 import socket from "@/plugins/socket";
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
+import networks from '@/shared/utils/networks';
+import { Blockchain } from '@/models/types';
 
 export default {
   name: 'PriceTicker',
@@ -37,9 +39,13 @@ export default {
     this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
   },
   computed: {
-    ...mapState(useStore, ['price']),
+    Blockchain() {
+      return Blockchain
+    },
+    ...mapState(useStore, ['price', 'loggedWallet']),
   },
   data: () => ({
+    networks,
     socket,
     ticker: {
       prevPrice: 0,
