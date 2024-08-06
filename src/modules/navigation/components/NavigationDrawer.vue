@@ -92,83 +92,84 @@
       <v-divider></v-divider>
         <v-list-item three-line class="px-0">
           <v-list-item-avatar style="margin: auto" class="mr-3" size="40" >
-            <v-dialog v-model="changeAvatarDialog" scrollable width="720">
-              <template v-slot:activator="{ on, attrs }">
-                <v-hover>
-                  <template v-slot:default="{ hover }">
-                    <v-btn fab elevation="0" v-bind="attrs" v-on="on">
-                      <v-img v-if="account" :src="avatar"></v-img>
-                      <v-fade-transition>
-                        <v-overlay v-if="hover" absolute color="#ffffff"></v-overlay>
-                      </v-fade-transition>
-                    </v-btn>
-                  </template>
-                </v-hover>
-              </template>
-              <v-card :loading="avatarsLoading">
-                <v-card-title class="justify-center">
-                  Change Your Profile Picture
-                </v-card-title>
-                <v-card-text>
-                  <v-item-group v-model="selectedAvatar">
-                    <v-container>
-                      <v-row>
-                        <v-col
-                            v-for="(avatar, index) in avatars"
-                            :key="index"
-                            cols="12"
-                            lg="3"
-                            md="4"
-                            sm="6"
-                            class="pa-2"
-                        >
-                          <v-item v-slot="{ active, toggle }">
-                            <v-card
-                                :color="active ? 'primary' : ''"
-                                flat
-                                outlined
-                                dark
-                                @click="toggle"
-                                class="fill-height"
-                                :disabled="loading"
-                            >
-                              <v-img :src="avatar.image | toIPFS" alt="" contain
-                                     @error="fallbackImage"
-                                     onerror="this.onerror=null; this.src='https://d1zjrpdfxjmowk.cloudfront.net/assets/images/1x1.webp';"
-                                     aspect-ratio="1">
-                                <template v-slot:placeholder>
-                                  <v-sheet>
-                                    <v-skeleton-loader class="mx-auto" type="image"></v-skeleton-loader>
-                                  </v-sheet>
-                                </template>
-                                <!--                              <div style="position: absolute; margin-left: auto; margin-right: auto; left: 0; right: 0; text-align: center; bottom: 0;">-->
-                                <!--                                <strong style="font-size: 12px; line-height: 2.2;">{{ avatar.assetName }}</strong>-->
-                                <!--                              </div>-->
-                                <v-scroll-y-transition>
-                                  <v-icon v-if="active" style="position: absolute; right: 4px; top: 2px;">
-                                    mdi-check
-                                  </v-icon>
-                                </v-scroll-y-transition>
-                              </v-img>
-                              <v-card-title class="text-center justify-center pt-0 px-0 pb-1"
-                                            style="word-break: break-word; font-size: 12px">
-                                {{ avatar.assetName }}
-                              </v-card-title>
-                            </v-card>
-                          </v-item>
-                        </v-col>
-                      </v-row>
-                    </v-container>
-                  </v-item-group>
-                </v-card-text>
-                <v-card-actions class="justify-center">
-                  <v-btn color="primary" text @click="closeChangeAvatarDialog" :disabled="loading">Cancel</v-btn>
-                  <v-btn color="primary" elevation="0" @click="selectAvatar" :loading="loading"
-                         :disabled="loading || selectedAvatar === undefined">Save
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-dialog>
+            <v-img v-if="account" :src="avatar"></v-img>
+<!--            <v-dialog v-model="changeAvatarDialog" scrollable width="720">-->
+<!--              <template v-slot:activator="{ on, attrs }">-->
+<!--                <v-hover>-->
+<!--                  <template v-slot:default="{ hover }">-->
+<!--                    <v-btn fab elevation="0" v-bind="attrs" v-on="on">-->
+<!--                      <v-img v-if="account" :src="avatar"></v-img>-->
+<!--                      <v-fade-transition>-->
+<!--                        <v-overlay v-if="hover" absolute color="#ffffff"></v-overlay>-->
+<!--                      </v-fade-transition>-->
+<!--                    </v-btn>-->
+<!--                  </template>-->
+<!--                </v-hover>-->
+<!--              </template>-->
+<!--              <v-card :loading="avatarsLoading">-->
+<!--                <v-card-title class="justify-center">-->
+<!--                  Change Your Profile Picture-->
+<!--                </v-card-title>-->
+<!--                <v-card-text>-->
+<!--                  <v-item-group v-model="selectedAvatar">-->
+<!--                    <v-container>-->
+<!--                      <v-row>-->
+<!--                        <v-col-->
+<!--                            v-for="(avatar, index) in avatars"-->
+<!--                            :key="index"-->
+<!--                            cols="12"-->
+<!--                            lg="3"-->
+<!--                            md="4"-->
+<!--                            sm="6"-->
+<!--                            class="pa-2"-->
+<!--                        >-->
+<!--                          <v-item v-slot="{ active, toggle }">-->
+<!--                            <v-card-->
+<!--                                :color="active ? 'primary' : ''"-->
+<!--                                flat-->
+<!--                                outlined-->
+<!--                                dark-->
+<!--                                @click="toggle"-->
+<!--                                class="fill-height"-->
+<!--                                :disabled="loading"-->
+<!--                            >-->
+<!--                              <v-img :src="avatar.image | toIPFS" alt="" contain-->
+<!--                                     @error="fallbackImage"-->
+<!--                                     onerror="this.onerror=null; this.src='https://d1zjrpdfxjmowk.cloudfront.net/assets/images/1x1.webp';"-->
+<!--                                     aspect-ratio="1">-->
+<!--                                <template v-slot:placeholder>-->
+<!--                                  <v-sheet>-->
+<!--                                    <v-skeleton-loader class="mx-auto" type="image"></v-skeleton-loader>-->
+<!--                                  </v-sheet>-->
+<!--                                </template>-->
+<!--                                &lt;!&ndash;                              <div style="position: absolute; margin-left: auto; margin-right: auto; left: 0; right: 0; text-align: center; bottom: 0;">&ndash;&gt;-->
+<!--                                &lt;!&ndash;                                <strong style="font-size: 12px; line-height: 2.2;">{{ avatar.assetName }}</strong>&ndash;&gt;-->
+<!--                                &lt;!&ndash;                              </div>&ndash;&gt;-->
+<!--                                <v-scroll-y-transition>-->
+<!--                                  <v-icon v-if="active" style="position: absolute; right: 4px; top: 2px;">-->
+<!--                                    mdi-check-->
+<!--                                  </v-icon>-->
+<!--                                </v-scroll-y-transition>-->
+<!--                              </v-img>-->
+<!--                              <v-card-title class="text-center justify-center pt-0 px-0 pb-1"-->
+<!--                                            style="word-break: break-word; font-size: 12px">-->
+<!--                                {{ avatar.assetName }}-->
+<!--                              </v-card-title>-->
+<!--                            </v-card>-->
+<!--                          </v-item>-->
+<!--                        </v-col>-->
+<!--                      </v-row>-->
+<!--                    </v-container>-->
+<!--                  </v-item-group>-->
+<!--                </v-card-text>-->
+<!--                <v-card-actions class="justify-center">-->
+<!--                  <v-btn color="primary" text @click="closeChangeAvatarDialog" :disabled="loading">Cancel</v-btn>-->
+<!--                  <v-btn color="primary" elevation="0" @click="selectAvatar" :loading="loading"-->
+<!--                         :disabled="loading || selectedAvatar === undefined">Save-->
+<!--                  </v-btn>-->
+<!--                </v-card-actions>-->
+<!--              </v-card>-->
+<!--            </v-dialog>-->
           </v-list-item-avatar>
           <v-list-item-content class="py-0" style="align-self: initial">
             <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account">{{ account.name }}</v-list-item-title>

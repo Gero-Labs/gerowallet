@@ -7,8 +7,8 @@
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
               <v-app-bar flat class="transparent" color="transparent">
-                <price-ticker></price-ticker>
-                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
+                <PriceTicker></PriceTicker>
+                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="networks.resolveNetwork(loggedWallet?.chain, loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></v-divider>
                 <span style="font-size: 14px">{{'Epoch ' + latestTip?.epoch}}</span>
                 <v-progress-linear v-if="epochSlotPercentage"
                     striped
@@ -29,38 +29,38 @@
                 </v-icon>&nbsp;
                 <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(latestTip?.time * 1000).toLocaleString()}}</span>
                 <v-spacer></v-spacer>
-                <v-btn icon class="ml-2">
-                  <v-avatar size="20">
-                    <img
-                        :src="require('@/assets/svg/bell-03.svg')"
-                        alt="Notifications"
-                    >
-                  </v-avatar>
-                </v-btn>
-                <v-btn icon class="">
-                  <v-avatar size="20">
-                    <img
-                        :src="require('@/assets/svg/eye.svg')"
-                        alt="Notifications"
-                    >
-                  </v-avatar>
-                </v-btn>
-                <v-btn icon class="">
-                  <v-avatar size="20">
-                    <img
-                        :src="require('@/assets/svg/life-buoy-01.svg')"
-                        alt="Notifications"
-                    >
-                  </v-avatar>
-                </v-btn>
-                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">
-                  <v-avatar size="20">
-                    <img
-                        :src="require('@/assets/svg/settings-02.svg')"
-                        alt="Notifications"
-                    >
-                  </v-avatar>
-                </v-btn>
+<!--                <v-btn icon class="ml-2">-->
+<!--                  <v-avatar size="20">-->
+<!--                    <img-->
+<!--                        :src="require('@/assets/svg/bell-03.svg')"-->
+<!--                        alt="Notifications"-->
+<!--                    >-->
+<!--                  </v-avatar>-->
+<!--                </v-btn>-->
+<!--                <v-btn icon class="">-->
+<!--                  <v-avatar size="20">-->
+<!--                    <img-->
+<!--                        :src="require('@/assets/svg/eye.svg')"-->
+<!--                        alt="Notifications"-->
+<!--                    >-->
+<!--                  </v-avatar>-->
+<!--                </v-btn>-->
+<!--                <v-btn icon class="">-->
+<!--                  <v-avatar size="20">-->
+<!--                    <img-->
+<!--                        :src="require('@/assets/svg/life-buoy-01.svg')"-->
+<!--                        alt="Notifications"-->
+<!--                    >-->
+<!--                  </v-avatar>-->
+<!--                </v-btn>-->
+<!--                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">-->
+<!--                  <v-avatar size="20">-->
+<!--                    <img-->
+<!--                        :src="require('@/assets/svg/settings-02.svg')"-->
+<!--                        alt="Notifications"-->
+<!--                    >-->
+<!--                  </v-avatar>-->
+<!--                </v-btn>-->
               </v-app-bar>
               <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
               <v-sheet class="transparent">
@@ -83,11 +83,19 @@ import socket from "@/plugins/socket";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
 import {mapState} from "pinia";
 import SettingsDialog from "@/modules/dashboard/dialogs/SettingsDialog.vue";
+import { Blockchain } from '@/models/types';
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'ContentLayout',
   components: {PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
+    networks() {
+      return networks
+    },
+    Blockchain() {
+      return Blockchain
+    },
     ...mapState(useStore, ['loggedWallet', "latestTip"]),
     epochSlotPercentage() {
       if (this.latestTip) {
