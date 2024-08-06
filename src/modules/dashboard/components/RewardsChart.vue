@@ -1,11 +1,11 @@
 <template>
-  <div style="min-height: 155px">
-    <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
-  </div>
+  <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
 </template>
 <script>
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
 
 export default {
   components: {
@@ -28,13 +28,11 @@ export default {
     }
   },
   computed: {
+    ...mapState(useStore, ['loadingTxs']),
     chartOptions() {
-      if (Object.values(this.chartData).length === 0) {
-        return null
-      }
-      const yMax = Object.values(this.chartData).reduce(function(a, b) {
-        return Math.max(a, b);
-      });
+      // if (Object.values(this.chartData).length === 0) {
+      //   return null
+      // }
       return {
         accessibility: {
           enabled: false,
@@ -97,9 +95,7 @@ export default {
               color: '#fff'
             }
           },
-          tickInterval: yMax >= 3 ? 3: 0,
           min: 0,
-          max: yMax,
           opposite: true,
         },
         colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
