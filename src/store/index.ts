@@ -288,6 +288,9 @@ export const useStore = defineStore('store', {
             const unresolvedUnits = []
             const collections = {}
             collectibles.forEach(collectible => {
+              if (!this.assets) {
+                return
+              }
               const asset = this.assets.find(asset => asset.asset === collectible.unit)
               if (!asset) {
                 unresolvedUnits.push(collectible.unit)
@@ -351,6 +354,11 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       socket.stompConnect(appWallet)
+      window.dispatchEvent(new CustomEvent('gero:login', {
+        bubbles: true,
+        cancelable: true,
+        composed: false,
+      }))
       const promises = []
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
@@ -376,6 +384,11 @@ export const useStore = defineStore('store', {
       if (chrome?.storage) {
         await chrome.storage.local.remove(STORAGE.whitelisted);
       }
+      window.dispatchEvent(new CustomEvent('gero:logout', {
+        bubbles: true,
+        cancelable: true,
+        composed: false,
+      }))
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;

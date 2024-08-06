@@ -1,7 +1,7 @@
 import axios, {AxiosError, AxiosInstance} from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { resolveRewardAddress } from '@/shared/utils/resolver';
-import { Blockchain, Network, Provider } from '@/models/types';
+import {Blockchain, Network, Proof, Provider} from '@/models/types';
 import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
 
 export class Api {
@@ -211,4 +211,28 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async getBankAccountId(userId: number): Promise<number> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/zk-snark/accountId/${userId}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async verifyProof(proof: Proof, publicSignals: string[]): Promise<boolean> {
+    try {
+      const response = await this.axiosInstance.post("api/zk-snark/verify-proof", {
+        proof,
+        publicSignals
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying proof:', error);
+      return false;
+    }
+  }
+
 }

@@ -1,124 +1,171 @@
 <template>
-  <v-card flat class="transparent">
-    <v-card-text class="pa-0">
-      <v-row no-gutters>
-        <v-col cols="6" class="selectors-container px-2">
-          <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto">
-            <template v-for="index in selectedTokens?.length">
-              <TokenSelector
-                class="pb-1"
-                v-model="selectedTokens[index-1]"
-                :available="tokens"
-                :index="index-1"
-                :key="index"
-                @remove="removeTokenSelector"
-              ></TokenSelector>
-            </template>
-            <v-card-actions class="justify-center text-center">
-              <v-btn text class="add-token-button" @click="addToken">
-                <v-icon class="plus-icon" color="#00c7f3" small>mdi-plus</v-icon>
-                Add token
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-col>
-        <v-col cols="6" class="collectibles px-2">
-          <v-card flat outlined>
-            <v-card-title class="justify-center">Choose Collectibles</v-card-title>
-            <v-card-subtitle class="pb-0">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Deposit" subtitle="zkFiat: The Future of Confidential Compliance">
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+      <v-container class="justify-center text-center" style="max-width: 400px">
+        <div class="item-container">
+          <Select
+              :value="loggedWallet"
+              :items="[loggedWallet]"
+              label="Wallet"
+              :readonly="true"
+          ></Select>
+        </div>
+        <TokenSelector
+            class="pb-1"
+            v-model="selectedTokens[0]"
+            :available="tokens"
+            :index="0"
+        ></TokenSelector>
+        <v-btn @click="createDeposit" color="primary" x-large :disabled="!!txBody">
+          Deposit
+        </v-btn>
+        <div v-if="txBody" style="border: 1px solid #CCC; border-radius: 8px" class="mt-5 pa-4 text-center justify-center">
+          <h2>Bank Proof Verified <v-icon color="primary">mdi-check-bold</v-icon></h2>
+          <h2>Bank Account Id: <span style="color: white">{{ bankAccountId }}</span></h2>
+          <h2>Transaction Created <v-icon color="primary">mdi-check-bold</v-icon></h2>
+          <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+          >
+            <template v-slot:activator="{ }">
               <v-text-field
-                v-model="search"
-                placeholder="Search for collectibles"
-                outlined
-                dense
-                hide-details
-                class="mb-4"
-              ></v-text-field>
-            </v-card-subtitle>
-            <v-card-text style="overflow-y: auto; height: 382px; text-align: left;">
-              <v-item-group v-model="selectedCollectibles" multiple>
-                <template v-for="(collection, index) in collections">
-                  <div v-if="collection.items" :key="`collection_${index}`">
-                    <span style="font-size: 10px">{{ `${collection.name} (${collection.items.length})`  }}</span>
-                    <v-row :key="index" no-gutters>
-                      <v-col
-                        v-for="(item) in collection.items"
-                        :key="item.name"
-                        cols="12"
-                        sm="4"
-                        xs="12"
-                        class="pa-1"
-                      >
-                        <v-item v-slot="{ active, toggle }" :value="item">
-                          <div>
-                            <v-hover>
-                              <template v-slot:default="{ hover }">
-                                <v-card
-                                  flat
-                                  class="justify-center text-center px-1 shadow collectible-item"
-                                  :style="active ? { backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${item.img})`,border: '2px solid #00c7f3' } : { backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${item.img})`,border: '2px solid #00c7f300' }"
-                                  @click="toggle"
-                                >
-
-                                  <div class="collectible-text-container">
-                                    <span class="collectible-text">{{ item.name }}</span>
-                                  </div>
-                                  <v-scroll-y-transition>
-                                    <v-avatar color="#00c7f3" v-if="active" size="14" style="position: absolute; right: 4px; top: 4px;">
-                                      <v-icon color="black" x-small>
-                                        mdi-check-bold
-                                      </v-icon>
-                                    </v-avatar>
-                                  </v-scroll-y-transition>
-                                  <v-overlay
-                                    v-if="hover"
-                                    absolute
-                                    color="#ffffff"
-                                  >
-                                  </v-overlay>
-                                </v-card>
-                              </template>
-                            </v-hover>
-                            <div style="display: inline-flex; place-items: center;" v-if="item.quantity > 1 && active">
-                              <v-btn icon x-small>
-                                <v-icon color="#00DFF3" small>mdi-minus-box-outline</v-icon>
-                              </v-btn>
-                              <input type="number" min="1" :max="item.quantity"  style="text-align:center; height:16px; color: white; width: 54px; font-size: 10px"/>
-                              <v-btn icon x-small>
-                                <v-icon color="#00DFF3" small>mdi-plus-box-outline</v-icon>
-                              </v-btn>
-                            </div>
-                          </div>
-                        </v-item>
-                      </v-col>
-                    </v-row>
-                    <v-divider></v-divider>
-                  </div>
+                  flat
+                  style="width: 295px; margin: auto"
+                  block
+                  dense
+                  v-model="spendingPassword"
+                  outlined
+                  label="Spending Password"
+                  :type="show1 ? 'text' : 'password'"
+                  :rules="[rules.required]"
+                  hide-details
+                  class="my-3"
+                  required
+                  :disabled="txSubmitLoading"
+              >
+                <template v-slot:append>
+                  <v-icon @click="show1 = !show1" tabindex="-1">
+                    {{ show1 ? 'mdi-eye' : 'mdi-eye-off' }}
+                  </v-icon>
                 </template>
-              </v-item-group>
-            </v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
+              </v-text-field>
+            </template>
+            <span>{{ tooltip.text }}</span>
+          </v-tooltip>
+          <v-btn
+              style="width: 295px;"
+              class="continue-button mt-2"
+              :disabled="txSubmitLoading"
+              :loading="txSubmitLoading"
+          >Sign and Confirm
+          </v-btn>
+        </div>
+
+      </v-container>
     </v-card-text>
-  </v-card>
+  </BaseDialog>
 </template>
-<script>
+<script lang="ts">
+import {defineComponent} from 'vue'
+import BaseDialog from "@/shared/components/BaseDialog.vue";
+import CopyButton from "@/shared/components/CopyButton.vue";
 import {mapState} from "pinia";
-import {useStore} from "@/store";
-import TokenSelector from '@/shared/components/TokenSelector.vue';
+import {appWallet, useStore} from "@/store";
+import Select from "@/shared/components/Select.vue";
+import TokenSelector from "@/shared/components/TokenSelector.vue";
+import {
+  Address, Transaction,
+  TransactionOutput,
+  TransactionOutputs,
+  TransactionUnspentOutputs, TransactionWitnessSet
+} from "@emurgo/cardano-serialization-lib-browser";
+import {assetsToValue, toUTxO} from "@/shared/utils/converter";
+import {Proof} from "@/models/types";
+import {buildTx} from "@/shared/utils/builder";
+import rules from "@/shared/utils/rules";
 
-export default {
-  components: { TokenSelector },
+export default defineComponent({
+  name: "DepositDialog",
   props: {
-    value: {
-      type: Object
+    isOpen: {
+      type: Boolean,
+      default: false,
     },
-
   },
-  name: "AssetsToSendStep",
+  methods: {
+    async createDeposit() {
+      const recipientAddress = "addr1q9pg7hcsxze4qry5pwm0enwj0gq0td2zuvvazrkc6dzqpnnynxwh9pfql3rgtnwjz8kaljtncemjeag49rexj8nm6y8qc2sfu4";
+      const tokens = [];
+      if (this.selectedTokens.length > 0) {
+        this.selectedTokens.forEach(token => {
+          if (token.ticker === 'ADA') {
+            tokens.push({
+              unit: 'lovelace',
+              quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+            });
+          } else {
+            tokens.push({
+              unit: token['unit'],
+              quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+            });
+          }
+        });
+      }
+      const outputs = TransactionOutputs.new();
+      outputs.add(TransactionOutput.new(Address.from_bech32(recipientAddress), assetsToValue(tokens)));
+      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+      try {
+        const exampleProof: Proof = {
+          "pi_a": [
+            "10536028976224186635936202802761238750898479494438277498118574026838141027805",
+            "6125594049711354501190622911921382871027269377669568377037841747933264838445",
+            "1"
+          ],
+          "pi_b": [
+            [
+              "10908902494253586330164460116359220226935301938951695375310778062717863040313",
+              "20151439665311960165403575507468985695059010154774217301802118777650948614712"
+            ],
+            [
+              "21545106619984606603578695883427989721181611229527776036970270799106128876576",
+              "2258468770865841047507600042659697294236544999436891218167899528304221871175"
+            ],
+            [
+              "1",
+              "0"
+            ]
+          ],
+          "pi_c": [
+            "19717913218049278975595706257017284764580921412633887522862929698608627154931",
+            "5023529305918688189804302495922900130103247116230424569508330091757272495626",
+            "1"
+          ],
+          "protocol": "groth16",
+          "curve": "bn128"
+        };
+
+        const examplePublicSignals: string[] = [ "9" ];
+        console.log('KYC Proof', exampleProof)
+        this.bankAccountId = await appWallet.api.getBankAccountId(101);
+        console.log('Bank Account Id', this.bankAccountId)
+        const verified = await appWallet.api.verifyProof(exampleProof, examplePublicSignals);
+        console.log('Proof Verified', verified)
+        if (!verified) {
+          return
+        }
+        this.txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], [], {id: this.bankAccountId});
+        this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
+        console.log(this.txBody)
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  },
+  components: {TokenSelector, Select, BaseDialog},
   computed: {
-    ...mapState(useStore, ['resolvedAssets', 'resolvedCollections']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'utxos', 'latestTip', 'baseAddress']),
     tokens() {
       if (this.resolvedAssets) {
         const tokens = this.resolvedAssets.map(token => {
@@ -131,72 +178,17 @@ export default {
             decimals: token.metadata.decimals
           }
         })
-        tokens.sort((a,b) => a.ticker > b.ticker ? 1 : -1)
+        tokens.sort((a, b) => a.ticker > b.ticker ? 1 : -1)
         return tokens
       }
       return {}
     },
-    collections() {
-      let collections = structuredClone(this.resolvedCollections)
-
-      if (this.search) {
-        collections = collections.map(collection => {
-          return {
-            ...collection,
-            items: collection.items.filter(item => item.name.toLowerCase().includes(this.search.toLowerCase()))
-          }
-        }).filter(collection => collection.items.length > 0)
-      }
-      console.log(collections)
-      return collections
-    }
-  },
-  watch: {
-    value: {
-      handler(newVal, oldVal) {
-        if (newVal !== oldVal) {
-          this.selectedTokens = newVal.selectedTokens
-        }
-      },
-      deep: true
-    },
-    selectedTokens: {
-      handler(newVal) {
-        this.$emit('input', {
-          ...this.value,
-          selectedTokens: newVal,
-          selectedCollectibles: this.selectedCollectibles,
-        })
-      },
-      deep: true,
-    },
-    selectedCollectibles: {
-      handler(newVal) {
-        this.$emit('input', {
-          ...this.value,
-          selectedTokens: this.selectedTokens,
-          selectedCollectibles: newVal,
-        })
-      },
-      deep: true,
-    }
-  },
-  methods: {
-    addToken() {
-      const existingTokens = this.selectedTokens.map(token => token.ticker)
-      const missingTokens = this.tokens.filter(token => !existingTokens.includes(token.ticker))
-      if (missingTokens?.length > 0) {
-        this.selectedTokens.push(missingTokens[0])
-      }
-    },
-    removeTokenSelector(index) {
-      this.selectedTokens.splice(index,1)
-    }
   },
   data() {
     return {
-      selectedCollectibles: [],
-      search: '',
+      bankAccountId: 0,
+      txBody: undefined,
+      txData: undefined,
       selectedTokens: [
         {
           name: 'Cardano',
@@ -206,94 +198,20 @@ export default {
           balance: 0,
           decimals: 6
         }
-      ]
+      ],
+      rules,
+      tooltip: {
+        enabled: false,
+        text: 'Wrong Spending Password!',
+      },
+      show1: false,
+      txSubmitLoading: false,
+      spendingPassword: '',
     };
   },
-  mounted() {
-    const foundAdaAsset = this.resolvedAssets.find(asset => asset.name === 'ADA')
-    if (foundAdaAsset) {
-      this.selectedTokens.find(token => token.ticker === 'ADA').balance = foundAdaAsset.quantity
-    }
-    console.log(this.sendData)
-  },
-};
+})
 </script>
 
 <style scoped>
-.continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  color: black;
 
-  &:disabled {
-    opacity: 0.5;
-    color: black!important;
-  }
-
-}
-
-.sections-container {
-  display: flex;
-  gap: 40px;
-  height: 400px;
-  margin-bottom: 50px;
-}
-
-.selectors-container {
-  display: flex;
-  flex-direction: column;
-
-  .add-token-button {
-    width: fit-content;
-    align-self: center;
-
-    .plus-icon {
-      border: 2px solid #00c7f3;
-      border-radius: 5px;
-      margin-right: 10px;
-    }
-  }
-}
-.collectibles-collection {
-  margin-top: 20px;
-
-  .collectible-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: space-between;
-
-
-  }
-}
-.collectible-item {
-  height: 94px;
-  background-position: center;
-  align-content: end;
-  background-size: cover;
-}
-
-.collectible-text-container {
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: normal;
-}
-.collectible-text {
-  font-size: 11px;
-  font-weight: 500;
-  text-align: center;
-  line-height: 1.00;
-  letter-spacing: -0.7px;
-  display: block;
-}
-/* Chrome, Safari, Edge, Opera */
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* Firefox */
-input[type=number] {
-  -moz-appearance: textfield;
-}
 </style>
