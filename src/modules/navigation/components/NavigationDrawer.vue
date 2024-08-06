@@ -1,12 +1,11 @@
 <template>
   <v-navigation-drawer
       v-model="drawer"
-      width="280"
+      width="270"
       height="100vh"
       style="min-width: 270px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
-      permanent
-      floating
       class="px-3"
+      v-show="!$vuetify.breakpoint.mobile || drawer"
   >
     <template v-slot:prepend>
       <v-list-item class="text-center">
@@ -14,8 +13,6 @@
           <v-list-item-title>
             <img
                 :src="require('../assets/gero_dashboards.png')" width="100" alt="logo"
-                style="-webkit-filter: drop-shadow(-8px 3px 6px #B71C1C2D);
-              filter: drop-shadow(-8px 3px 6px #B71C1C2D);"
             />
           </v-list-item-title>
         </v-list-item-content>
@@ -194,11 +191,49 @@ import {useStore} from "@/store";
 
 export default {
   name: 'NavigationDrawer',
+  props: {
+    value: {
+      type: Boolean,
+      default: false
+    }
+  },
   filters,
+  watch: {
+    value(val) {
+      this.drawer = val
+    }
+  },
+  computed: {
+    ...mapState(useStore, ['wallets', 'loggedWallet']),
+    avatar() {
+      if (this.account.icon.includes('http')) {
+        return this.account.icon
+      } else {
+        return this.resolveIcon(this.account.icon)
+      }
+    },
+    account() {
+      if (this.loggedWallet) {
+        return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
+      }
+      return null
+    },
+    drawer: {
+      get() {
+        if (!this.$vuetify.breakpoint.mobile) {
+          return true;
+        } else {
+          return this.value
+        }
+      },
+      set(val) {
+        this.$emit('value', val)
+      }
+    }
+  },
   data: () => ({
     avatarsLoading: true,
     loading: false,
-    drawer: true,
     network: 'mainnet',
     assets: [],
     selectedAvatar: undefined,
@@ -208,6 +243,8 @@ export default {
       // { header: 'Home' },
       {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/'},
       {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking'},
+      {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback'},
+      {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat'},
       // {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap'},
       // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
       // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
@@ -225,22 +262,6 @@ export default {
     ],
     errorImage: require('@/assets/img/1x1.png')
   }),
-  computed: {
-    ...mapState(useStore, ['wallets', 'loggedWallet']),
-    avatar() {
-      if (this.account.icon.includes('http')) {
-        return this.account.icon
-      } else {
-        return this.resolveIcon(this.account.icon)
-      }
-    },
-    account() {
-      if (this.loggedWallet) {
-        return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
-      }
-      return null
-    },
-  },
   methods: {
     ...mapActions(useStore, ['logout']),
     async submitLogout() {
@@ -277,8 +298,7 @@ export default {
     fallbackImage(e) {
       e.target.src = this.errorImage
     }
-  },
-  watch: {}
+  }
 }
 </script>
 <style scoped>

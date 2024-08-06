@@ -169,6 +169,14 @@ export type Withdrawal = {
 
 export const DEFAULT_TTL: number = 14400;
 
+export type Proof = {
+  pi_a: string[];
+  pi_b: string[][];
+  pi_c: string[];
+  protocol: string,
+  curve: string,
+}
+
 export {
   HARDENED,
   CoreAddressTypes,
