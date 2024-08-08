@@ -797,35 +797,6 @@ export class Wallet {
     return this.db.open();
   }
 
-  async syncAddresses(): Promise<any> {
-    try {
-      const res = await this.api.getAccountAddresses(this.stakeAddress().to_address().to_bech32());
-      if (res) {
-        return await this.setAccountAddresses(res);
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
-  async setAccountAddresses(res): Promise<any> {
-    return this.db
-      .open()
-      .then(db => {
-        const addressesTable = db.table('addresses');
-
-        if (!addressesTable) throw new Error('No Addresses table.');
-
-        res.forEach(address => {
-          addressesTable.put({ address: address.address });
-        });
-        return res;
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
   public async getBlockchainDb(): Promise<Dexie> {
     return db.checkAndCreateBlockchainDatabase(this.chain + '_' + this.network);
   }

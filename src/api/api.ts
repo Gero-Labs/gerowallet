@@ -107,20 +107,6 @@ export class Api {
     }
   }
 
-  async getAddressTransactions(address: string, fromBlockHeight: number) {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/address/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&address=${address}&from=${fromBlockHeight}`);
-      if (status === 200)
-        return data
-      if (status === 404) {
-        return null
-      }
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getAssetsInfo(units) {
     try {
       const { data, status } = await this.axiosInstance.post(
@@ -235,4 +221,54 @@ export class Api {
     }
   }
 
+  async checkAvailability(): Promise<boolean> {
+    try {
+      const { data, status } = await this.axiosInstance.get("/api/bring/check-availability?country=us"); //TODO
+      if (status === 200) return data?.isAvailable;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async categories(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get("/api/bring/categories");
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async searchTerms(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get("/api/bring/search-terms");
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async retailers(category?: number, search?: string): Promise<any> {
+    try {
+      const requestBody = {
+        type: 'all',
+        country: "us", //TODO
+        page: 0,
+        pageSize: 250
+      }
+      if (category) {
+        requestBody['category'] = category
+      } else if (search) {
+        requestBody['search'] = search
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/bring/retailers`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }

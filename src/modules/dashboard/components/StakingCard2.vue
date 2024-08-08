@@ -198,7 +198,7 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'utxos', 'latestTip', 'baseAddress', 'stakeAddress']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'utxos', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
     Network() {
       return Network
     },
