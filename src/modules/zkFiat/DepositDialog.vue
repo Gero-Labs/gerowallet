@@ -69,7 +69,6 @@
 <script lang="ts">
 import {defineComponent} from 'vue'
 import BaseDialog from "@/shared/components/BaseDialog.vue";
-import CopyButton from "@/shared/components/CopyButton.vue";
 import {mapState} from "pinia";
 import {appWallet, useStore} from "@/store";
 import Select from "@/shared/components/Select.vue";
