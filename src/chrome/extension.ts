@@ -408,6 +408,23 @@ export const getAddress = async () => {
   ).to_address().to_hex();
 };
 
+export const getAddressBech32 = async () => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+      .derive(ChainDerivations.EXTERNAL)
+      .derive(0)
+      .to_raw_key();
+  const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+      .derive(ChainDerivations.CHIMERIC_ACCOUNT)
+      .derive(STAKING_KEY_INDEX)
+      .to_raw_key();
+  return BaseAddress.new(
+      networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
+      StakeCredential.from_keyhash(pubKey.hash()),
+      StakeCredential.from_keyhash(stakeKey.hash()),
+  ).to_address().to_bech32();
+};
+
 export const getRewardAddresses = async () => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])

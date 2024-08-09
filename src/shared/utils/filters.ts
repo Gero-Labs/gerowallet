@@ -25,12 +25,12 @@ const filters = {
   toIPFS(value: string) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value;
   },
-  toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbol?: string, human?: boolean, decimals?: number) {
+  toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
     if (decimals == 1) {
       console.log('toCurrency')
     }
-    if (symbol == undefined) {
-      symbol = '₳'
+    if (symbolPrefix == undefined) {
+      symbolPrefix = '₳'
     }
     if (decimals == undefined) {
       decimals = 6
@@ -49,12 +49,12 @@ const filters = {
       const item = lookup.slice().reverse().find(function (item) {
         return res >= item.value;
       });
-      return symbol+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0");
+      return symbolPrefix+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0")+symbolSuffix;
     }
     if (res >= 0) {
-      return (signs ? '+ ' : '') + symbol+ (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString());
+      return (signs ? '+ ' : '') + symbolPrefix + (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString()) + symbolSuffix;
     }
-    return (signs ? '- ' : '') + symbol+(decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString());
+    return (signs ? '- ' : '') + symbolPrefix + (decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString()) + symbolSuffix;
   },
   stateColor(state: string) {
     if (state === 'NOT_FOR_SALE') {

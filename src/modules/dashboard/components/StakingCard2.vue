@@ -79,14 +79,14 @@
                   </template>
                 </v-progress-linear>
                 <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
-                  <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', true) }}</strong>
+                  <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', '', true) }}</strong>
                   <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
+                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
                   </strong>
                   <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
+                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
                   </strong>
                 </div>
               </v-col>

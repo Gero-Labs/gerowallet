@@ -133,14 +133,14 @@
                   </template>
                 </v-progress-linear>
                 <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify;">
-                  <strong>{{ item.active_stake | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}</strong>
+                  <strong>{{ item.active_stake | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}</strong>
                   <strong v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
+                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
                   </strong>
                   <strong v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
+                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
                   </strong>
                 </div>
               </template>
@@ -149,7 +149,7 @@
                   }}</span>
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
-                {{ item.pledge | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), true) }}
+                {{ item.pledge | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
                 <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)">mdi-check</v-icon>
                 <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
               </template>

@@ -41,6 +41,14 @@ export const getAddress = async (): Promise<string[]> => {
   return [result['data']];
 };
 
+export const getAddressBech32 = async (): Promise<string[]> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getAddressBech32,
+    data: {}
+  });
+  return [result['data']];
+};
+
 export const getRewardAddresses = async (): Promise<string[]> => {
   const result = await Messaging.sendToContent({
     method: METHOD.getRewardAddresses,
