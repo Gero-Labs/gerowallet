@@ -170,7 +170,6 @@ export const Messaging = {
     // listen to events from background
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener(async (response) => {
-        console.log(response)
         if (
           typeof response !== 'object' ||
           response === null ||
@@ -182,14 +181,16 @@ export const Messaging = {
         )
           return;
 
-        const whitelisted = await Messaging.sendToBackground({
-          method: METHOD.isWhitelisted,
-          origin: window.origin,
-        });
+        if (response.action !== "GET_WALLET_ADDRESS") {
+          const whitelisted = await Messaging.sendToBackground({
+            method: METHOD.isWhitelisted,
+            origin: window.origin,
+          });
 
-        // protect background by not allowing not whitelisted
-        if (!whitelisted || (whitelisted as any).error) return;
-
+          // protect background by not allowing not whitelisted
+          if (!whitelisted || (whitelisted as any).error) return;
+        }
+        console.log(`${TARGET}${response.event}`)
         const event = new CustomEvent(`${TARGET}${response.event}`, {
           detail: response.data,
         });

@@ -13,6 +13,7 @@ export const METHOD = {
   getRewardAddresses: 'getRewardAddresses',
   getUsedAddresses: 'getUsedAddresses',
   getAddress: 'getAddress',
+  getAddressBech32: 'getAddressBech32',
   signData: 'signData',
   signTx: 'signTx',
   submitTx: 'submitTx',

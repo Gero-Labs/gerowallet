@@ -2,6 +2,7 @@ import {
   focusOrCreatePopup,
   extractKeyHash,
   getAddress,
+  getAddressBech32,
   getBalance,
   getStorage,
   isWhitelisted,
@@ -141,6 +142,25 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
   const address = await getAddress();
+  if (address) {
+    sendResponse({
+      id: request.id,
+      data: address,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
+  const address = await getAddressBech32();
   if (address) {
     sendResponse({
       id: request.id,
