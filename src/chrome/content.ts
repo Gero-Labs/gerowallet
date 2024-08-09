@@ -1,12 +1,10 @@
 import { Messaging } from './messaging';
 import { bringInitContentScript } from '@bringweb3/sdk';
-import {getAddress} from "@/chrome/webpage";
+import { getAddressBech32 } from "@/chrome/webpage";
 
 const getWalletAddress = async (): Promise<string> => {
-  console.log('getWalletAddress')
   try {
-    const addresses = await getAddress()
-    console.log(addresses)
+    const addresses = await getAddressBech32()
     if (addresses && addresses.length > 0) {
       return addresses[0]
     }

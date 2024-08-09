@@ -49,6 +49,7 @@ export const useStore = defineStore('store', {
     addresses: undefined,
     fiatRates: undefined,
     currency: undefined,
+    bringCache: undefined
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -138,7 +139,6 @@ export const useStore = defineStore('store', {
                   statuses.push('Stake Deregistration')
                 }
               })
-              console.log(this.pools)
             }
             if (totalAmount > 0) {
               statuses.push('Received')
@@ -371,6 +371,7 @@ export const useStore = defineStore('store', {
       promises.push(this.loadAssets())
       promises.push(this.loadRewards())
       promises.push(this.loadConnectedDapps())
+      promises.push(this.loadBringCache())
       await Promise.all(promises)
       try {
         await appWallet.fetchTip().then(tip => {
@@ -536,6 +537,12 @@ export const useStore = defineStore('store', {
           console.error('Failed to Fetch Connected Dapps:', error)
         }
       });
+    },
+    async loadBringCache() {
+      if (!appWallet) {
+        return
+      }
+      this.bringCache = await appWallet.api.cache(appWallet.baseAddress().to_address().to_bech32())
     },
     async disconnectDapp(id: number) {
       if (!appWallet) {

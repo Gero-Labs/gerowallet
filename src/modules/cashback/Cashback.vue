@@ -18,10 +18,10 @@
             </div>
             <div class="amount-section">
               <div class="amount">
-                <div class="highlight-text">A100.00</div>
+                <div class="highlight-text">{{ eligible ? eligible.tokenAmount : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</div>
               </div>
               <div class="usd-amount">
-                <div class="usd-text">$1,280</div>
+                <div class="usd-text">{{ eligible ? eligible.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false) }}</div>
               </div>
             </div>
           </div>
@@ -44,10 +44,10 @@
             </div>
             <div class="amount-section">
               <div class="amount">
-                <div class="secondary-text">A100.00</div>
+                <div class="secondary-text">{{ pending ? pending.tokenAmount : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false) }}</div>
               </div>
               <div class="usd-amount">
-                <div class="usd-secondary-text">$1,280</div>
+                <div class="usd-secondary-text">{{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}</div>
               </div>
             </div>
           </div>
@@ -70,9 +70,9 @@
             </v-chip>
           </v-chip-group>
         </v-col>
-        <v-col cols="12" xl="3" lg="3" md="3">
+        <v-col cols="12" xl="2" lg="2" md="2">
         </v-col>
-        <v-col cols="12" xl="3" lg="3" md="3">
+        <v-col cols="12" xl="4" lg="4" md="4">
           <v-autocomplete
             flat
             v-model="model"
@@ -115,7 +115,6 @@
             type="image"
           ></v-skeleton-loader>
         </v-col>
-
       </v-row>
     </v-card-text>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
@@ -123,19 +122,34 @@
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { appWallet } from '@/store';
+import {appWallet, useStore} from '@/store';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
+import {mapState} from "pinia";
+import filters from "@/shared/utils/filters";
 
 export default defineComponent({
   name: 'Cashback.vue',
   components: { ViewRewardsDialog},
   computed: {
+    ...mapState(useStore, ['bringCache']),
     terms() {
       return this.entries
     },
     selectedCategory() {
       return this.categories.items[this.selectedCategoryIndex]
-    }
+    },
+    eligible() {
+      if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
+        return this.bringCache.data.eligible[0]
+      }
+      return undefined
+    },
+    pending() {
+      if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
+        return this.bringCache.data.totalPendings[0]
+      }
+      return undefined
+    },
   },
   watch: {
     async model(val) {
@@ -194,6 +208,7 @@ export default defineComponent({
       return item.toLowerCase().startsWith(queryText.toLowerCase())
     }
   },
+  filters,
   data() {
     return {
       selectedCategoryIndex: 0,

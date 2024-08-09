@@ -14,48 +14,136 @@
                 </div>
                 <div class="amount-section">
                   <div class="amount">
-                    <div class="highlight-text">A100.00</div>
+                    <div class="highlight-text">{{ eligible ? eligible.tokenAmount : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</div>
                   </div>
-                  <div class="usd-amount">
-                    <div class="usd-text">$1,280</div>
+                  <div class="usd-amount" v-if="eligible">
+                    <div class="usd-text">Total Value: {{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}</div>
                   </div>
+                  <span v-if="eligible">Minimum to claim {{ eligible ? eligible.minimumClaimThreshold : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</span>
                 </div>
               </div>
-              <v-btn icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);">Claim</v-btn>
+              <v-btn icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold < eligible.tokenAmount">Claim</v-btn>
             </div>
           </div>
         </v-col>
         <v-col cols="12" xl="5" lg="5" md="5" class="text-center" style="align-content: center;">
           <div>
             <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">Pending Rewards</div>
-            <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">A100.00</div>
-            <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">$1,280</div>
+            <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">
+              {{ pending ? pending.tokenAmount : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false) }}
+            </div>
+            <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
+              {{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}
+            </div>
           </div>
         </v-col>
       </v-row>
     </div>
+    <v-card-title>
+      Rewards Details
+      <v-spacer></v-spacer>
+      <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
+        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Deals&nbsp;
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{deals?.length}}</v-chip>
+        </v-btn>
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> Claims&nbsp;
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{claims.length}}</v-chip>
+        </v-btn>
+      </v-btn-toggle>
+    </v-card-title>
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-      <v-card-title class="px-0 pb-0">Transaction History</v-card-title>
-      <v-data-table :headers="headers" :items="transactions" hide-default-footer hide-default-header>
-        <template v-slot:[`item.retailer`]="{ item }">
-          {{item}}
-        </template>
-      </v-data-table>
+      <v-tabs-items v-model="currentTab" class="transparent">
+        <v-tab-item>
+          <v-card outlined>
+            <v-data-table
+                :headers="dealsHeaders"
+                :items="deals"
+                hide-default-footer
+                class="transparent"
+                :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+                show-expand
+                single-expand
+                :expanded.sync="expanded"
+                item-key="retailerName"
+            >
+              <template v-slot:[`item.retailerName`]="{ item }">
+                <v-list-item>
+                  <v-list-item-avatar :color="item.retailerBackgroundColor">
+                    <v-img :src="bringCache.retailerIconBasePath+item.retailerIconPath" contain></v-img>
+                  </v-list-item-avatar>
+                  <v-list-item-title>{{ item.retailerName }}</v-list-item-title>
+                </v-list-item>
+              </template>
+              <template v-slot:[`item.eligibleDate`]="{ item }">
+                <Countdown :deadline="new Date(item.eligibleDate)"></Countdown>
+              </template>
+              <template v-slot:[`item.tokenAmount`]="{ item }">
+                <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
+                <div style="color: #475467">{{item.totalEstimatedUsd | toCurrency(false, 2, '$', '', true, 0)}}</div>
+              </template>
+              <template v-slot:expanded-item="{ headers, item }">
+                <td :colspan="headers.length">
+                  <v-timeline v-if="item.history?.length > 0">
+                    <v-timeline-item
+                        v-for="(history, i) in item.history"
+                        :key="i"
+                        :color="getColor(history.action)"
+                        small
+                    >
+                      <template v-slot:opposite>
+                        <span
+                            :class="`headline font-weight-bold ${getColor(history.action)}--text`"
+                            v-text="history.year"
+                        ></span>
+                      </template>
+                      <div class="py-4">
+                        <h2 :class="`headline font-weight-light mb-4 ${getColor(history.action)}--text`">
+                          {{ getActionTitle(history.actiom)}}
+                        </h2>
+                        <div>
+                          {{ getActionText(history.actiom)}}
+                        </div>
+                      </div>
+                    </v-timeline-item>
+                  </v-timeline>
+                  <span v-else>No Data</span>
+                </td>
+              </template>
+            </v-data-table>
+          </v-card>
+        </v-tab-item>
+        <v-tab-item>
+          <v-card outlined>
+            <v-data-table
+                :headers="claimHeaders"
+                :items="claims"
+                hide-default-footer
+                class="transparent"
+                :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+            >
+              <template v-slot:[`item.date`]="{ item }">
+                {{new Date(item.date).toLocaleString()}}
+              </template>
+              <template v-slot:[`item.tokenAmount`]="{ item }">
+                <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
+              </template>
+            </v-data-table>
+          </v-card>
+        </v-tab-item>
+      </v-tabs-items>
     </v-card-text>
   </BaseDialog>
 </template>
 <script>
-import QRCodeStyling from 'qr-code-styling';
-import Vue from 'vue';
 import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
-import CopyButton from '@/shared/components/CopyButton.vue';
+import { useStore } from '@/store';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
+import Countdown from "@/shared/components/Countdown.vue";
 
 export default {
   name: 'ViewRewardsDialog',
-  components: { BaseDialog },
+  components: {Countdown, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,
@@ -64,20 +152,77 @@ export default {
   },
   filters,
   computed: {
-
+    ...mapState(useStore, ['bringCache']),
+    eligible() {
+      if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
+        return this.bringCache.data.eligible[0]
+      }
+      return undefined
+    },
+    pending() {
+      if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
+        return this.bringCache.data.totalPendings[0]
+      }
+      return undefined
+    },
+    claims() {
+      if (this.bringCache) {
+        return this.bringCache.data.movements.claims
+      }
+      return []
+    },
+    deals() {
+      if (this.bringCache) {
+        return this.bringCache.data.movements.deals
+      }
+      return []
+    }
   },
   methods: {
-
+    handleSwitchTab(tab) {
+      this.currentTab = tab;
+    },
+    getColor(action) {
+      if (action === 'PURCHASE_POSTED') {
+        return 'red'
+      } else if (action === 'PURCHASE_APPROVED') {
+        return 'green'
+      } else { //PURCHASE_CORRECTED
+        return 'blue'
+      }
+    },
+    getActionTitle(action) {
+      if (action === 'PURCHASE_POSTED') {
+        return 'Purchase Made'
+      } else if (action === 'PURCHASE_APPROVED') {
+        return 'Cashback Eligible'
+      } else { //PURCHASE_CORRECTED
+        return 'Purchase Updated'
+      }
+    },
+    getActionText(action) {
+      if (action === 'PURCHASE_POSTED') {
+        return 'A purchase has been successfully completed.'
+      } else if (action === 'PURCHASE_APPROVED') {
+        return 'Your recent purchase is now eligible for cashback rewards.'
+      } else { //PURCHASE_CORRECTED
+        return 'The amount or release date of your purchase has been adjusted due to a retailer\'s decision or item return.'
+      }
+    }
   },
   data: () => ({
-    transactions: [],
-    headers: [
-      { text: "Store Name", align: "start", sortable: true, value: "retailer"},
-      { text: "Available In", align: "center", sortable: true, value: "available_in"},
-      { text: "Claimed Amount", align: "center", sortable: true, value: "claimed_amount"},
-      { text: "Transaction Date", align: "center", sortable: true, value: "tx_date"},
-      { text: "Details", align: "center", sortable: true, value: "details"},
-    ]
+    currentTab: 0,
+    dealsHeaders: [
+      { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
+      { text: "Available In", align: "center", sortable: true, value: "eligibleDate"},
+      { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+      { text: '', value: 'data-table-expand' },
+    ],
+    expanded: [],
+    claimHeaders: [
+      { text: "Time", align: "start", sortable: true, value: "date"},
+      { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+    ],
   }),
   mounted() {
 
