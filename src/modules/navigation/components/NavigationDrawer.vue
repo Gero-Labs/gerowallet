@@ -250,7 +250,7 @@ export default {
       // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
       // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
       // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
-      {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', soon: true},
+      {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player'},
       {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
       {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},
       // { header: 'Tools' },

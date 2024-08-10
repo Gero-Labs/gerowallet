@@ -106,7 +106,20 @@
         <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
           <v-card class="pa-4 fill-height" flat outlined style="background-color: black!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
             <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
-              <v-img :src="retailer.img" contain style="margin: auto;" eager></v-img>
+              <v-img :src="retailer.img" contain style="margin: auto;" eager>
+                <template v-slot:placeholder>
+                  <v-row
+                      class="fill-height ma-0"
+                      align="center"
+                      justify="center"
+                  >
+                    <v-progress-circular
+                        indeterminate
+                        color="primary"
+                    ></v-progress-circular>
+                  </v-row>
+                </template>
+              </v-img>
             </v-avatar>
             <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
             <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-card-subtitle>

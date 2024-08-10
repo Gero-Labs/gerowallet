@@ -408,8 +408,6 @@ const openUI = async () => {
   await openDashboard();
 };
 
-if (chrome?.action) {
-  chrome.action.onClicked.addListener(openUI);
-}
+chrome.action.onClicked.addListener(openUI);
 
 app.listen();
