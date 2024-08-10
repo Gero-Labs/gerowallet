@@ -7,7 +7,7 @@ import Vue from 'vue';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
 import { createPinia, Pinia, PiniaVuePlugin } from 'pinia';
-
+import VueShowdown from 'vue-showdown'
 import i18n from '@/plugins/i18n';
 import vuetify from '@/plugins/vuetify';
 import router from '@/modules/navigation/router';
@@ -19,7 +19,14 @@ Vue.config.productionTip = false;
 
 Vue.use(FlagIcon);
 Vue.use(PiniaVuePlugin);
-
+Vue.use(VueShowdown, {
+  // set default flavor of showdown
+  flavor: 'github',
+  // set default options of showdown (will override the flavor options)
+  options: {
+    emoji: false,
+  },
+})
 const pinia: Pinia = createPinia();
 pinia.use(piniaPluginPersistedstate);
 

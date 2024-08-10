@@ -29,7 +29,7 @@
             ></StackedTokens>
           </template>
           <template v-slot:[`item.amount`]="{ item }">
-            <span :style="{ color: getColor(item) }">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), false) }}</span>
+            <span :style="{ color: getColor(item) }" v-if="loggedWallet">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}</span>
           </template>
         </v-data-table>
       </v-card-text>
@@ -85,7 +85,6 @@ export default defineComponent({
       return '';
     },
     getColor(item) {
-      console.log(item)
       if (item.status === 'Pending') {
         return '#FEC84B';
       } else if (item.status.includes('Received')) {

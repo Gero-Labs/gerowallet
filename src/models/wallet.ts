@@ -49,6 +49,7 @@ import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types
 import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
+import socket from '@/plugins/socket';
 
 const blake2b = require('blake2b');
 
@@ -87,7 +88,7 @@ export class Wallet {
   static class(wallet, provider) {
     const wal = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
-    wal.api = new Api(provider);
+    wal.api = new Api(wallet, provider);
     wal.db = new Dexie('wallet-' + wallet.id);
     return wal;
   }
@@ -568,6 +569,56 @@ export class Wallet {
       console.log('sync');
       const lastSyncInfo = await this.getLastSyncInfo();
       if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+        const promises = [];
+        promises.push(this.syncStakingPools());
+        const prevAccountInfo = await this.getAccountInfo()
+        socket.sendSync(tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo.rewards_sum, prevAccountInfo.controlled_amount)
+        // promises.push(this.api.sync(tip.height, this.stakeAddress().to_address().to_bech32(), prevAccountInfo).then(async syncResponse => {
+        //   if (!syncResponse.success) {
+        //     return;
+        //   }
+        //   if (syncResponse.transactions && Array.isArray(syncResponse.transactions)) {
+        //     await this.setAccountTransactions(syncResponse.transactions);
+        //     await this.setAssets2(syncResponse.assets)
+        //   }
+        //   await this.setLastSyncInfo(tip);
+        // }))
+      }
+      this.locked = false;
+    }
+  }
+
+  async setSync(syncObject) {
+    if (syncObject && syncObject.success) {
+      const promises = []
+      if (syncObject.account) {
+        promises.push(this.setAccountInfo(syncObject))
+      }
+      if (syncObject.assets) {
+        promises.push(this.setAssets2(syncObject.assets))
+      }
+      if (syncObject.rewards) {
+        promises.push(this.setAccountRewards(syncObject.rewards))
+      }
+      if (syncObject.transactions) {
+        promises.push(this.setAccountTransactions(syncObject.transactions))
+      }
+      if (syncObject.block) {
+        promises.push(this.setLastSyncInfo(syncObject.block))
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises)
+      }
+    }
+  }
+
+
+  async sync2(tip): Promise<void> {
+    if (!this.locked) {
+      this.locked = true;
+      console.log('sync');
+      const lastSyncInfo = await this.getLastSyncInfo();
+      if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const prevAccountInfo = await this.getAccountInfo()
         const promises = [];
         promises.push(this.syncStakingPools());
@@ -641,6 +692,21 @@ export class Wallet {
     const assets = (await Promise.all(promises)).flat();
     console.log(assets)
     assetsSyncTable.put({ time: new Date().getTime() });
+  }
+
+  async setAssets2(assets): Promise<any> {
+    const blockchainDB: Dexie = await this.getBlockchainDb();
+    const assetsSyncTable = blockchainDB.table('assets_sync');
+    return this.db.open()
+      .then(db => {
+        const assetsTable = db.table('assets');
+        if (assetsTable) {
+          assetsTable.bulkPut(assets);
+        }
+        assetsSyncTable.put({ time: new Date().getTime() });
+      }).catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
   }
 
   private async getAssetsInfo(units: string[], blockchainDB: Dexie) {

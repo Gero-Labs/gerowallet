@@ -32,6 +32,9 @@ const filters = {
     if (symbolPrefix == undefined) {
       symbolPrefix = '₳'
     }
+    if (symbolSuffix == undefined) {
+      symbolSuffix = ''
+    }
     if (decimals == undefined) {
       decimals = 6
     }
