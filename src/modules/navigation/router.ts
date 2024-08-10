@@ -12,6 +12,7 @@ import DappSignData from '@/popup/modules/views/DappSignData.vue';
 import SignTx from '@/popup/modules/views/SignTx.vue';
 import zkFiat from "@/modules/zkFiat/zkFiat.vue";
 import Cashback from "@/modules/cashback/Cashback.vue";
+import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 
 const routes = [
   {
@@ -71,6 +72,15 @@ const routes = [
     path: '/zkFiat',
     name: 'zkFiat',
     component: zkFiat,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/media-player',
+    name: 'mediaPlayer',
+    component: MediaPlayer,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
