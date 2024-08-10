@@ -2,7 +2,7 @@ import Dexie, {DexieError} from 'dexie';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { useStore } from '@/store';
 import { Wallet } from '@/models/wallet';
-import { Blockchain, CoinTypes, Currency, Network, Provider, WalletType, WalletTypePurpose } from '@/models/types';
+import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 
 const db = new Dexie('GeroWalletDatabase');
 
@@ -16,66 +16,18 @@ db.open().catch(err => {
   console.error(`Failed to open database: ${err.stack || err}`);
 });
 
-await initializeConfigTable();
-
-await initializeProviderTable();
-async function initializeConfigTable() {
-  await db['config'].toArray().then(async rows => {
-    if (rows.length === 0) {
-      const initialData = [{ key: 'provider', value: Provider.KOIOS }];
-      await db['config'].bulkAdd(initialData).catch(error => {
-        console.error('Error adding initial data:', error);
-      });
-    }
-  });
-}
-
-async function initializeProviderTable() {
-  await db['provider'].toArray().then(async rows => {
-    if (rows.length === 0) {
-      const initialData = [
-        {
-          name: Provider.KOIOS,
-          chain: Blockchain.CARDANO,
-          network: Network.MAINNET,
-          baseUrl: 'https://api.koios.rest/api/v1/',
-          apiKey: null
-        },
-        {
-          name: Provider.KOIOS,
-          chain: Blockchain.CARDANO,
-          network: Network.PREPROD,
-          baseUrl: 'https://preprod.koios.rest/api/v1/',
-          apiKey: null
-        },
-        {
-          name: Provider.KOIOS,
-          chain: Blockchain.CARDANO,
-          network: Network.PREVIEW,
-          baseUrl: 'https://preview.koios.rest/api/v1/',
-          apiKey: null
-        },
-        {
-          name: Provider.KOIOS,
-          chain: Blockchain.APEX_PRIME,
-          network: Network.TESTNET,
-          baseUrl: 'http://apex-prime-testnet.gerowallet.io:8053/',
-          apiKey: null
-        },
-        {
-          name: Provider.KOIOS,
-          chain: Blockchain.APEX_VECTOR,
-          network: Network.TESTNET,
-          baseUrl: 'http://apex-vector-testnet.gerowallet.io:8053/',
-          apiKey: null
-        }
-      ];
-      await db['provider'].bulkAdd(initialData).catch(error => {
-        console.error('Error adding initial data:', error);
-      });
-    }
-  });
-}
+// await initializeConfigTable();
+//
+// async function initializeConfigTable() {
+//   await db['config'].toArray().then(async rows => {
+//     if (rows.length === 0) {
+//       const initialData = [{ key: 'provider', value: Provider.KOIOS }];
+//       await db['config'].bulkAdd(initialData).catch(error => {
+//         console.error('Error adding initial data:', error);
+//       });
+//     }
+//   });
+// }
 
 export default {
   async getProvider(chain, network) {

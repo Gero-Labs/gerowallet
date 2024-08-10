@@ -62,7 +62,7 @@
           plain
           :ripple="false"
           style="text-transform: none"
-          href="https://gerowallet.io/assets/downloads/UserAgreement.pdf"
+          href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true"
           target="_blank"
         >
           {{ $t('termsOfService') }}

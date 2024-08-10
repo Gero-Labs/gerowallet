@@ -15,12 +15,12 @@
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Total</span>
-                    <h4 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}</h4>
+                    <h4 style="color: white" v-if="loggedWallet && accountInfo">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}</h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Rewards</span>
-                    <h4 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}</h4>
-                    <v-btn v-if="accountInfo.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
+                    <h4 style="color: white" v-if="accountInfo">{{ accountInfo.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}</h4>
+                    <v-btn v-if="accountInfo?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
                       Withdraw
                     </v-btn>
                   </v-col>
@@ -62,8 +62,8 @@
                 <v-row no-gutters class="pt-2 pb-1">
                   <v-col cols="6" style="display: block;text-align: center;">
                     <h5>Pool Id</h5>
-                    <span style="color: white;">{{ accountInfo.pool_id | truncate }}</span>
-                    <copy-button :value="accountInfo.pool_id" x-small></copy-button>
+                    <span style="color: white;">{{ accountInfo?.pool_id | truncate }}</span>
+                    <copy-button :value="accountInfo?.pool_id" x-small></copy-button>
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;">
                     <h5>ROS</h5>

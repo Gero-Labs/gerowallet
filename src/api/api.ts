@@ -10,10 +10,10 @@ export class Api {
   public provider: string;
   public axiosInstance: AxiosInstance;
 
-  constructor(provider) {
-    this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === provider.chain);
-    this.network = Object.keys(Network).find(key => Network[key] === provider.network);
-    this.provider = Object.keys(Provider).find(key => Provider[key] === provider.name);
+  constructor(wallet, provider: Provider) {
+    this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain);
+    this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
+    this.provider = Provider[provider]
     this.axiosInstance = axios.create({
       baseURL: process.env['VUE_APP_BACKEND_URL'],
       timeout: 120000,
@@ -22,6 +22,19 @@ export class Api {
         'Access-Control-Allow-Origin': '*',
       },
     });
+  }
+
+  async sync(fromBlockHeight, address: string, prevAccountInfo: any) {
+    try {
+      const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
+      const { data, status } = await this.axiosInstance.get(
+        `/api/sync?chain=${this.chain}&network=${this.network}&provider=${this.provider}&from=${fromBlockHeight}&address=${rewardAddress}&rewards_sum=${prevAccountInfo.rewards_sum}&controlled_amount=${prevAccountInfo.controlled_amount}`
+      );
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
   }
 
   async getAccountInfo(address: string) {
@@ -44,19 +57,6 @@ export class Api {
         `/api/account/rewards?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}&page=${page}&size=${size}`
       );
       if (status === 200) return data
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async getAccountAddresses(address: string) {
-    try {
-      const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
-      const { data, status } = await this.axiosInstance.get(
-        `/api/account/addresses?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`
-      );
-      if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -251,17 +251,17 @@ export class Api {
     }
   }
 
-  async retailers(category?: number, search?: string): Promise<any> {
+  async retailers(category: number, search?: string, page?: number): Promise<any> {
+    console.log('retailers')
     try {
       const requestBody = {
         type: 'all',
+        category: category,
         country: "us", //TODO
-        page: 0,
-        pageSize: 250
+        page: page ? page : 0,
+        pageSize: 28
       }
-      if (category) {
-        requestBody['category'] = category
-      } else if (search) {
+      if (search) {
         requestBody['search'] = search
       }
       const { data, status } = await this.axiosInstance.post(`/api/bring/retailers`, requestBody);

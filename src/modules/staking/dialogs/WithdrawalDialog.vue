@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :height="300" title="Withdraw Staking Rewards"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" title="Withdraw Staking Rewards"
               subtitle="Claim your accumulated rewards from staking. Confirm the details and enter your password to proceed.">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert

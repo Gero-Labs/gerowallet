@@ -22,7 +22,7 @@
                   <span v-if="eligible">Minimum to claim {{ eligible ? eligible.minimumClaimThreshold : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</span>
                 </div>
               </div>
-              <v-btn icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold < eligible.tokenAmount">Claim</v-btn>
+              <v-btn class="geroButton" icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold < eligible.tokenAmount">Claim</v-btn>
             </div>
           </div>
         </v-col>
@@ -53,7 +53,7 @@
     </v-card-title>
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-tabs-items v-model="currentTab" class="transparent">
-        <v-tab-item>
+        <v-tab-item :transition="false">
           <v-card outlined>
             <v-data-table
                 :headers="dealsHeaders"
@@ -112,7 +112,7 @@
             </v-data-table>
           </v-card>
         </v-tab-item>
-        <v-tab-item>
+        <v-tab-item :transition="false">
           <v-card outlined>
             <v-data-table
                 :headers="claimHeaders"

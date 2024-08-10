@@ -6,6 +6,11 @@
     <v-card-subtitle class="justify-center text-center" style="font-size: 18px">
       Receive ADA when shopping online!
     </v-card-subtitle>
+    <v-card-subtitle class="justify-center text-center pt-0">
+      <v-btn class="geroButton" style="color:black!important" rounded color="primary" @click="isHowItWorksDialogOpen = true">
+        How it works?
+      </v-btn>
+    </v-card-subtitle>
     <v-card-text>
       <div class="card-text">
         <div class="main-content">
@@ -47,7 +52,7 @@
                 <div class="secondary-text">{{ pending ? pending.tokenAmount : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false) }}</div>
               </div>
               <div class="usd-amount">
-                <div class="usd-secondary-text">{{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}</div>
+                <div class="usd-secondary-text">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false) }}</div>
               </div>
             </div>
           </div>
@@ -58,7 +63,7 @@
           <v-chip-group v-if="chipLoading" column>
             <v-skeleton-loader
               type="chip"
-              v-for="i in 9"
+              v-for="i in 10"
               :key="'chip-'+i"
               class="ma-1"
             >
@@ -92,15 +97,15 @@
             attach
           >
           </v-autocomplete>
-          <div class="pt-4" v-if="retailers.length > 0">
-            {{ retailers.length }} Deals Found
+          <div class="pt-4" v-if="totalItems > 0">
+            {{ totalItems }} Deals Found
           </div>
         </v-col>
       </v-row>
       <v-row class="mt-4" v-show="!isLoading">
-        <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in retailers" :key="retailer.id">
+        <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
           <v-card class="pa-4 fill-height" flat outlined style="background-color: black!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
-            <v-avatar color="white" size="80" v-if="retailer.img">
+            <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
               <v-img :src="retailer.img" contain style="margin: auto;" eager></v-img>
             </v-avatar>
             <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
@@ -117,7 +122,17 @@
         </v-col>
       </v-row>
     </v-card-text>
+    <v-card-actions class="justify-center text-center" style="flex-direction: column;">
+      <v-card-title>
+        {{ loadingMore ? "Loading ..." : "" }}
+      </v-card-title>
+      <v-card-title style="font-size: 14px" v-intersect="onIntersect">
+        Powered By&nbsp;<v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
+      </v-card-title>
+    </v-card-actions>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
+    <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath"></RetailerDialog>
+    <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
   </v-card>
 </template>
 <script lang="ts">
@@ -126,10 +141,12 @@ import {appWallet, useStore} from '@/store';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
 import {mapState} from "pinia";
 import filters from "@/shared/utils/filters";
+import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
+import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
 
 export default defineComponent({
   name: 'Cashback.vue',
-  components: { ViewRewardsDialog},
+  components: { HowItWorksDialog, RetailerDialog, ViewRewardsDialog},
   computed: {
     ...mapState(useStore, ['bringCache']),
     terms() {
@@ -150,56 +167,77 @@ export default defineComponent({
       }
       return undefined
     },
+    deals() {
+      return Object.values(this.retailers)
+    }
   },
   watch: {
+    async isIntersecting(val) {
+      if (val) {
+        console.log(val)
+        if (this.nextPage) {
+          this.loadingMore = true
+          const retailers = await appWallet.api.retailers(this.selectedCategory?.id, this.model, this.nextPage)
+          this.retailers = {...this.retailers, ...retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {}) }
+          this.nextPage = retailers.nextPageNumber
+          console.log(this.retailers)
+          this.loadingMore = false
+        }
+      }
+    },
     async model(val) {
+      console.log(val)
       this.isLoading = true
       if (val) {
-        const retailers = await appWallet.api.retailers(undefined, val)
-        const retailerIconBasePath = retailers.retailerIconBasePath
-        const iconQueryParam = retailers.iconQueryParam
-        this.retailers = retailers.items.map(item => {
-          item.img = retailerIconBasePath+item.iconPath+iconQueryParam
-          return item
-        })
+        const retailers = await appWallet.api.retailers(0, val)
+        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
+        this.nextPage = retailers.nextPageNumber
+        this.totalItems = retailers.totalItems
       } else {
         const retailers = await appWallet.api.retailers(this.selectedCategory.id)
-        const retailerIconBasePath = retailers.retailerIconBasePath
-        const iconQueryParam = retailers.iconQueryParam
-        this.retailers = retailers.items.map(item => {
-          item.img = retailerIconBasePath+item.iconPath+iconQueryParam
-          return item
-        })
+        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
+        this.nextPage = retailers.nextPageNumber
+        this.totalItems = retailers.totalItems
       }
       this.isLoading = false
     },
     search() {
       // Items have already been loaded
       if (this.terms.length > 0) return
-
       // Items have already been requested
       if (this.isLoading) return
-
       this.isLoading = true
-
       appWallet.api.searchTerms()
         .then(res => this.entries = res.items)
         .catch(err => console.log(err))
         .finally(() => this.isLoading = false)
     },
     async selectedCategory() {
-      const retailers = await appWallet.api.retailers(this.selectedCategory.id)
-      const retailerIconBasePath = retailers.retailerIconBasePath
-      const iconQueryParam = retailers.iconQueryParam
-      this.retailers = retailers.items.map(item => {
-        item.img = retailerIconBasePath+item.iconPath+iconQueryParam
-        return item
-      })
+      this.model = ""
+      if (this.selectedCategory) {
+        const retailers = await appWallet.api.retailers(this.selectedCategory.id)
+        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
+        console.log(retailers)
+        this.nextPage = retailers.nextPageNumber
+        this.generalTermsUrl = retailers.generalTermsUrl
+        this.retailerTermsBasePath = retailers.retailerTermsBasePath
+        this.totalItems = retailers.totalItems
+        this.isLoading = false
+      }
     }
   },
   methods: {
+    onIntersect (entries, observer) {
+      this.isIntersecting = entries[0].isIntersecting
+
+    },
     openRetailerDialog(retailer) {
-      console.log(retailer)
+      this.retailer = retailer
+      this.isRetailerDialogOpen = true
+    },
+    closeRetailerDialog() {
+      this.isRetailerDialogOpen = false
+      this.retailer = null
     },
     customAutoCompleteFilter(item, queryText) {
       if (!queryText) {
@@ -211,6 +249,7 @@ export default defineComponent({
   filters,
   data() {
     return {
+      isIntersecting: false,
       selectedCategoryIndex: 0,
       entries: [],
       model: null,
@@ -220,8 +259,16 @@ export default defineComponent({
       },
       chipLoading: false,
       isLoading: false,
-      retailers: [],
+      loadingMore: false,
+      retailers: {},
+      nextPage: null,
       isRewardsDialogOpen: false,
+      isRetailerDialogOpen: false,
+      isHowItWorksDialogOpen: false,
+      retailer: null,
+      generalTermsUrl: null,
+      retailerTermsBasePath: null,
+      totalItems: null
     }
   },
   async mounted() {
@@ -229,23 +276,11 @@ export default defineComponent({
     this.isLoading = true
     const isAvailable = await appWallet.api.checkAvailability()
     if (isAvailable) {
-      this.categories = await appWallet.api.categories()
+      const cat = await appWallet.api.categories()
+      this.categories.items = [{ iconSvg: "", id: 0, name: "All Categories"}]
+      this.categories.items.push(...cat.items)
       this.chipLoading = false
-      if (this.categories?.items.length > 0) {
-        const retailers = await appWallet.api.retailers(this.selectedCategory.id)
-        const retailerIconBasePath = retailers.retailerIconBasePath
-        const iconQueryParam = retailers.iconQueryParam
-        this.retailers = retailers.items.map(item => {
-          item.img = retailerIconBasePath+item.iconPath+iconQueryParam
-          return item
-        })
-
-        const generalTermsUrl = retailers.generalTermsUrl
-        const retailerTermsBasePath = retailers.retailerTermsBasePath
-        console.log(retailers)
-      }
     }
-    this.isLoading = false
   },
 });
 </script>

@@ -1,6 +1,6 @@
 <template>
-  <v-dialog v-model="isDialogOpen" persistent width="850" scrollable>
-    <v-card class="pa-7" :min-height="height" style="background-color: #141414!important;">
+  <v-dialog v-model="isDialogOpen" persistent :width="width" scrollable>
+    <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -49,6 +49,14 @@ export default {
     height: {
       type: Number,
       default: 800
+    },
+    minHeight: {
+      type: Number,
+      default: 800
+    },
+    width: {
+      type: Number,
+      default: 850
     }
   },
   computed: {
