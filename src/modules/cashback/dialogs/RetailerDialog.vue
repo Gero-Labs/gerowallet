@@ -1,0 +1,125 @@
+<template>
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Deal Details" subtitle="" :min-height="600" :height="600" :width="500">
+    <div style="z-index: 3">
+      <v-row>
+        <v-col cols="12">
+          <div class="card-text">
+            <v-list-item v-if="retailer">
+              <v-list-item-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="60" v-if="retailer.img">
+                <v-img :src="retailer.img" contain style="margin: auto;" eager></v-img>
+              </v-list-item-avatar>
+              <v-list-item-title style="word-break: break-word; font-size: 24px">
+                {{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}
+              </v-list-item-title>
+            </v-list-item>
+            <v-card-subtitle v-if="retailer" class="pa-0" style="word-break: break-word; color: #00DFF3">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-card-subtitle>
+          </div>
+        </v-col>
+      </v-row>
+    </div>
+    <v-card-title class="px-1">
+      Cashback Terms & Exclusions
+    </v-card-title>
+    <v-card-text class="px-4 pt-2 pb-0" style="z-index: 1; border: 1px solid #EAECF0; border-radius: 10px; background-color: black">
+      <div v-if="loading" style="width: 100%; height: 100%; align-content: center" class="text-center" >
+        <v-progress-circular color="primary" size="80" width="8" indeterminate ></v-progress-circular>
+        <div class="pt-4">Loading ...</div>
+      </div>
+      <VueShowdown v-else :markdown="fileContent" flavor="vanilla" :options="{ emoji: true }"/>
+    </v-card-text>
+    <v-card-actions class="px-0 pt-4 justify-center text-center" style="flex-direction: column;">
+      <v-btn
+        class="geroButton"
+        :disabled="disabled"
+        style="color: black!important;"
+      >Start Shopping</v-btn>
+      <v-card-subtitle class="pa-0 pt-3">By clicking Start Shopping, I accept the terms above.</v-card-subtitle>
+    </v-card-actions>
+  </BaseDialog>
+</template>
+<script>
+import BaseDialog from '@/shared/components/BaseDialog.vue';
+import filters from '@/shared/utils/filters';
+import axios from 'axios';
+
+export default {
+  name: 'RetailerDialog',
+  components: {BaseDialog },
+  props: {
+    isOpen: {
+      type: Boolean,
+      default: false,
+    },
+    retailer: {
+      type: Object
+    },
+    retailerTermsBasePath: {
+      type: String,
+      default: 'https://media.bringweb3.io/cashback-terms'
+    }
+  },
+  filters,
+  methods: {
+    getContent() {
+      this.fileContent = "rendering ";
+      // var self;
+      axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
+        .then(response => {
+          this.fileContent = response.data;
+          this.loading = false
+          this.disabled = false
+        }).catch(e => {
+          this.fileContent = e;
+          this.loading = false
+        });
+    }
+  },
+  data: () => ({
+    fileContent: null,
+    loading: true,
+    disabled: true,
+  }),
+  mounted() {
+
+  },
+  watch: {
+    isOpen(val) {
+      if (val) {
+        this.loading = true
+        this.default = true
+        this.getContent();
+        // appWallet.api.
+      }
+    }
+  },
+};
+</script>
+<style scoped>
+
+.card-text {
+  width: 100%;
+  padding: 24px;
+  background: linear-gradient(90deg, rgb(0, 14, 17), rgb(0, 19, 16));
+  border-radius: 12px;
+  border: 1px solid #00DFF3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 4px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  border: 4px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
+}
+</style>

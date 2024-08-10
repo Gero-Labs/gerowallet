@@ -36,6 +36,8 @@ import Highstock from "highcharts/highstock";
 import filters from "@/shared/utils/filters";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
+import networks from '@/shared/utils/networks';
+import { Blockchain, Network } from '@/models/types';
 
 export default {
   props: {
@@ -46,7 +48,17 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['price', 'transactions', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'price', 'transactions', 'loadingTxs']),
+    resolveCurrency() {
+      if (this.loggedWallet.chain === Blockchain.APEX_PRIME || this.loggedWallet.chain === Blockchain.APEX_VECTOR) {
+        if (this.loggedWallet.network === Network.MAINNET) {
+          return 'Â '
+        }
+        return 'tÂ '
+      } else {
+        return '$'
+      }
+    },
     adaPrice() {
       const price = this.chartData[this.chartData.length - 1][1]
       if (this.lastPrice === -1) {
@@ -244,7 +256,7 @@ export default {
     generateTitleText() {
       if (this.adaPrice) {
         return (
-          `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${filters.toCurrency(this.adaPrice, false, 2, '$', '', true, 0)}</span>`
+          `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${filters.toCurrency(this.adaPrice, false, 2, this.resolveCurrency, '', true, 0)}</span>`
           /*+`<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${this.tab.vsLabel}</span></span>`*/
         );
       } else {
@@ -255,7 +267,7 @@ export default {
   data() {
     return {
       tab: { value: "ALL", label: "All", vsLabel: "vs all time" },
-      lastPrice: -1,
+      lastPrice: 1,
       chartInstance: null,
       tabs: {
         ALL: { value: "ALL", label: "All", vsLabel: "vs all time" },

@@ -63,10 +63,12 @@ const ChainDerivations = {
 
 const STAKING_KEY_INDEX = 0;
 
-const Provider = {
-  KOIOS: 'Koios',
-  BLOCKFROST: 'Blockfrost',
-};
+enum Provider {
+  UNDEFINED,
+  KOIOS,
+  BLOCKFROST,
+  YACI
+}
 
 const Blockchain = {
   CARDANO: 'Cardano',

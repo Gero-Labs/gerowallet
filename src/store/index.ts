@@ -16,6 +16,8 @@ import {
   resolveAsset,
 } from '@/shared/utils/resolver';
 import networks from '@/shared/utils/networks';
+import * as net from 'node:net';
+import { Blockchain } from '@/models/types';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -150,13 +152,13 @@ export const useStore = defineStore('store', {
             if (tx.withdrawals?.length > 0) {
               statuses.push('Withdrawal')
             }
-            const network = networks.resolveNetwork(this.loggedWallet.chain, this.loggedWallet.network)
+            const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)
             const nativeAsset = {
               policy_id: "",
               asset_name: "lovelace",
               decimals: 6,
               quantity: totalAmount,
-              logo: network.currencyImage
+              logo: network?.currencyImage
             }
             return {
               ...tx,
@@ -350,7 +352,7 @@ export const useStore = defineStore('store', {
       }
       await this.setLoggedWallet(wallet);
       try {
-        this.provider = await db.getProvider(wallet.chain, wallet.network);
+        this.provider = networks.resolveDefaultProvider(this.loggedWallet.chain, this.loggedWallet. network);
       } catch (err) {
         console.log(err)
       }
@@ -420,7 +422,11 @@ export const useStore = defineStore('store', {
       this.network = network;
     },
     setPrice(price) {
-      this.price = price
+      if (this.loggedWallet.chain === Blockchain.APEX_VECTOR || this.loggedWallet.chain === Blockchain.APEX_PRIME) {
+        this.price = 1
+      } else {
+        this.price = price
+      }
     },
     async setFiatRates(fiatRates) {
       this.fiatRates = fiatRates

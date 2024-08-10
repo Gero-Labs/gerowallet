@@ -11,12 +11,12 @@
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Total</span>
-            <h2 style="color: white" v-if="loggedWallet">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</h2>
+            <h2 style="color: white" v-if="loggedWallet && accountInfo">{{ accountInfo?.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>
-            <h2 style="color: white">{{ accountInfo.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</h2>
-            <v-btn v-if="accountInfo.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
+            <h2 style="color: white">{{ accountInfo?.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
+            <v-btn v-if="accountInfo?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
               Withdraw
             </v-btn>
           </v-col>
@@ -69,7 +69,7 @@
             <v-row no-gutters>
               <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
                 <h4>Fees</h4>
-                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)) }}</span>
+                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
               </v-col>
               <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
                 <h4>Saturation</h4>
@@ -82,11 +82,11 @@
                   <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', '', true) }}</strong>
                   <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
+                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                   </strong>
                   <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', true) }}
+                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                   </strong>
                 </div>
               </v-col>
@@ -127,7 +127,7 @@
               <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
                       :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
+                    item.amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
                   }}</span>
                 <span v-else>{{ item.amount }}</span>
               </template>
@@ -138,7 +138,7 @@
                     alt="trend"></v-img>
                 </v-avatar>&nbsp;
                 <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
+                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
                   }}</span>
               </template>
               <template v-slot:[`item.date`]="{ item }">
@@ -262,7 +262,7 @@ export default {
       const wallet = useStore().getWallet;
       // Withdrawals
       const withdrawals = []
-      if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo.withdrawable_amount) > 0) {
+      if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo?.withdrawable_amount) > 0) {
         withdrawals.push({
           address: this.stakeAddress,
           amount: this.accountInfo.withdrawable_amount
