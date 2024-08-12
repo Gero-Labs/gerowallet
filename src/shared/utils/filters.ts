@@ -25,6 +25,11 @@ const filters = {
   toIPFS(value: string) {
     return 'https://cloudflare-ipfs.com/ipfs/' + value;
   },
+  minutes(value: number): string {
+    if (!value || typeof value !== "number") return "00:00"
+    const min: number = value / 60, sec: number = value % 60
+    return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec)
+  },
   toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
     if (decimals == 1) {
       console.log('toCurrency')

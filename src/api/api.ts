@@ -252,7 +252,6 @@ export class Api {
   }
 
   async retailers(category: number, search?: string, page?: number): Promise<any> {
-    console.log('retailers')
     try {
       const requestBody = {
         type: 'all',
@@ -278,6 +277,22 @@ export class Api {
         walletAddress,
       }
       const { data, status } = await this.axiosInstance.post(`/api/bring/cache`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async activate(itemId: string, walletAddress: string, tokenSymbol: string, search: string): Promise<any> {
+    try {
+      const requestBody = {
+        itemId,
+        walletAddress,
+        tokenSymbol,
+        search
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/bring/activate`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
