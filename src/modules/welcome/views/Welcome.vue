@@ -8,37 +8,42 @@
         <network-selector ref="networkSelector"></network-selector>
       </v-card-title>
       <v-card-text class="pb-12 px-12">
-        <v-row class="fill-height" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
-          <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">
-            <parallax-card style="margin-left: auto; margin-right: auto;"
-                           :data-image="walletCreateCardBg">
-              <h1 slot="header" style="line-height: 1;">{{ $t('createWallet') }}</h1>
-              <p slot="content">{{ $t('createWalletSubtitle') }}</p>
-            </parallax-card>
-          </v-col>
-          <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="restoreWalletDialog = true">
-            <parallax-card style="margin-left: auto; margin-right: auto;"
-                           :data-image="walletRestoreCardBg">
-              <h1 slot="header" style="line-height: 1">{{ $t('restoreWallet') }}</h1>
-              <p slot="content">{{ $t('restoreWalletSubtitle') }}</p>
-            </parallax-card>
-          </v-col>
-          <v-col cols="12" md="4" lg="4" v-if="network" class="d-flex align-center" :style="network.supportedHardware ? { } : { pointerEvents: 'none' }" @click="pairHardwareWalletDialog = true">
-            <v-chip large v-if="!network.supportedHardware"
-              style="position: fixed;
-              transform: translateX(50%) translateX(64px);
-              z-index: 4;"
-              color="red"
-            >
-              SOON
-            </v-chip>
-            <parallax-card :style="network.supportedHardware ? { marginLeft: 'auto', marginRight: 'auto' } : { marginLeft: 'auto', marginRight: 'auto', filter: 'brightness(0.5)' }"
-                           :data-image="hardwarePairCardBg">
-              <h1 slot="header" style="line-height: 1">{{ $t('hardwareWallet') }}</h1>
-              <p slot="content">{{ $t('hardwareWalletSubtitle') }}</p>
-            </parallax-card>
-          </v-col>
-        </v-row>
+        <div v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
+          <v-row class="fill-height">
+            <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">
+              <parallax-card style="margin-left: auto; margin-right: auto;"
+                             :data-image="walletCreateCardBg">
+                <h1 slot="header" style="line-height: 1;">{{ $t('createWallet') }}</h1>
+                <p slot="content">{{ $t('createWalletSubtitle') }}</p>
+              </parallax-card>
+            </v-col>
+            <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="restoreWalletDialog = true">
+              <parallax-card style="margin-left: auto; margin-right: auto;"
+                             :data-image="walletRestoreCardBg">
+                <h1 slot="header" style="line-height: 1">{{ $t('restoreWallet') }}</h1>
+                <p slot="content">{{ $t('restoreWalletSubtitle') }}</p>
+              </parallax-card>
+            </v-col>
+            <v-col cols="12" md="4" lg="4" v-if="network" class="d-flex align-center" :style="network.supportedHardware ? { } : { pointerEvents: 'none' }" @click="pairHardwareWalletDialog = true">
+              <v-chip large v-if="!network.supportedHardware"
+                style="position: fixed;
+                transform: translateX(50%) translateX(64px);
+                z-index: 4;"
+                color="red"
+              >
+                SOON
+              </v-chip>
+              <parallax-card :style="network.supportedHardware ? { marginLeft: 'auto', marginRight: 'auto' } : { marginLeft: 'auto', marginRight: 'auto', filter: 'brightness(0.5)' }"
+                             :data-image="hardwarePairCardBg">
+                <h1 slot="header" style="line-height: 1">{{ $t('hardwareWallet') }}</h1>
+                <p slot="content">{{ $t('hardwareWalletSubtitle') }}</p>
+              </parallax-card>
+            </v-col>
+          </v-row>
+          <div class="text-center justify-center">
+            <v-btn class="mt-4" :ripple="false" text plain @click="walletSetup = false">{{$t('signIn')}}&nbsp;<v-icon small>mdi-chevron-right</v-icon></v-btn>
+          </div>
+        </div>
         <v-card v-else class="transparent" flat style="max-width: 400px; margin: auto">
           <v-card-text class="px-2 py-0" style="max-height: 177px; overflow-y: auto">
             <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
@@ -79,7 +84,7 @@
           </v-card-text>
           <v-divider></v-divider>
           <v-card-actions class="justify-center pt-10">
-            <v-btn text plain style="text-transform: capitalize" @click="walletSetup = true">{{$t('startWalletSetup')}}</v-btn>
+            <v-btn text plain :ripple="false" @click="walletSetup = true"><v-icon small>mdi-chevron-left</v-icon>&nbsp;{{$t('walletSetup')}}</v-btn>
           </v-card-actions>
         </v-card>
       </v-card-text>

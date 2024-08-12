@@ -83,7 +83,6 @@ export class SocketPlugin {
         controlled_amount,
         session_id: this.sessionId
       }
-      console.log(body)
       this.client.send("/app/sync", {}, JSON.stringify(body))
     }
   }
@@ -116,7 +115,6 @@ export class SocketPlugin {
         }),
         sync: this.client.subscribe(`/topic/sync/${this.sessionId}` , (val: Stomp.Message) => {
           const data = JSON.parse(val.body);
-          console.log(data)
           this.setMessage(Object.assign({}, data));
         })
       };

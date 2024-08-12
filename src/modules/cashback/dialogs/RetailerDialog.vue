@@ -29,9 +29,11 @@
     </v-card-text>
     <v-card-actions class="px-0 pt-4 justify-center text-center" style="flex-direction: column;">
       <v-btn
+        :loading="loading || !retailerUrl"
         class="geroButton"
-        :disabled="disabled"
+        :disabled="disabled || !retailerUrl"
         style="color: black!important;"
+        :href="retailerUrl" target="_blank"
       >Start Shopping</v-btn>
       <v-card-subtitle class="pa-0 pt-3">By clicking Start Shopping, I accept the terms above.</v-card-subtitle>
     </v-card-actions>
@@ -41,6 +43,9 @@
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import axios from 'axios';
+import { appWallet, useStore } from '@/store';
+import { mapState } from 'pinia';
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'RetailerDialog',
@@ -59,22 +64,36 @@ export default {
     }
   },
   filters,
+  computed: {
+    ...mapState(useStore, ['baseAddress', 'loggedWallet']),
+  },
   methods: {
-    getContent() {
+    async getContent() {
       this.fileContent = "rendering ";
-      // var self;
-      axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
-        .then(response => {
-          this.fileContent = response.data;
-          this.loading = false
-          this.disabled = false
-        }).catch(e => {
-          this.fileContent = e;
-          this.loading = false
-        });
+      try {
+        const response = await axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
+        this.fileContent = response.data;
+        this.disabled = false
+      } catch (e) {
+        this.fileContent = e;
+      }
+    },
+    async activate() {
+      try {
+        const response = await appWallet.api.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), "")
+        console.log(response)
+        if (response.status) {
+          this.retailerUrl = response.url
+        } else {
+          this.retailerUrl = ""
+        }
+      } catch (e) {
+        console.log(e)
+      }
     }
   },
   data: () => ({
+    retailerUrl: null,
     fileContent: null,
     loading: true,
     disabled: true,
@@ -85,10 +104,15 @@ export default {
   watch: {
     isOpen(val) {
       if (val) {
+        this.retailerUrl = null
         this.loading = true
         this.default = true
-        this.getContent();
-        // appWallet.api.
+        const promises = []
+        console.log(this.retailer)
+        promises.push(this.getContent());
+        promises.push(this.activate());
+        Promise.all(promises)
+        this.loading = false
       }
     }
   },

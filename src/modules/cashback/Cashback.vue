@@ -187,19 +187,16 @@ export default defineComponent({
   watch: {
     async isIntersecting(val) {
       if (val) {
-        console.log(val)
         if (this.nextPage) {
           this.loadingMore = true
           const retailers = await appWallet.api.retailers(this.selectedCategory?.id, this.model, this.nextPage)
           this.retailers = {...this.retailers, ...retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {}) }
           this.nextPage = retailers.nextPageNumber
-          console.log(this.retailers)
           this.loadingMore = false
         }
       }
     },
     async model(val) {
-      console.log(val)
       this.isLoading = true
       if (val) {
         const retailers = await appWallet.api.retailers(0, val)
@@ -230,7 +227,6 @@ export default defineComponent({
       if (this.selectedCategory) {
         const retailers = await appWallet.api.retailers(this.selectedCategory.id)
         this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
-        console.log(retailers)
         this.nextPage = retailers.nextPageNumber
         this.generalTermsUrl = retailers.generalTermsUrl
         this.retailerTermsBasePath = retailers.retailerTermsBasePath
