@@ -572,7 +572,7 @@ export class Wallet {
         const promises = [];
         promises.push(this.syncStakingPools());
         const prevAccountInfo = await this.getAccountInfo()
-        socket.sendSync(tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo.rewards_sum, prevAccountInfo.controlled_amount)
+        socket.sendSync(tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount)
         // promises.push(this.api.sync(tip.height, this.stakeAddress().to_address().to_bech32(), prevAccountInfo).then(async syncResponse => {
         //   if (!syncResponse.success) {
         //     return;
