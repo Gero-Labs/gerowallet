@@ -5,7 +5,7 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined>
+        <v-card flat outlined>
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>
@@ -161,6 +161,7 @@
                   v-slot="{ hover }"
                 >
                   <v-card
+                    flat
                     outlined
                     :color="hover ? '#FFFFFF' : '#84CAFF'"
                     style="border-radius: 12px"
