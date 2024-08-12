@@ -232,18 +232,18 @@ export const useStore = defineStore('store', {
       const resolvedAssets = await Promise.all(assetArray.map(asset => resolveAsset(this.assets, asset)));
 
       if (adaBalance > 0) {
-        const network = networks.resolveNetwork(this.loggedWallet.chain, this.loggedWallet.network)
+        const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)
         resolvedAssets.push(
           {
             unit: '',
-            name: network.currencyName,
+            name: network?.currencyName,
             policy_id: '',
-            img: network.currencyImage,
+            img: network?.currencyImage,
             quantity: adaBalance,
             metadata: {
-              name: network.currencyName,
-              ticker: network.currencyTicker,
-              description: network.currencyDescription,
+              name: network?.currencyName,
+              ticker: network?.currencyTicker,
+              description: network?.currencyDescription,
               decimals: 6,
             },
             onchain_metadata: null,
@@ -257,6 +257,9 @@ export const useStore = defineStore('store', {
       const outputs = [];
       const inputSet = new Set();
       const addresses: Set<string> = new Set();
+      if (!appWallet) {
+        return
+      }
       const stakeAddress = appWallet.stakeAddress().to_address().to_bech32()
 
       if (transactions && transactions.length > 0) {
@@ -346,6 +349,7 @@ export const useStore = defineStore('store', {
     },
     async login(walletId: number) {
       loading.setLoading(true);
+      console.log('login')
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -422,7 +426,7 @@ export const useStore = defineStore('store', {
       this.network = network;
     },
     setPrice(price) {
-      if (this.loggedWallet.chain === Blockchain.APEX_VECTOR || this.loggedWallet.chain === Blockchain.APEX_PRIME) {
+      if (this.loggedWallet && (this.loggedWallet.chain === Blockchain.APEX_VECTOR || this.loggedWallet.chain === Blockchain.APEX_PRIME)) {
         this.price = 1
       } else {
         this.price = price
@@ -453,7 +457,7 @@ export const useStore = defineStore('store', {
         return
       }
       const db = await appWallet.getDb()
-      liveQuery(() => db.table('account').where({walletId: this.loggedWallet.id}).first()).subscribe({
+      liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
         next: newAccountInfo => {
           this.accountInfo = newAccountInfo
         },

@@ -79,8 +79,8 @@ export class SocketPlugin {
         provider: Provider[networks.resolveDefaultProvider(this.wallet.chain, this.wallet.network)],
         from,
         address,
-        rewards_sum,
-        controlled_amount,
+        rewards_sum: (rewards_sum ? rewards_sum : "0"),
+        controlled_amount: (controlled_amount ? controlled_amount : "0"),
         session_id: this.sessionId
       }
       this.client.send("/app/sync", {}, JSON.stringify(body))

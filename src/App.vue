@@ -68,10 +68,11 @@ export default {
     ...mapState(useStore, ['loggedWallet', 'transactions', 'assets', 'resolvedAssets', 'resolvedCollections']),
   },
   methods: {
-    ...mapActions(useStore, ['loadWallets', 'login', 'setLoadingTxs']),
+    ...mapActions(useStore, ['login', 'setLoadingTxs']),
   },
   async mounted() {
     if (this.loggedWallet?.id) {
+      console.log('loginApp', this.loggedWallet)
       await this.login(this.loggedWallet.id)
     }
     this.loading.setLoading(false)
