@@ -110,7 +110,7 @@ export default {
       currencyName: 'Apex Fusion',
       currencyDescription: 'Apex Fusion Native Token',
       currencyImage: apexLogo,
-      defaultProvider: Provider.YACI
+      defaultProvider: Provider.BLOCKFROST
     },
   ],
   resolveNetwork(chain: string, network: string) {
