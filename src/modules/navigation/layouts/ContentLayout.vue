@@ -1,9 +1,9 @@
 <template>
   <v-app>
     <v-main>
-      <v-container class="pa-0" style="background-color: #141414">
+      <v-container class="pa-0" style="background-color: #141414;" >
         <v-layout :align-start="true">
-          <navigation-drawer></navigation-drawer>
+          <navigation-drawer ></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
               <v-app-bar flat class="transparent" color="transparent">
@@ -69,13 +69,21 @@
                 </keep-alive>
               </v-sheet>
             </v-layout>
+
+<!--            <v-app-bar >-->
+<!--              <v-container class="pa-0">-->
+<!--                <v-card height="64" style="background-color: black">-->
+<!--                  Test Test Test Test Test Test Test Test Test Test Test Test-->
+<!--                </v-card>-->
+<!--              </v-container>-->
+<!--            </v-app-bar>-->
+            <Player style="position: -webkit-sticky; position: sticky; bottom: 0;" />
           </v-sheet>
         </v-layout>
       </v-container>
     </v-main>
   </v-app>
 </template>
-
 <script>
 import NavigationDrawer from "../components/NavigationDrawer.vue";
 import {useStore} from "@/store";
@@ -85,10 +93,11 @@ import {mapState} from "pinia";
 import SettingsDialog from "@/modules/dashboard/dialogs/SettingsDialog.vue";
 import { Blockchain } from '@/models/types';
 import networks from '@/shared/utils/networks';
+import Player from '@/modules/media-player/Player.vue';
 
 export default {
   name: 'ContentLayout',
-  components: {PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks

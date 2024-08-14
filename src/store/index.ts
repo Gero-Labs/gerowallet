@@ -1,5 +1,6 @@
 import {defineStore} from 'pinia';
 import loading from '@/plugins/loading';
+import { Howl } from 'howler';
 
 // import { ChromeSyncStorage } from '@/store/chrome-storage'
 // import { LocalPersistedStorage} from "@/store/local-storage";
@@ -16,17 +17,17 @@ import {
   resolveAsset,
 } from '@/shared/utils/resolver';
 import networks from '@/shared/utils/networks';
-import * as net from 'node:net';
 import { Blockchain } from '@/models/types';
+import { formatTime, getArtists } from '@/shared/utils/converter';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
-
+const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 export let appWallet: Wallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress']},
+  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections', 'musicPlaylist', 'stakeAddress']},
   state: () => ({
     loggedWallet: undefined,
     baseAddress: undefined,
@@ -48,10 +49,25 @@ export const useStore = defineStore('store', {
     utxos: undefined,
     resolvedAssets: undefined,
     resolvedCollections: undefined,
+    musicPlaylist: undefined,
     addresses: undefined,
     fiatRates: undefined,
     currency: undefined,
-    bringCache: undefined
+    bringCache: undefined,
+    context: {
+      img: undefined,
+      isPlaying: false,
+      isRepeat: false,
+      isShuffle: false,
+      currentIndex: 0,
+      audio: undefined,
+      paused: true,
+      volume_percent: 100,
+      position: 0,
+      seek: 0,
+      duration: undefined,
+      minimized: false,
+    },
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -252,6 +268,33 @@ export const useStore = defineStore('store', {
       }
       return resolvedAssets;
     },
+    async setMusicPlaylist() {
+      const mediaNFTs = []
+      this.resolvedCollections.forEach(collection => {
+        collection.items.forEach(nft => {
+          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) {
+            mediaNFTs.push(nft)
+          }
+        })
+      })
+      this.musicPlaylist = mediaNFTs.map(nft => {
+        return nft.onchain_metadata.files?.map(file => {
+          const src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
+          return {
+            id: nft.unit,
+            artist: getArtists(nft.onchain_metadata.release?.artists) || nft.metadata?.name || nft.name,
+            title: (file.song?.song_title || nft.name) + (file.mediaType?.includes('video') ? " (Video)" : ""),
+            img: nft.img,
+            url: src,
+            mediaType: file.mediaType,
+            metadata: nft.onchain_metadata,
+            name: file.name || nft.name,
+            display: true
+          }
+        });
+      }).flat()
+        .filter(nft => nft.mediaType?.includes('audio') || nft.mediaType?.includes('video'))
+    },
     async setUtxosAndAddresses(transactions) {
       const utxos = [];
       const outputs = [];
@@ -340,6 +383,7 @@ export const useStore = defineStore('store', {
             })
             this.resolvedCollections = Object.values(collections)
           }))
+        .then(() => this.setMusicPlaylist())
     },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
@@ -437,6 +481,94 @@ export const useStore = defineStore('store', {
     },
     setStakingProView(isPro) {
       this.stakingProView = isPro
+    },
+    setMinimized() {
+      this.context.minimized = true
+    },
+    setMaximized() {
+      this.context.minimized = false
+    },
+    setTrack(index) {
+      this.context.currentIndex = index
+      this.playTrack()
+    },
+    initializeSound() {
+      if (this.context.audio) {
+        this.context.audio.unload();
+      }
+      const current = this.musicPlaylist[this.context.currentIndex]
+      this.context.audio = new Howl({
+        src: [current.url],
+        onend: () => {
+          if (this.context.isRepeat) {
+            this.context.audio.play();
+          } else {
+            this.nextTrack(); // Automatically play the next track when the current one ends
+          }
+        },
+        onplay: () => {
+          // Display the duration.
+          this.context.duration = this.context.audio.duration();
+
+          // Start updating the progress of the track.
+          requestAnimationFrame(this.step);
+
+          // Start the wave animation if we have already loaded
+          // wave.container.style.display = 'block';
+          // bar.style.display = 'none';
+          // pauseBtn.style.display = 'block';
+        },
+        format: current.mediaType,
+        html5: true,
+      });
+    },
+    step() {
+      // Get the Howl we want to manipulate.
+      const sound = this.context.audio;
+
+      // Determine our current seek position.
+      this.context.seek = Math.round(sound.seek()) || 0;
+      // progress.style.width = (((this.context.seek / sound.duration()) * 100) || 0) + '%';
+
+      // If the sound is still playing, continue stepping.
+      if (sound.playing()) {
+        requestAnimationFrame(this.step);
+      }
+    },
+    nextTrack() {
+      if (this.context.isShuffle) {
+        this.context.currentIndex = Math.floor(Math.random() * this.musicPlaylist.length);
+      } else {
+        this.context.currentIndex = (this.context.currentIndex + 1) % this.musicPlaylist.length;
+      }
+      this.playTrack();
+    },
+    prevTrack() {
+      this.context.currentIndex = (this.context.currentIndex - 1 + this.musicPlaylist.length) % this.musicPlaylist.length;
+      this.playTrack();
+    },
+    toggleRepeat() {
+      this.context.isRepeat = !this.context.isRepeat;
+    },
+    toggleShuffle() {
+      this.context.isShuffle = !this.context.isShuffle;
+    },
+    playTrack() {
+      this.initializeSound();
+      this.context.audio.play();
+      this.context.isPlaying = true;
+    },
+    togglePlayPause() {
+      if (!this.context.audio) {
+        this.initializeSound()
+      }
+      if (this.context.isPlaying) {
+        this.context.audio.pause();
+        this.context.isPlaying = false;
+      } else {
+        this.context.audio.play();
+        this.context.isPlaying = true;
+      }
     },
     async loadSync() {
       if (!appWallet) {

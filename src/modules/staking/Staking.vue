@@ -66,7 +66,7 @@
             </v-row>
           </v-card-subtitle>
           <v-card-text class="py-0">
-            <v-data-table v-if="isPro" dense :headers="headers" :items="stakePools" :items-per-page="9" :page.sync="page"
+            <v-data-table v-if="isPro" dense :headers="headers" :items="stakePools" :items-per-page="8" :page.sync="page"
                           @page-count="pageCount = $event" :header-props="{ 'sort-icon': 'mdi-menu-up' }" multi-sort
                           hide-default-footer :search="search" class="poolsTable transparent" @click:row="delegate">
               <template v-slot:[`item.name`]="{ item }">

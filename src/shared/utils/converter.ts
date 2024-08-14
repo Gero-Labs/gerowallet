@@ -150,3 +150,16 @@ export function getColor(value) {
   const hue = ((1 - value) * 120).toString(10);
   return ["hsl(", hue, ",57.26%,54.12%)"].join("");
 }
+
+export function getArtists(artists) {
+  if (artists !== undefined && Array.isArray(artists)) {
+    return artists.join(', ');
+  }
+  return artists;
+}
+
+export function formatTime(secs: number): string {
+  const minutes = Math.floor(secs / 60) || 0;
+  const seconds = (secs - minutes * 60) || 0;
+  return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+}
