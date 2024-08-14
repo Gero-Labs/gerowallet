@@ -4,30 +4,28 @@
       <v-col cols="12" xl="6" lg="6">
         <v-card flat class="pa-4 transparent">
           <v-card-text style="height: 433px; max-height: 433px;" >
-            <video v-if="audioFile" ref="player" playsinline loop :src="audioFile" style="height: 400px; max-height: 400px;" :poster="imageFile"  @click="playAudio">
+            <video v-if="isVideo" playsinline loop :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="imageFile">
 
             </video>
           </v-card-text>
-          <v-card-title class="justify-center" style="word-break: break-word" v-if="audioFile">
-            {{`${track.artist} - ${track.title}` }}
+          <v-card-title class="justify-center" style="word-break: break-word" v-if="currentTrack">
+            {{`${currentTrack.artist} - ${currentTrack.title}` }}
           </v-card-title>
-          <v-card-title class="justify-center" v-if="audioFile">
-            <v-slider v-model="currentProgressBar" :min="1" :max="100" v-if="audioFile">
-              <template v-slot:prepend>
-                <span class="currentTime">{{ currentTime | fancyTimeFormat }}</span>
-              </template>
-              <template v-slot:append>
-                <span class="totalTime"> {{ trackDuration | fancyTimeFormat }}</span>
-              </template>
-            </v-slider>
-          </v-card-title>
+          <v-slider v-model="currentProgressBar" :min="1" :max="100" v-if="currentTrack">
+            <template v-slot:prepend>
+              <span class="currentTime">{{ currentTime | fancyTimeFormat }}</span>
+            </template>
+            <template v-slot:append>
+              <span class="totalTime"> {{ trackDuration | fancyTimeFormat }}</span>
+            </template>
+          </v-slider>
           <div class="justify-center text-center">
             <v-btn outlined color="primary" class="mx-1" icon @click="currentSong--">
               <v-icon>
                 mdi-skip-previous
               </v-icon>
             </v-btn>
-            <v-btn outlined color="primary" class="mx-1" icon @click="playAudio">
+            <v-btn outlined color="primary" class="mx-1" icon @click="playTrack">
               <v-icon>
                 {{ currentlyPlaying ? 'mdi-pause' : 'mdi-play' }}
               </v-icon>
@@ -59,6 +57,9 @@
             >
             </v-text-field>
           </v-card-title>
+          <v-sheet>
+
+          </v-sheet>
           <v-list nav dense style="width: 100%" class="transparent">
             <v-list-item-group v-model="currentSong">
               <v-list-item v-for="(track, index) in musicPlaylist" :key="index">
@@ -83,10 +84,8 @@
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { mapState } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
-
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 
 export default defineComponent({
   name: "MediaPlayer",
@@ -104,125 +103,38 @@ export default defineComponent({
   },
   watch: {
     currentSong(index) {
-      this.changeSong(index)
+      this.setTrack(index)
     }
   },
   computed: {
-    ...mapState(useStore, ['resolvedCollections']),
-    musicPlaylist() {
-      let mediaNFTs = []
-      this.resolvedCollections.forEach(collection => {
-        collection.items.forEach(nft => {
-          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) {
-            mediaNFTs.push(nft)
-          }
-        })
-      })
-      return mediaNFTs.map(nft => {
-        return nft.onchain_metadata.files?.map(file => {
-          const src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
-          // const audio = new Audio(src)
-          // const duration = await this.getAudioDuration(audio)
-          // console.log(duration)
-          return {
-            artist: this.getArtists(nft.release?.artist) || nft.metadata?.name || nft.name,
-            title: (file.song?.song_title || file.name || nft.name) + (file.mediaType?.includes('video') ? " (Video)" : ""),
-            img: nft.img,
-            url: src,
-            mediaType: file.mediaType,
-            metadata: nft.onchain_metadata,
-            display: true
-          }
-        });
-      }).flat()
-        .filter(nft => nft.mediaType?.includes('audio') || nft.mediaType?.includes('video'))
+    ...mapState(useStore, ['musicPlaylist', 'context']),
+    currentTrack() {
+      return this.musicPlaylist[this.context.currentIndex]
+    },
+    currentSong: {
+      get() {
+        return this.context.currentIndex
+      },
+      set(val) {
+        this.setTrack(val)
+      }
     }
   },
   methods: {
-    changeSong(index?) {
-      if (index !== undefined) {
-        this.stopAudio();
-        this.currentSong = index;
-      }
-      console.log('cha')
-      this.track = this.musicPlaylist[this.currentSong]
-      this.audioFile = this.track.url;
-      this.imageFile = this.track.img
-      this.audio = new Audio(this.audioFile);
-      const localThis = this;
-      const audio = this.audio
-      audio.addEventListener("loadedmetadata", function() {
-        localThis.trackDuration = Math.round(audio.duration);
-      });
-      this.audio.addEventListener("ended", this.handleEnded);
-      this.playAudio();
-    },
-    handleEnded() {
-      if (this.currentSong + 1 == this.musicPlaylist.length) {
-        this.stopAudio();
-        this.currentlyPlaying = false;
-        this.currentlyStopped = true;
-      } else {
-        this.currentlyPlaying = false;
-        this.currentSong++;
-      }
-    },
-    playAudio() {
-      if (this.currentlyStopped == true && this.currentSong + 1 == this.musicPlaylist.length) {
-        this.currentSong = 0;
-        this.changeSong();
-      }
-      if (!this.currentlyPlaying) {
-        this.getCurrentTimeEverySecond(true);
-        this.currentlyPlaying = true;
-        this.audio.play();
-      } else {
-        this.stopAudio();
-      }
-      this.currentlyStopped = false;
-    },
-    stopAudio() {
-      console.log('pause')
-      if (this.audio) {
-        this.audio.pause();
-      }
-      this.currentTime = 0;
-      this.currentlyPlaying = false;
-      this.pausedMusic();
-    },
-    getCurrentTimeEverySecond: function(startStop) {
-      const localThis = this;
-      this.checkingCurrentPositionInTrack = setTimeout(
-        function() {
-          localThis.currentTime = localThis.audio.currentTime;
-          localThis.currentProgressBar = localThis.audio.currentTime / localThis.trackDuration * 100;
-          localThis.getCurrentTimeEverySecond(true);
-        }.bind(this),
-        1000
-      );
-    },
-    pausedMusic: function() {
-      clearTimeout(this.checkingCurrentPositionInTrack);
-    },
-    getArtists(artists) {
-      if (artists !== undefined && Array.isArray(artists)) {
-        return artists.join(', ');
-      }
-      return artists;
-    },
+    ...mapActions(useStore, ['playTrack', 'setTrack', 'playTrack']),
+    isVideo() {
+      return this.currentTrack.mediaType.toLowerCase().includes("video")
+    }
   },
   data: () => ({
-    audio: null,
     search: '',
     selected: null,
     trackDuration: 0,
     currentlyPlaying: false,
     currentlyStopped: false,
     currentTime: 0,
-    currentSong: -1,
     currentProgressBar: 0,
     checkingCurrentPositionInTrack: null,
-    audioFile: "",
     imageFile: "",
     track: null
   })
