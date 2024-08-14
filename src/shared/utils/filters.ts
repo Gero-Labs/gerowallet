@@ -30,6 +30,11 @@ const filters = {
     const min: number = value / 60, sec: number = value % 60
     return (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec)
   },
+  msToMinutes(millis: number) {
+    const minutes = Math.floor(millis / 60000);
+    const seconds = Number(((millis % 60000) / 1000).toFixed(0));
+    return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+  },
   toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
     if (decimals == 1) {
       console.log('toCurrency')

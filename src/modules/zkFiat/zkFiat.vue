@@ -1,5 +1,5 @@
 <template>
-  <div class="fill-height">
+  <div class="fill-height" style="height: 100%">
     <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
       <v-card-text class="d-flex justify-space-between align-content-space-between pa-0 fill-height">
         <v-row no-gutters>
