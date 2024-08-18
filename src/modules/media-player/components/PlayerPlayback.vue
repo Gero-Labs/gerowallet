@@ -1,6 +1,6 @@
 <template>
   <div class="player-playback pb-3" v-if="context">
-    <div class="player-playback__time">{{ progress | msToMinutes }}</div>
+    <div class="player-playback__time">{{ formatTime(Math.round(context.seek)) }}</div>
     <div class="player-playback__progress-bar">
       <v-slider
         :value="Math.round(context.seek / context.duration * 100)"
@@ -65,7 +65,7 @@ export default {
 .player-playback
   display: flex
   width: 100%
-  max-width: 400px
+  justify-content: center
 
   &__time
     align-content: center
@@ -74,4 +74,5 @@ export default {
 
   &__progress-bar
     width: 100%
+    max-width: 400px
 </style>

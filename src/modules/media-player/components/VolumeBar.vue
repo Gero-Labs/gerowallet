@@ -17,7 +17,7 @@
   </div>
 </template>
 <script>
-import { mapState } from 'pinia';
+import {mapActions, mapState} from 'pinia';
 import { useStore } from '@/store';
 
 export default {
@@ -30,7 +30,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(useStore, ['playback', 'context']),
+    ...mapState(useStore, ['context']),
     volumeIcon() {
       if (this.volume > 75) {
         return 'mdi-volume-high'
@@ -44,13 +44,7 @@ export default {
     },
   },
   methods: {
-    setVolume(val) {
-      // try {
-        // api.spotify.player.volume(val);
-      // } catch (e) {
-      //   console.log(e);
-      // }
-    },
+    ...mapActions(useStore, ['setVolume']),
     onButtonClick() {
       if (this.volume > 0) {
         this.tmpVolume = this.volume;
@@ -74,13 +68,8 @@ export default {
       }
     }
   },
-  watch: {
-    // playback(obj) {
-    //   this.volume = obj.device.volume_percent;
-    // }
-  },
   mounted() {
-    this.volume = this.context.volume_percent;
+    this.volume = this.context.volume;
   }
 };
 </script>

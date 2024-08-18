@@ -1,45 +1,22 @@
 <template>
-  <v-card flat outlined>
+  <v-card flat outlined style="min-height: calc(100vh - 80px);">
     <v-row no-gutters>
-      <v-col cols="12" xl="6" lg="6">
+      <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent">
           <v-card-text style="height: 433px; max-height: 433px;" >
-            <video v-if="isVideo" playsinline loop :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="imageFile">
-
-            </video>
+            <video playsinline loop :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.img" />
           </v-card-text>
           <v-card-title class="justify-center" style="word-break: break-word" v-if="currentTrack">
             {{`${currentTrack.artist} - ${currentTrack.title}` }}
           </v-card-title>
-          <v-slider v-model="currentProgressBar" :min="1" :max="100" v-if="currentTrack">
-            <template v-slot:prepend>
-              <span class="currentTime">{{ currentTime | fancyTimeFormat }}</span>
-            </template>
-            <template v-slot:append>
-              <span class="totalTime"> {{ trackDuration | fancyTimeFormat }}</span>
-            </template>
-          </v-slider>
-          <div class="justify-center text-center">
-            <v-btn outlined color="primary" class="mx-1" icon @click="currentSong--">
-              <v-icon>
-                mdi-skip-previous
-              </v-icon>
-            </v-btn>
-            <v-btn outlined color="primary" class="mx-1" icon @click="playTrack">
-              <v-icon>
-                {{ currentlyPlaying ? 'mdi-pause' : 'mdi-play' }}
-              </v-icon>
-            </v-btn>
-            <v-btn outlined color="primary" class="mx-1" icon @click="currentSong++">
-              <v-icon>
-                mdi-skip-next
-              </v-icon>
-            </v-btn>
+          <div class="text-center justify-center">
+            <PlayerControls large />
+            <PlayerPlayback style="align-self: center;" />
           </div>
         </v-card>
       </v-col>
       <v-col cols="12" xl="6" lg="6">
-        <v-card flat>
+        <v-card flat class="transparent">
           <v-card-title>
             <v-spacer></v-spacer>
             <v-text-field
@@ -57,26 +34,25 @@
             >
             </v-text-field>
           </v-card-title>
-          <v-sheet>
-
-          </v-sheet>
-          <v-list nav dense style="width: 100%" class="transparent">
-            <v-list-item-group v-model="currentSong">
-              <v-list-item v-for="(track, index) in musicPlaylist" :key="index">
-                <v-list-item-avatar>
-                  <v-img :src="track.img" contain></v-img>
-                </v-list-item-avatar>
-                <v-list-item-action-text class="mr-4">
-                  {{index | numbers}}
-                </v-list-item-action-text>
-                <v-list-item-content>
-                  <v-list-item-title>{{ track.title }}</v-list-item-title>
-                  <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
-                </v-list-item-content>
-                <v-spacer></v-spacer>
-              </v-list-item>
-            </v-list-item-group>
-          </v-list>
+          <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
+            <v-list nav dense style="width: 100%" class="transparent">
+              <v-list-item-group v-model="currentSong" mandatory>
+                <v-list-item v-for="(track, index) in musicPlaylist" :key="index">
+                  <v-list-item-avatar>
+                    <v-img :src="track.img" contain></v-img>
+                  </v-list-item-avatar>
+                  <v-list-item-action-text class="mr-4">
+                    {{index | numbers}}
+                  </v-list-item-action-text>
+                  <v-list-item-content>
+                    <v-list-item-title>{{ track.title }}</v-list-item-title>
+                    <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
+                  </v-list-item-content>
+                  <v-spacer></v-spacer>
+                </v-list-item>
+              </v-list-item-group>
+            </v-list>
+          </v-card-text>
         </v-card>
       </v-col>
     </v-row>
@@ -86,9 +62,12 @@
 import { defineComponent } from 'vue';
 import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
+import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
+import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
 
 export default defineComponent({
   name: "MediaPlayer",
+  components: {PlayerControls, PlayerPlayback},
   filters: {
     fancyTimeFormat(s) {
       return (s - (s %= 60)) / 60 + (9 < s ? ":" : ":0") + s.toFixed(0);
@@ -118,13 +97,10 @@ export default defineComponent({
       set(val) {
         this.setTrack(val)
       }
-    }
+    },
   },
   methods: {
     ...mapActions(useStore, ['playTrack', 'setTrack', 'playTrack']),
-    isVideo() {
-      return this.currentTrack.mediaType.toLowerCase().includes("video")
-    }
   },
   data: () => ({
     search: '',
