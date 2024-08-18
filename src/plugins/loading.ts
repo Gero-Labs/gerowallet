@@ -1,6 +1,7 @@
 export class LoadingPlugin {
 
   loading: boolean = true;
+  isSyncing: boolean = true;
 
   setLoading(value: boolean) {
     // if (!val) {
@@ -8,7 +9,9 @@ export class LoadingPlugin {
     // }
     this.loading = value;
   }
-
+  setSyncing(value: boolean) {
+    this.isSyncing = value
+  }
 }
 
 export default new LoadingPlugin();

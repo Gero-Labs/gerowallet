@@ -41,7 +41,7 @@
             </v-col>
           </v-row>
           <div class="text-center justify-center">
-            <v-btn class="mt-4" :ripple="false" text plain @click="walletSetup = false">{{$t('signIn')}}&nbsp;<v-icon small>mdi-chevron-right</v-icon></v-btn>
+            <v-btn class="mt-4" :ripple="false" text plain @click="walletSetup = false" v-show="wallets?.length > 0">{{$t('signIn')}}&nbsp;<v-icon small>mdi-chevron-right</v-icon></v-btn>
           </div>
         </div>
         <v-card v-else class="transparent" flat style="max-width: 400px; margin: auto">

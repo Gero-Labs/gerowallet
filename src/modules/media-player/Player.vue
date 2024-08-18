@@ -11,11 +11,11 @@
         <!--        <DevicePicker />-->
         <VolumeBar />
       </div>
-      <div style="flex: none; align-self: start;" @click="setMinimized" v-show="!context.minimized">
-        <v-btn icon x-small color="white">
+      <div style="flex: none; align-self: start;" v-show="!context.minimized">
+        <v-btn icon x-small color="white" @click="setMinimized">
           <v-icon x-small>mdi-window-minimize</v-icon>
         </v-btn>
-        <v-btn icon x-small color="white" class="mr-2">
+        <v-btn icon x-small color="white" class="mr-2" @click="setMediaPlayerShown(!context.shown)">
           <v-icon x-small>mdi-window-close</v-icon>
         </v-btn>
       </div>
@@ -54,7 +54,7 @@ export default {
     }
   },
   methods: {
-    ...mapActions(useStore, ['setMinimized', 'setMaximized']),
+    ...mapActions(useStore, ['setMinimized', 'setMaximized', 'setMediaPlayerShown']),
   }
 };
 </script>
