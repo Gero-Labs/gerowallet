@@ -25,7 +25,7 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  Earn rewards by staking your {{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} tokens with {{ loggedWallet.chain }}'s extensive network of stake pools.
+                  Earn rewards by staking your {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with {{ loggedWallet?.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists">
@@ -145,7 +145,7 @@
                 </div>
               </template>
               <template v-slot:[`item.fixed_cost`]="{ item }">
-                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network))
+                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
                   }}</span>
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
@@ -364,13 +364,15 @@ export default {
       return ["hsl(", hue, ",57.26%,54.12%)"].join("");
     },
     delegateToGero() {
-      const poolId = networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (!pool) {
-        console.log('Pool Not Found')
-        return;
+      if (this.loggedWallet) {
+        const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
+        const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
+        if (!pool) {
+          console.log('Pool Not Found')
+          return;
+        }
+        this.delegate(pool)
       }
-      this.delegate(pool)
     },
     delegate(row) {
       console.log('delegate', row)

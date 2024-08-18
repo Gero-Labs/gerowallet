@@ -2,11 +2,11 @@
   <v-card flat outlined style="min-height: calc(100vh - 80px);">
     <v-row no-gutters>
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
-        <v-card flat class="pa-4 transparent">
-          <v-card-text style="height: 433px; max-height: 433px;" >
+        <v-card flat class="pa-4 transparent" v-if="currentTrack">
+          <v-card-text style="height: 433px; max-height: 433px;">
             <video playsinline loop :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.img" />
           </v-card-text>
-          <v-card-title class="justify-center" style="word-break: break-word" v-if="currentTrack">
+          <v-card-title class="justify-center" style="word-break: break-word">
             {{`${currentTrack.artist} - ${currentTrack.title}` }}
           </v-card-title>
           <div class="text-center justify-center">

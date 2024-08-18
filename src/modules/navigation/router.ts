@@ -13,6 +13,7 @@ import SignTx from '@/popup/modules/views/SignTx.vue';
 import zkFiat from "@/modules/zkFiat/zkFiat.vue";
 import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
+import loading from '@/plugins/loading';
 
 const routes = [
   {
@@ -145,9 +146,10 @@ const router = new VueRouter({
 });
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
-  const store = useStore();
+  loading.setLoading(true);
+  const store= useStore();
   await store.loadWallets();
-  const wallets = store.getWallets;
+  const wallets: any[] = store.wallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
   }
@@ -166,6 +168,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     });
   }
   next();
+  loading.setLoading(false);
 });
 
 export default router;
