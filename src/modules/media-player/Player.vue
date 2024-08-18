@@ -58,9 +58,7 @@ export default {
   }
 };
 </script>
-
 <style scoped lang="sass">
-
 .player
   position: fixed
   bottom: 0

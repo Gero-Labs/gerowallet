@@ -77,7 +77,7 @@
 <!--                </v-card>-->
 <!--              </v-container>-->
 <!--            </v-app-bar>-->
-            <Player style="position: -webkit-sticky; position: sticky; bottom: 0;" />
+            <Player v-if="currentPage.name !== 'mediaPlayer'" style="position: -webkit-sticky; position: sticky; bottom: 0;" />
           </v-sheet>
         </v-layout>
       </v-container>
@@ -104,6 +104,9 @@ export default {
     },
     Blockchain() {
       return Blockchain
+    },
+    currentPage() {
+      return this.$route
     },
     ...mapState(useStore, ['loggedWallet', "latestTip"]),
     epochSlotPercentage() {

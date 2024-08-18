@@ -62,7 +62,7 @@ export const useStore = defineStore('store', {
       currentIndex: 0,
       audio: undefined,
       paused: true,
-      volume_percent: 100,
+      volume: 100,
       position: 0,
       seek: 0,
       duration: undefined,
@@ -293,7 +293,7 @@ export const useStore = defineStore('store', {
           }
         });
       }).flat()
-        .filter(nft => nft.mediaType?.includes('audio') || nft.mediaType?.includes('video'))
+        .filter(nft => nft.mediaType?.includes('audio'))// || nft.mediaType?.includes('video'))
     },
     async setUtxosAndAddresses(transactions) {
       const utxos = [];
@@ -568,6 +568,13 @@ export const useStore = defineStore('store', {
       } else {
         this.context.audio.play();
         this.context.isPlaying = true;
+      }
+    },
+    setVolume(val) {
+      if (this.context.audio) {
+        this.context.volume = val
+        console.log(val)
+        this.context.audio.volume(val)
       }
     },
     async loadSync() {
