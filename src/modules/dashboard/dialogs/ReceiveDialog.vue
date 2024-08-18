@@ -54,7 +54,7 @@ export default {
   computed: {
     ...mapState(useStore, ['baseAddress', 'addresses', 'stakeAddress']),
     allAddresses() {
-      if (this.showUsed) {
+      if (this.showUsed && this.addresses) {
         return this.addresses
           .filter(address => address !== this.baseAddress)
           .map(address => {

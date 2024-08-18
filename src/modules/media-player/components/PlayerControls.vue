@@ -1,8 +1,8 @@
 <template>
   <div v-if="currentTrack" class="text-center">
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="toggleShuffle">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="toggleShuffle" :plain="!context.isShuffle">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
-        {{ context.isShuffle ? 'mdi-shuffle' : 'mdi-shuffle-disabled' }}
+        mdi-shuffle
       </v-icon>
     </v-btn>
     <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" text icon color="primary" @click="prevTrack">
@@ -20,9 +20,9 @@
         mdi-skip-next
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="toggleRepeat">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" :plain="!context.isRepeat" @click="toggleRepeat">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
-        {{ context.isRepeat ? 'mdi-repeat' : 'mdi-repeat-off' }}
+        mdi-repeat
       </v-icon>
     </v-btn>
   </div>

@@ -29,6 +29,25 @@
                 </v-icon>&nbsp;
                 <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(latestTip?.time * 1000).toLocaleString()}}</span>
                 <v-spacer></v-spacer>
+                <v-btn icon class="ml-2" :loading="loading.isSyncing" disabled>
+                  <v-avatar size="20">
+                    <v-icon>mdi-sync</v-icon>
+                  </v-avatar>
+                  <template v-slot:loader>
+                    <span class="custom-loader">
+                      <v-icon>mdi-sync</v-icon>
+                    </span>
+                  </template>
+                </v-btn>
+                <v-btn icon text :plain="!context.shown" v-if="musicPlaylist?.length > 0" @click="setMediaPlayerShown(!context.shown)">
+                  <v-avatar size="20" >
+                    <img
+                        :src="require('@/assets/svg/play-square.svg')"
+                        alt="Media Player"
+                        style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+                    >
+                  </v-avatar>
+                </v-btn>
 <!--                <v-btn icon class="ml-2">-->
 <!--                  <v-avatar size="20">-->
 <!--                    <img-->
@@ -77,7 +96,7 @@
 <!--                </v-card>-->
 <!--              </v-container>-->
 <!--            </v-app-bar>-->
-            <Player v-if="currentPage.name !== 'mediaPlayer'" style="position: -webkit-sticky; position: sticky; bottom: 0;" />
+            <Player v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown" style="position: -webkit-sticky; position: sticky; bottom: 0;" />
           </v-sheet>
         </v-layout>
       </v-container>
@@ -89,11 +108,12 @@ import NavigationDrawer from "../components/NavigationDrawer.vue";
 import {useStore} from "@/store";
 import socket from "@/plugins/socket";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
-import {mapState} from "pinia";
+import { mapActions, mapState } from 'pinia';
 import SettingsDialog from "@/modules/dashboard/dialogs/SettingsDialog.vue";
 import { Blockchain } from '@/models/types';
 import networks from '@/shared/utils/networks';
 import Player from '@/modules/media-player/Player.vue';
+import loading from '@/plugins/loading';
 
 export default {
   name: 'ContentLayout',
@@ -108,12 +128,15 @@ export default {
     currentPage() {
       return this.$route
     },
-    ...mapState(useStore, ['loggedWallet', "latestTip"]),
+    ...mapState(useStore, ['loggedWallet', "latestTip", 'musicPlaylist', 'loadingTxs', 'context']),
     epochSlotPercentage() {
       if (this.latestTip) {
         return this.latestTip.epoch_slot / 432000 * 100
       }
       return ''
+    },
+    loading() {
+      return loading
     },
   },
   data: () => ({
@@ -124,6 +147,7 @@ export default {
     },
   }),
   methods: {
+    ...mapActions(useStore, ['setMediaPlayerShown']),
     closeDialog() {
       this.currentDialog = null;
     },
@@ -139,5 +163,42 @@ export default {
 
 .v-input--switch__thumb {
   color: #ffffff !important;
+}
+
+.custom-loader {
+  animation: loader 1s infinite;
+  display: flex;
+}
+@-moz-keyframes loader {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@-webkit-keyframes loader {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@-o-keyframes loader {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loader {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

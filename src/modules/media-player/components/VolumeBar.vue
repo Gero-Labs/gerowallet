@@ -5,9 +5,7 @@
       v-model="volume"
       @click:prepend="onButtonClick"
       :prepend-icon="volumeIcon"
-      v-on:drag-start="onDragStart"
-      v-on:callback="onSliderChange"
-      v-on:drag-end="onDragEnd"
+      @end="onDragEnd"
       :tooltip="false"
       track-fill-color="primary"
       track-color="#737575"
@@ -54,19 +52,9 @@ export default {
       }
       this.setVolume(this.volume);
     },
-    onDragStart({ currentValue }) {
-      this.dragStartVolume = currentValue;
+    onDragEnd() {
+      this.setVolume(this.volume);
     },
-    onDragEnd({ currentValue }) {
-      this.setVolume(currentValue);
-    },
-    onSliderChange(currentValue) {
-      const diff = Math.abs(this.dragStartVolume - currentValue);
-      if (diff >= 10) {
-        this.dragStartVolume = currentValue;
-        this.setVolume(currentValue);
-      }
-    }
   },
   mounted() {
     this.volume = this.context.volume;

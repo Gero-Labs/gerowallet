@@ -39,6 +39,7 @@ export const useStore = defineStore('store', {
     price: undefined,
     transactions: undefined,
     loadingTxs: true,
+    isSyncing: false,
     assets: [],
     pools: [],
     rewards: [],
@@ -67,6 +68,7 @@ export const useStore = defineStore('store', {
       seek: 0,
       duration: undefined,
       minimized: false,
+      shown: false,
     },
   }),
   getters: {
@@ -452,15 +454,12 @@ export const useStore = defineStore('store', {
       this.pools = []
       this.accountInfo = undefined;
       this.latestTip = undefined;
+      this.resolvedCollections = undefined
+      this.musicPlaylist = undefined
+      this.addresses = undefined
+      this.baseAddress = undefined
+      this.stakeAddress = undefined
       appWallet = undefined
-      loading.setLoading(false);
-    },
-    async loadWallets(): Promise<void> {
-      loading.setLoading(true);
-      const wallets = await db.getAllWallets();
-      if (Array.isArray(wallets) && wallets.length) {
-        this.wallets = wallets;
-      }
       loading.setLoading(false);
     },
     setLocale(locale) {
@@ -487,6 +486,9 @@ export const useStore = defineStore('store', {
     },
     setMaximized() {
       this.context.minimized = false
+    },
+    setMediaPlayerShown(value) {
+      this.context.shown = value
     },
     setTrack(index) {
       this.context.currentIndex = index
@@ -573,9 +575,18 @@ export const useStore = defineStore('store', {
     setVolume(val) {
       if (this.context.audio) {
         this.context.volume = val
-        console.log(val)
-        this.context.audio.volume(val)
+        this.context.audio.volume(val / 100)
       }
+    },
+    async loadWallets(): Promise<void> {
+      liveQuery(() => db.getAllWallets()).subscribe({
+        next: wallets => {
+          this.wallets = wallets
+        },
+        error: error => {
+          console.error('Failed to get all Wallets:', error)
+        }
+      });
     },
     async loadSync() {
       if (!appWallet) {
@@ -598,6 +609,7 @@ export const useStore = defineStore('store', {
       const db = await appWallet.getDb()
       liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
         next: newAccountInfo => {
+          console.log(newAccountInfo)
           this.accountInfo = newAccountInfo
         },
         error: error => {
