@@ -1,8 +1,8 @@
 <template>
   <div v-if="currentTrack" class="text-center">
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="shuffle">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="toggleShuffle">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
-        mdi-shuffle
+        {{ context.isShuffle ? 'mdi-shuffle' : 'mdi-shuffle-disabled' }}
       </v-icon>
     </v-btn>
     <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" text icon color="primary" @click="prevTrack">
@@ -20,9 +20,9 @@
         mdi-skip-next
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="repeat">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="toggleRepeat">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
-        mdi-repeat-variant
+        {{ context.isRepeat ? 'mdi-repeat' : 'mdi-repeat-off' }}
       </v-icon>
     </v-btn>
   </div>
@@ -62,7 +62,7 @@ export default {
     }
   },
   methods: {
-    ...mapActions(useStore, ['togglePlayPause', 'setTrack', 'nextTrack', 'prevTrack']),
+    ...mapActions(useStore, ['togglePlayPause', 'setTrack', 'nextTrack', 'prevTrack', 'toggleShuffle', 'toggleRepeat']),
     next() {
       // api.spotify.player.nextTrack();
     },
