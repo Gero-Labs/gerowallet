@@ -12,7 +12,7 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-                :src="require('../assets/gero_dashboards.png')" width="100" alt="logo"
+                :src="require('../assets/gero_dashboards.svg')" width="100" alt="logo"
             />
           </v-list-item-title>
         </v-list-item-content>
@@ -26,11 +26,13 @@
         <v-list-item
             v-else-if="item.link"
             :to="item.link"
+            v-show="item.enabled || item.soon"
             :disabled="item.soon"
             :key="index"
             :active-class="$vuetify.theme.isDark ? 'activePageDark' : 'activePage'"
             link
             class="menuItem"
+            style="height: 40px"
         >
           <v-list-item-avatar tile size="18" :style="item.soon ? { filter: 'opacity(0.5)'} : {}">
             <v-img width="18" height="18" :src="item.icon" :alt="item.title" contain style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"></v-img>
@@ -189,6 +191,7 @@
 import filters from '@/shared/utils/filters'
 import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'NavigationDrawer',
@@ -205,7 +208,10 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['wallets', 'loggedWallet']),
+    networks() {
+      return networks
+    },
+    ...mapState(useStore, ['wallets', 'loggedWallet', 'musicPlaylist']),
     avatar() {
       if (this.account.icon.includes('http')) {
         return this.account.icon
@@ -218,6 +224,30 @@ export default {
         return this.wallets.find(wallet => wallet.id === this.loggedWallet.id)
       }
       return null
+    },
+    items() {
+
+      return [
+        // { header: 'Home' },
+        {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/', enabled: true},
+        {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking', enabled: true},
+        {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap', enabled: networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
+        // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
+        // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
+        {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
+        {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat', soon: true},
+        {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
+        {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},
+        // { header: 'Tools' },
+        // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
+        // { title: 'IPFS Cache', icon: 'mdi-cube', link: '/ipfs-cache', soon: true },
+        // { title: 'Snapshot', icon: 'mdi-camera-enhance', link: '/snapshot', soon: true },
+        // { header: 'Documentation' },
+        // { title: 'Guides', icon: 'mdi-book-open-variant', href: 'https://docs.adabox.io/'},
+        // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper'},
+      ]
     },
     drawer: {
       get() {
@@ -240,27 +270,6 @@ export default {
     selectedAvatar: undefined,
     avatars: [],
     changeAvatarDialog: false,
-    items: [
-      // { header: 'Home' },
-      {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/'},
-      {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking'},
-      {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback'},
-      {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat'},
-      // {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap'},
-      // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
-      // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
-      // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
-      {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player'},
-      {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
-      {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},
-      // { header: 'Tools' },
-      // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
-      // { title: 'IPFS Cache', icon: 'mdi-cube', link: '/ipfs-cache', soon: true },
-      // { title: 'Snapshot', icon: 'mdi-camera-enhance', link: '/snapshot', soon: true },
-      // { header: 'Documentation' },
-      // { title: 'Guides', icon: 'mdi-book-open-variant', href: 'https://docs.adabox.io/'},
-      // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper'},
-    ],
     errorImage: require('@/assets/img/1x1.png')
   }),
   methods: {

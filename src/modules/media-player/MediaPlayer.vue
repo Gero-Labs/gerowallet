@@ -88,7 +88,10 @@ export default defineComponent({
   computed: {
     ...mapState(useStore, ['musicPlaylist', 'context']),
     currentTrack() {
-      return this.musicPlaylist[this.context.currentIndex]
+      if (this.musicPlaylist) {
+        return this.musicPlaylist[this.context.currentIndex]
+      }
+      return undefined
     },
     currentSong: {
       get() {

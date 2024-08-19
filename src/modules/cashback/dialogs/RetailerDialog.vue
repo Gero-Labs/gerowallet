@@ -12,7 +12,7 @@
                 {{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}
               </v-list-item-title>
             </v-list-item>
-            <v-card-subtitle v-if="retailer" class="pa-0" style="word-break: break-word; color: #00DFF3">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-card-subtitle>
+            <v-card-subtitle v-if="retailer" class="pa-0" style="word-break: break-word; color: #00DFF3">Up to {{ retailer.maxCashback.toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-card-subtitle>
           </div>
         </v-col>
       </v-row>
@@ -69,7 +69,7 @@ export default {
   },
   methods: {
     async getContent() {
-      this.fileContent = "rendering ";
+      this.fileContent = "";
       try {
         const response = await axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
         this.fileContent = response.data;

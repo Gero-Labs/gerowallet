@@ -1,7 +1,9 @@
 export class LoadingPlugin {
 
   loading: boolean = true;
+  text: string = '';
   isSyncing: boolean = true;
+  isRestoring: boolean = false;
 
   setLoading(value: boolean) {
     // if (!val) {
@@ -9,8 +11,17 @@ export class LoadingPlugin {
     // }
     this.loading = value;
   }
+  setText(value: string) {
+    this.text = value
+  }
   setSyncing(value: boolean) {
     this.isSyncing = value
+  }
+  setRestoring(value: boolean) {
+    if (!value) {
+      this.setText('')
+    }
+    this.isRestoring = value
   }
 }
 

@@ -29,7 +29,9 @@ export default {
         price_step: 0.0000721,
         coins_per_utxo_size: "4310"
       },
-      defaultProvider: Provider.KOIOS
+      defaultProvider: Provider.KOIOS,
+      cashbackSupport: true,
+      swapSupport: true,
     },
     {
       icon: require('@/assets/svg/cardano.svg'),
@@ -55,7 +57,9 @@ export default {
         price_step: 0.0000721,
         coins_per_utxo_size: "4310"
       },
-      defaultProvider: Provider.KOIOS
+      defaultProvider: Provider.KOIOS,
+      cashbackSupport: false,
+      swapSupport: false,
     },
     {
       icon: require('@/assets/svg/cardano.svg'),
@@ -69,7 +73,9 @@ export default {
       currencyName: 'Cardano',
       currencyDescription: 'Cardano Native Token',
       currencyImage: cardanoLogo,
-      defaultProvider: Provider.KOIOS
+      defaultProvider: Provider.KOIOS,
+      cashbackSupport: false,
+      swapSupport: false,
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -96,7 +102,9 @@ export default {
         coins_per_utxo_size: "4310"
       },
       geroPool: 'pool1kvdf7svevc4d5j5ll0l0094s5m9xmpvkhtq9up0j3nlwytnyq8f',
-      defaultProvider: Provider.KOIOS
+      defaultProvider: Provider.KOIOS,
+      cashbackSupport: false,
+      swapSupport: false,
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -110,34 +118,48 @@ export default {
       currencyName: 'Apex Fusion',
       currencyDescription: 'Apex Fusion Native Token',
       currencyImage: apexLogo,
-      defaultProvider: Provider.BLOCKFROST
+      defaultProvider: Provider.BLOCKFROST,
+      cashbackSupport: false,
+      swapSupport: false,
     },
   ],
   resolveNetwork(chain: string, network: string) {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
   },
   resolveNetworkId(chain: string, network: string): number {
-    return this.resolveNetwork(chain, network).networkId;
+    return this.resolveNetwork(chain, network)?.networkId;
   },
   resolveCurrencySymbol(chain: string, network: string): string {
     if (!chain || !network) {
       return ''
     }
-    return this.resolveNetwork(chain, network).currencySymbol
+    return this.resolveNetwork(chain, network)?.currencySymbol
   },
   resolveCurrencyTicker(chain: string, network: string): string {
     if (!chain || !network) {
       return ''
     }
-    return this.resolveNetwork(chain, network).currencyTicker
+    return this.resolveNetwork(chain, network)?.currencyTicker
   },
   resolvePool(chain: string, network: string): string {
-    return this.resolveNetwork(chain, network).geroPool
+    return this.resolveNetwork(chain, network)?.geroPool
   },
   resolveDefaultProvider(chain: string, network: string): Provider {
     if (!chain || !network) {
       return Provider.UNDEFINED
     }
-    return this.resolveNetwork(chain, network).defaultProvider
+    return this.resolveNetwork(chain, network)?.defaultProvider
+  },
+  resolveCashbackSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.cashbackSupport
+  },
+  resolveSwapSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.swapSupport
   },
 };

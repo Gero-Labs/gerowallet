@@ -5,8 +5,8 @@
         <v-layout :align-start="true">
           <navigation-drawer ></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
-            <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
-              <v-app-bar flat class="transparent" color="transparent">
+            <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
+              <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px">
                 <PriceTicker></PriceTicker>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="networks.resolveNetwork(loggedWallet?.chain, loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></v-divider>
                 <span style="font-size: 14px">{{'Epoch ' + latestTip?.epoch}}</span>

@@ -125,7 +125,7 @@
                 {{new Date(item.date).toLocaleString()}}
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
-                <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
+                <div>{{ (item.tokenAmount+"") | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
               </template>
             </v-data-table>
           </v-card>

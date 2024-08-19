@@ -21,18 +21,20 @@ export class SocketPlugin {
     sync?: Subscription
   }
 
-  setMessage(value: string) {
+  async setMessage(value: string) {
     this.message = value;
     const msg_type = value['message_type']
     const object = value['object']
     if (msg_type === 'TIP') {
-      this.wallet.sync(object)
+      if (!this.wallet.locked) {
+        await this.wallet.sync(object)
+      }
     } else if (msg_type === 'PRICE') {
       useStore().setPrice(object)
     } else if (msg_type === 'FIAT_RATES') {
-      useStore().setFiatRates(object)
+      await useStore().setFiatRates(object)
     } else if (msg_type === 'SYNC') {
-      this.wallet.setSync(object)
+      await this.wallet.setSync(object)
     }
   }
 

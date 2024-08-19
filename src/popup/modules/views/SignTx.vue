@@ -96,7 +96,7 @@ import rules from '@/shared/utils/rules';
 import {
   BigNum,
   decode_metadatum_to_json_str,
-  Transaction,
+  Transaction, TransactionWitnessSet,
   Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { mapState } from 'pinia';
@@ -129,6 +129,7 @@ export default {
         enabled: false,
         text: 'Wrong Spending Password!',
       },
+      txSubmitLoading: false,
       loading: true,
       controller: Messaging.createInternalController(),
       // txCbor: '84a900828258207deec26e4afa4cd5373c93db4f514da668f68544bacb248f0d02e99d2fcf12b000825820a8c5ac70414db4f8330e23c592443aabf42f2fa2be7391263b6ea2f31aca2f0f040187a30058393184cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9ab2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6d011a0011a008028201d818582258209a53eccef981a9565010918e3493a332206478df48bd1b32d3a4d396b6f1d8d3825839019f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799ab8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e531a000f424082583901aea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ec2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e11a0112a880825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a150ce3ed825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a0a8671f6825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad821a0011d28aa1581cf7535d3356b29a16ce50a2843c539c9a05c94abfca7b96a26a56012ca14b4d75736963426f7834393001825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a0a713131021a00036e3c031a0791c8df0b58203a5912a61f0f567682118754b8c0c06fee9231831ddf7a50cd3a9ef3d003bdd10d8182582037a0c517d3f5b9a91c92a4d38847dad806911d1cb7914f236b1d31d0929e66240210825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a004725e6111a0005255a12818258201693c508b6132e89b932754d657d28b24068ff5ff1715fec36c010d4d6470b3d00a2049fd8799f9fd8799fd8799fd8799f581c9f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799abffd8799fd8799fd8799f581c8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e53ffffffff1a000f4240ffd8799fd8799fd8799f581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffd8799fd8799fd8799f581c2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e1ffffffff1a0112a880ffff581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffff0581840000d8799f00ff821a000326a91a055457e7f5f6'
@@ -266,7 +267,7 @@ export default {
       if (this.$refs.form.validate()) {
         if (appWallet.verifySpendingPassword(this.spendingPassword)) {
           try {
-            const res = await appWallet.signTx(
+            const response = await appWallet.signTx(
               this.request.data.tx,
               this.request.data.partialSign,
               this.spendingPassword,
@@ -274,8 +275,7 @@ export default {
               this.utxos,
               this.addresses,
             );
-            console.log(res) // TODO Submit
-            await this.controller.returnData({ data: res, error: undefined });
+            await this.controller.returnData({ data: response.witnesses, error: undefined });
           } catch (e) {
             console.log(e)
             await this.controller.returnData({ data: undefined, error: e });
