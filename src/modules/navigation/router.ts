@@ -14,6 +14,7 @@ import zkFiat from "@/modules/zkFiat/zkFiat.vue";
 import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 import loading from '@/plugins/loading';
+import Swap from '@/modules/swap/Swap.vue';
 
 const routes = [
   {
@@ -45,7 +46,7 @@ const routes = [
   {
     path: '/swap',
     name: 'swap',
-    component: Dashboard,
+    component: Swap,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

@@ -32,7 +32,7 @@ export default {
   filters,
   methods: {
     getContent() {
-      this.fileContent = "rendering ";
+      this.fileContent = "";
       // var self;
       axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
         .then(response => {

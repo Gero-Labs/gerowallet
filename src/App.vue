@@ -3,10 +3,11 @@
     <component :is="this.$route.meta.layout || 'div'">
       <router-view></router-view>
     </component>
-    <v-overlay v-show="loading.loading" opacity="0.9" style="text-align: center;">
+    <v-overlay v-show="loading.loading || loading.isRestoring" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="require('@/assets/output.webm')" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
+        <v-card-text style="color: white" v-if="loading.text">{{ loading.text }}</v-card-text>
         <v-progress-linear
             buffer-value="0"
             color="primary"

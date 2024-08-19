@@ -20,7 +20,7 @@ import {
   Address,
   EnterpriseAddress,
   PointerAddress,
-  TransactionHash,
+  TransactionHash, TransactionBody,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -46,7 +46,6 @@ import {
   COSESign1Builder, COSEKey, KeyType, Int, BigNum,
 } from '@emurgo/cardano-message-signing-browser';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
-import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
@@ -277,10 +276,10 @@ export class Wallet {
     };
   }
 
-  async signTx(txCbor: string, partialSign = false, password: string, accountIndex: number, utxos, addresses: string[]) {
-    const rawTx = FixedTransaction.from_hex(txCbor);
-    const vkeyWitnesses = Vkeywitnesses.new();
-    const txBody = rawTx.body();
+  async signTx(txCbor: string, partialSign = false, password: string, accountIndex: number, utxos, addresses: string[]): Promise<{witnesses: string}> {
+    const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
+    const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
+    const txBody: TransactionBody = rawTx.body();
     const deduped = [];
     const keyHashes = [];
 
@@ -577,26 +576,59 @@ export class Wallet {
       loading.setSyncing(true)
       const lastSyncInfo = await this.getLastSyncInfo();
       if (!lastSyncInfo) {
-        loading.setLoading(true)
-      }
-      if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+        // loading.setText('Restoring Wallet Data. Please Wait ...')
+        loading.setRestoring(true)
+        await this.restore(tip)
+        loading.setRestoring(false)
+      } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const promises = [];
         promises.push(this.syncStakingPools());
         const prevAccountInfo = await this.getAccountInfo()
         socket.sendSync(!lastSyncInfo ? undefined : tip, tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount)
-        // promises.push(this.api.sync(tip.height, this.stakeAddress().to_address().to_bech32(), prevAccountInfo).then(async syncResponse => {
-        //   if (!syncResponse.success) {
-        //     return;
-        //   }
-        //   if (syncResponse.transactions && Array.isArray(syncResponse.transactions)) {
-        //     await this.setAccountTransactions(syncResponse.transactions);
-        //     await this.setAssets2(syncResponse.assets)
-        //   }
-        //   await this.setLastSyncInfo(tip);
-        // }))
       }
       this.locked = false;
     }
+  }
+
+  async restore(tip): Promise<void> {
+    console.log('restore');
+    const prevAccountInfo = await this.getAccountInfo()
+    const promises = [];
+    promises.push(this.syncStakingPools());
+    promises.push(this.syncAccountInfo().then(accountInfo => {
+      if (accountInfo) {
+        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
+          promises.push(this.syncAccountRewards());
+        }
+        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
+          promises.push(this.syncAccountTransactions( 0).then(txs => {
+            if (txs) {
+              const units: Set<string> = new Set();
+              txs.forEach(tx => {
+                tx.inputs.forEach(input => {
+                  if (input.asset_list) {
+                    input.asset_list.forEach(asset => {
+                      units.add(asset.policy_id + asset.asset_name);
+                    });
+                  }
+                });
+                tx.outputs.forEach(output => {
+                  if (output.asset_list) {
+                    output.asset_list.forEach(asset => {
+                      units.add(asset.policy_id + asset.asset_name);
+                    });
+                  }
+                });
+              });
+              promises.push(this.syncAssets(Array.from(units), false));
+            }
+          }));
+        }
+      }
+      return [];
+    }));
+    await Promise.all(promises);
+    await this.setLastSyncInfo(tip);
   }
 
   async setSync(syncObject) {
@@ -620,9 +652,6 @@ export class Wallet {
       if (promises.length > 0) {
         await Promise.all(promises)
       }
-    }
-    if (loading.loading) {
-      loading.setLoading(false)
     }
     loading.setSyncing(false)
   }
@@ -742,6 +771,28 @@ export class Wallet {
     return await this.api.getTip();
   }
 
+  async syncAccountInfo(): Promise<any> {
+    try {
+      const res = await this.api.getAccountInfo(this.stakeAddress().to_address().to_bech32());
+      if (res) {
+        return await this.setAccountInfo(res);
+      }
+    } catch (e) {
+      // console.log(e);
+    }
+  }
+
+  async syncAccountRewards(): Promise<void> {
+    try {
+      const res = await this.api.getAccountRewards(this.stakeAddress().to_address().to_bech32());
+      if (res) {
+        await this.setAccountRewards(res);
+      }
+    } catch (e) {
+      // console.log(e);
+    }
+  }
+
   async setAccountRewards(res): Promise<any[] | void> {
     return this.db
       .open()
@@ -760,6 +811,25 @@ export class Wallet {
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
       });
+  }
+
+  async syncAccountTransactions(height: number): Promise<any> {
+    try {
+      const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height);
+      if (res && Array.isArray(res)) {
+        const promises = [];
+        const txHashes: string[] = res.map(tx => tx.tx_hash);
+        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 5 * 1024 });
+        smallerArrays.forEach(smallerArray => {
+          promises.push(this.api.getTransactionsInfo(smallerArray));
+        });
+        const txs = (await Promise.all(promises)).flat();
+        await this.setAccountTransactions(txs);
+        return txs;
+      }
+    } catch (e) {
+      console.log(e);
+    }
   }
 
   async setAccountTransactions(txs): Promise<any> {

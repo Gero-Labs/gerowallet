@@ -13,12 +13,12 @@
       <div class="info-container">
         <span class="info-label">Fingerprint: </span>
         <span class="info-value">{{ fingerprint }}</span>
-        <CopyButton small color="#94969c" :value="fingerprint" />
+        <CopyButton v-if="fingerprint" small color="#94969c" :value="fingerprint" />
       </div>
       <div class="info-container">
         <span class="info-label">Asset Name:</span>
         <span class="info-value">{{ asset }}</span>
-        <CopyButton small color="#94969c" :value="asset" />
+        <CopyButton v-if="asset" small color="#94969c" :value="asset" />
       </div>
     </div>
     <div class="navigation-links">
@@ -36,7 +36,7 @@
 import CopyButton from '@/shared/components/CopyButton.vue';
 
 export default {
-  components: { CopyButton },    
+  components: { CopyButton },
   data() {
     return {
       asset: "696d656e73696f6e426f78202330303436",
@@ -121,7 +121,7 @@ export default {
 .carousel-item.right {
   height: 50%;
   width: 15%;
-  
+
   & .carousel-image {
     height: 100%;
     opacity: 0.4;
@@ -144,7 +144,7 @@ export default {
    width: 300px;
   }
 
-  
+
   .info-label, .info-value{
     color: #94969c;
     font-size: 12px;
@@ -159,7 +159,7 @@ export default {
   margin-top: 20px;
   flex-wrap: wrap;
 
-  
+
   .nav-button{
     background-color: #0f0f0f;
     padding: 10px;
@@ -167,7 +167,7 @@ export default {
     color: white;
     border-radius: 8px;
     transition: all 0.3s ease;
-    
+
     &:hover{
       opacity: 0.9;
     }
@@ -186,5 +186,5 @@ export default {
     background: linear-gradient(to right,#FFC900 , #FFFFFF);
   }
 }
-  
+
 </style>
