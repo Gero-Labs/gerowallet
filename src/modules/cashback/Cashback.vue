@@ -30,14 +30,6 @@
               </div>
             </div>
           </div>
-          <v-btn outlined height="148" color="#00C7F3" class="btn-bg" @click="isRewardsDialogOpen = true">
-            <div class="btn-content">
-              <v-avatar size="56" class="avatar-bg">
-                <v-icon color="white" style="font-size: 28px">mdi-gift-open-outline</v-icon>
-              </v-avatar>
-              <div class="btn-text">View Rewards</div>
-            </div>
-          </v-btn>
           <div class="right-section">
             <div class="header">
               <div class="icon-bg">
@@ -56,6 +48,14 @@
               </div>
             </div>
           </div>
+          <v-btn outlined height="148" color="#00C7F3" class="btn-bg" @click="isRewardsDialogOpen = true">
+            <div class="btn-content">
+              <v-avatar size="56" class="avatar-bg">
+                <v-icon color="white" style="font-size: 28px">mdi-gift-open-outline</v-icon>
+              </v-avatar>
+              <div class="btn-text">View Rewards</div>
+            </div>
+          </v-btn>
         </div>
       </div>
       <v-row class="mt-4">
@@ -69,8 +69,8 @@
             >
             </v-skeleton-loader>
           </v-chip-group>
-          <v-chip-group v-else v-model="selectedCategoryIndex" column mandatory active-class="primary--text" >
-            <v-chip color="#CECFD2" class="ma-1" style="background-color: #333741!important;" outlined v-for="item in categories?.items" :key="item.id">
+          <v-chip-group v-else v-model="selectedCategoryIndex" column mandatory active-class="geroButton" >
+            <v-chip color="#CECFD2" class="ma-1" style="background-color: #333741!important;" v-for="item in categories?.items" :key="item.id">
               {{ item.name }}
             </v-chip>
           </v-chip-group>
@@ -122,7 +122,9 @@
               </v-img>
             </v-avatar>
             <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
-            <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-card-subtitle>
+            <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
+              <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
+            </v-card-subtitle>
           </v-card>
         </v-col>
       </v-row>
@@ -450,5 +452,9 @@ export default defineComponent({
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
+}
+
+.theme--dark.v-chip--active:hover::before, .theme--dark.v-chip--active::before {
+   opacity: 0;
 }
 </style>

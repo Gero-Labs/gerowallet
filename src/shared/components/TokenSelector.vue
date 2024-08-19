@@ -1,13 +1,15 @@
 <template>
   <v-card class="transparent" flat v-if="selectedToken">
     <v-card-text style="display: flex; flex-direction: column" class="pa-0">
-      <v-row no-gutters class="pb-1">
-        <v-col cols="12" style="display: flex">
+      <v-row no-gutters class="pb-1" v-if="!bottomTitle">
+        <v-col cols="12" style="display: flex; align-items: center;">
+          <span v-if="title" :style="{ color: titleColor }">{{title}}</span>
           <v-spacer></v-spacer>
-          <span style="color: #667085">Balance: {{ balance }}</span>
+          <span style="color: #667085">Balance: {{ balance | toCurrency(false, 0, '', '', false, 0) }}</span>
+          <v-btn text plain small @click="setMax" :ripple="false" color="#00DFF3" class="px-0" v-if="maxButtonEnabled">MAX</v-btn>
         </v-col>
       </v-row>
-      <v-card class="card-container px-2 py-1" outlined>
+      <v-card class="card-container px-2 py-1" outlined :style="{backgroundColor: backgroundColor+'!important' }">
 <!--        <v-card-subtitle class="text-right pb-0 pt-2">Balance: {{ selectedToken.balance | toCurrency(false,2,'', true, selectedToken.decimals) }}</v-card-subtitle>-->
         <v-card-text style="display: flex" class="pa-0">
           <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left;">
@@ -73,12 +75,15 @@
         </v-card-text>
       </v-card>
     </v-card-text>
-    <v-card-actions class="px-0">
-      <v-btn text small @click="removeTokenSelector" v-if="index !== 0">
+    <v-card-actions class="px-0" v-if="bottomTitle">
+      <span v-if="title" :style="{ color: titleColor }">{{title}}</span>
+      <v-spacer></v-spacer>
+      <span style="color: #667085">Balance: {{ balance | toCurrency(false, 0, '', '', false, 0) }}</span>
+    </v-card-actions>
+    <v-card-actions class="px-0" v-else-if="index !== 0">
+      <v-btn text small @click="removeTokenSelector">
         <v-icon color="#00DFF3">mdi-minus-box-outline</v-icon>&nbsp;Remove
       </v-btn>
-      <v-spacer></v-spacer>
-      <v-btn text small @click="setMax" color="#00DFF3">MAX</v-btn>
     </v-card-actions>
   </v-card>
 </template>
@@ -92,6 +97,13 @@ export default {
   name: 'TokenSelector',
   components: { CurrencyTextField },
   props: {
+    title: {
+      type: String,
+    },
+    titleColor: {
+      type: String,
+      default: 'white'
+    },
     value: {
       type: Object,
       required: false,
@@ -101,13 +113,25 @@ export default {
     },
     index: {
       type: Number,
+    },
+    bottomTitle: {
+      type: Boolean,
+      default: false
+    },
+    backgroundColor: {
+      type: String,
+      default: '#292929'
+    },
+    maxButtonEnabled: {
+      type: Boolean,
+      default: true
     }
   },
   filters,
   computed: {
     ...mapState(useStore, ['price']),
     balance() {
-      return this.selectedToken.decimals ? (filters.toCurrency(this.selectedToken.balance, false,this.selectedToken.decimals,'', false, this.selectedToken.decimals)) : this.selectedToken.balance+''
+      return this.selectedToken.decimals ? (filters.toCurrency(this.selectedToken.balance, false,this.selectedToken.decimals,'', '',false, this.selectedToken.decimals)) : this.selectedToken.balance+''
     },
     selectedToken: {
       get() {
@@ -136,7 +160,6 @@ export default {
 </script>
 <style scoped>
 .card-container {
-  background-color: #292929 !important;
   border-radius: 10px !important;
   border-color: #00DFF3 !important;
   box-shadow: 0 0 0 5px #00dff32a !important;
