@@ -29,7 +29,7 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "PlayerControls",
@@ -56,7 +56,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(useStore, ['musicPlaylist', 'context']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     currentTrack() {
       if (this.musicPlaylist) {
         return this.musicPlaylist[this.context.currentIndex]
@@ -65,7 +65,7 @@ export default {
     }
   },
   methods: {
-    ...mapActions(useStore, ['togglePlayPause', 'setTrack', 'nextTrack', 'prevTrack', 'toggleShuffle', 'toggleRepeat']),
+    ...mapActions(musicStore, ['togglePlayPause', 'setTrack', 'nextTrack', 'prevTrack', 'toggleShuffle', 'toggleRepeat']),
     next() {
       // api.spotify.player.nextTrack();
     },

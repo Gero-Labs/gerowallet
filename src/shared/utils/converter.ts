@@ -1,22 +1,25 @@
 import {
   Address,
-  BaseAddress,
-  MultiAsset,
-  TransactionHash,
-  TransactionInput,
-  TransactionUnspentOutput,
-  TransactionOutput,
-  Assets,
   AssetName,
-  BigNum,
-  ScriptHash,
-  Value,
-  PlutusData,
+  Assets,
+  BaseAddress,
   BigInt,
+  BigNum,
+  ByronAddress,
+  ConstrPlutusData,
+  MultiAsset,
+  PlutusData,
   PlutusList,
   PlutusMap,
-  ConstrPlutusData, ByronAddress,
+  ScriptHash,
+  TransactionHash,
+  TransactionInput,
+  TransactionOutput,
+  TransactionUnspentOutput,
+  Value,
 } from '@emurgo/cardano-serialization-lib-browser';
+import { blake2b } from 'blakejs';
+import { bech32 } from 'bech32';
 
 export const toAddress = bech32 => Address.from_bech32(bech32);
 
@@ -51,7 +54,7 @@ export function toValue(assets, lovelace) {
 
 export function jsonToPlutusData(jsonObj): PlutusData {
   function parsePlutusData(data) {
-    if (data.bytes) {
+    if ('bytes' in data) {
       return PlutusData.new_bytes(Buffer.from(data.bytes, 'hex'));
     } else if (data.int !== undefined) {
       return PlutusData.new_integer(BigInt.from_str(data.int.toString()));
@@ -162,4 +165,15 @@ export function formatTime(secs: number): string {
   const minutes = Math.floor(secs / 60) || 0;
   const seconds = (secs - minutes * 60) || 0;
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+}
+
+export function unitToFingerprint(unit) {
+  const policyIdBytes = Buffer.from(unit.slice(0,56), 'hex');
+  const assetNameBytes = Buffer.from(unit.slice(56), 'hex');
+  const combined = Buffer.concat([policyIdBytes, assetNameBytes]);
+  // Perform Blake2b-160 hash on the combined bytes
+  const hash = blake2b(combined, null, 20);
+  // Encode the result as Bech32
+  const words = bech32.toWords(hash);
+  return bech32.encode('asset', words)
 }

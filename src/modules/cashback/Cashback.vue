@@ -152,18 +152,19 @@
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import {appWallet, useStore} from '@/store';
+import {appWallet} from '@/store';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
 import {mapState} from "pinia";
 import filters from "@/shared/utils/filters";
 import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
 import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
+import { bringStore } from '@/store/modules/bring';
 
 export default defineComponent({
   name: 'Cashback.vue',
   components: { HowItWorksDialog, RetailerDialog, ViewRewardsDialog},
   computed: {
-    ...mapState(useStore, ['bringCache']),
+    ...mapState(bringStore, ['bringCache']),
     terms() {
       return this.entries
     },

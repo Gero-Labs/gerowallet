@@ -22,6 +22,7 @@ import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import filters from '@/shared/utils/filters';
 import { formatTime } from '@/shared/utils/converter';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "player-player-playback",
@@ -34,7 +35,7 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['musicPlaylist', 'context']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     currentTrack() {
       return this.musicPlaylist[this.context.currentIndex]
     }

@@ -187,10 +187,13 @@ export class Wallet {
       StakeCredential.from_keyhash(this.pubKey(0).hash()),
       StakeCredential.from_keyhash(this.stakeKey().hash()),
     );
+
+    // return BaseAddress.from_address(Address.from_bech32("addr1q86qys9le3d9rmj3v5720mjzmfxgl329lgkv0l3x2k3era882ad6fg7zhf9stumjhlffscnvc4ggmyd9kdvs3g5v7fgseaes4f"))
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), StakeCredential.from_keyhash(this.stakeKey().hash()));
+    // return RewardAddress.from_address(Address.from_bech32("stake1u8n4wkay50pt5jc97detl55cvfkv25ydjxjmxkgg52x0y5g89ayyl"))
   }
 
   paymentKeyHash(address: string) {
@@ -591,43 +594,51 @@ export class Wallet {
   }
 
   async restore(tip): Promise<void> {
-    console.log('restore');
     const prevAccountInfo = await this.getAccountInfo()
+
+    // Create an array to hold the promises that need to be awaited
     const promises = [];
+
+    // Sync staking pools
     promises.push(this.syncStakingPools());
-    promises.push(this.syncAccountInfo().then(accountInfo => {
+
+    // Sync account info and handle rewards and transactions
+    promises.push(this.syncAccountInfo().then(async accountInfo => {
       if (accountInfo) {
         if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-          promises.push(this.syncAccountRewards());
+          await this.syncAccountRewards();
         }
         if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
-          promises.push(this.syncAccountTransactions( 0).then(txs => {
-            if (txs) {
-              const units: Set<string> = new Set();
-              txs.forEach(tx => {
-                tx.inputs.forEach(input => {
-                  if (input.asset_list) {
-                    input.asset_list.forEach(asset => {
-                      units.add(asset.policy_id + asset.asset_name);
-                    });
-                  }
-                });
-                tx.outputs.forEach(output => {
-                  if (output.asset_list) {
-                    output.asset_list.forEach(asset => {
-                      units.add(asset.policy_id + asset.asset_name);
-                    });
-                  }
-                });
+          const txs = await this.syncAccountTransactions(0);
+          if (txs) {
+            const units: Set<string> = new Set();
+            txs.forEach(tx => {
+              tx.inputs.forEach(input => {
+                if (input.asset_list) {
+                  input.asset_list.forEach(asset => {
+                    units.add(asset.policy_id + asset.asset_name);
+                  });
+                }
               });
-              promises.push(this.syncAssets(Array.from(units), false));
-            }
-          }));
+              tx.outputs.forEach(output => {
+                if (output.asset_list) {
+                  output.asset_list.forEach(asset => {
+                    units.add(asset.policy_id + asset.asset_name);
+                  });
+                }
+              });
+            });
+            await this.syncAssets(Array.from(units), false);
+          }
         }
       }
       return [];
     }));
+
+    // Wait for all promises to complete
     await Promise.all(promises);
+
+    // Set the last sync info once everything is done
     await this.setLastSyncInfo(tip);
   }
 
@@ -659,42 +670,25 @@ export class Wallet {
   async syncAssets(units: string[], force?: boolean): Promise<void> {
     console.log('syncAssets')
     const blockchainDB: Dexie = await this.getBlockchainDb();
-    const assetsSyncTable = blockchainDB.table('assets_sync');
-    const lastAssetsSyncArray = await assetsSyncTable.toArray();
-    if (force) {
-      await this.setAssets(units, blockchainDB, assetsSyncTable);
-    } else {
-      if (lastAssetsSyncArray.length > 0) {
-        const lastAssetsSync = lastAssetsSyncArray[0];
-        const hoursSinceEpoch: number = Math.floor(lastAssetsSync.time / (1000 * 60 * 60));
-        if (hoursSinceEpoch % 4 === 0) {
-          await this.setAssets(units, blockchainDB, assetsSyncTable);
-        }
-      } else {
-        await this.setAssets(units, blockchainDB, assetsSyncTable);
-      }
-    }
+    await this.setAssets(units, blockchainDB);
   }
 
-  async setAssets(units: string[], blockchainDB: Dexie, assetsSyncTable) {
-    const promises = [];
+  async setAssets(units: string[], blockchainDB: Dexie) {
+    const promises: any[] = [];
     const smallerArrays = chunkArray({ input: units, bytesSize: 5 * 1024 });
     smallerArrays.forEach(smallerArray => {
       promises.push(this.getAssetsInfo(smallerArray, blockchainDB));
     });
-    const assets = (await Promise.all(promises)).flat();
-    console.log(assets)
-    assetsSyncTable.put({ time: new Date().getTime() });
+    (await Promise.all(promises)).flat();
   }
 
   async setAssets2(assets): Promise<void> {
+    console.log('setAssets')
     const blockchainDB: Dexie = await this.getBlockchainDb();
-    const assetsSyncTable = blockchainDB.table('assets_sync');
     const assetsTable = blockchainDB.table('assets')
     if (assetsTable) {
       assetsTable.bulkPut(assets);
     }
-    assetsSyncTable.put({ time: new Date().getTime() });
   }
 
   private async getAssetsInfo(units: string[], blockchainDB: Dexie) {

@@ -36,9 +36,6 @@ const filters = {
     return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
   },
   toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
-    if (decimals == 1) {
-      console.log('toCurrency')
-    }
     if (symbolPrefix == undefined) {
       symbolPrefix = '₳'
     }

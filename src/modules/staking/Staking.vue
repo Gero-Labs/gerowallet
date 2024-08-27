@@ -112,7 +112,7 @@
                     <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" v-if="item.description">{{item.description}}</v-list-item-subtitle>
                     <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">
                       {{ item.pool_id_bech32 | truncate }}&nbsp;
-                      <copy-button :value="item.pool_id_bech32" x-small></copy-button>
+                      <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
