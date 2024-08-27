@@ -299,4 +299,88 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async getAllTokens(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/swap/tokens`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getAveragePrice(tokenIn: string, tokenOut: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/swap/averagePrice/${tokenIn}/${tokenOut}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async estimate(amount_in: number, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+    try {
+      const requestBody = {
+        amount_in,
+        referrer,
+        slippage,
+        token_in,
+        token_out,
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/swap/estimate`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async charts(tokenIn: string, tokenOut: string, period: string, from: number, to: number): Promise<any> {
+    try {
+      const requestBody = {
+        tokenIn,
+        tokenOut,
+        period,
+        from,
+        to,
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/charts`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async mcap(unit: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/mcap/${unit}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async dailyPriceChange(tokenIn: string, tokenOut: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/stats/dailyPriceChange/${tokenIn}/${tokenOut}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async assetRisk(fingerprint: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }

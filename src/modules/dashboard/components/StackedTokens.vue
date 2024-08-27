@@ -57,7 +57,7 @@ export default {
   },
   methods: {
     async updateTokens(tokens) {
-      this.collect = await Promise.all(tokens.slice(0, 4).map(token => resolveAsset(this.assets, token)));
+      this.collect = await Promise.all(tokens.slice(0, 4).map(token => resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)));
     },
   },
   computed: {

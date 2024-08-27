@@ -114,6 +114,7 @@ import { Blockchain } from '@/models/types';
 import networks from '@/shared/utils/networks';
 import Player from '@/modules/media-player/Player.vue';
 import loading from '@/plugins/loading';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: 'ContentLayout',
@@ -128,7 +129,8 @@ export default {
     currentPage() {
       return this.$route
     },
-    ...mapState(useStore, ['loggedWallet', "latestTip", 'musicPlaylist', 'loadingTxs', 'context']),
+    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     epochSlotPercentage() {
       if (this.latestTip) {
         return this.latestTip.epoch_slot / 432000 * 100
@@ -147,7 +149,7 @@ export default {
     },
   }),
   methods: {
-    ...mapActions(useStore, ['setMediaPlayerShown']),
+    ...mapActions(musicStore, ['setMediaPlayerShown']),
     closeDialog() {
       this.currentDialog = null;
     },

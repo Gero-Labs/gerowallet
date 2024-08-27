@@ -60,10 +60,10 @@
                   </v-btn>
                 </div>
                 <v-row no-gutters class="pt-2 pb-1">
-                  <v-col cols="6" style="display: block;text-align: center;">
+                  <v-col cols="6" style="display: block;text-align: center;" v-if="accountInfo">
                     <h5>Pool Id</h5>
                     <span style="color: white;">{{ accountInfo?.pool_id | truncate }}</span>
-                    <copy-button :value="accountInfo?.pool_id" x-small></copy-button>
+                    <CopyButton :value="accountInfo?.pool_id" x-small></CopyButton>
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;">
                     <h5>ROS</h5>

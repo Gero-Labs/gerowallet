@@ -21,6 +21,7 @@ export class LoadingPlugin {
     if (!value) {
       this.setText('')
     }
+    this.loading = value
     this.isRestoring = value
   }
 }

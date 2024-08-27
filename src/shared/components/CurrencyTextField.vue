@@ -8,10 +8,12 @@
       maxlength="16"
       @input="handleInput"
       class="text-right transparent"
-      :rules="[rules.required, v => v <= maximum || 'Insufficient Funds']"
+      :rules="[rules.required, v => parseFloat(v) <= maximum || 'Insufficient Funds']"
+      :readonly="readOnly"
     ></v-text-field>
   </v-form>
 </template>
+
 <script>
 import rules from '@/shared/utils/rules';
 
@@ -20,11 +22,26 @@ export default {
   props: {
     value: {
       type: String,
-      default: ''
+      default: '0'
     },
     maximum: {
-      type: Number
+      type: Number,
+      default: Infinity
+    },
+    decimals: {
+      type: Number,
+      default: 2
+    },
+    readOnly: {
+      type: Boolean,
+      default: false
     }
+  },
+  data() {
+    return {
+      valid: false,
+      rules,
+    };
   },
   computed: {
     rawValue: {
@@ -32,7 +49,7 @@ export default {
         return this.cleanValue(this.value);
       },
       set(newValue) {
-        this.$emit('input', newValue);
+        this.$emit('input', newValue || '0');
       }
     },
     formattedValue: {
@@ -40,35 +57,30 @@ export default {
         return this.formatNumber(this.rawValue);
       },
       set(value) {
-        this.rawValue = this.cleanValue(value);
+        this.rawValue = this.cleanValue(value || '0');
       }
     }
   },
   methods: {
     validate() {
-      return this.$refs.form.validate()
+      return this.$refs.form.validate();
     },
     handleInput(value) {
       const cleanedValue = this.cleanValue(value);
-      if (cleanedValue.length <= 16) {
-        this.rawValue = cleanedValue;
-      }
+      this.rawValue = cleanedValue.length > 0 ? cleanedValue : '0';
     },
     cleanValue(value) {
-      return value.replace(/[^0-9.]/g, '').substring(0, 16)
+      return String(value).replace(/[^0-9.]/g, '').substring(0, 16);
     },
     formatNumber(value) {
-      if (!value) return "";
-      const number = Number(value);
-      return number.toLocaleString();
+      if (!value) return '0';
+      const number = parseFloat(value);
+      return isNaN(number) ? '0' : number.toLocaleString(undefined, { maximumFractionDigits: this.decimals });
     }
-  },
-  data: () => ({
-    valid: false,
-    rules,
-  })
-}
+  }
+};
 </script>
+
 <style>
 .v-text-field.v-text-field--solo.text-right .v-input__control {
   direction: rtl;
@@ -81,7 +93,7 @@ export default {
 }
 
 .text-right .v-input__control .v-input__slot {
-  background: #FFFFFF00!important;
-  padding: 0!important;
+  background: transparent !important;
+  padding: 0 !important;
 }
 </style>

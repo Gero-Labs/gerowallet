@@ -1,14 +1,12 @@
-import {defineStore} from 'pinia';
+import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
-import { Howl } from 'howler';
 
 // import { ChromeSyncStorage } from '@/store/chrome-storage'
 // import { LocalPersistedStorage} from "@/store/local-storage";
-
 import db from '@/db';
-import {Wallet} from '@/models/wallet';
-import Dexie, {liveQuery} from "dexie";
-import socket from "@/plugins/socket";
+import { Wallet } from '@/models/wallet';
+import Dexie, { liveQuery } from 'dexie';
+import socket from '@/plugins/socket';
 import { STORAGE } from '@/chrome/config';
 import {
   findCollectionDescription,
@@ -18,21 +16,30 @@ import {
 } from '@/shared/utils/resolver';
 import networks from '@/shared/utils/networks';
 import { Blockchain } from '@/models/types';
-import { formatTime, getArtists } from '@/shared/utils/converter';
+import { musicStore } from '@/store/modules/music';
+import { dexHunterStore } from '@/store/modules/dexhunter';
+import { unitToFingerprint } from '@/shared/utils/converter';
+import filters from '@/shared/utils/filters';
+import { bringStore } from '@/store/modules/bring';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 export let appWallet: Wallet = undefined;
 
 export const useStore = defineStore('store', {
-  persist: {paths: ['loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'utxos', 'addresses', 'resolvedAssets', 'resolvedCollections', 'musicPlaylist', 'stakeAddress']},
+  persist: {
+    paths: [
+      'utxos','loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress',
+      'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens'
+    ]
+  },
   state: () => ({
     loggedWallet: undefined,
     baseAddress: undefined,
     stakeAddress: undefined,
     wallets: [],
+    utxos: undefined,
     locale: 'us',
     network: undefined,
     provider: undefined,
@@ -40,36 +47,19 @@ export const useStore = defineStore('store', {
     transactions: undefined,
     loadingTxs: true,
     isSyncing: false,
-    assets: [],
+    assets: undefined,
     pools: [],
     rewards: [],
     connectedDapps: [],
     accountInfo: undefined,
     latestTip: undefined,
     stakingProView: false,
-    utxos: undefined,
     resolvedAssets: undefined,
     resolvedCollections: undefined,
-    musicPlaylist: undefined,
     addresses: undefined,
     fiatRates: undefined,
     currency: undefined,
-    bringCache: undefined,
-    context: {
-      img: undefined,
-      isPlaying: false,
-      isRepeat: false,
-      isShuffle: false,
-      currentIndex: 0,
-      audio: undefined,
-      paused: true,
-      volume: 100,
-      position: 0,
-      seek: 0,
-      duration: undefined,
-      minimized: false,
-      shown: false,
-    },
+    pinnedTokens: []
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -134,7 +124,7 @@ export const useStore = defineStore('store', {
               const assetName = receivedAsset['policy_id'] + receivedAsset['asset_name'];
 
               if (assets[assetName]) {
-                assets[assetName].quantity += Number(receivedAsset['quantity']);
+                assets[assetName].quantity -= Number(receivedAsset['quantity']);
 
                 if (assets[assetName].quantity === 0) delete assets[assetName];
               } else {
@@ -221,6 +211,7 @@ export const useStore = defineStore('store', {
       }
     },
     async setUtxos(utxos) {
+      console.log('Setting UTXOs:', utxos);
       this.utxos = utxos
       if (chrome?.storage) {
         if (utxos) {
@@ -230,72 +221,160 @@ export const useStore = defineStore('store', {
         }
       }
     },
-    async setResolvedAssets() {
+    async loadResolvedAssets() {
       const assets = {};
       let adaBalance = 0;
-
+      // Aggregate ADA balance and assets
       this.utxos.forEach(utxo => {
         adaBalance += Number(utxo.value);
         utxo.asset_list?.forEach(asset => {
           const key = asset.policy_id + asset.asset_name;
-          if (assets[key]) {
-            assets[key].quantity += Number(asset.quantity);
-          } else {
-            assets[key] = { ...asset, quantity: Number(asset.quantity) };
-          }
+          assets[key] = assets[key] || { ...asset, quantity: 0 };
+          assets[key].quantity += Number(asset.quantity);
         });
       });
 
-      const assetArray = Object.values(assets);
-      const resolvedAssets = await Promise.all(assetArray.map(asset => resolveAsset(this.assets, asset)));
-
-      if (adaBalance > 0) {
-        const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)
-        resolvedAssets.push(
-          {
-            unit: '',
-            name: network?.currencyName,
-            policy_id: '',
-            img: network?.currencyImage,
-            quantity: adaBalance,
-            metadata: {
-              name: network?.currencyName,
-              ticker: network?.currencyTicker,
-              description: network?.currencyDescription,
-              decimals: 6,
-            },
-            onchain_metadata: null,
-          }
-        );
+      if (!this.assets) {
+        return new Promise((resolve, reject) => reject())
       }
-      return resolvedAssets;
-    },
-    async setMusicPlaylist() {
-      const mediaNFTs = []
-      this.resolvedCollections.forEach(collection => {
-        collection.items.forEach(nft => {
-          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) {
-            mediaNFTs.push(nft)
-          }
-        })
-      })
-      this.musicPlaylist = mediaNFTs.map(nft => {
-        return nft.onchain_metadata.files?.map(file => {
-          const src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
-          return {
-            id: nft.unit,
-            artist: getArtists(nft.onchain_metadata.release?.artists) || nft.metadata?.name || nft.name,
-            title: (file.song?.song_title || nft.name) + (file.mediaType?.includes('video') ? " (Video)" : ""),
-            img: nft.img,
-            url: src,
-            mediaType: file.mediaType,
-            metadata: nft.onchain_metadata,
-            name: file.name || nft.name,
-            display: true
-          }
+      // Resolve assets
+      const assetArray = Object.values(assets);
+      const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id']+asset['asset_name']) in this.assets)).map(asset => (asset['policy_id']+asset['asset_name']))
+      await appWallet.syncAssets(unresolvedAssets, true)
+      const resAssets = assetArray.filter(asset => (asset['policy_id']+asset['asset_name']) in this.assets)
+      const resolvedAssets = await Promise.all(resAssets.map(asset => resolveAsset(this.assets[asset['policy_id']+asset['asset_name']], asset)));
+
+      // Add ADA to resolved assets
+      if (adaBalance > 0) {
+        const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network);
+        resolvedAssets.push({
+          unit: '',
+          name: network?.currencyName,
+          policy_id: '',
+          img: network?.currencyImage,
+          quantity: adaBalance,
+          metadata: {
+            name: network?.currencyName,
+            ticker: network?.currencyTicker,
+            description: network?.currencyDescription,
+            decimals: 6,
+          },
+          verified: true,
+          onchain_metadata: null,
         });
-      }).flat()
-        .filter(nft => nft.mediaType?.includes('audio'))// || nft.mediaType?.includes('video'))
+      }
+
+      // Filter and enrich assets with additional information
+      const ticker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
+      const resolvingAsset = resolvedAssets
+        .filter(asset => asset?.metadata || asset?.name === ticker)
+        .map(async (token) => {
+          if (token.unit && dexHunterStore().tokens[token.unit]) {
+            token.verified = dexHunterStore().tokens[token.unit].verified;
+
+            try {
+              const stats = await appWallet.api.mcap(token.unit);
+              token['mcap'] = stats.mcap;
+              token['last_price'] = stats.price * Number(this.price.lastPrice);
+              token['value'] = Number(filters.toCurrency(
+                token['last_price'] * Number(token.quantity),
+                false,
+                token.metadata?.decimals,
+                '',
+                '',
+                false,
+                token.metadata?.decimals
+              ).replace(",", ""));
+            } catch (err) {
+              console.error(`Error fetching mcap for ${token.unit}:`, err);
+            }
+
+            try {
+              const changeStats = await appWallet.api.dailyPriceChange(
+                networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network),
+                token.unit
+              );
+              token['change'] = changeStats.change;
+            } catch (err) {
+              console.error(`Error fetching daily price change for ${token.unit}:`, err);
+            }
+
+            try {
+              const riskStats = await appWallet.api.assetRisk(unitToFingerprint(token.unit));
+              token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
+            } catch (err) {
+              console.error(`Error fetching risk for ${token.unit}:`, err);
+              token['risk'] = 'N/A';
+            }
+          } else if (token['name'] === 'Cardano') {
+            token['value'] = Number(filters.toCurrency(
+              Number(token.quantity) * Number(this.price.lastPrice),
+              false,
+              token.metadata?.decimals,
+              '',
+              '',
+              false,
+              token.metadata?.decimals
+            ).replace(",", ""));
+          }
+          return token;
+        });
+
+      // Wait for all the asynchronous operations to complete
+      this.setResolvedAssets(await Promise.all(resolvingAsset));
+      // Return unresolved assets
+      return resolvedAssets.filter(asset => !asset?.metadata && asset?.name !== ticker);
+    },
+    setResolvedAssets(val) {
+      this.resolvedAssets = val
+    },
+    async resolveCollections(collectibles) {
+      const unresolvedUnits = []
+      const collections = {}
+      collectibles.forEach(collectible => {
+        if (!this.assets) {
+          return
+        }
+        const asset = this.assets[collectible.unit]
+        if (!asset) {
+          unresolvedUnits.push(collectible.unit)
+        }
+        if (collections[collectible.policy_id]) {
+          collections[collectible.policy_id]['items'].push(collectible)
+          collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
+        } else {
+          collections[collectible.policy_id] = {}
+          collections[collectible.policy_id]['items'] = [collectible]
+          collections[collectible.policy_id]['name'] = findCollectionName(collectible)
+          collections[collectible.policy_id]['description'] = findCollectionDescription(collectible)
+          collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
+          collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
+        }
+      })
+      if (unresolvedUnits.length > 0) {
+        await appWallet.syncAssets(unresolvedUnits, true)
+      }
+      Object.values(collections).forEach(collection => {
+        if (collection['name'] == null) {
+          const items = collection['items']
+          if (items.length > 1 && items[0]['onchain_metadata']) {
+            collection['name'] = longestCommonStartingSubstring(items
+              .filter(item => item['onchain_metadata'])
+              .map(item => item['onchain_metadata'].name))
+          } else {
+            if (items[0]?.onchain_metadata?.name) {
+              collection['name'] = items[0]?.onchain_metadata?.name
+            } else {
+              collection['name'] = items[0]['policy_id']
+            }
+          }
+          if (!collection['name']) {
+            collection['name'] = items[0]['policy_id']
+          }
+        }
+      })
+      this.resolvedCollections = Object.values(collections)
+      return this.resolvedCollections
     },
     async setUtxosAndAddresses(transactions) {
       const utxos = [];
@@ -335,57 +414,12 @@ export const useStore = defineStore('store', {
       }
       await this.setAddresses(Array.from(addresses))
         .then(() => this.setUtxos(utxos))
-        .then(() => this.setResolvedAssets()
-          .then(async assets => {
-            this.resolvedAssets = assets.filter(asset => asset?.metadata || asset?.name === "ADA")
-            const collectibles = assets.filter(asset => !asset?.metadata && asset?.name !== "ADA");
-            const unresolvedUnits = []
-            const collections = {}
-            collectibles.forEach(collectible => {
-              if (!this.assets) {
-                return
-              }
-              const asset = this.assets.find(asset => asset.asset === collectible.unit)
-              if (!asset) {
-                unresolvedUnits.push(collectible.unit)
-              }
-              if (collections[collectible.policy_id]) {
-                collections[collectible.policy_id]['items'].push(collectible)
-                collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
-              } else {
-                collections[collectible.policy_id] = {}
-                collections[collectible.policy_id]['items'] = [collectible]
-                collections[collectible.policy_id]['name'] = findCollectionName(collectible)
-                collections[collectible.policy_id]['description'] = findCollectionDescription(collectible)
-                collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
-                collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
-              }
-            })
-            if (unresolvedUnits.length > 0) {
-              await appWallet.syncAssets(unresolvedUnits, true)
-            }
-            Object.values(collections).forEach(collection => {
-              if (collection['name'] == null) {
-                const items = collection['items']
-                if (items.length > 1 && items[0]['onchain_metadata']) {
-                  collection['name'] = longestCommonStartingSubstring(items
-                    .filter(item => item['onchain_metadata'])
-                    .map(item => item['onchain_metadata'].name))
-                } else {
-                  if (items[0]?.onchain_metadata?.name) {
-                    collection['name'] = items[0]?.onchain_metadata?.name
-                  } else {
-                    collection['name'] = items[0]['policy_id']
-                  }
-                }
-                if (!collection['name']) {
-                  collection['name'] = items[0]['policy_id']
-                }
-              }
-            })
-            this.resolvedCollections = Object.values(collections)
-          }))
-        .then(() => this.setMusicPlaylist())
+        .then(() => this.loadResolvedAssets())
+        .then(assets => this.resolveCollections(assets))
+        .then((resolvedCollections) => {
+          musicStore().resolveMusicPlaylist(resolvedCollections)
+        });
+
     },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
@@ -415,23 +449,24 @@ export const useStore = defineStore('store', {
         cancelable: true,
         composed: false,
       }))
+      await dexHunterStore().loadTokens()
+      await this.loadAssets()
       const promises = []
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadPools())
       promises.push(this.loadTransactions())
-      promises.push(this.loadAssets())
       promises.push(this.loadRewards())
       promises.push(this.loadConnectedDapps())
-      promises.push(this.loadBringCache())
+      promises.push(bringStore().loadBringCache())
       await Promise.all(promises)
       try {
-        await appWallet.fetchTip().then(tip => {
-          appWallet.sync(tip)
-        });
+        const tip = await appWallet.fetchTip()
+        await appWallet.sync(tip)
       } catch (err) {
         console.log(err)
       }
+      this.setLoadingTxs(false)
       loading.setLoading(false);
     },
     async logout() {
@@ -446,6 +481,8 @@ export const useStore = defineStore('store', {
         cancelable: true,
         composed: false,
       }))
+      musicStore().setMusicPlaylist(undefined)
+      dexHunterStore().setTokens(undefined)
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
@@ -455,7 +492,6 @@ export const useStore = defineStore('store', {
       this.accountInfo = undefined;
       this.latestTip = undefined;
       this.resolvedCollections = undefined
-      this.musicPlaylist = undefined
       this.addresses = undefined
       this.baseAddress = undefined
       this.stakeAddress = undefined
@@ -481,101 +517,12 @@ export const useStore = defineStore('store', {
     setStakingProView(isPro) {
       this.stakingProView = isPro
     },
-    setMinimized() {
-      this.context.minimized = true
-    },
-    setMaximized() {
-      this.context.minimized = false
-    },
-    setMediaPlayerShown(value) {
-      this.context.shown = value
-    },
-    setTrack(index) {
-      this.context.currentIndex = index
-      this.playTrack()
-    },
-    initializeSound() {
-      if (this.context.audio) {
-        this.context.audio.unload();
-      }
-      const current = this.musicPlaylist[this.context.currentIndex]
-      this.context.audio = new Howl({
-        src: [current.url],
-        onend: () => {
-          if (this.context.isRepeat) {
-            this.context.audio.play();
-          } else {
-            this.nextTrack(); // Automatically play the next track when the current one ends
-          }
-        },
-        onplay: () => {
-          // Display the duration.
-          this.context.duration = this.context.audio.duration();
-
-          // Start updating the progress of the track.
-          requestAnimationFrame(this.step);
-
-          // Start the wave animation if we have already loaded
-          // wave.container.style.display = 'block';
-          // bar.style.display = 'none';
-          // pauseBtn.style.display = 'block';
-        },
-        format: current.mediaType,
-        html5: true,
-      });
-    },
-    step() {
-      // Get the Howl we want to manipulate.
-      const sound = this.context.audio;
-
-      // Determine our current seek position.
-      this.context.seek = Math.round(sound.seek()) || 0;
-      // progress.style.width = (((this.context.seek / sound.duration()) * 100) || 0) + '%';
-
-      // If the sound is still playing, continue stepping.
-      if (sound.playing()) {
-        requestAnimationFrame(this.step);
-      }
-    },
-    nextTrack() {
-      if (this.context.isShuffle) {
-        this.context.currentIndex = Math.floor(Math.random() * this.musicPlaylist.length);
+    toggleFavoriteToken(val) {
+      const index = this.pinnedTokens.indexOf(val.unit);
+      if (index === -1) {
+        this.pinnedTokens.push(val.unit)
       } else {
-        this.context.currentIndex = (this.context.currentIndex + 1) % this.musicPlaylist.length;
-      }
-      this.playTrack();
-    },
-    prevTrack() {
-      this.context.currentIndex = (this.context.currentIndex - 1 + this.musicPlaylist.length) % this.musicPlaylist.length;
-      this.playTrack();
-    },
-    toggleRepeat() {
-      this.context.isRepeat = !this.context.isRepeat;
-    },
-    toggleShuffle() {
-      this.context.isShuffle = !this.context.isShuffle;
-    },
-    playTrack() {
-      this.initializeSound();
-      this.context.audio.play();
-      this.context.isPlaying = true;
-    },
-    togglePlayPause() {
-      if (!this.context.audio) {
-        this.initializeSound()
-      }
-      if (this.context.isPlaying) {
-        this.context.audio.pause();
-        this.context.isPlaying = false;
-      } else {
-        this.context.audio.play();
-        this.context.isPlaying = true;
-      }
-    },
-    setVolume(val) {
-      if (this.context.audio) {
-        this.context.volume = val
-        this.context.audio.volume(val / 100)
+        this.pinnedTokens.splice(index, 1);
       }
     },
     async loadWallets(): Promise<void> {
@@ -590,120 +537,159 @@ export const useStore = defineStore('store', {
     },
     async loadSync() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db = await appWallet.getDb()
-      liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
-        next: newTip => {
-          this.latestTip = newTip
-        },
-        error: error => {
-          console.error('Failed to Fetch Tip:', error)
-        }
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
+          next: newTip => {
+            this.latestTip = newTip
+            resolve(this.latestTip)
+          },
+          error: error => {
+            console.error('Failed to Fetch Tip:', error)
+            reject(error)
+          }
+        });
       });
     },
     async loadAccountInfo() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db = await appWallet.getDb()
-      liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
-        next: newAccountInfo => {
-          console.log(newAccountInfo)
-          this.accountInfo = newAccountInfo
-        },
-        error: error => {
-          console.error('Failed to Fetch AccountInfo:', error)
-        }
+      return new Promise((resolve, reject) => {
+        liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
+          next: newAccountInfo => {
+            this.accountInfo = newAccountInfo
+            resolve(this.accountInfo)
+          },
+          error: error => {
+            console.error('Failed to Fetch AccountInfo:', error)
+            reject(error)
+          }
+        });
       });
     },
     async loadTransactions() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db: Dexie = await appWallet.getDb()
-      liveQuery(() => db.table('transactions').toArray()).subscribe({
-        next: async newTransactions => {
-          const newT = newTransactions.map(tx => tx.transaction)
-          if (newT !== this.transactions) {
-            this.transactions = newT
-            await this.setUtxosAndAddresses(newT)
-            console.log('setNew')
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('transactions').toArray()).subscribe({
+          next: async newTransactions => {
+            const newT = newTransactions.map(tx => tx.transaction)
+            if (newT !== this.transactions) {
+              this.transactions = newT
+              await this.setUtxosAndAddresses(newT)
+              console.log('setNew')
+              resolve(this.transactions)
+            }
+          },
+          error: error => {
+            console.error('Failed to Fetch Transactions:', error)
+            reject(error)
           }
-        },
-        error: error => {
-          console.error('Failed to Fetch Transactions:', error)
-        }
+        });
       });
     },
     async loadAssets() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
-      const db: Dexie = await appWallet.getBlockchainDb()
-      liveQuery(() => db.table('assets').toArray()).subscribe({
-        next: newAssets => {
-          this.assets = newAssets
-        },
-        error: error => {
-          console.error('Failed to Fetch Assets:', error)
-        }
+      const db: Dexie = await appWallet.getBlockchainDb();
+      // Return a promise that resolves when the data is fully loaded
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('assets').toArray()).subscribe({
+          next: newAssets => {
+            this.assets = newAssets.reduce((map, asset) => {
+              map[asset.asset] = asset;
+              return map;
+            }, {});
+            resolve(this.assets); // Resolve the promise when data is loaded
+          },
+          error: error => {
+            console.error('Failed to Fetch Assets:', error);
+            reject(error); // Reject the promise if an error occurs
+          }
+        });
       });
     },
     async loadPools() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db: Dexie = await appWallet.getBlockchainDb()
-      liveQuery(() => db.table('pools').toArray()).subscribe({
-        next: newPools => {
-          this.pools = newPools
-        },
-        error: error => {
-          console.error('Failed to Fetch Pools:', error)
-        }
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('pools').toArray()).subscribe({
+          next: newPools => {
+            this.pools = newPools
+            resolve(this.pools);
+          },
+          error: error => {
+            console.error('Failed to Fetch Pools:', error)
+            reject(error);
+          }
+        });
       });
     },
     async loadRewards() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db = await appWallet.getDb()
-      liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
-        next: newRewards => {
-          this.rewards = newRewards
-        },
-        error: error => {
-          console.error('Failed to Fetch Rewards:', error)
-        }
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
+          next: newRewards => {
+            this.rewards = newRewards
+            resolve(this.rewards)
+          },
+          error: error => {
+            console.error('Failed to Fetch Rewards:', error)
+            reject(error)
+          }
+        });
       });
     },
     async loadConnectedDapps() {
       if (!appWallet) {
-        return
+        return new Promise((resolve, reject) => {
+          reject()
+        });
       }
       const db = await appWallet.getDb()
-      liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
-        next: newConnectedDapps => {
-          this.connectedDapps = newConnectedDapps
-          if (chrome?.storage) {
-            if (newConnectedDapps) {
-              chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
-            } else {
-              chrome.storage.local.remove(STORAGE.whitelisted);
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
+          next: newConnectedDapps => {
+            this.connectedDapps = newConnectedDapps
+            if (chrome?.storage) {
+              if (newConnectedDapps) {
+                chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
+              } else {
+                chrome.storage.local.remove(STORAGE.whitelisted);
+              }
             }
+            resolve(this.connectedDapps)
+          },
+          error: error => {
+            console.error('Failed to Fetch Connected Dapps:', error)
+            reject(error)
           }
-        },
-        error: error => {
-          console.error('Failed to Fetch Connected Dapps:', error)
-        }
+        });
       });
-    },
-    async loadBringCache() {
-      if (!appWallet) {
-        return
-      }
-      this.bringCache = await appWallet.api.cache(appWallet.baseAddress().to_address().to_bech32())
     },
     async disconnectDapp(id: number) {
       if (!appWallet) {

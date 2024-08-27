@@ -1,5 +1,5 @@
 import { Messaging } from './messaging';
-import { bringInitContentScript } from '@bringweb3/sdk';
+import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
 import { getAddressBech32 } from "@/chrome/webpage";
 
 const getWalletAddress = async (): Promise<string> => {
@@ -37,7 +37,7 @@ function shouldInject() {
   return docElemCheck && docTypeCheck;
 }
 
-function injectBring() {
+async function injectBring() {
   // bringInitContentScript({
   //   iframeEndpoint: 'https://dev-extension.bringweb3.io/', //https://extension.bringweb3.io/
   //   getWalletAddress: () => Promise<WalletAddress>(),
@@ -45,8 +45,8 @@ function injectBring() {
   //   walletAddressListeners: string[],
   //   customTheme: Style
   // });
-  bringInitContentScript({
-    iframeEndpoint:'https://dev-extension.bringweb3.io/',
+  await bringInitContentScript({
+    iframeEndpoint: 'https://dev-extension.bringweb3.io/',
     getWalletAddress,
     promptLogin: async () => await new Promise(resolve => setTimeout(() => resolve('addr1q8nj08tfwzjmzrmcl9y25dtpl6wxjdgy59z5mt5lppc88s7y6ald4epue5t6fesxemr3h857wv8aavjht4cpfrc26les2tmzw0'), 4000)), //prompt login
     walletAddressListeners: ['gero:login', 'gero:logout']
@@ -58,6 +58,6 @@ if (shouldInject()) {
   // const address = await getWalletAddress()
   // console.log('GerowalletAddress', address)
   injectScript();
-  injectBring();
+  await injectBring();
   Messaging.createProxyController();
 }

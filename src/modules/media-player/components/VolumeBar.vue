@@ -16,7 +16,7 @@
 </template>
 <script>
 import {mapActions, mapState} from 'pinia';
-import { useStore } from '@/store';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "volume-bar",
@@ -28,7 +28,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(useStore, ['context']),
+    ...mapState(musicStore, ['context']),
     volumeIcon() {
       if (this.volume > 75) {
         return 'mdi-volume-high'
@@ -42,7 +42,7 @@ export default {
     },
   },
   methods: {
-    ...mapActions(useStore, ['setVolume']),
+    ...mapActions(musicStore, ['setVolume']),
     onButtonClick() {
       if (this.volume > 0) {
         this.tmpVolume = this.volume;

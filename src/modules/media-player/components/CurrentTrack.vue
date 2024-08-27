@@ -24,14 +24,14 @@
 </template>
 <script>
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "current-track",
   components: { PlayerControls },
   computed: {
-    ...mapState(useStore, ['musicPlaylist', 'context']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     currentTrack() {
       return this.musicPlaylist[this.context.currentIndex]
     }

@@ -1,6 +1,6 @@
 <template>
   <v-card flat outlined style="min-height: calc(100vh - 80px);">
-    <v-row no-gutters>
+    <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent" v-if="currentTrack">
           <v-card-text style="height: 433px; max-height: 433px;">
@@ -36,8 +36,8 @@
           </v-card-title>
           <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
             <v-list nav dense style="width: 100%" class="transparent">
-              <v-list-item-group v-model="currentSong" mandatory>
-                <v-list-item v-for="(track, index) in musicPlaylist" :key="index">
+              <v-list-item-group v-model="currentSong">
+                <v-list-item v-for="(track, index) in playlist" :key="index" :value="track">
                   <v-list-item-avatar>
                     <v-img :src="track.img" contain></v-img>
                   </v-list-item-avatar>
@@ -64,6 +64,7 @@ import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
+import { musicStore } from '@/store/modules/music';
 
 export default defineComponent({
   name: "MediaPlayer",
@@ -81,29 +82,42 @@ export default defineComponent({
     },
   },
   watch: {
-    currentSong(index) {
-      this.setTrack(index)
+    currentSong(val) {
+      if (val) {
+        const index = this.musicPlaylist.indexOf(val)
+        this.setTrack(index)
+      }
     }
   },
   computed: {
-    ...mapState(useStore, ['musicPlaylist', 'context']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     currentTrack() {
       if (this.musicPlaylist) {
         return this.musicPlaylist[this.context.currentIndex]
       }
       return undefined
     },
+    playlist() {
+      if (this.search) {
+        return this.musicPlaylist.filter(track => track.artist.toLowerCase().includes(this.search.toLowerCase()) || track.title.toLowerCase().includes(this.search.toLowerCase()))
+      }
+      return this.musicPlaylist
+    },
     currentSong: {
       get() {
-        return this.context.currentIndex
+        return this.selected
       },
       set(val) {
-        this.setTrack(val)
+        if (val) {
+          this.selected = val
+          const index = this.musicPlaylist.indexOf(val)
+          this.setTrack(index)
+        }
       }
     },
   },
   methods: {
-    ...mapActions(useStore, ['playTrack', 'setTrack', 'playTrack']),
+    ...mapActions(musicStore, ['playTrack', 'setTrack']),
   },
   data: () => ({
     search: '',
