@@ -5,97 +5,119 @@
         <v-col cols="12" style="display: flex; align-items: center;">
           <span v-if="title" :style="{ color: titleColor }">{{title}}</span>
           <v-spacer></v-spacer>
-          <span style="color: #667085">Balance: {{ balance | toCurrency(false, 0, '', '', false, 0) }}</span>
-          <v-btn text plain small @click="setMax" :ripple="false" color="#00DFF3" class="px-0" v-if="maxButtonEnabled">MAX</v-btn>
+          <v-btn text plain small @click="setMax" :ripple="false" color="#00DFF3" class="px-0" v-if="maxButtonEnabled" :style="index !== 0 ? { marginRight: '30px' } : {}">MAX</v-btn>
         </v-col>
       </v-row>
-      <v-card class="card-container px-2 py-1" outlined :style="{backgroundColor: backgroundColor+'!important' }">
-<!--        <v-card-subtitle class="text-right pb-0 pt-2">Balance: {{ selectedToken.balance | toCurrency(false,2,'', true, selectedToken.decimals) }}</v-card-subtitle>-->
-        <v-card-text style="display: flex" class="pa-0">
-          <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left;">
-            <v-list-item-content class="py-0">
-              <v-menu
-                style="background-color: black"
-                offset-y
-                transition="scroll-y-transition"
-                :close-on-click="true"
-                :close-on-content-click="false"
-
-              >
-                <template v-slot:activator="{ on, attrs, value }">
-                  <v-list-item-title class="ma-0">
-                    <v-btn
-                      x-large
-                      text
-                      plain
-                      :ripple="false"
-                      v-bind="attrs"
-                      v-on="on"
-                      style="font-size: 22px; letter-spacing: normal"
-                      class="pa-0"
+      <div style="display: flex; align-items: center;">
+        <v-card class="card-container px-2 py-1" outlined :style="{backgroundColor: backgroundColor+'!important' }">
+          <!--        <v-card-subtitle class="text-right pb-0 pt-2">Balance: {{ selectedToken.balance | toCurrency(false,2,'', true, selectedToken.decimals) }}</v-card-subtitle>-->
+          <v-card-subtitle class="pa-0 text-right" style="margin-bottom: -10px">
+            Balance: {{ balance }}
+          </v-card-subtitle>
+          <v-card-text style="display: flex" class="pa-0">
+            <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left;">
+              <v-list-item-content class="py-0">
+                <v-list-item-title class="ma-0">
+                  <v-btn
+                    x-large
+                    text
+                    plain
+                    :ripple="false"
+                    style="font-size: 22px; letter-spacing: normal"
+                    class="pa-0"
+                    @click="selectTokenDialog = true"
+                  >
+                    <v-badge
+                      overlap
+                      avatar
+                      color="transparent"
+                      :offset-y="45"
+                      v-if="selectedToken.verified"
+                      class="mr-1"
                     >
-                      <v-avatar size="24">
+                      <template v-slot:badge>
+                        <v-avatar color="transparent" tile >
+                          <v-icon small color="primary">
+                            mdi-check-decagram
+                          </v-icon>
+                        </v-avatar>
+                      </template>
+                      <v-avatar size="40">
                         <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
                       </v-avatar>
-                      &nbsp;{{ selectedToken.ticker }}&nbsp;
-                      <v-icon class="toggleUpDown" :class="{ rotate: value }" small>mdi-chevron-down</v-icon>
-                    </v-btn>
-                  </v-list-item-title>
-                </template>
-                <v-list dense class="pa-0">
-                  <v-subheader class="px-0">
-                    <v-text-field dense filled hide-details prepend-inner-icon="mdi-magnify"></v-text-field>
-                  </v-subheader>
-                  <v-list-item-group v-model="selectedToken" mandatory>
-                    <v-list-item v-for="(item, index) in available" :key="index" :value="item">
-                      <v-list-item-avatar size="20">
-                        <img :src="item.img" :alt="`${selectedToken.ticker} Logo`"/>
-                      </v-list-item-avatar>
-                      <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>
-                      <v-list-item-subtitle class="text-center">{{ item.ticker }}</v-list-item-subtitle>
-                    </v-list-item>
-                  </v-list-item-group>
-                </v-list>
-              </v-menu>
-              <v-list-item-subtitle class="light-text">
-                {{ selectedToken.name }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-          <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right;">
-            <v-list-item-content class="py-0">
-              <v-list-item-title>
-                <CurrencyTextField v-model="selectedToken.quantity" :maximum="selectedToken.decimals === 0 ? selectedToken.balance : selectedToken.balance / Math.pow(10, selectedToken.decimals)"></CurrencyTextField>
-              </v-list-item-title>
-              <v-list-item-subtitle class="light-text">
-                {{ '~$' + (selectedToken.ticker === 'ADA' ? (Number(selectedToken.quantity) * price.lastPrice).toLocaleString() : 'N/A') }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-        </v-card-text>
-      </v-card>
+                    </v-badge>
+                    <v-avatar size="40" v-else class="mr-1">
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                    </v-avatar>
+                    {{ selectedToken.ticker }}
+                    <v-icon class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small>mdi-chevron-down</v-icon>
+                  </v-btn>
+                </v-list-item-title>
+
+                <!--              <v-menu-->
+                <!--                style="background-color: black"-->
+                <!--                offset-y-->
+                <!--                transition="scroll-y-transition"-->
+                <!--                :close-on-click="true"-->
+                <!--                :close-on-content-click="false"-->
+
+                <!--              >-->
+                <!--                <template v-slot:activator="{ on, attrs, value }">-->
+                <!--                  -->
+                <!--                </template>-->
+                <!--                <v-list dense class="pa-0">-->
+                <!--                  <v-subheader class="px-0">-->
+                <!--                    <v-text-field dense filled hide-details prepend-inner-icon="mdi-magnify"></v-text-field>-->
+                <!--                  </v-subheader>-->
+                <!--                  <v-list-item-group v-model="selectedToken" mandatory>-->
+                <!--                    <v-list-item v-for="(item, index) in available" :key="index" :value="item">-->
+                <!--                      <v-list-item-avatar size="20">-->
+                <!--                        <img :src="item.img" :alt="`${selectedToken.ticker} Logo`"/>-->
+                <!--                      </v-list-item-avatar>-->
+                <!--                      <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>-->
+                <!--                      <v-list-item-subtitle class="text-center">{{ item.ticker }}</v-list-item-subtitle>-->
+                <!--                    </v-list-item>-->
+                <!--                  </v-list-item-group>-->
+                <!--                </v-list>-->
+                <!--              </v-menu>-->
+                <v-list-item-subtitle class="light-text">
+                  {{ selectedToken.name }}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
+            <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right;">
+              <v-list-item-content class="py-0">
+                <v-list-item-title>
+                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :read-only="readOnly"></CurrencyTextField>
+                </v-list-item-title>
+                <v-list-item-subtitle class="light-text" v-if="!isNaN(price)">
+                  {{ '~$' + price }}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
+          </v-card-text>
+        </v-card>
+        <v-btn icon small @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
+          <v-icon small color="#00DFF3">mdi-minus-box-outline</v-icon>
+        </v-btn>
+      </div>
     </v-card-text>
     <v-card-actions class="px-0" v-if="bottomTitle">
       <span v-if="title" :style="{ color: titleColor }">{{title}}</span>
       <v-spacer></v-spacer>
-      <span style="color: #667085">Balance: {{ balance | toCurrency(false, 0, '', '', false, 0) }}</span>
+      <span style="color: #667085">Balance: {{ balance }}</span>
     </v-card-actions>
-    <v-card-actions class="px-0" v-else-if="index !== 0">
-      <v-btn text small @click="removeTokenSelector">
-        <v-icon color="#00DFF3">mdi-minus-box-outline</v-icon>&nbsp;Remove
-      </v-btn>
-    </v-card-actions>
+    <SelectTokenDialog v-model="selectedToken" :is-open="selectTokenDialog" @close="selectTokenDialog = false" :available-tokens="available"></SelectTokenDialog>
   </v-card>
 </template>
 <script>
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
-import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 
 export default {
   name: 'TokenSelector',
-  components: { CurrencyTextField },
+  components: { SelectTokenDialog, CurrencyTextField },
   props: {
     title: {
       type: String,
@@ -125,13 +147,22 @@ export default {
     maxButtonEnabled: {
       type: Boolean,
       default: true
+    },
+    readOnly: {
+      type: Boolean,
+      default: false
+    },
+    price: {
+      type: String,
     }
   },
   filters,
   computed: {
-    ...mapState(useStore, ['price']),
     balance() {
-      return this.selectedToken.decimals ? (filters.toCurrency(this.selectedToken.balance, false,this.selectedToken.decimals,'', '',false, this.selectedToken.decimals)) : this.selectedToken.balance+''
+      if (this.selectedToken.decimals) {
+        return (filters.toCurrency(this.selectedToken.balance, false, this.selectedToken.decimals, '', '', false, this.selectedToken.decimals))
+      }
+      return this.selectedToken.balance+''
     },
     selectedToken: {
       get() {
@@ -144,12 +175,14 @@ export default {
   },
   data() {
     return {
+      selectTokenDialog: false,
     };
   },
   mounted() {
   },
   methods: {
     setMax() {
+      console.log(this.balance)
       this.selectedToken.quantity = this.balance.replaceAll(",","")
     },
     removeTokenSelector() {

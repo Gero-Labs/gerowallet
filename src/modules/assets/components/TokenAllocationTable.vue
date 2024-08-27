@@ -1,14 +1,14 @@
 <template>
-  <v-card outlined class="no-gutters fill-height">
+  <v-card outlined class="no-gutters fill-height" :loading="loadingTxs">
     <v-card-title>
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
-        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Assets&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{assets?.length}}</v-chip>
+        <v-btn color="black" :value="0" rounded style="text-transform: capitalize">Assets
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{assets?.length}}</v-chip>
         </v-btn>
-        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="collectiblesLength === 0"> Collectibles&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{collectiblesLength}}</v-chip>
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="collectiblesLength === 0">Collectibles
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{collectiblesLength}}</v-chip>
         </v-btn>
       </v-btn-toggle>
     </v-card-title>
@@ -27,9 +27,35 @@
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
-                <v-list-item-avatar class="my-0" size="32">
-                  <img :src="item.img" :alt="item.name + ' Logo'"/>
-                </v-list-item-avatar>
+                <v-list-item-action class="my-0">
+                  <v-badge
+                    overlap
+                    avatar
+                    color="transparent"
+                    :offset-y="37"
+                    v-if="item['verified']"
+                  >
+                    <template v-slot:badge>
+                      <v-avatar color="transparent" tile >
+                        <v-icon small color="primary">
+                          mdi-check-decagram
+                        </v-icon>
+                      </v-avatar>
+                    </template>
+                    <v-avatar size="32">
+                      <img
+                        :src="item['img']"
+                        :alt="`${item['ticker']} Logo`"
+                      />
+                    </v-avatar>
+                  </v-badge>
+                  <v-avatar size="32" v-else>
+                    <img
+                      :src="item['img']"
+                      :alt="`${item['ticker']} Logo`"
+                    />
+                  </v-avatar>
+                </v-list-item-action>
                 <v-list-item-content>
                   <v-list-item-title>
                     {{item.name}}
@@ -41,44 +67,49 @@
               </v-list-item>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ (Number(item.quantity) / (item.metadata.decimals ? Math.pow(10, item.metadata.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}</span>
+              <v-tooltip top :open-delay="500">
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on">
+                    {{ Number(item.quantity) | toCurrency(false, 2, '', '', true, item.metadata?.decimals) }}
+                  </span>
+                </template>
+                {{ (Number(item.quantity) / (item.metadata?.decimals ? Math.pow(10, item.metadata?.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}
+              </v-tooltip>
             </template>
             <template v-slot:[`item.last_price`]="{ item }">
-              <span v-if="item.name === 'ADA'" class="table-text">{{Number(price.lastPrice).toFixed(4)}}</span>
-              <v-chip v-else outlined x-small color="#F97066">Soon</v-chip>
-<!--              <span class="table-text">${{ item.last_price }}</span>-->
+              <div v-if="item.name === 'Cardano'">{{Number(price.lastPrice) | toCurrency(false, 4, '$', '', false, 0)}}</div>
+              <span v-else-if="!item.last_price">N/A</span>
+              <span v-else>{{item.last_price | toCurrency(false, 4, '$', '', false, 0)}}</span>
             </template>
-            <template v-slot:[`item.change`]="{ }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <v-avatar tile size="20">-->
-<!--                <v-img-->
-<!--                  :src="-->
-<!--                    item.change >= 0-->
-<!--                      ? require('@/assets/svg/trend-up-01.svg')-->
-<!--                      : require('@/assets/svg/trend-down-01.svg')-->
-<!--                  "-->
-<!--                  alt="trend"-->
-<!--                ></v-img>-->
-<!--              </v-avatar>-->
-<!--              <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{-->
-<!--                Math.abs(item.change * 100) + "%"-->
-<!--              }}</span>-->
+            <template v-slot:[`item.change`]="{ item }">
+              <div style="display: flex" v-if="item.change !== undefined ">
+                <v-avatar tile size="20" class="mr-1">
+                  <v-img
+                    :src="
+                      item.change >= 0
+                        ? require('@/assets/svg/trend-up-01.svg')
+                        : require('@/assets/svg/trend-down-01.svg')
+                    "
+                    alt="trend"
+                  ></v-img>
+                </v-avatar>
+                <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{
+                  Math.abs(item.change).toFixed(2) + "%"
+                }}</span>
+              </div>
+              <span v-else>N/A</span>
+            </template>
+            <template v-slot:[`item.value`]="{ item }">
+              <div v-if="item.name === 'Cardano'">{{item.quantity * Number(price.lastPrice) | toCurrency(false, 2, '$', '', true, item.metadata?.decimals)}}</div>
+              <span v-else-if="!item.last_price">N/A</span>
+              <span v-else>{{item.value | toCurrency(false, 2, '$', '', true, 0)}}</span>
             </template>
             <template v-slot:[`item.cost_basis`]="{ }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.cost_basis">-->
-<!--                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>-->
-<!--              </div>-->
-            </template>
-            <template v-slot:[`item.value`]="{ item }">
-              <div v-if="item.name === 'Cardano'">{{Number(price.lastPrice).toLocaleString(undefined, {maximumFractionDigits: 2})}}</div>
-              <v-chip outlined x-small color="#F97066" v-else>Soon</v-chip>
-              <div v-if="item.value">
-                <span class="table-text">${{ item.value[0].toLocaleString() }}</span>
-                <span class="table-text-opacity">Â{{ item.value[1].toLocaleString() }}</span>
-              </div>
-
+              <!--              <div v-if="item.cost_basis">-->
+              <!--                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>-->
+              <!--                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>-->
+              <!--              </div>-->
             </template>
             <template v-slot:[`item.avg_price`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
@@ -98,15 +129,28 @@
 <!--                >-->
 <!--              </div>-->
             </template>
-            <template v-slot:[`item.total_amount`]="{ item }">
+            <template v-slot:[`item.mcap`]="{ item }">
+              <v-tooltip top :open-delay="500" v-if="item.mcap">
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on">
+                    {{ Number(item.mcap) | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true, 0) }}
+                  </span>
+                </template>
+                {{ Number(item.mcap).toLocaleString(undefined, {minimumFractionDigits: item.metadata.decimals}) }}
+              </v-tooltip>
+              <span v-else>N/A</span>
+            </template>
+            <template v-slot:[`item.total_allocation`]="{ item }">
+              <span v-if="!item.last_price && item.name !== 'Cardano'">N/A</span>
               <v-progress-linear
+                v-else
                 class="progress-bar"
                 height="14"
-                :value="item.quantity / Number(item.total_amount) * 100"
+                :value="item.total_allocation"
                 color="#00dff3"
               >
                 <template v-slot:default="{ value }">
-                  <strong style="font-size: 8px">{{ Math.ceil(value) }}%</strong>
+                  <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
                 </template>
               </v-progress-linear>
             </template>
@@ -217,10 +261,12 @@
   </v-card>
 </template>
 <script>
-import {mapState} from "pinia";
-import {useStore} from "@/store";
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
+import filters from '@/shared/utils/filters';
+import networks from '../../../shared/utils/networks';
 
 export default {
   name: "tokenAllocationTable",
@@ -236,8 +282,15 @@ export default {
       // this.dialogData = row; TODO
     },
   },
+  filters,
   computed: {
-    ...mapState(useStore, ['resolvedAssets', 'resolvedCollections', 'price']),
+    filters() {
+      return filters
+    },
+    networks() {
+      return networks
+    },
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
     collectiblesLength() {
       let amount = 0;
       if (this.resolvedCollections) {
@@ -250,6 +303,23 @@ export default {
       return amount
     },
     assets() {
+      let totalAllocation = 0
+      if (this.resolvedAssets) {
+        this.resolvedAssets.forEach(token => {
+          if (token.value) {
+            totalAllocation += token.value
+          }
+        })
+        return this.resolvedAssets.map(token => {
+          if (token['name'] === 'Cardano') {
+            token['value'] = Number(filters.toCurrency(token.quantity * Number(this.price.lastPrice), false, token.metadata?.decimals, '', '', false, token.metadata?.decimals).replace(",", ""))
+          }
+          if (token['value']) {
+            token['total_allocation'] = token['value'] / totalAllocation * 100
+          }
+          return token
+        })
+      }
       return this.resolvedAssets
     },
     collectibles() {
@@ -265,15 +335,16 @@ export default {
     chartData: [],
     assetsHeaders: [
       { text: "Asset", align: "start", sortable: true, value: "name" },
-      { text: "Quantity", align: "center", sortable: true, value: "quantity" },
+      { text: "Risk", align: "center", sortable: true, value: "risk", width: "100" },
+      { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "100" },
       { text: "Last Price", align: "center", sortable: true, value: "last_price", width: "100"  },
       { text: "Change", align: "center", sortable: true, value: "change", width: "85" },
-      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis", width: "102" },
       { text: "Value", align: "center", sortable: true, value: "value", width: "72" },
-      { text: "AVG Price", align: "center", sortable: true, value: "avg_price", width: "98" },
-      { text: "P&L", align: "center", sortable: true, value: "pnl" },
-      { text: "Allocation", align: "center", sortable: true, value: "total_amount", width: "150" },
-      { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days" },
+      { text: "Cost Basis", align: "center", sortable: false, value: "cost_basis", width: "102" },
+      { text: "AVG Price", align: "center", sortable: false, value: "avg_price", width: "98" },
+      { text: "P&L", align: "center", sortable: false, value: "pnl" },
+      { text: "Mcap", align: "center", sortable: true, value: "mcap", width: "100" },
+      { text: "Allocation", align: "center", sortable: true, value: "total_allocation", width: "150" },
     ],
     collectiblesHeaders: [
       { text: "Asset", align: "start", sortable: true, value: "name" },
@@ -284,19 +355,6 @@ export default {
       { text: "P&L", align: "center", sortable: true, value: "pnl" },
       { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
       { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days", width: "140" },
-    ],
-    collectiblesData: [
-      {
-        asset: "ADA",
-        amount: 27407,
-        floor: [75, 18],
-        change: 0.15,
-        cost_basis: [8222.1, 27407],
-        avg_price: [0.3, 100],
-        pnl: [106888.14, 27407.0],
-        allocation: 40,
-        last_7_days: 0.2,
-      },
     ],
     dialogData: null,
   }),

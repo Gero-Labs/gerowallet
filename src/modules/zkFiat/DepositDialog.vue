@@ -174,7 +174,8 @@ export default defineComponent({
             img: token.img,
             quantity: "0",
             balance: token.quantity,
-            decimals: token.metadata.decimals
+            decimals: token.metadata.decimals,
+            unit: token.unit
           }
         })
         tokens.sort((a, b) => a.ticker > b.ticker ? 1 : -1)

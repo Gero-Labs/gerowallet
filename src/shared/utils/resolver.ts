@@ -33,7 +33,7 @@ function cip68Label(asset: any) {
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
 }
 
-export async function resolveAsset(assets, token) {
+export async function resolveAsset(asset, token) {
   let img;
   let name = Buffer.from(token.asset_name, 'hex').toString('ascii');
   let metadata = null;
@@ -42,40 +42,36 @@ export async function resolveAsset(assets, token) {
   if (token.asset_name === 'lovelace') {
     img = token.logo;
     name = 'ADA'
-  } else {
-    if (assets) {
-      const asset = assets.find(asset =>
-        asset.policy_id === token.policy_id &&
-        asset.asset_name === token.asset_name
-      );
-      if (asset?.metadata) {
-        metadata = asset.metadata
-        name = asset.metadata.ticker
-        if (asset.metadata?.logo) {
-          img = `data:image/png;base64,${asset.metadata.logo}`;
+  } else if (asset) {
+    if (asset?.metadata) {
+      metadata = asset.metadata
+      name = asset.metadata.ticker
+      if (asset.metadata?.logo) {
+        img = `data:image/png;base64,${asset.metadata.logo}`;
+      }
+    } else if (asset?.onchain_metadata) {
+      if (asset.onchain_metadata?.image) {
+        img = `${baseUrl}/api/ipfs/${asset.onchain_metadata.image.replace('ipfs://', '')}`;
+      } else if (asset?.onchain_metadata['721'] && asset?.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
+        const obj = asset.onchain_metadata['721'][asset.policy_id][name];
+        onchain_metadata = obj
+        if (obj.image) {
+          img = `${baseUrl}/api/ipfs/${obj.image.replace('ipfs://', '').replace('ipfs/', '')}`;
         }
-      } else if (asset?.onchain_metadata) {
-        if (asset.onchain_metadata?.image) {
-          img = `${baseUrl}/api/ipfs/${asset.onchain_metadata.image.replace('ipfs://', '')}`;
-        } else if (asset?.onchain_metadata['721'] && asset?.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
-          const obj = asset.onchain_metadata['721'][asset.policy_id][name];
-          onchain_metadata = obj
-          if (obj.image) {
-            img = `${baseUrl}/api/ipfs/${obj.image.replace('ipfs://', '').replace('ipfs/', '')}`;
-          }
-        } else { // CIP 68
-          const label = cip68Label(asset);
-          if (label) {
-            const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
-            if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
-              const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
-              const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
-              if (label == 333) {
-                metadata = metadataJson
-              }
+      } else { // CIP 68
+        const label = cip68Label(asset);
+        if (label) {
+          const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
+          if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
+            const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
+            const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
+            if (label == 333) {
+              metadata = metadataJson
               img = `${baseUrl}/api/ipfs/${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
-              name = metadataJson.name
+            } else if (label == 222) {
+              img = `${baseUrl}/api/ipfs/${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
             }
+            name = metadataJson.name
           }
         }
       }
@@ -89,6 +85,7 @@ export async function resolveAsset(assets, token) {
     metadata,
     onchain_metadata,
     quantity,
+    verified: false,
   };
 }
 

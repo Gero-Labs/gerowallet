@@ -15,6 +15,9 @@
                 :src="require('../assets/gero_dashboards.svg')" width="100" alt="logo"
             />
           </v-list-item-title>
+          <v-list-item-subtitle style="color: orange">
+            BETA
+          </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
     </template>
@@ -192,6 +195,7 @@ import filters from '@/shared/utils/filters'
 import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: 'NavigationDrawer',
@@ -211,7 +215,8 @@ export default {
     networks() {
       return networks
     },
-    ...mapState(useStore, ['wallets', 'loggedWallet', 'musicPlaylist']),
+    ...mapState(useStore, ['wallets', 'loggedWallet']),
+    ...mapState(musicStore, ['musicPlaylist']),
     avatar() {
       if (this.account.icon.includes('http')) {
         return this.account.icon
@@ -231,12 +236,12 @@ export default {
         // { header: 'Home' },
         {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/', enabled: true},
         {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking', enabled: true},
-        {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap', enabled: networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
         // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
         // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
         // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
         {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
+        {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network), soon: true},
+        {title: 'Swap', icon: require('@/assets/svg/swap.svg'), link: '/swap', enabled: networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network), soon: true},
         {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat', soon: true},
         {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
         {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},

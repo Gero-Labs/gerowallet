@@ -21,7 +21,7 @@
             {{ `[${pool.ticker}] ${pool.name}` }}
           </v-list-item-title>
           <v-list-item-subtitle>{{ pool.description }}</v-list-item-subtitle>
-          <v-list-item-subtitle>{{ pool.pool_id_bech32 | truncate }}&nbsp;<copy-button :value="pool.pool_id_hex" x-small></copy-button></v-list-item-subtitle>
+          <v-list-item-subtitle v-if="pool">{{ pool.pool_id_bech32 | truncate }}&nbsp;<CopyButton :value="pool.pool_id_bech32" x-small></CopyButton></v-list-item-subtitle>
         </v-list-item-content>
 
         <v-list-item-avatar

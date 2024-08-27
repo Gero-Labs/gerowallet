@@ -37,6 +37,7 @@ import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue
 // import DevicePicker from '@/modules/media-player/components/DevicePicker.vue';
 import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
+import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "player",
@@ -48,13 +49,13 @@ export default {
     // DevicePicker
   },
   computed: {
-    ...mapState(useStore, ['musicPlaylist', 'context']),
+    ...mapState(musicStore, ['musicPlaylist', 'context']),
     currentTrack() {
       return this.musicPlaylist[this.context.currentIndex]
     }
   },
   methods: {
-    ...mapActions(useStore, ['setMinimized', 'setMaximized', 'setMediaPlayerShown']),
+    ...mapActions(musicStore, ['setMinimized', 'setMaximized', 'setMediaPlayerShown']),
   }
 };
 </script>

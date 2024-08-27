@@ -22,7 +22,7 @@ declare global {
 
 // CIP-30
 window.cardano = {
-  gero: {
+  gerowallet: {
     async enable(): Promise<any> {
       const enabled = await enable();
       if (enabled) {

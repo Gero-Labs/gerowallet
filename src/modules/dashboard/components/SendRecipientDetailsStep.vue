@@ -1,6 +1,6 @@
 <template>
   <div class="send-recipient-details-container">
-    <div class="item-container">
+    <div class="item-container pb-12">
       <Select
         :value="sendData.selectedWallet"
         :items="[sendData.selectedWallet]"
@@ -57,7 +57,7 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-around;
+  justify-content: center;
   height: 496px;
 
   & .item-container {

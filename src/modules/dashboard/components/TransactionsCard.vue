@@ -1,46 +1,44 @@
 <template>
-  <div>
-    <v-card outlined class="fill-height" :loading="loadingTxs">
-      <v-card-title>Transactions (Last 10)</v-card-title>
-      <v-card-text class="pa-0 text-center">
-        <v-data-table
-          :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-          :items="lastTenTransactions"
-          :headers="activityHeaders"
-          class="transparent transactions-table"
-          :sort-by.sync="sortBy"
-          :sort-desc.sync="sortDesc"
-          dense @click:row="handleOnTransactionsRowClick"
-        >
-          <template v-slot:[`item.time`]="{ item }">
-            <v-list-item two-line class="px-0">
-              <v-list-item-content>
-                <v-list-item-title style="font-size: 12px">{{ item.status }}</v-list-item-title>
-                <v-list-item-subtitle style="font-size: 10px"
-                >{{ new Date(item.time * 1000).toLocaleDateString() }}
-                </v-list-item-subtitle>
-              </v-list-item-content>
-            </v-list-item>
-          </template>
-          <template v-slot:[`item.assets`]="{ item }">
-            <StackedTokens
-              :tokens="item.assets"
-              :style="item.status === 'Pending' ? { opacity: '0.5' } : {}"
-            ></StackedTokens>
-          </template>
-          <template v-slot:[`item.amount`]="{ item }">
-            <span :style="{ color: getColor(item) }" v-if="loggedWallet">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}</span>
-          </template>
-        </v-data-table>
-      </v-card-text>
+  <v-card outlined class="fill-height" :loading="loadingTxs">
+    <v-card-title>Transactions</v-card-title>
+    <v-card-text class="pa-0 text-center">
+      <v-data-table
+        :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+        :items="lastTenTransactions"
+        :headers="activityHeaders"
+        class="transparent transactions-table"
+        :sort-by.sync="sortBy"
+        :sort-desc.sync="sortDesc"
+        dense @click:row="handleOnTransactionsRowClick"
+      >
+        <template v-slot:[`item.time`]="{ item }">
+          <v-list-item two-line class="px-0">
+            <v-list-item-content>
+              <v-list-item-title style="font-size: 12px">{{ item.status }}</v-list-item-title>
+              <v-list-item-subtitle style="font-size: 10px"
+              >{{ new Date(item.time * 1000).toLocaleDateString() }}
+              </v-list-item-subtitle>
+            </v-list-item-content>
+          </v-list-item>
+        </template>
+        <template v-slot:[`item.assets`]="{ item }">
+          <StackedTokens
+            :tokens="item.assets"
+            :style="item.status === 'Pending' ? { opacity: '0.5' } : {}"
+          ></StackedTokens>
+        </template>
+        <template v-slot:[`item.amount`]="{ item }">
+          <span :style="{ color: getColor(item) }" v-if="loggedWallet">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}</span>
+        </template>
+      </v-data-table>
+    </v-card-text>
 <!--      <v-card-actions class="justify-end" v-if="lastTenTransactions.length > 0">-->
 <!--        <v-btn style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black">-->
 <!--          Show All Transactions-->
 <!--        </v-btn>-->
 <!--      </v-card-actions>-->
-    </v-card>
     <TransactionDetailsDialog v-if="transactionInfo" :transactionInfo="transactionInfo" @close="handleTransactionModalClose"></TransactionDetailsDialog>
-  </div>
+  </v-card>
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
@@ -69,7 +67,7 @@ export default defineComponent({
   },
   methods: {
     handleOnTransactionsRowClick(row) {
-      this.transactionInfo = row;
+      // this.transactionInfo = row; TODO
     },
     handleTransactionModalClose() {
       this.transactionInfo = null;
