@@ -4,9 +4,7 @@
     <div class="player-playback__progress-bar">
       <v-slider
         :value="Math.round(context.seek / context.duration * 100)"
-        v-on:drag-start="onDragStart"
-        v-on:callback="onProgressChange"
-        v-on:drag-end="onDragEnd"
+        @change="onProgressChange"
         :tooltip="false"
         :dot-size="15"
         :process-style="{ background: '#1db954' }"
@@ -42,19 +40,14 @@ export default {
   },
   methods: {
     formatTime,
-    onDragStart({ currentValue }) {
-      this.isDragStart = true;
-    },
-
-    onDragEnd({ currentValue }) {
-      this.isDragStart = false;
-      // api.spotify.player.seekToPosition(currentValue);
-    },
-
     onProgressChange(currentValue) {
-      if (!this.isDragStart) {
-        this.isDragStart = false;
-        // api.spotify.player.seekToPosition(currentValue);
+      // Calculate the new seek position in seconds based on the slider value.
+      const newSeekPosition = (currentValue / 100) * this.context.duration;
+
+      // Set the new seek position in the Howl instance.
+      if (this.context.audio) {
+        this.context.audio.seek(newSeekPosition);
+        this.context.seek = newSeekPosition; // Update the seek position in the context.
       }
     }
   }

@@ -150,10 +150,18 @@ export default {
   }),
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
+    ...mapActions(useStore, ['login']),
     closeDialog() {
       this.currentDialog = null;
     },
   },
+  async mounted() {
+    if (this.loggedWallet?.id) {
+      console.log('loginApp', this.loggedWallet)
+      await this.login(this.loggedWallet.id)
+    }
+    this.loading.setLoading(false)
+  }
 };
 </script>
 

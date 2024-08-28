@@ -8,12 +8,11 @@
       maxlength="16"
       @input="handleInput"
       class="text-right transparent"
-      :rules="[rules.required, v => parseFloat(v) <= maximum || 'Insufficient Funds']"
+      :rules="[rules.required, v => parseFloat(v) <= maximum || 'Insufficient Funds', v => parseFloat(v) > minimum || `Minimum Required ${minimum}`]"
       :readonly="readOnly"
     ></v-text-field>
   </v-form>
 </template>
-
 <script>
 import rules from '@/shared/utils/rules';
 
@@ -27,6 +26,10 @@ export default {
     maximum: {
       type: Number,
       default: Infinity
+    },
+    minimum: {
+      type: Number,
+      default: 0,
     },
     decimals: {
       type: Number,

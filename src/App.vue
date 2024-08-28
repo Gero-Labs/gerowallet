@@ -51,12 +51,8 @@ export default {
   methods: {
     ...mapActions(useStore, ['login', 'setLoadingTxs']),
   },
-  async mounted() {
-    if (this.loggedWallet?.id) {
-      console.log('loginApp', this.loggedWallet)
-      await this.login(this.loggedWallet.id)
-    }
-    this.loading.setLoading(false)
+  mounted() {
+
   }
 }
 </script>

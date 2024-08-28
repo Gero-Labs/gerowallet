@@ -68,6 +68,7 @@
               class="mb-2"
               required
               :disabled="txSubmitLoading"
+              @keydown.enter.prevent="nextStep"
             >
               <template v-slot:append>
                 <v-icon @click="show1 = !show1" tabindex="-1">
@@ -120,6 +121,7 @@ import {
   TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks, { cardanoLogo } from '@/shared/utils/networks';
+import filters from '@/shared/utils/filters';
 
 export default {
   name: 'SendDialog',
@@ -161,22 +163,18 @@ export default {
     },
     isValid() {
       if (this.currentStep === 1) {
-        if (this.loggedWallet?.network !== Network.MAINNET) {
-          return this.sendData.recipientAddress.startsWith('addr_test1');
-        } else {
-          return this.sendData.recipientAddress.startsWith('addr1');
+        const prefix = this.loggedWallet?.network !== Network.MAINNET ? 'addr_test1' : 'addr1';
+        return this.sendData.recipientAddress.startsWith(prefix);
+      }
+      if (this.currentStep === 2) {
+        if (!this.txValid) {
+          return false;
         }
-      } else if (this.currentStep === 2) {
-        let found;
-        if (this.sendData.selectedTokens) {
-          found = this.sendData.selectedTokens.find(token => !token.quantity || Number(token.quantity) === 0);
-        }
-        if (this.sendData.selectedCollectibles) {
-          found = this.sendData.selectedCollectibles.find(collectible => Number(collectible.quantity) === 0);
-        }
-        return !found;
-      } else if (this.currentStep === 3) {
-        return !!this.spendingPassword;
+        const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
+        return !(hasZeroQuantity(this.sendData.selectedTokens) || hasZeroQuantity(this.sendData.selectedCollectibles));
+      }
+      if (this.currentStep === 3) {
+        return Boolean(this.spendingPassword);
       }
       return false;
     },
@@ -187,6 +185,22 @@ export default {
         this.resetData();
       }
     },
+    sendData: {
+      handler(val, oldVal) {
+        try {
+          this.buildTx()
+          this.txValid = true
+        } catch(e) {
+          if (e.includes('less than the minimum UTXO value')) {
+            const match = e.match(/minimum UTXO value (\d+)/);
+            const number = match ? parseInt(match[1], 10) : null;
+            this.sendData.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replace(",", ""))
+          }
+          this.txValid = false
+        }
+      },
+      deep: true,
+    }
   },
   data: () => ({
     steps: [
@@ -219,7 +233,9 @@ export default {
       selectedCollectibles: [],
       recipientAddress: '',
       selectedWallet: {},
+      minAda: 0,
     },
+    txValid: false,
   }),
   methods: {
     enableToolTip() {
@@ -289,13 +305,17 @@ export default {
       this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
       try {
         this.txBody = buildTx(this.sendData.selectedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], []);
+        this.sendData.minAda = 0
+        this.txValid = true
+        console.log(this.txBody.to_json())
         this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
-        this.$refs.summary.scanTx(this.txData);
-        if (this.currentStep < this.steps.length) {
-          this.currentStep++;
-        }
+
+        // if (this.currentStep < this.steps.length) {
+        //   this.currentStep++;
+        // }
       } catch (e) {
-        console.log(e);
+        console.log(e)
+        throw e
       }
     },
     nextStep() {
@@ -303,8 +323,9 @@ export default {
         if (this.currentStep === 1) {
           this.currentStep++;
         } else if (this.currentStep === 2) {
-          this.buildTx();
-        } else if (this.currentStep === 3) {
+          this.$refs.summary.scanTx(this.txData);
+          this.currentStep++;
+        } else if (this.currentStep === 3 && this.spendingPassword?.length > 0) {
           this.signAndSubmitTx();
         }
       }
@@ -325,6 +346,7 @@ export default {
       }
     },
     resetData() {
+      this.spendingPassword = ''
       this.currentStep = 1;
       this.txSubmitLoading = false
       this.txBody = undefined

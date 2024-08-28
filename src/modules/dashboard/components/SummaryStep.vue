@@ -180,7 +180,7 @@ export default {
 };
 </script>
 
-<style>
+<style scoped>
 .recipient-box {
   display: flex;
   gap: 10px;

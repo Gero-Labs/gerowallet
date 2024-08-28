@@ -88,9 +88,12 @@
             <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right;">
               <v-list-item-content class="py-0">
                 <v-list-item-title>
-                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :read-only="readOnly"></CurrencyTextField>
+                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly"></CurrencyTextField>
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text" v-if="!isNaN(price)">
+                <v-list-item-subtitle class="light-text" v-if="selectedToken.ticker === networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) && minimum > selectedToken.quantity" style="color: #f97066!important;">
+                  Min. Required: {{ minimum +" " + selectedToken.ticker}}
+                </v-list-item-subtitle>
+                <v-list-item-subtitle class="light-text" v-else-if="!isNaN(price)">
                   {{ '~$' + price }}
                 </v-list-item-subtitle>
               </v-list-item-content>
@@ -114,6 +117,9 @@
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
+import networks from '@/shared/utils/networks';
+import { mapState } from 'pinia';
+import { useStore } from '@/store';
 
 export default {
   name: 'TokenSelector',
@@ -154,10 +160,18 @@ export default {
     },
     price: {
       type: String,
+    },
+    minimum: {
+      type: Number,
+      default: 0,
     }
   },
   filters,
   computed: {
+    ...mapState(useStore, ['loggedWallet']),
+    networks() {
+      return networks
+    },
     balance() {
       if (this.selectedToken.decimals) {
         return (filters.toCurrency(this.selectedToken.balance, false, this.selectedToken.decimals, '', '', false, this.selectedToken.decimals))
