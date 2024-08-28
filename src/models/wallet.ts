@@ -587,7 +587,7 @@ export class Wallet {
         const promises = [];
         promises.push(this.syncStakingPools());
         const prevAccountInfo = await this.getAccountInfo()
-        socket.sendSync(!lastSyncInfo ? undefined : tip, tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount)
+        socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount)
       }
       this.locked = false;
     }
@@ -643,6 +643,7 @@ export class Wallet {
   }
 
   async setSync(syncObject) {
+    console.log('setSync', syncObject)
     if (syncObject && syncObject.success) {
       const promises = []
       if (syncObject.account) {

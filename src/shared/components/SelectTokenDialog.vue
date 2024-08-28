@@ -16,9 +16,9 @@
         :key="index"
         class="pl-1 pr-2 mx-1 mb-1"
       >
-        <v-avatar>
+        <v-avatar class="mr-1">
           <v-img :src="resolveToken(unit)['img']" />
-        </v-avatar>&nbsp;
+        </v-avatar>
         {{ resolveToken(unit)['ticker'] }}
       </v-chip>
     </v-card-title>

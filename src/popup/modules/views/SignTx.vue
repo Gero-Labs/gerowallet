@@ -313,14 +313,6 @@ export default {
 </script>
 
 <style scoped>
-.tooltip-content {
-  background: rgba(15, 19, 21, 1);
-  border: 1px solid #C4C4C4;
-  line-height: 18px;
-  padding: 10px;
-  font-size: 14px;
-}
-
 .tooltip-content .warning {
   color: #FF7777;
   font-size: 14px;

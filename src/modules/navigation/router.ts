@@ -35,15 +35,6 @@ const routes = [
     },
   },
   {
-    path: '/market',
-    name: 'market',
-    component: Dashboard,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
     path: '/swap',
     name: 'swap',
     component: Swap,
@@ -83,24 +74,6 @@ const routes = [
     path: '/media-player',
     name: 'mediaPlayer',
     component: MediaPlayer,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/send',
-    name: 'send',
-    component: Dashboard,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/receive',
-    name: 'receive',
-    component: Dashboard,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

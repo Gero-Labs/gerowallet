@@ -45,7 +45,7 @@ export const useStore = defineStore('store', {
     provider: undefined,
     price: undefined,
     transactions: undefined,
-    loadingTxs: true,
+    loadingTxs: false,
     isSyncing: false,
     assets: undefined,
     pools: [],
@@ -120,6 +120,7 @@ export const useStore = defineStore('store', {
 
             const totalAmount = receivedAmount - sentAmount;
             const assets = {...sentAssets};
+            const refAssets = {...sentAssets};
             Object.values(receivedAssets).forEach(receivedAsset => {
               const assetName = receivedAsset['policy_id'] + receivedAsset['asset_name'];
 
@@ -131,6 +132,13 @@ export const useStore = defineStore('store', {
                 assets[assetName] = receivedAsset;
               }
             });
+            const refAssetsCopy = {...refAssets}
+            Object.values(refAssets).forEach(asset => {
+              const assetName = asset['policy_id'] + asset['asset_name'];
+              if (Number(refAssetsCopy[assetName].quantity) === 0) {
+                delete refAssetsCopy[assetName]
+              }
+            })
             currentBalance += totalAmount
 
             const statuses = []
@@ -151,10 +159,10 @@ export const useStore = defineStore('store', {
               })
             }
             if (totalAmount > 0) {
-              statuses.push('Received')
+              statuses.push('Received Funds')
             } else {
               if (tx.certificates.length === 0) {
-                statuses.push('Sent')
+                statuses.push('Sent Funds')
               }
             }
             if (tx.withdrawals?.length > 0) {
@@ -269,8 +277,8 @@ export const useStore = defineStore('store', {
       const resolvingAsset = resolvedAssets
         .filter(asset => asset?.metadata || asset?.name === ticker)
         .map(async (token) => {
-          if (token.unit && dexHunterStore().tokens[token.unit]) {
-            token.verified = dexHunterStore().tokens[token.unit].verified;
+          if (token.unit && dexHunterStore().dexHunterTokens[token.unit]) {
+            token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
 
             try {
               const stats = await appWallet.api.mcap(token.unit);
@@ -427,8 +435,33 @@ export const useStore = defineStore('store', {
     setStakeAddress(stakeAddress) {
       this.stakeAddress = stakeAddress
     },
+    async simpleLogin(walletId: number) {
+      const wallet = this.wallets.find(wal => wal.id === walletId);
+      if (!wallet) {
+        return null;
+      }
+      await this.setLoggedWallet(wallet);
+      try {
+        this.provider = networks.resolveDefaultProvider(this.loggedWallet.chain, this.loggedWallet. network);
+      } catch (err) {
+        console.log(err)
+      }
+      appWallet = Wallet.class(wallet, this.provider);
+      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
+      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
+      socket.stompConnect(appWallet)
+      const promises = []
+      promises.push(this.loadSync())
+      try {
+        const tip = await appWallet.fetchTip()
+        await appWallet.sync(tip)
+      } catch (err) {
+        console.log(err)
+      }
+    },
     async login(walletId: number) {
       loading.setLoading(true);
+      this.setLoadingTxs(true)
       console.log('login')
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
@@ -546,6 +579,7 @@ export const useStore = defineStore('store', {
         liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
           next: newTip => {
             this.latestTip = newTip
+            console.log('latestTip', this.latestTip)
             resolve(this.latestTip)
           },
           error: error => {
