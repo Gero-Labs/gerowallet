@@ -71,12 +71,12 @@
     </v-footer>
   </v-app>
 </template>
-
 <script>
 import LanguageSelector from '../components/LanguageSelector.vue';
 import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
+import loading from '@/plugins/loading';
 
 export default {
   name: 'BlankLayout',
@@ -108,6 +108,9 @@ export default {
     geroLogoApex: require('@/modules/navigation/assets/gero_logo_apex.png'),
     geroLogo: require('@/modules/navigation/assets/gero_logo.png'),
   }),
+  mounted() {
+    loading.setLoading(false)
+  }
 };
 </script>
 <style>

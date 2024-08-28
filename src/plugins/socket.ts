@@ -73,17 +73,18 @@ export class SocketPlugin {
     }
   }
 
-  sendSync(from: any, to: any, address: string, rewards_sum: string, controlled_amount: string) {
+  sendSync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string,) {
     if (this.client && this.client.connected) {
       const body = {
         chain: Object.keys(Blockchain).find(key => Blockchain[key] === this.wallet.chain),
         network: Object.keys(Network).find(key => Network[key] === this.wallet.network),
         provider: Provider[networks.resolveDefaultProvider(this.wallet.chain, this.wallet.network)],
-        from,
+        from_block_height: from,
         to,
         address,
         rewards_sum: (rewards_sum ? rewards_sum : "0"),
         controlled_amount: (controlled_amount ? controlled_amount : "0"),
+        withdrawable_amount: (withdrawable_amount ? withdrawable_amount : "0"),
         session_id: this.sessionId
       }
       this.client.send("/app/sync", {}, JSON.stringify(body))

@@ -13,6 +13,7 @@
                 :key="index"
                 @remove="removeTokenSelector"
                 :price="getPrice(selectedTokens[index-1])"
+                :minimum="value.minAda"
               ></TokenSelector>
             </template>
             <v-card-actions class="justify-center text-center" v-if="missingTokens?.length > 0">

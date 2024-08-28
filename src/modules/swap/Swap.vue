@@ -20,14 +20,14 @@
                     </v-btn>
                   </v-btn-toggle>
                   <v-spacer></v-spacer>
-                  <v-btn icon small @click="refreshTokens">
+                  <v-btn icon small>
                     <v-icon small>mdi-reload</v-icon>
                   </v-btn>
                   <v-btn-toggle v-model="settingsToggle">
                     <v-btn small rounded :value="true">
                       <v-icon color="red" small v-if="slippage === 'unlimited'">mdi-infinity</v-icon>
                       <span v-else>{{ slippageDisplay }}</span>
-                      &nbsp;<v-icon small>mdi-cog</v-icon>
+                      <v-icon small class="ml-1">mdi-cog</v-icon>
                     </v-btn>
                   </v-btn-toggle>
                 </v-card-title>
@@ -79,15 +79,19 @@
         </v-col>
       </v-row>
     </v-layout>
+    {{ selectedTokenB }}
+    {{ availableTokens.find(token => token.ticker === 'GERO')}}
   </v-card>
 </template>
+
 <script lang="ts">
 import { defineComponent } from 'vue';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
-import { mapState } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import { appWallet, useStore } from '@/store';
-import networks, { geroLogo } from '@/shared/utils/networks';
+import networks, { cardanoLogo, geroLogo } from '@/shared/utils/networks';
+import { dexHunterStore } from '@/store/modules/dexhunter';
 
 export default defineComponent({
   name: 'Swap',
@@ -97,22 +101,34 @@ export default defineComponent({
       slippage: '2',
       settingsToggle: false,
       swapType: 0,
-      selectedTokenA: undefined,
+      selectedTokenA: {
+        name: 'Cardano',
+        ticker: 'ADA',
+        img: cardanoLogo,
+        fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+        balance: 0,
+        quantity: '0',
+        decimals: 6,
+        unit: '',
+        verified: true
+      },
       selectedTokenB: {
         name: 'GERO',
         ticker: 'GERO',
-        img: geroLogo,
+        img: "https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp",
+        fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
         balance: 0,
         quantity: '0',
         decimals: 6,
         unit: '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f',
+        verified: true
       },
-      availableTokens: [],
       price_ab: undefined,
       price_ba: undefined,
     };
   },
   computed: {
+    ...mapState(dexHunterStore, ['dexHunterTokens']),
     ...mapState(useStore, ['resolvedAssets', 'pinnedTokens', 'price']),
     tokens() {
       return (
@@ -124,12 +140,78 @@ export default defineComponent({
           decimals: token.metadata.decimals,
           unit: token.unit,
           quantity: '0',
-        })).sort((a, b) => a.ticker.localeCompare(b.ticker)) || []
+        })) || []
       );
     },
     nativeToken() {
-      const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
-      return this.tokens.find(token => token.ticker === currencyTicker);
+      const currencyTicker = networks.resolveCurrencyTicker(appWallet?.chain, appWallet?.network);
+      const token = this.resolvedAssets?.find(token => token.ticker === currencyTicker);
+      return token
+        ? {
+          name: token.metadata.name,
+          ticker: token.metadata.ticker,
+          img: token.img,
+          balance: token.quantity,
+          decimals: token.metadata.decimals,
+          unit: token.unit,
+          quantity: '0',
+          verified: true,
+        }
+        : {
+          name: 'Cardano',
+          ticker: 'ADA',
+          img: cardanoLogo,
+          balance: 0,
+          quantity: '0',
+          decimals: 6,
+          unit: '',
+          verified: true,
+        };
+    },
+    availableTokens() {
+      if (!this.dexHunterTokens) {
+        return [];
+      }
+
+      const resolvedAssets = this.tokens;
+      const native = resolvedAssets?.find(t => t.unit === this.nativeToken.unit);
+
+      const nativeToken = { ...this.nativeToken }; // avoid modifying original state
+
+      if (native) {
+        nativeToken.balance = native.balance;
+      }
+
+      const availableTokens = Object.values(this.dexHunterTokens)
+        .map(token => {
+          const found = resolvedAssets?.find(t => t.unit === token.unit);
+          const res = {
+            ...token,
+            balance: found ? found.balance : 0,
+          };
+          if (found && this.selectedTokenB.unit === found.unit) {
+            this.selectedTokenB.balance = res.balance
+          }
+          return res
+        })
+        .sort((a, b) => {
+          const isPinnedA = this.pinnedTokens.includes(a.unit);
+          const isPinnedB = this.pinnedTokens.includes(b.unit);
+
+          // Prioritize pinned tokens
+          if (isPinnedA && !isPinnedB) return -1;
+          if (!isPinnedA && isPinnedB) return 1;
+
+          // If both are pinned, sort by name
+          if (isPinnedA && isPinnedB) {
+            return a.name.localeCompare(b.name);
+          }
+
+          // If none are pinned, sort by balance in descending order
+          return b.balance - a.balance;
+        });
+
+      return [nativeToken, ...availableTokens];
     },
     slippageDisplay() {
       return this.slippage === 'auto' ? 'AUTO' : `${this.slippage}%`;
@@ -141,16 +223,32 @@ export default defineComponent({
     },
   },
   watch: {
-    selectedTokenA: {
-      handler:'updateTokenBQuantity',
-      deep: true
-    },
+    // selectedTokenA: {
+    //   handler: 'updateTokenBQuantity',
+    //   deep: true,
+    // },
     selectedTokenB: {
       handler: 'updateTokenAQuantity',
       deep: true,
     },
+    availableTokens(newTokens) {
+      // Handle updates when availableTokens change, e.g., update selected tokens
+      if (newTokens.length) {
+        const nativeToken = newTokens.find(token => token.ticker === 'ADA');
+        if (nativeToken) {
+          this.updateSelectedTokens(nativeToken);
+        }
+      }
+    },
   },
   methods: {
+    ...mapActions(dexHunterStore, ['loadTokens']),
+    updateSelectedTokens(nativeToken) {
+      // Ensure that selectedTokenA is updated correctly without direct mutation
+      if (this.selectedTokenA.ticker === nativeToken.ticker) {
+        this.selectedTokenA = { ...nativeToken }; // shallow copy, safe for primitive fields
+      }
+    },
     getPrice(token) {
       if (!token) return '';
       const multiplier = token.ticker === 'ADA' ? 1 : this.price_ba;
@@ -160,43 +258,25 @@ export default defineComponent({
       this.slippage = val;
     },
     switchPair() {
-      [this.selectedTokenA, this.selectedTokenB] = [this.selectedTokenB, this.selectedTokenA];
+      // Create deep copies to avoid reference issues
+      this.selectedTokenA = JSON.parse(JSON.stringify(this.selectedTokenB));
+      this.selectedTokenB = JSON.parse(JSON.stringify(this.selectedTokenA));
     },
-    async refreshTokens() {
-      const res = await appWallet.api.getAllTokens();
-      const availableTokens = res.map(token => ({
-        name: token.token_ascii,
-        ticker: token.ticker,
-        img: `https://storage.googleapis.com/dexhunter-images/tokens/${token.token_id}.webp`,
-        decimals: Number(token.token_decimals),
-        unit: token.token_id,
-        balance: this.tokens.find(t => t.ticker === token.ticker)?.balance || 0,
-        verified: token.is_verified,
-      })).sort((a, b) => {
-        return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.name.localeCompare(b.name);
-      });
-
-      this.availableTokens = [this.nativeToken, ...availableTokens].filter(Boolean);
-      const foundGEROAsset = this.availableTokens.find(token => token.ticker === 'GERO');
-      if (foundGEROAsset) {
-        foundGEROAsset.quantity = '0';
-        this.selectedTokenB = foundGEROAsset;
-      }
+    async updateTokenBQuantity(val) {
+      console.log(val)
+      // if (!this.selectedTokenA || !this.price_ba) return;
+      // this.selectedTokenB.quantity = String((Number(this.selectedTokenA.quantity) / this.price_ba).toFixed(2));
+      // const res = await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, Number(this.selectedTokenA.quantity));
+      // console.log(res)
     },
-    async updateTokenBQuantity() {
-      console.log('')
-      if (!this.selectedTokenA || !this.price_ba) return;
-      this.selectedTokenB.quantity = String((Number(this.selectedTokenA.quantity) / this.price_ba).toFixed(2));
-      await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, Number(this.selectedTokenA.quantity));
-    },
-    async updateTokenAQuantity() {
-      console.log('')
+    async updateTokenAQuantity(val) {
+      console.log(val)
       if (!this.selectedTokenB || !this.price_ba) return;
       this.selectedTokenA.quantity = String((Number(this.selectedTokenB.quantity) / this.price_ba).toFixed(2));
       await this.estimate(this.selectedTokenB.unit, this.selectedTokenA.unit, Number(this.selectedTokenB.quantity));
     },
     async estimate(token_in, token_out, amount_in) {
-      if (!amount_in || amount_in === 0) return;
+      if (!amount_in) return;
       const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
       const res = await appWallet.api.estimate(amount_in, token_in, token_out, slippage);
       this.price_ab = res.price_ab;
@@ -204,15 +284,11 @@ export default defineComponent({
     },
   },
   async mounted() {
-    const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
-    this.selectedTokenA = {
-      ...this.tokens.find(token => token.ticker === currencyTicker),
-      quantity: '0'
-    }
-    await this.refreshTokens();
-  },
+    await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1);
+  }
 });
 </script>
+
 <style scoped>
 .mt-2 {
   margin-top: 8px;
