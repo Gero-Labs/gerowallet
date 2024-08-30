@@ -177,3 +177,19 @@ export function unitToFingerprint(unit) {
   const words = bech32.toWords(hash);
   return bech32.encode('asset', words)
 }
+
+export function stringToHex(input: string) {
+  let hexString = '';
+  for (let i = 0; i < input.length; i++) {
+    hexString += input.charCodeAt(i).toString(16).padStart(2, '0');
+  }
+  return hexString;
+}
+
+export function hexToString(hex) {
+  let output = '';
+  for (let i = 0; i < hex.length; i += 2) {
+    output += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+  }
+  return output;
+}

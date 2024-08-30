@@ -17,6 +17,14 @@ export const isEnabled = async (): Promise<boolean> => {
   return result['data'];
 };
 
+export const promptLogin = async (): Promise<void> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.popupLogin,
+    data: { },
+  });
+  return result['data'];
+};
+
 export const signData = async (address: string, payload: string): Promise<DataSignature> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signData,

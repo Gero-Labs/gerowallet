@@ -90,7 +90,7 @@ export default {
       } catch (e) {
         console.log(e)
       }
-    }
+    },
   },
   data: () => ({
     retailerUrl: null,

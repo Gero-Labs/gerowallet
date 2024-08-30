@@ -15,6 +15,7 @@ import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 import loading from '@/plugins/loading';
 import Swap from '@/modules/swap/Swap.vue';
+import Login from '@/popup/modules/views/Login.vue';
 
 const routes = [
   {
@@ -101,6 +102,15 @@ const routes = [
     path: '/sign-tx',
     name: 'sign-tx',
     component: SignTx,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/plogin',
+    name: 'plogin',
+    component: Login,
     meta: {
       layout: PopupLayout,
       requiresAuth: true,

@@ -5,7 +5,7 @@
       <img alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"/>
     </div>
     <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
-    <v-card-title class="justify-center py-0" style="font-size: 16px;">
+    <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
       <span style="color: #ccc">Website:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
@@ -23,6 +23,7 @@
       </div>
     </v-card-title>
     <Select
+      v-if="showWallet"
       :value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
@@ -45,6 +46,14 @@ export default{
       type: String,
       default: '',
     },
+    showWebsite: {
+      type: Boolean,
+      default: true
+    },
+    showWallet: {
+      type: Boolean,
+      default: true
+    }
   },
   computed: {
     ...mapState(useStore, ['loggedWallet']),

@@ -15,6 +15,7 @@ export const METHOD = {
   getAddress: 'getAddress',
   getAddressBech32: 'getAddressBech32',
   signData: 'signData',
+  popupLogin: 'popupLogin',
   signTx: 'signTx',
   submitTx: 'submitTx',
   //internal
@@ -56,7 +57,8 @@ export const POPUP = {
   main: 'mainPopup',
   signTx: 'sign-tx',
   dappConnect: 'dapp-connect',
-  dappSignData: 'dapp-sign'
+  dappSignData: 'dapp-sign',
+  login: 'plogin'
 };
 
 export const POPUP_WINDOW = {

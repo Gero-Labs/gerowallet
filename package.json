@@ -1,6 +1,6 @@
 {
   "name": "gero-wallet",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
@@ -17,7 +17,7 @@
     "zip": "node scripts/build-zip.js"
   },
   "dependencies": {
-    "@bringweb3/chrome-extension-kit": "^1.0.5",
+    "@bringweb3/chrome-extension-kit": "^1.0.9",
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.2",
     "@emurgo/cardano-message-signing-browser": "^1.0.1",
     "@emurgo/cardano-serialization-lib-browser": "^11.5.0",

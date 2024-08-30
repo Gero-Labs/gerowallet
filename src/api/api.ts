@@ -300,6 +300,41 @@ export class Api {
     }
   }
 
+  async claimInit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number): Promise<any> {
+    try {
+      const requestBody = {
+        walletAddress,
+        targetWalletAddress,
+        tokenSymbol,
+        tokenAmount
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/bring/claim-init`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async claimSubmit(walletAddress: string, targetWalletAddress: string, tokenSymbol: string, tokenAmount: number, message: string, signature: string, key: string): Promise<any> {
+    try {
+      const requestBody = {
+        walletAddress,
+        targetWalletAddress,
+        tokenSymbol,
+        tokenAmount,
+        message,
+        signature,
+        key
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/bring/claim-submit`, requestBody);
+      if (status === 202) return status;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async getAllTokens(): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/swap/tokens`);
@@ -330,6 +365,23 @@ export class Api {
         token_out,
       }
       const { data, status } = await this.axiosInstance.post(`/api/swap/estimate`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+    try {
+      const requestBody = {
+        amount_out,
+        referrer,
+        slippage,
+        token_in,
+        token_out,
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/swap/reverseEstimate`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
