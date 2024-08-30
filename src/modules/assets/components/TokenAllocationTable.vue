@@ -312,7 +312,7 @@ export default {
         })
         return this.resolvedAssets.map(token => {
           if (token['name'] === 'Cardano') {
-            token['value'] = Number(filters.toCurrency(token.quantity * Number(this.price.lastPrice), false, token.metadata?.decimals, '', '', false, token.metadata?.decimals).replace(",", ""))
+            token['value'] = Number(filters.toCurrency(token.quantity * Number(this.price.lastPrice), false, token.metadata?.decimals, '', '', false, token.metadata?.decimals).replaceAll(",", ""))
           }
           if (token['value']) {
             token['total_allocation'] = token['value'] / totalAllocation * 100

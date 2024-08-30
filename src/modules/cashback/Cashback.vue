@@ -23,10 +23,10 @@
             </div>
             <div class="amount-section">
               <div class="amount">
-                <div class="highlight-text">{{ eligible ? eligible.tokenAmount : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</div>
+                <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
               </div>
               <div class="usd-amount">
-                <div class="usd-text">{{ eligible ? eligible.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false) }}</div>
+                <div class="usd-text">{{ eligible ? eligible.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</div>
               </div>
             </div>
           </div>
@@ -41,10 +41,10 @@
             </div>
             <div class="amount-section">
               <div class="amount">
-                <div class="secondary-text">{{ pending ? pending.tokenAmount : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false) }}</div>
+                <div class="secondary-text">{{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
               </div>
               <div class="usd-amount">
-                <div class="usd-secondary-text">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false) }}</div>
+                <div class="usd-secondary-text">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</div>
               </div>
             </div>
           </div>
@@ -179,6 +179,7 @@ export default defineComponent({
     },
     pending() {
       if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
+        console.log(this.bringCache.data.totalPendings[0])
         return this.bringCache.data.totalPendings[0]
       }
       return undefined

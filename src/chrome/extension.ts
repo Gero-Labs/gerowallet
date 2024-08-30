@@ -740,17 +740,19 @@ const isValidAddressBytes = async (address: Buffer) => {
   }
   return false;
 };
-//
-// export const isValidEthAddress = function (address) {
-//   return isAddress(address);
-// };
-//
+
 export const extractKeyHash = async (address: string) => {
-  console.log(address);
   const uint8Array: Buffer = Buffer.from(address, 'hex');
-  if (!(await isValidAddressBytes(uint8Array)))
-    throw DataSignError.InvalidFormat;
-  const addressObject: Address = Address.from_bytes(uint8Array);
+  let addressObject: Address
+  if (!(await isValidAddressBytes(uint8Array))) {
+    addressObject = Address.from_bech32(address)
+    const array = Buffer.from(addressObject.to_hex(), 'hex')
+    if (!(await isValidAddressBytes(array))) {
+      throw DataSignError.InvalidFormat;
+    }
+  } else {
+    addressObject = Address.from_bytes(uint8Array);
+  }
   try {
     const addr: BaseAddress = BaseAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');

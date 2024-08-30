@@ -292,7 +292,7 @@ export const useStore = defineStore('store', {
                 '',
                 false,
                 token.metadata?.decimals
-              ).replace(",", ""));
+              ).replaceAll(",", ""));
             } catch (err) {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
             }
@@ -323,7 +323,7 @@ export const useStore = defineStore('store', {
               '',
               false,
               token.metadata?.decimals
-            ).replace(",", ""));
+            ).replaceAll(",", ""));
           }
           return token;
         });

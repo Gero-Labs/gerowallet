@@ -88,13 +88,13 @@
             <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right;">
               <v-list-item-content class="py-0">
                 <v-list-item-title>
-                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly"></CurrencyTextField>
+                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly" @change="quantityChange"></CurrencyTextField>
                 </v-list-item-title>
                 <v-list-item-subtitle class="light-text" v-if="selectedToken.ticker === networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) && minimum > selectedToken.quantity" style="color: #f97066!important;">
                   Min. Required: {{ minimum +" " + selectedToken.ticker}}
                 </v-list-item-subtitle>
-                <v-list-item-subtitle class="light-text" v-else-if="!isNaN(price)">
-                  {{ '~$' + price }}
+                <v-list-item-subtitle class="light-text" :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}" v-else-if="!isNaN(price.replaceAll(',', ''))">
+                  {{ '~$' + price }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B">mdi-alert-rhombus-outline</v-icon>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -164,6 +164,10 @@ export default {
     minimum: {
       type: Number,
       default: 0,
+    },
+    priceImpact: {
+      type: Number,
+      default: 0
     }
   },
   filters,
@@ -195,6 +199,9 @@ export default {
   mounted() {
   },
   methods: {
+    quantityChange(val) {
+      this.$emit('change', val ? val.replace(/^0+/, '') : 0)
+    },
     setMax() {
       console.log(this.balance)
       this.selectedToken.quantity = this.balance.replaceAll(",","")

@@ -27,7 +27,8 @@ import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
 
 await bringInitBackground({
   identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
-  apiEndpoint: 'sandbox'
+  apiEndpoint: 'sandbox',
+  cashbackPagePath: '/wallet/cashback'
 })
 
 console.log('Background Loaded');
@@ -180,6 +181,7 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
 
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
   const whitelisted = await isWhitelisted(request.origin);
+  console.log(request.origin)
   if (whitelisted) {
     sendResponse({
       data: whitelisted,
@@ -187,6 +189,7 @@ app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } else {
+    console.log('refuse')
     sendResponse({
       error: APIError.Refused,
       target: TARGET,
@@ -259,6 +262,30 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
     target: TARGET,
     sender: SENDER.extension,
   });
+});
+
+app.add(METHOD.popupLogin, async (request, sendResponse) => {
+  try {
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.login}`);
+    const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
+      .then((tab) => Messaging.sendToPopupInternal(tab, request))
+      .then((response) => response);
+    if (response.data) {
+      sendResponse({
+        id: request.id,
+        data: response.data,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
 });
 
 app.add(METHOD.signData, async (request, sendResponse) => {

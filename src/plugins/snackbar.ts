@@ -11,6 +11,12 @@ export class SnackbarPlugin {
     this.color = '#ff6464';
   }
 
+  fireSuccess(text: string) {
+    this.text = text;
+    this.color = '#47cd89';
+    this.active = true;
+  }
+
   setTimeout(value: number) {
     this.timeout = value;
   }
