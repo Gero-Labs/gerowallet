@@ -3,8 +3,8 @@
     <div style="z-index: 3" class="px-4">
       <v-row>
         <v-col cols="12" xl="7" lg="7" md="7">
-          <div class="card-text">
-            <div style="justify-content: flex-start; align-items: center; gap: 16px; display: inline-flex">
+          <div class="card-text" style="height: 190px">
+            <div style="justify-content: flex-start; align-items: center; gap: 16px; display: inline-flex" v-if="!isClaim">
               <div style="flex-direction: column; justify-content: flex-start; align-items: flex-start; gap: 16px; display: inline-flex">
                 <div style="align-self: stretch; justify-content: center; align-items: center; gap: 12px; display: inline-flex">
                   <v-avatar size="48" class="avatar-bg">
@@ -14,15 +14,74 @@
                 </div>
                 <div class="amount-section">
                   <div class="amount">
-                    <div class="highlight-text">{{ eligible ? eligible.tokenAmount : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</div>
+                    <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
                   </div>
                   <div class="usd-amount" v-if="eligible">
-                    <div class="usd-text">Total Value: {{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}</div>
+                    <div class="usd-text">Total Value: {{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}</div>
                   </div>
-                  <span v-if="eligible">Minimum to claim {{ eligible ? eligible.minimumClaimThreshold : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false) }}</span>
+                  <span v-if="eligible">Minimum to claim: {{ eligible ? (eligible.minimumClaimThreshold * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</span>
                 </div>
               </div>
-              <v-btn class="geroButton" icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold < eligible.tokenAmount">Claim</v-btn>
+              <v-btn class="geroButton" icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount" @click="toggleClaim(true)">Claim</v-btn>
+            </div>
+            <div style="justify-content: flex-start; align-items: start; display: inline-flex; flex-flow: column;" v-else>
+              <v-form>
+                <div style="position: relative; top: -6px; left: -56px">
+                  <v-btn text small plain @click="isClaim = false" class="px-0" :ripple="false">
+                    <v-icon class="mr-1" small>
+                      mdi-arrow-left
+                    </v-icon>Back
+                  </v-btn>
+                </div>
+                <div>
+                  <v-slider label="Claim Amt." hide-details thumb-label="always" v-model="amountToClaim" :min="eligible.minimumClaimThreshold" :max="eligible.tokenAmount">
+                    <template v-slot:thumb-label="{ value }">
+                      <span style="font-size: 9px">
+                        {{ value * 1000000 | toCurrency(false, 2, '₳', '', false, 6)  }}
+                      </span>
+                    </template>
+                  </v-slider>
+                  <v-tooltip
+                    v-model="tooltip.enabled"
+                    top
+                    color="red"
+                  >
+                    <template v-slot:activator="{ }">
+                      <v-text-field
+                        flat
+                        style="width: 295px; margin: auto"
+                        block
+                        dense
+                        v-model="spendingPassword"
+                        outlined
+                        label="Spending Password"
+                        :type="show1 ? 'text' : 'password'"
+                        :rules="[rules.required]"
+                        hide-details
+                        class="my-2"
+                        required
+                        :disabled="loading"
+                        @keydown.enter.stop="claim"
+                      >
+                        <template v-slot:append>
+                          <v-icon @click="show1 = !show1" tabindex="-1">
+                            {{ show1 ? 'mdi-eye' : 'mdi-eye-off' }}
+                          </v-icon>
+                        </template>
+                      </v-text-field>
+                    </template>
+                    <span>{{ tooltip.text }}</span>
+                  </v-tooltip>
+                  <v-btn
+                    style="width: 295px; color: black!important;"
+                    class="geroButton mt-2"
+                    :disabled="loading || !spendingPassword"
+                    :loading="loading"
+                    @click="claim"
+                  >Sign and Confirm
+                  </v-btn>
+                </div>
+              </v-form>
             </div>
           </div>
         </v-col>
@@ -30,10 +89,10 @@
           <div>
             <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">Pending Rewards</div>
             <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">
-              {{ pending ? pending.tokenAmount : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false) }}
+              {{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
             </div>
             <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
-              {{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false) }}
+              {{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}
             </div>
           </div>
         </v-col>
@@ -43,11 +102,11 @@
       Rewards Details
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
-        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Deals&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{deals?.length}}</v-chip>
+        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Deals
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{deals?.length}}</v-chip>
         </v-btn>
-        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> Claims&nbsp;
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;">{{claims.length}}</v-chip>
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> Claims
+          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{claims.length}}</v-chip>
         </v-btn>
       </v-btn-toggle>
     </v-card-title>
@@ -135,11 +194,16 @@
   </BaseDialog>
 </template>
 <script>
-import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { mapActions, mapState } from 'pinia';
+import { appWallet, useStore } from '@/store';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
+import { bringStore } from '@/store/modules/bring';
+import networks from '@/shared/utils/networks';
+import { stringToHex } from '@/shared/utils/converter';
+import rules from '@/shared/utils/rules';
+import snackbar from '@/plugins/snackbar';
 
 export default {
   name: 'ViewRewardsDialog',
@@ -152,7 +216,8 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['bringCache']),
+    ...mapState(bringStore, ['bringCache']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
     eligible() {
       if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
         return this.bringCache.data.eligible[0]
@@ -179,6 +244,13 @@ export default {
     }
   },
   methods: {
+    ...mapActions(bringStore, ['loadBringCache']),
+    toggleClaim(val) {
+      if (val) {
+        this.spendingPassword = ''
+      }
+      this.isClaim = val
+    },
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -208,9 +280,37 @@ export default {
       } else { //PURCHASE_CORRECTED
         return 'The amount or release date of your purchase has been adjusted due to a retailer\'s decision or item return.'
       }
-    }
+    },
+    async claim() {
+      const wallet = appWallet
+      if (wallet.verifySpendingPassword(this.spendingPassword)) {
+        this.loading = true
+        try {
+          const res = await appWallet.api.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
+          const messageToSign = res.messageToSign
+          const res2 = await wallet.signData(stringToHex(this.baseAddress), stringToHex(messageToSign), this.spendingPassword, 0)
+          const status = await appWallet.api.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, res2.signature, res2.key)
+          if (status === 202) {
+            snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
+            this.spendingPassword = ''
+            await this.loadBringCache()
+            this.isClaim = false
+          }
+        } catch (e) {
+          console.log(e)
+        }
+        this.loading = false
+      } else if (this.spendingPassword) {
+        this.tooltip.enabled = true
+        setTimeout(() => {
+          this.tooltip.enabled = false;
+        }, 3000);
+      }
+    },
   },
   data: () => ({
+    amountToClaim: 0,
+    isClaim: false,
     currentTab: 0,
     dealsHeaders: [
       { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
@@ -223,9 +323,19 @@ export default {
       { text: "Time", align: "start", sortable: true, value: "date"},
       { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
     ],
+    messageToSign: undefined,
+    signature: undefined,
+    tooltip: {
+      enabled: false,
+      text: 'Wrong Spending Password!',
+    },
+    rules,
+    show1: false,
+    loading: false,
+    spendingPassword: '',
   }),
   mounted() {
-
+      this.amountToClaim = this.eligible.tokenAmount
   },
   watch: {
     isOpen(val) {

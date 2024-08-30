@@ -149,7 +149,6 @@ export default {
           this.$refs.form.resetValidation()
         }
       }
-      console.log(val)
     },
     spendingPassword() {
       this.passwordRules = [

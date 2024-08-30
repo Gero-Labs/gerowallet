@@ -30,23 +30,7 @@ export default {
     }
   },
   filters,
-  methods: {
-    getContent() {
-      this.fileContent = "";
-      // var self;
-      axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
-        .then(response => {
-          this.fileContent = response.data;
-          this.loading = false
-          this.disabled = false
-        }).catch(e => {
-          this.fileContent = e;
-          this.loading = false
-        });
-    }
-  },
   data: () => ({
-    fileContent: null,
     loading: true,
     disabled: true,
   }),
@@ -58,8 +42,6 @@ export default {
       if (val) {
         this.loading = true
         this.default = true
-        this.getContent();
-        // appWallet.api.
       }
     }
   },

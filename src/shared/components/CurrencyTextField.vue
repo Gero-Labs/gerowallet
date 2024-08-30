@@ -71,6 +71,7 @@ export default {
     handleInput(value) {
       const cleanedValue = this.cleanValue(value);
       this.rawValue = cleanedValue.length > 0 ? cleanedValue : '0';
+      this.$emit('change', value.replaceAll(',', ''))
     },
     cleanValue(value) {
       return String(value).replace(/[^0-9.]/g, '').substring(0, 16);

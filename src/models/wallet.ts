@@ -247,7 +247,10 @@ export class Wallet {
   }
 
   async signData(address: string, payload: string, password: string, accountIndex: number) {
-    const keyHash = await extractKeyHash(address);
+    const keyHash = chrome.storage ? await extractKeyHash(address) :
+      BaseAddress.from_address(
+        Address.from_bech32(Buffer.from(address, 'hex').toString())
+      ).payment_cred().to_keyhash().to_bech32('addr_vkh');
     const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
     let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
     const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
