@@ -1,10 +1,7 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet.">
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-      <TokenSelector
-        :value="quantity"
-        @updateQuantity="updateQuantity"
-      ></TokenSelector>
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet." :min-height="300" :width="500">
+    <v-card-text class="text-center justify-center">
+      <SwapWidget></SwapWidget>
     </v-card-text>
   </BaseDialog>
 </template>
@@ -12,11 +9,12 @@
 import filters from "@/shared/utils/filters";
 import BaseDialog from "@/shared/components/BaseDialog.vue";
 import TokenSelector from '@/shared/components/TokenSelector.vue';
+import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 
 export default {
   name: "SwapDialog",
   filters,
-  components: { TokenSelector, BaseDialog },
+  components: { SwapWidget, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,
