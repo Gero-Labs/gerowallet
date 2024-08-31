@@ -6,75 +6,86 @@
           <v-card flat outlined>
             <v-card-title>Swap</v-card-title>
             <v-card-text class="text-center justify-center">
-              <v-card flat max-width="400" outlined class="mx-auto">
-                <v-card-title>
-                  <v-btn-toggle mandatory active-class="highlight" v-model="swapType">
-                    <v-btn small color="black" :value="0" rounded class="capitalize">
-                      Swap
-                    </v-btn>
-                    <v-btn small color="black" :value="1" rounded class="capitalize" disabled>
-                      Limit
-                    </v-btn>
-                    <v-btn small color="black" :value="2" rounded class="capitalize" disabled>
-                      DCA
-                    </v-btn>
-                  </v-btn-toggle>
-                  <v-spacer></v-spacer>
-                  <v-btn icon small>
-                    <v-icon small>mdi-reload</v-icon>
-                  </v-btn>
-                  <v-btn-toggle v-model="settingsToggle">
-                    <v-btn small rounded :value="true">
-                      <v-icon color="red" small v-if="slippage === 'unlimited'">mdi-infinity</v-icon>
-                      <span v-else>{{ slippageDisplay }}</span>
-                      <v-icon small class="ml-1">mdi-cog</v-icon>
-                    </v-btn>
-                  </v-btn-toggle>
-                </v-card-title>
-                <v-card-text class="">
-                  <TokenSelector
-                    v-model="selectedTokenA"
-                    :available="availableTokens"
-                    :index="0"
-                    title="Selling"
-                    titleColor="#FDA29B"
-                    :price="getPrice(selectedTokenA)"
-                    @change="tokenAQuantityChange"
-                  />
-                  <v-btn outlined icon color="#00DFF3" class="mt-2 z-index-5" @click="switchPair">
-                    <v-icon color="#00DFF3">mdi-chevron-double-down</v-icon>
-                  </v-btn>
-                  <TokenSelector
-                    v-model="selectedTokenB"
-                    :available="availableTokens"
-                    :index="0"
-                    title="Buying"
-                    titleColor="#75E0A7"
-                    background-color="transparent"
-                    :max-button-enabled="false"
-                    class="mt-n4"
-                    :price="getPrice(selectedTokenB)"
-                    :price-impact="calculateWeightedPriceImpact"
-                    @change="tokenBQuantityChange"
-                  />
-                  <div class="text-left" v-if="price_ba">
-                    <v-btn text plain class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle">
-                      <v-avatar
-                        color="primary"
-                        :style="{ animationDuration: '1.5s' }"
-                        class="mr-1 v-avatar--metronome"
-                        size="12"
+              <v-card flat outlined max-width="400" class="mx-auto">
+                <v-card-text class="pa-0">
+                  <v-card flat class="transparent">
+                    <v-card-title>
+                      <v-btn-toggle mandatory active-class="highlight" v-model="swapType">
+                        <v-btn small color="black" :value="0" rounded class="capitalize">
+                          Swap
+                        </v-btn>
+                        <v-btn small color="black" :value="1" rounded class="capitalize" disabled>
+                          Limit
+                        </v-btn>
+                        <v-btn small color="black" :value="2" rounded class="capitalize" disabled>
+                          DCA
+                        </v-btn>
+                      </v-btn-toggle>
+                      <v-spacer></v-spacer>
+                      <v-btn icon small>
+                        <v-icon small>mdi-reload</v-icon>
+                      </v-btn>
+                      <v-btn-toggle v-model="settingsToggle">
+                        <v-btn small rounded :value="true">
+                          <v-icon color="red" small v-if="slippage === 'unlimited'">mdi-infinity</v-icon>
+                          <span v-else>{{ slippageDisplay }}</span>
+                          <v-icon small class="ml-1">mdi-cog</v-icon>
+                        </v-btn>
+                      </v-btn-toggle>
+                    </v-card-title>
+                    <v-card-text class="pb-0">
+                      <TokenSelector
+                          v-model="selectedTokenA"
+                          :available="availableTokens"
+                          :index="0"
+                          title="Selling"
+                          titleColor="#FDA29B"
+                          :price="getPrice(selectedTokenA)"
+                          @change="tokenAQuantityChange"
                       />
-                      {{ pairPrice }}
-                    </v-btn>
-                  </div>
-                  <div class="text-left" v-else>
-                    <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
-                  </div>
-                  <v-btn color="primary" large block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ isInsufficientBalance ? 'Insufficient Balance' : 'Swap' }}</v-btn>
+                      <v-btn outlined icon color="#00DFF3" class="mt-2 z-index-5" @click="switchPair">
+                        <v-icon color="#00DFF3">mdi-chevron-double-down</v-icon>
+                      </v-btn>
+                      <TokenSelector
+                          v-model="selectedTokenB"
+                          :available="availableTokens"
+                          :index="0"
+                          title="Buying"
+                          titleColor="#75E0A7"
+                          background-color="transparent"
+                          :max-button-enabled="false"
+                          class="mt-n4"
+                          :price="getPrice(selectedTokenB)"
+                          :price-impact="calculateWeightedPriceImpact"
+                          @change="tokenBQuantityChange"
+                      />
+                      <div class="text-left" v-if="price_ba" style="display: flex;">
+                        <v-btn text plain class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
+                          <v-avatar
+                              color="primary"
+                              :style="{ animationDuration: '1.5s' }"
+                              class="mr-1 v-avatar--metronome"
+                              size="12"
+                          />
+                          {{ pairPrice }}
+                        </v-btn>
+                        <v-spacer></v-spacer>
+                        <v-btn text plain color="primary" class="px-0 no-opacity" :ripple="false" @click="swapOverviewToggle = true" style="letter-spacing: normal">
+                          Details
+                          <v-icon small class="ml-1">mdi-chevron-down</v-icon>
+                        </v-btn>
+                      </div>
+                      <div class="text-left" v-else>
+                        <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
+                      </div>
+                      <SwapOverviewOverlay ref="swap" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippage" :estimation="estimation" />
+                    </v-card-text>
+                  </v-card>
                 </v-card-text>
+                <v-card-actions class="px-4 pt-2">
+                  <v-btn color="primary" large block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ isInsufficientBalance ? 'Insufficient Balance' : 'Swap' }}</v-btn>
+                </v-card-actions>
                 <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
-                <SwapOverviewOverlay ref="swap" v-model="swapOverviewToggle" />
               </v-card>
             </v-card-text>
           </v-card>
@@ -88,8 +99,7 @@
     </v-layout>
   </v-card>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script>
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import { mapActions, mapState } from 'pinia';
@@ -100,16 +110,16 @@ import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
 
-export default defineComponent({
+export default {
   name: 'Swap',
   components: { SwapOverviewOverlay, SettingsOverlay, TokenSelector },
   computed: {
     ...mapState(dexHunterStore, ['dexHunterTokens']),
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'pinnedTokens', 'price']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'pinnedTokens', 'price', 'baseAddress']),
     isSwapDisabled() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const quantityB = this.selectedTokenB.quantity.replaceAll(',', '')
-      return quantityA == '0' || quantityB == '0' || isNaN(quantityA) || isNaN(quantityB) || this.isInsufficientBalance
+      return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || this.isInsufficientBalance
     },
     isInsufficientBalance() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
@@ -173,7 +183,7 @@ export default defineComponent({
         .map(token => {
           const found = resolvedAssets?.find(t => t.unit === token['unit']);
           const res = {
-            ...(token as object),
+            ...token,
             balance: found ? found.balance : 0,
           };
           if (found && this.selectedTokenB.unit === found.unit) {
@@ -239,15 +249,15 @@ export default defineComponent({
         if (newVal === 'ADA') {
           // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
           if (this.lastNonADATokenB) {
-            this.selectedTokenB = this.availableTokens.find(token => token.ticker === this.lastNonADATokenB.ticker);
+            this.selectedTokenB = this.availableTokens.find(token => token['ticker'] === this.lastNonADATokenB.ticker);
           } else {
-            this.selectedTokenB = this.availableTokens.find(token => token.ticker === oldVal);
+            this.selectedTokenB = this.availableTokens.find(token => token['ticker'] === oldVal);
           }
         } else {
           // Store the last non-ADA token for selectedTokenA
           this.lastNonADATokenA = { ...this.selectedTokenA };
           // Set selectedTokenB to ADA
-          this.selectedTokenB = this.availableTokens.find(token => token.ticker === 'ADA');
+          this.selectedTokenB = this.availableTokens.find(token => token['ticker'] === 'ADA');
         }
 
         // Estimate prices after updating tokens
@@ -271,7 +281,7 @@ export default defineComponent({
           this.lastNonADATokenB = { ...this.selectedTokenB };
           // If selectedTokenB is not ADA, keep selectedTokenA as ADA
           if (this.selectedTokenA.ticker !== 'ADA') {
-            this.selectedTokenA = this.availableTokens.find(token => token.ticker === 'ADA');
+            this.selectedTokenA = this.availableTokens.find(token => token['ticker'] === 'ADA');
           }
         }
 
@@ -296,7 +306,7 @@ export default defineComponent({
       this.debouncedEstimateTokenA(val);
     },
     debouncedEstimateTokenA: debounce(function (val) {
-      if (!val || val == 0) {
+      if (!val || val === 0) {
         this.selectedTokenB.quantity = '0'
       } else {
         this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, val, true);
@@ -307,7 +317,7 @@ export default defineComponent({
       this.debouncedEstimateTokenB(val);
     },
     debouncedEstimateTokenB: debounce(function (val) {
-      if (!val || val == 0) {
+      if (!val || val === 0) {
         this.selectedTokenA.quantity = '0'
       } else {
         this.reverseEstimate(this.selectedTokenA.unit, this.selectedTokenB.unit, val, true)
@@ -332,7 +342,10 @@ export default defineComponent({
     switchPair() {
       this.selectedTokenA = this.selectedTokenB
     },
-    async estimate(token_in: string, token_out: string, amount_in: number, update: boolean) {
+    async estimate(token_in, token_out, amount_in, update) {
+      if (!appWallet) {
+        return
+      }
       if (!token_in && !token_out) {
         return
       } else if (token_in && !token_out) {
@@ -352,10 +365,14 @@ export default defineComponent({
       if (update) {
         this.total_output_without_slippage = res.total_output_without_slippage
         this.splits = res.splits
+        this.estimation = res
         this.selectedTokenB.quantity = filters.toCurrency(this.total_output_without_slippage, false, this.selectedTokenB.decimals, '', '', false, 0);
       }
     },
-    async reverseEstimate(token_in: string, token_out: string, amount_out: number, update: boolean) {
+    async reverseEstimate(token_in, token_out, amount_out, update) {
+      if (!appWallet) {
+        return
+      }
       if (!token_in && !token_out) {
         return
       } else if (token_in && !token_out) {
@@ -375,29 +392,31 @@ export default defineComponent({
       if (update) {
         this.total_input_without_slippage = res.total_input_without_slippage
         this.splits = res.splits
+        this.estimation = res
         this.selectedTokenA.quantity = filters.toCurrency(this.total_input_without_slippage, false, this.selectedTokenA.decimals, '', '', false, 0);
       }
     },
     async performPeriodicEstimate() {
       if (this.lastFunctionCalled === 'estimate') {
         const amount = Number(this.selectedTokenA.quantity.replaceAll(',', ''))
-        if (amount == 0) {
+        if (amount === 0) {
           await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
         } else {
           await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, amount, true);
         }
       } else if (this.lastFunctionCalled === 'reverseEstimate') {
         const amount = Number(this.selectedTokenB.quantity.replaceAll(',', ''))
-        if (amount == 0) {
+        if (amount === 0) {
           await this.reverseEstimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
         } else {
           await this.reverseEstimate(this.selectedTokenA.unit, this.selectedTokenB.unit, amount, true);
         }
       }
     },
-    prepareSwap() {
+    async prepareSwap() {
       this.loading = true
       this.swapOverviewToggle = true
+      this.loading = false
     }
   },
   data() {
@@ -435,6 +454,13 @@ export default defineComponent({
       price_ba: undefined,
       total_output_without_slippage: 0,
       total_input_without_slippage: 0,
+      estimation: {
+        net_price_reverse: 0,
+        total_output: 0,
+        deposits: 0,
+        batcher_fee: 0,
+        partner_fee: 0,
+      },
       splits: undefined,
       lastFunctionCalled: 'estimate', // Keep track of the last function called
       intervalId: null, // Store interval ID to clear it later,
@@ -444,13 +470,13 @@ export default defineComponent({
     };
   },
   async mounted() {
-    await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1);
+    await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
     this.intervalId = setInterval(this.performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
   },
   beforeUnmount() {
     clearInterval(this.intervalId); // Clear the interval on component unmount
   }
-});
+}
 </script>
 
 <style scoped>
