@@ -519,7 +519,7 @@ export const useStore = defineStore('store', {
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
-      this.utxos = undefined
+      this.setUtxos(undefined)
       this.resolvedAssets = undefined
       this.pools = []
       this.accountInfo = undefined;

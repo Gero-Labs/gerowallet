@@ -23,7 +23,7 @@
               Bonus Output
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              +3,103,751.16 HUNT
+              {{ swapData.bonusOutput }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -31,7 +31,7 @@
               Net Price
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              39.78 ADA
+              {{ estimation['net_price_reverse'] | toCurrency(false, 6, '', ' ADA', false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -39,7 +39,7 @@
               Min. Receive
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              3,042,492.45 HUNT
+              {{ estimation['total_output'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -47,7 +47,7 @@
               Order Deposits
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              26 ADA
+              {{ estimation['deposits'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -55,7 +55,7 @@
               Batchers Fees
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              9.5 ADA
+              {{ estimation['batcher_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -63,13 +63,13 @@
               Frontend Fee
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              123,456.46 ADA
+              {{ estimation['partner_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
             </v-card-subtitle>
           </v-col>
         </v-row>
         <v-divider></v-divider>
       </v-card-title>
-      <v-card-text class="d-flex justify-space-around justify-center flex-column pb-2" style="overflow-y: auto; height: calc(100% - 250px)">
+      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 190px)">
         <v-row no-gutters>
           <v-col cols="6" v-for="(dex,index) in dexes" :key="index" style="height: 38px">
             <v-list-item class="px-2" dense>
@@ -79,11 +79,11 @@
                 </v-avatar>
               </v-list-item-action>
               <v-list-item-content>
-                <v-list-item-title class="text-left" style="font-size: 10px;">
-                  0 ADA
+                <v-list-item-title class="text-left" style="font-size: 10px;" :style="dex['priceImpact'] > 3 ? { color: '#FEC84B' } : {}">
+                  {{ dex.amount | toCurrency(false, 2, '', ` ${tokenA['ticker']}`, true, 0)}}
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  <v-progress-linear height="8">
+                  <v-progress-linear height="8" color="#88919e" :value="dex.percentage">
 
                   </v-progress-linear>
                 </v-list-item-subtitle>
@@ -92,60 +92,6 @@
           </v-col>
         </v-row>
       </v-card-text>
-      <v-card-actions class="justify-center text-center pt-0">
-        <v-form ref="form" v-model="valid">
-          <v-row no-gutters>
-            <v-col cols="4">
-              <h4>Tx Fee</h4>
-              <h4>v</h4>
-            </v-col>
-            <v-col cols="4">
-              <h4>Tx Fee</h4>
-              <h4>b</h4>
-            </v-col>
-            <v-col cols="4">
-              <h4>Tx Fee</h4>
-              <h4><strong>a</strong></h4>
-            </v-col>
-            <v-col cols="8" class="pt-0" style="display: ruby; align-self: center;">
-              <v-tooltip
-                v-model="tooltip.enabled"
-                top
-                color="red"
-              >
-                <template v-slot:activator="{ }">
-                  <v-text-field
-                    flat
-                    style="width: 100%;"
-                    block
-                    dense
-                    v-model="spendingPassword"
-                    outlined
-                    label="Spending Password"
-                    :type="showPassword ? 'text' : 'password'"
-                    :rules="passwordRules"
-                    hide-details
-                    required
-                    :disabled="loading"
-                  >
-                    <template v-slot:append>
-                      <v-icon @click="showPassword = !showPassword" tabindex="-1">
-                        {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
-                      </v-icon>
-                    </template>
-                  </v-text-field>
-                </template>
-                <span>{{ tooltip.text }}</span>
-              </v-tooltip>
-            </v-col>
-            <v-col cols="4" style="align-self: center;">
-              <v-btn block color="primary" elevation="0" @click="submit" height="40" :disabled="loading || !valid" :loading="loading" class="ml-2 mt-0" style="margin-bottom: 1px">
-                Submit
-              </v-btn>
-            </v-col>
-          </v-row>
-        </v-form>
-      </v-card-actions>
     </v-card>
   </v-overlay>
 </template>
@@ -155,7 +101,7 @@ import filters from '@/shared/utils/filters';
 import networks from '@/shared/utils/networks';
 import rules from '@/shared/utils/rules';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import {appWallet, useStore} from '@/store';
 
 export default defineComponent({
   name: 'SwapOverviewOverlay',
@@ -163,17 +109,44 @@ export default defineComponent({
     value: {
       type: Boolean,
     },
+    tokenA: {
+      type: Object,
+    },
+    tokenB: {
+      type: Object,
+    },
+    slippage: {
+      type: String,
+    },
+    estimation: {
+      type: Object
+    }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses']),
+    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
+    dexes() {
+      if (this.estimation && this.estimation['splits']) {
+        const template = JSON.parse(JSON.stringify(this.dexesTemplate))
+        let totalAmount = 0
+        this.estimation['splits'].forEach(split => {
+          totalAmount += split.amount_in
+        })
+        this.estimation['splits'].forEach(split => {
+          const dex = template.find(dex => dex.name.includes(split.dex))
+          dex.amount += split.amount_in
+          dex.priceImpact = split.price_impact
+          dex.percentage = dex.amount / totalAmount * 100
+        })
+        return template
+      } else {
+        return this.dexesTemplate
+      }
+    }
   },
   watch: {
-    isOpen(val) {
+    value(val) {
       if (val) {
         this.spendingPassword = ''
-        if (this.$refs.form) {
-          this.$refs.form.resetValidation()
-        }
       }
     },
     spendingPassword() {
@@ -182,7 +155,18 @@ export default defineComponent({
       ]
     }
   },
+  filters,
   methods: {
+    async prepareSwap() {
+      const amount = Number(this.tokenA['quantity'].replaceAll(',', ''))
+      const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
+      try {
+        const res = await appWallet.api.swap(amount, this.baseAddress, this.tokenA['unit'], this.tokenB['unit'], slippage)
+        console.log(res)
+      } catch (e) {
+        console.log(e)
+      }
+    },
     submit() {
 
     },
@@ -190,7 +174,6 @@ export default defineComponent({
       this.$emit('input', false);
     },
   },
-  filters,
   data: () => ({
     networks,
     loading: false,
@@ -204,16 +187,20 @@ export default defineComponent({
     passwordRules: [
       rules.required
     ],
-    dexes: [
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/splashlogo.jpeg', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/minswap.png', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/sundaev3.webp', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/axo.jpeg', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/vyfi.png', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/wingriders.png', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/spectrum.png', amount: 0, priceImpact: 0 },
-      { img: 'https://storage.googleapis.com/dexhunter-images/public/sundae.png', amount: 0, priceImpact: 0 },
-    ]
+    dexesTemplate: [
+      { name: ['SPLASH'], img: 'https://storage.googleapis.com/dexhunter-images/public/splashlogo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['MINSWAP', 'MINSWAPV2'], img: 'https://storage.googleapis.com/dexhunter-images/public/minswap.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['SUNDAESWAPV3'], img: 'https://storage.googleapis.com/dexhunter-images/public/sundaev3.webp', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['AXO'], img: 'https://storage.googleapis.com/dexhunter-images/public/axo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['VYFI'], img: 'https://storage.googleapis.com/dexhunter-images/public/vyfi.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['WINGRIDER'], img: 'https://storage.googleapis.com/dexhunter-images/public/wingriders.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['SPECTRUM'], img: 'https://storage.googleapis.com/dexhunter-images/public/spectrum.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: ['SUNDAESWAP'], img: 'https://storage.googleapis.com/dexhunter-images/public/sundae.png', amount: 0, priceImpact: 0, percentage: 0 },
+    ],
+    swapData: {
+      bonusOutput: 'Direct Swap',
+      netPriceReverse: 0
+    }
   }),
 });
 </script>

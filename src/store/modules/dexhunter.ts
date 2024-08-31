@@ -14,7 +14,6 @@ export const dexHunterStore = defineStore( 'dexHunterStore', {
         return
       }
       const res = await appWallet.api.getAllTokens();
-      console.log(res)
       this.setTokens(res.reduce(function(map, token) {
         map[token.token_id] = {
           name: token.token_ascii,
