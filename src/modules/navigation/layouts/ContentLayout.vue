@@ -184,7 +184,7 @@ export default {
     transform: rotate(0);
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 @-webkit-keyframes loader {
@@ -192,7 +192,7 @@ export default {
     transform: rotate(0);
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 @-o-keyframes loader {
@@ -200,7 +200,7 @@ export default {
     transform: rotate(0);
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 @keyframes loader {
@@ -208,7 +208,7 @@ export default {
     transform: rotate(0);
   }
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 </style>
