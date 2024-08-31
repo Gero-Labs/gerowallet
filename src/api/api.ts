@@ -345,6 +345,20 @@ export class Api {
     }
   }
 
+  async moonPaySign(url: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.post(`/api/moonpay/sign`, url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async getAveragePrice(tokenIn: string, tokenOut: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/swap/averagePrice/${tokenIn}/${tokenOut}`);
@@ -355,7 +369,7 @@ export class Api {
     }
   }
 
-  async estimate(amount_in: number, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+  async estimate(amount_in: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
     try {
       const requestBody = {
         amount_in,
@@ -363,6 +377,7 @@ export class Api {
         slippage,
         token_in,
         token_out,
+        blacklisted_dexes,
       }
       const { data, status } = await this.axiosInstance.post(`/api/swap/estimate`, requestBody);
       if (status === 200) return data;
@@ -372,7 +387,7 @@ export class Api {
     }
   }
 
-  async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+  async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
     try {
       const requestBody = {
         amount_out,
@@ -380,6 +395,7 @@ export class Api {
         slippage,
         token_in,
         token_out,
+        blacklisted_dexes
       }
       const { data, status } = await this.axiosInstance.post(`/api/swap/reverseEstimate`, requestBody);
       if (status === 200) return data;

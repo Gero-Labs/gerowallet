@@ -1,6 +1,6 @@
 {
   "name": "gero-wallet",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
@@ -26,7 +26,6 @@
     "@ledgerhq/hw-transport-web-ble": "^6.28.5",
     "@ledgerhq/hw-transport-webusb": "^6.28.5",
     "@mdi/font": "^6.9.96",
-    "@moonpay/moonpay-js": "^0.5.0",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
     "archiver": "^7.0.1",
