@@ -29,7 +29,7 @@
       <div id="risk-label" v-else>{{ label }}</div>
       <div id="risk-powered">
         <span>Powered by</span>
-        <img alt="Cardano Shield" :src="require('@/assets/img/cardano-shield/logo.png')" />
+        <img alt="Cardano Shield" :src="require('@/assets/img/cardano-shield/logo.png')" style="width: 70px" />
       </div>
     </div>
   </div>
@@ -132,7 +132,7 @@ export default {
   font-size: 36px;
 }
 #risk-powered {
-  bottom: 0;
+  bottom: -10px;
   height: 16px;
   width: inherit;
   position: absolute;

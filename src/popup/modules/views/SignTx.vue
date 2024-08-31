@@ -11,7 +11,7 @@
                 mdi-information-outline
               </v-icon>
             </template>
-            <div class="tooltip-content">
+            <div>
               <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
               <span class="warning">sent<br>from your wallet</span>
               <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
@@ -26,7 +26,7 @@
                 mdi-information-outline
               </v-icon>
             </template>
-            <div class="tooltip-content">
+            <div>
               <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens shown here will be </span>
               <span class="success">sent to your wallet<br /><br /></span>
               <span>Once signed, this action is irreversible.</span>
@@ -59,6 +59,7 @@
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required]"
                     required
+                    @keydown.enter.stop="confirm"
                   >
                     <template v-slot:append>
                       <v-icon @click="showPassword = !showPassword" tabindex="-1">
@@ -313,14 +314,14 @@ export default {
 </script>
 
 <style scoped>
-.tooltip-content .warning {
+.warning {
   color: #FF7777;
   font-size: 14px;
   font-weight: 900;
   line-height: 14px;
 }
 
-.tooltip-content .success {
+.success {
   color: #00C77A;
   font-size: 14px;
   font-weight: 900;

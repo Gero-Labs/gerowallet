@@ -37,68 +37,69 @@
               <span>Receive</span>
             </v-layout>
           </v-col>
-<!--          <v-col cols="6" class="pa-2" style="align-content: center;">-->
-<!--            <v-layout column style="align-items: center">-->
-<!--              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP">-->
-<!--                <v-avatar tile size="80">-->
-<!--                  <v-img-->
-<!--                    :src="require('@/assets/svg/swap.svg')"-->
-<!--                    alt="Swap"-->
-<!--                    contain-->
-<!--                    style="-->
-<!--                      filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);-->
-<!--                    "-->
-<!--                  ></v-img>-->
-<!--                </v-avatar>-->
-<!--              </v-btn>-->
-<!--              <span>Swap</span>-->
-<!--            </v-layout>-->
-<!--          </v-col>-->
-<!--          <v-col cols="6" class="pa-2" style="align-content: center;">-->
-<!--            <v-layout column style="align-items: center">-->
-<!--              <v-btn-->
-<!--                text-->
-<!--                plain-->
-<!--                rounded-->
-<!--                class="px-0"-->
-<!--                height="100"-->
-<!--                width="100"-->
-<!--                @click="buy"-->
-<!--                :disabled="isBuyDisabled"-->
-<!--                :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"-->
-<!--              >-->
-<!--                <v-avatar tile size="80">-->
-<!--                  <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Swap" contain></v-img>-->
-<!--                </v-avatar>-->
-<!--              </v-btn>-->
-<!--              <span>Buy</span>-->
-<!--            </v-layout>-->
-<!--          </v-col>-->
+          <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
+            <v-layout column style="align-items: center">
+              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP"
+                     :disabled="isSwapDisabled"
+              >
+                <v-avatar tile size="80">
+                  <v-img
+                    :src="require('@/assets/svg/swap.svg')"
+                    alt="Swap"
+                    contain
+                    style="
+                      filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);
+                    "
+                  ></v-img>
+                </v-avatar>
+              </v-btn>
+              <span>Swap</span>
+            </v-layout>
+          </v-col>
+          <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isBuyDisabled">
+            <v-layout column style="align-items: center">
+              <v-btn
+                text
+                plain
+                rounded
+                class="px-0"
+                height="100"
+                width="100"
+                @click="currentDialog = dialogs.BUY"
+                :disabled="isBuyDisabled"
+                :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
+              >
+                <v-avatar tile size="80">
+                  <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Buy" contain></v-img>
+                </v-avatar>
+              </v-btn>
+              <span>Buy</span>
+            </v-layout>
+          </v-col>
         </v-row>
       </v-card-text>
       <v-card-actions></v-card-actions>
     </v-card>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
-<!--    <SwapDialog :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>-->
-<!--    <BuyDialog :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>-->
+    <SwapDialog v-if="!isSwapDisabled" :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
+    <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
 </template>
 <script>
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
-// import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
-// import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
-import { useStore } from "@/store";
-import { Blockchain, Network } from "@/models/types";
-// import { loadMoonPay } from "@moonpay/moonpay-js";
+import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
+import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
+import { useStore } from '@/store';
 import SendDialog from "../dialogs/SendDialog.vue";
 import {mapState} from "pinia";
+import networks from '@/shared/utils/networks';
 
 export default {
   name: "QuickActions",
   components: {
-    // BuyDialog,
-    // SwapDialog,
+    BuyDialog,
+    SwapDialog,
     ReceiveDialog,
     SendDialog,
   },
@@ -112,39 +113,18 @@ export default {
     ...mapState(useStore, ['loggedWallet', 'baseAddress']),
     isBuyDisabled() {
       if (this.loggedWallet) {
-        return (
-          this.loggedWallet.network !== Network.MAINNET ||
-          this.loggedWallet.chain !== Blockchain.CARDANO
-        );
+        return !networks.resolveBuySupported(this.loggedWallet.chain, this.loggedWallet.network)
       }
-      return null
+      return true
+    },
+    isSwapDisabled() {
+      if (this.loggedWallet) {
+        return !networks.resolveSwapSupport(this.loggedWallet.chain, this.loggedWallet.network)
+      }
+      return true
     },
   },
   methods: {
-    async buy() {
-      // const moonPay = await loadMoonPay();
-      // const widget = moonPay?.({
-      //   flow: "buy",
-      //   environment: "sandbox",
-      //   variant: 'overlay',
-      //   params: {
-      //     apiKey: "MOONPAY_API_KEY_REMOVED",
-      //     enabledPaymentMethods: "credit_debit_card",
-      //     currencyCode: "ada",
-      //     walletAddress: baseAddress,
-      //     colorCode: '#2f9cac',
-      //     baseCurrencyCode: 'usd',
-      //     theme: 'dark',
-      //   },
-      //   handlers: {
-      //     async onTransactionCompleted(props) {
-      //       console.log("onTransactionCompleted", props);
-      //     },
-      //   },
-      // });
-      //
-      // widget?.show();
-    },
     closeDialog() {
       this.currentDialog = null;
     },

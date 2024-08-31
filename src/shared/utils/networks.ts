@@ -32,7 +32,8 @@ export default {
       },
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
-      swapSupport: false,
+      swapSupport: true,
+      buySupport: true,
     },
     {
       icon: require('@/assets/svg/cardano.svg'),
@@ -61,6 +62,7 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       swapSupport: false,
+      buySupport: false,
     },
     // {
     //   icon: require('@/assets/svg/cardano.svg'),
@@ -77,6 +79,7 @@ export default {
     //   defaultProvider: Provider.KOIOS,
     //   cashbackSupport: false,
     //   swapSupport: false,
+    //   buySupport: false,
     // },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -106,6 +109,7 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       swapSupport: false,
+      buySupport: false,
     },
     {
       icon: require('@/assets/img/apex.jpg'),
@@ -122,6 +126,7 @@ export default {
       defaultProvider: Provider.BLOCKFROST,
       cashbackSupport: false,
       swapSupport: false,
+      buySupport: false,
     },
   ],
   resolveNetwork(chain: string, network: string) {
@@ -162,5 +167,11 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.swapSupport
+  },
+  resolveBuySupported(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.buySupport
   },
 };
