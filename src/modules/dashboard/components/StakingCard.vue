@@ -177,7 +177,7 @@ import {mapState} from "pinia";
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import {
   Certificate,
-  StakeCredential,
+  Credential,
   StakeDeregistration,
   Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
@@ -287,7 +287,7 @@ export default {
       const certificates = [];
       if (this.accountInfo?.active) {
         // DeRegistration Certificate
-        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(StakeCredential.from_keyhash(appWallet.stakeKey().hash())))
+        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(appWallet.stakeKey().hash())))
         certificates.push(deRegistrationCertificate);
         // Withdrawals
         const withdrawals = []

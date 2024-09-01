@@ -106,6 +106,7 @@ export const Messaging = {
     return new Promise((resolve, reject) => {
       const requestId = Math.random().toString(36).substr(2, 9);
       function responseHandler(e: MessageEvent) {
+        console.log('message', e)
         const response = e.data;
         if (
           typeof response !== 'object' ||
