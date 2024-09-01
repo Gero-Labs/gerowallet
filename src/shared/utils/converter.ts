@@ -10,7 +10,7 @@ import {
   MultiAsset,
   PlutusData,
   PlutusList,
-  PlutusMap,
+  PlutusMap, PlutusMapValues,
   ScriptHash,
   TransactionHash,
   TransactionInput,
@@ -69,7 +69,9 @@ export function jsonToPlutusData(jsonObj): PlutusData {
       data.map.forEach(item => {
         const key = parsePlutusData(item.k);
         const value = parsePlutusData(item.v);
-        plutusMap.insert(key, value);
+        const values = PlutusMapValues.new();
+        values.add(value)
+        plutusMap.insert(key, values);
       });
       return PlutusData.new_map(plutusMap);
     } else if (data.constructor !== undefined && data.fields) {

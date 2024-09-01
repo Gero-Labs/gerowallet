@@ -7,9 +7,9 @@ import {
   BaseAddress,
   Bip32PrivateKey,
   Bip32PublicKey,
+  Credential,
   RewardAddress,
   PublicKey,
-  StakeCredential,
   encrypt_with_password,
   decrypt_with_password,
   PrivateKey,
@@ -184,15 +184,15 @@ export class Wallet {
   baseAddress(): BaseAddress {
     return BaseAddress.new(
       this.networkId(),
-      StakeCredential.from_keyhash(this.pubKey(0).hash()),
-      StakeCredential.from_keyhash(this.stakeKey().hash()),
+      Credential.from_keyhash(this.pubKey(0).hash()),
+      Credential.from_keyhash(this.stakeKey().hash()),
     );
 
     // return BaseAddress.from_address(Address.from_bech32("addr1q86qys9le3d9rmj3v5720mjzmfxgl329lgkv0l3x2k3era882ad6fg7zhf9stumjhlffscnvc4ggmyd9kdvs3g5v7fgseaes4f"))
   }
 
   stakeAddress(): RewardAddress {
-    return RewardAddress.new(this.networkId(), StakeCredential.from_keyhash(this.stakeKey().hash()));
+    return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
     // return RewardAddress.from_address(Address.from_bech32("stake1u8n4wkay50pt5jc97detl55cvfkv25ydjxjmxkgg52x0y5g89ayyl"))
   }
 

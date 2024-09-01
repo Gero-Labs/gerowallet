@@ -482,8 +482,8 @@ export const useStore = defineStore('store', {
         cancelable: true,
         composed: false,
       }))
-      await dexHunterStore().loadTokens()
       await this.loadAssets()
+      await dexHunterStore().loadTokens()
       const promises = []
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())

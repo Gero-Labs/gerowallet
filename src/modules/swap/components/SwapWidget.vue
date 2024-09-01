@@ -91,8 +91,9 @@ import { appWallet, useStore } from '@/store';
 import filters from '@/shared/utils/filters';
 import networks, { cardanoLogo } from '@/shared/utils/networks';
 import debounce from 'lodash/debounce';
-import { Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import snackbar from '@/plugins/snackbar';
+import { Messaging } from '@/chrome/messaging';
+import { METHOD } from '@/chrome/config';
 
 export default {
   name: 'SwapWidget',
@@ -172,6 +173,9 @@ export default {
           };
           if (found && this.selectedTokenB.unit === found.unit) {
             this.selectedTokenB.balance = res.balance
+          }
+          if (this.selectedTokenA.ticker === nativeToken.ticker) {
+            this.selectedTokenA.balance = nativeToken.balance
           }
           return res
         })
@@ -274,14 +278,11 @@ export default {
         this.isUpdating = false; // Reset flag
       },
     },
-    availableTokens(newTokens) {
-      // Handle updates when availableTokens change, e.g., update selected tokens
-      if (newTokens.length) {
-        const nativeToken = newTokens.find(token => token.ticker === 'ADA');
-        if (nativeToken) {
-          this.updateSelectedTokens(nativeToken);
-        }
-      }
+    'resolvedAssets': {
+      handler(val) {
+        console.log(val)
+      },
+      deep: true
     },
   },
   methods: {
@@ -308,12 +309,6 @@ export default {
       }
       this.lastFunctionCalled = 'reverseEstimate';
     }, 300),
-    updateSelectedTokens(nativeToken) {
-      // Ensure that selectedTokenA is updated correctly without direct mutation
-      if (this.selectedTokenA.ticker === nativeToken.ticker) {
-        this.selectedTokenA = { ...nativeToken }; // shallow copy, safe for primitive fields
-      }
-    },
     getPrice(token) {
       if (!token) return '';
       const multiplier = token.ticker === 'ADA' ? 1 : this.price_ba;
@@ -327,7 +322,6 @@ export default {
       this.selectedTokenA = this.selectedTokenB
     },
     async estimate(token_in, token_out, amount_in, update) {
-      console.log('estimate')
       if (!appWallet) {
         return
       }
@@ -397,27 +391,17 @@ export default {
       const amount = Number(this.selectedTokenA['quantity'].replaceAll(',', ''))
       const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
       try {
-        const res = await appWallet.api.swap(amount, this.baseAddress, this.selectedTokenA['unit'], this.selectedTokenB['unit'], slippage)
-        console.log(res)
-        const x = await window.cardano.gerowallet.enable()
-        console.log(x)
-        const witness = await x.signTx(res.cbor, true)
-        const tx = Transaction.from_hex(res.cbor)
-        console.log(tx.to_json())
-        console.log(witness)
-        const signedTx = Transaction.new(
-          tx.body(),
-          TransactionWitnessSet.from_hex(witness),
-          undefined // TODO Transaction metadata
-        );
-        try {
-          console.log(signedTx)
-          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
-          snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!`)
-          console.log(txId)
-        } catch (e) {
-          console.log(e)
-        }
+        const swapRes = await appWallet.api.swap(amount, this.baseAddress, this.selectedTokenA['unit'], this.selectedTokenB['unit'], slippage)
+        const txCbor = swapRes.cbor
+        const partialSign = true
+        const signaturesRes = await Messaging.sendToBackground({
+          method: METHOD.signTx,
+          data: { tx: txCbor, partialSign },
+        });
+        const signRes = await appWallet.api.swapSign(signaturesRes.data, txCbor)
+        const txId = await appWallet.submitTx(signRes.cbor);
+        snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!`)
+        console.log(txId)
       } catch (e) {
         console.log(e)
       }
