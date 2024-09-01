@@ -35,12 +35,11 @@
 <script>
 import {mapState} from "pinia";
 import { appWallet, useStore } from '@/store';
-import {Blockchain, Network} from "@/models/types";
+import {Blockchain} from "@/models/types";
 import networks from "@/shared/utils/networks";
-import filters from '@/shared/utils/filters';
 import {
   Certificate, Ed25519KeyHash,
-  StakeCredential,
+  Credential,
   StakeDelegation,
   StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
@@ -84,11 +83,11 @@ export default {
       // Registration Certificate
       const certificates = [];
       if (!this.accountInfo?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(StakeCredential.from_keyhash(wallet.stakeKey().hash())))
+        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
       }
       // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(StakeCredential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(poolId)));
+      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(poolId)));
       certificates.push(delegationCertificate);
       // UTxOs
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();

@@ -404,6 +404,7 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
   async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
     try {
       const requestBody = {
@@ -415,6 +416,20 @@ export class Api {
         referrer,
       }
       const { data, status } = await this.axiosInstance.post(`/api/swap`, requestBody);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async swapSign(Signatures: number, txCbor: string): Promise<any> {
+    try {
+      const requestBody = {
+        Signatures,
+        txCbor,
+      }
+      const { data, status } = await this.axiosInstance.post(`/api/swap/sign`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {

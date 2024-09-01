@@ -11,7 +11,7 @@ import {
   MultiAsset,
   RewardAddress,
   ScriptHash,
-  StakeCredential, TransactionBody,
+  Credential, TransactionBody,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
   TransactionUnspentOutputs,
@@ -25,7 +25,7 @@ import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/ca
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
-  return RewardAddress.new(networkId, StakeCredential.from_keyhash(stakeKeyHash));
+  return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));
 };
 
 export function  getTransactionBuilder(chain: string, network: string): TransactionBuilder {
@@ -37,7 +37,7 @@ export function  getTransactionBuilder(chain: string, network: string): Transact
     .key_deposit(BigNum.from_str(pp.key_deposit))
     .max_value_size(pp.max_val_size)
     .max_tx_size(pp.max_tx_size)
-    .coins_per_utxo_word(BigNum.from_str('34482'))
+    .coins_per_utxo_byte(BigNum.from_str(pp.coins_per_utxo_size))
     .ex_unit_prices(ExUnitPrices.new(UnitInterval.new(BigNum.from_str('577'), BigNum.from_str('10000')), UnitInterval.new(BigNum.from_str('721'), BigNum.from_str('10000000'))))
     .prefer_pure_change(true)
     .build());
@@ -138,7 +138,7 @@ function addInputUtxos(
   } else {
     for (let i = 0 ; i < utxos.len() ; i++) {
       const utxo = utxos.get(i)
-      txBuilder.add_input(utxo.output().address(), utxo.input(), utxo.output().amount());
+      txBuilder.add_regular_input(utxo.output().address(), utxo.input(), utxo.output().amount());
     }
   }
 }
