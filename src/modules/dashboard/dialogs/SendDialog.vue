@@ -113,7 +113,7 @@ import { mapState } from 'pinia';
 import { assetsToValue, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import rules from '@/shared/utils/rules';
-import { Network } from '@/models/types';
+import { Network, WalletType } from '@/models/types';
 import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
 import {
   Address, Transaction,
@@ -245,6 +245,9 @@ export default {
       }, 3000);
     },
     async signAndSubmitTx() {
+      if (appWallet.type === WalletType.Ledger) {
+        console.log('ledger')
+      }
       if (appWallet.verifySpendingPassword(this.spendingPassword)) {
         const witness = await appWallet.signTx(
           this.txData.to_hex(),

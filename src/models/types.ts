@@ -180,6 +180,7 @@ export type Proof = {
 }
 
 export {
+  purpose,
   HARDENED,
   CoreAddressTypes,
   WalletType,

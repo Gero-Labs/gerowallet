@@ -1,16 +1,15 @@
 import Vue from 'vue';
-import Vuetify from 'vuetify/lib/framework';
-
+import Vuetify from 'vuetify/lib';
 import i18n from '@/plugins/i18n';
 
 Vue.use(Vuetify);
 
 export default new Vuetify({
   lang: {
-    t: (key: string, ...params) => i18n.t(key, params),
+    t: (key: string, ...params: (string | number)[]): string => i18n.t(key, params) as string,
   },
   icons: {
-    iconfont: 'mdi',
+    iconfont: 'mdi', // Material Design Icons
   },
   theme: {
     dark: true,
@@ -28,7 +27,7 @@ export default new Vuetify({
         navigationDrawerBackground: '#141414',
         appBarBackground: '#141414',
         cardBackground: '#0F0F0F',
-      }
+      },
     },
   },
 });
