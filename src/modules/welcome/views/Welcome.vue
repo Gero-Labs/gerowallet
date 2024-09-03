@@ -78,6 +78,9 @@
                   <v-list-item-avatar tile size="20" v-if="item.type === 'Ledger'">
                     <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
                   </v-list-item-avatar>
+                  <v-list-item-avatar tile size="20" v-if="item.type === 'Keystone'">
+                    <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
+                  </v-list-item-avatar>
                 </v-list-item>
               </v-list-item-group>
             </v-list>

@@ -56,7 +56,7 @@ const blake2b = require('blake2b');
 export class Wallet {
   db: Dexie;
   api: Api;
-  locked: Boolean = false;
+  private syncLock: Promise<void> | null = null; // Lock for the sync function
 
   id: any;
   name: any;
@@ -576,24 +576,35 @@ export class Wallet {
   }
 
   async sync(tip): Promise<void> {
-    if (!this.locked) {
-      this.locked = true;
-      console.log('sync');
-      loading.setSyncing(true)
-      const lastSyncInfo = await this.getLastSyncInfo();
-      if (!lastSyncInfo) {
-        // loading.setText('Restoring Wallet Data. Please Wait ...')
-        loading.setRestoring(true)
-        await this.restore(tip)
-        loading.setRestoring(false)
-      } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
-        const promises = [];
-        promises.push(this.syncStakingPools());
-        const prevAccountInfo = await this.getAccountInfo()
-        socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount)
-      }
-      this.locked = false;
+    if (this.syncLock) {
+      // If sync is already running, wait for it to complete
+      await this.syncLock;
+      return;
     }
+    this.syncLock = (async () => {
+      try {
+        console.log('sync');
+        loading.setSyncing(true)
+        const lastSyncInfo = await this.getLastSyncInfo();
+        if (!lastSyncInfo) {
+          // loading.setText('Restoring Wallet Data. Please Wait ...')
+          loading.setRestoring(true)
+          await this.restore(tip)
+          loading.setRestoring(false)
+        } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+          const promises = [];
+          promises.push(this.syncStakingPools());
+          const prevAccountInfo = await this.getAccountInfo()
+          socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount)
+        }
+      } finally {
+        // Release the lock after execution
+        this.syncLock = null;
+        loading.setSyncing(false); // Ensure to reset syncing state after execution
+      }
+    })();
+    // Wait for the locked sync operation to complete
+    await this.syncLock;
   }
 
   async restore(tip): Promise<void> {

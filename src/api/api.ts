@@ -50,14 +50,32 @@ export class Api {
     }
   }
 
-  async getAccountRewards(address: string, page: number = 1, size: number = 10000) {
+  async getAccountRewards(address: string) {
     try {
+      const size = this.provider === Provider[Provider.BLOCKFROST] ? 100 : 1000;
       const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
-      const { data, status } = await this.axiosInstance.get(
-        `/api/account/rewards?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}&page=${page}&size=${size}`
-      );
-      if (status === 200) return data
-      throw parseHttpError(data);
+      let page = 1;
+      let allRewards: any[] = []; // Accumulator for all rewards
+      let morePages = true; // Condition to control the loop
+
+      while (morePages) {
+        const { data, status } = await this.axiosInstance.get(
+          `/api/account/rewards?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}&page=${page}&size=${size}`
+        );
+        if (status === 200) {
+          allRewards = allRewards.concat(data);
+
+          // If the number of rewards returned is less than the page size, we've reached the last page
+          if (data.length < size) {
+            morePages = false; // No more pages to fetch
+          } else {
+            page++; // Otherwise, move to the next page
+          }
+        } else {
+          throw parseHttpError(data);
+        }
+      }
+      return allRewards;
     } catch (error) {
       throw parseHttpError(error);
     }

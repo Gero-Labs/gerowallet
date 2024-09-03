@@ -118,7 +118,7 @@
                   <v-spacer></v-spacer>
                   <v-btn
                       color="primary"
-                      @click="step = 2"
+                      @click="nextStep"
                       elevation="0"
                       :disabled="!valid"
                   >
@@ -135,7 +135,7 @@
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
                   <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
                   <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
-                  <img v-if="walletType === 'Keystone'" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
+                  <img v-if="walletType === 'Keystone' && !keystoneScan" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
                   <v-alert
                       color="white"
                       dense
@@ -145,21 +145,28 @@
                       border="left"
                   >
                     <b>Instructions</b>
-                    <ul class="text-left" style="line-height: 1.5" v-if="walletType === 'Ledger'">
-                      <li>Setup your {{walletType}} hardware wallet if it's new.</li>
-                      <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
-                      <li>Unlock the hardware wallet by entering your pin code on the device.</li>
-                      <li>Open the Cardano app on the hardware wallet.</li>
-                    </ul>
-                    <ul class="text-left" style="line-height: 1.5" v-else-if="walletType === 'Keystone'">
-                      <li>Unlock your Keystone device.</li>
-                      <li>Select the option to scan a QR code.</li>
-                      <li>Use your Keystone device to scan the QR code.</li>
-                      <li>Sign the transaction on the Keystone device and then click 'Next' to scan it with Gero.</li>
-
-
-
-                    </ul>
+                    <div v-if="walletType === 'Ledger'">
+                      <ul class="text-left" style="line-height: 1.5" >
+                        <li>Setup your {{walletType}} hardware wallet if it's new.</li>
+                        <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
+                        <li>Unlock the hardware wallet by entering your pin code on the device.</li>
+                        <li>Open the Cardano app on the hardware wallet.</li>
+                      </ul>
+                    </div>
+                    <div v-else-if="walletType === 'Keystone' && !keystoneScan">
+                      <ul class="text-left" style="line-height: 1.5">
+                        <li>Unlock your Keystone device.</li>
+                        <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
+                        <li>Use your Keystone device to scan the QR code.</li>
+                        <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+                      </ul>
+                    </div>
+                    <div v-else-if="walletType === 'Keystone' && keystoneScan">
+                      <ul class="text-left" style="line-height: 1.5">
+                        <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
+                        <li>Use a low density setting for animated QR codes if required.</li>
+                      </ul>
+                    </div>
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === 'Ledger'">
                     <p class="mr-5 my-auto">USB <v-icon :color="isBluetooth ? '#ffffff' : 'primary'" small>mdi-usb</v-icon></p>
@@ -174,12 +181,27 @@
                     ></v-switch>
                     <p class="my-auto"><v-icon :color="isBluetooth ? 'primary' : '#ffffff'" small>mdi-bluetooth</v-icon> Bluetooth</p>
                   </div>
+                  <div id="qr-code" ref="qrCode" v-else-if="walletType === 'Keystone' && !keystoneScan"> </div>
+                  <div class="qr-scanner" v-else-if="walletType === 'Keystone' && keystoneScan">
+                    <QrcodeStream @decode="onDecode" @init="onInit">
+                      <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>
+                        <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>
+                      </div>
+                    </QrcodeStream>
+                  </div>
                 </v-card-text>
                 <v-card-actions class="px-0 align-self-end" style="width: 100%">
                   <v-spacer></v-spacer>
                   <v-btn
                       text
-                      @click="step = 1"
+                      @click="backToStepOne"
                       elevation="0"
                   >
                     Back
@@ -197,7 +219,7 @@
           </v-stepper-content>
           <v-stepper-content step="3" style="text-align: -webkit-center;" class="pt-0">
             <v-form ref="form3" v-model="valid3">
-              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px">
+              <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px" :disabled="creatingWalletLoader">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
                   <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
@@ -210,9 +232,10 @@
                       label="Wallet Name"
                       placeholder="e.g. My New Wallet"
                       :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
+                      :disabled="creatingWalletLoader"
                   ></v-text-field>
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
-                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
+                  <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details :disabled="creatingWalletLoader">
                     <v-radio value="green">
                       <template v-slot:label>
                         <v-avatar size="32"  >
@@ -278,7 +301,7 @@
                       color="primary"
                       @click="walletCreationStep3"
                       elevation="0"
-                      :disabled="!valid3"
+                      :disabled="!valid3 || creatingWalletLoader"
                       class=""
                   >
                     Continue
@@ -310,15 +333,25 @@
   </v-dialog>
 </template>
 <script>
+import { QrcodeStream } from "vue-qrcode-reader";
 import rules from "@/shared/utils/rules";
-import {Blockchain, Network, Theme, WalletType} from "@/models/types"
+import { Blockchain, Network, purpose, Theme } from '@/models/types';
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
-import {useStore} from "@/store";
+import { getKeystonePublicKeyUR, parseMultiAccounts } from '@/shared/utils/keystone';
+import { mapActions } from 'pinia';
+import { useStore } from '@/store';
+import QRCodeStyling from 'qr-code-styling';
+import Vue from 'vue';
+import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
+import snackbar from '@/plugins/snackbar';
 
 export default {
   name: "PairHardwareWallet",
+  components: {
+    QrcodeStream,
+  },
   props: {
     dialog: {
       type: Boolean,
@@ -326,9 +359,6 @@ export default {
     },
   },
   computed: {
-    WalletType() {
-      return WalletType
-    },
     valid: {
       get() {
         return this.walletType !== undefined
@@ -341,15 +371,56 @@ export default {
       },
       set(value) {
         this.$emit('dialogChange', value)
+        if (!value) {
+          this.resetDialog()
+        }
       },
     },
   },
   methods: {
+    ...mapActions(useStore, ['login']),
+    onDecode(result) {
+      const multiAccounts = parseMultiAccounts(result);
+      this.newWallet.name = multiAccounts.device
+      this.newWallet.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
+      snackbar.fireSuccess("Keystone QR code successfully scanned.")
+      this.step++;
+      this.keystoneScan = false
+    },
+    onInit(promise) {
+      promise.then(() => {
+          console.log("Camera initialized successfully");
+        })
+        .catch((error) => {
+          console.error("Camera initialization failed:", error);
+        });
+    },
+    nextStep() {
+      if (this.walletType === 'Keystone') {
+        if (this.qrCode) {
+          this.qrCode = null; // Clear the QRCode instance
+          // Clear the QR Code container content
+          if (this.$refs.qrCode)
+            this.$refs.qrCode.innerHTML = '';
+        }
+
+        this.qrCode = new QRCodeStyling(getKeystonePublicKeyUR(purpose.hdwallet, 0));
+        Vue.nextTick(() => {
+          this.qrCode.append(this.$refs.qrCode);
+        });
+      }
+      this.step++
+    },
+    backToStepOne() {
+      this.step = 1
+      this.keystoneScan = false
+    },
     async walletCreationStep2() {
-      this.persistent = true
-      this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
-      this.hardwareLoading.setLoading(true)
       if (this.walletType === 'Ledger') {
+        console.log('ledger')
+        this.persistent = true
+        this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
+        this.hardwareLoading.setLoading(true)
         try {
           const coldWalletProps = await ledger.initLedger(this.isBluetooth)
           console.log(coldWalletProps)
@@ -359,24 +430,28 @@ export default {
             this.newWallet.publicKey = coldWalletProps.hwPublicKey
             this.step = 3
           }
-          this.hardwareLoading.setLoading(false)
-          this.persistent = false
         } catch (e) {
-          this.hardwareLoading.setLoading(false)
-          this.persistent = false
+          console.log(e)
         }
       } else if (this.walletType === 'Keystone') {
+        this.keystoneScan = true
+        if (this.qrCode) {
+          this.qrCode = null; // Clear the QRCode instance
+          // Clear the QR Code container content
+          if (this.$refs.qrCode)
+            this.$refs.qrCode.innerHTML = '';
+
+        }
         //TODO
       }
-      console.log('ledger')
-
-
+      this.hardwareLoading.setLoading(false)
+      this.persistent = false
     },
     async walletCreationStep3() {
       if (this.$refs.form3.validate()) {
         this.creatingWalletLoader = true
         const walletId = await db.createNewHardwareWallet(this.newWallet.name, this.newWallet.icon, this.walletType, Theme.GERO, Blockchain.CARDANO, Network.MAINNET, this.newWallet.publicKey)
-        await this.store.login(walletId)
+        await this.login(walletId)
         this.dialogLocal = false
         this.resetDialog()
         await this.$router.push('/')
@@ -384,12 +459,19 @@ export default {
       }
     },
     resetDialog() {
+      this.step = 1
+      this.walletType = undefined
+      if (this.qrCode) {
+        this.qrCode = null;
+        if (this.$refs.qrCode)
+          this.$refs.qrCode.innerHTML = '';
+      }
       this.newWallet = {
         name: '',
         termsChecked: false,
       }
       this.valid2 = false
-      this.valid3 = false,
+      this.valid3 = false
       this.creatingWalletLoader = false
     }
   },
@@ -424,16 +506,18 @@ export default {
       {
         name: 'Keystone',
         description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
-        enabled: false,
+        enabled: true,
         icon: require('@/assets/svg/keystone-3-pro.svg'),
         support: '3 Pro'
       },
     ],
     walletType: undefined,
     isBluetooth: false,
+    isQrCode: false,
     hardwareLoading,
     persistent: false,
-    store: useStore()
+    qrCode: undefined,
+    keystoneScan: false,
   })
 }
 </script>
@@ -451,5 +535,34 @@ export default {
 }
 .usbBluetoothSwitch .v-input--switch__thumb {
   color: #2f9cac!important;
+}
+#qr-code > svg {
+  border-radius: 10px;
+}
+.qr-scanner {
+  height: 334px;
+  text-align: center;
+  border: 1px solid white;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.qrcode-stream-camera {
+  border-radius: 4px !important;
+}
+
+.overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 1.5em;
+}
+
+.qr-result {
+  margin-top: 20px;
 }
 </style>
