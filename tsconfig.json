@@ -36,6 +36,7 @@
       "./node_modules/vuetify/types"
     ],
     "types": [
+      "vuetify",
       "webpack-env",
       "chrome"
     ],

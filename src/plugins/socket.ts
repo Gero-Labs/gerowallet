@@ -26,9 +26,7 @@ export class SocketPlugin {
     const msg_type = value['message_type']
     const object = value['object']
     if (msg_type === 'TIP') {
-      if (!this.wallet.locked) {
-        await this.wallet.sync(object)
-      }
+      await this.wallet.sync(object)
     } else if (msg_type === 'PRICE') {
       useStore().setPrice(object)
     } else if (msg_type === 'FIAT_RATES') {

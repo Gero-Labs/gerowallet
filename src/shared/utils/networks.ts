@@ -11,7 +11,7 @@ export default {
       title: 'Cardano Mainnet',
       blockchain: Blockchain.CARDANO,
       network: Network.MAINNET,
-      supportedHardware: false,
+      supportedHardware: true,
       networkId: 1,
       currencySymbol: '₳',
       currencyTicker: 'ADA',
