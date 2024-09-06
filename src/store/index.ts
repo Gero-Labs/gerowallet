@@ -31,10 +31,11 @@ export const useStore = defineStore('store', {
   persist: {
     paths: [
       'utxos','loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress',
-      'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens'
+      'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens', 'config'
     ]
   },
   state: () => ({
+    config: undefined,
     loggedWallet: undefined,
     baseAddress: undefined,
     stakeAddress: undefined,
@@ -477,14 +478,10 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       socket.stompConnect(appWallet)
-      window.dispatchEvent(new CustomEvent('gero:login', {
-        bubbles: true,
-        cancelable: true,
-        composed: false,
-      }))
       await this.loadAssets()
       await dexHunterStore().loadTokens()
       const promises = []
+      await this.loadConfig()
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadPools())
@@ -608,6 +605,25 @@ export const useStore = defineStore('store', {
           }
         });
       });
+    },
+    async loadConfig() {
+      if (!appWallet) {
+        return new Promise((resolve, reject) => {
+          reject()
+        });
+      }
+      const db: Dexie = await appWallet.getDb()
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('config').toArray()).subscribe({
+          next: value => {
+            this.config = value.reduce(function(map, val) {
+              map[val.key] = val.value
+              return map
+            }, {});
+            resolve(this.config)
+          }
+        })
+      })
     },
     async loadTransactions() {
       if (!appWallet) {

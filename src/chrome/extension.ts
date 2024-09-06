@@ -55,9 +55,9 @@ export const getWhitelisted = async (): Promise<WhitelistedEntry[]> => {
 
 export const isWhitelisted = async (_origin: string): Promise<boolean> => {
   const whitelisted: WhitelistedEntry[] = await getWhitelisted();
-  let access = false;
-  if (whitelisted.find(el => _origin.includes(el.domain))) access = true;
-  return access;
+  const bringDomains = await getStorage('bring_relevantDomains')
+  if (whitelisted.find(el => _origin.includes(el.domain))) return true;
+  return !!(bringDomains && bringDomains.find(el => _origin.includes(el)));
 };
 
 export const getCurrency = () => getStorage(STORAGE.currency);
@@ -123,6 +123,9 @@ export const getAddress = async () => {
 
 export const getAddressBech32 = async () => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  if (!loggedWallet) {
+    return undefined
+  }
   const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
       .derive(ChainDerivations.EXTERNAL)
       .derive(0)

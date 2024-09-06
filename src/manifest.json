@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "GeroWallet 2.0",
-  "short_name": "GeroWallet",
-  "version": "0.2.3",
-  "description": "Your Master Key to DeFi",
+  "name": "Gero Dashboard Beta",
+  "short_name": "Gero Dashboard Beta",
+  "version": "2.2.5",
+  "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",
     "48": "./assets/logo48.png",
@@ -15,7 +15,7 @@
       "48": "./assets/logo48.png",
       "128": "./assets/logo128.png"
     },
-    "default_title": "GeroWallet | Your Master Key to DeFi"
+    "default_title": "Gero Dashboard Beta | A Multi-chain Light Wallet Merging Web2 and Web3"
   },
   "background": {
     "service_worker": "js/background.js",

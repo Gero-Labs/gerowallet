@@ -144,8 +144,8 @@
                           alt="trend"></v-img>
                       </v-avatar>&nbsp;
                       <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
-                        }}</span>
+                        {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
+                      </span>
                     </template>
                     <template v-slot:[`item.date`]="{ item }">
                       <v-list-item two-line class="px-0">

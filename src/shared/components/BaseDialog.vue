@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="isDialogOpen" persistent :width="width" scrollable>
-    <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;">
+    <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
@@ -23,7 +23,7 @@
         </v-list-item>
       </v-card-title>
       <slot></slot>
-      <v-btn icon @click="$emit('close')" class="close-button">
+      <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>
     </v-card>
@@ -57,6 +57,10 @@ export default {
     width: {
       type: Number,
       default: 850
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   computed: {

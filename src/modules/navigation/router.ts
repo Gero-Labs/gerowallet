@@ -36,8 +36,8 @@ const routes = [
     },
   },
   {
-    path: '/swap',
-    name: 'swap',
+    path: '/market',
+    name: 'market',
     component: Swap,
     meta: {
       layout: ContentLayout,
@@ -113,7 +113,7 @@ const routes = [
     component: Login,
     meta: {
       layout: PopupLayout,
-      requiresAuth: true,
+      requiresAuth: false,
     },
   },
   {

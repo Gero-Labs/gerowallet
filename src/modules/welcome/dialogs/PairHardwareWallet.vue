@@ -133,9 +133,9 @@
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
-                  <img v-if="walletType === 'Ledger'" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
-                  <img v-if="walletType === 'Trezor'" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
-                  <img v-if="walletType === 'Keystone' && !keystoneScan" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
+                  <img v-if="walletType === WalletType.Ledger" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
+                  <img v-if="walletType === WalletType.Trezor" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
+                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
                   <v-alert
                       color="white"
                       dense
@@ -145,7 +145,7 @@
                       border="left"
                   >
                     <b>Instructions</b>
-                    <div v-if="walletType === 'Ledger'">
+                    <div v-if="walletType === WalletType.Ledger">
                       <ul class="text-left" style="line-height: 1.5" >
                         <li>Setup your {{walletType}} hardware wallet if it's new.</li>
                         <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
@@ -153,7 +153,7 @@
                         <li>Open the Cardano app on the hardware wallet.</li>
                       </ul>
                     </div>
-                    <div v-else-if="walletType === 'Keystone' && !keystoneScan">
+                    <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
                       <ul class="text-left" style="line-height: 1.5">
                         <li>Unlock your Keystone device.</li>
                         <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
@@ -161,28 +161,18 @@
                         <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
                       </ul>
                     </div>
-                    <div v-else-if="walletType === 'Keystone' && keystoneScan">
+                    <div v-else-if="walletType === WalletType.Keystone && keystoneScan">
                       <ul class="text-left" style="line-height: 1.5">
                         <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
                         <li>Use a low density setting for animated QR codes if required.</li>
                       </ul>
                     </div>
                   </v-alert>
-                  <div style="display: flex;" v-if="walletType === 'Ledger'">
-                    <p class="mr-5 my-auto">USB <v-icon :color="isBluetooth ? '#ffffff' : 'primary'" small>mdi-usb</v-icon></p>
-                    <v-switch
-                        inset
-                        dense
-                        v-model="isBluetooth"
-                        color="inherit"
-                        hide-details
-                        style="margin-top: 0; align-items: center;"
-                        class="usbBluetoothSwitch"
-                    ></v-switch>
-                    <p class="my-auto"><v-icon :color="isBluetooth ? 'primary' : '#ffffff'" small>mdi-bluetooth</v-icon> Bluetooth</p>
+                  <div style="display: flex;" v-if="walletType === WalletType.Ledger">
+                    <USBBluetoothSwitch v-model="isBluetooth" />
                   </div>
-                  <div id="qr-code" ref="qrCode" v-else-if="walletType === 'Keystone' && !keystoneScan"> </div>
-                  <div class="qr-scanner" v-else-if="walletType === 'Keystone' && keystoneScan">
+                  <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan"> </div>
+                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan">
                     <QrcodeStream @decode="onDecode" @init="onInit">
                       <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
                         <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
@@ -335,7 +325,7 @@
 <script>
 import { QrcodeStream } from "vue-qrcode-reader";
 import rules from "@/shared/utils/rules";
-import { Blockchain, Network, purpose, Theme } from '@/models/types';
+import { Blockchain, Network, purpose, Theme, WalletType } from '@/models/types';
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
@@ -346,10 +336,12 @@ import QRCodeStyling from 'qr-code-styling';
 import Vue from 'vue';
 import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
 import snackbar from '@/plugins/snackbar';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 
 export default {
   name: "PairHardwareWallet",
   components: {
+    USBBluetoothSwitch,
     QrcodeStream,
   },
   props: {
@@ -359,6 +351,9 @@ export default {
     },
   },
   computed: {
+    WalletType() {
+      return WalletType
+    },
     valid: {
       get() {
         return this.walletType !== undefined
@@ -396,7 +391,7 @@ export default {
         });
     },
     nextStep() {
-      if (this.walletType === 'Keystone') {
+      if (this.walletType === WalletType.Keystone) {
         if (this.qrCode) {
           this.qrCode = null; // Clear the QRCode instance
           // Clear the QR Code container content
@@ -416,10 +411,10 @@ export default {
       this.keystoneScan = false
     },
     async walletCreationStep2() {
-      if (this.walletType === 'Ledger') {
+      if (this.walletType === WalletType.Ledger) {
         console.log('ledger')
         this.persistent = true
-        this.hardwareLoading.setText("Please follow the directions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
+        this.hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
         this.hardwareLoading.setLoading(true)
         try {
           const coldWalletProps = await ledger.initLedger(this.isBluetooth)
@@ -433,7 +428,7 @@ export default {
         } catch (e) {
           console.log(e)
         }
-      } else if (this.walletType === 'Keystone') {
+      } else if (this.walletType === WalletType.Keystone) {
         this.keystoneScan = true
         if (this.qrCode) {
           this.qrCode = null; // Clear the QRCode instance
@@ -451,9 +446,9 @@ export default {
       if (this.$refs.form3.validate()) {
         this.creatingWalletLoader = true
         const walletId = await db.createNewHardwareWallet(this.newWallet.name, this.newWallet.icon, this.walletType, Theme.GERO, Blockchain.CARDANO, Network.MAINNET, this.newWallet.publicKey)
-        await this.login(walletId)
         this.dialogLocal = false
         this.resetDialog()
+        await this.login(walletId)
         await this.$router.push('/')
         this.creatingWalletLoader = false
       }
@@ -527,14 +522,6 @@ export default {
   backdrop-filter: blur(12px);
   background: #000000ab;
   border: solid 2px #ffffff44;
-}
-.usbBluetoothSwitch .v-input--switch__track {
-  color: #ffffff2b !important;
-  opacity: 1;
-  border: 1px solid #ffffff12;
-}
-.usbBluetoothSwitch .v-input--switch__thumb {
-  color: #2f9cac!important;
 }
 #qr-code > svg {
   border-radius: 10px;

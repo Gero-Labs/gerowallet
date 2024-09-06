@@ -1,7 +1,7 @@
 <template>
   <div class="volume-bar">
     <v-slider
-      style="width: 150px"
+      style="width: 100px"
       v-model="volume"
       @click:prepend="onButtonClick"
       :prepend-icon="volumeIcon"

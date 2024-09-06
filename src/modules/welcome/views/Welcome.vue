@@ -75,10 +75,10 @@
                       {{ item.chain }} - {{item.network}}
                     </v-list-item-subtitle>
                   </v-list-item-content>
-                  <v-list-item-avatar tile size="20" v-if="item.type === 'Ledger'">
+                  <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
                     <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
                   </v-list-item-avatar>
-                  <v-list-item-avatar tile size="20" v-if="item.type === 'Keystone'">
+                  <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
                     <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
                   </v-list-item-avatar>
                 </v-list-item>
@@ -106,11 +106,15 @@ import {mapActions, mapState} from "pinia";
 import RestoreWallet from "@/modules/welcome/dialogs/RestoreWallet.vue";
 import networks from "@/shared/utils/networks";
 import NetworkSelector from '@/modules/navigation/components/NetworkSelector.vue';
+import { WalletType } from '@/models/types';
 
 export default {
   name: 'welcome',
   components: { NetworkSelector, PairHardwareWallet, ParallaxCard, CreateWallet, RestoreWallet},
   computed: {
+    WalletType() {
+      return WalletType
+    },
     ...mapState(useStore, ['wallets','network']),
     walletCreateCardBg() {
       if (this.network?.blockchain?.includes("Apex")) {

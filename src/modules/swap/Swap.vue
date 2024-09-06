@@ -23,7 +23,7 @@
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 
 export default {
-  name: 'Swap',
+  name: 'Market',
   components: { SwapWidget },
 
 }

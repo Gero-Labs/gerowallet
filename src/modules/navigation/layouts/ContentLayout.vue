@@ -72,14 +72,14 @@
 <!--                    >-->
 <!--                  </v-avatar>-->
 <!--                </v-btn>-->
-<!--                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">-->
-<!--                  <v-avatar size="20">-->
-<!--                    <img-->
-<!--                        :src="require('@/assets/svg/settings-02.svg')"-->
-<!--                        alt="Notifications"-->
-<!--                    >-->
-<!--                  </v-avatar>-->
-<!--                </v-btn>-->
+                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">
+                  <v-avatar size="20">
+                    <img
+                        :src="require('@/assets/svg/settings-02.svg')"
+                        alt="Settings"
+                    >
+                  </v-avatar>
+                </v-btn>
               </v-app-bar>
               <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" @close="closeDialog" />
               <v-sheet class="transparent">

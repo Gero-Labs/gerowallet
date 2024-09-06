@@ -30,8 +30,10 @@ export const musicStore = defineStore( 'musicStore', {
     resolveMusicPlaylist(resolvedCollections) {
       const mediaNFTs = []
       resolvedCollections.forEach(collection => {
+        console.log(collection)
         collection.items.forEach(nft => {
-          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) {
+          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio') || file.mediaType.includes('video'))) {
+            nft['collection'] = collection.name
             mediaNFTs.push(nft)
           }
         })
@@ -48,11 +50,12 @@ export const musicStore = defineStore( 'musicStore', {
             mediaType: file.mediaType,
             metadata: nft.onchain_metadata,
             name: file.name || nft.name,
-            display: true
+            display: true,
+            category: nft.collection
           }
         });
       }).flat()
-        .filter(nft => nft.mediaType?.includes('audio'))// || nft.mediaType?.includes('video'))
+        .filter(nft => nft.mediaType?.includes('audio') || nft.mediaType?.includes('video'))
       )
     },
     setMusicPlaylist(musicPlaylist) {
@@ -141,8 +144,10 @@ export const musicStore = defineStore( 'musicStore', {
     },
     playTrack() {
       this.initializeSound();
-      this.context.audio.play();
-      this.context.isPlaying = true;
+      if (this.musicPlaylist[this.context.currentIndex].mediaType.includes('audio')) {
+        this.context.audio.play();
+        this.context.isPlaying = true;
+      }
     },
     togglePlayPause() {
       if (!this.context.audio) {
