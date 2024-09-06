@@ -7,7 +7,7 @@
       </div>
       <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">Select a Wallet to Login</v-card-title>
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
-        <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
+        <v-list nav dense class="pa-0" style="background-color: #ffffff0a;" v-if="availableWallets?.length > 0">
           <v-list-item-group v-model="selectedWallet" color="primary">
             <v-list-item v-for="(item, i) in availableWallets" :key="`wallet-${i}`" @click="submitLogin(item.id)">
               <v-list-item-icon>
@@ -36,12 +36,19 @@
                   {{ item.chain }} - {{item.network}}
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-avatar tile size="20" v-if="item.type === 'Ledger'">
+              <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
                 <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
+              </v-list-item-avatar>
+              <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
+                <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
               </v-list-item-avatar>
             </v-list-item>
           </v-list-item-group>
         </v-list>
+        <div v-else>
+          No Cardano mainnet wallets detected!<br>
+          Please close this window and create a wallet to continue.
+        </div>
       </v-card-text>
     </v-card>
   </v-form>
@@ -50,11 +57,15 @@
 import { useStore } from '@/store';
 import { mapActions, mapState } from 'pinia';
 import networks from '@/shared/utils/networks';
-import { Blockchain, Network } from '@/models/types';
+import { Blockchain, Network, WalletType } from '@/models/types';
+import { Messaging } from '@/chrome/messaging';
 
 export default {
-  name: 'DappSignData',
+  name: 'Login',
   computed: {
+    WalletType() {
+      return WalletType
+    },
     ...mapState(useStore, ['wallets']),
     availableWallets() {
       return this.wallets.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET)
@@ -63,7 +74,8 @@ export default {
   methods: {
     ...mapActions(useStore, ['login']),
     async submitLogin(walletId) {
-      await this.login(walletId)
+      this.login(walletId)
+      await this.controller.returnData({ data: 'login', error: undefined })
       window.close();
     },
     resolveIcon(icon) {
@@ -83,6 +95,7 @@ export default {
   data() {
     return {
       selectedWallet: {},
+      controller: Messaging.createInternalController()
     };
   },
 };

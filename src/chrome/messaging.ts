@@ -182,16 +182,13 @@ export const Messaging = {
         )
           return;
 
-        if (response.action !== "GET_WALLET_ADDRESS") {
-          const whitelisted = await Messaging.sendToBackground({
-            method: METHOD.isWhitelisted,
-            origin: window.origin,
-          });
+        const whitelisted = await Messaging.sendToBackground({
+          method: METHOD.isWhitelisted,
+          origin: window.origin,
+        });
 
-          // protect background by not allowing not whitelisted
-          if (!whitelisted || (whitelisted as any).error) return;
-        }
-        console.log(`${TARGET}${response.event}`)
+        // protect background by not allowing not whitelisted
+        if (!whitelisted || (whitelisted as any).error) return;
         const event = new CustomEvent(`${TARGET}${response.event}`, {
           detail: response.data,
         });

@@ -86,14 +86,16 @@
                 <v-avatar tile size="20" class="mr-1">
                   <v-img
                     :src="
-                      item.change >= 0
+                      item.change === 0
+                        ? require('@/assets/svg/arrow-right.svg')
+                        : item.change > 0
                         ? require('@/assets/svg/trend-up-01.svg')
                         : require('@/assets/svg/trend-down-01.svg')
                     "
                     alt="trend"
                   ></v-img>
                 </v-avatar>
-                <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{
+                <span :style="item.change === 0 ? {color: '#A3A3A3' } : item.change > 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{
                   Math.abs(item.change).toFixed(2) + "%"
                 }}</span>
               </div>
@@ -104,31 +106,15 @@
               <span v-else-if="!item.last_price">N/A</span>
               <span v-else>{{item.value | toCurrency(false, 2, '$', '', true, 0)}}</span>
             </template>
-            <template v-slot:[`item.cost_basis`]="{ }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-              <!--              <div v-if="item.cost_basis">-->
-              <!--                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>-->
-              <!--                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>-->
-              <!--              </div>-->
-            </template>
-            <template v-slot:[`item.avg_price`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.avg_price">-->
-<!--                <span class="table-text">${{ item.avg_price[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.avg_price[1].toLocaleString() }}</span>-->
-<!--              </div>-->
-            </template>
-            <template v-slot:[`item.pnl`]="{ }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.pnl">-->
-<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text"-->
-<!--                  >${{ item.pnl[0].toLocaleString() }}</span-->
-<!--                >-->
-<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text-opacity"-->
-<!--                  >Â{{ item.pnl[1].toLocaleString() }}</span-->
-<!--                >-->
-<!--              </div>-->
-            </template>
+<!--            <template v-slot:[`item.cost_basis`]="{ }">-->
+<!--              <v-chip outlined x-small color="#F97066">Soon</v-chip>-->
+<!--            </template>-->
+<!--            <template v-slot:[`item.avg_price`]="{  }">-->
+<!--              <v-chip outlined x-small color="#F97066">Soon</v-chip>-->
+<!--            </template>-->
+<!--            <template v-slot:[`item.pnl`]="{ }">-->
+<!--              <v-chip outlined x-small color="#F97066">Soon</v-chip>-->
+<!--            </template>-->
             <template v-slot:[`item.mcap`]="{ item }">
               <v-tooltip top :open-delay="500" v-if="item.mcap">
                 <template v-slot:activator="{ on, attrs }">
@@ -216,28 +202,12 @@
             </template>
             <template v-slot:[`item.cost_basis`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.cost_basis">-->
-<!--                <span class="table-text">${{ item.cost_basis[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.cost_basis[1].toLocaleString() }}</span>-->
-<!--              </div>-->
             </template>
             <template v-slot:[`item.avg_price`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.avg_price">-->
-<!--                <span class="table-text">${{ item.avg_price[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.avg_price[1].toLocaleString() }}</span>-->
-<!--              </div>-->
             </template>
             <template v-slot:[`item.pnl`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div v-if="item.pnl">-->
-<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text"-->
-<!--                  >${{ item.pnl[0].toLocaleString() }}</span-->
-<!--                >-->
-<!--                <span :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }" class="table-text-opacity"-->
-<!--                  >Â{{ item.pnl[1].toLocaleString() }}</span-->
-<!--                >-->
-<!--              </div>-->
             </template>
             <template v-slot:[`item.allocation`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
@@ -340,9 +310,9 @@ export default {
       { text: "Last Price", align: "center", sortable: true, value: "last_price", width: "100"  },
       { text: "Change", align: "center", sortable: true, value: "change", width: "85" },
       { text: "Value", align: "center", sortable: true, value: "value", width: "72" },
-      { text: "Cost Basis", align: "center", sortable: false, value: "cost_basis", width: "102" },
-      { text: "AVG Price", align: "center", sortable: false, value: "avg_price", width: "98" },
-      { text: "P&L", align: "center", sortable: false, value: "pnl" },
+      // { text: "Cost Basis", align: "center", sortable: false, value: "cost_basis", width: "102" },
+      // { text: "AVG Price", align: "center", sortable: false, value: "avg_price", width: "98" },
+      // { text: "P&L", align: "center", sortable: false, value: "pnl" },
       { text: "Mcap", align: "center", sortable: true, value: "mcap", width: "100" },
       { text: "Allocation", align: "center", sortable: true, value: "total_allocation", width: "150" },
     ],

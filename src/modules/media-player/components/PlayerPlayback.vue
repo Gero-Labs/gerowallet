@@ -1,18 +1,21 @@
 <template>
   <div class="player-playback pb-3" v-if="context">
-    <div class="player-playback__time">{{ formatTime(Math.round(context.seek)) }}</div>
-    <div class="player-playback__progress-bar">
-      <v-slider
-        :value="Math.round(context.seek / context.duration * 100)"
-        @change="onProgressChange"
-        :tooltip="false"
-        :dot-size="15"
-        :process-style="{ background: '#1db954' }"
-        :bg-style="{ background: '#737575' }"
-        hide-details
-      />
+    <div style="display: flex; width: 100%; justify-content: center;">
+      <div class="player-playback__time">{{ formatTime(Math.round(context.seek)) }}</div>
+      <div class="player-playback__progress-bar">
+        <v-slider
+          :value="Math.round(context.seek / context.duration * 100)"
+          @change="onProgressChange"
+          :tooltip="false"
+          :dot-size="15"
+          :process-style="{ background: '#1db954' }"
+          :bg-style="{ background: '#737575' }"
+          hide-details
+        />
+      </div>
+      <div class=" player-playback__time">{{ formatTime(Math.round(context.duration)) }}</div>
     </div>
-    <div class=" player-playback__time">{{ formatTime(Math.round(context.duration)) }}</div>
+    <VolumeBar />
   </div>
 </template>
 <script>
@@ -21,9 +24,11 @@ import { useStore } from '@/store';
 import filters from '@/shared/utils/filters';
 import { formatTime } from '@/shared/utils/converter';
 import { musicStore } from '@/store/modules/music';
+import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 
 export default {
   name: "player-player-playback",
+  components: { VolumeBar },
   data() {
     return {
       progress: 0,

@@ -3,6 +3,7 @@ import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 const WalletType = {
   Trezor: 'Trezor',
   Ledger: 'Ledger',
+  Keystone: 'Keystone',
   Normal: 'Normal',
 };
 

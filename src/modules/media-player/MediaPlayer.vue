@@ -4,12 +4,12 @@
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent" v-if="currentTrack">
           <v-card-text style="height: 433px; max-height: 433px;">
-            <video playsinline loop :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.img" />
+            <video ref="videoPlayer" :loop="this.context.isRepeat" playsinline :controls="currentTrack.mediaType.includes('video')" :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.mediaType.includes('video') ? '' : currentTrack.img"  />
           </v-card-text>
           <v-card-title class="justify-center" style="word-break: break-word">
             {{`${currentTrack.artist} - ${currentTrack.title}` }}
           </v-card-title>
-          <div class="text-center justify-center">
+          <div class="text-center justify-center" v-if="!currentTrack.mediaType.includes('video')" >
             <PlayerControls large />
             <PlayerPlayback style="align-self: center;" />
           </div>
@@ -35,21 +35,24 @@
             </v-text-field>
           </v-card-title>
           <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
-            <v-list nav dense style="width: 100%" class="transparent">
+            <v-list nav dense style="width: 100%" class="transparent py-0">
               <v-list-item-group v-model="currentSong">
-                <v-list-item v-for="(track, index) in playlist" :key="index" :value="track">
-                  <v-list-item-avatar>
-                    <v-img :src="track.img" contain></v-img>
-                  </v-list-item-avatar>
-                  <v-list-item-action-text class="mr-4">
-                    {{index | numbers}}
-                  </v-list-item-action-text>
-                  <v-list-item-content>
-                    <v-list-item-title>{{ track.title }}</v-list-item-title>
-                    <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
-                  </v-list-item-content>
-                  <v-spacer></v-spacer>
-                </v-list-item>
+                <!-- Iterate over grouped playlist -->
+                <template v-for="(group, category) in groupedPlaylist">
+                  <!-- Sticky header for each category -->
+                  <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
+                  <!-- Iterate over tracks in each category -->
+                  <v-list-item v-for="(track, index) in group" :key="`${category}-${index}`" :value="track">
+                    <v-list-item-avatar>
+                      <v-img :src="track.img" contain></v-img>
+                    </v-list-item-avatar>
+                    <v-list-item-content>
+                      <v-list-item-title>{{ track.title }}</v-list-item-title>
+                      <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
+                    </v-list-item-content>
+                    <v-spacer></v-spacer>
+                  </v-list-item>
+                </template>
               </v-list-item-group>
             </v-list>
           </v-card-text>
@@ -97,6 +100,17 @@ export default defineComponent({
       }
       return undefined
     },
+    groupedPlaylist() {
+      // Group tracks by category
+      const grouped = this.playlist.reduce((acc, track) => {
+        if (!acc[track.category]) {
+          acc[track.category] = [];
+        }
+        acc[track.category].push(track);
+        return acc;
+      }, {});
+      return grouped;
+    },
     playlist() {
       if (this.search) {
         return this.musicPlaylist.filter(track => track.artist.toLowerCase().includes(this.search.toLowerCase()) || track.title.toLowerCase().includes(this.search.toLowerCase()))
@@ -117,7 +131,15 @@ export default defineComponent({
     },
   },
   methods: {
-    ...mapActions(musicStore, ['playTrack', 'setTrack']),
+    ...mapActions(musicStore, ['playTrack', 'setTrack', 'nextTrack']),
+    calculateIndex(index, category) {
+      // Calculate global index based on the category and track index
+      const categoryStartIndex = Object.keys(this.groupedPlaylist).reduce((acc, key) => {
+        if (key === category) return acc;
+        return acc + this.groupedPlaylist[key].length;
+      }, 0);
+      return this.$options.filters['numbers'](categoryStartIndex + index);
+    },
   },
   data: () => ({
     search: '',
@@ -371,5 +393,18 @@ video {
 .video-container.scrubbing .timeline,
 .timeline-container:hover .timeline {
   height: 100%;
+}
+
+.sticky-header {
+  position: -webkit-sticky; /* For Safari */
+  position: sticky;
+  top: 0;
+  color: white;
+  background-color: #1E1E1E; /* Adjust as needed */
+  z-index: 1; /* Make sure it stays above other content */
+  padding-top: 8px; /* Adjust padding as needed */
+  padding-bottom: 8px;
+  border-top-right-radius: 8px;
+  border-top-left-radius: 8px;
 }
 </style>

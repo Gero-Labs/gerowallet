@@ -31,7 +31,7 @@ export default {
         coins_per_utxo_size: "4310"
       },
       defaultProvider: Provider.KOIOS,
-      cashbackSupport: false,
+      cashbackSupport: true,
       swapSupport: true,
       buySupport: true,
     },

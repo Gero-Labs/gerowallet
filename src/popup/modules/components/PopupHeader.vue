@@ -1,6 +1,6 @@
 <template>
-  <v-card outlined class="pa-4 d-flex flex-column fill-height transparent">
-    <div style="width: 52px; margin: auto">
+  <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent">
+    <div style="width: 52px; margin-left: auto; margin-right: auto">
       <img alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/svg/gero-logo.svg')"/>
       <img alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"/>
     </div>
@@ -27,7 +27,7 @@
       :value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
-      class="py-4"
+      class="py-0"
     ></Select>
     <slot />
   </v-card>

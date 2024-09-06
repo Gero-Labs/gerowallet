@@ -1,8 +1,8 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Transaction Summary" ref="popupHeader">
-      <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
-        <DappAddress class="mb-4" :address="recipient" :risk="risks?.addressRisk" />
+    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(this.$route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)">
+      <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
+        <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
           You're giving
           <v-tooltip bottom>
@@ -12,8 +12,8 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
-              <span class="warning">sent<br>from your wallet</span>
+              <span>{{ networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
+              <span class="warn">sent<br>from your wallet</span>
               <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
             </div>
           </v-tooltip>
@@ -27,20 +27,22 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network) }} and/or tokens shown here will be </span>
-              <span class="success">sent to your wallet<br /><br /></span>
+              <span>{{ networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network) }} and/or tokens shown here will be </span>
+              <span class="succ">sent to your wallet<br /><br /></span>
               <span>Once signed, this action is irreversible.</span>
             </div>
           </v-tooltip>
         </TransactionCard>
+        <v-row no-gutters style="flex: none;">
+          <v-col cols="12" class="justify-center text-center">
+            <TransactionRisk :risk="risks?.score" :loading="loading" />
+          </v-col>
+        </v-row>
       </v-card-text>
-      <v-card-actions class="justify-center py-2 px-0">
+      <v-card-actions class="justify-center pa-0 pt-2">
         <v-layout>
           <v-row>
-            <v-col cols="12" class="justify-center text-center">
-              <TransactionRisk :risk="risks?.score" :loading="loading" />
-            </v-col>
-            <v-col cols="12">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
               <v-tooltip
                 v-model="tooltip.enabled"
                 top
@@ -71,6 +73,17 @@
                 <span>{{ tooltip.text }}</span>
               </v-tooltip>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
+              <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
+                <span style="color: white; font-size: 12px">
+                  Please review the transaction details carefully before proceeding. Confirm the transaction by signing with your
+                {{ loggedWallet.type }} device.
+                </span>
+              </v-alert>
+              <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
+                <USBBluetoothSwitch v-model="isBT" />
+              </v-card-subtitle>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline">
                 Decline
@@ -87,7 +100,6 @@
     </PopupHeader>
   </v-form>
 </template>
-
 <script>
 import { appWallet, useStore } from '@/store';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
@@ -112,12 +124,15 @@ import {
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
 import networks from '@/shared/utils/networks';
+import { WalletType } from '@/models/types';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 
 export default {
   name: 'DappConnect',
-  components: { TransactionRisk, TransactionCard, DappAddress, PopupHeader },
+  components: { USBBluetoothSwitch, TransactionRisk, TransactionCard, DappAddress, PopupHeader },
   data() {
     return {
+      isBT: false,
       networks,
       risks: undefined,
       rules,
@@ -137,6 +152,9 @@ export default {
     };
   },
   computed: {
+    WalletType() {
+      return WalletType
+    },
     ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
     txFee() {
       return this.tx ? this.tx.body().fee().to_str() : null;
@@ -250,6 +268,7 @@ export default {
         },
         recipient: this.recipient,
         txMetadata: this.txMetadata,
+        queryParams: undefined
       };
     },
   },
@@ -290,12 +309,12 @@ export default {
   },
   async created() {
     const request = await this.controller.requestData();
-    const api = useStore().getWallet.api
     if (request?.data?.tx) {
+      console.log(request.data.tx)
       this.tx = Transaction.from_bytes(Buffer.from(request.data.tx, 'hex'));
       this.queryParams = this.$route.query;
       try {
-        this.risks = await api.scanTx({
+        this.risks = await appWallet.api.scanTx({
           cborHex: request.data.tx,
           toAddress: this.recipient,
           fromAddress: this.changeAddress,
@@ -314,20 +333,27 @@ export default {
 </script>
 
 <style scoped>
-.warning {
+.warn {
   color: #FF7777;
   font-size: 14px;
   font-weight: 900;
   line-height: 14px;
 }
 
-.success {
+.succ {
   color: #00C77A;
   font-size: 14px;
   font-weight: 900;
   line-height: 14px;
 }
 
+.v-tooltip__content {
+  background: rgba(15, 19, 21, 1);
+  border:1px solid #C4C4C4;
+  line-height: 18px;
+  padding: 10px;
+  font-size: 14px;
+}
 .v-tooltip__content.menuable__content__active {
   opacity: 1;
 }

@@ -13,7 +13,12 @@ export const bringStore = defineStore( 'bringStore', {
       if (!appWallet) {
         return
       }
-      this.setBringCache(await appWallet.api.cache(appWallet.baseAddress().to_address().to_bech32()))
+      try {
+        const bringCache = await appWallet.api.cache(appWallet.baseAddress().to_address().to_bech32())
+        this.setBringCache(bringCache)
+      } catch (e) {
+        // console.log(e)
+      }
     },
     setBringCache(val) {
       this.bringCache = val

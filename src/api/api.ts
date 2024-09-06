@@ -241,7 +241,7 @@ export class Api {
 
   async checkAvailability(): Promise<boolean> {
     try {
-      const { data, status } = await this.axiosInstance.get("/api/bring/check-availability?country=us"); //TODO
+      const { data, status } = await this.axiosInstance.get("/api/bring/check-availability");
       if (status === 200) return data?.isAvailable;
       throw parseHttpError(data);
     } catch (error) {

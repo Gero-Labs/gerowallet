@@ -3,14 +3,10 @@
     <div v-if="currentTrack" class="player__inner">
       <CurrentTrack class="player__left" />
       <div class="player__center" v-show="!context.minimized">
-        <PlayerControls large v-show="!context.minimized" />
+        <PlayerControls large v-show="!context.minimized" style="margin-left: -100px;" />
         <PlayerPlayback v-show="!context.minimized" />
       </div>
 
-      <div class="player__right" style="place-content: center;" v-show="!context.minimized">
-        <!--        <DevicePicker />-->
-        <VolumeBar />
-      </div>
       <div style="flex: none; align-self: start;" v-show="!context.minimized">
         <v-btn icon x-small color="white" @click="setMinimized">
           <v-icon x-small>mdi-window-minimize</v-icon>
@@ -30,23 +26,18 @@
   </div>
 </template>
 <script>
-import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 import CurrentTrack from '@/modules/media-player/components/CurrentTrack.vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
 import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue';
-// import DevicePicker from '@/modules/media-player/components/DevicePicker.vue';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
 import { musicStore } from '@/store/modules/music';
 
 export default {
   name: "player",
   components: {
-    VolumeBar,
     CurrentTrack,
     PlayerControls,
     PlayerPlayback,
-    // DevicePicker
   },
   computed: {
     ...mapState(musicStore, ['musicPlaylist', 'context']),

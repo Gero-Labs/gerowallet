@@ -48,12 +48,12 @@
               </div>
             </div>
           </div>
-          <v-btn outlined height="148" color="#00C7F3" class="btn-bg" @click="isRewardsDialogOpen = true">
+          <v-btn outlined height="148" color="#00C7F3" class="btn-bg" @click="isRewardsDialogOpen = true" :disabled="!supported">
             <div class="btn-content">
               <v-avatar size="56" class="avatar-bg">
                 <v-icon color="white" style="font-size: 28px">mdi-gift-open-outline</v-icon>
               </v-avatar>
-              <div class="btn-text">View Rewards</div>
+              <div :class="supported ? 'btn-text' : 'btn-text-disabled'">View Rewards</div>
             </div>
           </v-btn>
         </div>
@@ -79,11 +79,12 @@
         </v-col>
         <v-col cols="12" xl="4" lg="4" md="4">
           <v-autocomplete
+            v-if="supported"
             flat
             v-model="model"
             :search-input.sync="search"
             :items="terms"
-            :loading="isLoading"
+            :loading="isLoading2"
             label="Brand, product, destination"
             outlined
             solo
@@ -128,7 +129,7 @@
           </v-card>
         </v-col>
       </v-row>
-      <v-row class="mt-4" v-show="isLoading">
+      <v-row class="mt-4" v-show="isLoading && supported">
         <v-col cols="12" md="3" style="border-radius: 16px" v-for="i in 12" :key="i">
           <v-skeleton-loader
             height="183"
@@ -137,11 +138,13 @@
         </v-col>
       </v-row>
     </v-card-text>
+
     <v-card-actions class="justify-center text-center" style="flex-direction: column;">
       <v-card-title>
+        {{ supported ? '' : 'Unfortunately, Cashback isn\'t supported in your Country yet.'}}
         {{ loadingMore ? "Loading ..." : "" }}
       </v-card-title>
-      <v-card-title style="font-size: 14px" v-intersect="onIntersect">
+      <v-card-title style="font-size: 14px" v-intersect="onIntersect" v-if="supported">
         Powered By&nbsp;<v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
       </v-card-title>
     </v-card-actions>
@@ -219,12 +222,12 @@ export default defineComponent({
       // Items have already been loaded
       if (this.terms.length > 0) return
       // Items have already been requested
-      if (this.isLoading) return
-      this.isLoading = true
+      if (this.isLoading2) return
+      this.isLoading2 = true
       appWallet.api.searchTerms()
         .then(res => this.entries = res.items)
         .catch(err => console.log(err))
-        .finally(() => this.isLoading = false)
+        .finally(() => this.isLoading2 = false)
     },
     async selectedCategory() {
       this.model = ""
@@ -272,6 +275,7 @@ export default defineComponent({
       },
       chipLoading: false,
       isLoading: false,
+      isLoading2: false,
       loadingMore: false,
       retailers: {},
       nextPage: null,
@@ -281,18 +285,25 @@ export default defineComponent({
       retailer: null,
       generalTermsUrl: null,
       retailerTermsBasePath: null,
-      totalItems: null
+      totalItems: null,
+      supported: true
     }
   },
   async mounted() {
     this.chipLoading = true
     this.isLoading = true
-    const isAvailable = await appWallet.api.checkAvailability()
-    if (isAvailable) {
-      const cat = await appWallet.api.categories()
-      this.categories.items = [{ iconSvg: "", id: 0, name: "All Categories"}]
-      this.categories.items.push(...cat.items)
+    try {
+      const isAvailable = await appWallet.api.checkAvailability()
+      if (isAvailable) {
+        const cat = await appWallet.api.categories()
+        this.categories.items = [{ iconSvg: "", id: 0, name: "All Categories"}]
+        this.categories.items.push(...cat.items)
+        this.chipLoading = false
+      }
+    } catch (e) {
+      this.supported = false
       this.chipLoading = false
+      this.isLoading = false
     }
   },
 });
@@ -409,6 +420,19 @@ export default defineComponent({
   text-transform: capitalize;
   align-self: stretch;
   background: linear-gradient(to right, #00c7f3, #00fad5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 38px;
+  word-wrap: break-word;
+}
+
+.btn-text-disabled {
+  text-transform: capitalize;
+  align-self: stretch;
+  background: linear-gradient(to right, #00c7f3, #00fad5);
+  filter: grayscale(0.9);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-size: 30px;
