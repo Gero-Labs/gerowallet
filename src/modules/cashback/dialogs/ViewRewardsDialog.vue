@@ -297,6 +297,9 @@ export default {
             this.isClaim = false
           }
         } catch (e) {
+          if (JSON.parse(e).status === 403) {
+            snackbar.setError(`403 Forbidden`)
+          }
           console.log(e)
         }
         this.loading = false

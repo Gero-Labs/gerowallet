@@ -27,7 +27,7 @@ import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
 
 await bringInitBackground({
   identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
-  apiEndpoint: 'sandbox',
+  apiEndpoint: 'prod',
   cashbackPagePath: '/wallet/cashback'
 })
 
@@ -270,14 +270,12 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
     const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
       .then((tab) => Messaging.sendToPopupInternal(tab, request))
       .then((response) => response);
-    if (response.data) {
-      sendResponse({
-        id: request.id,
-        data: response.data,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    }
+    sendResponse({
+      id: request.id,
+      data: response.data,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
   } catch (e) {
     sendResponse({
       id: request.id,

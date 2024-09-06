@@ -29,7 +29,9 @@
       <div id="risk-label" v-else>{{ label }}</div>
       <div id="risk-powered">
         <span>Powered by</span>
-        <img alt="Cardano Shield" :src="require('@/assets/img/cardano-shield/logo.png')" style="width: 70px" />
+        <a href="https://cardanoshield.com/" target="_blank">
+          <img alt="Cardano Shield" :src="require('@/assets/img/cardano-shield/logo.png')" style="height: 30px" />
+        </a>
       </div>
     </div>
   </div>
@@ -91,11 +93,12 @@ export default {
   justify-content: center;
   margin: 0 auto 0;
   width: 192px;
+  height: 169px;
 }
 #risk-title {
   display: flex;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   color: white;
   font-size: 14px;
   font-weight: 400;
@@ -122,7 +125,7 @@ export default {
   position: absolute;
 }
 #risk-label {
-  bottom: 20px;
+  bottom: 24px;
   width: inherit;
   position: absolute;
   text-align: center;
@@ -132,7 +135,7 @@ export default {
   font-size: 36px;
 }
 #risk-powered {
-  bottom: -10px;
+  bottom: 0;
   height: 16px;
   width: inherit;
   position: absolute;
@@ -141,7 +144,7 @@ export default {
   align-items: center;
   justify-content: center;
   span {
-    font-size: 11px;
+    font-size: 10px;
     line-height: 16px;
   }
   img {

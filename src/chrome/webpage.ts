@@ -22,6 +22,13 @@ export const promptLogin = async (): Promise<void> => {
     method: METHOD.popupLogin,
     data: { },
   });
+  if (result['data']) {
+    window.dispatchEvent(new CustomEvent('gero:login', {
+      bubbles: true,
+      cancelable: true,
+      composed: false,
+    }))
+  }
   return result['data'];
 };
 

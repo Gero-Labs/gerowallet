@@ -39,7 +39,7 @@ function shouldInject() {
 
 async function injectBring() {
   await bringInitContentScript({
-    iframeEndpoint: 'https://dev-extension.bringweb3.io/',
+    iframeEndpoint: 'https://extension.bringweb3.io/',
     getWalletAddress,
     promptLogin, //prompt login
     walletAddressListeners: ['gero:login', 'gero:logout'],

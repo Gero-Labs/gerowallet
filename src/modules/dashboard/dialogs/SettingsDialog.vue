@@ -1,15 +1,16 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings">
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-      <v-text-field
-        v-model="search"
-        placeholder="Search"
-        prepend-inner-icon="mdi-magnify"
-        outlined
-        dense
-        hide-details
-        class="mb-4"
-      />
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings" :loading="loading">
+    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1">
+<!--      <v-text-field-->
+<!--        v-model="search"-->
+<!--        placeholder="Search"-->
+<!--        prepend-inner-icon="mdi-magnify"-->
+<!--        outlined-->
+<!--        dense-->
+<!--        hide-details-->
+<!--        class="mb-4"-->
+<!--        :disabled="true"-->
+<!--      />-->
       <v-tabs
         v-model="tab"
         color="white"
@@ -18,15 +19,19 @@
       >
         <v-tab
           v-for="tab in tabs"
-          :key="tab.value">{{ tab.label }}
+          :key="tab.value"
+          :disabled="tab.disabled"
+        >
+          {{ tab.label }}
         </v-tab>
       </v-tabs>
       <v-tabs-items v-model="tab" class="transparent">
         <ProfileTab />
-        <PasswordTab />
+<!--        <PasswordTab />-->
         <CollateralTab />
         <ContactsTab />
         <ConnectedDappsTab />
+        <AdvancedSettingsTab @loading="loadingChange" />
       </v-tabs-items>
     </v-card-text>
   </BaseDialog>
@@ -38,26 +43,36 @@ import PasswordTab from '@/modules/dashboard/components/PasswordTab.vue';
 import CollateralTab from '@/modules/dashboard/components/CollateralTab.vue';
 import ProfileTab from '@/modules/dashboard/components/ProfileTab.vue';
 import ConnectedDappsTab from '@/modules/dashboard/components/ConnectedDappsTab.vue';
+import AdvancedSettingsTab from '@/modules/dashboard/components/AdvancedSettingsTab.vue';
 
 export default {
   name: 'SettingsDialog',
-  components: { BaseDialog, ContactsTab, PasswordTab, CollateralTab, ProfileTab, ConnectedDappsTab },
+  components: {
+    AdvancedSettingsTab, BaseDialog, ContactsTab,
+    // PasswordTab,
+    CollateralTab, ProfileTab, ConnectedDappsTab },
   props: {
     isOpen: {
       type: Boolean,
       default: false,
     },
   },
-
+  methods: {
+    loadingChange(val) {
+      this.loading = val
+    }
+  },
   data: () => ({
     search: null,
     tab: null,
+    loading: false,
     tabs: [
       { label: 'Profile', value: 'profile' },
-      { label: 'Password', value: 'password' },
-      { label: 'Collateral', value: 'collateral' },
-      { label: 'Contacts', value: 'contacts' },
-      { label: 'Connected Dapps', value: 'connectedDapps' }
+      // { label: 'Password', value: 'password' },
+      { label: 'Collateral', value: 'collateral', disabled: false },
+      { label: 'Contacts', value: 'contacts', disabled: true },
+      { label: 'Connected Dapps', value: 'connectedDapps', disabled: false },
+      { label: 'Advanced', value: 'advanced', disabled: false }
     ],
   }),
 };

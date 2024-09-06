@@ -50,6 +50,7 @@ import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
+import { appWallet } from '@/store';
 
 const blake2b = require('blake2b');
 
@@ -654,6 +655,33 @@ export class Wallet {
 
     // Set the last sync info once everything is done
     await this.setLastSyncInfo(tip);
+  }
+
+  async resync() {
+    await this.db
+      .open()
+      .then(db => {
+        const syncTable = db.table('sync');
+        syncTable.clear();
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+    await this.db
+      .open()
+      .then(db => {
+        const syncTable = db.table('account');
+        syncTable.clear();
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+    try {
+      const tip = await appWallet.fetchTip()
+      await appWallet.sync(tip)
+    } catch (err) {
+      console.log(err)
+    }
   }
 
   async setSync(syncObject) {

@@ -13,7 +13,7 @@
       <v-container class="py-0 fill-height" style="max-width: 1000px">
         <v-spacer></v-spacer>
 
-        <language-selector></language-selector>
+<!--        <language-selector></language-selector>-->
         <v-btn
           plain
           large
@@ -22,6 +22,8 @@
           width="100"
           style="text-transform: none"
           :ripple="false"
+          :href="'https://www.gerowallet.io/support'"
+          target="_blank"
         >
           <v-icon>mdi-lifebuoy</v-icon>&nbsp;
           {{ $t('help') }}
@@ -72,7 +74,7 @@
   </v-app>
 </template>
 <script>
-import LanguageSelector from '../components/LanguageSelector.vue';
+// import LanguageSelector from '../components/LanguageSelector.vue';
 import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
@@ -80,7 +82,9 @@ import loading from '@/plugins/loading';
 
 export default {
   name: 'BlankLayout',
-  components: { PrivacyPolicyDialog, LanguageSelector },
+  components: { PrivacyPolicyDialog,
+    // LanguageSelector
+  },
   computed: {
     ...mapState(useStore, ['network']),
     background() {

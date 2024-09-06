@@ -2,7 +2,7 @@
   <v-tab-item>
     <v-layout class="py-2" column>
       <v-row no-gutters class="py-2">
-        <v-col cols="7">
+        <v-col cols="7" class="text-left">
           <h3>Wallet Name</h3>
           <span class="helper  my-0">Edit your wallet name</span>
         </v-col>
@@ -11,7 +11,7 @@
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
-        <v-col cols="7">
+        <v-col cols="7" class="text-left">
           <h3>Wallet Profile Picture</h3>
           <span class="helper">Choose a profile picture for your wallet</span>
         </v-col>
@@ -28,6 +28,7 @@
                 outlined
                 color="grey"
                 autocapitalize="on"
+                disabled
               >
                 <span class="capitalize">Upload Picture</span>
                 <v-icon
@@ -42,6 +43,7 @@
                 block
                 outlined
                 color="grey"
+                disabled
               >
                 <span class="capitalize">Choose NFT</span>
                 <v-icon
@@ -56,7 +58,7 @@
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
-        <v-col cols="7">
+        <v-col cols="7" class="text-left">
           <h3>Currency Preference</h3>
           <span class="helper">Choose your preferred currency</span>
         </v-col>
@@ -68,16 +70,17 @@
             v-model="selectedCurrency"
             hide-details
             return-object
+            disabled
           ></v-select>
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
-        <v-col cols="7">
+        <v-col cols="7" class="text-left">
           <h3>Display Language</h3>
           <span class="helper">Set the language for Gero Dashboard</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
-          <v-select v-model="loc" :items="Object.values(languages)" item-text="name" outlined dense hide-details>
+          <v-select v-model="loc" :items="Object.values(languages)" item-text="name" outlined dense hide-details disabled>
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
                 <flag :iso="item.iso" style="font-size: 20px;"></flag>
@@ -101,7 +104,7 @@
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
-        <v-col cols="7">
+        <v-col cols="7" class="text-left">
           <h3>Region</h3>
           <span class="helper">Choose region, affects dates & time</span>
         </v-col>
