@@ -195,3 +195,18 @@ export function hexToString(hex) {
   }
   return output;
 }
+
+export function bytesToIp(bytes) {
+  if (!bytes) return null;
+  if (bytes.length === 4) {
+    return {ipv4: bytes.join('.')};
+  } else if (bytes.length === 16) {
+    let ipv6 = '';
+    for (let i = 0; i < bytes.length; i += 2) {
+      ipv6 += bytes[i].toString(16) + bytes[i + 1].toString(16) + ':';
+    }
+    ipv6 = ipv6.slice(0, -1);
+    return {ipv6};
+  }
+  return null;
+}

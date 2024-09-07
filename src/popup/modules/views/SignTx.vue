@@ -212,7 +212,6 @@ export default {
       if (!this.tx || !this.utxos || this.utxos.length === 0) {
         return null;
       }
-      console.log(this.tx);
       const txBody = this.tx.body();
       let inputValue = Value.new(BigNum.from_str('0'));
       for (let i = 0; i < txBody.inputs().len(); i++) {
@@ -284,26 +283,33 @@ export default {
       window.close();
     },
     async confirm() {
-      if (this.$refs.form.validate()) {
-        if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-          try {
-            const response = await appWallet.signTx(
-              this.request.data.tx,
-              this.request.data.partialSign,
-              this.spendingPassword,
-              0,
-              this.utxos,
-              this.addresses,
-            );
-            await this.controller.returnData({ data: response.witnesses, error: undefined });
-          } catch (e) {
-            console.log(e)
-            await this.controller.returnData({ data: undefined, error: e });
-          }
-          window.close();
-        } else {
-          this.enableToolTip()
+      const signAndReturnTx = async () => {
+        try {
+          const response = await appWallet.signTx(
+            this.request.data.tx,
+            this.request.data.partialSign,
+            this.spendingPassword,
+            0,
+            this.utxos,
+            this.addresses
+          );
+          await this.controller.returnData({ data: response.witnesses, error: undefined });
+        } catch (e) {
+          console.log(e);
+          await this.controller.returnData({ data: undefined, error: e });
         }
+        window.close();
+      };
+      if (appWallet.type === WalletType.Normal) {
+        if (this.$refs.form.validate()) {
+          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
+            await signAndReturnTx();
+          } else {
+            this.enableToolTip();
+          }
+        }
+      } else {
+        await signAndReturnTx();
       }
     }
   },
