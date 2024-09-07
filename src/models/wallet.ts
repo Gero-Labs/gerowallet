@@ -347,7 +347,7 @@ export class Wallet {
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
     } else if (this.type === WalletType.Ledger) {
       const wit: TransactionWitnessSet = <TransactionWitnessSet>(
-        await ledger.txToLedger(txBody, this.baseAddress().to_address().to_bech32(), 0, null, true, utxos)
+        await ledger.txToLedger(txBody, this, 0, null, true, utxos)
       );
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
     } else {

@@ -34,6 +34,9 @@ export default {
       cashbackSupport: true,
       swapSupport: true,
       buySupport: true,
+      networkParams: {
+        networkMagic: 764824073
+      }
     },
     {
       icon: require('@/assets/svg/cardano.svg'),
@@ -63,6 +66,9 @@ export default {
       cashbackSupport: false,
       swapSupport: false,
       buySupport: false,
+      networkParams: {
+
+      }
     },
     // {
     //   icon: require('@/assets/svg/cardano.svg'),
