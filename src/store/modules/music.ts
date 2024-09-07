@@ -30,7 +30,6 @@ export const musicStore = defineStore( 'musicStore', {
     resolveMusicPlaylist(resolvedCollections) {
       const mediaNFTs = []
       resolvedCollections.forEach(collection => {
-        console.log(collection)
         collection.items.forEach(nft => {
           if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio') || file.mediaType.includes('video'))) {
             nft['collection'] = collection.name
