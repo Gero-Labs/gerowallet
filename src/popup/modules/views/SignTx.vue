@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(this.$route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)">
+    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(this.$route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
@@ -81,16 +81,16 @@
                 </span>
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <USBBluetoothSwitch v-model="isBT" />
+                <USBBluetoothSwitch v-model="isBT" :disabled="txSignLoading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
-              <v-btn block outlined color="red" class="capitalize" @click="decline">
+              <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
                 Decline
               </v-btn>
             </v-col>
             <v-col cols="6">
-              <v-btn block class="geroButton" style="color: black!important;" @click="confirm" :disabled="!valid">
+              <v-btn block class="geroButton" style="color: black!important;" @click="confirm" :disabled="!valid || txSignLoading" :loading="txSignLoading">
                 Sign & Confirm
               </v-btn>
             </v-col>
@@ -126,6 +126,7 @@ import {
 import networks from '@/shared/utils/networks';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
+import snackbar from '@/plugins/snackbar';
 
 export default {
   name: 'DappConnect',
@@ -145,10 +146,9 @@ export default {
         enabled: false,
         text: 'Wrong Spending Password!',
       },
-      txSubmitLoading: false,
+      txSignLoading: false,
       loading: true,
       controller: Messaging.createInternalController(),
-      // txCbor: '84a900828258207deec26e4afa4cd5373c93db4f514da668f68544bacb248f0d02e99d2fcf12b000825820a8c5ac70414db4f8330e23c592443aabf42f2fa2be7391263b6ea2f31aca2f0f040187a30058393184cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9ab2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6d011a0011a008028201d818582258209a53eccef981a9565010918e3493a332206478df48bd1b32d3a4d396b6f1d8d3825839019f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799ab8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e531a000f424082583901aea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ec2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e11a0112a880825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a150ce3ed825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a0a8671f6825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad821a0011d28aa1581cf7535d3356b29a16ce50a2843c539c9a05c94abfca7b96a26a56012ca14b4d75736963426f7834393001825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a0a713131021a00036e3c031a0791c8df0b58203a5912a61f0f567682118754b8c0c06fee9231831ddf7a50cd3a9ef3d003bdd10d8182582037a0c517d3f5b9a91c92a4d38847dad806911d1cb7914f236b1d31d0929e66240210825839016f3df66b6c87c3005828000d5853e04e6bf630bf1975d9700c64f1eef536c87a81581b044d5f2a968be29caa8998b8cad49c66d2e738d9ad1a004725e6111a0005255a12818258201693c508b6132e89b932754d657d28b24068ff5ff1715fec36c010d4d6470b3d00a2049fd8799f9fd8799fd8799fd8799f581c9f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799abffd8799fd8799fd8799f581c8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e53ffffffff1a000f4240ffd8799fd8799fd8799f581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffd8799fd8799fd8799f581c2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e1ffffffff1a0112a880ffff581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffff0581840000d8799f00ff821a000326a91a055457e7f5f6'
     };
   },
   computed: {
@@ -284,21 +284,30 @@ export default {
     },
     async confirm() {
       const signAndReturnTx = async () => {
+        this.txSignLoading = true
         try {
+          const txCbor = this.request.data.tx
+          const partialSign = this.request.data.partialSign
+          // const txCbor = '84a90082825820117f3a40ad7ff8dd66af4e7bfbca6c310cc87f56ce5a127760bab77ac066466400825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef0010184a30058393184cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9ab2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6d011a0011a008028201d818582258204ea1730fb6d01cca1fb672ec3422d30fb2b95deb79b7ed519aea3c628302ade7825839019f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799ab8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e531a00186a0082583901aea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ec2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e11a010980c0825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75821b00000006b25f6871a1581c85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18a15244696d656e73696f6e426f7820233033343001021a0003ac72031a07feecf90b58201224772d32b8ca3901f6edb3c631e3f0a31d6defdd8938aedc74da3356f5fef80d81825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef00110825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af751b00000006b37c9830111a000582ab12818258201693c508b6132e89b932754d657d28b24068ff5ff1715fec36c010d4d6470b3d00a20481d8799f9fd8799fd8799fd8799f581c9f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799abffd8799fd8799fd8799f581c8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e53ffffffff1a00186a00ffd8799fd8799fd8799f581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffd8799fd8799fd8799f581c2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e1ffffffff1a010980c0ffff581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecff0581840001d8799f00ff821a000326a91a04555e60f5f6'
+          // const partialSign = true
           const response = await appWallet.signTx(
-            this.request.data.tx,
-            this.request.data.partialSign,
+            txCbor,
+            partialSign,
             this.spendingPassword,
             0,
             this.utxos,
-            this.addresses
+            this.addresses,
+            !this.isBT
           );
+          console.log(response)
           await this.controller.returnData({ data: response.witnesses, error: undefined });
+          window.close();
         } catch (e) {
+          snackbar.setError(e)
           console.log(e);
           await this.controller.returnData({ data: undefined, error: e });
         }
-        window.close();
+        this.txSignLoading = false
       };
       if (appWallet.type === WalletType.Normal) {
         if (this.$refs.form.validate()) {
@@ -314,14 +323,19 @@ export default {
     }
   },
   async created() {
-    const request = await this.controller.requestData();
-    if (request?.data?.tx) {
-      console.log(request.data.tx)
-      this.tx = Transaction.from_bytes(Buffer.from(request.data.tx, 'hex'));
+    let txCbor;
+    this.request = await this.controller.requestData();
+    if (this.request?.data?.tx) {
+      txCbor = this.request.data.tx
+    }
+    // txCbor = '84a90082825820117f3a40ad7ff8dd66af4e7bfbca6c310cc87f56ce5a127760bab77ac066466400825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef0010184a30058393184cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9ab2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6d011a0011a008028201d818582258204ea1730fb6d01cca1fb672ec3422d30fb2b95deb79b7ed519aea3c628302ade7825839019f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799ab8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e531a00186a0082583901aea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ec2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e11a010980c0825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75821b00000006b25f6871a1581c85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18a15244696d656e73696f6e426f7820233033343001021a0003ac72031a07feecf90b58201224772d32b8ca3901f6edb3c631e3f0a31d6defdd8938aedc74da3356f5fef80d81825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef00110825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af751b00000006b37c9830111a000582ab12818258201693c508b6132e89b932754d657d28b24068ff5ff1715fec36c010d4d6470b3d00a20481d8799f9fd8799fd8799fd8799f581c9f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799abffd8799fd8799fd8799f581c8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e53ffffffff1a00186a00ffd8799fd8799fd8799f581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffd8799fd8799fd8799f581c2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e1ffffffff1a010980c0ffff581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecff0581840001d8799f00ff821a000326a91a04555e60f5f6'
+    if (txCbor) {
+      console.log(txCbor)
+      this.tx = Transaction.from_bytes(Buffer.from(txCbor, 'hex'));
       this.queryParams = this.$route.query;
       try {
         this.risks = await appWallet.api.scanTx({
-          cborHex: request.data.tx,
+          cborHex: txCbor,
           toAddress: this.recipient,
           fromAddress: this.changeAddress,
           url: this.queryParams['website'],
@@ -333,7 +347,6 @@ export default {
       }
       this.loading = false;
     }
-    this.request = request;
   },
 };
 </script>

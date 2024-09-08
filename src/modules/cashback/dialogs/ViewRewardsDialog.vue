@@ -338,7 +338,7 @@ export default {
     spendingPassword: '',
   }),
   mounted() {
-      this.amountToClaim = this.eligible.tokenAmount
+      this.amountToClaim = this.eligible?.tokenAmount
   },
   watch: {
     isOpen(val) {

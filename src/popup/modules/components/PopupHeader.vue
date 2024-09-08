@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent">
+  <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
     <div style="width: 52px; margin-left: auto; margin-right: auto">
       <img alt="Gero Logo" id="modal-logo-icon" width="52" :src="require('@/assets/svg/gero-logo.svg')"/>
       <img alt="Gero Logo" id="modal-logo-text" width="52" :src="require('@/assets/svg/gero-text.svg')"/>
@@ -53,6 +53,10 @@ export default{
     showWallet: {
       type: Boolean,
       default: true
+    },
+    disabled: {
+      type: Boolean,
+      default: false
     }
   },
   computed: {

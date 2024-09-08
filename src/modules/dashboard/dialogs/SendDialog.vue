@@ -52,6 +52,7 @@
           v-model="tooltip.enabled"
           top
           color="red"
+          v-if="loggedWallet.type === WalletType.Normal"
         >
           <template v-slot:activator="{ }">
             <v-text-field
@@ -79,6 +80,11 @@
           </template>
           <span>{{ tooltip.text }}</span>
         </v-tooltip>
+        <div v-else-if="loggedWallet.type === WalletType.Ledger" class="pb-6" style="align-content: center;">
+          <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
+            <USBBluetoothSwitch v-model="isBT" :disabled="txSubmitLoading" />
+          </v-card-subtitle>
+        </div>
       </div>
       <div>
         <v-btn
@@ -122,10 +128,12 @@ import {
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks, { cardanoLogo } from '@/shared/utils/networks';
 import filters from '@/shared/utils/filters';
+import snackbar from '@/plugins/snackbar';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 
 export default {
   name: 'SendDialog',
-  components: { BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
+  components: { USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
   props: {
     isOpen: {
       type: Boolean,
@@ -133,6 +141,9 @@ export default {
     },
   },
   computed: {
+    WalletType() {
+      return WalletType
+    },
     networks() {
       return networks
     },
@@ -174,7 +185,11 @@ export default {
         return !(hasZeroQuantity(this.sendData.selectedTokens) || hasZeroQuantity(this.sendData.selectedCollectibles));
       }
       if (this.currentStep === 3) {
-        return Boolean(this.spendingPassword);
+        if (this.loggedWallet.type === WalletType.Normal) {
+          return Boolean(this.spendingPassword);
+        } else {
+          return true
+        }
       }
       return false;
     },
@@ -236,6 +251,7 @@ export default {
       minAda: 0,
     },
     txValid: false,
+    isBT: false
   }),
   methods: {
     enableToolTip() {
@@ -245,35 +261,46 @@ export default {
       }, 3000);
     },
     async signAndSubmitTx() {
-      if (appWallet.type === WalletType.Ledger) {
-        console.log('ledger')
-      }
-      if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-        const witness = await appWallet.signTx(
-          this.txData.to_hex(),
-          false,
-          this.spendingPassword,
-          0,
-          this.utxos,
-          this.addresses,
-        );
-        const signedTx = Transaction.new(
-          this.txBody,
-          TransactionWitnessSet.from_bytes(Buffer.from(witness.witnesses, "hex")),
-          undefined // TODO Transaction metadata
-        );
+      console.log('signAndSubmit')
+      const signAndReturnTx = async () => {
+        this.txSubmitLoading = true
         try {
-          this.txSubmitLoading = true
-          const response = await appWallet.submitTx(signedTx.to_hex().toString());
-          console.log(response)
-          this.txSubmitLoading = false
+          const txCbor = this.txData.to_hex()
+          const partialSign = false
+          const response = await appWallet.signTx(
+            txCbor,
+            partialSign,
+            this.spendingPassword,
+            0,
+            this.utxos,
+            this.addresses,
+            !this.isBT
+          );
+          const signedTx = Transaction.new(
+            this.txBody,
+            TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
+            undefined // TODO Transaction metadata
+          );
+          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+          console.log(txId)
+          snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
           this.$emit('close')
         } catch (e) {
-          console.log(e)
-          this.txSubmitLoading = false
+          snackbar.setError(e)
+          console.log(e);
+        }
+        this.txSubmitLoading = false
+      };
+      if (appWallet.type === WalletType.Normal) {
+        if (this.$refs.form.validate()) {
+          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
+            await signAndReturnTx();
+          } else {
+            this.enableToolTip();
+          }
         }
       } else {
-        this.enableToolTip()
+        await signAndReturnTx();
       }
     },
     buildTx() {
@@ -328,7 +355,7 @@ export default {
         } else if (this.currentStep === 2) {
           this.$refs.summary.scanTx(this.txData);
           this.currentStep++;
-        } else if (this.currentStep === 3 && this.spendingPassword?.length > 0) {
+        } else if (this.currentStep === 3) {
           this.signAndSubmitTx();
         }
       }

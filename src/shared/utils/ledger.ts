@@ -5,12 +5,12 @@ import Ada, {
   bigint_like,
   BIP32Path,
   CertificateType,
-  CredentialParamsType,
+  CredentialParamsType, GetExtendedPublicKeysResponse, GetVersionResponse,
   PoolKeyType,
   PoolOwnerType,
   PoolRewardAccountType,
   RelayType,
-  RequiredSigner,
+  RequiredSigner, SignedTransactionData, SignMessageResponse,
   SignTransactionRequest,
   Transaction,
   TransactionSigningMode,
@@ -27,6 +27,7 @@ import { CoinTypes, HARDENED, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import {
+  Address,
   AuxiliaryData,
   BaseAddress,
   Bip32PublicKey,
@@ -36,7 +37,8 @@ import {
   RewardAddress,
   ScriptHash,
   Transaction as Trans,
-  TransactionBody,
+  TransactionBody, TransactionInput, TransactionInputs,
+  TransactionOutput,
   TransactionWitnessSet,
   Vkey,
   Vkeywitness,
@@ -47,6 +49,9 @@ import { bytesToIp } from '@/shared/utils/converter';
 import { Wallet } from '@/models/wallet';
 import networks from '@/shared/utils/networks';
 import { appWallet } from '@/store';
+import { Buffer } from 'buffer';
+import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import Transport from '@ledgerhq/hw-transport'
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -62,32 +67,28 @@ export default {
   _transportClose: null,
   _ledger: null,
   usbDevice: undefined,
-  async initLedger(isBluetooth, signingMode) {
+  async initLedger(isBluetooth) {
     try {
-      let transport;
+      let transport: Transport;
       if (!isBluetooth) {
         transport = await this.connectViaUSB();
         console.log(transport);
       } else {
         transport = await this.connectViaBT();
       }
-      const ledger = new Ada(transport);
+      const ledger: Ada = new Ada(transport);
       if (!ledger) {
         return false;
       }
       hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
-      const productName = ledger.transport.deviceModel.productName;
-
+      const productName: string = ledger.transport.deviceModel.productName;
       hardwareLoading.setText('Retrieving Cardano App Version ...');
       const version = await this.retrieveCardanoAppVersion(ledger);
-
       hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Ledger Device.');
-      const ledgerKeys = await ledger.getExtendedPublicKeys({
+      const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
         paths: [[WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED]],
       });
-      const hwPublicKey = Bip32PublicKey.from_hex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex).to_bech32();
-      console.log(ledgerKeys);
-      console.log(ledger);
+      const hwPublicKey: string = Bip32PublicKey.from_hex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex).to_bech32();
       return { productName, version, hwPublicKey };
     } catch (error: any) {
       snackbar.setError(error.message);
@@ -96,25 +97,22 @@ export default {
     }
     return this.usbDevice;
   },
-  async retrieveCardanoAppVersion(ledger) {
+  async retrieveCardanoAppVersion(ledger: Ada): Promise<GetVersionResponse> {
     try {
-      let version;
-
+      let version: GetVersionResponse;
       await Promise.race([
-        timeout(10000, null), // 3000 = the maximum time to wait
-        (async () => {
-          // ...do the real work, modelled here as `wait`...
+        timeout(10000, null), // 10000 = the maximum time to wait
+        (async (): Promise<void> => {
           version = await ledger.getVersion();
         })(),
       ]);
-
       return version;
     } catch (e) {
       throw new Error('Failed to Retrieve Cardano App Version. Is the Cardano App Opened on Your Ledger?');
     }
   },
-  async connectViaUSB() {
-    const isSupported = await TransportWebUSB.isSupported();
+  async connectViaUSB(): Promise<Transport> {
+    const isSupported: boolean = await TransportWebUSB.isSupported();
     if (isSupported) {
       if (this._transportClose) {
         await this._transportClose;
@@ -122,7 +120,7 @@ export default {
       if (this._transport && this._transportType === 'WebUSB') {
         return this._transport;
       }
-      let transport;
+      let transport: Transport;
       try {
         transport = await TransportWebUSB.create();
       } catch (e) {
@@ -142,8 +140,7 @@ export default {
       throw new Error('WebUSB not supported. Please check USB connection and/or choose another connection method.');
     }
   },
-  async connectViaBT() {
-    console.log('test');
+  async connectViaBT(): Promise<Transport> {
     const isSupported = await BluetoothTransport.isSupported();
     if (isSupported) {
       if (this._transportClose) {
@@ -152,19 +149,17 @@ export default {
       if (this._transport && this._transportType === 'WebBLE') {
         return this._transport;
       }
-      const transport = await BluetoothTransport.create(12e3);
+      const transport: Transport = await BluetoothTransport.create(12e3);
       transport.on('disconnect', () => {
         this.setActiveTransport(null, null);
       });
       this.setActiveTransport(transport, 'WebBLE');
       return transport;
     } else {
-      throw new Error(
-        'Bluetooth not supported by Ledger device or platform. Please check bluetooth connection and/or choose another connection method in wallet settings.',
-      );
+      throw new Error('Bluetooth not supported by Ledger device or platform. Please check bluetooth connection and/or choose another connection method in wallet settings.',);
     }
   },
-  setActiveTransport(transport, type) {
+  setActiveTransport(transport: Transport, type) {
     this._transportClose = null;
     this._transport = transport;
     this._transportType = type;
@@ -172,40 +167,40 @@ export default {
       this._ledger = null;
     }
   },
-  async txToLedger(txBody: TransactionBody, wallet: Wallet, index: number = 0, txAuxiliaryData: AuxiliaryData, isDapp?: boolean, usedUtxos?: any[]) {
-    const address = wallet.baseAddress().to_address();
+  async txToLedger(txBody: TransactionBody, wallet: Wallet, index: number = 0, txAuxiliaryData: AuxiliaryData, isDapp?: boolean, usedUtxos?: any[], isUsb?: boolean) {
+    const address: Address = wallet.baseAddress().to_address();
+    const stakeAddress: Address = wallet.stakeAddress().to_address();
     const network = networks.resolveNetwork(appWallet.chain, appWallet.network)
     const keys = {
       payment: {
         hash: BaseAddress.from_address(address).payment_cred().to_keyhash(),
-        path: [HARDENED + 1852, HARDENED + 1815, HARDENED + 0, 0, 0],
+        path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0],
       },
       stake: {
-        hash: RewardAddress.from_address(address).payment_cred().to_keyhash(),
-        path: [HARDENED + 1852, HARDENED + 1815, HARDENED + 0, 2, 0],
+        hash: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash(),
+        path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0],
       },
     };
 
-    let signingMode = TransactionSigningMode.ORDINARY_TRANSACTION;
-    const inputs = txBody.inputs();
+    let signingMode: TransactionSigningMode = TransactionSigningMode.ORDINARY_TRANSACTION;
+    const inputs: TransactionInputs = txBody.inputs();
     const ledgerInputs: TxInput[] = [];
-    for (let i = 0; i < inputs.len(); i++) {
-      const input = inputs.get(i);
+    for (let i: number = 0; i < inputs.len(); i++) {
+      const input: TransactionInput = inputs.get(i);
 
       const foundUtxo = usedUtxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index());
-      ledgerInputs.push({
-        txHashHex: Buffer.from(input.transaction_id().to_bytes()).toString('hex'),
-        outputIndex: input.index(),
-        path: [
-          HARDENED + 1852, HARDENED + 1815, HARDENED + 0, foundUtxo.addressing.type, foundUtxo.addressing.path,
-        ], // needed to include payment key witness if available
-      });
+      if (foundUtxo) {
+        ledgerInputs.push({
+          txHashHex: Buffer.from(input.transaction_id().to_bytes()).toString('hex'),
+          outputIndex: input.index(),
+          path: [
+            WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, foundUtxo.addressing ? foundUtxo.addressing.type : 0, foundUtxo.addressing ? foundUtxo.addressing.path : 0,
+          ], // needed to include payment key witness if available
+        });
+      }
     }
-
     const outputs = txBody.outputs();
-
     const ledgerOutputs: TxOutput[] = this.outputsToLedger(outputs, address, index, false);
-
     let ledgerCertificates = null;
     const certificates = txBody.certs();
     if (certificates) {
@@ -515,9 +510,9 @@ export default {
     let referenceInputs = null;
     if (txBody.reference_inputs()) {
       referenceInputs = [];
-      const refInputs = txBody.reference_inputs();
-      for (let i = 0; i < refInputs.len(); i++) {
-        const input = refInputs.get(i);
+      const refInputs: TransactionInputs = txBody.reference_inputs();
+      for (let i: number = 0; i < refInputs.len(); i++) {
+        const input: TransactionInput = refInputs.get(i);
         referenceInputs.push({
           txHashHex: input.transaction_id().to_hex(),
           outputIndex: parseInt(input.index().toString()),
@@ -571,7 +566,7 @@ export default {
     };
 
     Object.keys(ledgerTx).forEach(
-      (key) => !ledgerTx[key] && ledgerTx[key] != 0 && delete ledgerTx[key],
+      (key: string) => !ledgerTx[key] && ledgerTx[key] != 0 && delete ledgerTx[key],
     );
 
     const fullTx: SignTransactionRequest = {
@@ -579,26 +574,30 @@ export default {
       tx: ledgerTx,
       additionalWitnessPaths,
     };
-
+    console.log(fullTx)
     Object.keys(fullTx).forEach(
       (key) => !fullTx[key] && fullTx[key] != 0 && delete fullTx[key],
     );
-
-    const foundDevices = await navigator.usb.getDevices();
-    const device = foundDevices.find(x => x.productName === 'Nano S' || x.productName === 'Nano S Plus' || x.productName === 'Nano X');
-    if (!device) {
-      throw new Error('Ledger not found');
+    let transport: Transport;
+    console.log(isUsb)
+    if (isUsb) {
+      transport = await this.connectViaUSB();
+      console.log(transport);
+    } else {
+      transport = await this.connectViaBT();
     }
-    const transport = await TransportWebUSB.open(device);
-    const appAda = new Ada(transport);
-    const version = await appAda.getVersion(); // check if Ledger has Cardano app opened
+    const ledger: Ada = new Ada(transport);
+    if (!ledger) {
+      return false;
+    }
+    const version: GetVersionResponse = await ledger.getVersion(); // check if Ledger has Cardano app opened
     if (!version) {
-      throw new Error('Cardano app is close');
+      throw new Error('Cardano app is closed');
     }
-    const result = await appAda.signTransaction(fullTx);
+    const result: SignedTransactionData = await ledger.signTransaction(fullTx);
 
-    const ledgerKeys = await appAda.getExtendedPublicKeys({
-      paths: [[HARDENED + 1852, HARDENED + 1815, HARDENED + 0]],
+    const ledgerKeys = await ledger.getExtendedPublicKeys({
+      paths: [[WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index]],
     });
 
     // getting public keys
@@ -607,9 +606,7 @@ export default {
 
     result.witnesses.forEach((witness) => {
       const vkey = Vkey.new(
-        Bip32PublicKey.from_bytes(
-          Buffer.from(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex, 'hex'),
-        )
+        Bip32PublicKey.from_bytes(Buffer.from(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex, 'hex'))
           .derive(witness.path[3])
           .derive(witness.path[4])
           .to_raw_key(),
@@ -618,20 +615,18 @@ export default {
         witness.witnessSignatureHex,
       );
       vkeys.add(Vkeywitness.new(vkey, signature));
-
     });
     witnessSet.set_vkeys(vkeys);
     if (isDapp) {
       return witnessSet;
     } else {
-      const signedTxRaw = Trans.new(txBody, witnessSet, txAuxiliaryData);
-      return signedTxRaw.to_bytes();
+      return Trans.new(txBody, witnessSet, txAuxiliaryData).to_bytes();
     }
   },
   outputsToLedger(outputs: TransactionOutputs, address, index, checkDatum = true): TxOutput[] {
     const ledgerOutputs = [];
     for (let i = 0; i < outputs.len(); i++) {
-      const output = outputs.get(i);
+      const output: TransactionOutput = outputs.get(i);
       const multiAsset = output.amount().multiasset();
       let tokenBundle = null;
 
@@ -650,7 +645,7 @@ export default {
             });
           }
           // sort canonical
-          tokens.sort((a, b) => {
+          tokens.sort((a, b): number => {
             if (a.assetNameHex.length == b.assetNameHex.length) {
               return a.assetNameHex > b.assetNameHex ? 1 : -1;
             } else if (a.assetNameHex.length > b.assetNameHex.length) return 1;
@@ -663,9 +658,7 @@ export default {
         }
       }
 
-      const outputAddress = Buffer.from(output.address().to_bytes()).toString(
-        'hex',
-      );
+      const outputAddress: string = Buffer.from(output.address().to_bytes()).toString('hex',);
       const destination: TxOutputDestination =
         output.address().to_bech32() !== address
           ? {
@@ -673,20 +666,8 @@ export default {
             params: {
               type: AddressType.BASE_PAYMENT_KEY_STAKE_KEY,
               params: {
-                spendingPath: [
-                  HARDENED + 1852,
-                  HARDENED + 1815,
-                  HARDENED + index,
-                  0,
-                  0,
-                ],
-                stakingPath: [
-                  HARDENED + 1852,
-                  HARDENED + 1815,
-                  HARDENED + index,
-                  2,
-                  0,
-                ],
+                spendingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0],
+                stakingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0],
               },
             },
           }
@@ -696,18 +677,18 @@ export default {
               addressHex: outputAddress,
             },
           };
-      const datum = checkDatum ? (output as any)?.datum() : null;
+      const datum = checkDatum ? output?.plutus_data() : null;
       const outputRes: TxOutput = {
         amount: output.amount().coin().to_str(),
         tokenBundle,
         destination,
         datumHashHex:
           datum && datum.kind() === 0
-            ? Buffer.from(datum.as_data_hash().to_bytes()).toString('hex')
+            ? datum.to_hex()
             : null,
       };
       //that is deleting the format property, that's why we add it in the next line
-      Object.keys(outputRes).forEach((key) => {
+      Object.keys(outputRes).forEach((key: string) => {
         if (!outputRes[key]) delete outputRes[key];
       });
       //TODO: this is hardcoded until we implement babbage utxos
@@ -716,5 +697,34 @@ export default {
     }
     return ledgerOutputs;
   },
-
+  async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean): Promise<SignMessageResponse> {
+    const messageData: MessageData = {
+      messageHex: payload,
+      signingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, accountIndex + HARDENED, 2, 0],
+      hashPayload: false,
+      preferHexDisplay: false,
+      addressFieldType: MessageAddressFieldType.ADDRESS,
+      address: {
+        type: AddressType.REWARD_KEY,
+        params: {
+          stakingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, accountIndex + HARDENED, 2, 0],
+        },
+      },
+      network: { protocolMagic: network.networkParams.networkMagic, networkId: network.networkId },
+    }
+    let transport: Transport;
+    console.log(isUsb)
+    if (isUsb) {
+      transport = await this.connectViaUSB();
+      console.log(transport);
+    } else {
+      transport = await this.connectViaBT();
+    }
+    const ledger: Ada = new Ada(transport);
+    const version: GetVersionResponse = await ledger.getVersion(); // check if Ledger has Cardano app opened
+    if (!version) {
+      throw new Error('Cardano app is closed');
+    }
+    return await ledger.signMessage(messageData)
+  },
 };

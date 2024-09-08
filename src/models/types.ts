@@ -42,7 +42,7 @@ const CoreAddressTypes = {
 
 const WalletTypePurpose = {
   BIP44: HARDENED + 44,
-  CIP1852: HARDENED + 1852,
+  CIP1852: HARDENED + purpose.hdwallet,
 };
 
 const CoinTypes = {
