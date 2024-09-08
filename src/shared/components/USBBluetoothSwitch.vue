@@ -15,6 +15,7 @@
       hide-details
       style="margin-top: 0; align-items: center;"
       class="usbBluetoothSwitch"
+      :disabled="disabled"
     ></v-switch>
     <p class="my-auto" style="width: 85px">
       <v-icon :color="value ? 'primary' : '#ffffff'" small>
@@ -33,6 +34,10 @@ export default {
       type: Boolean,
       required: true,
     },
+    disabled: {
+      type: Boolean,
+      default: false,
+    }
   },
   methods: {
     toggleSwitch(value) {
