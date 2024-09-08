@@ -16,7 +16,7 @@
       <v-card-actions class="justify-center py-2 px-0">
         <v-layout>
           <v-row>
-            <v-col cols="12">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
               <v-text-field
                 style="width: 100%"
                 block
@@ -37,16 +37,24 @@
                 </template>
               </v-text-field>
             </v-col>
+            <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
+              <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
+                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+              </v-card-subtitle>
+            </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline">
                 Decline
               </v-btn>
             </v-col>
             <v-col cols="6">
-              <v-btn block
-                     class="geroButton"
-                     style="color: black!important;"
-                     @click="confirm" :disabled="!valid">
+              <v-btn
+                block
+                class="geroButton"
+                style="color: black!important;"
+                @click="confirm"
+                :loading="loading"
+                :disabled="!valid || loading">
                 Sign & Confirm
               </v-btn>
             </v-col>
@@ -63,10 +71,19 @@ import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { appWallet, useStore } from '@/store';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
+import { mapState } from 'pinia';
+import { WalletType } from '@/models/types';
 
 export default {
   name: 'DappSignData',
-  components: { PopupHeader },
+  components: { USBBluetoothSwitch, PopupHeader },
+  computed: {
+    WalletType() {
+      return WalletType
+    },
+    ...mapState(useStore, ['loggedWallet'])
+  },
   methods: {
     async decline() {
       await this.controller.returnData({ data: undefined, error: DataSignError.UserDeclined })
@@ -74,10 +91,9 @@ export default {
     },
     async confirm() {
       if (this.$refs.form.validate()) {
-        const wallet = appWallet
-        if (wallet.verifySpendingPassword(this.spendingPassword)) {
+        if (appWallet.verifySpendingPassword(this.spendingPassword)) {
           try {
-            const res = await wallet.signData(this.request.data.address, this.request.data.payload, this.spendingPassword, 0)
+            const res = await appWallet.signData(this.request.data.address, this.request.data.payload, this.spendingPassword, 0)
             await this.controller.returnData({ data: res, error: undefined })
             console.log(res)
           } catch (e) {
@@ -111,6 +127,8 @@ export default {
         enabled: false,
         text: 'Wrong Spending Password!'
       },
+      isBT: false,
+      loading: false,
       controller: Messaging.createInternalController()
     };
   },

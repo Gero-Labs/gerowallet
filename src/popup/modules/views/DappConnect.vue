@@ -19,8 +19,7 @@
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">For your security, any future transactions from this website will require you to enter your spending password
-                before signing.</p>
+              <p class="ml-9">For your security, any future transactions from this website will require additional verification by {{ appWallet.type === WalletType.Normal ? ' entering your spending password ' : ' interacting with your hardware wallet ' }} before signing.</p>
             </div>
           </section>
     </v-card-text>
@@ -43,16 +42,23 @@
   </PopupHeader>
 </template>
 <script>
-import { appWallet, useStore } from '@/store';
+import { appWallet } from '@/store';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
+import { WalletType } from '@/models/types';
 
 export default {
   name: 'dapp-connect',
+  computed: {
+    WalletType() {
+      return WalletType
+    }
+  },
   components: { PopupHeader },
   data() {
     return {
+      appWallet,
       consent: false,
       controller: Messaging.createInternalController()
     };

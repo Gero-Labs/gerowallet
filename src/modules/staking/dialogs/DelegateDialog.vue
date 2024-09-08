@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake" :loading="loading"
               :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)} to a stake pool.`">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert
@@ -75,11 +75,12 @@
             <h4>Tx Fee</h4>
             <h4><strong>{{ tx.body().fee().to_str() | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
-          <v-col cols="12" class="pt-6" style="display: ruby">
+          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
             <v-tooltip
               v-model="tooltip.enabled"
               top
               color="red"
+              v-if="loggedWallet.type === WalletType.Normal"
             >
               <template v-slot:activator="{ }">
                 <v-text-field
@@ -105,6 +106,11 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
+            <div v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0" style="align-content: center;">
+              <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
+                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+              </v-card-subtitle>
+            </div>
             <v-btn color="primary" elevation="0" @click="signDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
               Delegate
             </v-btn>
@@ -123,10 +129,13 @@ import { appWallet, useStore } from '@/store';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
 import networks from "@/shared/utils/networks";
+import snackbar from '@/plugins/snackbar';
+import { WalletType } from '@/models/types';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 
 export default {
   name: 'DelegateDialog',
-  components: { CopyButton, BaseDialog },
+  components: { USBBluetoothSwitch, CopyButton, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,
@@ -157,6 +166,9 @@ export default {
     }
   },
   computed: {
+    WalletType() {
+      return WalletType
+    },
     ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses']),
     depositFee() {
       let depositFee = 0;
@@ -199,36 +211,46 @@ export default {
       }, 3000);
     },
     async signDelegationTx() {
-      this.loading = true
-      const wallet = appWallet;
-      this.passwordRules.push(() => wallet.verifySpendingPassword(this.spendingPassword))
-      if (!wallet.verifySpendingPassword(this.spendingPassword)) {
-        this.enableToolTip()
-      }
-      if (this.$refs.form.validate()) {
-          const witness = await wallet.signTx(
-            this.tx.to_hex(),
-            false,
+      const signAndReturnTx = async () => {
+        this.loading = true
+        try {
+          const txCbor = this.tx.to_hex()
+          const partialSign = false
+          const response = await appWallet.signTx(
+            txCbor,
+            partialSign,
             this.spendingPassword,
             0,
             this.utxos,
             this.addresses,
+            !this.isBT
           );
           const signedTx = Transaction.new(
             this.tx.body(),
-            TransactionWitnessSet.from_bytes(Buffer.from(witness.witnesses, "hex")),
+            TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
             undefined // TODO Transaction metadata
           );
-          try {
-            console.log(signedTx)
-            const txId = await wallet.submitTx(signedTx.to_hex().toString());
-            console.log(txId)
-            this.$emit('close')
-          } catch (e) {
-            console.log(e)
+          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+          console.log(txId)
+          snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
+          this.$emit('close')
+        } catch (e) {
+          snackbar.setError(e)
+          console.log(e);
+        }
+        this.loading = false
+      };
+      if (appWallet.type === WalletType.Normal) {
+        if (this.$refs.form.validate()) {
+          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
+            await signAndReturnTx();
+          } else {
+            this.enableToolTip();
           }
+        }
+      } else {
+        await signAndReturnTx();
       }
-      this.loading = false
     },
     getColor(value) {
       if (value > 100) {
@@ -262,7 +284,8 @@ export default {
     valid: false,
     passwordRules: [
       rules.required
-    ]
+    ],
+    isBT: false
   }),
 }
 </script>

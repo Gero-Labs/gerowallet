@@ -43,14 +43,19 @@ import {
   Label,
   ProtectedHeaderMap,
   Headers,
-  COSESign1Builder, COSEKey, KeyType, Int, BigNum,
+  COSESign1Builder, COSEKey, KeyType, Int, BigNum, COSESign1,
 } from '@emurgo/cardano-message-signing-browser';
-import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import {
+  HARDENED,
+  MessageAddressFieldType,
+  MessageData, SignedMessageData,
+} from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
+import { AddressType } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 const blake2b = require('blake2b');
 
@@ -137,7 +142,7 @@ export class Wallet {
     let accountKey: Bip32PrivateKey;
     try {
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
-      const buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      const buffer: Buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
       accountKey = Bip32PrivateKey.from_bytes(buffer)
         .derive(WalletTypePurpose.CIP1852) // purpose
         .derive(CoinTypes.CARDANO) // coin type;
@@ -188,13 +193,10 @@ export class Wallet {
       Credential.from_keyhash(this.pubKey(0).hash()),
       Credential.from_keyhash(this.stakeKey().hash()),
     );
-
-    // return BaseAddress.from_address(Address.from_bech32("addr1q86qys9le3d9rmj3v5720mjzmfxgl329lgkv0l3x2k3era882ad6fg7zhf9stumjhlffscnvc4ggmyd9kdvs3g5v7fgseaes4f"))
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
-    // return RewardAddress.from_address(Address.from_bech32("stake1u8n4wkay50pt5jc97detl55cvfkv25ydjxjmxkgg52x0y5g89ayyl"))
   }
 
   paymentKeyHash(address: string) {
@@ -233,7 +235,6 @@ export class Wallet {
     }
     return undefined;
   }
-
   stakeKeyHash(address) {
     const keyAddress = Address.from_bech32(address);
     try {
@@ -247,53 +248,62 @@ export class Wallet {
     return undefined;
   }
 
-  async signData(address: string, payload: string, password: string, accountIndex: number) {
-    const keyHash = chrome.storage ? await extractKeyHash(address) :
-      BaseAddress.from_address(
-        Address.from_bech32(Buffer.from(address, 'hex').toString())
-      ).payment_cred().to_keyhash().to_bech32('addr_vkh');
-    const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
-    let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
-    const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
-    const publicKey = accountKey.to_public();
-    if (keyHash !== publicKey.hash().to_bech32(prefix))
-      throw DataSignError.ProofGeneration;
-    const protectedHeaders = HeaderMap.new();
-    protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-    // protectedHeaders.set_key_id(publicKey.as_bytes()); // Removed to adhere to CIP-30
-    protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(address, 'hex')));
-    const protectedSerialized = ProtectedHeaderMap.new(protectedHeaders);
-    const unprotectedHeaders = HeaderMap.new();
-    const headers = Headers.new(protectedSerialized, unprotectedHeaders);
-    const builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
-    const toSign = builder.make_data_to_sign().to_bytes();
-    const signedSigStruc = accountKey.sign(toSign).to_bytes();
-    const coseSign1 = builder.build(signedSigStruc);
-    stakeKey.free();
-    stakeKey = null;
-    paymentKey.free();
-    paymentKey = null;
-    const key = COSEKey.new(Label.from_key_type(KeyType.OKP));
-    key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-    key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
-    key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(publicKey.as_bytes())); // x (-2) set to public key
-    return {
-      signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
-      key: Buffer.from(key.to_bytes()).toString('hex'),
-    };
+  async signData(address: string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
+    if (this.type === WalletType.Ledger) {
+      const res: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb)
+      console.log(res)
+      return {
+        signature: 'todo',
+        key: 'todo',
+      };
+    } else {
+      const keyHash: string = chrome.storage ? await extractKeyHash(address) :
+        BaseAddress.from_address(
+          Address.from_bech32(Buffer.from(address, 'hex').toString())
+        ).payment_cred().to_keyhash().to_bech32('addr_vkh');
+      const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
+      let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
+      const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
+      const publicKey: PublicKey = accountKey.to_public();
+      if (keyHash !== publicKey.hash().to_bech32(prefix))
+        throw DataSignError.ProofGeneration;
+      const protectedHeaders: HeaderMap = HeaderMap.new();
+      protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+      // protectedHeaders.set_key_id(publicKey.as_bytes()); // Removed to adhere to CIP-30
+      protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(address, 'hex')));
+      const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
+      const unprotectedHeaders: HeaderMap = HeaderMap.new();
+      const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
+      const builder: COSESign1Builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
+      const toSign: Uint8Array = builder.make_data_to_sign().to_bytes();
+      const signedSigStruc: Uint8Array = accountKey.sign(toSign).to_bytes();
+      const coseSign1: COSESign1 = builder.build(signedSigStruc);
+      stakeKey.free();
+      stakeKey = null;
+      paymentKey.free();
+      paymentKey = null;
+      const key: COSEKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
+      key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
+      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(publicKey.as_bytes())); // x (-2) set to public key
+      return {
+        signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
+        key: Buffer.from(key.to_bytes()).toString('hex'),
+      };
+    }
   }
 
-  async signTx(txCbor: string, partialSign = false, password: string, accountIndex: number, utxos, addresses: string[]): Promise<{witnesses: string}> {
+  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{witnesses: string}> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
     const txBody: TransactionBody = rawTx.body();
-    const deduped = [];
-    const keyHashes = [];
+    const deduped: any[] = [];
+    const keyHashes: any[] = [];
 
     const txHashHex = blake2b(new Uint8Array(32).length).update(rawTx.raw_body()).digest('hex');
 
-    const changeAddress = this.baseAddress().to_address().to_bech32()
-    let paymentKeyHash = this.paymentKeyHash(changeAddress);
+    const changeAddress: string = this.baseAddress().to_address().to_bech32()
+    let paymentKeyHash: Uint8Array = this.paymentKeyHash(changeAddress);
     let paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
     let stakeKeyHash = this.stakeKeyHash(changeAddress);
@@ -346,9 +356,8 @@ export class Wallet {
       );
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
     } else if (this.type === WalletType.Ledger) {
-      const wit: TransactionWitnessSet = <TransactionWitnessSet>(
-        await ledger.txToLedger(txBody, this, 0, null, true, utxos)
-      );
+      console.log(txBody.to_json())
+      const wit: TransactionWitnessSet = <TransactionWitnessSet>(await ledger.txToLedger(txBody, this, 0, null, true, deduped, isUsb));
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
     } else {
       // const privateKey = await this.sendNewTransactionService.getPrivateKey(password);
