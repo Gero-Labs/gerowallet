@@ -16,13 +16,23 @@ import {
   TransactionBuilderConfigBuilder,
   TransactionUnspentOutputs,
   UnitInterval,
-  Value, Withdrawals,
+  Value, Withdrawals, PublicKey, Vkey, Ed25519Signature, Vkeywitness,
 
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
+import {
+  AlgorithmId,
+  CBORValue, COSEKey,
+  COSESign1Builder,
+  HeaderMap,
+  Headers, Int, KeyType,
+  Label,
+  ProtectedHeaderMap,
+} from '@emurgo/cardano-message-signing-browser';
+import { toHexBuffer, toHexString } from '@/shared/utils/converter';
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));
@@ -96,6 +106,8 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
     }
   }
 
+  txBuilder.set_validity_start_interval(0)
+
   const hasDeregistrationCert = !!certificates.find(certificate => certificate.kind() == 1)
   console.log(hasDeregistrationCert) // TODO Fix
   // add utxos to the transaction as inputs
@@ -133,7 +145,7 @@ function addInputUtxos(
     useAllUtxos = false
 ) {
   if (!useAllUtxos) {
-    const strategy = outputHasAssets(outputs) ? CoinSelectionStrategyCIP2.RandomImproveMultiAsset : CoinSelectionStrategyCIP2.RandomImprove;
+    const strategy = outputHasAssets(outputs) ? CoinSelectionStrategyCIP2.RandomImproveMultiAsset : CoinSelectionStrategyCIP2.LargestFirst;
     txBuilder.add_inputs_from(utxos, strategy);
   } else {
     for (let i = 0 ; i < utxos.len() ; i++) {
@@ -243,3 +255,4 @@ export function getPayAndReceiveTokens(diff) {
   }
   return { payTokens, receiveTokens };
 }
+

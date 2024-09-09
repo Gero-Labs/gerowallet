@@ -20,7 +20,7 @@ import {
   Address,
   EnterpriseAddress,
   PointerAddress,
-  TransactionHash, TransactionBody,
+  TransactionHash, TransactionBody, Transaction,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -47,15 +47,14 @@ import {
 } from '@emurgo/cardano-message-signing-browser';
 import {
   HARDENED,
-  MessageAddressFieldType,
-  MessageData, SignedMessageData,
+  SignedMessageData,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
-import { AddressType } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+import { toHexArray } from '@/shared/utils/converter';
 
 const blake2b = require('blake2b');
 
@@ -95,14 +94,14 @@ export class Wallet {
     const wal = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     wal.api = new Api(wallet, provider);
-    console.log('class')
+    console.log('class');
     wal.db = new Dexie('wallet-' + wallet.id);
     wal.db.open().catch(async err => {
       if (err.name === 'NoSuchDatabaseError') {
         await db.createNewWalletDb(wallet.id);
       }
-      console.log(err)
-    })
+      console.log(err);
+    });
     return wal;
   }
 
@@ -235,6 +234,7 @@ export class Wallet {
     }
     return undefined;
   }
+
   stakeKeyHash(address) {
     const keyAddress = Address.from_bech32(address);
     try {
@@ -250,16 +250,27 @@ export class Wallet {
 
   async signData(address: string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
     if (this.type === WalletType.Ledger) {
-      const res: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb)
-      console.log(res)
+      const response: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb);
+      const protectedHeaders: HeaderMap = HeaderMap.new();
+      protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+      protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(response.addressFieldHex, 'hex')));
+      const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
+      const unprotectedHeaders: HeaderMap = HeaderMap.new();
+      const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
+      const builder: COSESign1Builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
+      const coseSign1: COSESign1 = builder.build(Buffer.from(response.signatureHex, 'hex'));
+      const key: COSEKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
+      key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
+      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(Buffer.from(response.signingPublicKeyHex, 'hex'))); // x (-2) set to public key
       return {
-        signature: 'todo',
-        key: 'todo',
+        signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
+        key: Buffer.from(key.to_bytes()).toString('hex'),
       };
     } else {
       const keyHash: string = chrome.storage ? await extractKeyHash(address) :
         BaseAddress.from_address(
-          Address.from_bech32(Buffer.from(address, 'hex').toString())
+          Address.from_bech32(Buffer.from(address, 'hex').toString()),
         ).payment_cred().to_keyhash().to_bech32('addr_vkh');
       const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
       let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
@@ -295,6 +306,7 @@ export class Wallet {
 
   async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{witnesses: string}> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
+    const tx: Transaction = Transaction.from_hex(txCbor)
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
     const txBody: TransactionBody = rawTx.body();
     const deduped: any[] = [];
@@ -309,6 +321,7 @@ export class Wallet {
     let stakeKeyHash = this.stakeKeyHash(changeAddress);
     let stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
 
+    // Process inputs and add corresponding witnesses
     for (let i = 0; i < txBody.inputs().len(); i++) {
       const input = txBody.inputs().get(i);
       const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
@@ -333,7 +346,7 @@ export class Wallet {
       .filter((hash) => !!hash)
       .map((keyHash) => Buffer.from(keyHash).toString('hex'));
 
-    //get keyHashes from required signers
+    // Process required signers from the transaction body
     const requiredSigners = txBody.required_signers();
     if (requiredSigners) {
       for (let i = 0; i < requiredSigners.len(); i++) {
@@ -345,48 +358,62 @@ export class Wallet {
           } else if (requiredKeyHash === stakeKeyHex) {
             keyHashes.push(requiredKeyHash);
             deduped.push({ addressing: { type: 2, path: 0 } });
+          } else {
+            console.warn('Required signer key hash missing:', requiredKeyHash);
           }
         }
       }
     }
 
-    if (this.type === WalletType.Trezor) {
-      const wit: TransactionWitnessSet = <TransactionWitnessSet>(
-        await trezor.txToTrezor(txBody, this.baseAddress().to_address().to_bech32(), 0, true, utxos)
-      );
-      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
-    } else if (this.type === WalletType.Ledger) {
-      console.log(txBody.to_json())
-      const wit: TransactionWitnessSet = <TransactionWitnessSet>(await ledger.txToLedger(txBody, this, 0, null, true, deduped, isUsb));
-      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') }
-    } else {
-      // const privateKey = await this.sendNewTransactionService.getPrivateKey(password);
-      // const decodedHash = await this.passwordCipher.decryptWithPassword(password, privateKey as string);
+    // Ledger Signing Logic
+    if (this.type === WalletType.Ledger) {
+      console.log(tx.to_json())
+      const wit: TransactionWitnessSet = await ledger.txToLedger(txBody, this, 0, null, utxos, isUsb);
+      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') };
+    }
 
+    // Trezor Signing Logic
+    else if (this.type === WalletType.Trezor) {
+      console.log('Signing with Trezor...');
+      const wit: TransactionWitnessSet = <TransactionWitnessSet>(
+        await trezor.txToTrezor(txBody, this.baseAddress().to_address().to_bech32(), accountIndex, true, utxos)
+      );
+      if (!wit) {
+        throw new Error('Trezor did not return a valid witness set.');
+      }
+
+      const witnessHex = Buffer.from(wit.to_bytes()).toString('hex');
+      console.log('Trezor Witness Set:', witnessHex);
+
+      return { witnesses: witnessHex };
+    }
+
+    // Software Wallet Signing
+    else {
+      console.log('Signing with Software Wallet...');
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
       const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)))
 
       if (!decodedHash && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
+
       const txHash = TransactionHash.from_bytes(Buffer.from(txHashHex, 'hex'));
 
       deduped.forEach((utxo) => {
         const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
           .derive(WalletTypePurpose.CIP1852)
           .derive(CoinTypes.CARDANO)
-          .derive(HARDENED + accountIndex) // TODO: move this logic on a separate variable (Account key)
+          .derive(HARDENED + accountIndex)
           .derive(utxo.addressing ? utxo.addressing.type : 0)
           .derive(utxo.addressing ? utxo.addressing.path : 0)
           .to_raw_key();
         const vKeyWitness = make_vkey_witness(txHash, prvKey);
         vkeyWitnesses.add(vKeyWitness);
       });
-      if (
-        !keyHashes.includes(stakeKeyHash) &&
-        ((txBody.certs() && txBody.certs().len() > 0) ||
-          (txBody.withdrawals() && txBody.withdrawals().len() > 0))
-      ) {
+
+      // Stake key signing for certificates or withdrawals
+      if (!keyHashes.includes(stakeKeyHex) && ((txBody.certs() && txBody.certs().len() > 0) || (txBody.withdrawals() && txBody.withdrawals().len() > 0))) {
         const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
           .derive(WalletTypePurpose.CIP1852)
           .derive(CoinTypes.CARDANO)
@@ -397,12 +424,13 @@ export class Wallet {
         const vKeyWitness = make_vkey_witness(txHash, prvKey);
         vkeyWitnesses.add(vKeyWitness);
       }
+
       const witnesses = TransactionWitnessSet.new();
       witnesses.set_vkeys(vkeyWitnesses);
       if (!witnesses && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
-      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex'), };
+      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex') };
     }
   }
 
@@ -497,7 +525,7 @@ export class Wallet {
   // };
 
   async submitTx(body: string) {
-    const response = await this.api.submitTx(body)
+    const response = await this.api.submitTx(body);
     if (response.error) {
       if (response.status_code === 400) {
         throw new Error(TxSendError.Failure.info.concat('.', ' ', response.message));
@@ -511,7 +539,7 @@ export class Wallet {
         throw new Error(APIError.InvalidRequest.info);
       }
     }
-    return response
+    return response;
   }
 
   async getLastSyncInfo() {
@@ -546,7 +574,7 @@ export class Wallet {
   }
 
   async setLastSyncInfo(tip): Promise<void> {
-    console.log(tip)
+    console.log(tip);
     await this.db
       .open()
       .then(db => {
@@ -594,18 +622,18 @@ export class Wallet {
     this.syncLock = (async () => {
       try {
         console.log('sync');
-        loading.setSyncing(true)
+        loading.setSyncing(true);
         const lastSyncInfo = await this.getLastSyncInfo();
         if (!lastSyncInfo) {
           // loading.setText('Restoring Wallet Data. Please Wait ...')
-          loading.setRestoring(true)
-          await this.restore(tip)
-          loading.setRestoring(false)
+          loading.setRestoring(true);
+          await this.restore(tip);
+          loading.setRestoring(false);
         } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
           const promises = [];
           promises.push(this.syncStakingPools());
-          const prevAccountInfo = await this.getAccountInfo()
-          socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount)
+          const prevAccountInfo = await this.getAccountInfo();
+          socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount);
         }
       } finally {
         // Release the lock after execution
@@ -618,7 +646,7 @@ export class Wallet {
   }
 
   async restore(tip): Promise<void> {
-    const prevAccountInfo = await this.getAccountInfo()
+    const prevAccountInfo = await this.getAccountInfo();
 
     // Create an array to hold the promises that need to be awaited
     const promises = [];
@@ -686,41 +714,41 @@ export class Wallet {
         console.error(`Failed to open database: ${err.stack || err}`);
       });
     try {
-      const tip = await appWallet.fetchTip()
-      await appWallet.sync(tip)
+      const tip = await appWallet.fetchTip();
+      await appWallet.sync(tip);
     } catch (err) {
-      console.log(err)
+      console.log(err);
     }
   }
 
   async setSync(syncObject) {
-    console.log('setSync', syncObject)
+    console.log('setSync', syncObject);
     if (syncObject && syncObject.success) {
-      const promises = []
+      const promises = [];
       if (syncObject.account) {
-        promises.push(this.setAccountInfo(syncObject.account))
+        promises.push(this.setAccountInfo(syncObject.account));
       }
       if (syncObject.assets) {
-        promises.push(this.setAssets2(syncObject.assets))
+        promises.push(this.setAssets2(syncObject.assets));
       }
       if (syncObject.rewards) {
-        promises.push(this.setAccountRewards(syncObject.rewards))
+        promises.push(this.setAccountRewards(syncObject.rewards));
       }
       if (syncObject.transactions) {
-        promises.push(this.setAccountTransactions(syncObject.transactions))
+        promises.push(this.setAccountTransactions(syncObject.transactions));
       }
       if (syncObject.block) {
-        promises.push(this.setLastSyncInfo(syncObject.block))
+        promises.push(this.setLastSyncInfo(syncObject.block));
       }
       if (promises.length > 0) {
-        await Promise.all(promises)
+        await Promise.all(promises);
       }
     }
-    loading.setSyncing(false)
+    loading.setSyncing(false);
   }
 
   async syncAssets(units: string[], force?: boolean): Promise<void> {
-    console.log('syncAssets')
+    console.log('syncAssets');
     const blockchainDB: Dexie = await this.getBlockchainDb();
     await this.setAssets(units, blockchainDB);
   }
@@ -735,9 +763,9 @@ export class Wallet {
   }
 
   async setAssets2(assets): Promise<void> {
-    console.log('setAssets')
+    console.log('setAssets');
     const blockchainDB: Dexie = await this.getBlockchainDb();
-    const assetsTable = blockchainDB.table('assets')
+    const assetsTable = blockchainDB.table('assets');
     if (assetsTable) {
       assetsTable.bulkPut(assets);
     }

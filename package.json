@@ -50,6 +50,7 @@
     "pinia-plugin-persistedstate": "^3.2.1",
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
+    "qrcode": "^1.5.4",
     "sockjs-client": "^1.6.1",
     "stompjs": "^2.3.3",
     "vue": "^2.7.16",

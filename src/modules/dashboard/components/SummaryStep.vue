@@ -35,6 +35,7 @@
       </v-col>
       <v-col cols="6" style="align-content: center">
         <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
+        <AnimatedQRCodeComponent type="" cbor="84a40081825820cdacaa2ba36be6da12b5455e06a0d28bfed4461a6545abbe20b6d03a5638ff950000181825839013e50d7d58c9a510e643fd8a3a137c64f0952c4bb6472628cf1121a3e3c0b010021a000f4240021a0002fafda1581de1e3ce71a768b06b7d8d38b57f13a07d78e0cd25549c4a9640b4eb3c76a0021a0002fafda1581de1e3ce71a768b06b7d8d38b57f13a07d78e0cd25549c4a9640b4eb3c76a00f5f684a40081825820cdacaa2ba36be6da12b5455e06a0d28bfed4461a6545abbe20b6d03a5638ff950000181825839013e50d7d58c9a510e643fd8a3a137c64f0952c4bb6472628cf1121a3e3c0b010021a000f4240021a0002fafda1581de1e3ce71a768b06b7d8d38b57f13a07d78e0cd25549c4a9640b4eb3c76a0021a0002fafda1581de1e3ce71a768b06b7d8d38b57f13a07d78e0cd25549c4a9640b4eb3c76a00f5f6" />
       </v-col>
     </v-row>
   </v-card>
@@ -55,9 +56,10 @@ import {
   diffAssetsFromIncomingToOutgoing,
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
+import AnimatedQRCodeComponent from '@/shared/components/AnimatedQRCode.vue';
 
 export default {
-  components: { TransactionCard, DappAddress, TransactionRisk, Select },
+  components: { AnimatedQRCodeComponent, TransactionCard, DappAddress, TransactionRisk, Select },
   name: 'SummaryStep',
   props: {
     sendData: {

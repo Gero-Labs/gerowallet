@@ -3,6 +3,7 @@
   "name": "Gero Dashboard Beta",
   "short_name": "Gero Dashboard Beta",
   "version": "2.2.5",
+  "key": "MANIFEST_KEY_REMOVED",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",
