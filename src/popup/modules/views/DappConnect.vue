@@ -19,7 +19,7 @@
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">For your security, any future transactions from this website will require additional verification by {{ appWallet.type === WalletType.Normal ? ' entering your spending password ' : ' interacting with your hardware wallet ' }} before signing.</p>
+              <p class="ml-9">For your security, any future transactions from this website will require additional verification by {{ loggedWallet.type === WalletType.Normal ? ' entering your spending password ' : ' interacting with your hardware wallet ' }} before signing.</p>
             </div>
           </section>
     </v-card-text>
@@ -42,15 +42,17 @@
   </PopupHeader>
 </template>
 <script>
-import { appWallet } from '@/store';
+import { appWallet, useStore } from '@/store';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
+import { mapState } from 'pinia';
 
 export default {
   name: 'dapp-connect',
   computed: {
+    ...mapState(useStore, ['loggedWallet']),
     WalletType() {
       return WalletType
     }

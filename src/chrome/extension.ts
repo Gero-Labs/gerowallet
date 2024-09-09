@@ -152,7 +152,7 @@ export const getRewardAddresses = async () => {
 };
 
 export const getNetwork = async (): Promise<any> => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = await getStorage(STORAGE.loggedWallet)
   return loggedWallet['network'].toLowerCase();
 };
 

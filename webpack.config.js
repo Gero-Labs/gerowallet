@@ -1,10 +1,10 @@
-const webpack = require('webpack')
-const MiniCssExtractPlugin = require('mini-css-extract-plugin')
-const CopyPlugin = require('copy-webpack-plugin')
-const { VueLoaderPlugin } = require('vue-loader')
-const { version } = require('./package.json')
-const { VuetifyLoaderPlugin } = require('vuetify-loader')
-const ESLintPlugin = require('eslint-webpack-plugin')
+const webpack = require('webpack');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CopyPlugin = require('copy-webpack-plugin');
+const { VueLoaderPlugin } = require('vue-loader');
+const { version } = require('./package.json');
+const { VuetifyLoaderPlugin } = require('vuetify-loader');
+const ESLintPlugin = require('eslint-webpack-plugin');
 
 module.exports = {
   context: __dirname + '/src',
@@ -31,7 +31,8 @@ module.exports = {
   resolve: {
     alias: {
       '@': __dirname + '/src',
-      '#': __dirname + '/src/components'
+      '#': __dirname + '/src/components',
+      'process': 'process/browser.js'  // Explicitly add the extension
     },
     extensions: ['.ts', '.js', '.wasm'],
     fallback: {
@@ -142,7 +143,7 @@ module.exports = {
       formatter: undefined
     }),
     new webpack.ProvidePlugin({
-      process: 'process/browser',
+      process: 'process/browser.js',  // Explicitly use browser.js file
       Buffer: ['buffer', 'Buffer'],
     }),
     new CopyPlugin({
@@ -169,4 +170,4 @@ module.exports = {
       ]
     })
   ]
-}
+};
