@@ -210,3 +210,8 @@ export function bytesToIp(bytes) {
   }
   return null;
 }
+
+export const toHexArray = (hex2) => Uint8Array.from(toHexBuffer(hex2));
+export const toHexBuffer = (hex2) => Buffer.from(byteaToHex(hex2), "hex")
+export const byteaToHex = (bytea) => bytea.startsWith("\\x") ? bytea.substring(2) : bytea;
+export const toHexString = (arr) => arr ? Buffer.from(arr).toString("hex") : "";

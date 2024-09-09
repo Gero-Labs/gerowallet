@@ -4,18 +4,47 @@ import { DerivationAlgorithm } from '@keystonehq/bc-ur-registry/src/extended/Der
 
 const sdk: KeystoneSDK = new KeystoneSDK();
 
-export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex = 0) => {
+export const getKeystonePublicKeyUR = (accPurpose = purpose.hdwallet, accIndex = 0): any => {
   const ur: UR = sdk.generateKeyDerivationCall({ schemas: [ { path: `m/${accPurpose}'/1815'/${accIndex}'`, curve: Curve.ed25519, algo: DerivationAlgorithm.bip32ed25519 } ], origin: 'gerowallet' })
   return qrCodeOptions(UREncoder.encodeSinglePart(ur))
 }
 
 export const parseMultiAccounts = (decodedQRCode: string) => {
-  const multiAccounts = sdk.parseMultiAccounts(URDecoder.decode(decodedQRCode))
-  console.log(multiAccounts)
-  return multiAccounts
+  return sdk.parseMultiAccounts(URDecoder.decode(decodedQRCode))
 }
 
-const qrCodeOptions = (encodedUR: string)=> {
+// export const createKeystoneSignRequest = async (appAccount, walletData, txBuildRes, credList) => {
+//   if (!(txBuildRes == null ? void 0 : txBuildRes.builtTx)) {
+//     throw ErrorSignTx.missingTx;
+//   }
+//   if (!(txBuildRes == null ? void 0 : txBuildRes.txCbor)) {
+//     throw ErrorSignTx.missingTx;
+//   }
+//   if (!credList) {
+//     throw ErrorSignTx.missingKeysList;
+//   }
+//   const xfp = walletData.wallet.masterFingerprint ?? "";
+//   const tx = txBuildRes.builtTx;
+//   let inputUtxoList = tx.inputUtxoList;
+//   if (!inputUtxoList) {
+//     const { utxoList } = getFilteredUtxoList(appAccount, false);
+//     inputUtxoList = utxoList;
+//   }
+//   const req = {
+//     origin,
+//     requestId: getRandomUUID(),
+//     signData: toHexBuffer(txBuildRes.txCbor),
+//     utxos: getOwnedUtxos(appAccount.data, xfp, tx.body.inputs, inputUtxoList),
+//     extraSigners: getExtraSigners(appAccount.data, xfp, credList, tx.body.inputs, inputUtxoList)
+//   };
+//   const req_json = JSON.parse(JSON.stringify(req));
+//   console.log("req_json", JSON.stringify(req_json));
+//   console.log("req_json", req_json);
+//   txBuildRes.hwRequest = req_json;
+//   return sdk.cardano.generateSignRequest(req);
+// }
+
+const qrCodeOptions = (encodedUR: string): any=> {
   return {
     width: 190,
     height: 190,

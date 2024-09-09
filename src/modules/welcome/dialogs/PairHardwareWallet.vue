@@ -318,7 +318,6 @@
         <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text">
         </v-card-title>
       </v-card>
-
     </v-overlay>
   </v-dialog>
 </template>
