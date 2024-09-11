@@ -30,6 +30,7 @@ export default {
         price_step: 0.0000721,
         coins_per_utxo_size: "4310"
       },
+      geroPool: 'pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kxd530f9',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: true,
       swapSupport: true,

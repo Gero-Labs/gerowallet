@@ -57,7 +57,7 @@ export default {
     ...mapState(useStore, ['baseAddress', 'addresses', 'stakeAddress']),
     allAddresses() {
       if (this.showUsed && this.addresses) {
-        return this.addresses
+        return Object.keys(this.addresses)
           .filter(address => address !== this.baseAddress)
           .map(address => {
           return {address, used: true}

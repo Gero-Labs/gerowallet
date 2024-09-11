@@ -77,7 +77,7 @@
               </v-tooltip>
             </template>
             <template v-slot:[`item.last_price`]="{ item }">
-              <div v-if="item.name === 'Cardano'">{{Number(price.lastPrice) | toCurrency(false, 4, '$', '', false, 0)}}</div>
+              <div v-if="item.name === 'Cardano' && price">{{Number(price.lastPrice) | toCurrency(false, 4, '$', '', false, 0)}}</div>
               <span v-else-if="!item.last_price">N/A</span>
               <span v-else>{{item.last_price | toCurrency(false, 4, '$', '', false, 0)}}</span>
             </template>
@@ -102,7 +102,7 @@
               <span v-else>N/A</span>
             </template>
             <template v-slot:[`item.value`]="{ item }">
-              <div v-if="item.name === 'Cardano'">{{item.quantity * Number(price.lastPrice) | toCurrency(false, 2, '$', '', true, item.metadata?.decimals)}}</div>
+              <div v-if="item.name === 'Cardano' && price">{{item.quantity * Number(price.lastPrice) | toCurrency(false, 2, '$', '', true, item.metadata?.decimals)}}</div>
               <span v-else-if="!item.last_price">N/A</span>
               <span v-else>{{item.value | toCurrency(false, 2, '$', '', true, 0)}}</span>
             </template>
@@ -274,7 +274,7 @@ export default {
     },
     assets() {
       let totalAllocation = 0
-      if (this.resolvedAssets) {
+      if (this.resolvedAssets && this.price) {
         this.resolvedAssets.forEach(token => {
           if (token.value) {
             totalAllocation += token.value

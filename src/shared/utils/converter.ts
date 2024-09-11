@@ -7,10 +7,12 @@ import {
   BigNum,
   ByronAddress,
   ConstrPlutusData,
+  Credential,
+  EnterpriseAddress,
   MultiAsset,
   PlutusData,
   PlutusList,
-  PlutusMap, PlutusMapValues,
+  PlutusMap, PlutusMapValues, PointerAddress, RewardAddress,
   ScriptHash,
   TransactionHash,
   TransactionInput,
@@ -26,9 +28,6 @@ export const toAddress = bech32 => Address.from_bech32(bech32);
 export const toBaseAddress = bech32 => BaseAddress.from_address(toAddress(bech32));
 
 export function toUTxO(output): TransactionUnspentOutput {
-  if (output.tx_hash === '167e232bc0fa82e96b992d13df9336a543c2b3e8c5cc234aa55f3a32af195037') {
-    console.log(output.tx_hash)
-  }
   return TransactionUnspentOutput.new(
     TransactionInput.new(TransactionHash.from_bytes(Buffer.from(output.tx_hash, 'hex')), output.tx_index),
     TransactionOutput.new(Address.from_bech32(output.payment_addr.bech32), toValue(output.asset_list, output.value)
@@ -215,3 +214,75 @@ export const toHexArray = (hex2) => Uint8Array.from(toHexBuffer(hex2));
 export const toHexBuffer = (hex2) => Buffer.from(byteaToHex(hex2), "hex")
 export const byteaToHex = (bytea) => bytea.startsWith("\\x") ? bytea.substring(2) : bytea;
 export const toHexString = (arr) => arr ? Buffer.from(arr).toString("hex") : "";
+export function hdPathToArray(path: string): number[] {
+  // Remove the 'm/' part of the path and split by '/'
+  const parts = path.replace('m/', '').split('/');
+
+  // Convert each part to an integer, handling hardened indices
+  return parts.map(part => {
+    if (part.endsWith("'")) {
+      // If the part ends with an apostrophe, it's a hardened index
+      return parseInt(part.slice(0, -1), 10) + 0x80000000; // Add the hardened flag
+    } else {
+      // Otherwise, it's a normal index
+      return parseInt(part, 10);
+    }
+  });
+}
+
+export function stakeCredential(address: string): Credential {
+  const keyAddress = Address.from_bech32(address);
+  try {
+    const baseKeyAddress = BaseAddress.from_address(keyAddress)
+      .stake_cred();
+    return baseKeyAddress.to_bytes();
+  } catch (e) {
+    // I want application to not crush, but don't care about the message
+  }
+  return undefined;
+}
+
+export function toStakeKeyHash(address: string) {
+  const credential: Credential = stakeCredential(address)
+  if (credential) {
+    return credential.to_keyhash();
+  }
+  return undefined;
+}
+
+export function paymentCredentials(address: string) {
+  const keyAddress = Address.from_bech32(address);
+  try {
+    const baseKeyAddress = BaseAddress.from_address(keyAddress)
+      .payment_cred()
+    return baseKeyAddress.to_bytes();
+  } catch (e) {
+    // I want application to not crush, but don't care about the message
+  }
+  try {
+    const enterpriseKeyAddress = EnterpriseAddress.from_address(keyAddress)
+      .payment_cred()
+    return enterpriseKeyAddress.to_bytes();
+  } catch (e) {
+    // I want application to not crush, but don't care about the message
+  }
+  try {
+    const pointerKeyAddress = PointerAddress.from_address(keyAddress)
+      .payment_cred()
+    return pointerKeyAddress.to_bytes();
+  } catch (e) {
+    // I want application to not crush, but don't care about the message
+  }
+  try {
+    const rewardKeyAddress = RewardAddress.from_address(keyAddress)
+      .payment_cred()
+    return rewardKeyAddress.to_bytes();
+  } catch (e) {
+    // I want application to not crush, but don't care about the message
+  }
+  return undefined;
+}
+
+export function addressCredentials(address: string) {
+  return { payment: paymentCredentials(address), stake: stakeCredential(address) }
+}

@@ -172,7 +172,7 @@
                     <USBBluetoothSwitch v-model="isBluetooth" />
                   </div>
                   <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan"> </div>
-                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan">
+                  <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px">
                     <QrcodeStream @decode="onDecode" @init="onInit">
                       <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
                         <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
@@ -324,12 +324,12 @@
 <script>
 import { QrcodeStream } from "vue-qrcode-reader";
 import rules from "@/shared/utils/rules";
-import { Blockchain, Network, purpose, Theme, WalletType } from '@/models/types';
+import { purpose, Theme, WalletType } from '@/models/types';
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
 import { getKeystonePublicKeyUR, parseMultiAccounts } from '@/shared/utils/keystone';
-import { mapActions } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import QRCodeStyling from 'qr-code-styling';
 import Vue from 'vue';
@@ -350,6 +350,7 @@ export default {
     },
   },
   computed: {
+    ...mapState(useStore, ['network']),
     WalletType() {
       return WalletType
     },
@@ -377,6 +378,8 @@ export default {
       const multiAccounts = parseMultiAccounts(result);
       this.newWallet.name = multiAccounts.device
       this.newWallet.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
+      this.newWallet.xfp = multiAccounts.masterFingerprint
+      this.newWallet.keys = multiAccounts.keys
       snackbar.fireSuccess("Keystone QR code successfully scanned.")
       this.step++;
       this.keystoneScan = false
@@ -415,13 +418,16 @@ export default {
         this.persistent = true
         this.hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+this.walletType+" device to complete the pairing process.")
         this.hardwareLoading.setLoading(true)
+        const index = 0
         try {
-          const coldWalletProps = await ledger.initLedger(this.isBluetooth)
+          const path = `m/${purpose.hdwallet}'/1815'/${index}'`
+          const coldWalletProps = await ledger.initLedger(this.isBluetooth, path)
           console.log(coldWalletProps)
           const isConnected = !!coldWalletProps
           if (isConnected) {
             this.newWallet.name = coldWalletProps.productName
             this.newWallet.publicKey = coldWalletProps.hwPublicKey
+            this.newWallet.keys = coldWalletProps.keys
             this.step = 3
           }
         } catch (e) {
@@ -444,7 +450,14 @@ export default {
     async walletCreationStep3() {
       if (this.$refs.form3.validate()) {
         this.creatingWalletLoader = true
-        const walletId = await db.createNewHardwareWallet(this.newWallet.name, this.newWallet.icon, this.walletType, Theme.GERO, Blockchain.CARDANO, Network.MAINNET, this.newWallet.publicKey)
+        const wallet = {
+          ...this.newWallet,
+          type: this.walletType,
+          theme: Theme.GERO,
+          chain: this.network.blockchain,
+          network: this.network.network
+        }
+        const walletId = await db.createNewHardwareWallet(wallet)
         this.dialogLocal = false
         this.resetDialog()
         await this.login(walletId)
@@ -462,6 +475,8 @@ export default {
       }
       this.newWallet = {
         name: '',
+        icon: '',
+        publicKey: '',
         termsChecked: false,
       }
       this.valid2 = false
@@ -500,7 +515,7 @@ export default {
       {
         name: 'Keystone',
         description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
-        enabled: true,
+        enabled: false,
         icon: require('@/assets/svg/keystone-3-pro.svg'),
         support: '3 Pro'
       },
@@ -526,7 +541,6 @@ export default {
   border-radius: 10px;
 }
 .qr-scanner {
-  height: 334px;
   text-align: center;
   border: 1px solid white;
   border-radius: 4px;

@@ -55,7 +55,7 @@ import { appWallet } from '@/store';
 import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';
-import { bytesToIp } from '@/shared/utils/converter';
+import { bytesToIp, hdPathToArray } from '@/shared/utils/converter';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -71,7 +71,8 @@ export default {
   _transportClose: null,
   _ledger: null,
   usbDevice: undefined,
-  async initLedger(isBluetooth) {
+  async initLedger(isBluetooth: boolean, path: string) {
+    const pathArray = hdPathToArray(path)
     try {
       let transport: Transport;
       if (!isBluetooth) {
@@ -87,13 +88,18 @@ export default {
       hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
       const productName: string = ledger.transport.deviceModel.productName;
       hardwareLoading.setText('Retrieving Cardano App Version ...');
-      const version = await this.retrieveCardanoAppVersion(ledger);
+      const version: GetVersionResponse = await this.retrieveCardanoAppVersion(ledger);
       hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Ledger Device.');
       const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
-        paths: [[WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED]],
+        paths: [pathArray],
       });
       const hwPublicKey: string = Bip32PublicKey.from_hex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex).to_bech32();
-      return { productName, version, hwPublicKey };
+      const keys = [{
+        chainCode: ledgerKeys[0].chainCodeHex,
+        path: path,
+        publicKey: ledgerKeys[0].publicKeyHex
+      }]
+      return { productName, version, hwPublicKey, keys };
     } catch (error: any) {
       snackbar.setError(error.message);
       console.log('catch error', error.message);
