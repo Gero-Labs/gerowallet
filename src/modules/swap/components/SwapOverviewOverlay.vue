@@ -129,7 +129,7 @@ export default defineComponent({
     }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'utxos', 'baseAddress']),
     dexes() {
       if (this.estimation && this.estimation['splits']) {
         const template = JSON.parse(JSON.stringify(this.dexesTemplate))

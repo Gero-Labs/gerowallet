@@ -1,6 +1,11 @@
 import { toAddress, toBaseAddress } from '@/shared/utils/converter';
 import { buildRewardAddress } from '@/shared/utils/builder';
-import { Address, BaseAddress, Ed25519KeyHash, PlutusData } from '@emurgo/cardano-serialization-lib-browser';
+import {
+  Address,
+  BaseAddress,
+  Ed25519KeyHash,
+  PlutusData,
+} from '@emurgo/cardano-serialization-lib-browser';
 import { appWallet } from '@/store';
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/shared/utils/converter';

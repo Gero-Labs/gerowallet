@@ -88,7 +88,7 @@ export default {
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewHardwareWallet(name: string, icon: string, type, theme, chain, network, publicKey) {
+  async createNewHardwareWallet(wallet: any) {
     let order = await this.getLatestWalletByOrder();
     if (order == null) {
       order = 1;
@@ -96,15 +96,9 @@ export default {
       order++;
     }
     const walletId = await db['wallets'].add({
-      name: name,
-      icon: icon,
-      type: type,
-      theme: theme,
+      ...wallet,
       order: order,
-      publicKey: publicKey,
       passwordLastUpdate: new Date(),
-      chain: chain,
-      network: network
     });
     await this.createNewWalletDb(walletId);
     await useStore().loadWallets();

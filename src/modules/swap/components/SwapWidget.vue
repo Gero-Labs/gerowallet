@@ -335,15 +335,18 @@ export default {
         return;
       }
       const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
-      const res = await appWallet.api.estimate(amount_in, token_in, token_out, slippage, this.blacklisted_dexes);
-      this.price_ab = res.price_ab;
-      this.price_ba = res.price_ba;
-      if (update) {
-        this.total_output_without_slippage = res.total_output_without_slippage
-        this.splits = res.splits
-        this.estimation = res
-        this.selectedTokenB.quantity = filters.toCurrency(this.total_output_without_slippage, false, this.selectedTokenB.decimals, '', '', false, 0);
-      }
+      appWallet.api.estimate(amount_in, token_in, token_out, slippage, this.blacklisted_dexes).then(res => {
+        this.price_ab = res.price_ab;
+        this.price_ba = res.price_ba;
+        if (update) {
+          this.total_output_without_slippage = res.total_output_without_slippage
+          this.splits = res.splits
+          this.estimation = res
+          this.selectedTokenB.quantity = filters.toCurrency(this.total_output_without_slippage, false, this.selectedTokenB.decimals, '', '', false, 0);
+        }
+      }).catch(() => {
+        // console.log(e)
+      });
     },
     async reverseEstimate(token_in, token_out, amount_out, update) {
       if (!appWallet) {

@@ -31,7 +31,7 @@ export const musicStore = defineStore( 'musicStore', {
       const mediaNFTs = []
       resolvedCollections.forEach(collection => {
         collection.items.forEach(nft => {
-          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio') || file.mediaType.includes('video'))) {
+          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) { //|| file.mediaType.includes('video'))) {
             nft['collection'] = collection.name
             mediaNFTs.push(nft)
           }
@@ -54,7 +54,7 @@ export const musicStore = defineStore( 'musicStore', {
           }
         });
       }).flat()
-        .filter(nft => nft.mediaType?.includes('audio') || nft.mediaType?.includes('video'))
+        .filter(nft => nft.mediaType?.includes('audio')) // || nft.mediaType?.includes('video'))
       )
     },
     setMusicPlaylist(musicPlaylist) {

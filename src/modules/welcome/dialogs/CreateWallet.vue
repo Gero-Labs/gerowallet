@@ -309,6 +309,7 @@ import rules from "@/shared/utils/rules";
 import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";
+import { mapState } from 'pinia';
 
 export default {
   name: "CreateWallet",
@@ -319,6 +320,7 @@ export default {
     },
   },
   computed: {
+    ...mapState(useStore, ['network']),
     dialogLocal: {
       get() {
         return this.dialog
@@ -375,8 +377,7 @@ export default {
     },
     async walletCreationStep3() {
       this.creatingWalletLoader = true
-      const network = this.store.getNetwork
-      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, network.blockchain, network.network)
+      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, this.network.blockchain, this.network.network)
       this.dialogLocal = false
       this.resetDialog()
       await this.store.login(walletId)
