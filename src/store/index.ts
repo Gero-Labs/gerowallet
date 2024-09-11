@@ -315,7 +315,7 @@ export const useStore = defineStore('store', {
               console.error(`Error fetching risk for ${token.unit}:`, err);
               token['risk'] = 'N/A';
             }
-          } else if (token['name'] === 'Cardano') {
+          } else if (token['name'] === 'Cardano' && this.price) {
             token['value'] = Number(filters.toCurrency(
               Number(token.quantity) * Number(this.price.lastPrice),
               false,
@@ -386,14 +386,14 @@ export const useStore = defineStore('store', {
       return this.resolvedCollections
     },
     async setUtxosAndAddresses(transactions) {
-      const utxos = [];
+      const utxos: any[] = [];
       const outputs = [];
       const inputSet = new Set();
       const addresses: Set<string> = new Set();
       if (!appWallet) {
         return
       }
-      const stakeAddress = appWallet.stakeAddress().to_address().to_bech32()
+      const stakeAddress: string = appWallet.stakeAddress().to_address().to_bech32()
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -421,7 +421,7 @@ export const useStore = defineStore('store', {
           }
         });
       }
-      await this.setAddresses(Array.from(addresses))
+      await appWallet.syncAddresses(Array.from(addresses))
         .then(() => this.setUtxos(utxos))
         .then(() => this.loadResolvedAssets())
         .then(assets => this.resolveCollections(assets))
@@ -482,6 +482,7 @@ export const useStore = defineStore('store', {
       await dexHunterStore().loadTokens()
       const promises = []
       await this.loadConfig()
+      promises.push(this.loadAddresses())
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadPools())
@@ -564,6 +565,26 @@ export const useStore = defineStore('store', {
           console.error('Failed to get all Wallets:', error)
         }
       });
+    },
+    async loadAddresses() {
+      if (!appWallet) {
+        return new Promise((resolve, reject) => {
+          reject()
+        });
+      }
+      const db: Dexie = await appWallet.getDb()
+      return new Promise((resolve, reject) => {
+        liveQuery(() => db.table('addresses').toArray()).subscribe({
+          next: value => {
+            this.setAddresses(value.reduce(function(map, val) {
+              map[val.address] = val
+              return map
+            }, {}));
+            console.log(this.addresses)
+            resolve(this.addresses)
+          }
+        })
+      })
     },
     async loadSync() {
       if (!appWallet) {

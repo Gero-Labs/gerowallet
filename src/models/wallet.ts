@@ -4,23 +4,25 @@ import { Buffer } from 'buffer';
 import * as CryptoTS from 'crypto-ts';
 import cryptoRandomString from 'crypto-random-string';
 import {
+  Address,
   BaseAddress,
   Bip32PrivateKey,
   Bip32PublicKey,
   Credential,
-  RewardAddress,
-  PublicKey,
-  encrypt_with_password,
   decrypt_with_password,
+  encrypt_with_password,
+  EnterpriseAddress,
+  FixedTransaction,
+  make_vkey_witness,
+  PointerAddress,
   PrivateKey,
+  PublicKey,
+  RewardAddress,
+  Transaction,
+  TransactionBody,
+  TransactionHash,
   TransactionWitnessSet,
   Vkeywitnesses,
-  make_vkey_witness,
-  FixedTransaction,
-  Address,
-  EnterpriseAddress,
-  PointerAddress,
-  TransactionHash, TransactionBody, Transaction,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -28,8 +30,9 @@ import {
   Blockchain,
   ChainDerivations,
   CoinTypes,
-  ERROR,
-  STAKING_KEY_INDEX, WalletType,
+  ERROR, purpose,
+  STAKING_KEY_INDEX,
+  WalletType,
   WalletTypePurpose,
 } from '@/models/types';
 import db from '@/db';
@@ -38,23 +41,25 @@ import { extractKeyHash } from '@/chrome/extension';
 import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import {
   AlgorithmId,
+  BigNum,
   CBORValue,
+  COSEKey,
+  COSESign1,
+  COSESign1Builder,
   HeaderMap,
+  Headers,
+  Int,
+  KeyType,
   Label,
   ProtectedHeaderMap,
-  Headers,
-  COSESign1Builder, COSEKey, KeyType, Int, BigNum, COSESign1,
 } from '@emurgo/cardano-message-signing-browser';
-import {
-  HARDENED,
-  SignedMessageData,
-} from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
-import { toHexArray } from '@/shared/utils/converter';
+import { toStakeKeyHash } from '@/shared/utils/converter';
 
 const blake2b = require('blake2b');
 
@@ -187,11 +192,7 @@ export class Wallet {
   }
 
   baseAddress(): BaseAddress {
-    return BaseAddress.new(
-      this.networkId(),
-      Credential.from_keyhash(this.pubKey(0).hash()),
-      Credential.from_keyhash(this.stakeKey().hash()),
-    );
+    return this.deriveAddressFromPath(0)
   }
 
   stakeAddress(): RewardAddress {
@@ -235,21 +236,9 @@ export class Wallet {
     return undefined;
   }
 
-  stakeKeyHash(address) {
-    const keyAddress = Address.from_bech32(address);
-    try {
-      const baseKeyAddress = BaseAddress.from_address(keyAddress)
-        .stake_cred()
-        .to_keyhash();
-      return baseKeyAddress.to_bytes();
-    } catch (e) {
-      // I want application to not crush, but don't care about the message
-    }
-    return undefined;
-  }
-
   async signData(address: string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
     if (this.type === WalletType.Ledger) {
+      address()
       const response: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb);
       const protectedHeaders: HeaderMap = HeaderMap.new();
       protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
@@ -318,7 +307,7 @@ export class Wallet {
     let paymentKeyHash: Uint8Array = this.paymentKeyHash(changeAddress);
     let paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
-    let stakeKeyHash = this.stakeKeyHash(changeAddress);
+    let stakeKeyHash = toStakeKeyHash(changeAddress);
     let stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
 
     // Process inputs and add corresponding witnesses
@@ -332,7 +321,7 @@ export class Wallet {
         paymentKeyHash = this.paymentKeyHash(utxo.payment_addr.bech32);
         paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
-        stakeKeyHash = this.stakeKeyHash(utxo.payment_addr.bech32);
+        stakeKeyHash = toStakeKeyHash(utxo.payment_addr.bech32);
         stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
 
         if (!keyHashes.includes(paymentkeyHex)) {
@@ -854,6 +843,51 @@ export class Wallet {
     } catch (e) {
       // console.log(e);
     }
+  }
+
+  async syncAddresses(knownAddresses: string[]): Promise<void> {
+     await this.db
+      .open()
+      .then(async db => {
+        const addressesTable = db.table('addresses');
+        if (!addressesTable) throw new Error('No Addresses table.');
+        const storedAddresses = await addressesTable.toArray()
+        const storedAddressSet = new Set(storedAddresses.map(addr => addr.address));
+        const missingAddresses = knownAddresses.filter(address => !storedAddressSet.has(address));
+        const resolvedAddress = this.resolvePathsForMissingAddresses(missingAddresses, 1000);
+        if (resolvedAddress?.length > 0) {
+          addressesTable.bulkPut(resolvedAddress)
+        }
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  resolvePathsForMissingAddresses(missingAddresses, maxAddresses) {
+    const resolvedAddresses = [];
+    for (let addressIndex = 0; addressIndex < maxAddresses; addressIndex++) {
+      const derivedAddress = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
+      if (missingAddresses.includes(derivedAddress)) {
+        resolvedAddresses.push({
+          address: derivedAddress,
+          path: `m/${purpose.hdwallet}'/1815'/0'/0/${addressIndex}`,
+          cred: Buffer.from(this.paymentKeyHash(derivedAddress)).toString('hex')
+        });
+      }
+      if (missingAddresses.length === resolvedAddresses.length) {
+        break;
+      }
+    }
+    return resolvedAddresses;
+  }
+
+  deriveAddressFromPath(addressIndex) {
+    return BaseAddress.new(
+      this.networkId(),
+      Credential.from_keyhash(this.pubKey(addressIndex).hash()),
+      Credential.from_keyhash(this.stakeKey().hash())
+    )
   }
 
   async syncAccountRewards(): Promise<void> {

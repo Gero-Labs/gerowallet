@@ -296,7 +296,7 @@ export default {
             this.spendingPassword,
             0,
             this.utxos,
-            this.addresses,
+            Object.keys(this.addresses),
             !this.isBT
           );
           console.log(response)

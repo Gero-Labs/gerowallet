@@ -41,7 +41,7 @@
               v-model="tooltip.enabled"
               top
               color="red"
-              v-if="loggedWallet.type === WalletType.Normal"
+              v-if="loggedWallet?.type === WalletType.Normal"
             >
               <template v-slot:activator="{ }">
                 <v-text-field
@@ -67,7 +67,7 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <div v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0" style="align-content: center;">
+            <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
@@ -160,7 +160,7 @@ export default {
             this.spendingPassword,
             0,
             this.utxos,
-            this.addresses,
+            Object.keys(this.addresses),
             !this.isBT
           );
           const signedTx = Transaction.new(
@@ -178,7 +178,7 @@ export default {
         }
         this.loading = false
       };
-      if (appWallet.type === WalletType.Normal) {
+      if (appWallet?.type === WalletType.Normal) {
         if (this.$refs.form.validate()) {
           if (appWallet.verifySpendingPassword(this.spendingPassword)) {
             await signAndReturnTx();
