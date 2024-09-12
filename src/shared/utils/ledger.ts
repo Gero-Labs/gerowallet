@@ -183,6 +183,7 @@ export default {
     wallet: Wallet,
     index: number = 0,
     txAuxiliaryData: AuxiliaryData,
+    addresses: any,
     usedUtxos?: any[],
     isUsb?: boolean
   ): Promise<TransactionWitnessSet> {
@@ -209,21 +210,17 @@ export default {
     for (let i: number = 0; i < inputs.len(); i++) {
       const input: TransactionInput = inputs.get(i);
       const foundUtxo = usedUtxos.find((utxo) => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index());
+      const address = addresses[foundUtxo.payment_addr.bech32]
+      console.log(address)
       ledgerInputs.push({
         txHashHex: Buffer.from(input.transaction_id().to_bytes()).toString('hex'),
         outputIndex: input.index(),
-        path: [
-          WalletTypePurpose.CIP1852,
-          CoinTypes.CARDANO,
-          HARDENED + index,
-          foundUtxo.addressing ? foundUtxo.addressing.type : 0,
-          foundUtxo.addressing ? foundUtxo.addressing.path : 0,
-        ],
+        path: hdPathToArray(address.path),
       });
     }
 
     // Process Outputs
-    const ledgerOutputs: TxOutput[] = this.outputsToLedger(txBody.outputs(), address, index, false);
+    const ledgerOutputs: TxOutput[] = this.outputsToLedger(txBody.outputs(), addresses, index, false);
 
     // Process Certificates
     const ledgerCertificates = this.processCertificates(txBody.certs(), keys, address, signingMode);
@@ -247,7 +244,7 @@ export default {
     const collateralInputs = this.processCollateralInputs(txBody, keys, signingMode);
 
     // Collateral Output
-    const collateralOutput = this.getCollateralOutput(txBody, address, index);
+    const collateralOutput = this.getCollateralOutput(txBody, addresses, index);
 
     // Reference Inputs
     const referenceInputs = this.processReferenceInputs(txBody);
@@ -561,11 +558,11 @@ export default {
     return collateralInputs;
   },
 
-  getCollateralOutput(txBody: TransactionBody, address: Address, index: number): any {
+  getCollateralOutput(txBody: TransactionBody, addresses, index: number): any {
     if (!txBody.collateral_return()) return null;
     const outputs = TransactionOutputs.new();
     outputs.add(txBody.collateral_return());
-    const [out] = this.outputsToLedger(outputs, address, index);
+    const [out] = this.outputsToLedger(outputs, addresses, index);
     return out;
   },
 
@@ -614,7 +611,7 @@ export default {
     const version: GetVersionResponse = await ledger.getVersion();
     if (!version) throw new Error('Cardano app is closed');
   },
-  outputsToLedger(outputs: TransactionOutputs, address, index, checkDatum = true): TxOutput[] {
+  outputsToLedger(outputs: TransactionOutputs, addresses, index, checkDatum = true): TxOutput[] {
     const ledgerOutputs = [];
     for (let i = 0; i < outputs.len(); i++) {
       const output: TransactionOutput = outputs.get(i);
@@ -651,7 +648,7 @@ export default {
 
       const outputAddress: string = Buffer.from(output.address().to_bytes()).toString('hex');
       const destination: TxOutputDestination =
-        output.address().to_bech32() === address.to_bech32()
+        addresses[output.address().to_bech32()]
           ? {
             type: TxOutputDestinationType.DEVICE_OWNED,
             params: {
@@ -702,7 +699,6 @@ export default {
     console.log(isUsb);
     if (isUsb) {
       transport = await this.connectViaUSB();
-      console.log(transport);
     } else {
       transport = await this.connectViaBT();
     }

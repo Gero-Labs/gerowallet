@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Receive" subtitle="Receive ADA by displaying your wallet address and QR code." :min-height="600" :height="600">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Receive" subtitle="Receive ADA by displaying your wallet address and QR code." :min-height="300" :height="600">
     <v-card-title>
       <v-list-item three-line class="px-0">
         <v-list-item-avatar size="160" rounded>
@@ -7,7 +7,10 @@
         </v-list-item-avatar>
         <v-list-item-content style="align-self: normal;">
           <v-list-item-title v-if=baseAddress style="max-width: -webkit-fill-available; font-size: 20px; display: inline-block; font-weight: bold; color: white;flex: 1 1 100%; overflow: visible; text-overflow: unset; white-space: normal; text-align: left;">
-            {{options.data}}<CopyButton small :value="baseAddress"></CopyButton>
+            <span @click="triggerCopy(baseAddress)" style="cursor: pointer">
+              {{options.data}}
+            </span>
+            <CopyButton :ref="el => setCopyButtonRef(el, baseAddress)" small :value="baseAddress"></CopyButton>
           </v-list-item-title>
           <v-list-item-subtitle style="text-align: left; font-size: 16px">
             Your wallet address
@@ -28,7 +31,10 @@
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-data-table :headers="[{text: 'Address', sortable: true, align: 'left', value: 'address'},]" :items="allAddresses" hide-default-footer hide-default-header>
         <template v-slot:[`item.address`]="{ item }">
-          {{ item.address | shortenStringWithEllipsis(40)  }}<CopyButton small :value="item.address"></CopyButton>
+          <v-btn text plain :ripple="false" style="text-transform: lowercase;" class="px-0" @click="triggerCopy(item.address)">
+            {{ item.address | shortenStringWithEllipsis(40)  }}
+          </v-btn>
+          <CopyButton :ref="el => setCopyButtonRef(el, item.address)" small :value="item.address"></CopyButton>
         </template>
       </v-data-table>
     </v-card-text>
@@ -80,18 +86,9 @@ export default {
         },
         imageOptions: {
           hideBackgroundDots: true,
-          imageSize: 0.4,
+          imageSize: 0.5,
           margin: 10,
           crossOrigin: 'anonymous',
-        },
-        dotsOptions: {
-          // color: '#41b583',
-          gradient: {
-            type: 'linear', // 'radial'
-            rotation: 0,
-            colorStops: [{ offset: 0, color: '#00c7f3' }, { offset: 1, color: '#00ffd1' }],
-          },
-          type: 'rounded',
         },
         backgroundOptions: {
           color: '#ffffff',
@@ -102,7 +99,6 @@ export default {
           // },
         },
         cornersSquareOptions: {
-          color: '#35495E',
           type: 'extra-rounded',
           // gradient: {
           //   type: 'linear', // 'radial'
@@ -111,23 +107,32 @@ export default {
           // },
         },
         cornersDotOptions: {
-          // color: '#35495E',
           type: 'dot',
-          gradient: {
-            type: 'linear', // 'radial'
-            rotation: 180,
-            colorStops: [{ offset: 0, color: '#00c7f3' }, { offset: 1, color: '#00ffd1' }],
-          },
         },
       };
     },
   },
   methods: {
+    setCopyButtonRef(el, address) {
+      if (!this.copyButtonRefs) {
+        this.copyButtonRefs = {};
+      }
+      if (el) {
+        this.copyButtonRefs[address] = el;
+      }
+    },
+    triggerCopy(address) {
+      const copyButtonRef = this.copyButtonRefs[address];
+      if (copyButtonRef && typeof copyButtonRef.copy === 'function') {
+        copyButtonRef.copy(); // Calling the `copy` method of CopyButton
+      }
+    },
     download() {
       this.qrCode.download({ extension: this.extension });
     },
   },
   data: () => ({
+    copyButtonRefs: {},
     showUsed: true,
     qrCode: undefined,
     extension: 'svg',
