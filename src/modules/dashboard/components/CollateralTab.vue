@@ -30,7 +30,7 @@
               large
               class="geroButton"
               style="color: black!important;"
-              :disabled="collateralCandidate.length === 0"
+              :disabled="collateralCandidate.length !== 0"
               @click="setCollateral"
             >
               Set Collateral
@@ -43,7 +43,7 @@
 </template>
 <script>
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { buildTx } from '@/shared/utils/builder';
 import {
   Address, Transaction,
@@ -57,6 +57,7 @@ import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '../../../shared/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import snackbar from '@/plugins/snackbar';
 
 export default {
   name: 'CollateralTab',
@@ -80,23 +81,33 @@ export default {
   filters,
   methods: {
     async setCollateral() {
-      // if (this.utxos && this.collateralCandidate.length === 0) {
-          const outputs = TransactionOutputs.new();
-          outputs.add(TransactionOutput.new(Address.from_bech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
-          const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-          this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-          const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
-          const tx = Transaction.new(txBody, TransactionWitnessSet.new())
-          const signaturesRes = await Messaging.sendToBackground({
-            method: METHOD.signTx,
-            data: { tx: tx.to_hex(), partialSign: true },
-          });
-          console.log(signaturesRes)
-      // }
+      const outputs = TransactionOutputs.new();
+      outputs.add(TransactionOutput.new(Address.from_bech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
+      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+      const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
+      const tx = Transaction.new(txBody, TransactionWitnessSet.new())
+      const res = await Messaging.sendToBackground({
+        method: METHOD.signTx,
+        data: { tx: tx.to_hex(), partialSign: true },
+      });
+      if (res.data) {
+        const signedTx = Transaction.new(
+          tx.body(),
+          TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
+          undefined // TODO Transaction metadata
+        );
+        const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+        console.log(txId)
+        snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`)
+        this.$emit('close')
+        //TODO Wait for Collateral to load up in UI
+      } else if (res.error) {
+        snackbar.setError(res.error.info)
+      }
     }
   },
   data: () => ({
-    transaction: '62b6f02a8be5ccdd40c1d89068f9f0de05dc2fe67c7eda52dc6c673b7ee309e6',
     headers: [
       {text: 'UTxO', sortable: false, value: 'utxo'},
       {text: 'Address', sortable: false, value: 'address'},
