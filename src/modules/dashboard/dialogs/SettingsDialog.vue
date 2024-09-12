@@ -1,20 +1,10 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings" :loading="loading">
-    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1">
-<!--      <v-text-field-->
-<!--        v-model="search"-->
-<!--        placeholder="Search"-->
-<!--        prepend-inner-icon="mdi-magnify"-->
-<!--        outlined-->
-<!--        dense-->
-<!--        hide-details-->
-<!--        class="mb-4"-->
-<!--        :disabled="true"-->
-<!--      />-->
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings" :loading="loading" :min-height="0" >
+    <v-card-title class="pa-0">
       <v-tabs
         v-model="tab"
         color="white"
-        class="v-tabs-border-bottom"
+        class="v-tabs-border-bottom mb-0"
         background-color="transparent"
       >
         <v-tab
@@ -25,6 +15,19 @@
           {{ tab.label }}
         </v-tab>
       </v-tabs>
+    </v-card-title>
+    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1; min-height: 0; height: 608px">
+<!--      <v-text-field-->
+<!--        v-model="search"-->
+<!--        placeholder="Search"-->
+<!--        prepend-inner-icon="mdi-magnify"-->
+<!--        outlined-->
+<!--        dense-->
+<!--        hide-details-->
+<!--        class="mb-4"-->
+<!--        :disabled="true"-->
+<!--      />-->
+
       <v-tabs-items v-model="tab" class="transparent">
         <ProfileTab />
 <!--        <PasswordTab />-->

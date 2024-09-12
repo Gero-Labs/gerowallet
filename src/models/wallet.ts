@@ -965,7 +965,7 @@ export class Wallet {
       console.log(`Domain ${domain} added successfully.`);
 
     } catch (err) {
-      console.error(`Failed to add connected dapp: ${err.stack || err}`);
+      console.error(`Failed to add connected dapp: ${err}`);
     }
   }
 }
