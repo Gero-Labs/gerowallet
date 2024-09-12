@@ -14,25 +14,15 @@ import {
   Credential, TransactionBody,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
+  TransactionOutputs,
   TransactionUnspentOutputs,
   UnitInterval,
-  Value, Withdrawals, PublicKey, Vkey, Ed25519Signature, Vkeywitness,
+  Value, Withdrawals,
 
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
-import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
-import {
-  AlgorithmId,
-  CBORValue, COSEKey,
-  COSESign1Builder,
-  HeaderMap,
-  Headers, Int, KeyType,
-  Label,
-  ProtectedHeaderMap,
-} from '@emurgo/cardano-message-signing-browser';
-import { toHexBuffer, toHexString } from '@/shared/utils/converter';
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));

@@ -109,8 +109,7 @@ import rules from '@/shared/utils/rules';
 import {
   BigNum,
   decode_metadatum_to_json_str,
-  Transaction, TransactionWitnessSet,
-  Value,
+  Transaction, Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { mapState } from 'pinia';
 import { Buffer } from 'buffer';

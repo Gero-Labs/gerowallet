@@ -43,12 +43,12 @@ import {
   TransactionInput,
   TransactionInputs,
   TransactionOutput,
+  TransactionOutputs,
   TransactionWitnessSet,
   Vkey,
   Vkeywitness,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
 import { Wallet } from '@/models/wallet';
 import networks from '@/shared/utils/networks';
 import { appWallet } from '@/store';

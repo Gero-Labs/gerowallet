@@ -86,7 +86,7 @@ import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
 import { appWallet, useStore } from '@/store';
-import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
+import { Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/shared/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';

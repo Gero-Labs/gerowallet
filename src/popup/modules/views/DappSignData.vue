@@ -119,7 +119,7 @@ export default {
           console.log(res)
           verifyData(res, address, payload)
           await this.controller.returnData({ data: res, error: undefined })
-          // window.close();
+          window.close();
         } catch (e) {
           snackbar.setError(e)
           console.log(e);

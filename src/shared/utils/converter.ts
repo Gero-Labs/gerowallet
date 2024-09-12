@@ -25,12 +25,12 @@ import {
   AlgorithmId,
   BigNum as BigNum2,
   Int as Int2,
-  CBORValue, COSEKey,
+  CBORValue,
   COSESign1Builder,
+  Headers,
   HeaderMap,
-  Headers, KeyType,
   Label,
-  ProtectedHeaderMap, COSESign1,
+  ProtectedHeaderMap, KeyType, COSEKey, COSESign1,
 } from '@emurgo/cardano-message-signing-browser';
 
 export const toAddress = bech32 => Address.from_bech32(bech32);
@@ -293,29 +293,24 @@ export function addressCredentials(address: string) {
 }
 
 export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
-  console.log('createSignDataBuilder')
   const free: any[] = [];
-  const protectedHeaders: HeaderMap = HeaderMap.new();
+  const protectedHeaders = HeaderMap.new();
   free.push(protectedHeaders);
-  const labelAlgoid: Label = Label.from_algorithm_id(AlgorithmId.EdDSA);
+  const labelAlgoid = Label.from_algorithm_id(AlgorithmId.EdDSA);
   free.push(labelAlgoid);
-  const labelAddress: Label = Label.new_text("address");
+  const labelAddress = Label.new_text("address");
   free.push(labelAddress);
-  const valueAddress: CBORValue = CBORValue.new_bytes(addressBytes);
+  const valueAddress = CBORValue.new_bytes(addressBytes);
   free.push(valueAddress);
   protectedHeaders.set_algorithm_id(labelAlgoid);
   protectedHeaders.set_header(labelAddress, valueAddress);
-  const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
+  const protectedSerialized = ProtectedHeaderMap.new(protectedHeaders);
   free.push(protectedSerialized);
-  const unprotectedHeaders: HeaderMap = HeaderMap.new();
+  const unprotectedHeaders = HeaderMap.new();
   free.push(unprotectedHeaders);
-  const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
+  const headers = Headers.new(protectedSerialized, unprotectedHeaders);
   free.push(headers);
-  console.log('protectedHeaders', protectedHeaders.to_bytes());
-  console.log('unprotectedHeaders', unprotectedHeaders.to_bytes());
-  console.log('headers', headers.to_bytes())
-  console.log('payload', toHexBuffer(payload2))
-  const builder2:COSESign1Builder = COSESign1Builder.new(headers, toHexBuffer(payload2), false);
+  const builder2 = COSESign1Builder.new(headers, toHexBuffer(payload2), false);
   if (hashed) {
     builder2.hash_payload();
   }

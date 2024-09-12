@@ -22,7 +22,6 @@ import {
   TARGET,
 } from './config';
 import networks from '@/shared/utils/networks';
-import { TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
 
 await bringInitBackground({
@@ -229,7 +228,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 
 app.add(METHOD.getUtxos, (request, sendResponse) => {
   getUtxos(request.data.amount, request.data.paginate)
-    .then((utxos: TransactionUnspentOutput[]) => {
+    .then((utxos) => {
       let res: string[] | null;
       if (utxos) {
         // LEGACY support => TODO change in the future
