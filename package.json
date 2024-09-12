@@ -20,7 +20,7 @@
     "@bringweb3/chrome-extension-kit": "^1.0.12",
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.3",
     "@emurgo/cardano-message-signing-browser": "^1.0.1",
-    "@emurgo/cardano-serialization-lib-browser": "^12.0.1",
+    "@emurgo/cardano-serialization-lib-browser": "^12.1.0",
     "@keystonehq/animated-qr": "^0.10.0",
     "@keystonehq/keystone-sdk": "^0.8.0",
     "@ledgerhq/hw-transport-web-ble": "^6.29.2",
@@ -67,6 +67,7 @@
   "devDependencies": {
     "@babel/core": "^7.22.5",
     "@babel/eslint-parser": "^7.22.5",
+    "@babel/preset-env": "^7.25.4",
     "@types/chrome": "^0.0.268",
     "@types/howler": "^2.2.11",
     "@types/lodash": "^4.17.7",

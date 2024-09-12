@@ -197,10 +197,10 @@ import { assetsToValue, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import rules from '@/shared/utils/rules';
 import { Network, WalletType } from '@/models/types';
-import { TransactionOutputs } from '@emurgo/cardano-serialization-lib-browser/cardano_serialization_lib';
 import {
   Address, Transaction,
   TransactionOutput,
+  TransactionOutputs,
   TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
