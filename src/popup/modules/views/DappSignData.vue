@@ -85,6 +85,7 @@ import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { mapState } from 'pinia';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import { verifyData } from '@/shared/utils/converter';
 
 export default {
   name: 'DappSignData',
@@ -111,12 +112,13 @@ export default {
         this.loading = true
         try {
           const address = this.request.data.address
-          const payload = this.request.data.payload
           console.log('address', address)
+          const payload = this.request.data.payload
           console.log('payload', payload)
-          const response = await appWallet.signData(address, payload, this.spendingPassword, 0, !this.isBT)
-          console.log(response)
-          await this.controller.returnData({ data: response.witnesses, error: undefined })
+          const res = await appWallet.signData(address, payload, this.spendingPassword, 0, !this.isBT)
+          console.log(res)
+          verifyData(res, address, payload)
+          await this.controller.returnData({ data: res, error: undefined })
           // window.close();
         } catch (e) {
           snackbar.setError(e)
@@ -138,13 +140,7 @@ export default {
       }
     },
     async init() {
-      // const request = await this.controller.requestData();
-      const request = {
-        data: {
-          payload: '7b22707572706f7365223a224b6f696f73204163636f756e7420566572696669636174696f6e222c226163636f756e74223a2265313238636238366636626133316461363439646639346233663535393565396435336632623661373163303535643166353938643061663735222c226e6f6e6365223a313732363034373131333532367d',
-          address: 'e128cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75'
-        }
-      }
+      const request = await this.controller.requestData();
       if (request?.data?.payload) {
         this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')
       }
