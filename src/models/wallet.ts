@@ -59,7 +59,13 @@ import trezor from '@/shared/utils/trezor';
 import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
-import { toStakeKeyHash } from '@/shared/utils/converter';
+import {
+  createCOSEKeyHex,
+  createSignDataBuilder, safeFreeCSLObject,
+  toHexArray,
+  toHexString,
+  toStakeKeyHash,
+} from '@/shared/utils/converter';
 
 const blake2b = require('blake2b');
 
@@ -238,23 +244,23 @@ export class Wallet {
 
   async signData(address: string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
     if (this.type === WalletType.Ledger) {
-      address()
       const response: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb);
-      const protectedHeaders: HeaderMap = HeaderMap.new();
-      protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-      protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(response.addressFieldHex, 'hex')));
-      const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
-      const unprotectedHeaders: HeaderMap = HeaderMap.new();
-      const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
-      const builder: COSESign1Builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
-      const coseSign1: COSESign1 = builder.build(Buffer.from(response.signatureHex, 'hex'));
-      const key: COSEKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
-      key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
-      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(Buffer.from(response.signingPublicKeyHex, 'hex'))); // x (-2) set to public key
+      console.log('response', response)
+      console.log('addressBytes', toHexArray(response.addressFieldHex))
+      console.log('payload', payload)
+      console.log('hashed', payload.length > 99)
+      const builder2: COSESign1Builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload, payload.length > 99);
+      console.log('signedSigStructure', toHexArray(response.signatureHex))
+      const coseSign1: COSESign1 = builder2.build(toHexArray(response.signatureHex));
+      console.log('coseSign1', coseSign1.signature())
+      console.log('coseSign1',coseSign1.to_bytes())
+      const signatureHex = toHexString(coseSign1.to_bytes());
+      const keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
+      safeFreeCSLObject(builder2);
+      safeFreeCSLObject(coseSign1);
       return {
-        signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
-        key: Buffer.from(key.to_bytes()).toString('hex'),
+        signature: signatureHex,
+        key: keyHex
       };
     } else {
       const keyHash: string = chrome.storage ? await extractKeyHash(address) :
@@ -308,7 +314,7 @@ export class Wallet {
     let paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
     let stakeKeyHash = toStakeKeyHash(changeAddress);
-    let stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
+    let stakeKeyHex = stakeKeyHash.to_hex();
 
     // Process inputs and add corresponding witnesses
     for (let i = 0; i < txBody.inputs().len(); i++) {
@@ -322,7 +328,7 @@ export class Wallet {
         paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
         stakeKeyHash = toStakeKeyHash(utxo.payment_addr.bech32);
-        stakeKeyHex = Buffer.from(stakeKeyHash).toString('hex');
+        stakeKeyHex = stakeKeyHash.to_hex()
 
         if (!keyHashes.includes(paymentkeyHex)) {
           keyHashes.push(paymentkeyHex);
