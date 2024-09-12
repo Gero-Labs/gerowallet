@@ -39,20 +39,6 @@ import db from '@/db';
 import { chunkArray } from 'array-chunk-by-size';
 import { extractKeyHash } from '@/chrome/extension';
 import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
-import {
-  AlgorithmId,
-  BigNum,
-  CBORValue,
-  COSEKey,
-  COSESign1,
-  COSESign1Builder,
-  HeaderMap,
-  Headers,
-  Int,
-  KeyType,
-  Label,
-  ProtectedHeaderMap,
-} from '@emurgo/cardano-message-signing-browser';
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
@@ -61,12 +47,10 @@ import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
 import {
   createCOSEKeyHex,
-  createSignDataBuilder, safeFreeCSLObject,
-  toHexArray,
-  toHexString,
+  createSignDataBuilder,
+  safeFreeCSLObject, toHexArray, toHexString,
   toStakeKeyHash,
 } from '@/shared/utils/converter';
-
 const blake2b = require('blake2b');
 
 export class Wallet {
@@ -243,60 +227,49 @@ export class Wallet {
   }
 
   async signData(address: string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
-    if (this.type === WalletType.Ledger) {
-      const response: SignedMessageData = await ledger.signData(address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb);
-      console.log('response', response)
-      console.log('addressBytes', toHexArray(response.addressFieldHex))
-      console.log('payload', payload)
-      console.log('hashed', payload.length > 99)
-      const builder2: COSESign1Builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload, payload.length > 99);
-      console.log('signedSigStructure', toHexArray(response.signatureHex))
-      const coseSign1: COSESign1 = builder2.build(toHexArray(response.signatureHex));
-      console.log('coseSign1', coseSign1.signature())
-      console.log('coseSign1',coseSign1.to_bytes())
+    let signatureHex: string, keyHex: string;
+
+    const buildAndSignData = (builder: any, signingData: Uint8Array, accountKey: PrivateKey | undefined) => {
+      const signedData = accountKey ? accountKey.sign(signingData).to_bytes() : signingData;
+      const coseSign1 = builder.build(signedData);
       const signatureHex = toHexString(coseSign1.to_bytes());
-      const keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
-      safeFreeCSLObject(builder2);
+      safeFreeCSLObject(builder);
       safeFreeCSLObject(coseSign1);
-      return {
-        signature: signatureHex,
-        key: keyHex
-      };
+      return signatureHex;
+    };
+
+    if (this.type === WalletType.Ledger) {
+      const response: SignedMessageData = await ledger.signData(
+        address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb
+      );
+
+      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload, payload.length > 99);
+      signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
+      keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
+
     } else {
-      const keyHash: string = chrome.storage ? await extractKeyHash(address) :
-        BaseAddress.from_address(
-          Address.from_bech32(Buffer.from(address, 'hex').toString()),
+      const keyHash: string = chrome.storage
+        ? await extractKeyHash(address)
+        : BaseAddress.from_address(
+          Address.from_bech32(Buffer.from(address, 'hex').toString())
         ).payment_cred().to_keyhash().to_bech32('addr_vkh');
+
       const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
-      let { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
+      const { paymentKey, stakeKey } = this.requestAccountKey(password, accountIndex);
       const accountKey: PrivateKey = prefix === 'addr_vkh' ? paymentKey : stakeKey;
       const publicKey: PublicKey = accountKey.to_public();
-      if (keyHash !== publicKey.hash().to_bech32(prefix))
+
+      if (keyHash !== publicKey.hash().to_bech32(prefix)) {
         throw DataSignError.ProofGeneration;
-      const protectedHeaders: HeaderMap = HeaderMap.new();
-      protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-      // protectedHeaders.set_key_id(publicKey.as_bytes()); // Removed to adhere to CIP-30
-      protectedHeaders.set_header(Label.new_text('address'), CBORValue.new_bytes(Buffer.from(address, 'hex')));
-      const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
-      const unprotectedHeaders: HeaderMap = HeaderMap.new();
-      const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
-      const builder: COSESign1Builder = COSESign1Builder.new(headers, Buffer.from(payload, 'hex'), false);
-      const toSign: Uint8Array = builder.make_data_to_sign().to_bytes();
-      const signedSigStruc: Uint8Array = accountKey.sign(toSign).to_bytes();
-      const coseSign1: COSESign1 = builder.build(signedSigStruc);
-      stakeKey.free();
-      stakeKey = null;
-      paymentKey.free();
-      paymentKey = null;
-      const key: COSEKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
-      key.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
-      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('1'))), CBORValue.new_int(Int.new_i32(6))); // crv (-1) set to Ed25519 (6)
-      key.set_header(Label.new_int(Int.new_negative(BigNum.from_str('2'))), CBORValue.new_bytes(publicKey.as_bytes())); // x (-2) set to public key
-      return {
-        signature: Buffer.from(coseSign1.to_bytes()).toString('hex'),
-        key: Buffer.from(key.to_bytes()).toString('hex'),
-      };
+      }
+
+      const builder = createSignDataBuilder(toHexArray(address), payload, false);
+      const toSign = builder.make_data_to_sign().to_bytes();
+      signatureHex = buildAndSignData(builder, toSign, accountKey);
+      keyHex = createCOSEKeyHex(publicKey.as_bytes());
     }
+
+    return { signature: signatureHex, key: keyHex };
   }
 
   async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{witnesses: string}> {
