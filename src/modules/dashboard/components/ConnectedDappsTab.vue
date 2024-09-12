@@ -1,27 +1,29 @@
 <template>
   <v-tab-item>
     <v-card class="transparent">
-      <v-data-table
-        dense
-        class="transparent"
-        :items="connectedDapps"
-        :headers="headers"
-        hide-default-footer
-      >
-        <template v-slot:[`item.domain`]="{ item }">
-          <v-avatar size="16">
-            <v-img :src="`https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${item.domain}&size=16`" contain></v-img>
-          </v-avatar>&nbsp;
-          {{item.domain}}
-        </template>
-        <template v-slot:[`item.actions`]="{ item }">
-          <v-btn small icon @click="confirmRemove(item)">
-            <v-icon small color="red">
-              mdi-trash-can
-            </v-icon>
-          </v-btn>
-        </template>
-      </v-data-table>
+      <v-card-text class="px-0">
+        <v-data-table
+          dense
+          class="transparent"
+          :items="connectedDapps"
+          :headers="headers"
+          hide-default-footer
+        >
+          <template v-slot:[`item.domain`]="{ item }">
+            <v-avatar size="16">
+              <v-img :src="`https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${item.domain}&size=16`" contain></v-img>
+            </v-avatar>&nbsp;
+            {{item.domain}}
+          </template>
+          <template v-slot:[`item.actions`]="{ item }">
+            <v-btn small icon @click="confirmRemove(item)">
+              <v-icon small color="red">
+                mdi-trash-can
+              </v-icon>
+            </v-btn>
+          </template>
+        </v-data-table>
+      </v-card-text>
     </v-card>
     <v-dialog
       v-model="confirmRemoveDialog"
