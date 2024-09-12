@@ -1,6 +1,6 @@
 <template>
   <div class="send-recipient-details-container">
-    <div class="item-container pb-12">
+    <div class="item-container pb-6">
       <Select
         :value="sendData.selectedWallet"
         :items="[sendData.selectedWallet]"
@@ -19,6 +19,7 @@
         :rules="[rules.required, rules.paymentAddress(loggedWallet.network !== Network.MAINNET)]"
         class="recipient-address"
         @input="$emit('updateRecipientAddress', $event)"
+        hide-details
       ></v-textarea>
     </div>
   </div>
@@ -58,7 +59,7 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 496px;
+  padding: 16px;
 
   & .item-container {
     width: 60%;
@@ -74,5 +75,6 @@ export default {
       resize: none;
     }
   }
+
 }
 </style>

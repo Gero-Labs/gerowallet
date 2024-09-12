@@ -160,7 +160,7 @@ export default {
             this.spendingPassword,
             0,
             this.utxos,
-            Object.keys(this.addresses),
+            this.addresses,
             !this.isBT
           );
           const signedTx = Transaction.new(

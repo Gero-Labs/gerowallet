@@ -112,7 +112,6 @@ import {
   Transaction, Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { mapState } from 'pinia';
-import { Buffer } from 'buffer';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
@@ -295,7 +294,7 @@ export default {
             this.spendingPassword,
             0,
             this.utxos,
-            Object.keys(this.addresses),
+            this.addresses,
             !this.isBT
           );
           console.log(response)

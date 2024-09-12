@@ -68,10 +68,6 @@ export default {
   opacity: 0.3;
 }
 
-.no-opacity.v-btn--plain:not(.v-btn--active):not(.v-btn--loading):not(:focus):not(:hover) .v-btn__content {
-  opacity: 1;
-}
-
 @keyframes metronome-example {
   from {
     transform: scale(.5);

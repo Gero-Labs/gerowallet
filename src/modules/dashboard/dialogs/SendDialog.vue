@@ -1,31 +1,33 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" :loading="txSubmitLoading"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
               :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
-    <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
-      <v-stepper-header>
-        <template v-for="(item, index) in steps">
-          <div
-            class="custom-step"
-            :key="item.name"
-            :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
-          >
-            <div class="icon-container">
-              <v-icon
-                class="step-icon"
-                :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
-                size="20"
-              >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
-              </v-icon
-              >
+    <v-card-title style="display: block;" class="py-0">
+      <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
+        <v-stepper-header>
+          <template v-for="(item, index) in steps">
+            <div
+              class="custom-step"
+              :key="item.name"
+              :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
+            >
+              <div class="icon-container">
+                <v-icon
+                  class="step-icon"
+                  :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                  size="20"
+                >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
+                </v-icon
+                >
+              </div>
+              <span class="step-label">{{ item.label }}</span>
             </div>
-            <span class="step-label">{{ item.label }}</span>
-          </div>
-          <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
-               v-if="index < steps.length - 1"></div>
-        </template>
-      </v-stepper-header>
-    </v-stepper>
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
+            <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+                 v-if="index < steps.length - 1"></div>
+          </template>
+        </v-stepper-header>
+      </v-stepper>
+    </v-card-title>
+    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;">
       <CustomStepper :currentStep="currentStep" :steps="steps">
         <v-stepper-content step="1">
           <SendRecipientDetailsStep
@@ -122,7 +124,7 @@
         </div>
       </v-overlay>
     </v-card-text>
-    <v-card-actions class="text-center justify-center" style="flex-flow: column;">
+    <v-card-actions class="text-center justify-center" :style="loggedWallet?.type === WalletType.Ledger ? { display: 'block', height: '96px', alignContent: 'end'} : { flexFlow: 'column'}">
       <div class="" v-if="currentStep === 3">
         <v-tooltip
           v-model="tooltip.enabled"
@@ -156,7 +158,7 @@
           </template>
           <span>{{ tooltip.text }}</span>
         </v-tooltip>
-        <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-6" style="align-content: center;">
+        <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
             <USBBluetoothSwitch v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
@@ -390,7 +392,7 @@ export default {
             this.spendingPassword,
             0,
             this.utxos,
-            Object.keys(this.addresses),
+            this.addresses,
             !this.isBT
           );
           const signedTx = Transaction.new(
@@ -571,7 +573,6 @@ export default {
   }
 
 }
-
 .stepper-container {
   background-color: transparent;
 
@@ -629,5 +630,8 @@ export default {
       background-color: #00dff3;
     }
   }
+}
+.v-stepper__content {
+  padding: 0;
 }
 </style>
