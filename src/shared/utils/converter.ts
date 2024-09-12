@@ -8,8 +8,7 @@ import {
   ByronAddress,
   ConstrPlutusData,
   Credential,
-  EnterpriseAddress,
-  MultiAsset,
+  EnterpriseAddress, MultiAsset,
   PlutusData,
   PlutusList,
   PlutusMap, PlutusMapValues, PointerAddress, RewardAddress,
@@ -22,6 +21,17 @@ import {
 } from '@emurgo/cardano-serialization-lib-browser';
 import { blake2b } from 'blakejs';
 import { bech32 } from 'bech32';
+import {
+  AlgorithmId,
+  BigNum as BigNum2,
+  Int as Int2,
+  CBORValue, COSEKey,
+  COSESign1Builder,
+  HeaderMap,
+  Headers, KeyType,
+  Label,
+  ProtectedHeaderMap, COSESign1,
+} from '@emurgo/cardano-message-signing-browser';
 
 export const toAddress = bech32 => Address.from_bech32(bech32);
 
@@ -210,10 +220,10 @@ export function bytesToIp(bytes) {
   return null;
 }
 
-export const toHexArray = (hex2) => Uint8Array.from(toHexBuffer(hex2));
-export const toHexBuffer = (hex2) => Buffer.from(byteaToHex(hex2), "hex")
-export const byteaToHex = (bytea) => bytea.startsWith("\\x") ? bytea.substring(2) : bytea;
-export const toHexString = (arr) => arr ? Buffer.from(arr).toString("hex") : "";
+export const toHexArray = (hex2: string): Uint8Array => Uint8Array.from(toHexBuffer(hex2));
+export const toHexBuffer = (hex2: string): Buffer => Buffer.from(byteaToHex(hex2), "hex")
+export const byteaToHex = (bytea: string): string => bytea.startsWith("\\x") ? bytea.substring(2) : bytea;
+export const toHexString = (arr: Uint8Array): string => arr ? Buffer.from(arr).toString("hex") : "";
 export function hdPathToArray(path: string): number[] {
   // Remove the 'm/' part of the path and split by '/'
   const parts = path.replace('m/', '').split('/');
@@ -231,11 +241,10 @@ export function hdPathToArray(path: string): number[] {
 }
 
 export function stakeCredential(address: string): Credential {
-  const keyAddress = Address.from_bech32(address);
+  const keyAddress: Address = Address.from_bech32(address);
   try {
-    const baseKeyAddress = BaseAddress.from_address(keyAddress)
+    return BaseAddress.from_address(keyAddress)
       .stake_cred();
-    return baseKeyAddress.to_bytes();
   } catch (e) {
     // I want application to not crush, but don't care about the message
   }
@@ -251,32 +260,28 @@ export function toStakeKeyHash(address: string) {
 }
 
 export function paymentCredentials(address: string) {
-  const keyAddress = Address.from_bech32(address);
+  const keyAddress: Address = Address.from_bech32(address);
   try {
-    const baseKeyAddress = BaseAddress.from_address(keyAddress)
+    return BaseAddress.from_address(keyAddress)
       .payment_cred()
-    return baseKeyAddress.to_bytes();
   } catch (e) {
     // I want application to not crush, but don't care about the message
   }
   try {
-    const enterpriseKeyAddress = EnterpriseAddress.from_address(keyAddress)
+    return EnterpriseAddress.from_address(keyAddress)
       .payment_cred()
-    return enterpriseKeyAddress.to_bytes();
   } catch (e) {
     // I want application to not crush, but don't care about the message
   }
   try {
-    const pointerKeyAddress = PointerAddress.from_address(keyAddress)
+    return PointerAddress.from_address(keyAddress)
       .payment_cred()
-    return pointerKeyAddress.to_bytes();
   } catch (e) {
     // I want application to not crush, but don't care about the message
   }
   try {
-    const rewardKeyAddress = RewardAddress.from_address(keyAddress)
+    RewardAddress.from_address(keyAddress)
       .payment_cred()
-    return rewardKeyAddress.to_bytes();
   } catch (e) {
     // I want application to not crush, but don't care about the message
   }
@@ -286,3 +291,97 @@ export function paymentCredentials(address: string) {
 export function addressCredentials(address: string) {
   return { payment: paymentCredentials(address), stake: stakeCredential(address) }
 }
+
+export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
+  console.log('createSignDataBuilder')
+  const free: any[] = [];
+  const protectedHeaders: HeaderMap = HeaderMap.new();
+  free.push(protectedHeaders);
+  const labelAlgoid: Label = Label.from_algorithm_id(AlgorithmId.EdDSA);
+  free.push(labelAlgoid);
+  const labelAddress: Label = Label.new_text("address");
+  free.push(labelAddress);
+  const valueAddress: CBORValue = CBORValue.new_bytes(addressBytes);
+  free.push(valueAddress);
+  protectedHeaders.set_algorithm_id(labelAlgoid);
+  protectedHeaders.set_header(labelAddress, valueAddress);
+  const protectedSerialized: ProtectedHeaderMap = ProtectedHeaderMap.new(protectedHeaders);
+  free.push(protectedSerialized);
+  const unprotectedHeaders: HeaderMap = HeaderMap.new();
+  free.push(unprotectedHeaders);
+  const headers: Headers = Headers.new(protectedSerialized, unprotectedHeaders);
+  free.push(headers);
+  console.log('protectedHeaders', protectedHeaders.to_bytes());
+  console.log('unprotectedHeaders', unprotectedHeaders.to_bytes());
+  console.log('headers', headers.to_bytes())
+  console.log('payload', toHexBuffer(payload2))
+  const builder2:COSESign1Builder = COSESign1Builder.new(headers, toHexBuffer(payload2), false);
+  if (hashed) {
+    builder2.hash_payload();
+  }
+  freeCSLObjects(free);
+  return builder2;
+};
+
+export const createCOSEKeyHex = (pubKeyBytes) => {
+  const free = [];
+  const okpKey = Label.from_key_type(KeyType.OKP);
+  free.push(okpKey);
+  const key3 = COSEKey.new(okpKey);
+  free.push(key3);
+  const algId = Label.from_algorithm_id(AlgorithmId.EdDSA);
+  free.push(algId);
+  const big1 = BigNum2.from_str("1");
+  free.push(big1);
+  const big2 = BigNum2.from_str("2");
+  free.push(big2);
+  const neg1 = Int2.new_negative(big1);
+  free.push(neg1);
+  const neg22 = Int2.new_negative(big2);
+  free.push(neg22);
+  const labelNeg1 = Label.new_int(neg1);
+  free.push(labelNeg1);
+  const labelNeg2 = Label.new_int(neg22);
+  free.push(labelNeg2);
+  const int6 = Int2.new_i32(6);
+  free.push(int6);
+  const cborInt6 = CBORValue.new_int(int6);
+  free.push(cborInt6);
+  const cborPubKey = CBORValue.new_bytes(pubKeyBytes);
+  free.push(cborPubKey);
+  key3.set_algorithm_id(algId);
+  key3.set_header(labelNeg1, cborInt6);
+  key3.set_header(labelNeg2, cborPubKey);
+  const keyHex = toHexString(key3.to_bytes());
+  freeCSLObjects(free);
+  return keyHex;
+};
+
+export function verifyData(data: { key: string; signature: string }, address2: string, payload2: string) {
+  const coseSign1_verify = COSESign1.from_bytes(toHexBuffer(data.signature));
+  const signedSigStruc_verify = coseSign1_verify.signed_data();
+  const isSame = toHexString(signedSigStruc_verify.payload()) === payload2;
+  console.log(payload2)
+  console.warn("verifyData: isSame:", isSame);
+  return isSame;
+}
+
+export const safeFreeCSLObject = (obj2) => {
+  if (obj2 && obj2.free) {
+    if (obj2.__wbg_ptr > 0) {
+      obj2.free();
+    }
+  }
+};
+
+const freeCSLObjects = (free) => {
+  let _a, _b;
+  for (let k2 = free.length - 1; k2 >= 0; k2--) {
+    try {
+      (_b = (_a = free[k2]) == null ? void 0 : _a.free) == null ? void 0 : _b.call(_a);
+      // eslint-disable-next-line no-empty
+    } catch (e) {
+    }
+  }
+  free.length = 0;
+};

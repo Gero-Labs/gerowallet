@@ -288,7 +288,7 @@ export default {
         try {
           const res = await appWallet.api.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
           const messageToSign = res.messageToSign
-          const res2 = await wallet.signData(stringToHex(this.baseAddress), stringToHex(messageToSign), this.spendingPassword, 0)
+          const res2 = await wallet.signData(stringToHex(this.baseAddress), stringToHex(messageToSign), this.spendingPassword, 0, false)
           const status = await appWallet.api.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, res2.signature, res2.key)
           if (status === 202) {
             snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
