@@ -157,12 +157,14 @@ export const getNetwork = async (): Promise<any> => {
 };
 
 export const getUsedAddresses = async (paginate?: Paginate): Promise<any> => {
-  let addresses: string[] = await getStorage(STORAGE.addresses);
-  if (Array.isArray(addresses)) {
-    addresses = addresses.map(address => Address.from_bech32(address).to_hex())
-    return paginateArray(addresses, paginate);
+  const addresses: {} = await getStorage(STORAGE.addresses);
+  let res = []
+  const addressesArray = Object.keys(addresses)
+  if (Array.isArray(addressesArray)) {
+    const addressesArrayHex = Object.keys(addresses).map(address => Address.from_bech32(address).to_hex())
+    res = paginateArray(addressesArrayHex, paginate);
   }
-  return []
+  return res
 };
 
 function paginateArray(array: any[], paginate?: Paginate): any[] {

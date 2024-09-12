@@ -272,7 +272,9 @@ export class Wallet {
     return { signature: signatureHex, key: keyHex };
   }
 
-  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{witnesses: string}> {
+  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{
+    witnesses: string
+  }> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
     const tx: Transaction = Transaction.from_hex(txCbor)
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
@@ -310,7 +312,7 @@ export class Wallet {
       }
     }
 
-    const paymentKeyHashes = addresses.map(address => this.paymentKeyHash(address))
+    const paymentKeyHashes = Object.keys(addresses).map(address => this.paymentKeyHash(address))
       .filter((hash) => !!hash)
       .map((keyHash) => Buffer.from(keyHash).toString('hex'));
 
@@ -336,7 +338,7 @@ export class Wallet {
     // Ledger Signing Logic
     if (this.type === WalletType.Ledger) {
       console.log(tx.to_json())
-      const wit: TransactionWitnessSet = await ledger.txToLedger(txBody, this, 0, null, utxos, isUsb);
+      const wit: TransactionWitnessSet = await ledger.txToLedger(txBody, this, 0, null, addresses, utxos, isUsb);
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') };
     }
 
@@ -825,7 +827,7 @@ export class Wallet {
   }
 
   async syncAddresses(knownAddresses: string[]): Promise<void> {
-     await this.db
+    await this.db
       .open()
       .then(async db => {
         const addressesTable = db.table('addresses');
@@ -943,15 +945,27 @@ export class Wallet {
   }
 
   async addConnectedDapp(domain: string) {
-    await this.db
-      .open()
-      .then(db => {
-        const dappsTable = db.table('connected_dapps');
-        if (!dappsTable) throw new Error('No Connected Dapps Table.');
-        return dappsTable.put({ domain: domain, time: new Date().getTime() });
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
+    try {
+      const db = await this.db.open();
+      const dappsTable = db.table('connected_dapps');
+
+      if (!dappsTable) throw new Error('No Connected Dapps Table.');
+
+      // Check if the domain already exists in the table
+      const existingDapp = await dappsTable.get({ domain: domain });
+
+      // If the domain already exists, we ignore the insertion
+      if (existingDapp) {
+        console.log(`Domain ${domain} already exists, ignoring.`);
+        return; // Exit the function if the domain already exists
+      }
+
+      // If domain doesn't exist, insert it
+      await dappsTable.put({ domain: domain, time: new Date().getTime() });
+      console.log(`Domain ${domain} added successfully.`);
+
+    } catch (err) {
+      console.error(`Failed to add connected dapp: ${err.stack || err}`);
+    }
   }
 }
