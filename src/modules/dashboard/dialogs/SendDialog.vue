@@ -412,12 +412,10 @@ export default {
         this.txSubmitLoading = false
       };
       if (appWallet?.type === WalletType.Normal) {
-        if (this.$refs.form.validate()) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
+        if (appWallet.verifySpendingPassword(this.spendingPassword)) {
+          await signAndReturnTx();
+        } else {
+          this.enableToolTip();
         }
       } else if (appWallet?.type === WalletType.Keystone) {
         if (this.qrCode) {

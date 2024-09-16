@@ -401,14 +401,25 @@ export default {
           method: METHOD.signTx,
           data: { tx: txCbor, partialSign },
         });
-        const signRes = await appWallet.api.swapSign(signaturesRes.data, txCbor)
-        const txId = await appWallet.submitTx(signRes.cbor);
-        snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!`)
-        console.log(txId)
+        if (signaturesRes.error) {
+          snackbar.setError(signaturesRes.error.info)
+        } else {
+          console.log(signaturesRes)
+          const signRes = await appWallet.api.swapSign(signaturesRes.data, txCbor)
+          console.log('signRes', signRes)
+          await this.submit(signRes.cbor)
+        }
       } catch (e) {
+        snackbar.setError(e)
         console.log(e)
       }
       this.loading = false
+    },
+    async submit(cborHex) {
+      const txId = await appWallet.submitTx(cborHex);
+      snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
+      this.$emit('onSwap')
+      console.log(txId)
     },
     async excludedChange(val) {
       this.blacklisted_dexes = val

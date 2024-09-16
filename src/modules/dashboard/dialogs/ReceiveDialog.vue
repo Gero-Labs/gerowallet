@@ -1,6 +1,6 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Receive" subtitle="Receive ADA by displaying your wallet address and QR code." :min-height="300" :height="600">
-    <v-card-title>
+    <v-card-title class="py-0">
       <v-list-item three-line class="px-0">
         <v-list-item-avatar size="160" rounded>
           <div id="qr-code" ref="qrCode" style="border-radius: 8px"> </div>
@@ -23,13 +23,13 @@
           <!--        </v-list-item-title>-->
         </v-list-item-content>
       </v-list-item>
-      <v-card-title class="px-0 pb-0">Used Addresses
+      <v-card-title class="pa-0">Used Addresses
         <!--      <v-spacer></v-spacer>-->
         <!--      <v-switch v-model="showUsed" label="Show Used" inset dense></v-switch>-->
       </v-card-title>
     </v-card-title>
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-      <v-data-table :headers="[{text: 'Address', sortable: true, align: 'left', value: 'address'},]" :items="allAddresses" hide-default-footer hide-default-header>
+    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1">
+      <v-data-table :headers="[{text: 'Address', sortable: true, align: 'left', value: 'address'}]" :items="allAddresses"  hide-default-footer hide-default-header disable-pagination>
         <template v-slot:[`item.address`]="{ item }">
           <v-btn text plain :ripple="false" style="text-transform: lowercase;" class="px-0" @click="triggerCopy(item.address)">
             {{ item.address | shortenStringWithEllipsis(40)  }}
@@ -62,14 +62,15 @@ export default {
   computed: {
     ...mapState(useStore, ['baseAddress', 'addresses', 'stakeAddress']),
     allAddresses() {
+      let res = []
       if (this.showUsed && this.addresses) {
-        return Object.keys(this.addresses)
+        res = Object.keys(this.addresses)
           .filter(address => address !== this.baseAddress)
           .map(address => {
           return {address, used: true}
         })
       }
-      return []
+      return res
     },
     options() {
       return {
