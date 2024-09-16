@@ -86,7 +86,7 @@ export class Wallet {
   }
 
   static class(wallet, provider) {
-    const wal = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
+    const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     wal.api = new Api(wallet, provider);
     console.log('class');
@@ -170,6 +170,13 @@ export class Wallet {
   pubKey(index: number): PublicKey {
     return Bip32PublicKey.from_bech32(this.publicKey)
       .derive(ChainDerivations.EXTERNAL)
+      .derive(index)
+      .to_raw_key();
+  }
+
+  pubKeyInternal(index: number): PublicKey {
+    return Bip32PublicKey.from_bech32(this.publicKey)
+      .derive(ChainDerivations.INTERNAL)
       .derive(index)
       .to_raw_key();
   }
@@ -272,9 +279,7 @@ export class Wallet {
     return { signature: signatureHex, key: keyHex };
   }
 
-  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{
-    witnesses: string
-  }> {
+  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{ witnesses: string }> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
     const tx: Transaction = Transaction.from_hex(txCbor)
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
@@ -338,7 +343,7 @@ export class Wallet {
     // Ledger Signing Logic
     if (this.type === WalletType.Ledger) {
       console.log(tx.to_json())
-      const wit: TransactionWitnessSet = await ledger.txToLedger(txBody, this, 0, null, addresses, utxos, isUsb);
+      const wit: TransactionWitnessSet = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
       return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') };
     }
 
@@ -832,10 +837,10 @@ export class Wallet {
       .then(async db => {
         const addressesTable = db.table('addresses');
         if (!addressesTable) throw new Error('No Addresses table.');
-        const storedAddresses = await addressesTable.toArray()
-        const storedAddressSet = new Set(storedAddresses.map(addr => addr.address));
-        const missingAddresses = knownAddresses.filter(address => !storedAddressSet.has(address));
-        const resolvedAddress = this.resolvePathsForMissingAddresses(missingAddresses, 1000);
+        // const storedAddresses = await addressesTable.toArray()
+        // const storedAddressSet = new Set(storedAddresses.map(addr => addr.address));
+        // const missingAddresses = knownAddresses.filter(address => !storedAddressSet.has(address));
+        const resolvedAddress = this.resolvePathsForMissingAddresses(knownAddresses);
         if (resolvedAddress?.length > 0) {
           addressesTable.bulkPut(resolvedAddress)
         }
@@ -845,20 +850,41 @@ export class Wallet {
       });
   }
 
-  resolvePathsForMissingAddresses(missingAddresses, maxAddresses) {
+  resolvePathsForMissingAddresses(usedAddresses: string[]) {
     const resolvedAddresses = [];
-    for (let addressIndex = 0; addressIndex < maxAddresses; addressIndex++) {
+    let addressIndex = 0;       // Start from the first address index
+    let consecutiveUnused = 0;  // Track consecutive unused addresses
+    const GAP_LIMIT = 40;       // Define the gap limit as 20
+    while (consecutiveUnused < GAP_LIMIT) {
       const derivedAddress = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
-      if (missingAddresses.includes(derivedAddress)) {
+      const internalDerivedAddress = this.deriveInternalAddressFromPath(addressIndex).to_address().to_bech32();
+      let found = false
+      if (usedAddresses.includes(derivedAddress)) {
         resolvedAddresses.push({
           address: derivedAddress,
-          path: `m/${purpose.hdwallet}'/1815'/0'/0/${addressIndex}`,
+          path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
           cred: Buffer.from(this.paymentKeyHash(derivedAddress)).toString('hex')
         });
+        consecutiveUnused = 0;  // Reset unused counter if we find a match
+        found = true
       }
-      if (missingAddresses.length === resolvedAddresses.length) {
+      if (usedAddresses.includes(internalDerivedAddress)) {
+        resolvedAddresses.push({
+          address: internalDerivedAddress,
+          path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
+          cred: Buffer.from(this.paymentKeyHash(internalDerivedAddress)).toString('hex')
+        });
+        consecutiveUnused = 0;  // Reset unused counter if we find a match
+        found = true
+      }
+      if (!found) {
+        consecutiveUnused++;  // Increment unused address counter if no match is found
+      }
+      // If we've resolved all missing addresses, we can break early
+      if (usedAddresses.length === resolvedAddresses.length) {
         break;
       }
+      addressIndex++;  // Move to the next address index
     }
     return resolvedAddresses;
   }
@@ -867,6 +893,14 @@ export class Wallet {
     return BaseAddress.new(
       this.networkId(),
       Credential.from_keyhash(this.pubKey(addressIndex).hash()),
+      Credential.from_keyhash(this.stakeKey().hash())
+    )
+  }
+
+  deriveInternalAddressFromPath(addressIndex) {
+    return BaseAddress.new(
+      this.networkId(),
+      Credential.from_keyhash(this.pubKeyInternal(addressIndex).hash()),
       Credential.from_keyhash(this.stakeKey().hash())
     )
   }

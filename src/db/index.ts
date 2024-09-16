@@ -120,7 +120,10 @@ export default {
     });
     await db['config'].toArray().then(async rows => {
       if (rows.length === 0) {
-        const initialData = [{ key: 'currency', value: Currency.USD.short }];
+        const initialData = [
+          { key: 'currency', value: Currency.USD.short },
+          { key: 'txAutoSubmit', value: true }
+        ];
         await db['config'].bulkAdd(initialData).catch(error => {
           console.error('Error adding initial data:', error);
         });

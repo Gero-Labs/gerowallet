@@ -191,9 +191,9 @@ export default {
             TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
             undefined // TODO Transaction metadata
           );
-          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
-          console.log(txId)
-          snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`)
+          // const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+          // console.log(txId)
+          // snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`)
           this.$emit('close')
         } catch (e) {
           snackbar.setError(e)

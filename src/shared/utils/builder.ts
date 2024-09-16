@@ -101,15 +101,15 @@ export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: Transa
   const hasDeregistrationCert = !!certificates.find(certificate => certificate.kind() == 1)
   console.log(hasDeregistrationCert) // TODO Fix
   // add utxos to the transaction as inputs
-  const shouldUseAllUtxos = hasDeregistrationCert || withdrawals.length > 0; // length > 0 || withdrawals.length > 0;
+  // const shouldUseAllUtxos = hasDeregistrationCert || withdrawals.length > 0; // length > 0 || withdrawals.length > 0;
   try {
-    addInputUtxos(txBuilder, utxos, outputs, shouldUseAllUtxos);
+    addInputUtxos(txBuilder, utxos, outputs, false);
     const calcChangeAddress = Address.from_bech32(changeAddress);
     txBuilder.add_change_if_needed(calcChangeAddress);
-  }
-  catch (e: unknown) {
+  } catch (e: unknown) {
+    console.log(e)
     const error = e as string;
-    if (isNotEnoughBalanceError(error) && !shouldUseAllUtxos) {
+    if (isNotEnoughBalanceError(error)) {
       addInputUtxos(txBuilder, utxos, outputs, true);
       const calcChangeAddress = Address.from_bech32(changeAddress);
       txBuilder.add_change_if_needed(calcChangeAddress);
