@@ -11,7 +11,7 @@
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Total</span>
-            <h2 style="color: white" v-if="loggedWallet && accountInfo">{{ accountInfo?.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
+            <h2 style="color: white" v-if="loggedWallet && accountInfo">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h2>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>

@@ -274,7 +274,6 @@ export class Api {
       const requestBody = {
         type: 'all',
         category: category,
-        country: "us", //TODO
         page: page ? page : 0,
         pageSize: 28
       }

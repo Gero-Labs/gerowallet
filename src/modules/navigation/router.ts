@@ -16,6 +16,7 @@ import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 import loading from '@/plugins/loading';
 import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
+import DevTools from '@/modules/devTools/DevTools.vue';
 
 const routes = [
   {
@@ -75,6 +76,15 @@ const routes = [
     path: '/media-player',
     name: 'mediaPlayer',
     component: MediaPlayer,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/dev-tools',
+    name: 'devTools',
+    component: DevTools,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
