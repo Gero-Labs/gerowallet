@@ -36,7 +36,6 @@ import Highstock from "highcharts/highstock";
 import filters from "@/shared/utils/filters";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
-import networks from '@/shared/utils/networks';
 import { Blockchain, Network } from '@/models/types';
 
 export default {
@@ -48,7 +47,7 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'price', 'transactions', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'price', 'loadingTxs']),
     resolveCurrency() {
       if (this.loggedWallet.chain === Blockchain.APEX_PRIME || this.loggedWallet.chain === Blockchain.APEX_VECTOR) {
         if (this.loggedWallet.network === Network.MAINNET) {

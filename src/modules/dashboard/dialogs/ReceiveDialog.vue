@@ -48,6 +48,7 @@ import { useStore } from '@/store';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'ReceiveDialog',
@@ -60,7 +61,8 @@ export default {
   },
   filters,
   computed: {
-    ...mapState(useStore, ['baseAddress', 'addresses', 'stakeAddress']),
+    ...mapState(useStore, ['baseAddress', 'stakeAddress']),
+    ...mapState(walletConfigStore, ['addresses']),
     allAddresses() {
       let res = []
       if (this.showUsed && this.addresses) {

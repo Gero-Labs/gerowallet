@@ -31,8 +31,7 @@ export let appWallet: Wallet = undefined;
 export const useStore = defineStore('store', {
   persist: {
     paths: [
-      'utxos','loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress',
-      'addresses', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens'
+      'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens'
     ]
   },
   state: () => ({
@@ -40,7 +39,6 @@ export const useStore = defineStore('store', {
     baseAddress: undefined,
     stakeAddress: undefined,
     wallets: [],
-    utxos: undefined,
     locale: 'us',
     network: undefined,
     provider: undefined,
@@ -57,7 +55,6 @@ export const useStore = defineStore('store', {
     stakingProView: false,
     resolvedAssets: undefined,
     resolvedCollections: undefined,
-    addresses: undefined,
     fiatRates: undefined,
     currency: undefined,
     pinnedTokens: []
@@ -209,32 +206,11 @@ export const useStore = defineStore('store', {
         }
       }
     },
-    async setAddresses(addresses: string[]) {
-      this.addresses = addresses
-      if (chrome?.storage) {
-        if (addresses) {
-          await chrome.storage.local.set({ [STORAGE.addresses]: addresses });
-        } else {
-          await chrome.storage.local.remove(STORAGE.addresses);
-        }
-      }
-    },
-    async setUtxos(utxos) {
-      console.log('Setting UTXOs:', utxos);
-      this.utxos = utxos
-      if (chrome?.storage) {
-        if (utxos) {
-          await chrome.storage.local.set({ [STORAGE.utxos]: utxos });
-        } else {
-          await chrome.storage.local.remove(STORAGE.utxos);
-        }
-      }
-    },
     async loadResolvedAssets() {
       const assets = {};
       let adaBalance = 0;
       // Aggregate ADA balance and assets
-      this.utxos.forEach(utxo => {
+      walletConfigStore().utxos.forEach(utxo => {
         adaBalance += Number(utxo.value);
         utxo.asset_list?.forEach(asset => {
           const key = asset.policy_id + asset.asset_name;
@@ -422,7 +398,7 @@ export const useStore = defineStore('store', {
         });
       }
       await appWallet.syncAddresses(Array.from(addresses))
-        .then(() => this.setUtxos(utxos))
+        .then(() => walletConfigStore().setUtxos(utxos))
         .then(() => this.loadResolvedAssets())
         .then(assets => this.resolveCollections(assets))
         .then((resolvedCollections) => {
@@ -482,7 +458,7 @@ export const useStore = defineStore('store', {
       await dexHunterStore().loadTokens()
       const promises = []
       await walletConfigStore().loadConfig()
-      promises.push(this.loadAddresses())
+      promises.push(walletConfigStore().loadAddresses())
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadPools())
@@ -517,13 +493,13 @@ export const useStore = defineStore('store', {
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
-      this.setUtxos(undefined)
+      walletConfigStore().setUtxos(undefined)
       this.resolvedAssets = undefined
       this.pools = []
       this.accountInfo = undefined;
       this.latestTip = undefined;
       this.resolvedCollections = undefined
-      this.addresses = undefined
+      walletConfigStore().setAddresses(undefined)
       this.baseAddress = undefined
       this.stakeAddress = undefined
       appWallet = undefined
@@ -565,25 +541,6 @@ export const useStore = defineStore('store', {
           console.error('Failed to get all Wallets:', error)
         }
       });
-    },
-    async loadAddresses() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db: Dexie = await appWallet.getDb()
-      return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('addresses').toArray()).subscribe({
-          next: value => {
-            this.setAddresses(value.reduce(function(map, val) {
-              map[val.address] = val
-              return map
-            }, {}));
-            resolve(this.addresses)
-          }
-        })
-      })
     },
     async loadSync() {
       if (!appWallet) {

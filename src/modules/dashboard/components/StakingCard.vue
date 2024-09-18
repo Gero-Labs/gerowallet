@@ -185,6 +185,7 @@ import { getColor, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/shared/utils/networks';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   components: {WithdrawalDialog, UnstakeDialog, CopyButton, RewardsChart},
@@ -204,7 +205,8 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'utxos', 'latestTip', 'baseAddress', 'stakeAddress']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'latestTip', 'baseAddress', 'stakeAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     Network() {
       return Network
     },

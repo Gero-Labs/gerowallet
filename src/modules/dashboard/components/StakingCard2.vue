@@ -175,6 +175,7 @@ import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/shared/utils/networks';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'StakingCard2',
@@ -198,7 +199,8 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'utxos', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
+    ...mapState(walletConfigStore, ['utxos']),
     Network() {
       return Network
     },
