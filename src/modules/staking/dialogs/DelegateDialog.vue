@@ -353,7 +353,7 @@ export default {
         }
         this.loading = false
       };
-      if (appWallet.type === WalletType.Normal) {
+      if (appWallet?.type === WalletType.Normal) {
         if (this.$refs.form.validate()) {
           if (appWallet.verifySpendingPassword(this.spendingPassword)) {
             await signAndReturnTx();

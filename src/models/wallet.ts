@@ -281,7 +281,6 @@ export class Wallet {
 
   async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{ witnesses: string }> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
-    const tx: Transaction = Transaction.from_hex(txCbor)
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
     const txBody: TransactionBody = rawTx.body();
     const deduped: any[] = [];
@@ -342,7 +341,6 @@ export class Wallet {
 
     // Ledger Signing Logic
     if (this.type === WalletType.Ledger) {
-      console.log(tx.to_json())
       const wit = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
       return { witnesses: wit };
     }
@@ -358,7 +356,6 @@ export class Wallet {
       }
 
       const witnessHex = Buffer.from(wit.to_bytes()).toString('hex');
-      console.log('Trezor Witness Set:', witnessHex);
 
       return { witnesses: witnessHex };
     }
@@ -368,7 +365,7 @@ export class Wallet {
       console.log('Signing with Software Wallet...');
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
       const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)))
-
+      password = null;
       if (!decodedHash && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
@@ -402,13 +399,16 @@ export class Wallet {
         vkeyWitnesses.add(vKeyWitness);
       }
 
+      if (decodedHash && typeof decodedHash.fill === 'function') {
+        decodedHash.fill(0);
+      }
+
       const witnesses = TransactionWitnessSet.new();
       witnesses.set_vkeys(vkeyWitnesses);
       if (!witnesses && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
-      return { witnesses: ''
-        // Buffer.from(witnesses.to_bytes()).toString('hex')
+      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex')
       };
     }
   }
