@@ -55,6 +55,7 @@ import {
   diffAssetsFromIncomingToOutgoing,
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   components: { TransactionCard, DappAddress, TransactionRisk, Select },
@@ -69,7 +70,8 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     changeAddress() {
       return this.baseAddress;
     },

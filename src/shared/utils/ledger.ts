@@ -4,36 +4,26 @@ import {
   Ada,
   AddressType,
   CertificateType,
-  CredentialParamsType, DRepParamsType,
+  CredentialParamsType, DatumType, DRepParamsType,
   GetExtendedPublicKeysResponse,
   GetVersionResponse,
   SignedTransactionData,
   SignMessageResponse,
-  SignTransactionRequest,
-  Transaction,
   TransactionSigningMode,
   TxInput,
   TxOutput,
   TxOutputDestinationType,
-  TxOutputFormat, VoteOption, VoterType,
+  TxOutputFormat, TxRequiredSignerType, VoteOption, VoterType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
+import { ChainDerivations, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import {
-  Address,
+  Address, AssetName, Assets,
   BaseAddress,
-  Bip32PublicKey, CborContainerType, CertificateKind,
-  Ed25519Signature, FixedTransaction,
-  RewardAddress,
-  TransactionInput,
-  TransactionInputs,
-  TransactionOutput,
+  Bip32PublicKey, CborContainerType, CertificateKind, Ed25519KeyHashes, FixedTransaction, MultiAsset, RewardAddress, ScriptHash, TransactionInputs,
   TransactionOutputs,
-  TransactionWitnessSet,
-  Vkey,
-  Vkeywitness,
-  Vkeywitnesses,
+  Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Wallet } from '@/models/wallet';
 import networks from '@/shared/utils/networks';
@@ -42,11 +32,11 @@ import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';
 import {
+  assembleWitnesses,
   generateLedgerMetadata,
   generateLedgerMetadataFromHash,
-  generateLedgerMintBundle,
-  generateRequiredSigners,
-  getAddressCredentials, getOwnedCred,
+  generateLedgerMintBundle, generateLedgerOwnedAddress,
+  getAddressCredentials, getDecodedCbor, getOwnedCred,
   getPlutusHVB, getRewardAddressFromCred,
   hasConwaySetTag,
   hdPathToArray,
@@ -54,7 +44,8 @@ import {
   isSameArray, isScriptStakeAddress,
   toHexString,
 } from '@/shared/utils/converter';
-import { decode } from 'cborg';
+
+const CertificateTypes = Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -184,7 +175,7 @@ export default {
     addresses: any,
     usedUtxos?: any[],
     isUsb?: boolean,
-  ): Promise<TransactionWitnessSet> {
+  ): Promise<string> {
     const txBody = tx.body();
     console.log(txBody.to_json());
     const address: Address = wallet.baseAddress().to_address();
@@ -195,39 +186,46 @@ export default {
       state: {
         networkId: network.networkId
       },
+      account: {
+        pub: wallet.publicKey,
+        path: [purpose.hdwallet, 1815, index]
+      },
       keys: {
-        payment: Object.values(addresses),
-        stake: {
-          cred: BaseAddress.from_address(address).payment_cred().to_keyhash(),
-          path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0]
-        }
+        payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
+        stake: [{
+          cred: BaseAddress.from_address(address).stake_cred().to_keyhash().to_hex(),
+          path: `m/${purpose.hdwallet}'/1815'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
+        }],
+        change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
+        script: [],
+        drep: [],
+        cc_cold: [],
+        cc_hot: []
       }
-
     }
-
     const credList = [
       {
-        cred: BaseAddress.from_address(address).payment_cred().to_keyhash(),
+        cred: BaseAddress.from_address(address).payment_cred().to_keyhash().to_hex(),
         path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0]
       },
       {
-        cred: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash(),
+        cred: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash().to_hex(),
         path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0]
       }]
     // Process Inputs
-    const inputs = this.inputsToLedger(txBody.inputs(), usedUtxos, addresses);
+    const inputs = this.generateLedgerInputs(accountData, txBody.inputs(), usedUtxos);
     // Collateral Inputs
-    const collateralInputs = this.inputsToLedger(txBody.collateral(), usedUtxos, addresses);
+    const collateralInputs = txBody.collateral() ? this.generateLedgerInputs(accountData, txBody.collateral(), usedUtxos) : null;
     // Reference Inputs
-    const referenceInputs = this.inputsToLedger(txBody.reference_inputs(), usedUtxos, addresses);
+    const referenceInputs = txBody.reference_inputs() ? this.generateLedgerInputs(accountData, txBody.reference_inputs(), usedUtxos) : null;
     // Process Outputs
-    const outputs: TxOutput[] = this.outputsToLedger(txBody.outputs(), addresses, index, false);
+    const outputs: TxOutput[] = this.generateLedgerOutputs(accountData, tx, tx.body().outputs());
     // Collateral Output
     let collateralOutput = null;
     if (txBody.collateral_return()) {
       const collateralOutputs = TransactionOutputs.new();
       collateralOutputs.add(txBody.collateral_return());
-      collateralOutput = this.outputsToLedger(collateralOutputs, addresses, index, false);
+      collateralOutput = this.generateLedgerOutputs(accountData, tx, collateralOutputs);
     }
     // Additional Witness Paths
     const additionalWitnessPaths = this.generateAdditionalWitnessPaths(credList, inputs, collateralInputs, referenceInputs);
@@ -264,30 +262,30 @@ export default {
       lTx['withdrawals'] = this.generateLedgerWithdrawals(accountData, txBody.withdrawals());
     }
     if (txBody.certs()) {
-      lTx.certificates = this.generateLedgerCertificates(accountData, txBody.certs());
+      lTx['certificates'] = this.generateLedgerCertificates(accountData, txBody.certs());
     }
     if (tx.auxiliary_data() && isCatalystVotingRegistrationMetadata(tx.auxiliary_data())) {
-      lTx.auxiliaryData = generateLedgerMetadata(accountData, tx.auxiliary_data());
+      lTx['auxiliaryData'] = generateLedgerMetadata(accountData, tx.auxiliary_data());
     } else if (txBody.auxiliary_data_hash()) {
-      lTx.auxiliaryData = generateLedgerMetadataFromHash(txBody.auxiliary_data_hash());
+      lTx['auxiliaryData'] = generateLedgerMetadataFromHash(txBody.auxiliary_data_hash());
     }
     if (txBody.mint()) {
-      lTx.mint = generateLedgerMintBundle(txBody.mint());
+      lTx['mint'] = generateLedgerMintBundle(txBody.mint());
     }
     if (txBody.script_data_hash() != null) {
-      lTx.scriptDataHashHex = txBody.script_data_hash();
+      lTx['scriptDataHashHex'] = txBody.script_data_hash().to_hex();
     }
     if (txBody.validity_start_interval() != null) {
-      lTx.validityIntervalStart = txBody.validity_start_interval();
+      lTx['validityIntervalStart'] = txBody.validity_start_interval();
     }
     if (txBody.required_signers()) {
-      lTx.requiredSigners = this.generateRequiredSigners(accountData, txBody.required_signers());
+      lTx['requiredSigners'] = this.generateRequiredSigners(accountData, txBody.required_signers());
     }
     if (txBody.network_id()) {
-      lTx.includeNetworkId = true;
+      lTx['includeNetworkId'] = true;
     }
     if (txBody.voting_procedures()) {
-      lTx.votingProcedures = this.generateLedgerVotingProcedures(accountData, txBody.voting_procedures());
+      lTx['votingProcedures'] = this.generateLedgerVotingProcedures(accountData, txBody.voting_procedures());
     }
     let signingMode;
     if (!!collateralInputs || !!tx.witness_set().redeemers() || !!txBody.reference_inputs()) {
@@ -301,111 +299,28 @@ export default {
       signingMode,
       tx: lTx,
       options: {
-        tagCborSets: hasConwaySetTag(tx.to_hex()),
+        tagCborSets: hasConwaySetTag(tx),
       },
     };
     if (additionalWitnessPaths.length > 0) {
-      req.additionalWitnessPaths = additionalWitnessPaths;
+      req['additionalWitnessPaths'] = additionalWitnessPaths;
     }
-    const req_json = JSON.parse(JSON.stringify(req));
-    txBuildRes2.hwRequest = req_json;
-    console.log('builtTx', txBuildRes2);
-    console.log('req_json', JSON.stringify(req_json));
-    console.log('req_json', req_json);
-    const ledger2 = await initiateLedger(void 0, signingMode);
-    const requestNumber = _requestNumber;
-    const response = await ledger2.signTransaction(req_json);
-    if (requestNumber !== _requestNumber) {
-      throw new Error('Ledger request closes.');
-    }
-    console.log('response', response);
-    console.log('txBuildRes ', txBuildRes2);
-    if (!moreTxFollow) {
-      closeTransport().catch((e) => console.error(e));
-    }
-    if (txBuildRes2.txHash && doHashCheck) {
-      if (response.txHashHex !== txBuildRes2.txHash) {
-        console.error('Ledger tx hash response:', response.txHashHex);
-        console.error('Source tx hash from cbor:', txBuildRes2.txHash);
-        throw new Error('Tx serialization mismatch between Ledger and source transaction');
-      }
-    }
-    const witnessSetHex = assembleWitnesses$1(accountData2, response);
-    return {
-      serializedWitnessSet: witnessSetHex,
-      signedTransactionData: response,
-    };
+    const fullTx = JSON.parse(JSON.stringify(req));
 
-
-    const ledgerTx: Transaction = {
-      network: {
-        protocolMagic: network.networkParams?.networkMagic,
-        networkId: 1,
-      },
-      inputs: ledgerInputs,
-      outputs: ledgerOutputs,
-      fee: txBody.fee().to_str(),
-      ttl: txBody.ttl().toString(),
-      certificates: ledgerCertificates,
-      withdrawals: ledgerWithdrawals,
-      auxiliaryData,
-      validityIntervalStart: txBody.validity_start_interval()?.toString() || '0',
-      mint: mintBundle,
-      scriptDataHashHex: txBody.script_data_hash()
-        ? Buffer.from(txBody.script_data_hash().to_bytes()).toString('hex')
-        : null,
-      requiredSigners: (requiredSigners.length > 0 ? requiredSigners : undefined),
-      collateralInputs,
-      collateralOutput,
-      totalCollateral: txBody.total_collateral()
-        ? txBody.total_collateral().to_str()
-        : null,
-      referenceInputs,
-    };
-
-    this.cleanObject(ledgerTx);
-
-    const fullTx: SignTransactionRequest = {
-      signingMode,
-      tx: ledgerTx,
-      additionalWitnessPaths,
-      options: {},
-    };
-
-    this.cleanObject(fullTx);
     console.log(fullTx);
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
     await this.ensureLedgerVersion(ledger);
 
-    const result: SignedTransactionData = await ledger.signTransaction(fullTx);
-
-    const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
-      paths: [[WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index]],
-    });
-
-    const witnessSet: TransactionWitnessSet = TransactionWitnessSet.new();
-    const vKeys: Vkeywitnesses = Vkeywitnesses.new();
-
-    result.witnesses.forEach((witness) => {
-      const vKey = Vkey.new(Bip32PublicKey.from_bytes(Buffer.from(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex, 'hex'))
-        .derive(witness.path[3])
-        .derive(witness.path[4])
-        .to_raw_key(),
-      );
-      const signature = Ed25519Signature.from_hex(
-        witness.witnessSignatureHex,
-      );
-      vKeys.add(Vkeywitness.new(vKey, signature));
-
-    });
-    witnessSet.set_vkeys(vKeys);
-    return witnessSet;
+    const response: SignedTransactionData = await ledger.signTransaction(fullTx);
+    console.log('response', response);
+    return assembleWitnesses(accountData, response);
   },
-  generateAdditionalWitnessPaths(credList, inputs: TxInput[], collaterals: TxInput[], refInputs: TxInput[]) {
+  generateAdditionalWitnessPaths(credList, inputs, collaterals: TxInput[], refInputs: TxInput[]) {
     const additionalWitnessPaths = [];
     for (const cred of credList) {
-      if (additionalWitnessPaths.some((i2) => isSameArray(i2, cred.path))) {
+      const hardenedPath = cred.path;
+      if (additionalWitnessPaths.some((i2) => isSameArray(i2, hardenedPath))) {
         continue;
       }
       const isPartOfInputs = inputs.some((item) => item.path && isSameArray(item.path, hardenedPath));
@@ -417,10 +332,12 @@ export default {
     }
     return additionalWitnessPaths;
   },
-  generateLedgerWithdrawals(accountData2, withdrawals) {
+  generateLedgerWithdrawals(accountData2, withdrawals: Withdrawals) {
     const ledgerWithdrawals = [];
-    for (const withdrawal2 of Object.entries(withdrawals)) {
-      const cred = getAddressCredentials(withdrawal2[0]);
+    for (let i = 0 ; i < withdrawals.keys().len() ; i++) {
+      const rewardAddress = withdrawals.keys().get(i);
+      const amount = withdrawals.get(rewardAddress)
+      const cred = getAddressCredentials(rewardAddress.to_address().to_bech32());
       const stakeCred = getOwnedCred([accountData2.keys], cred.stakeCred, "stake");
       if (stakeCred) {
         ledgerWithdrawals.push({
@@ -428,35 +345,36 @@ export default {
             type: CredentialParamsType.KEY_PATH,
             keyPath: hdPathToArray(stakeCred.path)
           },
-          amount: withdrawal2[1]
+          amount: amount.to_str()
         });
       } else if (cred.stakeCred) {
         ledgerWithdrawals.push({
-          stakeCredential: isScriptStakeAddress(withdrawal2[0]) ? {
+          stakeCredential: isScriptStakeAddress(rewardAddress) ? {
             type: CredentialParamsType.SCRIPT_HASH,
             scriptHashHex: cred.stakeCred
           } : {
             type: CredentialParamsType.KEY_HASH,
             keyHashHex: cred.stakeCred
           },
-          amount: withdrawal2[1]
+          amount: amount.to_str()
         });
       }
     }
     return ledgerWithdrawals.length === 0 ? void 0 : ledgerWithdrawals;
   },
-  generateRequiredSigners(accountData2, requiredSigners) {
+  generateRequiredSigners(accountData2, requiredSigners: Ed25519KeyHashes) {
     const requiredSignerList = [];
-    for (const requiredSigner of requiredSigners) {
+    for (let i = 0 ; i < requiredSigners.len() ; i++) {
+      const requiredSigner = requiredSigners.get(i).to_hex()
       const cred = getOwnedCred([accountData2.keys], requiredSigner);
       if (cred) {
         requiredSignerList.push({
-          type: Ada.TxRequiredSignerType.PATH,
+          type: TxRequiredSignerType.PATH,
           path: hdPathToArray(cred.path)
         });
       } else {
         requiredSignerList.push({
-          type: Ada.TxRequiredSignerType.HASH,
+          type: TxRequiredSignerType.HASH,
           hashHex: requiredSigner
         });
       }
@@ -479,7 +397,7 @@ export default {
             params: {
               stakeCredential: ownedCred ? {
                 type: CredentialParamsType.KEY_PATH,
-                keyPath: getHardenedDerivationPath(ownedCred.path)
+                keyPath: hdPathToArray(ownedCred.path)
               } : isScriptStakeAddress(addr) ? {
                 type: CredentialParamsType.SCRIPT_HASH,
                 scriptHashHex: cred
@@ -490,7 +408,7 @@ export default {
             }
           };
           if (regCert.coin) {
-            ledgerRegCert.params.deposit = regCert.coin;
+            ledgerRegCert.params['deposit'] = regCert.coin;
           }
           ledgerCertificate.push(ledgerRegCert);
           break;
@@ -516,7 +434,7 @@ export default {
             }
           };
           if (deregCert.coin) {
-            ledgerDeregCert.params.deposit = deregCert.coin;
+            ledgerDeregCert.params['deposit'] = deregCert.coin;
           }
           ledgerCertificate.push(ledgerDeregCert);
           break;
@@ -570,11 +488,11 @@ export default {
           };
           if (typeof drep === "string") {
             if (drep === "AlwaysAbstain") {
-              ledgerVoteDel.params.dRep = {
+              ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.ABSTAIN
               };
             } else {
-              ledgerVoteDel.params.dRep = {
+              ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.NO_CONFIDENCE
               };
             }
@@ -583,18 +501,18 @@ export default {
             const ownedDRepCred = keyHash ? getOwnedCred([accountData2.keys], keyHash, "drep") : null;
             if (keyHash) {
               if (ownedDRepCred) {
-                ledgerVoteDel.params.dRep = {
+                ledgerVoteDel.params['dRep'] = {
                   type: DRepParamsType.KEY_PATH,
                   keyPath: hdPathToArray(ownedDRepCred.path)
                 };
               } else {
-                ledgerVoteDel.params.dRep = {
+                ledgerVoteDel.params['dRep'] = {
                   type: DRepParamsType.KEY_HASH,
                   keyHashHex: keyHash
                 };
               }
             } else {
-              ledgerVoteDel.params.dRep = {
+              ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.SCRIPT_HASH,
                 scriptHashHex: drep.ScriptHash
               };
@@ -648,7 +566,7 @@ export default {
             }
           };
           if (committeeHColdResign.anchor) {
-            ledgerCommitteeColdResign.params.anchor = {
+            ledgerCommitteeColdResign.params['anchor'] = {
               url: committeeHColdResign.anchor.anchor_url,
               hashHex: committeeHColdResign.anchor.anchor_data_hash
             };
@@ -674,7 +592,7 @@ export default {
             }
           };
           if (drepRegistration.anchor) {
-            ledgerDRepRegistration.params.anchor = {
+            ledgerDRepRegistration.params['anchor'] = {
               url: drepRegistration.anchor.anchor_url,
               hashHex: drepRegistration.anchor.anchor_data_hash
             };
@@ -699,7 +617,7 @@ export default {
             }
           };
           if (drepUpdate.anchor) {
-            ledgerDRepUpdate.params.anchor = {
+            ledgerDRepUpdate.params['anchor'] = {
               url: drepUpdate.anchor.anchor_url,
               hashHex: drepUpdate.anchor.anchor_data_hash
             };
@@ -816,7 +734,7 @@ export default {
           },
         };
         if (vote.voting_procedure.anchor) {
-          ledgerVote.votingProcedure.anchor = {
+          ledgerVote.votingProcedure['anchor'] = {
             url: vote.voting_procedure.anchor.anchor_url,
             hashHex: vote.voting_procedure.anchor.anchor_data_hash,
           };
@@ -827,39 +745,37 @@ export default {
     }
     return ledgerVotingProcedures;
   },
-  cleanObject(obj: any) {
-    Object.keys(obj).forEach(key => !obj[key] && obj[key] !== 0 && delete obj[key]);
-  },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();
     if (!version) throw new Error('Cardano app is closed');
   },
-  inputsToLedger(inputs: TransactionInputs, usedUtxos, addresses) {
-    const ledgerInputs: TxInput[] = [];
-    for (let i: number = 0; i < inputs.len(); i++) {
-      const input: TransactionInput = inputs.get(i);
-      const foundUtxo = usedUtxos.find((utxo) => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index());
-      const address = addresses[foundUtxo.payment_addr.bech32];
-      console.log(address);
+  generateLedgerInputs(accountData2, inputs: TransactionInputs, utxoList) {
+    const ledgerInputs = [];
+    for (let i = 0 ; i < inputs.len() ; i++) {
+      const input = inputs.get(i)
+      console.log(utxoList)
+      const utxo3 = utxoList.find((u2) => u2.tx_hash === input.transaction_id().to_hex() && u2.tx_index === input.index());
+      const cred = utxo3 ? getAddressCredentials(utxo3.payment_addr.bech32) : null;
+      const key3 = cred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
       ledgerInputs.push({
         txHashHex: input.transaction_id().to_hex(),
         outputIndex: input.index(),
-        path: hdPathToArray(address.path),
+        path: key3 ? hdPathToArray(key3.path) : null
       });
     }
     return ledgerInputs;
   },
-  generateLedgerTokenBundle(multiAsset) {
+  generateLedgerTokenBundle(multiAsset: MultiAsset) {
     let tokenBundle = undefined;
 
     if (multiAsset) {
       tokenBundle = [];
       for (let j = 0; j < multiAsset.keys().len(); j++) {
-        const policy = multiAsset.keys().get(j);
-        const assets = multiAsset.get(policy);
+        const policy: ScriptHash = multiAsset.keys().get(j);
+        const assets: Assets = multiAsset.get(policy);
         const tokens = [];
         for (let k = 0; k < assets.keys().len(); k++) {
-          const assetName = assets.keys().get(k);
+          const assetName: AssetName = assets.keys().get(k);
           const amount = assets.get(assetName).to_str();
           tokens.push({
             assetNameHex: Buffer.from(assetName.name()).toString('hex'),
@@ -874,105 +790,103 @@ export default {
           else return -1;
         });
         tokenBundle.push({
-          policyIdHex: Buffer.from(policy.to_bytes()).toString('hex'),
+          policyIdHex: policy.to_hex(),
           tokens,
         });
       }
     }
     return tokenBundle;
   },
-  outputsToLedger(outputs: TransactionOutputs, addresses, index, isCollateral): TxOutput[] {
+  generateLedgerOutputs(accountData2, tx2: FixedTransaction, outputs: TransactionOutputs) {
+    let _a;
     const ledgerOutputs = [];
-    for (let i: number = 0; i < outputs.len(); i++) {
-      const output: TransactionOutput = outputs.get(i);
-      const addressDetails = addresses[output.address().to_bech32()];
-
-      let format: TxOutputFormat = TxOutputFormat.ARRAY_LEGACY;
-      const isBabbage = output.serialization_format() === CborContainerType.Map;
-      if (isCollateral && isBabbage) {
-        format = TxOutputFormat.MAP_BABBAGE;
+    for (let i = 0; i < outputs.len() ; i++) {
+      const output2 = outputs.get(i);
+      const outputJs = output2.to_js_value()
+      const cred = getAddressCredentials(output2.address().to_bech32(), null, true);
+      if (!cred) {
+        throw new Error("unable to parse output address: " + output2.address().to_bech32());
       }
-
-      let out =
-        addressDetails
-          ? {
-            format,
+      const paymentCred = cred.paymentCred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
+      let out;
+      let format2 = TxOutputFormat.ARRAY_LEGACY;
+      let isBabbage = false
+      if (output2.serialization_format() === CborContainerType.Map) {
+        format2 = TxOutputFormat.MAP_BABBAGE;
+        isBabbage = true
+      }
+      try {
+        if (paymentCred) {
+          out = {
+            format: format2,
             destination: {
               type: TxOutputDestinationType.DEVICE_OWNED,
-              params: {
-                spendingPath: hdPathToArray(addressDetails.path),
-                stakingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0],
-              },
+              params: generateLedgerOwnedAddress(accountData2, paymentCred, cred.stakeCred)
             },
-            amount: output.amount().coin(),
-          }
-          : {
-            format,
-            destination: {
-              type: TxOutputDestinationType.THIRD_PARTY,
-              params: {
-                addressHex: output.address().to_hex(),
-              },
-            },
+            amount: output2.amount().coin().to_str()
           };
-      let plutusDataBytes;
-      let plutusScriptBytes;
-      if (output.amount().multiasset()) {
-        out.tokenBundle = this.generateLedgerTokenBundle(output.amount().multiasset());
-      }
-      if (isBabbage) {
-        const plutusData = output.plutus_data();
-        const plutusScript = output.script_ref();
-        if (plutusData) {
-          plutusDataBytes = plutusData.to_bytes();
         }
-        if (plutusScript) {
-          const script = decode(plutusScript.to_bytes());
-          let _a;
-          plutusScriptBytes = ((_a = script == null ? void 0 : script.value) == null ? void 0 : _a.value) ?? plutusScript.to_bytes();
-        }
+      } catch (err2) {
+        //
       }
-      if (output.script_ref()) {
+      if (!out) {
+        out = {
+          format: format2,
+          destination: {
+            type: TxOutputDestinationType.THIRD_PARTY,
+            params: {
+              addressHex: toHexString(cred.addressBytes)
+            }
+          },
+          amount: output2.amount().coin().to_str()
+        };
+      }
+      if (output2.amount().multiasset()) {
+        out.tokenBundle = this.generateLedgerTokenBundle(output2.amount().multiasset());
+      }
+      let plutusScriptBytes
+      if (outputJs.script_ref) {
+        const cslPlutusScript = output2.script_ref();
+        const decodedPlutusScript = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
+        plutusScriptBytes = ((_a = decodedPlutusScript == null ? void 0 : decodedPlutusScript.value) == null ? void 0 : _a.value) ?? cslPlutusScript.to_bytes();
         let script = null;
         if (plutusScriptBytes) {
           script = toHexString(plutusScriptBytes);
         } else {
-          script = output.script_ref().plutus_script() ?? output.script_ref().native_script() ?? null;
+          script = outputJs.script_ref["PlutusScript"] ?? outputJs.script_ref["NativeScript"] ?? null;
         }
-        if (script && typeof script === 'string') {
+        if (script && typeof script === "string") {
           out = {
             ...out,
-            referenceScriptHex: script,
+            referenceScriptHex: script
           };
         }
       }
-      const hvb = getPlutusHVB(output.plutus_data());
-      if (plutusDataBytes) {
-        hvb.bytes = toHexString(plutusDataBytes);
+      const hvb = getPlutusHVB(outputJs.plutus_data);
+      if (output2.plutus_data()) {
+        hvb.bytes = toHexString(output2.plutus_data().to_bytes());
       }
       if (hvb.bytes) {
         out = {
           ...out,
           datum: {
-            type: 1,
-            // DatumType.INLINE
-            datumHex: hvb.bytes,
-          },
+            type: DatumType.INLINE,
+            datumHex: hvb.bytes
+          }
         };
       } else if (hvb.hash) {
         if (format2 === TxOutputFormat.MAP_BABBAGE) {
           out = {
             ...out,
             datum: {
-              type: 0,
-              // DatumType.HASH
-              datumHashHex: hvb.hash,
-            },
+              type: DatumType.HASH,
+              datumHashHex: hvb.hash
+            }
           };
         } else {
           out = {
             ...out,
-            datumHashHex: hvb.hash,
+            datumHashHex: hvb.hash
           };
         }
       }

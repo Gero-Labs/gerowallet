@@ -47,7 +47,7 @@ import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
 import {
   createCOSEKeyHex,
-  createSignDataBuilder,
+  createSignDataBuilder, hdPathToArray,
   safeFreeCSLObject, toHexArray, toHexString,
   toStakeKeyHash,
 } from '@/shared/utils/converter';
@@ -343,8 +343,8 @@ export class Wallet {
     // Ledger Signing Logic
     if (this.type === WalletType.Ledger) {
       console.log(tx.to_json())
-      const wit: TransactionWitnessSet = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
-      return { witnesses: Buffer.from(wit.to_bytes()).toString('hex') };
+      const wit = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
+      return { witnesses: wit };
     }
 
     // Trezor Signing Logic
@@ -376,12 +376,14 @@ export class Wallet {
       const txHash = TransactionHash.from_bytes(Buffer.from(txHashHex, 'hex'));
 
       deduped.forEach((utxo) => {
+        const address = addresses[utxo.payment_addr.bech32]
+        const path = hdPathToArray(address['path'])
         const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
           .derive(WalletTypePurpose.CIP1852)
           .derive(CoinTypes.CARDANO)
           .derive(HARDENED + accountIndex)
-          .derive(utxo.addressing ? utxo.addressing.type : 0)
-          .derive(utxo.addressing ? utxo.addressing.path : 0)
+          .derive(path[3])
+          .derive(path[4])
           .to_raw_key();
         const vKeyWitness = make_vkey_witness(txHash, prvKey);
         vkeyWitnesses.add(vKeyWitness);
@@ -405,7 +407,9 @@ export class Wallet {
       if (!witnesses && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
-      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex') };
+      return { witnesses: ''
+        // Buffer.from(witnesses.to_bytes()).toString('hex')
+      };
     }
   }
 

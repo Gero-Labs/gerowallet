@@ -33,6 +33,7 @@ export default {
       geroPool: 'pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kxd530f9',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: true,
+      governanceSupport: true,
       swapSupport: true,
       buySupport: true,
       networkParams: {
@@ -65,6 +66,7 @@ export default {
       },
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
+      governanceSupport: false,
       swapSupport: false,
       buySupport: false,
       networkParams: {
@@ -115,6 +117,7 @@ export default {
       geroPool: 'pool1kvdf7svevc4d5j5ll0l0094s5m9xmpvkhtq9up0j3nlwytnyq8f',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
+      governanceSupport: false,
       swapSupport: false,
       buySupport: false,
     },
@@ -132,6 +135,7 @@ export default {
       currencyImage: apexLogo,
       defaultProvider: Provider.BLOCKFROST,
       cashbackSupport: false,
+      governanceSupport: false,
       swapSupport: false,
       buySupport: false,
     },
@@ -168,6 +172,12 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.cashbackSupport
+  },
+  resolveGovernanceSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.governanceSupport
   },
   resolveSwapSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

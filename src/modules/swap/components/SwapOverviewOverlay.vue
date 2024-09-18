@@ -108,6 +108,7 @@ import filters from '@/shared/utils/filters';
 import rules from '@/shared/utils/rules';
 import { mapState } from 'pinia';
 import { useStore} from '@/store';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default defineComponent({
   name: 'SwapOverviewOverlay',
@@ -129,7 +130,8 @@ export default defineComponent({
     }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     dexes() {
       if (this.estimation && this.estimation['splits']) {
         const template = JSON.parse(JSON.stringify(this.dexesTemplate))

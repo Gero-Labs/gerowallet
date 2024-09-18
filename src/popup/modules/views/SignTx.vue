@@ -14,7 +14,8 @@
             <div>
               <span>{{ networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
               <span class="warn">sent<br>from your wallet</span>
-              <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
+              <span> to the<br>address listed above.
+                <br /><br />Once signed, this action<br>is irreversible.</span>
             </div>
           </v-tooltip>
         </TransactionCard>
@@ -27,9 +28,9 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network) }} and/or tokens shown here will be </span>
-              <span class="succ">sent to your wallet<br /><br /></span>
-              <span>Once signed, this action is irreversible.</span>
+              <span>{{ networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network) }} and/or tokens<br>shown here will be </span>
+              <span class="succ">sent<br />to your wallet.</span>
+              <span><br /><br />Once signed, this action<br>is irreversible.</span>
             </div>
           </v-tooltip>
         </TransactionCard>
@@ -61,7 +62,7 @@
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required]"
                     required
-                    @keydown.enter.stop="confirm"
+                    @keydown.enter.stop="sign"
                   >
                     <template v-slot:append>
                       <v-icon @click="showPassword = !showPassword" tabindex="-1">
@@ -90,8 +91,8 @@
               </v-btn>
             </v-col>
             <v-col cols="6">
-              <v-btn block class="geroButton" style="color: black!important;" @click="confirm" :disabled="!valid || txSignLoading" :loading="txSignLoading">
-                Sign & Confirm
+              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
+                {{config.txAutoSubmit ? 'Sign & Confirm' : !witnesses ? 'SIGN' : 'CONFIRM'}}
               </v-btn>
             </v-col>
           </v-row>
@@ -125,6 +126,7 @@ import networks from '@/shared/utils/networks';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'DappConnect',
@@ -147,13 +149,15 @@ export default {
       txSignLoading: false,
       loading: true,
       controller: Messaging.createInternalController(),
+      witnesses: undefined
     };
   },
   computed: {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'addresses', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
+    ...mapState(walletConfigStore, ['config', 'utxos', 'addresses']),
     txFee() {
       return this.tx ? this.tx.body().fee().to_str() : null;
     },
@@ -265,7 +269,7 @@ export default {
         },
         recipient: this.recipient,
         txMetadata: this.txMetadata,
-        queryParams: undefined
+        queryParams: undefined,
       };
     },
   },
@@ -280,7 +284,10 @@ export default {
       await this.controller.returnData({ data: undefined, error: TxSignError.UserDeclined });
       window.close();
     },
-    async confirm() {
+    async sign() {
+      if (!this.config.txAutoSubmit && this.witnesses) {
+        await this.confirm()
+      }
       const signAndReturnTx = async () => {
         this.txSignLoading = true
         try {
@@ -296,12 +303,13 @@ export default {
             !this.isBT
           );
           console.log(response)
-          await this.controller.returnData({ data: response.witnesses, error: undefined });
-          // window.close();
+          this.witnesses = response.witnesses
+          if (this.config.txAutoSubmit) {
+            await this.confirm()
+          }
         } catch (e) {
+          console.log(e)
           snackbar.setError(e)
-          console.log(e);
-          await this.controller.returnData({ data: undefined, error: e });
         }
         this.txSignLoading = false
       };
@@ -316,15 +324,23 @@ export default {
       } else {
         await signAndReturnTx();
       }
+    },
+    async confirm() {
+      await this.controller.returnData({ data: this.witnesses, error: undefined });
+      window.close();
     }
   },
   async created() {
     let txCbor;
     this.request = await this.controller.requestData();
+    // this.request = {
+    //   data: {
+    //     tx: '84a8008182582071275b5db86a1f4cc6ed5d32967183e41692c5449df107edff03c6ad75515a1701018483581d7186ae9eebd8b97944a45201e4aec1330a72291af2d071644bba0159591a00d59f80582068a52b298166998c9173f81120d4111abf732282fbe8a8d4c75220068425cef282583901ffebcc9e31749eb5803e396202d84e3b436ec362463b2fd70fb4c8819086fc9117b2dadb43da1f922c46039a47d51bff09433dcdd18f1cce1a000f4240825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af751a001e8480825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af751b00000006b0e6de77021a00036415031a080b3179075820f346d417038705eafb6b09d0a9bd27aebfa05cf793074e1f6db1777db8ca93f3081a080b23690b58209862196cc4b921b6854818fbf530babc8b229b3dc46054510666ac471b3a68c10e82581c0bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb26582440581c28cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75a1049fd8799fd8799fd8799fd8799f581c0bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb26582440ffd8799fd8799fd8799f581c28cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75ffffffff581c0bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb265824401b00000191fcaea026d8799fd8799f4040ffd8799f581c10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6444745524fffffffd8799fd879801a4e5da6b9fffffff5a11902a2a1636d7367826f44657868756e74657220547261646571506172746e65722044455848554e544552'
+    //   }
+    // }
     if (this.request?.data?.tx) {
       txCbor = this.request.data.tx
     }
-    // txCbor = '84a90082825820117f3a40ad7ff8dd66af4e7bfbca6c310cc87f56ce5a127760bab77ac066466400825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef0010184a30058393184cc25ea4c29951d40b443b95bbc5676bc425470f96376d1984af9ab2c967f4bd28944b06462e13c5e3f5d5fa6e03f8567569438cd833e6d011a0011a008028201d818582258204ea1730fb6d01cca1fb672ec3422d30fb2b95deb79b7ed519aea3c628302ade7825839019f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799ab8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e531a00186a0082583901aea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ec2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e11a010980c0825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af75821b00000006b25f6871a1581c85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18a15244696d656e73696f6e426f7820233033343001021a0003ac72031a07feecf90b58201224772d32b8ca3901f6edb3c631e3f0a31d6defdd8938aedc74da3356f5fef80d81825820020cf34e0333a1049279cdbd6d4966a561653e17b159df9a17575e09f5d76ef00110825839010bb3cb520c54944c12fcadac8d65bfe6dc4c2b75c7c14bbb2658244028cb86f6ba31da649df94b3f5595e9d53f2b6a71c055d1f598d0af751b00000006b37c9830111a000582ab12818258201693c508b6132e89b932754d657d28b24068ff5ff1715fec36c010d4d6470b3d00a20481d8799f9fd8799fd8799fd8799f581c9f09e6cad382232fca653bb90d6d86bac87d6915fd3e489c5c8799abffd8799fd8799fd8799f581c8f695697137ef1dfb761a4e0a20a9cd0d44f6e6345fdb5ce8d351e53ffffffff1a00186a00ffd8799fd8799fd8799f581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecffd8799fd8799fd8799f581c2050c6027aa4fed1942b74fed238fdc02d36eb965593f1f4fb82c2e1ffffffff1a010980c0ffff581caea616304c2974c63f3c7a575901f2f1264ae5b22fb2edcde946e8ecff0581840001d8799f00ff821a000326a91a04555e60f5f6'
     if (txCbor) {
       console.log(txCbor)
       this.tx = Transaction.from_bytes(Buffer.from(txCbor, 'hex'));

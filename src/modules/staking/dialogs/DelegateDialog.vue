@@ -213,6 +213,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import QRCodeStyling from 'qr-code-styling';
 import { QrcodeStream } from "vue-qrcode-reader";
 import Vue from 'vue';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'DelegateDialog',
@@ -250,7 +251,8 @@ export default {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses']),
+    ...mapState(useStore, ['accountInfo', 'loggedWallet']),
+    ...mapState(walletConfigStore, ['utxos', 'addresses']),
     depositFee() {
       let depositFee = 0;
       const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())

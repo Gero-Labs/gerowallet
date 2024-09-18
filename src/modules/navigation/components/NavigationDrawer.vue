@@ -241,6 +241,7 @@ export default {
         // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
         {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
         {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Governance', icon: require('@/assets/svg/governance.svg'), link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network), soon: true},
         {title: 'Market', icon: require('@/assets/svg/finance.svg'), link: '/market', enabled: false, soon: true},
         {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat', soon: true},
         {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},

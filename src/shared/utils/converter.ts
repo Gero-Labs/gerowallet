@@ -1,22 +1,44 @@
 import {
   Address,
   AssetName,
-  Assets, AuxiliaryData, AuxiliaryDataHash,
+  Assets,
+  AuxiliaryData,
+  AuxiliaryDataHash,
   BaseAddress,
   BigInt,
   BigNum,
+  Bip32PublicKey,
   ByronAddress,
   ConstrPlutusData,
-  Credential, decode_metadatum_to_json_str, Ed25519KeyHashes,
-  EnterpriseAddress, GeneralTransactionMetadata, hash_plutus_data, MetadataJsonSchema, MetadataList, Mint, MultiAsset,
-  PlutusData, PlutusDatumSchema,
+  Credential,
+  decode_metadatum_to_json_str,
+  Ed25519KeyHash,
+  Ed25519Signature,
+  EnterpriseAddress,
+  FixedTransaction,
+  GeneralTransactionMetadata,
+  hash_plutus_data,
+  MetadataJsonSchema,
+  MetadataList,
+  MultiAsset,
+  PlutusData,
+  PlutusDatumSchema,
   PlutusList,
-  PlutusMap, PlutusMapValues, PointerAddress, RewardAddress,
-  ScriptHash, TransactionHash,
+  PlutusMap,
+  PlutusMapValues,
+  PointerAddress,
+  PublicKey,
+  RewardAddress,
+  ScriptHash,
+  TransactionHash,
   TransactionInput,
   TransactionOutput,
   TransactionUnspentOutput,
+  TransactionWitnessSet,
   Value,
+  Vkey,
+  Vkeywitness,
+  Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { blake2b, blake2bHex } from 'blakejs';
 import { bech32 } from 'bech32';
@@ -34,12 +56,12 @@ import {
 
 import {
   AddressType,
-  CIP36VoteRegistrationFormat, RequiredSigner, TransactionSigningMode,
+  CIP36VoteRegistrationFormat,
   TxAuxiliaryDataType,
-  TxOutputDestinationType, TxRequiredSignerType,
+  TxOutputDestinationType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
-import { decode } from 'cborg';
+const cbor = require('cbor')
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -116,28 +138,6 @@ export function jsonToPlutusData(jsonObj): PlutusData {
   return parsePlutusData(jsonObj);
 }
 
-export function normalizeToAddress(addr: string): Address {
-  // in Shelley, addresses can be base16, bech32 or base58
-  // this function, we try parsing in all encodings possible
-
-  // 1) Try converting from base58
-  if (ByronAddress.is_valid(addr)) {
-    return ByronAddress.from_base58(addr).to_address();
-  }
-
-  // 2) If already base16, simply return
-  try {
-    return Address.from_bytes(Buffer.from(addr, 'hex'));
-  } catch (_e) {} // eslint-disable-line no-empty
-
-  // 3) Try converting from base32
-  try {
-    return Address.from_bech32(addr);
-  } catch (_e) {} // eslint-disable-line no-empty
-
-  return undefined;
-}
-
 export const assetsToValue = (assets) => {
   const multiAsset = MultiAsset.new();
   const lovelace = assets.find((asset) => asset.unit === 'lovelace');
@@ -211,29 +211,6 @@ export function stringToHex(input: string) {
   return hexString;
 }
 
-export function hexToString(hex) {
-  let output = '';
-  for (let i = 0; i < hex.length; i += 2) {
-    output += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
-  }
-  return output;
-}
-
-export function bytesToIp(bytes) {
-  if (!bytes) return null;
-  if (bytes.length === 4) {
-    return {ipv4: bytes.join('.')};
-  } else if (bytes.length === 16) {
-    let ipv6 = '';
-    for (let i = 0; i < bytes.length; i += 2) {
-      ipv6 += bytes[i].toString(16) + bytes[i + 1].toString(16) + ':';
-    }
-    ipv6 = ipv6.slice(0, -1);
-    return {ipv6};
-  }
-  return null;
-}
-
 export const toHexArray = (hex2: string): Uint8Array => Uint8Array.from(toHexBuffer(hex2));
 export const toHexBuffer = (hex2: string): Buffer => Buffer.from(byteaToHex(hex2), "hex")
 export const byteaToHex = (bytea: string): string => bytea.startsWith("\\x") ? bytea.substring(2) : bytea;
@@ -271,39 +248,6 @@ export function toStakeKeyHash(address: string) {
     return credential.to_keyhash();
   }
   return undefined;
-}
-
-export function paymentCredentials(address: string) {
-  const keyAddress: Address = Address.from_bech32(address);
-  try {
-    return BaseAddress.from_address(keyAddress)
-      .payment_cred()
-  } catch (e) {
-    // I want application to not crush, but don't care about the message
-  }
-  try {
-    return EnterpriseAddress.from_address(keyAddress)
-      .payment_cred()
-  } catch (e) {
-    // I want application to not crush, but don't care about the message
-  }
-  try {
-    return PointerAddress.from_address(keyAddress)
-      .payment_cred()
-  } catch (e) {
-    // I want application to not crush, but don't care about the message
-  }
-  try {
-    RewardAddress.from_address(keyAddress)
-      .payment_cred()
-  } catch (e) {
-    // I want application to not crush, but don't care about the message
-  }
-  return undefined;
-}
-
-export function addressCredentials(address: string) {
-  return { payment: paymentCredentials(address), stake: stakeCredential(address) }
 }
 
 export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
@@ -477,10 +421,8 @@ export const isSameArray = (a1, a2) => {
   return a1.length === a2.length && a1.every((v2, i2) => v2 === a2[i2]);
 };
 
-export const hasConwaySetTag = (tx2) => {
-  if (typeof tx2 === "string") {
-    tx2 = getDecodedCbor(tx2);
-  }
+export const hasConwaySetTag = (tx2: FixedTransaction) => {
+  tx2 = getDecodedCbor(tx2.to_hex());
   const decodedTx = tx2;
   const decodedTxBody = getDecodedTxBody(decodedTx);
   for (const item of decodedTxBody) {
@@ -493,16 +435,16 @@ export const hasConwaySetTag = (tx2) => {
   return false;
 };
 
-const getDecodedCbor = (tx2) => {
+export const getDecodedCbor = (cborHex) => {
   try {
-    return !tx2 ? null : decode(toHexBuffer(tx2));
+    return !cborHex ? null : cbor.decodeAllSync(Buffer.from(cborHex, 'hex'));
   } catch (e) {
     console.error("getDecodedCbor", e);
   }
   return null;
 };
 
-const getDecodedTxBody = (tx2) => tx2.value["0"];
+const getDecodedTxBody = (tx2) => tx2[0][0];
 
 export const isCatalystVotingRegistrationMetadata = (metadata: AuxiliaryData) => {
   const _metadata = metadata == null ? void 0 : metadata.metadata();
@@ -528,7 +470,7 @@ export function generateLedgerMetadataFromHash(metadataHash: AuxiliaryDataHash) 
   return {
     type: TxAuxiliaryDataType.ARBITRARY_HASH,
     params: {
-      hashHex: metadataHash
+      hashHex: metadataHash.to_hex()
     }
   };
 }
@@ -602,25 +544,6 @@ export function generateLedgerMintBundle(mintList2) {
     });
   }
   return assetGroup;
-}
-
-export function generateRequiredSigners(keys: any, requiredSigners: Ed25519KeyHashes): RequiredSigner[] {
-  const requiredSignerList: RequiredSigner[] = [];
-  for (let i = 0; i < requiredSigners.len(); i++) {
-    const signerHex = requiredSigners.get(i).to_hex()
-    if (signerHex === keys.payment.hash.to_hex()) {
-      requiredSignerList.push({
-        type: TxRequiredSignerType.PATH,
-        path: hdPathToArray(keys.payment.path)
-      });
-    } else {
-      requiredSignerList.push({
-        type: TxRequiredSignerType.HASH,
-        hashHex: signerHex,
-      });
-    }
-  }
-  return requiredSignerList;
 }
 
 export const generateLedgerOwnedAddress = (accountData, paymentCred, stakeCred) => {
@@ -886,8 +809,7 @@ function getAddressType(addrBech32) {
   return (addrBytes[0] & 240) >> 4;
 }
 
-export const getRewardAddressFromCred = (stakeCred, networkId2) => {
-  const network2 = getNetworkId$1(networkId2);
+export const getRewardAddressFromCred = (stakeCred, network2: number) => {
   const cslStakeCred = getCSLCredential(stakeCred);
   const cslRewardAddr = RewardAddress.new(network2, cslStakeCred);
   const cslAddr = cslRewardAddr.to_address();
@@ -896,4 +818,76 @@ export const getRewardAddressFromCred = (stakeCred, networkId2) => {
   safeFreeCSLObject(cslRewardAddr);
   safeFreeCSLObject(cslStakeCred);
   return addr;
+};
+
+const getCSLCredential = (cred, free?) => {
+  const cslKeyHash = Ed25519KeyHash.from_bytes(toHexBuffer(cred));
+  const cslCred = Credential.from_keyhash(cslKeyHash);
+  safeFreeCSLObject(cslKeyHash);
+  return cslCred;
+};
+
+export const assembleWitnesses = (accountData2, signedTxData) => {
+  const witnesses = TransactionWitnessSet.new();
+  const vkeyWitnesses = witnesses.vkeys() ?? Vkeywitnesses.new();
+  for (const witness of signedTxData.witnesses) {
+    const pubKey = createPubKey(accountData2.account.pub, witness.path.slice(3));
+    vkeyWitnesses.add(getVkeyWitness(pubKey, witness.witnessSignatureHex));
+  }
+  witnesses.set_vkeys(vkeyWitnesses);
+  console.log(witnesses.to_json())
+  const witnessSetHex = witnesses.to_hex();
+  safeFreeCSLObject(vkeyWitnesses);
+  safeFreeCSLObject(witnesses);
+  return witnessSetHex;
+};
+
+const createPubKey = (accPubBech32, path3) => {
+  const cslPubKey = derivePubKey(accPubBech32, path3);
+  const pubKeyBech32 = cslPubKey.to_bech32();
+  safeFreeCSLObject(cslPubKey);
+  return pubKeyBech32;
+};
+
+const getCSLBip32PublicKey = (bech322, free?) => {
+  const cslBip32PublicKey = Bip32PublicKey.from_bech32(bech322);
+  free == null ? void 0 : free.push(cslBip32PublicKey);
+  return cslBip32PublicKey;
+};
+
+const derivePubKey = (pubBech32, path3) => cslDerivePubKey(getCSLBip32PublicKey(pubBech32), path3);
+
+const cslDerivePubKey = (key3, path3) => {
+  const _keyInit = key3;
+  let _key = key3;
+  for (let p2 = 0; p2 < path3.length; p2++) {
+    _key = _key.derive(path3[p2]);
+    if (key3 !== _keyInit) {
+      safeFreeCSLObject(key3);
+    }
+    key3 = _key;
+  }
+  if (key3 !== _keyInit) {
+    safeFreeCSLObject(_keyInit);
+  }
+  return _key;
+};
+
+const getVkeyWitness = (pub2, witnessSignatureHex: string, raw2 = false, hex2 = false) => {
+  let pubRaw;
+  let pubBip32;
+  if (raw2) {
+    pubRaw = hex2 ? PublicKey.from_hex(pub2) : PublicKey.from_bech32(pub2);
+  } else {
+    pubBip32 = hex2 ? Bip32PublicKey.from_hex(pub2) : Bip32PublicKey.from_bech32(pub2);
+    pubRaw = pubBip32.to_raw_key();
+  }
+  const vkey = Vkey.new(pubRaw);
+  const signature = Ed25519Signature.from_hex(witnessSignatureHex);
+  const vkeyWitness = Vkeywitness.new(vkey, signature);
+  safeFreeCSLObject(pubRaw);
+  safeFreeCSLObject(pubBip32);
+  safeFreeCSLObject(vkey);
+  safeFreeCSLObject(signature);
+  return vkeyWitness;
 };

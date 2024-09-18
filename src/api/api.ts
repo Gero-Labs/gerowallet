@@ -259,6 +259,16 @@ export class Api {
     }
   }
 
+  async categoriesSearch(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get("/api/bring/categories-search");
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async searchTerms(): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get("/api/bring/search-terms");
