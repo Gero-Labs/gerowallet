@@ -46,7 +46,7 @@ export default {
     store: useStore()
   }),
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'transactions', 'assets', 'resolvedAssets', 'resolvedCollections', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'assets', 'resolvedAssets', 'resolvedCollections', 'loadingTxs']),
   },
   methods: {
     ...mapActions(useStore, ['login', 'setLoadingTxs']),

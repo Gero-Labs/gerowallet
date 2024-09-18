@@ -215,6 +215,7 @@ import QRCodeStyling from 'qr-code-styling';
 import { QrcodeStream } from "vue-qrcode-reader";
 // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import { UREncoder } from '@keystonehq/keystone-sdk';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'SendDialog',
@@ -232,7 +233,8 @@ export default {
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'utxos', 'addresses', 'pinnedTokens']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'pinnedTokens']),
+    ...mapState(walletConfigStore, ['utxos', 'addresses']),
     tokens() {
       if (this.resolvedAssets) {
         const tokens = this.resolvedAssets.map(token => {

@@ -83,6 +83,7 @@ import {assetsToValue, toUTxO} from "@/shared/utils/converter";
 import {Proof} from "@/models/types";
 import {buildTx} from "@/shared/utils/builder";
 import rules from "@/shared/utils/rules";
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default defineComponent({
   name: "DepositDialog",
@@ -164,7 +165,8 @@ export default defineComponent({
   },
   components: {TokenSelector, Select, BaseDialog},
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'utxos', 'latestTip', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'latestTip', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     tokens() {
       if (this.resolvedAssets) {
         const tokens = this.resolvedAssets.map(token => {

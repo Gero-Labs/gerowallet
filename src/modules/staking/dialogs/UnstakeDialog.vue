@@ -90,6 +90,7 @@ import rules from '@/shared/utils/rules';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'UnstakeDialog',
@@ -123,7 +124,8 @@ export default {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'utxos', 'addresses', 'stakeAddress']),
+    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'stakeAddress']),
+    ...mapState(walletConfigStore, ['utxos', 'addresses']),
     withdrawals() {
       let withdrawals = 0
       if (this.tx?.body()?.withdrawals()?.keys()) {

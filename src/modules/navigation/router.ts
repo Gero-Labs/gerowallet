@@ -17,6 +17,7 @@ import loading from '@/plugins/loading';
 import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
+import Governance from '@/modules/governance/Governance.vue';
 
 const routes = [
   {
@@ -58,6 +59,15 @@ const routes = [
     path: '/cashback',
     name: 'cashback',
     component: Cashback,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/governance',
+    name: 'governance',
+    component: Governance,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

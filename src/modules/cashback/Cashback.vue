@@ -82,8 +82,7 @@
             v-if="supported"
             flat
             v-model="model"
-            :search-input.sync="search"
-            :items="terms"
+            :items="searchTerms"
             :loading="isLoading2"
             label="Brand, product, destination"
             outlined
@@ -145,7 +144,7 @@
         {{ loadingMore ? "Loading ..." : "" }}
       </v-card-title>
       <v-card-title style="font-size: 14px" v-intersect="onIntersect" v-if="supported">
-        Powered By&nbsp;<v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
+        Powered By<v-btn color="primary" class="px-0 mx-0 ml-1" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
       </v-card-title>
     </v-card-actions>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
@@ -182,7 +181,6 @@ export default defineComponent({
     },
     pending() {
       if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
-        console.log(this.bringCache.data.totalPendings[0])
         return this.bringCache.data.totalPendings[0]
       }
       return undefined
@@ -217,17 +215,6 @@ export default defineComponent({
         this.totalItems = retailers.totalItems
       }
       this.isLoading = false
-    },
-    search() {
-      // Items have already been loaded
-      if (this.terms.length > 0) return
-      // Items have already been requested
-      if (this.isLoading2) return
-      this.isLoading2 = true
-      appWallet.api.searchTerms()
-        .then(res => this.entries = res.items)
-        .catch(err => console.log(err))
-        .finally(() => this.isLoading2 = false)
     },
     async selectedCategory() {
       this.model = ""
@@ -268,8 +255,8 @@ export default defineComponent({
       isIntersecting: false,
       selectedCategoryIndex: 0,
       entries: [],
+      searchTerms: [],
       model: null,
-      search: null,
       categories: {
         items: []
       },
@@ -295,9 +282,10 @@ export default defineComponent({
     try {
       const isAvailable = await appWallet.api.checkAvailability()
       if (isAvailable) {
-        const cat = await appWallet.api.categories()
+        const res = await appWallet.api.categoriesSearch()
         this.categories.items = [{ iconSvg: "", id: 0, name: "All Categories"}]
-        this.categories.items.push(...cat.items)
+        this.categories.items.push(...res.categories.items)
+        this.searchTerms = res.searchTerms.items
         this.chipLoading = false
       }
     } catch (e) {

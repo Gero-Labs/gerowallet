@@ -46,6 +46,7 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: "NoTokensCard",
@@ -69,7 +70,8 @@ export default {
     Blockchain() {
       return Blockchain
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'pools', 'utxos', 'latestTip', 'baseAddress']),
+    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'pools', 'latestTip', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
   },
   methods: {
     delegateToGero() {

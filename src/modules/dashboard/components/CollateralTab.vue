@@ -58,6 +58,7 @@ import filters from '@/shared/utils/filters';
 import networks from '../../../shared/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'CollateralTab',
@@ -66,7 +67,8 @@ export default {
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'utxos', 'accountInfo', 'config', 'baseAddress', 'latestTip']),
+    ...mapState(useStore, ['loggedWallet', 'accountInfo', 'config', 'baseAddress', 'latestTip']),
+    ...mapState(walletConfigStore, ['utxos']),
     hasCollateral() {
       console.log(this.config['collateral'])
       return false

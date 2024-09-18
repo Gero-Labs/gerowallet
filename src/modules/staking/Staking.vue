@@ -278,6 +278,7 @@ import { buildTx } from '@/shared/utils/builder';
 import { toUTxO } from '@/shared/utils/converter';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from "@/shared/utils/networks";
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'Staking',
@@ -311,7 +312,8 @@ export default {
     geroPoolExists() {
       return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
     },
-    ...mapState(useStore, ['pools', 'loggedWallet', 'accountInfo', 'utxos', 'latestTip', 'baseAddress']),
+    ...mapState(useStore, ['pools', 'loggedWallet', 'accountInfo', 'latestTip', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     numPages() {
       // calculate the number of pages we have
       return Math.ceil(this.stakePools.length / this.pageSize);
