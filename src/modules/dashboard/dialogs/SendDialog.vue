@@ -446,7 +446,7 @@ export default {
       const tokens = [];
       if (this.sendData.selectedTokens.length > 0) {
         this.sendData.selectedTokens.forEach(token => {
-          if (token.ticker === 'ADA') {
+          if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
             tokens.push({
               unit: 'lovelace',
               quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
@@ -514,6 +514,7 @@ export default {
       }
     },
     resetData() {
+      this.show1 = false
       this.keystoneScan = false
       this.isInit = false
       this.overlay = false
