@@ -13,10 +13,10 @@
           </v-card>
         </v-card>
       </v-card-text>
-      <v-card-actions class="justify-center py-2 px-0">
+      <v-card-actions class="justify-center pb-0 pt-3 px-0">
         <v-layout>
           <v-row>
-            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal" class="pb-0">
               <v-tooltip
                 v-model="tooltip.enabled"
                 top
@@ -71,7 +71,6 @@
           </v-row>
         </v-layout>
       </v-card-actions>
-      <v-snackbar top v-model="snackbar.enabled" rounded color="red" transition="scroll-y-transition">{{snackbar.text}}</v-snackbar>
     </PopupHeader>
   </v-form>
 </template>
@@ -156,7 +155,7 @@ export default {
       message: ``,
       password: '',
       valid: false,
-      snackbar: {
+      tooltip: {
         enabled: false,
         text: 'Wrong Spending Password!'
       },

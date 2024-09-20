@@ -180,7 +180,7 @@ export default {
     console.log(txBody.to_json());
     const address: Address = wallet.baseAddress().to_address();
     const stakeAddress: Address = wallet.stakeAddress().to_address();
-    const network = networks.resolveNetwork(appWallet.chain, appWallet.network);
+    const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
 
     const accountData = {
       state: {

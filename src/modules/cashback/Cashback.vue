@@ -1,58 +1,53 @@
 <template>
   <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center" style="font-size: 32px">
-      ADA Cashback
+      Cashback
     </v-card-title>
-    <v-card-subtitle class="justify-center text-center" style="font-size: 18px">
-      Receive ADA when shopping online!
+    <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
+      Pay with any credit card online, and receive ADA Cashback!
     </v-card-subtitle>
-    <v-card-subtitle class="justify-center text-center pt-0">
-      <v-btn class="geroButton" style="color:black!important" rounded color="primary" @click="isHowItWorksDialogOpen = true">
-        How it works?
+    <v-card-subtitle class="justify-center text-center pt-2 pb-8">
+      <v-btn small outlined rounded color="#00DFF3" @click="isHowItWorksDialogOpen = true">
+        How it works
       </v-btn>
     </v-card-subtitle>
     <v-card-text>
       <div class="card-text">
         <div class="main-content">
           <div class="left-section">
-            <div class="header">
-              <v-avatar size="48" class="avatar-bg">
-                <v-icon color="#00DFF3">mdi-gift-outline</v-icon>
-              </v-avatar>
-              <div class="header-text">Ready to Claim</div>
-            </div>
-            <div class="amount-section">
-              <div class="amount">
-                <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-              </div>
-              <div class="usd-amount">
-                <div class="usd-text">{{ eligible ? eligible.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</div>
-              </div>
-            </div>
+            <v-list-item two-line dense style="width: min-content; min-width: 250px">
+              <v-list-item-avatar size="40" tile>
+                <v-img :src="require('@/assets/svg/gift.svg')" contain></v-img>
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title style="font-size: 14px">
+                  Ready to Claim
+                </v-list-item-title>
+                <v-list-item-subtitle style="display: flex; align-items: center;">
+                  <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ eligible ? Number(eligible.totalEstimatedUsd).toLocaleString(undefined, {maximumFractionDigits: 2}) : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
+                </v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
           </div>
           <div class="right-section">
-            <div class="header">
-              <div class="icon-bg">
-                <div class="icon-container">
-                  <v-icon color="#A3A3A3">mdi-timer-sand</v-icon>
-                </div>
-              </div>
-              <div class="header-text">Pending rewards</div>
-            </div>
-            <div class="amount-section">
-              <div class="amount">
-                <div class="secondary-text">{{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
-              </div>
-              <div class="usd-amount">
-                <div class="usd-secondary-text">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</div>
-              </div>
-            </div>
+            <v-list-item two-line dense style="width: min-content; min-width: 250px">
+              <v-list-item-avatar size="40" tile>
+                <v-img :src="require('@/assets/svg/pending.svg')" contain></v-img>
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title style="font-size: 14px">
+                  Pending rewards
+                </v-list-item-title>
+                <v-list-item-subtitle style="display: flex; align-items: center;">
+                  <div class="secondary-text">{{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
+                </v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
           </div>
-          <v-btn outlined height="148" color="#00C7F3" class="btn-bg" @click="isRewardsDialogOpen = true" :disabled="!supported">
+          <v-btn elevation="0" height="50" color="#0B141B" @click="isRewardsDialogOpen = true" :disabled="!supported">
             <div class="btn-content">
-              <v-avatar size="56" class="avatar-bg">
-                <v-icon color="white" style="font-size: 28px">mdi-gift-open-outline</v-icon>
-              </v-avatar>
               <div :class="supported ? 'btn-text' : 'btn-text-disabled'">View Rewards</div>
             </div>
           </v-btn>
@@ -70,7 +65,7 @@
             </v-skeleton-loader>
           </v-chip-group>
           <v-chip-group v-else v-model="selectedCategoryIndex" column mandatory active-class="geroButton" >
-            <v-chip color="#CECFD2" class="ma-1" style="background-color: #333741!important;" v-for="item in categories?.items" :key="item.id">
+            <v-chip class="ma-1" style="border: 1px solid rgba(51, 55, 65, 0.5); background-color: #141414!important;" v-for="item in categories?.items" :key="item.id">
               {{ item.name }}
             </v-chip>
           </v-chip-group>
@@ -86,6 +81,7 @@
             :loading="isLoading2"
             label="Brand, product, destination"
             outlined
+            class="cashback-search"
             solo
             dense
             prepend-inner-icon="mdi-magnify"
@@ -93,6 +89,7 @@
             hide-details
             hide-no-data
             hide-selected
+            style="border-radius: 20px"
             :filter="customAutoCompleteFilter"
             attach
           >
@@ -104,7 +101,7 @@
       </v-row>
       <v-row class="mt-4" v-show="!isLoading">
         <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
-          <v-card class="pa-4 fill-height" flat outlined style="background-color: black!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
+          <v-card class="pa-4 fill-height" flat style="background-color: #161B26!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
             <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
               <v-img :src="retailer.img" contain style="margin: auto;" eager>
                 <template v-slot:placeholder>
@@ -298,12 +295,13 @@ export default defineComponent({
 </script>
 <style scoped>
 .card-text {
-  width: 100%;
-  height: 100%;
+  margin: auto;
+  width: max-content;
+  height: 114px;
   padding: 24px;
-  background: linear-gradient(90deg, rgb(0, 14, 17), rgb(0, 19, 16));
+  background-color: #161B26;
   border-radius: 12px;
-  border: 1px solid #00DFF3;
+  border: 1px solid #333741;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -315,7 +313,6 @@ export default defineComponent({
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  gap: 80px;
 }
 
 .left-section, .right-section {
@@ -323,7 +320,6 @@ export default defineComponent({
   flex-direction: column;
   justify-content: flex-start;
   align-items: flex-start;
-  gap: 24px;
 }
 
 .header {
@@ -367,7 +363,7 @@ export default defineComponent({
   background: linear-gradient(to right, #00c7f3, #00fad5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-size: 30px;
+  font-size: 26px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
@@ -410,7 +406,7 @@ export default defineComponent({
   background: linear-gradient(to right, #00c7f3, #00fad5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-size: 30px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;

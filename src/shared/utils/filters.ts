@@ -10,6 +10,9 @@ const filters = {
     return value.substring(0, frontChars) + separator + value.substring(value.length - backChars);
   },
   shortenStringWithEllipsis(str, maxLength) {
+    if (!str) {
+      return str
+    }
     // Check if the string length is less than or equal to the maximum length
     if (str.length <= maxLength) {
       return str;
@@ -59,7 +62,10 @@ const filters = {
       const item = lookup.slice().reverse().find(function (item) {
         return res >= item.value;
       });
-      return symbolPrefix+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0")+symbolSuffix;
+      let result = symbolPrefix+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0")+symbolSuffix
+      if (result === symbolPrefix+'0'+symbolSuffix)
+        result = symbolPrefix+res.toFixed(4).match(/^-?\d*\.?0*\d?/)[0]+symbolSuffix;
+      return result
     }
     if (res >= 0) {
       return (signs ? '+ ' : '') + symbolPrefix + (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString()) + symbolSuffix;

@@ -38,21 +38,27 @@ export const musicStore = defineStore( 'musicStore', {
         })
       })
       this.setMusicPlaylist(mediaNFTs.map(nft => {
-        return nft.onchain_metadata.files?.map(file => {
-          const src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
-          return {
-            id: nft.unit,
-            artist: getArtists(nft.onchain_metadata.release?.artists) || nft.metadata?.name || nft.name,
-            title: (file.song?.song_title || nft.name) + (file.mediaType?.includes('video') ? " (Video)" : ""),
-            img: nft.img,
-            url: src,
-            mediaType: file.mediaType,
-            metadata: nft.onchain_metadata,
-            name: file.name || nft.name,
-            display: true,
-            category: nft.collection
-          }
-        });
+        return nft.onchain_metadata.files?.filter(file => file.src)
+          .map(file => {
+            let src
+            if (String(file.src).includes('ar://')) {
+              src = `${baseUrl}/api/ar/${file.src.replace('ar://', '')}`
+            } else {
+              src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
+            }
+            return {
+              id: nft.unit,
+              artist: getArtists(nft.onchain_metadata.release?.artists) || nft.metadata?.name || nft.name,
+              title: (file.song?.song_title || nft.name) + (file.mediaType?.includes('video') ? " (Video)" : ""),
+              img: nft.img,
+              url: src,
+              mediaType: file.mediaType,
+              metadata: nft.onchain_metadata,
+              name: file.name || nft.name,
+              display: true,
+              category: nft.collection
+            }
+          });
       }).flat()
         .filter(nft => nft.mediaType?.includes('audio')) // || nft.mediaType?.includes('video'))
       )
