@@ -25,7 +25,7 @@
           :href="'https://www.gerowallet.io/support'"
           target="_blank"
         >
-          <v-icon>mdi-lifebuoy</v-icon>&nbsp;
+          <v-icon class="mr-1">mdi-lifebuoy</v-icon>
           {{ $t('help') }}
         </v-btn>
       </v-container>
@@ -54,8 +54,18 @@
       color="transparent"
     >
       <v-container class="py-0 fill-height d-flex justify-end" style="max-width: 1000px">
-        <privacy-policy-dialog :dialog="privacyPolicyDialog"
-                               @dialogChange="privacyPolicyDialogChange"></privacy-policy-dialog>
+        <v-btn
+          text
+          plain
+          :ripple="false"
+          style="text-transform: none"
+          href="https://www.gerowallet.io/privacy"
+          target="_blank"
+        >
+          Privacy Policy
+        </v-btn>
+<!--        <privacy-policy-dialog :dialog="privacyPolicyDialog"-->
+<!--                               @dialogChange="privacyPolicyDialogChange"></privacy-policy-dialog>-->
         <div class="mx-1" style="height: 20px">
           <v-divider vertical></v-divider>
         </div>
@@ -75,14 +85,15 @@
 </template>
 <script>
 // import LanguageSelector from '../components/LanguageSelector.vue';
-import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
+// import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
 
 export default {
   name: 'BlankLayout',
-  components: { PrivacyPolicyDialog,
+  components: {
+    // PrivacyPolicyDialog,
     // LanguageSelector
   },
   computed: {
