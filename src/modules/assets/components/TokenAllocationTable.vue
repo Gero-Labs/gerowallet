@@ -43,14 +43,14 @@
                       </v-avatar>
                     </template>
                     <v-avatar size="32">
-                      <img
+                      <img v-if="item['img']"
                         :src="item['img']"
                         :alt="`${item['ticker']} Logo`"
                       />
                     </v-avatar>
                   </v-badge>
                   <v-avatar size="32" v-else>
-                    <img
+                    <img v-if="item['img']"
                       :src="item['img']"
                       :alt="`${item['ticker']} Logo`"
                     />

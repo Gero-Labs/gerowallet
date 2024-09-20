@@ -18,7 +18,6 @@ import {
   PrivateKey,
   PublicKey,
   RewardAddress,
-  Transaction,
   TransactionBody,
   TransactionHash,
   TransactionWitnessSet,
@@ -47,10 +46,10 @@ import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
 import {
   createCOSEKeyHex,
-  createSignDataBuilder, hdPathToArray,
-  safeFreeCSLObject, toHexArray, toHexString,
+  createSignDataBuilder, safeFreeCSLObject, toHexArray, toHexString,
   toStakeKeyHash,
 } from '@/shared/utils/converter';
+
 const blake2b = require('blake2b');
 
 export class Wallet {
@@ -189,11 +188,13 @@ export class Wallet {
   }
 
   baseAddress(): BaseAddress {
-    return this.deriveAddressFromPath(0)
+    return this.deriveAddressFromPath(0);
+    // return BaseAddress.from_address(Address.from_bech32("addr1q9vshd7azlr2s7gkk5jan8vxkp8d8x4pwjnkx2x6uegpgthx4f8naynfp7hswl0faaww0nlc88ge2jk04ty4l0zapjpq5qg024"))
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
+    // return RewardAddress.from_address(Address.from_bech32("stake1u8n25ne7jf5sltc80h577h88elurn5v4ft864j2lh3wseqs04jqmy"))
   }
 
   paymentKeyHash(address: string) {
@@ -247,7 +248,7 @@ export class Wallet {
 
     if (this.type === WalletType.Ledger) {
       const response: SignedMessageData = await ledger.signData(
-        address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb
+        address, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb,
       );
 
       const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload, payload.length > 99);
@@ -258,7 +259,7 @@ export class Wallet {
       const keyHash: string = chrome.storage
         ? await extractKeyHash(address)
         : BaseAddress.from_address(
-          Address.from_bech32(Buffer.from(address, 'hex').toString())
+          Address.from_bech32(Buffer.from(address, 'hex').toString()),
         ).payment_cred().to_keyhash().to_bech32('addr_vkh');
 
       const prefix: string = keyHash.startsWith('addr_vkh') ? 'addr_vkh' : 'stake_vkh';
@@ -279,7 +280,9 @@ export class Wallet {
     return { signature: signatureHex, key: keyHex };
   }
 
-  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{ witnesses: string }> {
+  async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{
+    witnesses: string
+  }> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
     const vkeyWitnesses: Vkeywitnesses = Vkeywitnesses.new();
     const txBody: TransactionBody = rawTx.body();
@@ -288,7 +291,7 @@ export class Wallet {
 
     const txHashHex = blake2b(new Uint8Array(32).length).update(rawTx.raw_body()).digest('hex');
 
-    const changeAddress: string = this.baseAddress().to_address().to_bech32()
+    const changeAddress: string = this.baseAddress().to_address().to_bech32();
     let paymentKeyHash: Uint8Array = this.paymentKeyHash(changeAddress);
     let paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
@@ -307,7 +310,7 @@ export class Wallet {
         paymentkeyHex = Buffer.from(paymentKeyHash).toString('hex');
 
         stakeKeyHash = toStakeKeyHash(utxo.payment_addr.bech32);
-        stakeKeyHex = stakeKeyHash.to_hex()
+        stakeKeyHex = stakeKeyHash.to_hex();
 
         if (!keyHashes.includes(paymentkeyHex)) {
           keyHashes.push(paymentkeyHex);
@@ -339,14 +342,11 @@ export class Wallet {
       }
     }
 
-    // Ledger Signing Logic
-    if (this.type === WalletType.Ledger) {
-      const wit = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
-      return { witnesses: wit };
-    }
 
-    // Trezor Signing Logic
-    else if (this.type === WalletType.Trezor) {
+    if (this.type === WalletType.Ledger) { // Ledger Signing Logic
+      const wit: string = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
+      return { witnesses: wit };
+    } else if (this.type === WalletType.Trezor) { // Trezor Signing Logic
       console.log('Signing with Trezor...');
       const wit: TransactionWitnessSet = <TransactionWitnessSet>(
         await trezor.txToTrezor(txBody, this.baseAddress().to_address().to_bech32(), accountIndex, true, utxos)
@@ -354,9 +354,7 @@ export class Wallet {
       if (!wit) {
         throw new Error('Trezor did not return a valid witness set.');
       }
-
       const witnessHex = Buffer.from(wit.to_bytes()).toString('hex');
-
       return { witnesses: witnessHex };
     }
 
@@ -364,7 +362,7 @@ export class Wallet {
     else {
       console.log('Signing with Software Wallet...');
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
-      const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)))
+      const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
       password = null;
       if (!decodedHash && partialSign === false) {
         throw TxSignError.ProofGeneration;
@@ -373,14 +371,12 @@ export class Wallet {
       const txHash = TransactionHash.from_bytes(Buffer.from(txHashHex, 'hex'));
 
       deduped.forEach((utxo) => {
-        const address = addresses[utxo.payment_addr.bech32]
-        const path = hdPathToArray(address['path'])
         const prvKey = Bip32PrivateKey.from_bytes(decodedHash)
           .derive(WalletTypePurpose.CIP1852)
           .derive(CoinTypes.CARDANO)
           .derive(HARDENED + accountIndex)
-          .derive(path[3])
-          .derive(path[4])
+          .derive(utxo.addressing ? utxo.addressing.type : 0)
+          .derive(utxo.addressing ? utxo.addressing.path : 0)
           .to_raw_key();
         const vKeyWitness = make_vkey_witness(txHash, prvKey);
         vkeyWitnesses.add(vKeyWitness);
@@ -408,100 +404,11 @@ export class Wallet {
       if (!witnesses && partialSign === false) {
         throw TxSignError.ProofGeneration;
       }
-      return { witnesses: Buffer.from(witnesses.to_bytes()).toString('hex')
+      return {
+        witnesses: Buffer.from(witnesses.to_bytes()).toString('hex'),
       };
     }
   }
-
-  // async signTxHW(tx, keyHashes, account, hw, partialSign = false)  {
-  //   const rawTx: Transaction = Transaction.from_bytes(Buffer.from(tx, 'hex'));
-  //   const address = Address.from_bech32(account.paymentAddr);
-  //   const network = address.network_id();
-  //   const keys = {
-  //     payment: { hash: null, path: null },
-  //     stake: { hash: null, path: null },
-  //   };
-  //   if (hw.device === WalletType.Ledger.toLowerCase()) {
-  //     const appAda = hw.appAda;
-  //     keyHashes.forEach((keyHash) => {
-  //       if (keyHash === account.paymentKeyHash)
-  //         keys.payment = {
-  //           hash: keyHash,
-  //           path: [HARDENED + 1852, HARDENED + 1815, HARDENED + hw.account, 0, 0],
-  //         };
-  //       else if (keyHash === account.stakeKeyHash)
-  //         keys.stake = {
-  //           hash: keyHash,
-  //           path: [HARDENED + 1852, HARDENED + 1815, HARDENED + hw.account, 2, 0],
-  //         };
-  //       else if (!partialSign) throw TxSignError.ProofGeneration;
-  //       else return;
-  //     });
-  //     const ledgerTx = await ledger.txToLedger(rawTx, network, keys, Buffer.from(address.to_bytes()).toString('hex'), hw.account);
-  //     const result = await appAda.signTransaction(ledgerTx);
-  //     // getting public keys
-  //     const witnessSet = TransactionWitnessSet.new();
-  //     const vkeys = Vkeywitnesses.new();
-  //     result.witnesses.forEach((witness) => {
-  //       if (
-  //         witness.path[3] == 0 // payment key
-  //       ) {
-  //         const vkey = Vkey.new(Bip32PublicKey.from_bytes(Buffer.from(account.publicKey, 'hex'))
-  //             .derive(0)
-  //             .derive(0)
-  //             .to_raw_key());
-  //         const signature = Ed25519Signature.from_hex(
-  //           witness.witnessSignatureHex
-  //         );
-  //         vkeys.add(Vkeywitness.new(vkey, signature));
-  //       } else if (
-  //         witness.path[3] == 2 // stake key
-  //       ) {
-  //         const vkey = Vkey.new(Bip32PublicKey.from_bytes(Buffer.from(account.publicKey, 'hex'))
-  //             .derive(2)
-  //             .derive(0)
-  //             .to_raw_key()
-  //         );
-  //         const signature = Ed25519Signature.from_hex(
-  //           witness.witnessSignatureHex
-  //         );
-  //         vkeys.add(Vkeywitness.new(vkey, signature));
-  //       }
-  //     });
-  //     witnessSet.set_vkeys(vkeys);
-  //     return witnessSet;
-  //   } else {
-  //     keyHashes.forEach((keyHash) => {
-  //       if (keyHash === account.paymentKeyHash)
-  //         keys.payment = {
-  //           hash: keyHash,
-  //           path: `m/1852'/1815'/${hw.account}'/0/0`,
-  //         };
-  //       else if (keyHash === account.stakeKeyHash)
-  //         keys.stake = {
-  //           hash: keyHash,
-  //           path: `m/1852'/1815'/${hw.account}'/2/0`,
-  //         };
-  //       else if (!partialSign) throw TxSignError.ProofGeneration;
-  //       else return;
-  //     });
-  //     const trezorTx = await txToTrezor(rawTx, network, keys, Buffer.from(address.to_bytes()).toString('hex'), hw.account);
-  //     const result = await TrezorConnect.cardanoSignTransaction(trezorTx);
-  //     if (!result.success) throw new Error('Trezor could not sign tx');
-  //     // getting public keys
-  //     const witnessSet = TransactionWitnessSet.new();
-  //     const vkeys = Vkeywitnesses.new();
-  //     result.payload.witnesses.forEach((witness) => {
-  //       const vkey = Vkey.new(PublicKey.from_bytes(Buffer.from(witness.pubKey, 'hex')));
-  //       const signature = Ed25519Signature.from_hex(
-  //         witness.signature
-  //       );
-  //       vkeys.add(Vkeywitness.new(vkey, signature));
-  //     });
-  //     witnessSet.set_vkeys(vkeys);
-  //     return witnessSet;
-  //   }
-  // };
 
   async submitTx(body: string) {
     const response = await this.api.submitTx(body);
@@ -846,7 +753,7 @@ export class Wallet {
         // const missingAddresses = knownAddresses.filter(address => !storedAddressSet.has(address));
         const resolvedAddress = this.resolvePathsForMissingAddresses(knownAddresses);
         if (resolvedAddress?.length > 0) {
-          addressesTable.bulkPut(resolvedAddress)
+          addressesTable.bulkPut(resolvedAddress);
         }
       })
       .catch(err => {
@@ -862,24 +769,24 @@ export class Wallet {
     while (consecutiveUnused < GAP_LIMIT) {
       const derivedAddress = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
       const internalDerivedAddress = this.deriveInternalAddressFromPath(addressIndex).to_address().to_bech32();
-      let found = false
+      let found = false;
       if (usedAddresses.includes(derivedAddress)) {
         resolvedAddresses.push({
           address: derivedAddress,
           path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
-          cred: Buffer.from(this.paymentKeyHash(derivedAddress)).toString('hex')
+          cred: Buffer.from(this.paymentKeyHash(derivedAddress)).toString('hex'),
         });
         consecutiveUnused = 0;  // Reset unused counter if we find a match
-        found = true
+        found = true;
       }
       if (usedAddresses.includes(internalDerivedAddress)) {
         resolvedAddresses.push({
           address: internalDerivedAddress,
           path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
-          cred: Buffer.from(this.paymentKeyHash(internalDerivedAddress)).toString('hex')
+          cred: Buffer.from(this.paymentKeyHash(internalDerivedAddress)).toString('hex'),
         });
         consecutiveUnused = 0;  // Reset unused counter if we find a match
-        found = true
+        found = true;
       }
       if (!found) {
         consecutiveUnused++;  // Increment unused address counter if no match is found
@@ -897,16 +804,16 @@ export class Wallet {
     return BaseAddress.new(
       this.networkId(),
       Credential.from_keyhash(this.pubKey(addressIndex).hash()),
-      Credential.from_keyhash(this.stakeKey().hash())
-    )
+      Credential.from_keyhash(this.stakeKey().hash()),
+    );
   }
 
   deriveInternalAddressFromPath(addressIndex) {
     return BaseAddress.new(
       this.networkId(),
       Credential.from_keyhash(this.pubKeyInternal(addressIndex).hash()),
-      Credential.from_keyhash(this.stakeKey().hash())
-    )
+      Credential.from_keyhash(this.stakeKey().hash()),
+    );
   }
 
   async syncAccountRewards(): Promise<void> {

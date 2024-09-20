@@ -92,7 +92,7 @@
             </v-col>
             <v-col cols="6">
               <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
-                {{config.txAutoSubmit ? 'Sign & Confirm' : !witnesses ? 'SIGN' : 'CONFIRM'}}
+                {{txAutoSubmit ? 'Sign & Confirm' : !witnesses ? 'SIGN' : 'CONFIRM'}}
               </v-btn>
             </v-col>
           </v-row>
@@ -112,7 +112,7 @@ import {
   decode_metadatum_to_json_str,
   Transaction, Value,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { mapState } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
@@ -156,8 +156,16 @@ export default {
     WalletType() {
       return WalletType
     },
+    txAutoSubmit: {
+      get() {
+        return this.getTxAutoSubmit
+      },
+      async set(val) {
+        await this.setTxAutoSubmit(val)
+      }
+    },
     ...mapState(useStore, ['loggedWallet', 'baseAddress']),
-    ...mapState(walletConfigStore, ['config', 'utxos', 'addresses']),
+    ...mapState(walletConfigStore, ['config', 'utxos', 'addresses', 'getTxAutoSubmit']),
     txFee() {
       return this.tx ? this.tx.body().fee().to_str() : null;
     },
@@ -274,6 +282,7 @@ export default {
     },
   },
   methods: {
+    ...mapActions(walletConfigStore, ['setTxAutoSubmit']),
     enableToolTip() {
       this.tooltip.enabled = true;
       setTimeout(() => {
@@ -285,7 +294,7 @@ export default {
       window.close();
     },
     async sign() {
-      if (!this.config.txAutoSubmit && this.witnesses) {
+      if (!this.txAutoSubmit && this.witnesses) {
         await this.confirm()
       }
       const signAndReturnTx = async () => {
@@ -304,7 +313,7 @@ export default {
           );
           console.log(response)
           this.witnesses = response.witnesses
-          if (this.config.txAutoSubmit) {
+          if (this.txAutoSubmit) {
             await this.confirm()
           }
         } catch (e) {

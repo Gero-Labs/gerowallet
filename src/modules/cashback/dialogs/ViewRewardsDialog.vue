@@ -3,13 +3,10 @@
     <div style="z-index: 3" class="px-4">
       <v-row>
         <v-col cols="12" xl="7" lg="7" md="7">
-          <div class="card-text" style="height: 190px">
-            <div style="justify-content: flex-start; align-items: center; gap: 16px; display: inline-flex" v-if="!isClaim">
-              <div style="flex-direction: column; justify-content: flex-start; align-items: flex-start; gap: 16px; display: inline-flex">
-                <div style="align-self: stretch; justify-content: center; align-items: center; gap: 12px; display: inline-flex">
-                  <v-avatar size="48" class="avatar-bg">
-                    <v-icon color="#00DFF3">mdi-gift-outline</v-icon>
-                  </v-avatar>
+          <div class="card-text">
+            <div style="justify-content: flex-start; align-items: center; gap: 16px; display: inline-flex">
+              <div style="flex-direction: column; justify-content: flex-start; align-items: flex-start; display: inline-flex">
+                <div style="justify-content: center; align-items: center; display: inline-flex">
                   <div class="header-text">Ready to Claim</div>
                 </div>
                 <div class="amount-section">
@@ -17,71 +14,11 @@
                     <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
                   </div>
                   <div class="usd-amount" v-if="eligible">
-                    <div class="usd-text">Total Value: {{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}</div>
+                    <div class="usd-text">{{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}</div>
                   </div>
-                  <span v-if="eligible">Minimum to claim: {{ eligible ? (eligible.minimumClaimThreshold * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</span>
                 </div>
               </div>
-              <v-btn class="geroButton" icon height="100" width="100" style="letter-spacing: normal; font-size: 24px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount" @click="toggleClaim(true)">Claim</v-btn>
-            </div>
-            <div style="justify-content: flex-start; align-items: start; display: inline-flex; flex-flow: column;" v-else>
-              <v-form>
-                <div style="position: relative; top: -6px; left: -56px">
-                  <v-btn text small plain @click="isClaim = false" class="px-0" :ripple="false">
-                    <v-icon class="mr-1" small>
-                      mdi-arrow-left
-                    </v-icon>Back
-                  </v-btn>
-                </div>
-                <div>
-                  <v-slider label="Claim Amt." hide-details thumb-label="always" v-model="amountToClaim" :min="eligible.minimumClaimThreshold" :max="eligible.tokenAmount">
-                    <template v-slot:thumb-label="{ value }">
-                      <span style="font-size: 9px">
-                        {{ value * 1000000 | toCurrency(false, 2, '₳', '', false, 6)  }}
-                      </span>
-                    </template>
-                  </v-slider>
-                  <v-tooltip
-                    v-model="tooltip.enabled"
-                    top
-                    color="red"
-                  >
-                    <template v-slot:activator="{ }">
-                      <v-text-field
-                        flat
-                        style="width: 295px; margin: auto"
-                        block
-                        dense
-                        v-model="spendingPassword"
-                        outlined
-                        label="Spending Password"
-                        :type="show1 ? 'text' : 'password'"
-                        :rules="[rules.required]"
-                        hide-details
-                        class="my-2"
-                        required
-                        :disabled="loading"
-                        @keydown.enter.stop="claim"
-                      >
-                        <template v-slot:append>
-                          <v-icon @click="show1 = !show1" tabindex="-1">
-                            {{ show1 ? 'mdi-eye' : 'mdi-eye-off' }}
-                          </v-icon>
-                        </template>
-                      </v-text-field>
-                    </template>
-                    <span>{{ tooltip.text }}</span>
-                  </v-tooltip>
-                  <v-btn
-                    style="width: 295px; color: black!important;"
-                    class="geroButton mt-2"
-                    :disabled="loading || !spendingPassword"
-                    :loading="loading"
-                    @click="claim"
-                  >Sign and Confirm
-                  </v-btn>
-                </div>
-              </v-form>
+              <v-btn class="geroButton" :loading="loading" icon height="80" width="80" style="letter-spacing: normal; font-size: 20px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount || loading" @click="claim">Claim</v-btn>
             </div>
           </div>
         </v-col>
@@ -92,7 +29,7 @@
               {{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
             </div>
             <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
-              {{ pending?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}
+              {{ pending ? pending?.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}
             </div>
           </div>
         </v-col>
@@ -201,9 +138,12 @@ import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
 import { bringStore } from '@/store/modules/bring';
 import networks from '@/shared/utils/networks';
-import { stringToHex } from '@/shared/utils/converter';
+import { stringToHex, toHexBuffer, toHexString } from '@/shared/utils/converter';
 import rules from '@/shared/utils/rules';
 import snackbar from '@/plugins/snackbar';
+import { Messaging } from '@/chrome/messaging';
+import { METHOD } from '@/chrome/config';
+import { Address, BaseAddress } from '@emurgo/cardano-serialization-lib-browser';
 
 export default {
   name: 'ViewRewardsDialog',
@@ -218,6 +158,12 @@ export default {
   computed: {
     ...mapState(bringStore, ['bringCache']),
     ...mapState(useStore, ['loggedWallet', 'baseAddress']),
+    amountToClaim() {
+      if (this.eligible) {
+        return this.eligible.tokenAmount
+      }
+      return 0
+    },
     eligible() {
       if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
         return this.bringCache.data.eligible[0]
@@ -245,12 +191,6 @@ export default {
   },
   methods: {
     ...mapActions(bringStore, ['loadBringCache']),
-    toggleClaim(val) {
-      if (val) {
-        this.spendingPassword = ''
-      }
-      this.isClaim = val
-    },
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -282,38 +222,32 @@ export default {
       }
     },
     async claim() {
-      const wallet = appWallet
-      if (wallet.verifySpendingPassword(this.spendingPassword)) {
-        this.loading = true
-        try {
-          const res = await appWallet.api.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
-          const messageToSign = res.messageToSign
-          const res2 = await wallet.signData(stringToHex(this.baseAddress), stringToHex(messageToSign), this.spendingPassword, 0, false)
-          const status = await appWallet.api.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, res2.signature, res2.key)
+      this.loading = true
+      try {
+        const res = await appWallet.api.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
+        const messageToSign = res.messageToSign
+        const request = {
+          method: METHOD.signData,
+          data: { address: Address.from_bech32(this.baseAddress).to_hex(), payload: stringToHex(messageToSign) },
+        }
+        const signature = await Messaging.sendToBackground(request);
+        if (signature.error) {
+          snackbar.setError(signature.error.info)
+        } else {
+          const status = await appWallet.api.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
           if (status === 202) {
             snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
-            this.spendingPassword = ''
             await this.loadBringCache()
-            this.isClaim = false
           }
-        } catch (e) {
-          if (JSON.parse(e).status === 403) {
-            snackbar.setError(`403 Forbidden`)
-          }
-          console.log(e)
         }
-        this.loading = false
-      } else if (this.spendingPassword) {
-        this.tooltip.enabled = true
-        setTimeout(() => {
-          this.tooltip.enabled = false;
-        }, 3000);
+      } catch (e) {
+        snackbar.setError(e)
+        console.log(e)
       }
+      this.loading = false
     },
   },
   data: () => ({
-    amountToClaim: 0,
-    isClaim: false,
     currentTab: 0,
     dealsHeaders: [
       { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
@@ -328,18 +262,9 @@ export default {
     ],
     messageToSign: undefined,
     signature: undefined,
-    tooltip: {
-      enabled: false,
-      text: 'Wrong Spending Password!',
-    },
     rules,
-    show1: false,
     loading: false,
-    spendingPassword: '',
   }),
-  mounted() {
-      this.amountToClaim = this.eligible?.tokenAmount
-  },
   watch: {
     isOpen(val) {
       if (val) {
@@ -359,10 +284,10 @@ export default {
 
 .card-text {
   width: 100%;
-  padding: 24px;
-  background: linear-gradient(90deg, rgb(0, 14, 17), rgb(0, 19, 16));
+  padding: 10px;
+  background-color: #161B26;
   border-radius: 12px;
-  border: 1px solid #00DFF3;
+  border: 1px solid #333741;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -376,7 +301,7 @@ export default {
 
 .header-text {
   color: white;
-  font-size: 24px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 24px;
   word-wrap: break-word;
@@ -385,7 +310,6 @@ export default {
 .amount-section {
   font-weight: 700;
   align-self: stretch;
-  height: 76px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -411,7 +335,6 @@ export default {
 }
 
 .usd-amount {
-  height: 38px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;

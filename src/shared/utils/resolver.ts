@@ -33,7 +33,7 @@ function cip68Label(asset: any) {
     return null;
   }
   const numHex = label.slice(1, 5);
-  const num = parseInt(numHex, 16);
+  const num: number = parseInt(numHex, 16);
   const check = label.slice(5, 7);
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
 }
@@ -61,7 +61,17 @@ export async function resolveAsset(asset, token) {
         const obj = asset.onchain_metadata['721'][asset.policy_id][name];
         onchain_metadata = obj
         if (obj.image) {
-          img = `${baseUrl}/api/ipfs/${obj.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+          let imgString
+          if (typeof obj.image == "string") {
+            imgString = obj.image
+          } else if (Array.isArray(obj.image)) {
+            imgString = obj.image.join('')
+          }
+          if (imgString.includes('ar://')) {
+            img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
+          } else {
+            img = `${baseUrl}/api/ipfs/${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
+          }
         }
       } else { // CIP 68
         const label = cip68Label(asset);

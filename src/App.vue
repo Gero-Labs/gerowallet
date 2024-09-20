@@ -24,6 +24,7 @@
         :color="snackbar.color"
         top
         style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
+        transition="scroll-y-transition"
     >
       {{ snackbar.text }}
     </v-snackbar>

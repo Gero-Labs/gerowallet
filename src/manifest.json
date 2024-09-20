@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gero Dashboard Beta",
   "short_name": "Gero Dashboard Beta",
-  "version": "2.2.7",
+  "version": "2.2.8",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",
@@ -26,7 +26,8 @@
     "activeTab",
     "clipboardRead",
     "storage",
-    "favicon"
+    "favicon",
+    "alarms"
   ],
   "host_permissions": [
     "*://connect.trezor.io/*"
