@@ -54,7 +54,6 @@ export default {
     ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit']),
     txAutoSubmit: {
       get() {
-        console.log(this.getTxAutoSubmit)
         return this.getTxAutoSubmit
       },
       async set(val) {

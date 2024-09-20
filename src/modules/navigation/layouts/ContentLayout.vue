@@ -24,10 +24,15 @@
                   </template>
                 </v-progress-linear>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-                <v-icon small :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
+                <v-icon small class="mr-1" :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
                   {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
-                </v-icon>&nbsp;
-                <span style="font-size: 12px">{{loggedWallet?.network}} - Synced {{new Date(latestTip?.time * 1000).toLocaleString()}}</span>
+                </v-icon>
+                <span style="font-size: 12px; min-width: 101px; width: 101px; line-height: 1;" v-if="latestTip">{{loggedWallet?.network}} - Synced {{new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000))}}</span>
+                <v-avatar tile size="16" class="ml-4 mr-1">
+                  <v-img :src="require('@/assets/svg/wallet.svg')" contain></v-img>
+                </v-avatar>
+                <a style="font-size: 12px; color: white" class="mr-1" @click="copyAddress">{{baseAddress | shortenStringWithEllipsis(14)}}</a>
+                <copy-button ref="copyAddress" x-small :value="baseAddress"></copy-button>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2" :loading="loading.isSyncing" disabled>
                   <v-avatar size="20">
@@ -115,10 +120,12 @@ import networks from '@/shared/utils/networks';
 import Player from '@/modules/media-player/Player.vue';
 import loading from '@/plugins/loading';
 import { musicStore } from '@/store/modules/music';
+import filters from '@/shared/utils/filters';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 export default {
   name: 'ContentLayout',
-  components: { Player, PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks
@@ -129,7 +136,7 @@ export default {
     currentPage() {
       return this.$route
     },
-    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs', 'baseAddress']),
     ...mapState(musicStore, ['musicPlaylist', 'context']),
     epochSlotPercentage() {
       if (this.latestTip) {
@@ -141,6 +148,7 @@ export default {
       return loading
     },
   },
+  filters,
   data: () => ({
     socket,
     currentDialog: null,
@@ -151,6 +159,9 @@ export default {
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
     ...mapActions(useStore, ['login']),
+    copyAddress() {
+      this.$refs.copyAddress.copy()
+    },
     closeDialog() {
       this.currentDialog = null;
     },
