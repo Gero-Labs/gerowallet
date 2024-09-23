@@ -48,7 +48,7 @@
       </v-card-title>
       <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && accountInfo" style="display: block;">
+    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block;">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
@@ -57,7 +57,7 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4><strong>{{ accountInfo.controlled_amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</strong></h4>
+            <h4><strong>{{ account.controlled_amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Epoch Yield
@@ -65,7 +65,7 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4>~<strong>{{ accountInfo?.controlled_amount * pool.ros/100/73 | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4>~<strong>{{ account?.controlled_amount * pool.ros/100/73 | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>Deposit Fee</h4>
@@ -253,11 +253,11 @@ export default {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet']),
-    ...mapState(walletConfigStore, ['utxos', 'addresses']),
+    ...mapState(useStore, ['loggedWallet']),
+    ...mapState(walletConfigStore, ['utxos', 'addresses', 'account']),
     depositFee() {
       let depositFee = 0;
-      const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
+      const totalAdaBalance = BigNum.from_str(this.account.controlled_amount.toString())
       let totalAdaOutput = 0
       if (this.tx?.body()?.inputs()) {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {

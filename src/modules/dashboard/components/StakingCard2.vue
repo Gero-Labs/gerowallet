@@ -11,12 +11,12 @@
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Total</span>
-            <h2 style="color: white" v-if="loggedWallet && accountInfo">{{ accountInfo.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h2>
+            <h2 style="color: white" v-if="loggedWallet && account">{{ account.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h2>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>
-            <h2 style="color: white">{{ accountInfo?.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
-            <v-btn v-if="accountInfo?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
+            <h2 style="color: white">{{ account?.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
+            <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
               Withdraw
             </v-btn>
           </v-col>
@@ -56,10 +56,10 @@
               </v-btn>
             </div>
             <v-row no-gutters class="pt-2 pb-1">
-              <v-col cols="6" style="display: block;text-align: center;" v-if="accountInfo">
+              <v-col cols="6" style="display: block;text-align: center;" v-if="account">
                 <h4>Pool Id</h4>
-                <span style="color: white;">{{ accountInfo.pool_id | truncate }}</span>
-                <CopyButton :value="accountInfo.pool_id" x-small></CopyButton>
+                <span style="color: white;">{{ account.pool_id | truncate }}</span>
+                <CopyButton :value="account.pool_id" x-small></CopyButton>
               </v-col>
               <v-col cols="6" style="display: block;text-align: center;">
                 <h4>ROS</h4>
@@ -199,14 +199,14 @@ export default {
     filters() {
       return filters
     },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'accountInfo', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
-    ...mapState(walletConfigStore, ['utxos']),
+    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
+    ...mapState(walletConfigStore, ['utxos', 'account']),
     Network() {
       return Network
     },
     pool() {
       if (this.pools) {
-        return this.pools.find(pool => pool.pool_id_bech32 === this.accountInfo.pool_id)
+        return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)
       }
       return null
     },
@@ -264,10 +264,10 @@ export default {
       const wallet = useStore().getWallet;
       // Withdrawals
       const withdrawals = []
-      if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo?.withdrawable_amount) > 0) {
+      if (this.account?.withdrawable_amount && Number(this.account?.withdrawable_amount) > 0) {
         withdrawals.push({
           address: this.stakeAddress,
-          amount: this.accountInfo.withdrawable_amount
+          amount: this.account.withdrawable_amount
         })
       }
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();
@@ -282,19 +282,18 @@ export default {
       console.log('test')
       const wallet = useStore().getWallet;
       const certificates = [];
-      if (this.accountInfo?.active) {
+      if (this.account?.active) {
         // DeRegistration Certificate
         const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(deRegistrationCertificate);
         // Withdrawals
         const withdrawals = []
-        if (this.accountInfo?.withdrawable_amount && Number(this.accountInfo.withdrawable_amount) > 0) {
+        if (this.account?.withdrawable_amount && Number(this.account.withdrawable_amount) > 0) {
           withdrawals.push({
             address: this.stakeAddress,
-            amount: this.accountInfo.withdrawable_amount
+            amount: this.account.withdrawable_amount
           })
         }
-        // if (this.accountInfo)
         const transactionUnspentOutputs = TransactionUnspentOutputs.new();
         this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
         const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)

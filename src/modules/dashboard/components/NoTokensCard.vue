@@ -65,13 +65,13 @@ export default {
       return networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
     },
     hasAssets() {
-      return !!this.accountInfo
+      return !!this.account
     },
     Blockchain() {
       return Blockchain
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'pools', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos']),
+    ...mapState(useStore, ['loggedWallet', 'pools', 'latestTip', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos', 'account']),
   },
   methods: {
     delegateToGero() {
@@ -84,7 +84,7 @@ export default {
       const wallet = appWallet;
       // Registration Certificate
       const certificates = [];
-      if (!this.accountInfo?.active) {
+      if (!this.account?.active) {
         const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
       }

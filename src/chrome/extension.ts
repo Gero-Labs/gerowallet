@@ -1,4 +1,4 @@
-import { APIError, DataSignError, NETWORK_ID, POPUP_WINDOW, STORAGE } from './config';
+import { APIError, DataSignError, NETWORK_ID, POPUP_WINDOW, STORAGE, TxSendError } from './config';
 import {
   Address,
   BaseAddress,
@@ -6,23 +6,19 @@ import {
   ByronAddress,
   Credential,
   EnterpriseAddress,
-  PointerAddress,
+  PointerAddress, PublicKey,
   RewardAddress,
   Transaction,
   TransactionUnspentOutput,
   Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
-import { ChainDerivations, Paginate, STAKING_KEY_INDEX } from '@/models/types';
+import { ChainDerivations, ERROR, Paginate, STAKING_KEY_INDEX } from '@/models/types';
 import { toUTxO, toValue } from '@/shared/utils/converter';
 
 interface WhitelistedEntry {
   domain: string;
   id: number;
-}
-
-interface Network {
-  id: string;
 }
 
 export const getStorage = (key) =>
@@ -104,7 +100,7 @@ export const getUtxos = async (amount = undefined, paginate = undefined): Promis
   return converted;
 };
 
-export const getAddress = async () => {
+export const getAddress = async (): Promise<Address> => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
     .derive(ChainDerivations.EXTERNAL)
@@ -118,37 +114,30 @@ export const getAddress = async () => {
     networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
     Credential.from_keyhash(pubKey.hash()),
     Credential.from_keyhash(stakeKey.hash()),
-  ).to_address().to_hex();
+  ).to_address();
 };
 
-export const getAddressBech32 = async () => {
+export const getStakeKey = async (): Promise<PublicKey> => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet) {
-    return undefined
-  }
-  const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
-      .derive(ChainDerivations.EXTERNAL)
-      .derive(0)
-      .to_raw_key();
-  const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
-      .derive(ChainDerivations.CHIMERIC_ACCOUNT)
-      .derive(STAKING_KEY_INDEX)
-      .to_raw_key();
-  return BaseAddress.new(
-    networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
-    Credential.from_keyhash(pubKey.hash()),
-    Credential.from_keyhash(stakeKey.hash()),
-  ).to_address().to_bech32();
-};
-
-export const getRewardAddresses = async () => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  const stakeKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+  return Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
     .derive(ChainDerivations.CHIMERIC_ACCOUNT)
     .derive(STAKING_KEY_INDEX)
     .to_raw_key();
+}
+
+export const getRewardAddresses = async () => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const stakeKey = await getStakeKey();
   const networkId = networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network'])
   return [RewardAddress.new(networkId, Credential.from_keyhash(stakeKey.hash())).to_address().to_hex()]
+};
+
+export const getDRepKey = async (): Promise<PublicKey> => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  return Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+    .derive(ChainDerivations.DREP)
+    .derive(STAKING_KEY_INDEX)
+    .to_raw_key()
 };
 
 export const getNetwork = async (): Promise<any> => {
@@ -301,3 +290,45 @@ export const verifyTx = async (tx) => {
     throw APIError.InvalidRequest;
   }
 };
+
+export const submitTx = async (tx) => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  console.log(loggedWallet)
+  const result = await fetch(`/api/transactions/submit-tx?chain=${loggedWallet.chain}&network=${loggedWallet.network}&provider=${loggedWallet.provider}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: tx
+  })
+  if (result['error']) {
+    if (result['status_code'] === 400)
+      throw { ...TxSendError.Failure, message: result['message'] };
+    else if (result['status_code'] === 500) throw APIError.InternalError;
+    else if (result['status_code'] === 429) throw TxSendError.Refused;
+    else if (result['status_code'] === 425) throw ERROR.fullMempool;
+    else throw APIError.InvalidRequest;
+  }
+  return result;
+}
+
+export const getPubDRepKey = async (): Promise<string> => {
+  const drepPubKey: PublicKey = await getDRepKey()
+  return drepPubKey.to_hex()
+}
+
+export const getRegisteredPubStakeKeys = async () => {
+  const account = await getStorage(STORAGE.account);
+  if (account?.active) {
+    return [(await getStakeKey()).to_hex()];
+  } else {
+    return [];
+  }
+}
+
+export const getUnregisteredPubStakeKeys = async () => {
+  const account = await getStorage(STORAGE.account);
+  if (account?.active) {
+    return [];
+  } else {
+    return [(await getStakeKey()).to_hex()];
+  }
+}

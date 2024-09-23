@@ -21,7 +21,7 @@
         <TokenAllocationTable></TokenAllocationTable>
       </v-col>
       <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
-        <StakingCard2 v-if="accountInfo?.controlled_amount && accountInfo?.pool_id"></StakingCard2>
+        <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
       <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
@@ -42,6 +42,7 @@ import {mapState} from "pinia";
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'dashboard',
@@ -53,7 +54,8 @@ export default {
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'accountInfo', 'loggedWallet', 'loadingTxs']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'loggedWallet', 'loadingTxs']),
+    ...mapState(walletConfigStore, ['account']),
     computeChartData() {
       let graphData = undefined
       let currentBalance = 0

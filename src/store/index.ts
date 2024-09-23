@@ -51,7 +51,6 @@ export const useStore = defineStore('store', {
     pools: [],
     rewards: [],
     connectedDapps: [],
-    accountInfo: undefined,
     latestTip: undefined,
     stakingProView: false,
     resolvedAssets: undefined,
@@ -204,7 +203,6 @@ export const useStore = defineStore('store', {
       return []
     },
     getPools: state => state.pools,
-    getAccountInfo: state => state.accountInfo
   },
   actions: {
     setLoadingTxs(value) {
@@ -476,7 +474,7 @@ export const useStore = defineStore('store', {
       await walletConfigStore().loadConfig()
       promises.push(walletConfigStore().loadAddresses())
       promises.push(this.loadSync())
-      promises.push(this.loadAccountInfo())
+      promises.push(walletConfigStore().loadAccountInfo())
       promises.push(this.loadPools())
       promises.push(governanceStore().loadDReps())
       promises.push(this.loadTransactions())
@@ -510,13 +508,13 @@ export const useStore = defineStore('store', {
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
-      walletConfigStore().setUtxos(undefined)
+      await walletConfigStore().setUtxos(undefined)
       this.resolvedAssets = undefined
       this.pools = []
-      this.accountInfo = undefined;
+      await walletConfigStore().setAccount(undefined);
       this.latestTip = undefined;
       this.resolvedCollections = undefined
-      walletConfigStore().setAddresses(undefined)
+      await walletConfigStore().setAddresses(undefined)
       this.baseAddress = undefined
       this.stakeAddress = undefined
       appWallet = undefined
@@ -575,26 +573,6 @@ export const useStore = defineStore('store', {
           },
           error: error => {
             console.error('Failed to Fetch Tip:', error)
-            reject(error)
-          }
-        });
-      });
-    },
-    async loadAccountInfo() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db = await appWallet.getDb()
-      return new Promise((resolve, reject) => {
-        liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
-          next: newAccountInfo => {
-            this.accountInfo = newAccountInfo
-            resolve(this.accountInfo)
-          },
-          error: error => {
-            console.error('Failed to Fetch AccountInfo:', error)
             reject(error)
           }
         });
