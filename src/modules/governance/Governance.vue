@@ -20,13 +20,13 @@
               <div class="gradient-text text-h6 font-weight-semibold">
                 {{delegatingTo}}
               </div>
-              <div style="display: flex;align-items: center;" v-if="dreps[accountInfo?.drep_id]">
+              <div style="display: flex;align-items: center;" v-if="dreps[account?.drep_id]">
                 <div class="white--text text-h6 font-weight-semibold" >
-                  {{ accountInfo?.drep_id | truncate }}
-                </div><CopyButton small :value="accountInfo?.drep_id"></CopyButton>
+                  {{ account?.drep_id | truncate }}
+                </div><CopyButton small :value="account?.drep_id"></CopyButton>
               </div>
-              <div class="gradient-text text-subtitle-2 font-weight-semibold" v-if="dreps[accountInfo?.drep_id]">
-                Vote Power: {{dreps[accountInfo?.drep_id].amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true)}}
+              <div class="gradient-text text-subtitle-2 font-weight-semibold" v-if="dreps[account?.drep_id]">
+                Vote Power: {{dreps[account?.drep_id].amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true)}}
               </div>
             </v-card-text>
             <v-card-text class="px-0 pb-0">
@@ -210,19 +210,19 @@ export default defineComponent({
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'accountInfo', 'baseAddress', 'latestTip']),
-    ...mapState(walletConfigStore, ['utxos']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress', 'latestTip']),
+    ...mapState(walletConfigStore, ['utxos', 'account']),
     ...mapState(governanceStore, ['dreps', 'drepId']),
     delegatingTo() {
       let res = 'Undelegated'
-      if (this.accountInfo?.drep_id) {
+      if (this.account?.drep_id) {
         res = 'N/A'
-        if (this.accountInfo?.drep_id == 'drep_always_no_confidence') {
+        if (this.account?.drep_id == 'drep_always_no_confidence') {
           res = 'No Confidence'
-        } else if (this.accountInfo?.drep_id == 'drep_always_abstain') {
+        } else if (this.account?.drep_id == 'drep_always_abstain') {
           res = 'Abstain'
         } else {
-          const drep = this.dreps[this.accountInfo.drep_id]
+          const drep = this.dreps[this.account.drep_id]
           if (drep && drep['metadata']?.json?.body?.givenName) {
             if (drep['metadata'].json.body.givenName['@value']) {
               res = drep['metadata'].json.body.givenName['@value']
@@ -292,7 +292,7 @@ export default defineComponent({
       console.log('delegate', this.delegationModel)
       const wallet = appWallet;
       const certificates = [];
-      if (!this.accountInfo?.active) {
+      if (!this.account?.active) {
         const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
         // safeFreeCSLObject(registrationCertificate);
@@ -351,7 +351,7 @@ export default defineComponent({
       this.selectedDRep = row
       const wallet = appWallet;
       const certificates = [];
-      if (!this.accountInfo?.active) {
+      if (!this.account?.active) {
         const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
         // safeFreeCSLObject(registrationCertificate);

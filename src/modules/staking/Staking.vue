@@ -1,7 +1,7 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" class="pa-2" v-if="accountInfo?.controlled_amount && accountInfo?.pool_id">
+      <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id">
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
@@ -312,8 +312,8 @@ export default {
     geroPoolExists() {
       return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
     },
-    ...mapState(useStore, ['pools', 'loggedWallet', 'accountInfo', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos']),
+    ...mapState(useStore, ['pools', 'loggedWallet', 'latestTip', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos', 'account']),
     numPages() {
       // calculate the number of pages we have
       return Math.ceil(this.stakePools.length / this.pageSize);
@@ -382,7 +382,7 @@ export default {
       const wallet = appWallet;
       // Registration Certificate
       const certificates = [];
-      if (!this.accountInfo?.active) {
+      if (!this.account?.active) {
         const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
         certificates.push(registrationCertificate);
       }

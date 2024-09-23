@@ -12,7 +12,7 @@
         Unstaking will also claim your rewards.<br>Please verify your unstake details and enter your spending password to proceed.
       </v-alert>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0" v-if="accountInfo && tx">
+    <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
@@ -124,8 +124,8 @@ export default {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['accountInfo', 'loggedWallet', 'stakeAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'addresses']),
+    ...mapState(useStore, ['loggedWallet', 'stakeAddress']),
+    ...mapState(walletConfigStore, ['utxos', 'addresses', 'account']),
     withdrawals() {
       let withdrawals = 0
       if (this.tx?.body()?.withdrawals()?.keys()) {
@@ -140,7 +140,7 @@ export default {
     },
     depositFee() {
       let depositFee = 0;
-      const totalAdaBalance = BigNum.from_str(this.accountInfo.controlled_amount.toString())
+      const totalAdaBalance = BigNum.from_str(this.account.controlled_amount.toString())
       let totalAdaOutput = 0
       if (this.tx?.body()?.inputs()) {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {

@@ -5,12 +5,13 @@ import { STORAGE } from '@/chrome/config';
 
 export const walletConfigStore = defineStore( 'walletConfigStore', {
   persist: {
-    paths: ['config', 'utxos', 'addresses']
+    paths: ['config', 'utxos', 'addresses', 'account']
   },
   state: () => ({
     config: undefined,
     utxos: undefined,
     addresses: undefined,
+    account: undefined
   }),
   getters: {
     getTxAutoSubmit(state) {
@@ -40,6 +41,16 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
           await chrome.storage.local.set({ [STORAGE.addresses]: addresses });
         } else {
           await chrome.storage.local.remove(STORAGE.addresses);
+        }
+      }
+    },
+    async setAccount(account) {
+      this.account = account
+      if (chrome?.storage) {
+        if (account) {
+          await chrome.storage.local.set({ [STORAGE.account]: account });
+        } else {
+          await chrome.storage.local.remove(STORAGE.account);
         }
       }
     },
@@ -84,6 +95,26 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
           }
         })
       })
+    },
+    async loadAccountInfo() {
+      if (!appWallet) {
+        return new Promise((resolve, reject) => {
+          reject()
+        });
+      }
+      const db = await appWallet.getDb()
+      return new Promise((resolve, reject) => {
+        liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
+          next: newAccount => {
+            this.setAccount(newAccount)
+            resolve(this.account)
+          },
+          error: error => {
+            console.error('Failed to Fetch AccountInfo:', error)
+            reject(error)
+          }
+        });
+      });
     },
   },
 });
