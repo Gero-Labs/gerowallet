@@ -32,7 +32,7 @@
                   <v-img :src="require('@/assets/svg/wallet.svg')" contain></v-img>
                 </v-avatar>
                 <a style="font-size: 12px; color: white" class="mr-1" @click="copyAddress">{{baseAddress | shortenStringWithEllipsis(14)}}</a>
-                <copy-button ref="copyAddress" x-small :value="baseAddress"></copy-button>
+                <CopyButton ref="copyAddress" x-small :value="baseAddress" v-if="baseAddress"></CopyButton>
                 <v-spacer></v-spacer>
                 <v-btn icon class="ml-2" :loading="loading.isSyncing" disabled>
                   <v-avatar size="20">

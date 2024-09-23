@@ -22,6 +22,7 @@ import { unitToFingerprint } from '@/shared/utils/converter';
 import filters from '@/shared/utils/filters';
 import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import { governanceStore } from '@/store/modules/governance';
 
 // const env = process.env['VUE_APP_ENV']
 // const plugin = env === 'production' ? LocalPersistedStorage:
@@ -145,25 +146,38 @@ export const useStore = defineStore('store', {
               tx.certificates.forEach(certificate => {
                 if (certificate.type === 'stake_registration') {
                   statuses.push('Stake Registration')
-                } else if (certificate.type === 'delegation') {
+                }
+                if (certificate.type === 'pool_delegation') {
                   const poolId = certificate.info.pool_id_bech32
                   const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
                   if (pool) {
                     statuses.push('Delegating to '+pool.ticker)
                   }
-                } else if (certificate.type === 'stake_deregistration') {
+                }
+                if (certificate.type === 'stake_deregistration') {
                   statuses.push('Stake Deregistration')
+                }
+                if (certificate.type === 'drep_registration') {
+                  statuses.push('DRep Registration')
+                }
+                if (certificate.type === 'vote_delegation') {
+                  statuses.push('Vote Delegation')
+                }
+                if (certificate.type === 'drep_retire') {
+                  statuses.push('DRep Deregistration')
                 }
               })
             }
             if (totalAmount > 0) {
-              statuses.push('Received Funds')
+              if (tx.certificates.length === 0) {
+                statuses.push('Received Funds')
+              }
             } else {
               if (tx.certificates.length === 0) {
                 statuses.push('Sent Funds')
               }
             }
-            if (tx.withdrawals?.length > 0) {
+            if (tx.withdrawals?.length > 0 && tx.withdrawals.some(withdrawal => withdrawal.stake_addr === this.stakeAddress)) {
               statuses.push('Withdrawal')
             }
             const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)
@@ -426,6 +440,7 @@ export const useStore = defineStore('store', {
       appWallet = Wallet.class(wallet, this.provider);
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
+      governanceStore().setDRepId(appWallet.drepId().to_bech32())
       socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())
@@ -453,6 +468,7 @@ export const useStore = defineStore('store', {
       appWallet = Wallet.class(wallet, this.provider);
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
+      governanceStore().setDRepId(appWallet.drepId().to_bech32())
       socket.stompConnect(appWallet)
       await this.loadAssets()
       await dexHunterStore().loadTokens()
@@ -462,6 +478,7 @@ export const useStore = defineStore('store', {
       promises.push(this.loadSync())
       promises.push(this.loadAccountInfo())
       promises.push(this.loadPools())
+      promises.push(governanceStore().loadDReps())
       promises.push(this.loadTransactions())
       promises.push(this.loadRewards())
       promises.push(this.loadConnectedDapps())
