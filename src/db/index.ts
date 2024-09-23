@@ -5,6 +5,7 @@ import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 
 const db = new Dexie('GeroWalletDatabase');
+const blockChainDBVersion = 2
 
 await db.version(1).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
@@ -140,18 +141,21 @@ export default {
       if (error.name === 'NoSuchDatabaseError') {
         // Database does not exist, create it
         const db: Dexie = new Dexie(dbName);
-        db.version(1).stores({
-          pools: 'pool_id_bech32',
-          pools_sync: '++id, time',
-          assets: 'asset, fingerprint, asset_name, policy_id',
-          assets_sync: '++id, time'
-        });
-        return await db.open();
+        this.setBlockchainDBVersionSchema(db)
+        return db.open();
       } else {
         // Handle other errors
         console.error('Error opening database:', error);
         return null
       }
     }
+  },
+  setBlockchainDBVersionSchema(db: Dexie) {
+    db.version(blockChainDBVersion).stores({
+      pools: 'pool_id_bech32',
+      dreps: 'drep_id',
+      sync: '++id, time',
+      assets: 'asset, fingerprint, asset_name, policy_id',
+    });
   }
 };

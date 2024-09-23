@@ -42,7 +42,6 @@ export class SocketPlugin {
 
   stompConnect(wallet: Wallet) {
     this.wallet = wallet;
-
     const socket: WebSocket = new SockJS(`${process.env['VUE_APP_BACKEND_URL']}/sock`)
     this.client = Stomp.over(socket);
     this.client.debug = null;

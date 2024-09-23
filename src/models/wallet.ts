@@ -9,7 +9,7 @@ import {
   Bip32PrivateKey,
   Bip32PublicKey,
   Credential,
-  decrypt_with_password,
+  decrypt_with_password, DRep,
   encrypt_with_password,
   EnterpriseAddress,
   FixedTransaction,
@@ -187,6 +187,13 @@ export class Wallet {
       .to_raw_key();
   }
 
+  drepKey(): PublicKey {
+    return Bip32PublicKey.from_bech32(this.publicKey)
+      .derive(ChainDerivations.DREP)
+      .derive(STAKING_KEY_INDEX)
+      .to_raw_key();
+  }
+
   baseAddress(): BaseAddress {
     return this.deriveAddressFromPath(0);
     // return BaseAddress.from_address(Address.from_bech32("addr1q9vshd7azlr2s7gkk5jan8vxkp8d8x4pwjnkx2x6uegpgthx4f8naynfp7hswl0faaww0nlc88ge2jk04ty4l0zapjpq5qg024"))
@@ -195,6 +202,10 @@ export class Wallet {
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
     // return RewardAddress.from_address(Address.from_bech32("stake1u8n25ne7jf5sltc80h577h88elurn5v4ft864j2lh3wseqs04jqmy"))
+  }
+
+  drepId() {
+    return DRep.new_from_credential(Credential.from_keyhash(this.drepKey().hash()))
   }
 
   paymentKeyHash(address: string) {
@@ -517,7 +528,8 @@ export class Wallet {
           loading.setRestoring(false);
         } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
           const promises = [];
-          promises.push(this.syncStakingPools());
+          promises.push(this.syncTable(1)); //Sync Staking Pools
+          promises.push(this.syncTable(2)); //Sync DReps
           const prevAccountInfo = await this.getAccountInfo();
           socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount);
         }
@@ -538,7 +550,10 @@ export class Wallet {
     const promises = [];
 
     // Sync staking pools
-    promises.push(this.syncStakingPools());
+    promises.push(this.syncTable(1));
+
+    // Sync DReps
+    promises.push(this.syncTable(2));
 
     // Sync account info and handle rewards and transactions
     promises.push(this.syncAccountInfo().then(async accountInfo => {
@@ -687,35 +702,6 @@ export class Wallet {
     }
   }
 
-  async syncStakingPools(): Promise<void> {
-    if (this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME) {
-      const blockchainDB: Dexie = await this.getBlockchainDb();
-      const poolSyncTable = blockchainDB.table('pools_sync');
-      const lastPoolSyncArray = await poolSyncTable.toArray();
-      const currentTime = new Date();
-
-      if (lastPoolSyncArray.length == 0) {
-        await this.setStakingPools(blockchainDB, poolSyncTable);
-      } else if (lastPoolSyncArray.length > 0) {
-        const lastPoolSync = lastPoolSyncArray[0];
-        if (lastPoolSync?.time) {
-          const lastSyncTime = new Date(lastPoolSync.time);
-          const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
-
-          if (hoursSinceLastSync >= 4) {
-            await this.setStakingPools(blockchainDB, poolSyncTable);
-          }
-        }
-      }
-    }
-  }
-
-  async setStakingPools(blockchainDB: Dexie, poolSyncTable) {
-    const pools = await this.getStakingPools();
-    blockchainDB.table('pools').bulkPut(pools);
-    poolSyncTable.put({ time: new Date().getTime() });
-  }
-
   private async getStakingPools() {
     try {
       const res = await this.api.getAllPools();
@@ -725,6 +711,50 @@ export class Wallet {
     } catch (e) {
       console.log(e);
     }
+  }
+
+  private async getDReps() {
+    try {
+      const res = await this.api.getAllDReps();
+      if (res) {
+        return res;
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
+  async syncTable(tableId): Promise<void> { //pools - 1, dreps - 2
+    if (this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME) {
+      const blockchainDB: Dexie = await this.getBlockchainDb();
+      const syncTable = blockchainDB.table('sync');
+      const lastSyncArray = await syncTable.toArray();
+      const currentTime = new Date();
+      const sync = lastSyncArray?.find(element => element.id == tableId)
+      if (!sync) {
+        await this.setSyncTable(blockchainDB, syncTable, tableId);
+      } else {
+        const lastSyncTime = new Date(sync.time);
+        const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceLastSync >= 4) {
+          await this.setSyncTable(blockchainDB, syncTable, tableId);
+        }
+      }
+    }
+  }
+
+  async setSyncTable(blockchainDB: Dexie, syncTable, tableId: number) {
+    let res
+    let table
+    if (tableId == 1) {
+      res = await this.getStakingPools();
+      table = 'pools'
+    } else if (tableId == 2) {
+      res = await this.getDReps();
+      table = 'dreps'
+    }
+    blockchainDB.table(table).bulkPut(res);
+    syncTable.put({ id: tableId, time: new Date().getTime() });
   }
 
   async fetchTip(): Promise<any> {

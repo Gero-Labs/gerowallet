@@ -1,7 +1,7 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake" :loading="loading"
-              :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)} to a stake pool.`">
-    <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate to a DRep" :loading="loading" :min-height="660" :width="700"
+              :subtitle="`Delegating your ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} to a Delegated Representative.`">
+    <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="drep">
       <v-alert
         border="left"
         color="primary"
@@ -10,45 +10,50 @@
         class="text-left"
       >
         <ul>
-          <li>You can only delegate to one stake pool at a time</li>
-          <li>You can switch to delegate to a different stake pool at any time</li>
+          <li>You can only delegate to one DRep at a time</li>
+          <li>You can switch to delegate to a different DRep at any time</li>
           <li>You can cancel your delegation at any time</li>
         </ul>
       </v-alert>
       <v-list-item three-line>
         <v-list-item-content class="text-left">
           <v-list-item-title class="text-h5 mb-1">
-            {{ `[${pool.ticker}] ${pool.name}` }}
+            {{ `${drep.name}` }}
           </v-list-item-title>
-          <v-list-item-subtitle>{{ pool.description }}</v-list-item-subtitle>
-          <v-list-item-subtitle v-if="pool">{{ pool.pool_id_bech32 | truncate }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton></v-list-item-subtitle>
+          <v-list-item-subtitle v-if="drep">{{ drep.id | truncate }}<CopyButton class="ml-1" :value="drep.id" x-small></CopyButton></v-list-item-subtitle>
+          <v-list-item-subtitle v-if="drep.links">
+            <template v-for="(link, index) in drep.links">
+              <v-btn icon x-small  :key="index" :href="link.uri" target="_blank" v-if="link.uri && typeof link.uri === 'string'">
+                <v-avatar tile size="14" v-if="String(link.uri).includes('https://x.com') || String(link.uri).includes('https://twitter.com')">
+                  <v-img :src="xLogo" alt="x"></v-img>
+                </v-avatar>
+                <v-avatar tile size="14" v-else-if="String(link.uri).includes('https://t.me')">
+                  <v-img :src="telegramLogo" alt="x"></v-img>
+                </v-avatar>
+                <v-icon v-else>
+                  {{ getIconByURI(link.uri)}}
+                </v-icon>
+              </v-btn>
+            </template>
+          </v-list-item-subtitle>
         </v-list-item-content>
 
         <v-list-item-avatar
+          rounded
           size="80"
-          v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64"
+          v-if="drep.image"
         >
-          <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage"/>
+          <img :src="drep.image" alt="" @error="fallbackImage"/>
         </v-list-item-avatar>
       </v-list-item>
-      <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString() }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_stake | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString(undefined, {maximumFractionDigits: 2}) }}%</v-card-title>
-      <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">
-        <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="32" :value="pool.live_saturation" striped>
-          <template v-slot:default="{ value }">
-            <strong>{{ Math.ceil(value) }}%</strong>
-          </template>
-        </v-progress-linear>
-      </v-card-title>
-      <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
+      <v-card-title class="pt-0" style="color: white">{{ drep.delegators }}</v-card-title>
+      <v-card-subtitle class="text-left pb-2">Delegators</v-card-subtitle>
+      <v-card-title class="pt-0" style="color: white">{{ drep.votes }}</v-card-title>
+      <v-card-subtitle class="text-left pb-2">Votes</v-card-subtitle>
+      <v-card-title class="pt-0" style="color: white">{{ drep.voting_power | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</v-card-title>
+      <v-card-subtitle class="text-left pb-2">Voting Power</v-card-subtitle>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && accountInfo" style="display: block;">
+    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="drep && accountInfo" style="display: block;">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
@@ -59,14 +64,6 @@
             </h4>
             <h4><strong>{{ accountInfo.controlled_amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</strong></h4>
           </v-col>
-          <v-col :cols="cols">
-            <h4>Epoch Yield
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
-            </h4>
-            <h4>~<strong>{{ accountInfo?.controlled_amount * pool.ros/100/73 | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
-          </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>Deposit Fee</h4>
             <h4><strong>{{ depositFee | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
@@ -75,7 +72,7 @@
             <h4>Tx Fee</h4>
             <h4><strong>{{ tx.body().fee().to_str() | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
-          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
+          <v-col cols="12" class="pt-6" style="display: flex; justify-content: center;">
             <v-tooltip
               v-model="tooltip.enabled"
               top
@@ -217,14 +214,14 @@ import Vue from 'vue';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
-  name: 'DelegateDialog',
+  name: 'DRepDelegateDialog',
   components: { QrcodeStream, USBBluetoothSwitch, CopyButton, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,
       default: false,
     },
-    pool: {
+    drep: {
       type: Object,
       default: () => {},
     },
@@ -237,7 +234,7 @@ export default {
     isOpen(val) {
       if (val) {
         this.spendingPassword = ''
-        this.showPassword = ''
+        this.showPassword = false
         if (this.$refs.form) {
           this.$refs.form.resetValidation()
         }
@@ -282,13 +279,27 @@ export default {
     },
     cols() {
       if (this.depositFee > 0) {
-        return 3
-      } else {
         return 4
+      } else {
+        return 6
       }
     }
   },
   methods: {
+    getIconByURI(uri) {
+      if (String(uri).includes('https://github.com')) {
+        return 'mdi-github'
+      } else if (String(uri).includes('youtube.com') || String(uri).includes('youtu.be')) {
+        return 'mdi-youtube'
+      } else if (String(uri).includes('linkedin.com')) {
+        return 'mdi-linkedin'
+      } else if (String(uri).includes('instagram.com')) {
+        return 'mdi-instagram'
+      } else if (String(uri).includes('discord.com')) {
+        return 'mdi-discord'
+      }
+      return 'mdi-link'
+    },
     backScan() {
       if (this.keystoneScan) {
         this.keystoneScan = false
@@ -403,6 +414,9 @@ export default {
   },
   filters,
   data: () => ({
+    xLogo: require('@/assets/svg/x.svg'),
+    telegramLogo: require('@/assets/svg/telegram.svg'),
+    errorImage: require('@/assets/img/1x1.png'),
     networks,
     loading: false,
     spendingPassword: '',

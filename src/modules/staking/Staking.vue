@@ -405,7 +405,9 @@ export default {
       return undefined
     },
     fallbackImage(e) {
-      e.target.src = this.errorImage
+      if (e && e.target) {
+        e.target.src = this.errorImage
+      }
     }
   },
   filters,

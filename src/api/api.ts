@@ -125,6 +125,21 @@ export class Api {
     }
   }
 
+  async getAllDReps() {
+    try {
+      const { data, status } = await this.axiosInstance.get(
+        `/api/dreps/all?chain=${this.chain}&network=${this.network}`
+      );
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      if (error.response?.status === 404) {
+        return []
+      }
+      throw parseHttpError(error);
+    }
+  }
+
   async getAssetsInfo(units) {
     try {
       const { data, status } = await this.axiosInstance.post(
