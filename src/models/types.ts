@@ -101,7 +101,7 @@ export type Cardano = {
     name: string;
     icon: string;
     apiVersion: string;
-    enable: () => Promise<WalletInstance>;
+    enable: (extensions: Extensions) => Promise<WalletInstance>;
     isEnabled: () => Promise<boolean>;
     supportedExtensions: Extension[];
   };
@@ -140,6 +140,9 @@ export type ExperimentalFeatures = {
 };
 export type Extension = {
   cip: number
+}
+export type Extensions = {
+  extensions: Extension[]
 }
 
 const Currency = {

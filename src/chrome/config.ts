@@ -21,6 +21,10 @@ export const METHOD = {
   //internal
   requestData: 'requestData',
   returnData: 'returnData',
+  //cip 95
+  getPubDRepKey: 'getPubDRepKey',
+  getRegisteredPubStakeKeys: 'getRegisteredPubStakeKeys',
+  getUnregisteredPubStakeKeys: 'getUnregisteredPubStakeKeys'
 };
 
 export const APIError = {
@@ -70,7 +74,7 @@ export const STORAGE = {
   loggedWallet: 'loggedWallet',
   whitelisted: 'whitelisted',
   encryptedKey: 'encryptedKey',
-  accounts: 'accounts',
+  account: 'account',
   currentAccount: 'currentAccount',
   network: 'network',
   currency: 'currency',

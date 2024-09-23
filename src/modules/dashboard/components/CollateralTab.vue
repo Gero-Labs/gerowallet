@@ -67,8 +67,8 @@ export default {
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'accountInfo', 'config', 'baseAddress', 'latestTip']),
-    ...mapState(walletConfigStore, ['utxos']),
+    ...mapState(useStore, ['loggedWallet', 'baseAddress', 'latestTip']),
+    ...mapState(walletConfigStore, ['utxos', 'config']),
     hasCollateral() {
       console.log(this.config['collateral'])
       return false

@@ -53,7 +53,7 @@ export const getAddress = async (): Promise<string[]> => {
     method: METHOD.getAddress,
     data: {}
   });
-  return [result['data']];
+  return result['data'];
 };
 
 export const getAddressBech32 = async (): Promise<string[]> => {
@@ -108,6 +108,30 @@ export const submitTx = async (tx) => {
   const result = await Messaging.sendToContent({
     method: METHOD.submitTx,
     data: tx,
+  });
+  return result['data'];
+};
+
+export const getPubDRepKey = async () => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getPubDRepKey,
+    data: {},
+  });
+  return result['data'];
+};
+
+export const getRegisteredPubStakeKeys = async () => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getRegisteredPubStakeKeys,
+    data: {},
+  });
+  return result['data'];
+};
+
+export const getUnregisteredPubStakeKeys = async () => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getUnregisteredPubStakeKeys,
+    data: {},
   });
   return result['data'];
 };

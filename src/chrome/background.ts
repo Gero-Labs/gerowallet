@@ -2,7 +2,6 @@ import {
   focusOrCreatePopup,
   extractKeyHash,
   getAddress,
-  getAddressBech32,
   getBalance,
   getStorage,
   isWhitelisted,
@@ -10,7 +9,7 @@ import {
   verifyTx,
   getUsedAddresses,
   getRewardAddresses,
-  getUtxos
+  getUtxos, submitTx, getPubDRepKey, getRegisteredPubStakeKeys, getUnregisteredPubStakeKeys,
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -23,6 +22,7 @@ import {
 } from './config';
 import networks from '@/shared/utils/networks';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
+import { Address } from '@emurgo/cardano-serialization-lib-browser';
 
 await bringInitBackground({
   identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
@@ -141,11 +141,11 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
-  const address = await getAddress();
+  const address: Address = await getAddress();
   if (address) {
     sendResponse({
       id: request.id,
-      data: address,
+      data: address.to_hex(),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -160,11 +160,11 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  const address = await getAddressBech32();
+  const address: Address = await getAddress();
   if (address) {
     sendResponse({
       id: request.id,
-      data: address,
+      data: address.to_bech32(),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -287,7 +287,6 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 
 app.add(METHOD.signData, async (request, sendResponse) => {
   try {
-    console.log(request)
     verifyPayload(request.data.payload);
     try {
       await extractKeyHash(request.data.address);
@@ -365,6 +364,103 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     sendResponse({
       id: request.id,
       error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.submitTx, async (request, sendResponse) => {
+  await verifyTx(request.data.tx)
+  submitTx(request.data.tx)
+    .then((txHash) => {
+      sendResponse({
+        id: request.id,
+        data: txHash,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch(e => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
+
+app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
+  const key = await getPubDRepKey();
+  if (key) {
+    sendResponse({
+      id: request.id,
+      data: key,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
+  const key = await getPubDRepKey();
+  if (key) {
+    sendResponse({
+      id: request.id,
+      data: key,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
+  const key = await getRegisteredPubStakeKeys();
+  if (key) {
+    sendResponse({
+      id: request.id,
+      data: key,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
+  const key = await getUnregisteredPubStakeKeys();
+  if (key) {
+    sendResponse({
+      id: request.id,
+      data: key,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
     });
