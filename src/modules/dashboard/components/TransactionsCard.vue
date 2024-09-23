@@ -14,9 +14,9 @@
         <template v-slot:[`item.time`]="{ item }">
           <v-list-item two-line class="px-0">
             <v-list-item-content>
-              <v-list-item-title style="font-size: 12px">{{ item.status }}</v-list-item-title>
-              <v-list-item-subtitle style="font-size: 10px"
-              >{{ new Date(item.time * 1000).toLocaleDateString() }}
+              <v-list-item-title style="font-size: 12px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ item.status }}</v-list-item-title>
+              <v-list-item-subtitle style="font-size: 10px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;"
+              >{{ new Date(item.time * 1000).toLocaleString() }}
               </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
@@ -67,6 +67,7 @@ export default defineComponent({
   },
   methods: {
     handleOnTransactionsRowClick(row) {
+      console.log(row)
       // this.transactionInfo = row; TODO
     },
     handleTransactionModalClose() {
@@ -85,7 +86,7 @@ export default defineComponent({
     getColor(item) {
       if (item.status === 'Pending') {
         return '#FEC84B';
-      } else if (item.status.includes('Received')) {
+      } else if (item.status.includes('Received') || item.ada > 0) {
         return '#47cd89';
       } else if (item.status.includes('Sent') || item.ada < 0) {
         return '#F97066';
@@ -96,15 +97,20 @@ export default defineComponent({
   data: () => ({
     transactionInfo: null,
     activityHeaders: [
-      { text: 'Activity', align: 'start', sortable: true, value: 'time' },
-      { text: '', align: 'start', sortable: false, value: 'assets', width: 132 },
-      { text: 'Amount', align: 'start', sortable: false, value: 'amount' },
+      { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'time' },
+      { text: '', align: 'start no-padding', sortable: false, value: 'assets', width: 132 },
+      { text: 'Amount', align: 'start text-nowrap', sortable: false, value: 'amount' },
     ],
     sortBy: 'time',
     sortDesc: true,
   })
 });
 </script>
-<style scoped>
-
+<style>
+.text-nowrap {
+  text-wrap: nowrap;
+}
+.no-padding {
+  padding: 0!important;
+}
 </style>

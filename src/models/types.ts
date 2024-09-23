@@ -60,6 +60,7 @@ const ChainDerivations = {
   EXTERNAL: 0,
   INTERNAL: 1,
   CHIMERIC_ACCOUNT: 2,
+  DREP: 3,
 };
 
 const STAKING_KEY_INDEX = 0;
