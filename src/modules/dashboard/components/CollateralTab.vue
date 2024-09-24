@@ -9,7 +9,7 @@
         If none is available, use the 'Set Collateral' button to manually assign one.
       </v-card-subtitle>
       <v-card-text class="text-left px-0">
-        <v-data-table :items="collateralCandidate" :headers="headers" hide-default-footer>
+        <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer>
           <template v-slot:[`item.utxo`]="{ item }">
             <span class="mr-1">{{ `${item.tx_hash}#${item.tx_index}` | truncate }}</span>
             <CopyButton x-small :value="`${item.tx_hash}#${item.tx_index}`"></CopyButton>
@@ -19,7 +19,7 @@
             <CopyButton x-small :value="`${item.payment_addr.bech32}`"></CopyButton>
           </template>
           <template v-slot:[`item.balance`]="{ item }">
-            <span>{{ `${item.value}` | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), '', false, 6) }}</span>
+            <span>{{ `${item.value}` | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
           </template>
         </v-data-table>
         <v-row no-gutters class="mt-4">
@@ -68,14 +68,10 @@ export default {
       return networks
     },
     ...mapState(useStore, ['loggedWallet', 'baseAddress', 'latestTip']),
-    ...mapState(walletConfigStore, ['utxos', 'config']),
-    hasCollateral() {
-      console.log(this.config['collateral'])
-      return false
-    },
+    ...mapState(walletConfigStore, ['utxos', 'collateral']),
     collateralCandidate() {
-      if (this.utxos) {
-        return this.utxos.filter(utxo => utxo.asset_list.length === 0 && Number(utxo.value) >= 5000000 && Number(utxo.value) <= 20000000)
+      if (this.collateral) {
+        return [this.collateral]
       }
       return []
     }

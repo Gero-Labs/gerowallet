@@ -138,11 +138,11 @@
                       <span v-else>{{ item.amount }}</span>
                     </template>
                     <template v-slot:[`item.change`]="{ item }">
-                      <v-avatar tile size="20">
+                      <v-avatar tile size="20" class="mr-1">
                         <v-img
                           :src="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? require('@/assets/svg/arrow-right.svg') : change(item) >= 0 ? require('@/assets/svg/trend-up-01.svg') : require('@/assets/svg/trend-down-01.svg')"
                           alt="trend"></v-img>
-                      </v-avatar>&nbsp;
+                      </v-avatar>
                       <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
                         {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
                       </span>
@@ -281,7 +281,6 @@ export default {
       const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], withdrawals)
       this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
       console.log(txBody.to_json())
-      console.log(this.txData)
       this.withdrawalDialog = true
     },
     unstake() {
@@ -304,7 +303,6 @@ export default {
         const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)
         this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
         console.log(txBody.to_json())
-        console.log(this.txData)
         this.unstakeDialog = true
       }
     },

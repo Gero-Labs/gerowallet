@@ -96,10 +96,10 @@ export const getUtxos = async (amount?: string, paginate?: Paginate) => {
   return result['data'];
 };
 
-export const getCollateral = async () => {
+export const getCollateral = async (params) => {
   const result = await Messaging.sendToContent( {
     method: METHOD.getCollateral,
-    data: {}
+    data: params
   });
   return result['data'];
 };

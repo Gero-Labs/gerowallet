@@ -9,7 +9,7 @@ import {
   verifyTx,
   getUsedAddresses,
   getRewardAddresses,
-  getUtxos, submitTx, getPubDRepKey, getRegisteredPubStakeKeys, getUnregisteredPubStakeKeys,
+  getUtxos, submitTx, getPubDRepKey, getRegisteredPubStakeKeys, getUnregisteredPubStakeKeys, getCollateral,
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -22,7 +22,7 @@ import {
 } from './config';
 import networks from '@/shared/utils/networks';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
-import { Address } from '@emurgo/cardano-serialization-lib-browser';
+import { Address, TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
 
 await bringInitBackground({
   identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
@@ -236,6 +236,27 @@ app.add(METHOD.getUtxos, (request, sendResponse) => {
       } else {
         res = null
       }
+      sendResponse({
+        id: request.id,
+        data: res,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch((e) => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
+
+app.add(METHOD.getCollateral, (request, sendResponse) => {
+  getCollateral(request.data.params)
+    .then((utxos) => {
+      const res: string[] = utxos.map((utxo: TransactionUnspentOutput) => utxo.to_hex());
       sendResponse({
         id: request.id,
         data: res,

@@ -371,7 +371,6 @@ export default defineComponent({
       const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
       this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
       console.log(txBody.to_json())
-      console.log(this.txData)
       this.isDelegateDialogOpen = true
     },
   },

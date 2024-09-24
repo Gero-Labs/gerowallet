@@ -196,12 +196,12 @@ export class Wallet {
 
   baseAddress(): BaseAddress {
     return this.deriveAddressFromPath(0);
-    // return BaseAddress.from_address(Address.from_bech32("addr1q9vshd7azlr2s7gkk5jan8vxkp8d8x4pwjnkx2x6uegpgthx4f8naynfp7hswl0faaww0nlc88ge2jk04ty4l0zapjpq5qg024"))
+    // return BaseAddress.from_address(Address.from_bech32("addr1q99h0s5xexs9k3wj0e42ekd5fz6m9xhfp8qa86nxcsu4799y5guckqyykgl9cdupqgdq7mavve5qanmtl9lvlf6qnpasj5qu4g"))
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
-    // return RewardAddress.from_address(Address.from_bech32("stake1u8n25ne7jf5sltc80h577h88elurn5v4ft864j2lh3wseqs04jqmy"))
+    // return RewardAddress.from_address(Address.from_bech32("stake1uxj2ywvtqzzty0jux7qsyxs0d7kxv6qwea4ljlk05aqfs7clg3lek"))
   }
 
   drepId() {
@@ -437,6 +437,11 @@ export class Wallet {
       }
     }
     return response;
+  }
+
+  addPendingTx(txId, txJs, utxos) {
+    console.log(txId)
+    console.log(txJs)
   }
 
   async getLastSyncInfo() {

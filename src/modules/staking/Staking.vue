@@ -75,8 +75,8 @@
                     <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="fallbackImage" eager></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
-                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name}` }}&nbsp;
-                      <div>
+                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name}` }}
+                      <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
                           <v-icon small>
                             mdi-web
@@ -395,7 +395,6 @@ export default {
       const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
       this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
       console.log(txBody.to_json())
-      console.log(this.txData)
       this.isDelegateDialogOpen = true
     },
     poolExtendedInfo(pool) {
