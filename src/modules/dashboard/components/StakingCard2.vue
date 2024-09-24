@@ -275,7 +275,6 @@ export default {
       const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], withdrawals)
       this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
       console.log(txBody.to_json())
-      console.log(this.txData)
       this.withdrawalDialog = true
     },
     unstake() {
@@ -299,7 +298,6 @@ export default {
         const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)
         this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
         console.log(txBody.to_json())
-        console.log(this.txData)
         this.unstakeDialog = true
       }
     },

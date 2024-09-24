@@ -366,6 +366,7 @@ export default {
       const txId = await appWallet.submitTx(signedTx.to_hex().toString());
       console.log(txId)
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
+      appWallet.addPendingTx(txId, signedTx.to_js_value(), this.utxos)
       this.$emit('close')
     },
     onInit(promise) {
@@ -406,6 +407,7 @@ export default {
           const txId = await appWallet.submitTx(signedTx.to_hex().toString());
           console.log(txId)
           snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
+          appWallet.addPendingTx(txId, signedTx.to_js_value(), this.utxos)
           this.$emit('close')
         } catch (e) {
           snackbar.setError(e)

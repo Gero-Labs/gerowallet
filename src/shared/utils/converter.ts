@@ -73,10 +73,10 @@ export const toAddress = bech32 => Address.from_bech32(bech32);
 
 export const toBaseAddress = bech32 => BaseAddress.from_address(toAddress(bech32));
 
-export function toUTxO(output): TransactionUnspentOutput {
+export function toUTxO(utxo): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
-    TransactionInput.new(TransactionHash.from_bytes(Buffer.from(output.tx_hash, 'hex')), output.tx_index),
-    TransactionOutput.new(Address.from_bech32(output.payment_addr.bech32), toValue(output.asset_list, output.value)
+    TransactionInput.new(TransactionHash.from_hex(utxo.tx_hash), utxo.tx_index),
+    TransactionOutput.new(Address.from_bech32(utxo.payment_addr.bech32), toValue(utxo.asset_list, utxo.value)
     )
   );
 }
