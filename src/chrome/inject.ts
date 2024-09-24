@@ -15,7 +15,7 @@ import {
   signTx,
   submitTx,
 } from './webpage';
-import { Cardano, Extensions, Paginate } from '@/models/types';
+import { Cardano, CollateralParams, Extensions, Paginate } from '@/models/types';
 
 declare global {
   interface Window {
@@ -30,9 +30,7 @@ window.cardano = {
       const enabled = await enable();
       if (enabled) {
         const cip30 = {
-          experimental: {
-            getCollateral: () => getCollateral(),
-          },
+          getCollateral: (params?: CollateralParams) => getCollateral(params),
           getBalance: () => getBalance(),
           getChangeAddress: () => getAddress(),
           getExtensions: () => [{ cip: 30 },{ cip: 95}],

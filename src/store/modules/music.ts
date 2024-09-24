@@ -41,10 +41,16 @@ export const musicStore = defineStore( 'musicStore', {
         return nft.onchain_metadata.files?.filter(file => file.src)
           .map(file => {
             let src
-            if (String(file.src).includes('ar://')) {
-              src = `${baseUrl}/api/ar/${file.src.replace('ar://', '')}`
+            let fileSrc
+            if (typeof file.src == 'string') {
+              fileSrc = file.src
+            } else if (Array.isArray(file.src)) {
+              fileSrc = file.src.join('')
+            }
+            if (fileSrc.includes('ar://')) {
+              src = `${baseUrl}/api/ar/${fileSrc.replace('ar://', '').replace('ar/', '')}`
             } else {
-              src = `${baseUrl}/api/ipfs/${file.src.replace('ipfs://', '')}`
+              src = `${baseUrl}/api/ipfs/${fileSrc.replace('ipfs://', '').replace('ipfs/', '')}`
             }
             return {
               id: nft.unit,

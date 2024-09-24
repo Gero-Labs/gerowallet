@@ -1,19 +1,18 @@
 import { APIError, DataSignError, NETWORK_ID, POPUP_WINDOW, STORAGE, TxSendError } from './config';
 import {
   Address,
-  BaseAddress,
+  BaseAddress, BigNum,
   Bip32PublicKey,
   ByronAddress,
   Credential,
   EnterpriseAddress,
   PointerAddress, PublicKey,
   RewardAddress,
-  Transaction,
-  TransactionUnspentOutput,
+  Transaction, TransactionUnspentOutput,
   Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
-import { ChainDerivations, ERROR, Paginate, STAKING_KEY_INDEX } from '@/models/types';
+import { ChainDerivations, CollateralParams, ERROR, Paginate, STAKING_KEY_INDEX } from '@/models/types';
 import { toUTxO, toValue } from '@/shared/utils/converter';
 
 interface WhitelistedEntry {
@@ -75,29 +74,73 @@ export const getBalance = async (): Promise<Value> => {
   return balance;
 };
 
-export const getUtxos = async (amount = undefined, paginate = undefined): Promise<TransactionUnspentOutput[] | null> => {
+export const getUtxos = async (amount: string = undefined, paginate: Paginate = undefined): Promise<TransactionUnspentOutput[] | null> => {
   let utxos = await getStorage(STORAGE.utxos)
   const collateral = await getStorage(STORAGE.collateral)
 
-  // exclude collateral input from overall utxo set
+  // Exclude collateral input from the overall UTXO set
   if (collateral) {
     utxos = utxos.filter((utxo) => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index));
   }
-  let converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
-  // filter utxos
-  if (amount) {
-    let filterValue;
-    try {
-      filterValue = Value.from_bytes(Buffer.from(amount, 'hex'));
-    } catch (e) {
-      throw APIError.InvalidRequest;
+
+  // Convert raw UTXOs to the appropriate format
+  const converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
+
+  // If no amount is specified, return all UTXOs
+  if (!amount) {
+    if (paginate) {
+      // Check if the requested page and limit exceed the maximum page size
+      // if (paginate.page * paginate.limit >= maxPageSize) {
+      //   throw { maxSize: maxPageSize } as PaginateError;
+      // }
+
+      // Handle pagination
+      const start = paginate.page * paginate.limit;
+      const end = start + paginate.limit;
+      return converted.slice(start, end);
     }
-    converted = converted.filter((unspent) => !unspent.output().amount().compare(filterValue) || unspent.output().amount().compare(filterValue) !== -1);
+    return converted; // Return all UTXOs if pagination is not provided
   }
-  if ((amount || paginate) && converted.length <= 0) {
+
+  // If amount is specified, filter and accumulate UTXOs to match the target value
+  let targetValue;
+  try {
+    targetValue = Value.from_bytes(Buffer.from(amount, 'hex'));
+  } catch (e) {
+    throw APIError.InvalidRequest;
+  }
+
+  // Accumulate UTXOs until the combined value meets or exceeds the target value
+  let accumulatedValue = Value.zero();
+  const selectedUtxos: TransactionUnspentOutput[] = [];
+
+  for (const unspent of converted) {
+    selectedUtxos.push(unspent);
+    accumulatedValue = accumulatedValue.checked_add(unspent.output().amount());
+
+    // If the accumulated value is enough, stop accumulating
+    if (accumulatedValue.compare(targetValue) !== -1) {
+      break;
+    }
+  }
+
+  // If we couldn't accumulate enough value, return null
+  if (accumulatedValue.compare(targetValue) === -1) {
     return null;
   }
-  return converted;
+
+  // Handle pagination on the selected UTXOs
+  if (paginate) {
+    // Check if the requested page and limit exceed the maximum page size
+    // if (paginate.page * paginate.limit >= maxPageSize) {
+    //   throw { maxSize: maxPageSize } as PaginateError;
+    // }
+    const start = paginate.page * paginate.limit;
+    const end = start + paginate.limit;
+    return selectedUtxos.slice(start, end);
+  }
+
+  return selectedUtxos;
 };
 
 export const getAddress = async (): Promise<Address> => {
@@ -138,6 +181,80 @@ export const getDRepKey = async (): Promise<PublicKey> => {
     .derive(ChainDerivations.DREP)
     .derive(STAKING_KEY_INDEX)
     .to_raw_key()
+};
+
+export const getCollateral = async (params: CollateralParams): Promise<TransactionUnspentOutput[]> => {
+  const collateral = await getStorage(STORAGE.collateral)
+  if (!params || !params.amount) {
+    if (collateral) {
+      return [toUTxO(collateral)];
+    }
+    return null
+  }
+  const amount = params.amount
+
+  // Convert the amount to a BigNum for comparison
+  let targetValue;
+  try {
+    targetValue = BigNum.from_str(String(amount));
+  } catch (e) {
+    const error = APIError.InvalidRequest
+    error.info = 'Invalid amount parameter.'
+    throw error
+  }
+
+  // Enforce a maximum collateral limit (e.g., 5 ADA)
+  const maxCollateral = BigNum.from_str("5000000"); // 5 ADA in lovelaces
+  if (targetValue.compare(maxCollateral) === 1) {
+    const error = APIError.InvalidRequest
+    error.info = 'The requested collateral exceeds the allowed maximum of 5 ADA.'
+    throw error
+  }
+
+  if (!collateral) {
+    return null;
+  }
+
+  // Convert the collateral to a UTXO
+  const collateralUtxo = toUTxO(collateral)
+
+  // Check if the collateral UTXO meets the required amount
+  const collateralValue = collateralUtxo.output().amount().coin();
+  if (collateralValue.compare(targetValue) !== -1) {
+    // Return the collateral UTXO if it meets or exceeds the target value
+    return [collateralUtxo];
+  }
+
+  // If collateral UTXO does not meet the required value, attempt to gather more UTXOs
+  const utxos = await getStorage(STORAGE.utxos);
+  const suitableUtxos: TransactionUnspentOutput[] = [];
+  let accumulatedValue = BigNum.zero();
+
+  if (utxos) {
+    const convertedUtxos: TransactionUnspentOutput[] = utxos.filter(utxo => Array.isArray(utxo.asset_list) || !utxo.asset_list.length).map(utxo => toUTxO(utxo))
+
+    for (const convertedUtxo of convertedUtxos) {
+      suitableUtxos.push(convertedUtxo);
+      accumulatedValue = accumulatedValue.checked_add(convertedUtxo.output().amount().coin());
+
+      // Stop if we've gathered enough UTXOs to meet the target value
+      if (accumulatedValue.compare(targetValue) !== -1) {
+        break;
+      }
+    }
+  }
+
+  // Check if we accumulated enough collateral
+  if (accumulatedValue.compare(targetValue) === -1) {
+    throw {
+      message: 'Unable to gather enough collateral for the requested amount.',
+      blockingProblem: 'Not enough ADA in the wallet to meet the collateral requirements.',
+    };
+  }
+
+  // Return the suitable UTXOs
+  return suitableUtxos;
+
 };
 
 export const getNetwork = async (): Promise<any> => {

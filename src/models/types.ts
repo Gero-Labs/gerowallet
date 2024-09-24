@@ -118,6 +118,15 @@ export type Paginate = {
   page: number,
   limit: number,
 };
+
+export type PaginateError = {
+  maxSize: number,
+};
+
+export type CollateralParams = {
+  amount: string | number
+}
+
 export type WalletInstance = {
   experimental: ExperimentalFeatures;
   getBalance(): Promise<string>;

@@ -5,11 +5,12 @@ import { STORAGE } from '@/chrome/config';
 
 export const walletConfigStore = defineStore( 'walletConfigStore', {
   persist: {
-    paths: ['config', 'utxos', 'addresses', 'account']
+    paths: ['config', 'utxos', 'addresses', 'account', 'collateral']
   },
   state: () => ({
     config: undefined,
     utxos: undefined,
+    collateral: undefined,
     addresses: undefined,
     account: undefined
   }),
@@ -26,11 +27,29 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
     async setUtxos(utxos) {
       console.log('Setting UTXOs:', utxos);
       this.utxos = utxos
+      if (this.utxos) {
+        const collateralCandidates = this.utxos.filter(utxo => utxo.asset_list.length === 0 && Number(utxo.value) >= 5000000 && Number(utxo.value) <= 20000000).sort((a, b) => {
+          return Number(a.value) - Number(b.value)
+        })
+        if (collateralCandidates && collateralCandidates.length > 0) {
+          await this.setCollateral(collateralCandidates[0])
+        }
+      }
       if (chrome?.storage) {
         if (utxos) {
           await chrome.storage.local.set({ [STORAGE.utxos]: utxos });
         } else {
           await chrome.storage.local.remove(STORAGE.utxos);
+        }
+      }
+    },
+    async setCollateral(collateral) {
+      this.collateral = collateral
+      if (chrome?.storage) {
+        if (collateral) {
+          await chrome.storage.local.set({ [STORAGE.collateral]: collateral });
+        } else {
+          await chrome.storage.local.remove(STORAGE.collateral);
         }
       }
     },

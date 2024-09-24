@@ -3,7 +3,6 @@
     <v-card class="transparent">
       <v-card-text class="px-0">
         <v-data-table
-          dense
           class="transparent"
           :items="connectedDapps"
           :headers="headers"

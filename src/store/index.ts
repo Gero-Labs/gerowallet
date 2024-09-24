@@ -45,6 +45,7 @@ export const useStore = defineStore('store', {
     provider: undefined,
     price: undefined,
     transactions: undefined,
+    pendingTxs: undefined,
     loadingTxs: false,
     isSyncing: false,
     assets: undefined,
