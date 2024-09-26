@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import Dexie, { liveQuery } from 'dexie';
-import { appWallet } from '@/store';
+import { appWallet, subscriptions } from '@/store';
 import db from '@/db';
 
 export const governanceStore = defineStore( 'governanceStore', {
@@ -45,7 +45,7 @@ export const governanceStore = defineStore( 'governanceStore', {
       }
 
       return new Promise((resolve, reject) => {
-        liveQuery(() => blockchainDB.table('dreps').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => blockchainDB.table('dreps').toArray()).subscribe({
           next: newDReps => {
             this.dreps = newDReps.reduce(function(map, drep) {
               map[drep.drep_id] = drep
@@ -57,7 +57,7 @@ export const governanceStore = defineStore( 'governanceStore', {
             console.error('Failed to Fetch Pools:', error)
             reject(error);
           }
-        });
+        }));
       });
     },
   }
