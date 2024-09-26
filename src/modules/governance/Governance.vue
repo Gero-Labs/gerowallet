@@ -336,7 +336,7 @@ export default defineComponent({
             undefined // TODO Transaction metadata
           );
           console.log(signedTx.to_json())
-          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+          const txId = await appWallet.submitTx(signedTx, this.utxos);
           console.log(txId)
           snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
         }

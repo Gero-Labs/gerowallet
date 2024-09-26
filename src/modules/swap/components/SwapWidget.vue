@@ -94,6 +94,8 @@ import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
+import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
+import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
   name: 'SwapWidget',
@@ -101,6 +103,7 @@ export default {
   computed: {
     ...mapState(dexHunterStore, ['dexHunterTokens']),
     ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'pinnedTokens', 'price', 'baseAddress']),
+    ...mapState(walletConfigStore, ['utxos']),
     isSwapDisabled() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const quantityB = this.selectedTokenB.quantity.replaceAll(',', '')
@@ -416,7 +419,7 @@ export default {
       this.loading = false
     },
     async submit(cborHex) {
-      const txId = await appWallet.submitTx(cborHex);
+      const txId = await appWallet.submitTx(Transaction.from_hex(cborHex), this.utxos);
       snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
       this.$emit('onSwap')
       console.log(txId)

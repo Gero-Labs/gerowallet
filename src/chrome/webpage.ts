@@ -135,3 +135,11 @@ export const getUnregisteredPubStakeKeys = async () => {
   });
   return result['data'];
 };
+
+export const getAccountPub = async () => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getAccountPub,
+    data: {},
+  });
+  return result['data'];
+};

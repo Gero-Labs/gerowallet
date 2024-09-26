@@ -2,8 +2,8 @@
   <v-card flat class="transparent">
     <v-card-text class="pa-0">
       <v-row no-gutters>
-        <v-col cols="6" class="selectors-container px-2">
-          <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto">
+        <v-col :cols="collections?.length > 0 ? 6 : 12" class="selectors-container px-2" :style="collections?.length > 0 ? {} : {alignItems: 'center'}">
+          <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto; max-width: 350px;" >
             <template v-for="index in selectedTokens?.length">
               <TokenSelector
                 class="pb-1"
@@ -24,7 +24,7 @@
             </v-card-actions>
           </v-card>
         </v-col>
-        <v-col cols="6" class="collectibles px-2">
+        <v-col cols="6" class="collectibles px-2" v-if="collections?.length > 0">
           <v-card flat outlined>
             <v-card-title class="justify-center">Choose Collectibles</v-card-title>
             <v-card-subtitle class="pb-0">

@@ -5,11 +5,11 @@ import * as CryptoTS from 'crypto-ts';
 import cryptoRandomString from 'crypto-random-string';
 import {
   Address,
-  BaseAddress,
+  BaseAddress, BigNum,
   Bip32PrivateKey,
   Bip32PublicKey,
   Credential,
-  decrypt_with_password, DRep,
+  decrypt_with_password, DRep, Ed25519KeyHash,
   encrypt_with_password,
   EnterpriseAddress,
   FixedTransaction,
@@ -17,9 +17,9 @@ import {
   PointerAddress,
   PrivateKey,
   PublicKey,
-  RewardAddress,
+  RewardAddress, ScriptHash, Transaction,
   TransactionBody,
-  TransactionHash,
+  TransactionHash, TransactionJSON,
   TransactionWitnessSet,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
@@ -46,7 +46,7 @@ import loading from '@/plugins/loading';
 import { appWallet } from '@/store';
 import {
   createCOSEKeyHex,
-  createSignDataBuilder, safeFreeCSLObject, toHexArray, toHexString,
+  createSignDataBuilder, paymentCredential, safeFreeCSLObject, stakeCredential, toHexArray, toHexString,
   toStakeKeyHash,
 } from '@/shared/utils/converter';
 
@@ -353,7 +353,6 @@ export class Wallet {
       }
     }
 
-
     if (this.type === WalletType.Ledger) { // Ledger Signing Logic
       const wit: string = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
       return { witnesses: wit };
@@ -421,8 +420,9 @@ export class Wallet {
     }
   }
 
-  async submitTx(body: string) {
-    const response = await this.api.submitTx(body);
+  async submitTx(tx: Transaction, utxos) {
+    const txCbor = tx.to_hex()
+    const response = await this.api.submitTx(txCbor);
     if (response.error) {
       if (response.status_code === 400) {
         throw new Error(TxSendError.Failure.info.concat('.', ' ', response.message));
@@ -436,11 +436,129 @@ export class Wallet {
         throw new Error(APIError.InvalidRequest.info);
       }
     }
+    await this.addPendingTx(response, tx.to_js_value(), utxos)
     return response;
   }
 
-  addPendingTx(txId, txJs, utxos) {
-    console.log(txId)
+  async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any) {
+    console.log('addPendingTx')
+    const inputs = []
+    txJs.body.inputs.forEach(input => {
+      const utxo = utxos.find(utxo => utxo.tx_hash === input.transaction_id && utxo.tx_index === input.index)
+      if (utxo) {
+        inputs.push(utxo)
+      }
+    })
+    const outputs = []
+    let index = 0
+    const totalOutput: BigNum = BigNum.zero()
+    txJs.body.outputs.forEach(output => {
+      let stakeAddress
+      try {
+        stakeAddress = RewardAddress.new(this.networkId(), stakeCredential(output.address)).to_address().to_bech32();
+      } catch (e) {
+        console.log(e)
+      }
+      totalOutput.checked_add(BigNum.from_str(output.amount.coin))
+      const asset_list = output.amount.multiasset ? output.amount.multiasset : []
+        outputs.push({
+        asset_list,
+        datum_hash: null,
+        inline_datum: null,
+        payment_addr: {
+          bech32: output.address,
+          cred: paymentCredential(output.address).to_keyhash().to_hex()
+        },
+        reference_script: output.script_ref,
+        stake_addr: stakeAddress,
+        tx_hash: txId,
+        tx_index: index++,
+        value: output.amount.coin
+      })
+    })
+    const assets_minted = txJs.body.mint ? txJs.body.mint : []
+    const certificates = []
+    if (txJs.body.certs?.length > 0) {
+      let index = 0
+      txJs.body.certs.forEach(cert => {
+        if (cert['StakeDeregistration']) {
+          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDeregistration']['stake_credential']['Key'])
+          certificates.push({
+            index: index++,
+            info: {
+              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+            },
+            type: 'stake_deregistration'
+          })
+        } else if (cert['StakeRegistration']) {
+          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeRegistration']['stake_credential']['Key'])
+          certificates.push({
+            index: index++,
+            info: {
+              deposit: "2000000",
+              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+            },
+            type: 'stake_registration'
+          })
+        } else if (cert['StakeDelegation']) {
+          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['stake_credential']['Key'])
+          const poolKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['pool_keyhash'])
+          certificates.push({
+            index: index++,
+            info: {
+              pool_id_bech32: poolKeyHash.to_bech32('pool'),
+              pool_id_hex: poolKeyHash.to_hex(),
+              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+            },
+            type: 'pool_delegation'
+          })
+        } else if (cert['VoteDelegation']) {
+          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['VoteDelegation']['stake_credential']['Key'])
+          const drep = DRep.new_script_hash(ScriptHash.from_hex(cert['VoteDelegation']['drep']['ScriptHash']))
+          certificates.push({
+            index: index++,
+            info: {
+              drep_hex: drep.to_hex(),
+              drep_id: drep.to_bech32(),
+              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+            },
+            type: 'vote_delegation'
+          })
+        } else {
+          console.log(cert)
+        }
+      })
+
+    }
+    const native_scripts = txJs.auxiliary_data?.native_scripts ? txJs.auxiliary_data.native_scripts : []
+    const plutus_contracts = txJs.auxiliary_data?.plutus_scripts ? txJs.auxiliary_data.plutus_scripts : []
+    const reference_inputs = txJs.body.reference_inputs ? txJs.body.reference_inputs : []
+    const withdrawals = txJs.body.withdrawals ? txJs.body.withdrawals : []
+    const tx = {
+      absolute_slot: 0,
+      assets_minted,
+      block_hash: '',
+      block_height: 0,
+      certificates,
+      deposit: "0",
+      fee: txJs.body.fee,
+      inputs,
+      invalid_after: "",
+      invalid_before: '',
+      metadata: txJs.auxiliary_data?.metadata,
+      native_scripts,
+      outputs,
+      plutus_contracts,
+      reference_inputs,
+      total_output: totalOutput.to_str(),
+      tx_hash: txId,
+      tx_size: 0,
+      tx_timestamp: (new Date()).getTime() / 1000,
+      withdrawals,
+      pending: true
+    }
+    await this.setAccountTransactions([tx])
+    console.log(tx)
     console.log(txJs)
   }
 
