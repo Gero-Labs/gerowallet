@@ -95,7 +95,7 @@ export default {
           TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
           undefined // TODO Transaction metadata
         );
-        const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+        const txId = await appWallet.submitTx(signedTx, this.utxos);
         console.log(txId)
         snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`)
         this.$emit('close')

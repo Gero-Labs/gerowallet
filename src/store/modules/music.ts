@@ -50,7 +50,7 @@ export const musicStore = defineStore( 'musicStore', {
             if (fileSrc.includes('ar://')) {
               src = `${baseUrl}/api/ar/${fileSrc.replace('ar://', '').replace('ar/', '')}`
             } else {
-              src = `${baseUrl}/api/ipfs/${fileSrc.replace('ipfs://', '').replace('ipfs/', '')}`
+              src = `${baseUrl}/api/ipfs?path=${fileSrc.replace('ipfs://', '').replace('ipfs/', '')}`
             }
             return {
               id: nft.unit,

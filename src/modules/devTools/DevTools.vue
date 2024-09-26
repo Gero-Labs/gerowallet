@@ -45,12 +45,34 @@
           </v-card-text>
         </v-card>
       </v-col>
+      <v-col cols="12" class="pa-2">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+          <v-card-title class="row no-gutters d-flex justify-space-between">
+            Address Cbor Hex to Bech32
+          </v-card-title>
+          <v-card-text>
+            <v-row no-gutters>
+              <v-col cols="6">
+                <v-textarea
+                  v-model="addressHex"
+                  outlined
+                  hide-details
+                >
+                </v-textarea>
+              </v-col>
+              <v-col cols="6" class="px-3">
+                {{ address }}
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
   </v-layout>
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
+import { Address, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 
 export default defineComponent({
   name: 'DevTools',
@@ -76,6 +98,9 @@ export default defineComponent({
     },
     witnessSetCborHex(val) {
       this.witnesses = TransactionWitnessSet.from_hex(val)
+    },
+    addressHex(val) {
+      this.address = Address.from_hex(val).to_bech32()
     }
   },
   data() {
@@ -84,6 +109,8 @@ export default defineComponent({
         tx: null,
         witnessSetCborHex: '',
         witnesses: null,
+        addressHex: '',
+        address: null,
       };
   },
 });

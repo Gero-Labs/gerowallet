@@ -1,3 +1,5 @@
+import { getAccountPub } from '@/chrome/webpage';
+
 export const TARGET = 'gero-wallet';
 export const SENDER = { extension: 'extension', webpage: 'webpage' };
 export const METHOD = {
@@ -21,10 +23,12 @@ export const METHOD = {
   //internal
   requestData: 'requestData',
   returnData: 'returnData',
-  //cip 95
+  // cip 95
   getPubDRepKey: 'getPubDRepKey',
   getRegisteredPubStakeKeys: 'getRegisteredPubStakeKeys',
-  getUnregisteredPubStakeKeys: 'getUnregisteredPubStakeKeys'
+  getUnregisteredPubStakeKeys: 'getUnregisteredPubStakeKeys',
+  // cip 104
+  getAccountPub: 'getAccountPub'
 };
 
 export const APIError = {

@@ -146,8 +146,9 @@ export default {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
           const input = this.tx?.body()?.inputs().get(i)
           const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          totalAdaOutput -= Number(utxo.value)
-          console.log(utxo)
+          if (utxo) {
+            totalAdaOutput -= Number(utxo.value)
+          }
         }
       }
       if (this.tx?.body()?.outputs()) {
@@ -155,8 +156,6 @@ export default {
           const output = this.tx?.body()?.outputs().get(i)
           totalAdaOutput += Number(output.amount().coin().to_str())
         }
-        console.log('totalAdaBalance', totalAdaBalance.to_str())
-        console.log('totalAdaOutput', totalAdaOutput)
         depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str()) - this.withdrawals
         return depositFee;
       }
@@ -193,9 +192,9 @@ export default {
             TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
             undefined // TODO Transaction metadata
           );
-          // const txId = await appWallet.submitTx(signedTx.to_hex().toString());
-          // console.log(txId)
-          // snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`)
+          const txId = await appWallet.submitTx(signedTx, this.utxos);
+          console.log(txId)
+          snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`)
           this.$emit('close')
         } catch (e) {
           snackbar.setError(e)

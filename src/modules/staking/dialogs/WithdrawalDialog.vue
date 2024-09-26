@@ -170,7 +170,7 @@ export default {
             TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
             undefined // TODO Transaction metadata
           );
-          const txId = await appWallet.submitTx(signedTx.to_hex().toString());
+          const txId = await appWallet.submitTx(signedTx, this.utxos);
           console.log(txId)
           snackbar.fireSuccess(`Withdrawal Submitted Successfully. Tx ID: ${txId}`)
           this.$emit('close')
