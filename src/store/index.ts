@@ -5,7 +5,7 @@ import loading from '@/plugins/loading';
 // import { LocalPersistedStorage} from "@/store/local-storage";
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
-import Dexie, { liveQuery } from 'dexie';
+import Dexie, { liveQuery, Subscription } from 'dexie';
 import socket from '@/plugins/socket';
 import { STORAGE } from '@/chrome/config';
 import {
@@ -28,6 +28,7 @@ import { governanceStore } from '@/store/modules/governance';
 // const plugin = env === 'production' ? LocalPersistedStorage:
 // Vue.use(Vuex)
 export let appWallet: Wallet = undefined;
+export let subscriptions: Subscription[] = []
 
 export const useStore = defineStore('store', {
   persist: {
@@ -362,6 +363,8 @@ export const useStore = defineStore('store', {
         const items = collection['items']
         if (items[0]['policy_id'] === 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a') {
           collection['name'] = 'adaHandle'
+        } else if (items[0]['policy_id'] === '85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18') {
+          collection['name'] = 'MusicBox Dimensions'
         } else if (collection['name'] == null) {
           if (items.some(item => item['onchain_metadata'])) {
             collection['name'] = longestCommonStartingSubstring(items
@@ -460,6 +463,10 @@ export const useStore = defineStore('store', {
       loading.setLoading(true);
       this.setLoadingTxs(true)
       console.log('login')
+      subscriptions.forEach(sub => {
+        sub.unsubscribe();
+      })
+      subscriptions = []
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -500,6 +507,10 @@ export const useStore = defineStore('store', {
     },
     async logout() {
       loading.setLoading(true);
+      subscriptions.forEach(sub => {
+        sub.unsubscribe();
+      })
+      subscriptions = []
       socket.stompDisconnect();
       await this.setLoggedWallet(undefined)
       if (chrome?.storage) {
@@ -555,14 +566,14 @@ export const useStore = defineStore('store', {
       }
     },
     async loadWallets(): Promise<void> {
-      liveQuery(() => db.getAllWallets()).subscribe({
+      subscriptions.push(liveQuery(() => db.getAllWallets()).subscribe({
         next: wallets => {
           this.wallets = wallets
         },
         error: error => {
           console.error('Failed to get all Wallets:', error)
         }
-      });
+      }));
     },
     async loadSync() {
       if (!appWallet) {
@@ -572,7 +583,7 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
           next: newTip => {
             this.latestTip = newTip
             console.log('latestTip', this.latestTip)
@@ -582,7 +593,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Tip:', error)
             reject(error)
           }
-        });
+        }));
       });
     },
     async loadTransactions() {
@@ -593,7 +604,7 @@ export const useStore = defineStore('store', {
       }
       const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('transactions').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('transactions').toArray()).subscribe({
           next: async newTransactions => {
             const newT = newTransactions.map(tx => tx.transaction)
             if (newT !== this.transactions) {
@@ -607,7 +618,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Transactions:', error)
             reject(error)
           }
-        });
+        }));
       });
     },
     async loadAssets() {
@@ -619,7 +630,7 @@ export const useStore = defineStore('store', {
       const db: Dexie = await appWallet.getBlockchainDb();
       // Return a promise that resolves when the data is fully loaded
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('assets').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('assets').toArray()).subscribe({
           next: newAssets => {
             this.assets = newAssets.reduce((map, asset) => {
               map[asset.asset] = asset;
@@ -631,7 +642,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Assets:', error);
             reject(error); // Reject the promise if an error occurs
           }
-        });
+        }));
       });
     },
     async loadPools() {
@@ -642,7 +653,7 @@ export const useStore = defineStore('store', {
       }
       const db: Dexie = await appWallet.getBlockchainDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('pools').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('pools').toArray()).subscribe({
           next: newPools => {
             this.pools = newPools
             resolve(this.pools);
@@ -651,7 +662,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Pools:', error)
             reject(error);
           }
-        });
+        }));
       });
     },
     async loadRewards() {
@@ -662,7 +673,7 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
           next: newRewards => {
             this.rewards = newRewards
             resolve(this.rewards)
@@ -671,7 +682,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Rewards:', error)
             reject(error)
           }
-        });
+        }));
       });
     },
     async loadConnectedDapps() {
@@ -682,7 +693,7 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
           next: newConnectedDapps => {
             this.connectedDapps = newConnectedDapps
             if (chrome?.storage) {
@@ -698,7 +709,7 @@ export const useStore = defineStore('store', {
             console.error('Failed to Fetch Connected Dapps:', error)
             reject(error)
           }
-        });
+        }));
       });
     },
     async disconnectDapp(id: number) {
