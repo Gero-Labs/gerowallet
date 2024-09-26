@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gero Dashboard Beta",
   "short_name": "Gero Dashboard Beta",
-  "version": "2.2.13",
+  "version": "2.3.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkOji9IapW6Jhg+hAmzYxEIeZUtxD+27l+hSzmIuEC6A2j8IlLR1zgWqcfho4sXthDNREURRFiG+TGhU8MpJbE84FlbE8TVPVAc7XWV5t8AbvTBto571Um4LEY4Gy3KN99DlxDIoxqTTkyFa8h2s6SPdOM4khtXadA4vV8r6LzV7Tlfz2bXoyJkR1l/7dKVW2/7braliX9C6xG2HsGvmiNF9W9gBN7+nZVJ+PYpuz0cDrFSdY1rOm9S2e9rhyBLBjSlFY4jbFHIy7++bybovTuB+OUa4ghRqg4mzBePefPBeynEUEmCDcpqBBtKAf5D657birjUdJy6VMoxKjNhkiUwIDAQAB",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
