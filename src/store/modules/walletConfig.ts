@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import Dexie, { liveQuery } from 'dexie';
-import { appWallet } from '@/store';
+import { appWallet, subscriptions } from '@/store';
 import { STORAGE } from '@/chrome/config';
 
 export const walletConfigStore = defineStore( 'walletConfigStore', {
@@ -85,7 +85,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('config').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('config').toArray()).subscribe({
           next: value => {
             this.config = value.reduce(function(map, val) {
               map[val.key] = val.value
@@ -93,7 +93,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
             }, {});
             resolve(this.config)
           }
-        })
+        }));
       })
     },
     async loadAddresses() {
@@ -104,7 +104,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => db.table('addresses').toArray()).subscribe({
+        subscriptions.push(liveQuery(() => db.table('addresses').toArray()).subscribe({
           next: value => {
             this.setAddresses(value.reduce(function(map, val) {
               map[val.address] = val
@@ -112,7 +112,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
             }, {}));
             resolve(this.addresses)
           }
-        })
+        }));
       })
     },
     async loadAccountInfo() {
@@ -123,7 +123,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
+        subscriptions.push(liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
           next: newAccount => {
             this.setAccount(newAccount)
             resolve(this.account)
@@ -132,7 +132,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
             console.error('Failed to Fetch AccountInfo:', error)
             reject(error)
           }
-        });
+        }));
       });
     },
   },
