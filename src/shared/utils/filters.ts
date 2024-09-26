@@ -25,9 +25,6 @@ const filters = {
     // Concatenate the start part, ellipsis, and end part
     return `${startPart}...${endPart}`;
   },
-  toIPFS(value: string) {
-    return 'https://cloudflare-ipfs.com/ipfs/' + value;
-  },
   minutes(value: number): string {
     if (!value || typeof value !== "number") return "00:00"
     const min: number = value / 60, sec: number = value % 60

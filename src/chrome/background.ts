@@ -9,7 +9,13 @@ import {
   verifyTx,
   getUsedAddresses,
   getRewardAddresses,
-  getUtxos, submitTx, getPubDRepKey, getRegisteredPubStakeKeys, getUnregisteredPubStakeKeys, getCollateral,
+  getUtxos,
+  submitTx,
+  getPubDRepKey,
+  getRegisteredPubStakeKeys,
+  getUnregisteredPubStakeKeys,
+  getCollateral,
+  getPubKey,
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -475,6 +481,25 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
     sendResponse({
       id: request.id,
       data: key,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getAccountPub, async (request, sendResponse) => {
+  const key = await getPubKey();
+  if (key) {
+    sendResponse({
+      id: request.id,
+      data: key.to_hex(),
       target: TARGET,
       sender: SENDER.extension,
     });

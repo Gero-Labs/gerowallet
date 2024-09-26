@@ -56,7 +56,17 @@ export async function resolveAsset(asset, token) {
       }
     } else if (asset?.onchain_metadata) {
       if (asset.onchain_metadata?.image) {
-        img = `${baseUrl}/api/ipfs/${asset.onchain_metadata.image.replace('ipfs://', '')}`;
+        let imgString
+        if (typeof asset.onchain_metadata.image == "string") {
+          imgString = asset.onchain_metadata.image
+        } else if (Array.isArray(asset.onchain_metadata.image)) {
+          imgString = asset.onchain_metadata.image.join('')
+        }
+        if (imgString.includes('ar://') || imgString.includes('ar/')) {
+          img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
+        } else {
+          img = `${baseUrl}/api/ipfs?path=${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
+        }
       } else if (asset?.onchain_metadata['721'] && asset?.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
         const obj = asset.onchain_metadata['721'][asset.policy_id][name];
         onchain_metadata = obj
@@ -67,10 +77,10 @@ export async function resolveAsset(asset, token) {
           } else if (Array.isArray(obj.image)) {
             imgString = obj.image.join('')
           }
-          if (imgString.includes('ar://')) {
+          if (imgString.includes('ar://') || imgString.includes('ar/')) {
             img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
           } else {
-            img = `${baseUrl}/api/ipfs/${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
+            img = `${baseUrl}/api/ipfs?path=${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
           }
         }
       } else { // CIP 68
@@ -82,9 +92,9 @@ export async function resolveAsset(asset, token) {
             const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
             if (label == 333) {
               metadata = metadataJson
-              img = `${baseUrl}/api/ipfs/${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
+              img = `${baseUrl}/api/ipfs?path=${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
             } else if (label == 222) {
-              img = `${baseUrl}/api/ipfs/${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+              img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
             }
             name = metadataJson.name
           }

@@ -162,14 +162,14 @@
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
                 <v-list-item-avatar class="my-0" size="32">
-                  <img :src="item.img" :alt="item.name + ' Logo'"/>
+                  <img :src="item.img" :alt="item.name + ' Logo'" v-if="item.img" />
                 </v-list-item-avatar>
                 <v-list-item-content>
                   <v-list-item-title>
                     {{item.name}}
                   </v-list-item-title>
                   <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{item.description}}
+                    {{ Array.isArray(item.description) ? item.description.join('') : item.description }}
                   </v-list-item-subtitle>
                 </v-list-item-content>
               </v-list-item>
@@ -249,6 +249,7 @@ export default {
       this.dialogData = null;
     },
     handleOnRowClick(row) {
+      console.log(row)
       // this.dialogData = row; TODO
     },
   },

@@ -143,6 +143,11 @@ export const getUtxos = async (amount: string = undefined, paginate: Paginate = 
   return selectedUtxos;
 };
 
+export const getPubKey = async (): Promise<Bip32PublicKey> => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  return Bip32PublicKey.from_bech32(loggedWallet['publicKey'])
+}
+
 export const getAddress = async (): Promise<Address> => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const pubKey = Bip32PublicKey.from_bech32(loggedWallet['publicKey'])

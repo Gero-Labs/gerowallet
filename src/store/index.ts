@@ -269,7 +269,6 @@ export const useStore = defineStore('store', {
         .map(async (token) => {
           if (token.unit && dexHunterStore().dexHunterTokens[token.unit]) {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
-
             try {
               const stats = await appWallet.api.mcap(token.unit);
               token['mcap'] = stats.mcap;
@@ -340,11 +339,18 @@ export const useStore = defineStore('store', {
         if (collections[collectible.policy_id]) {
           collections[collectible.policy_id]['items'].push(collectible)
           collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
+          const description = findCollectionDescription(collectible)
+          if (description) {
+            collections[collectible.policy_id]['description'] = description
+          }
         } else {
           collections[collectible.policy_id] = {}
           collections[collectible.policy_id]['items'] = [collectible]
           collections[collectible.policy_id]['name'] = findCollectionName(collectible)
-          collections[collectible.policy_id]['description'] = findCollectionDescription(collectible)
+          const description = findCollectionDescription(collectible)
+          if (description) {
+            collections[collectible.policy_id]['description'] = description
+          }
           collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
           collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
         }
@@ -353,20 +359,20 @@ export const useStore = defineStore('store', {
         await appWallet.syncAssets(unresolvedUnits, true)
       }
       Object.values(collections).forEach(collection => {
-        if (collection['name'] == null) {
-          const items = collection['items']
-          if (items.length > 1 && items[0]['onchain_metadata']) {
+        const items = collection['items']
+        if (items[0]['policy_id'] === 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a') {
+          collection['name'] = 'adaHandle'
+        } else if (collection['name'] == null) {
+          if (items.some(item => item['onchain_metadata'])) {
             collection['name'] = longestCommonStartingSubstring(items
               .filter(item => item['onchain_metadata'])
               .map(item => item['onchain_metadata'].name))
-          } else {
-            if (items[0]?.onchain_metadata?.name) {
-              collection['name'] = items[0]?.onchain_metadata?.name
-            } else {
-              collection['name'] = items[0]['policy_id']
-            }
           }
           if (!collection['name']) {
+            collection['name'] = longestCommonStartingSubstring(items.map(item => item.name))
+          }
+          if (!collection['name']) {
+            console.log('')
             collection['name'] = items[0]['policy_id']
           }
         }

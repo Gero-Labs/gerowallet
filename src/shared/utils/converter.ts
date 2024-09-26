@@ -231,13 +231,24 @@ export function hdPathToArray(path: string): number[] {
   });
 }
 
+export function paymentCredential(address: string): Credential {
+  const keyAddress: Address = Address.from_bech32(address);
+  try {
+    return BaseAddress.from_address(keyAddress)
+      .payment_cred();
+  } catch (e) {
+    //
+  }
+  return undefined;
+}
+
 export function stakeCredential(address: string): Credential {
   const keyAddress: Address = Address.from_bech32(address);
   try {
     return BaseAddress.from_address(keyAddress)
       .stake_cred();
   } catch (e) {
-    // I want application to not crush, but don't care about the message
+    //
   }
   return undefined;
 }

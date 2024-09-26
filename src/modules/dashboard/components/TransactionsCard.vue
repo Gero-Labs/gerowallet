@@ -14,7 +14,10 @@
         <template v-slot:[`item.time`]="{ item }">
           <v-list-item two-line class="px-0">
             <v-list-item-content>
-              <v-list-item-title style="font-size: 12px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ item.status }}</v-list-item-title>
+              <v-list-item-title style="font-size: 12px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">
+                {{ item.status }}
+                <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
+              </v-list-item-title>
               <v-list-item-subtitle style="font-size: 10px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;"
               >{{ new Date(item.time * 1000).toLocaleString() }}
               </v-list-item-subtitle>
