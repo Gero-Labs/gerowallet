@@ -27,7 +27,7 @@
         </v-stepper-header>
       </v-stepper>
     </v-card-title>
-    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;">
+    <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet.type === WalletType.Normal ? { height: '442px'} : {}">
       <CustomStepper :currentStep="currentStep" :steps="steps">
         <v-stepper-content step="1">
           <SendRecipientDetailsStep

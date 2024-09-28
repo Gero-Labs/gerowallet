@@ -211,7 +211,7 @@ export class Wallet {
   paymentKeyHash(address: string): Uint8Array {
     const keyAddress: Address = Address.from_bech32(address);
     try {
-      const baseKeyAddress = BaseAddress.from_address(keyAddress)
+      const baseKeyAddress: Ed25519KeyHash = BaseAddress.from_address(keyAddress)
         .payment_cred()
         .to_keyhash();
       return baseKeyAddress.to_bytes();
@@ -219,7 +219,7 @@ export class Wallet {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const enterpriseKeyAddress = EnterpriseAddress.from_address(keyAddress)
+      const enterpriseKeyAddress: Ed25519KeyHash = EnterpriseAddress.from_address(keyAddress)
         .payment_cred()
         .to_keyhash();
       return enterpriseKeyAddress.to_bytes();
@@ -227,7 +227,7 @@ export class Wallet {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const pointerKeyAddress = PointerAddress.from_address(keyAddress)
+      const pointerKeyAddress: Ed25519KeyHash = PointerAddress.from_address(keyAddress)
         .payment_cred()
         .to_keyhash();
       return pointerKeyAddress.to_bytes();
@@ -235,7 +235,7 @@ export class Wallet {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const rewardKeyAddress = RewardAddress.from_address(keyAddress)
+      const rewardKeyAddress: Ed25519KeyHash = RewardAddress.from_address(keyAddress)
         .payment_cred()
         .to_keyhash();
       return rewardKeyAddress.to_bytes();

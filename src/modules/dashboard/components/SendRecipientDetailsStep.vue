@@ -32,6 +32,9 @@
           </v-icon>
         </template>
       </v-textarea>
+      <div style="color: #61646C; min-height: 56px; font-style: italic" class="pt-3" >
+        <span v-if="resolved">{{paymentAddress}}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -57,7 +60,11 @@ export default {
     recipientRules() {
       if (this.loggedWallet.network === Network.MAINNET) {
         if (this.loggedWallet.chain === Blockchain.CARDANO) {
-          return [rules.required, rules.paymentAddressOrAdaHandle(), !!this.resolved]
+          if (this.recipientAddress.startsWith('$')) {
+            return [rules.required, rules.paymentAddressOrAdaHandle(), !!this.resolved]
+          } else {
+            return [rules.required, rules.paymentAddressOrAdaHandle()]
+          }
         } else {
           return [rules.required, rules.paymentAddress(false)]
         }
@@ -91,6 +98,7 @@ export default {
       appWallet.api.getAssetNFTAddress('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$','')).toString('hex'))
         .then(address => {
           console.log(address)
+          this.paymentAddress = address.payment_address
           this.$emit('updateRecipientAddress', address.payment_address)
           this.resolved = true
         })
@@ -104,6 +112,7 @@ export default {
     }, 300),
   },
   data: () => ({
+    paymentAddress: '',
     recipientAddress: '',
     resolved: undefined,
     loading: false,
