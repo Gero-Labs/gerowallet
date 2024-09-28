@@ -13,7 +13,7 @@
           </v-card-title>
           <v-card-text>
             <v-icon>mdi-arrow-down-thin</v-icon>
-            <DappAddress class="mb-4" :address="sendData.recipientAddress" :risk="risks?.addressRisk" :with-bg="false"  />
+            <DappAddress class="mb-4" :address="sendData.recipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
             <v-icon>mdi-arrow-down-thin</v-icon>
             <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
               You're giving
@@ -152,6 +152,7 @@ export default {
   },
   methods: {
     async scanTx(txData) {
+      this.risks.score = undefined
       this.loading = true
       this.tx = txData
       try {
