@@ -204,12 +204,12 @@ export class Wallet {
     // return RewardAddress.from_address(Address.from_bech32("stake1uxj2ywvtqzzty0jux7qsyxs0d7kxv6qwea4ljlk05aqfs7clg3lek"))
   }
 
-  drepId() {
+  drepId(): DRep {
     return DRep.new_from_credential(Credential.from_keyhash(this.drepKey().hash()))
   }
 
-  paymentKeyHash(address: string) {
-    const keyAddress = Address.from_bech32(address);
+  paymentKeyHash(address: string): Uint8Array {
+    const keyAddress: Address = Address.from_bech32(address);
     try {
       const baseKeyAddress = BaseAddress.from_address(keyAddress)
         .payment_cred()

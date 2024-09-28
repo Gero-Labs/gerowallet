@@ -113,7 +113,7 @@
             >
               <template v-slot:[`item.pool_id`]="{ item }">
                 <v-list-item two-line>
-                  <v-list-item-avatar size="40">
+                  <v-list-item-avatar size="40" v-if="resolvePoolIcon(item.pool_id)">
                     <v-img :src="resolvePoolIcon(item.pool_id)" :alt="item.pool_id+ ' Icon'"></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content>
@@ -326,7 +326,7 @@ export default {
     resolvePoolIcon(poolId) {
       const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
       if (pool) {
-        return JSON.parse(pool.pool_extended_info).info.url_png_icon_64x64
+        return JSON.parse(pool.pool_extended_info)?.info?.url_png_icon_64x64
       }
       return ''
     },

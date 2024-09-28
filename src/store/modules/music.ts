@@ -31,9 +31,13 @@ export const musicStore = defineStore( 'musicStore', {
       const mediaNFTs = []
       resolvedCollections.forEach(collection => {
         collection.items.forEach(nft => {
-          if (nft.onchain_metadata && nft.onchain_metadata.files && nft.onchain_metadata.files.some(file => file.mediaType.includes('audio'))) { //|| file.mediaType.includes('video'))) {
-            nft['collection'] = collection.name
-            mediaNFTs.push(nft)
+          try {
+            if (nft.onchain_metadata && nft.onchain_metadata.files && Array.isArray(nft.onchain_metadata.files) && nft.onchain_metadata.files.some(file => file.mediaType?.includes('audio'))) { //|| file.mediaType.includes('video'))) {
+              nft['collection'] = collection.name
+              mediaNFTs.push(nft)
+            }
+          } catch (e) {
+            console.log(e)
           }
         })
       })
@@ -47,8 +51,10 @@ export const musicStore = defineStore( 'musicStore', {
             } else if (Array.isArray(file.src)) {
               fileSrc = file.src.join('')
             }
-            if (fileSrc.includes('ar://')) {
+            if (fileSrc.startsWith('ar://') || fileSrc.startsWith('ar/')) {
               src = `${baseUrl}/api/ar/${fileSrc.replace('ar://', '').replace('ar/', '')}`
+            } else if (fileSrc.startsWith('https://')) {
+              src = fileSrc
             } else {
               src = `${baseUrl}/api/ipfs?path=${fileSrc.replace('ipfs://', '').replace('ipfs/', '')}`
             }
