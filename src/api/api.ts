@@ -163,6 +163,16 @@ export class Api {
     }
   }
 
+  async getAssetNFTAddress(policyId: string, assetName: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async getTip() {
     try {
       const { data, status } = await this.axiosInstance.get(

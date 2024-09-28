@@ -262,7 +262,7 @@ export default {
     isValid() {
       if (this.currentStep === 1) {
         const prefix = this.loggedWallet?.network !== Network.MAINNET ? 'addr_test1' : 'addr1';
-        return this.sendData.recipientAddress.startsWith(prefix);
+        return this.sendData.recipientAddress?.startsWith(prefix);
       }
       if (this.currentStep === 2) {
         if (!this.txValid) {
@@ -293,7 +293,7 @@ export default {
           this.buildTx()
           this.txValid = true
         } catch(e) {
-          if (e.includes('less than the minimum UTXO value')) {
+          if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
             const match = e.match(/minimum UTXO value (\d+)/);
             const number = match ? parseInt(match[1], 10) : null;
             this.sendData.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
