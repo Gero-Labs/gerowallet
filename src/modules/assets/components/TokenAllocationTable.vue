@@ -165,7 +165,7 @@
                   <img :src="item.img" :alt="item.name + ' Logo'" v-if="item.img" />
                 </v-list-item-avatar>
                 <v-list-item-content>
-                  <v-list-item-title>
+                  <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
                     {{item.name}}
                   </v-list-item-title>
                   <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">

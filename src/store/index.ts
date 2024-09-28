@@ -365,19 +365,22 @@ export const useStore = defineStore('store', {
           collection['name'] = 'adaHandle'
         } else if (items[0]['policy_id'] === '85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18') {
           collection['name'] = 'MusicBox Dimensions'
-        } else if (collection['name'] == null) {
+        } else if (!collection['name']) {
           if (items.some(item => item['onchain_metadata'])) {
             collection['name'] = longestCommonStartingSubstring(items
-              .filter(item => item['onchain_metadata'])
-              .map(item => item['onchain_metadata'].name))
+              .filter(item => item['onchain_metadata'] && item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')])
+              .map(item => item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')]))
           }
           if (!collection['name']) {
-            collection['name'] = longestCommonStartingSubstring(items.map(item => item.name))
+            collection['name'] = longestCommonStartingSubstring(items.map(item => item[Object.keys(item).find(key => key.toLowerCase() === 'name')]))
           }
           if (!collection['name']) {
             console.log('')
             collection['name'] = items[0]['policy_id']
           }
+        }
+        if (Array.isArray(collection['name'])) {
+          collection['name'] = collection['name'].join(' ');
         }
       })
       this.resolvedCollections = Object.values(collections)
