@@ -62,8 +62,10 @@ export async function resolveAsset(asset, token) {
         } else if (Array.isArray(asset.onchain_metadata.image)) {
           imgString = asset.onchain_metadata.image.join('')
         }
-        if (imgString.includes('ar://') || imgString.includes('ar/')) {
+        if (imgString.startsWith('ar://') || imgString.startsWith('ar/')) {
           img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
+        } else if (imgString.startsWith('https://') || imgString.startsWith('data:image')) {
+          img = imgString;
         } else {
           img = `${baseUrl}/api/ipfs?path=${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
         }
@@ -79,12 +81,17 @@ export async function resolveAsset(asset, token) {
           }
           if (imgString.includes('ar://') || imgString.includes('ar/')) {
             img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
+          } else if (imgString.startsWith('https://') || imgString.startsWith('data:image')) {
+            img = imgString;
           } else {
             img = `${baseUrl}/api/ipfs?path=${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
           }
         }
+        if (obj.name) {
+          name = obj.name
+        }
       } else { // CIP 68
-        const label = cip68Label(asset);
+        const label: number = cip68Label(asset);
         if (label) {
           const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
           if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
@@ -115,19 +122,34 @@ export async function resolveAsset(asset, token) {
 }
 
 export function findCollectionName(collectible) {
-  let projectName
-  if (collectible?.onchain_metadata?.collection) {
-    return collectible.onchain_metadata.collection
+  let projectName: string = ''
+  if (collectible?.onchain_metadata) {
+    const collectionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project');
+    if (collectionKey) {
+      projectName = collectible.onchain_metadata[collectionKey]
+    }
   }
-  if (collectible?.onchain_metadata?.project) {
-    return collectible.onchain_metadata.project
+  if (!projectName && collectible?.onchain_metadata?.attributes) {
+    const collectionKey: string = Object.keys(collectible.onchain_metadata.attributes).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project' || key.toLowerCase() === 'collectionname');
+    if (collectionKey) {
+      projectName = collectible.onchain_metadata.attributes[collectionKey]
+    }
   }
   return projectName
 }
 
 export function findCollectionDescription(collectible) {
-  if (collectible?.onchain_metadata?.description) {
-    return collectible.onchain_metadata.description
+  if (collectible?.onchain_metadata) {
+    const descriptionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'description');
+    if (descriptionKey) {
+      return collectible.onchain_metadata[descriptionKey]
+    }
+  }
+  if (collectible?.onchain_metadata?.attributes) {
+    const descriptionKey: string = Object.keys(collectible.onchain_metadata.attributes).find(key => key.toLowerCase() === 'description');
+    if (descriptionKey) {
+      return collectible.onchain_metadata.attributes[descriptionKey]
+    }
   }
   return null
 }
@@ -136,19 +158,25 @@ export function longestCommonStartingSubstring(array) {
   if (array.length == 0) {
     return
   }
-  const sortedArray = [...array].sort();
+
+  const sortedArray: any[] = [...array].sort();
   const firstItem = sortedArray[0];
   const lastItem = sortedArray[sortedArray.length - 1];
-  const firstItemLength = firstItem.length;
-  let i = 0;
+  try {
+    const firstItemLength = firstItem.length;
+    let i: number = 0;
 
-  while (i < firstItemLength && firstItem.charAt(i) === lastItem.charAt(i)) {
-    i++;
-  }
+    while (i < firstItemLength && firstItem.charAt(i) === lastItem.charAt(i)) {
+      i++;
+    }
 
-  let subString = firstItem.substring(0, i);
-  if (subString.endsWith('#')) {
-    subString = firstItem.substring(0, i-1)
+    let subString = firstItem.substring(0, i);
+    if (subString.endsWith('#')) {
+      subString = firstItem.substring(0, i-1)
+    }
+    return subString.trim();
+  } catch (e) {
+    console.log(e)
+    return
   }
-  return subString.trim();
 }
