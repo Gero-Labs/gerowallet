@@ -90,6 +90,12 @@ export class SocketPlugin {
 
   stompSuccessCallback() {
     if (this.subscription) {
+      if (this.subscription.tip) {
+        this.subscription.tip.unsubscribe();
+      }
+      if (this.subscription.rates) {
+        this.subscription.rates.unsubscribe();
+      }
       if (this.subscription.sub) {
         this.subscription.sub.unsubscribe();
       }
