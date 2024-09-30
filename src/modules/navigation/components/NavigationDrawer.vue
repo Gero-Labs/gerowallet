@@ -16,7 +16,7 @@
             />
           </v-list-item-title>
           <v-list-item-subtitle style="color: orange">
-            BETA
+            {{ `v${version} BETA` }}
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -276,7 +276,8 @@ export default {
     selectedAvatar: undefined,
     avatars: [],
     changeAvatarDialog: false,
-    errorImage: require('@/assets/img/1x1.png')
+    errorImage: require('@/assets/img/1x1.png'),
+    version: require('@/manifest.json').version
   }),
   methods: {
     ...mapActions(useStore, ['logout']),

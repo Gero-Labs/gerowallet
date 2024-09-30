@@ -5,7 +5,8 @@ import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 
 const db = new Dexie('GeroWalletDatabase');
-const blockChainDBVersion = 2
+const blockChainDBVersion = 2;
+const walletDBVersion = 2;
 
 await db.version(1).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
@@ -107,15 +108,7 @@ export default {
   },
   async createNewWalletDb(walletId: number) {
     const db = new Dexie('wallet-' + walletId);
-    db.version(1).stores({
-      config: 'key, value',
-      sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-      account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
-      addresses: 'address',
-      rewards: 'epoch, amount, pool_id, type',
-      transactions: 'id',
-      connected_dapps: '++id, domain, time',
-    });
+    this.setWalletDBVersionSchema(db)
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);
     });
@@ -156,6 +149,18 @@ export default {
       dreps: 'drep_id',
       sync: '++id, time',
       assets: 'asset, fingerprint, asset_name, policy_id',
+    });
+  },
+  setWalletDBVersionSchema(db: Dexie) {
+    db.version(walletDBVersion).stores({
+      config: 'key, value',
+      sync: '++id, hash, height, slot, time, epoch, epoch_slot',
+      account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
+      addresses: 'address',
+      contacts: 'address, name',
+      rewards: 'epoch, amount, pool_id, type',
+      transactions: 'id',
+      connected_dapps: '++id, domain, time',
     });
   }
 };

@@ -73,7 +73,7 @@ export default {
       { label: 'Profile', value: 'profile' },
       // { label: 'Password', value: 'password' },
       { label: 'Collateral', value: 'collateral', disabled: false },
-      { label: 'Contacts', value: 'contacts', disabled: true },
+      { label: 'Contacts', value: 'contacts', disabled: false },
       { label: 'Connected Dapps', value: 'connectedDapps', disabled: false },
       { label: 'Advanced', value: 'advanced', disabled: false }
     ],

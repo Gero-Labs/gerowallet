@@ -3,6 +3,11 @@
     <v-card-title>
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
+      <div style="display: flex;">
+        <p class="mr-5 my-auto" style="font-size: 14px">Hide Scam Tokens</p>
+        <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
+      </div>
+
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn color="black" :value="0" rounded style="text-transform: capitalize">Assets
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{assets?.length}}</v-chip>
@@ -161,12 +166,33 @@
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
-                <v-list-item-avatar class="my-0" size="32">
-                  <img :src="item.img" :alt="item.name + ' Logo'" v-if="item.img" />
-                </v-list-item-avatar>
+                <v-list-item-action class="my-0">
+                  <v-badge
+                    overlap
+                    avatar
+                    color="transparent"
+                    :offset-y="37"
+                    v-if="item['isScam']"
+                  >
+                    <template v-slot:badge>
+                      <v-avatar color="transparent" tile size="20" >
+                        <v-icon small color="#F97066">
+                          mdi-alert-decagram
+                        </v-icon>
+                      </v-avatar>
+                    </template>
+                    <v-avatar size="32">
+                      <v-img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`" contain />
+                    </v-avatar>
+                  </v-badge>
+                  <v-avatar size="32" v-else>
+                    <img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`"
+                    />
+                  </v-avatar>
+                </v-list-item-action>
                 <v-list-item-content>
                   <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{item.name}}
+                    {{item.name}} <v-chip x-small v-if="item.isScam" class="ml-1" color="#F97066">Scam Token</v-chip>
                   </v-list-item-title>
                   <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
                     {{ Array.isArray(item.description) ? item.description.join('') : item.description }}
@@ -231,17 +257,25 @@
   </v-card>
 </template>
 <script>
-import { mapState } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import filters from '@/shared/utils/filters';
 import networks from '../../../shared/utils/networks';
+import { walletConfigStore } from '@/store/modules/walletConfig';
+import { Blockchain, Network } from '@/models/types';
 
 export default {
   name: "tokenAllocationTable",
   components: { TokensDialog, Sparkline },
+  watch: {
+    async hideScam(val) {
+      await this.setHideScamTokens(val)
+    }
+  },
   methods: {
+    ...mapActions(walletConfigStore, ['setHideScamTokens']),
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -255,13 +289,20 @@ export default {
   },
   filters,
   computed: {
+    Network() {
+      return Network
+    },
+    Blockchain() {
+      return Blockchain
+    },
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
+    ...mapState(walletConfigStore, 'getHideScamTokens'),
     filters() {
       return filters
     },
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
     collectiblesLength() {
       let amount = 0;
       if (this.resolvedCollections) {
@@ -281,7 +322,7 @@ export default {
             totalAllocation += token.value
           }
         })
-        return this.resolvedAssets.map(token => {
+        let res = this.resolvedAssets.map(token => {
           if (token['name'] === 'Cardano') {
             token['value'] = Number(filters.toCurrency(token.quantity * Number(this.price.lastPrice), false, token.metadata?.decimals, '', '', false, token.metadata?.decimals).replaceAll(",", ""))
           }
@@ -290,14 +331,23 @@ export default {
           }
           return token
         })
+        if (this.hideScam) {
+          res = res.filter(token => !token.isScam)
+        }
+        return res
       }
       return this.resolvedAssets
     },
     collectibles() {
-      return this.resolvedCollections
+      let res =  this.resolvedCollections
+      if (res && this.hideScam) {
+        res = res.filter(collection => !collection.isScam)
+      }
+      return res
     }
   },
   data: () => ({
+    hideScam: false,
     assetsSortBy: 'name',
     assetsSortDesc: false,
     collectiblesSortBy: 'name',
@@ -329,7 +379,9 @@ export default {
     ],
     dialogData: null,
   }),
-
+  mounted() {
+    this.hideScam = walletConfigStore().getHideScamTokens
+  }
 };
 </script>
 <style>

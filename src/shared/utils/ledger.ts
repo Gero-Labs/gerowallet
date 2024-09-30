@@ -19,10 +19,22 @@ import { ChainDerivations, CoinTypes, HARDENED, purpose, WalletTypePurpose } fro
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import {
-  Address, AssetName, Assets,
+  Address,
+  AssetName,
+  Assets,
   BaseAddress,
-  Bip32PublicKey, CborContainerType, CertificateKind, Ed25519KeyHashes, FixedTransaction, MultiAsset, RewardAddress, ScriptHash, TransactionInputs,
-  TransactionOutputs,
+  Bip32PublicKey,
+  CborContainerType,
+  CertificateKind,
+  Certificates, CommitteeColdResign, CommitteeHotAuth,
+  Credential, DRepDeregistration, DRepKind, DRepRegistration, DRepUpdate,
+  Ed25519KeyHashes,
+  FixedTransaction,
+  MultiAsset,
+  RewardAddress,
+  ScriptHash, StakeDelegation, StakeDeregistration, StakeRegistration,
+  TransactionInputs,
+  TransactionOutputs, VoteDelegation, VotingProcedures,
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Wallet } from '@/models/wallet';
@@ -381,19 +393,19 @@ export default {
     }
     return requiredSignerList;
   },
-  generateLedgerCertificates(accountData2, certificates) {
+  generateLedgerCertificates(accountData2, certificates: Certificates) {
     const ledgerCertificate = [];
     const networkId2 = accountData2.state.networkId;
-    for (const cert of certificates) {
-      const id3 = CertificateTypes.findIndex((type2) => type2 === Object.keys(cert)[0]);
-      switch (id3) {
+    for (let i = 0 ; i < certificates.len() ; i++) {
+      const cert = certificates.get(i)
+      switch (cert.kind()) {
         case CertificateKind.StakeRegistration: {
-          const regCert = cert.StakeRegistration;
-          const cred = Object.values(regCert.stake_credential)[0];
-          const addr = getRewardAddressFromCred(cred, networkId2);
+          const regCert: StakeRegistration = cert.as_stake_registration();
+          const cred: string = regCert.stake_credential().to_keyhash().to_hex();
+          const addr: string = getRewardAddressFromCred(cred, networkId2);
           const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
           const ledgerRegCert = {
-            type: regCert.coin ? CertificateType.STAKE_REGISTRATION_CONWAY : CertificateType.STAKE_REGISTRATION,
+            type: regCert.coin() ? CertificateType.STAKE_REGISTRATION_CONWAY : CertificateType.STAKE_REGISTRATION,
             params: {
               stakeCredential: ownedCred ? {
                 type: CredentialParamsType.KEY_PATH,
@@ -407,19 +419,19 @@ export default {
               }
             }
           };
-          if (regCert.coin) {
-            ledgerRegCert.params['deposit'] = regCert.coin;
+          if (regCert.coin()) {
+            ledgerRegCert.params['deposit'] = regCert.coin().to_str();
           }
           ledgerCertificate.push(ledgerRegCert);
           break;
         }
         case CertificateKind.StakeDeregistration: {
-          const deregCert = cert.StakeDeregistration;
-          const cred = Object.values(deregCert.stake_credential)[0];
-          const addr = getRewardAddressFromCred(cred, networkId2);
+          const deregCert: StakeDeregistration = cert.as_stake_deregistration();
+          const cred: string = deregCert.stake_credential().to_keyhash().to_hex();
+          const addr: string = getRewardAddressFromCred(cred, networkId2);
           const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
           const ledgerDeregCert = {
-            type: deregCert.coin ? CertificateType.STAKE_DEREGISTRATION_CONWAY : CertificateType.STAKE_DEREGISTRATION,
+            type: deregCert.coin() ? CertificateType.STAKE_DEREGISTRATION_CONWAY : CertificateType.STAKE_DEREGISTRATION,
             params: {
               stakeCredential: ownedCred ? {
                 type: CredentialParamsType.KEY_PATH,
@@ -433,16 +445,16 @@ export default {
               }
             }
           };
-          if (deregCert.coin) {
-            ledgerDeregCert.params['deposit'] = deregCert.coin;
+          if (deregCert.coin()) {
+            ledgerDeregCert.params['deposit'] = deregCert.coin().to_str();
           }
           ledgerCertificate.push(ledgerDeregCert);
           break;
         }
         case CertificateKind.StakeDelegation: {
-          const delegation2 = cert.StakeDelegation;
-          const cred = Object.values(delegation2.stake_credential)[0];
-          const addr = getRewardAddressFromCred(cred, networkId2);
+          const delegation2: StakeDelegation = cert.as_stake_delegation();
+          const cred: string = delegation2.stake_credential().to_keyhash().to_hex();
+          const addr: string = getRewardAddressFromCred(cred, networkId2);
           const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
           ledgerCertificate.push({
             type: CertificateType.STAKE_DELEGATION,
@@ -457,7 +469,7 @@ export default {
                 type: CredentialParamsType.KEY_HASH,
                 keyHashHex: cred
               },
-              poolKeyHashHex: delegation2.pool_keyhash
+              poolKeyHashHex: delegation2.pool_keyhash().to_hex()
             }
           });
           break;
@@ -466,10 +478,10 @@ export default {
         case CertificateKind.PoolRetirement:
           throw new Error("Error: generateLedgerCertificates: pool registration / retire cert no supported yet.");
         case CertificateKind.VoteDelegation: {
-          const delegation2 = cert.VoteDelegation;
-          const cred = Object.values(delegation2.stake_credential)[0];
-          const addr = getRewardAddressFromCred(cred, networkId2);
-          const drep = delegation2.drep;
+          const delegation2: VoteDelegation = cert.as_vote_delegation();
+          const cred: string = delegation2.stake_credential().to_keyhash().to_hex();
+          const addr: string = getRewardAddressFromCred(cred, networkId2);
+          const drep = delegation2.drep();
           const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
           const ledgerVoteDel = {
             type: CertificateType.VOTE_DELEGATION,
@@ -486,20 +498,22 @@ export default {
               }
             }
           };
-          if (typeof drep === "string") {
-            if (drep === "AlwaysAbstain") {
+          switch (drep.kind()) {
+            case DRepKind.AlwaysAbstain: {
               ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.ABSTAIN
               };
-            } else {
+            }
+            break
+            case DRepKind.AlwaysNoConfidence: {
               ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.NO_CONFIDENCE
               };
             }
-          } else {
-            const keyHash = drep.KeyHash;
-            const ownedDRepCred = keyHash ? getOwnedCred([accountData2.keys], keyHash, "drep") : null;
-            if (keyHash) {
+            break;
+            case DRepKind.KeyHash: {
+              const keyHash = drep.to_key_hash().to_hex();
+              const ownedDRepCred = keyHash ? getOwnedCred([accountData2.keys], keyHash, "drep") : null;
               if (ownedDRepCred) {
                 ledgerVoteDel.params['dRep'] = {
                   type: DRepParamsType.KEY_PATH,
@@ -511,20 +525,23 @@ export default {
                   keyHashHex: keyHash
                 };
               }
-            } else {
+            }
+            break;
+            case DRepKind.ScriptHash: {
               ledgerVoteDel.params['dRep'] = {
                 type: DRepParamsType.SCRIPT_HASH,
-                scriptHashHex: drep.ScriptHash
+                scriptHashHex: drep.to_script_hash().to_hex()
               };
             }
+            break;
           }
           ledgerCertificate.push(ledgerVoteDel);
           break;
         }
         case CertificateKind.CommitteeHotAuth: {
-          const committeeHotAuth = cert.CommitteeHotAuth;
-          const coldKey = Object.values(committeeHotAuth.committee_cold_credential)[0];
-          const hotKey = Object.values(committeeHotAuth.committee_hot_credential)[0];
+          const committeeHotAuth: CommitteeHotAuth = cert.as_committee_hot_auth();
+          const coldKey = committeeHotAuth.committee_cold_credential().to_keyhash().to_hex();
+          const hotKey = committeeHotAuth.committee_hot_credential().to_keyhash().to_hex();
           const ownedColdCred = getOwnedCred([accountData2.keys], coldKey, "cc_cold");
           const ownedHotCred = getOwnedCred([accountData2.keys], hotKey, "cc_hot");
           const ledgerCommitteeHotAuth = {
@@ -550,8 +567,8 @@ export default {
           break;
         }
         case CertificateKind.CommitteeColdResign: {
-          const committeeHColdResign = cert.CommitteeColdResign;
-          const coldKey = Object.values(committeeHColdResign.committee_cold_credential)[0];
+          const committeeHColdResign: CommitteeColdResign = cert.as_committee_cold_resign();
+          const coldKey: string = committeeHColdResign.committee_cold_credential().to_keyhash().to_hex()
           const ownedColdCred = getOwnedCred([accountData2.keys], coldKey, "cc_cold");
           const ledgerCommitteeColdResign = {
             type: CertificateType.RESIGN_COMMITTEE_COLD,
@@ -565,18 +582,18 @@ export default {
               }
             }
           };
-          if (committeeHColdResign.anchor) {
+          if (committeeHColdResign.anchor()) {
             ledgerCommitteeColdResign.params['anchor'] = {
-              url: committeeHColdResign.anchor.anchor_url,
-              hashHex: committeeHColdResign.anchor.anchor_data_hash
+              url: committeeHColdResign.anchor().url().url(),
+              hashHex: committeeHColdResign.anchor().anchor_data_hash().to_hex()
             };
           }
           ledgerCertificate.push(ledgerCommitteeColdResign);
           break;
         }
         case CertificateKind.DRepRegistration: {
-          const drepRegistration = cert.DRepRegistration;
-          const cred = Object.values(drepRegistration.voting_credential)[0];
+          const drepRegistration: DRepRegistration = cert.as_drep_registration();
+          const cred: string = drepRegistration.voting_credential().to_keyhash().to_hex();
           const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
           const ledgerDRepRegistration = {
             type: CertificateType.DREP_REGISTRATION,
@@ -588,21 +605,21 @@ export default {
                 type: CredentialParamsType.KEY_HASH,
                 keyHashHex: ownedDRepCred
               },
-              deposit: drepRegistration.coin
+              deposit: drepRegistration.coin().to_str()
             }
           };
-          if (drepRegistration.anchor) {
+          if (drepRegistration.anchor()) {
             ledgerDRepRegistration.params['anchor'] = {
-              url: drepRegistration.anchor.anchor_url,
-              hashHex: drepRegistration.anchor.anchor_data_hash
+              url: drepRegistration.anchor().url().url(),
+              hashHex: drepRegistration.anchor().anchor_data_hash().to_hex()
             };
           }
           ledgerCertificate.push(ledgerDRepRegistration);
           break;
         }
         case CertificateKind.DRepUpdate: {
-          const drepUpdate = cert.DRepUpdate;
-          const cred = Object.values(drepUpdate.voting_credential)[0];
+          const drepUpdate: DRepUpdate = cert.as_drep_update();
+          const cred: string = drepUpdate.voting_credential().to_keyhash().to_hex();
           const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
           const ledgerDRepUpdate = {
             type: CertificateType.DREP_UPDATE,
@@ -616,18 +633,18 @@ export default {
               }
             }
           };
-          if (drepUpdate.anchor) {
+          if (drepUpdate.anchor()) {
             ledgerDRepUpdate.params['anchor'] = {
-              url: drepUpdate.anchor.anchor_url,
-              hashHex: drepUpdate.anchor.anchor_data_hash
+              url: drepUpdate.anchor().url().url(),
+              hashHex: drepUpdate.anchor().anchor_data_hash().to_hex()
             };
           }
           ledgerCertificate.push(ledgerDRepUpdate);
           break;
         }
         case CertificateKind.DRepDeregistration: {
-          const drepDeregistration = cert.DRepDeregistration;
-          const cred = Object.values(drepDeregistration.voting_credential)[0];
+          const drepDeregistration: DRepDeregistration = cert.as_drep_deregistration();
+          const cred = drepDeregistration.voting_credential().to_keyhash().to_hex();
           const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
           const ledgerDRepdrepDeregistration = {
             type: CertificateType.DREP_DEREGISTRATION,
@@ -639,7 +656,7 @@ export default {
                 type: CredentialParamsType.KEY_HASH,
                 keyHashHex: ownedDRepCred
               },
-              deposit: drepDeregistration.coin
+              deposit: drepDeregistration.coin().to_str()
             }
           };
           ledgerCertificate.push(ledgerDRepdrepDeregistration);
@@ -651,14 +668,15 @@ export default {
     }
     return ledgerCertificate;
   },
-  generateLedgerVotingProcedures(accountData2, procedureList) {
+  generateLedgerVotingProcedures(accountData2, votingProcedure: VotingProcedures) {
     const ledgerVotingProcedures = [];
+    const procedureList = votingProcedure.to_js_value()
     for (const procedure of procedureList) {
       let voter = void 0;
       const voterType = Object.keys(procedure.voter)[0];
       switch (voterType) {
         case 'ConstitutionalCommitteeHotKey': {
-          const ccHotKey = procedure.voter.ConstitutionalCommitteeHotKey;
+          const ccHotKey = procedure.voter['ConstitutionalCommitteeHotKey'];
           const cred = Object.values(ccHotKey)[0];
           const ownedCred = getOwnedCred([accountData2.keys], cred, 'cc_hot');
           if (ownedCred) {
@@ -680,7 +698,7 @@ export default {
           break;
         }
         case 'DRep': {
-          const drep = procedure.voter.DRep;
+          const drep = procedure.voter['DRep'];
           const cred = Object.values(drep)[0];
           const ownedCred = getOwnedCred([accountData2.keys], cred, 'drep');
           if (ownedCred) {
@@ -704,7 +722,7 @@ export default {
         case 'StakingPool': {
           voter = {
             type: VoterType.STAKE_POOL_KEY_HASH,
-            keyHashHex: procedure.voter.StakingPool,
+            keyHashHex: procedure.voter['StakingPool'],
           };
           break;
         }

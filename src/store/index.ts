@@ -59,7 +59,7 @@ export const useStore = defineStore('store', {
     resolvedCollections: undefined,
     fiatRates: undefined,
     currency: undefined,
-    pinnedTokens: []
+    pinnedTokens: [],
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -270,6 +270,7 @@ export const useStore = defineStore('store', {
         .map(async (token) => {
           if (token.unit && dexHunterStore().dexHunterTokens[token.unit]) {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
+            token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             try {
               const stats = await appWallet.api.mcap(token.unit);
               token['mcap'] = stats.mcap;
@@ -354,6 +355,7 @@ export const useStore = defineStore('store', {
           }
           collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
           collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
+          collections[collectible.policy_id]['isScam'] = collectible.isScam
         }
       })
       if (unresolvedUnits.length > 0) {
@@ -486,6 +488,7 @@ export const useStore = defineStore('store', {
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
       socket.stompConnect(appWallet)
       await this.loadAssets()
+      await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
       const promises = []
       await walletConfigStore().loadConfig()
@@ -497,6 +500,7 @@ export const useStore = defineStore('store', {
       promises.push(this.loadTransactions())
       promises.push(this.loadRewards())
       promises.push(this.loadConnectedDapps())
+      promises.push(walletConfigStore().loadContacts())
       promises.push(bringStore().loadBringCache())
       await Promise.all(promises)
       try {
@@ -526,6 +530,7 @@ export const useStore = defineStore('store', {
       }))
       musicStore().setMusicPlaylist(undefined)
       dexHunterStore().setTokens(undefined)
+      dexHunterStore().setBlacklistPolicies([])
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
@@ -536,6 +541,7 @@ export const useStore = defineStore('store', {
       this.latestTip = undefined;
       this.resolvedCollections = undefined
       await walletConfigStore().setAddresses(undefined)
+      walletConfigStore().setContacts(undefined)
       this.baseAddress = undefined
       this.stakeAddress = undefined
       appWallet = undefined

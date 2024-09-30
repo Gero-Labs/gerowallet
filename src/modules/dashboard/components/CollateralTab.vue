@@ -9,7 +9,7 @@
         If none is available, use the 'Set Collateral' button to manually assign one.
       </v-card-subtitle>
       <v-card-text class="text-left px-0">
-        <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer>
+        <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
           <template v-slot:[`item.utxo`]="{ item }">
             <span class="mr-1">{{ `${item.tx_hash}#${item.tx_index}` | truncate }}</span>
             <CopyButton x-small :value="`${item.tx_hash}#${item.tx_index}`"></CopyButton>

@@ -54,7 +54,7 @@ export const governanceStore = defineStore( 'governanceStore', {
             resolve(this.dreps);
           },
           error: error => {
-            console.error('Failed to Fetch Pools:', error)
+            console.error('Failed to Fetch DReps:', error)
             reject(error);
           }
         }));

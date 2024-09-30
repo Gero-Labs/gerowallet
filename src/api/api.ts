@@ -397,6 +397,16 @@ export class Api {
     }
   }
 
+  async getAllBlacklistPolicies(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/assets/blacklist`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   async moonPaySign(url: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.post(`/api/moonpay/sign`, url, {
