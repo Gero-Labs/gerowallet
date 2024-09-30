@@ -9,6 +9,7 @@ import {
 import { appWallet } from '@/store';
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/shared/utils/converter';
+import { dexHunterStore } from '@/store/modules/dexhunter';
 
 const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 
@@ -38,11 +39,15 @@ function cip68Label(asset: any) {
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
 }
 
-export async function resolveAsset(asset, token) {
+export async function resolveAsset(asset, token): Promise<any> {
   let img;
-  let name = Buffer.from(token.asset_name, 'hex').toString('ascii');
+  let name: string = Buffer.from(token.asset_name, 'hex').toString('ascii');
   let metadata = null;
   let onchain_metadata = null;
+  let isScam = false
+  if (token.policy_id) {
+    isScam = dexHunterStore().blacklistPolicies.includes(token.policy_id)
+  }
   const quantity = token.quantity ? token.quantity : undefined;
   if (token.asset_name === 'lovelace') {
     img = token.logo;
@@ -118,6 +123,7 @@ export async function resolveAsset(asset, token) {
     onchain_metadata,
     quantity,
     verified: false,
+    isScam,
   };
 }
 

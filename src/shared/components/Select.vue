@@ -1,30 +1,29 @@
 <template>
-  <div class="custom-select">
-    <label v-if="label">{{ label }}</label>
+  <div class="custom-select" style="cursor: pointer!important;">
     <v-select
       solo
       flat
-      class="select"
+      :label="label"
       :items="items"
       :value="value"
       :disabled="disabled"
       :readonly="readonly"
+      :autofocus="false"
       :append-icon="readonly ? '' : 'mdi-menu-down'"
       @input="$emit('input', $event)"
       hide-details
       dense
-      style="cursor: pointer!important;"
     >
       <template v-slot:item="{ item }">
-        <v-avatar v-if="item.icon" size="20">
+        <v-avatar v-if="item.icon" size="20" class="mr-2">
           <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
-        </v-avatar>&nbsp;
+        </v-avatar>
         {{ item.name }}
       </template>
       <template v-slot:selection="{ item }">
-        <v-avatar v-if="item.icon" size="20">
+        <v-avatar v-if="item.icon" size="20" class="mr-2">
           <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
-        </v-avatar>&nbsp;
+        </v-avatar>
         {{ item.name }}
       </template>
     </v-select>

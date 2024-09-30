@@ -28,8 +28,8 @@
                   Earn rewards by staking your {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with {{ loggedWallet?.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists">
-                <v-card-title style="color: #00DFF3; font-size: 18px" v-if="geroPoolExists">
+              <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists && !delegatingToGero">
+                <v-card-title style="color: #00DFF3; font-size: 18px">
                   Consider supporting us
                 </v-card-title>
                 <v-card-subtitle>
@@ -110,8 +110,8 @@
                       </div>
                     </v-list-item-title>
                     <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" v-if="item.description">{{item.description}}</v-list-item-subtitle>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;">
-                      {{ item.pool_id_bech32 | truncate }}&nbsp;
+                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" class="mr-1">
+                      {{ item.pool_id_bech32 | truncate }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
                   </v-list-item-content>
@@ -311,6 +311,9 @@ export default {
     },
     geroPoolExists() {
       return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
+    },
+    delegatingToGero() {
+      return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network) === this.account.pool_id
     },
     ...mapState(useStore, ['pools', 'loggedWallet', 'latestTip', 'baseAddress']),
     ...mapState(walletConfigStore, ['utxos', 'account']),

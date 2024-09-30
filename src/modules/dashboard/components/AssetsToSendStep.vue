@@ -61,6 +61,14 @@
                                   :style="active ? { backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${item.img})`,border: '2px solid #00c7f3' } : { backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${item.img})`,border: '2px solid #00c7f300' }"
                                   @click="toggle"
                                 >
+                                  <div style="top: 0; position: absolute; display: flex" v-if="item.isScam">
+
+                                    <v-chip x-small color="#F97066" class="px-2">
+                                      <v-icon color="white" x-small style="margin-right: 3px">
+                                        mdi-alert-decagram
+                                      </v-icon>Scam Token
+                                    </v-chip>
+                                  </div>
                                   <div class="collectible-text-container">
                                     <span class="collectible-text">{{ item.name }}</span>
                                   </div>
@@ -286,7 +294,7 @@ export default {
   }
 }
 .collectible-item {
-  height: 94px;
+  height: 102px;
   background-position: center;
   align-content: end;
   background-size: cover;

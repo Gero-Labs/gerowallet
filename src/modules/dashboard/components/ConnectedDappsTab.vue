@@ -7,6 +7,8 @@
           :items="connectedDapps"
           :headers="headers"
           hide-default-footer
+          disable-pagination
+          :header-props="{ 'sort-icon': 'mdi-menu-up' }"
         >
           <template v-slot:[`item.domain`]="{ item }">
             <v-avatar size="16">

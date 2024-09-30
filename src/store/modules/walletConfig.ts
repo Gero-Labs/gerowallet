@@ -2,25 +2,32 @@ import { defineStore } from 'pinia';
 import Dexie, { liveQuery } from 'dexie';
 import { appWallet, subscriptions } from '@/store';
 import { STORAGE } from '@/chrome/config';
+import db from '@/db';
 
 export const walletConfigStore = defineStore( 'walletConfigStore', {
   persist: {
-    paths: ['config', 'utxos', 'addresses', 'account', 'collateral']
+    paths: ['config', 'utxos', 'addresses', 'account', 'collateral', 'contacts']
   },
   state: () => ({
     config: undefined,
     utxos: undefined,
     collateral: undefined,
     addresses: undefined,
-    account: undefined
+    account: undefined,
+    contacts: undefined,
   }),
   getters: {
     getTxAutoSubmit(state) {
-      console.log(state.config)
       if ('txAutoSubmit' in state.config) {
         return state.config.txAutoSubmit
       }
       return true
+    },
+    getHideScamTokens(state) {
+      if ('hideScamTokens' in state.config) {
+        return state.config.hideScamTokens
+      }
+      return false
     }
   },
   actions: {
@@ -77,6 +84,27 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       const db: Dexie = await appWallet.getDb()
       db.table('config').put({key: 'txAutoSubmit', value: val})
     },
+    async setHideScamTokens(val) {
+      const db: Dexie = await appWallet.getDb()
+      db.table('config').put({key: 'hideScamTokens', value: val})
+    },
+    setContacts(contacts) {
+      this.contacts = contacts
+    },
+    async addOrUpdateContact(contact, address?: string) {
+      if (this.contacts[contact.address] == null || this.contacts[contact.address].name != contact.name) {
+        const db: Dexie = await appWallet.getDb()
+        if (address) {
+          db.table('contacts').update(address, {address: contact.address, name: contact.name})
+        } else {
+          db.table('contacts').put({address: contact.address, name: contact.name})
+        }
+      }
+    },
+    async removeContact(address) {
+      const db: Dexie = await appWallet.getDb()
+      db.table('contacts').delete(address)
+    },
     async loadConfig() {
       if (!appWallet) {
         return new Promise((resolve, reject) => {
@@ -131,6 +159,48 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
           error: error => {
             console.error('Failed to Fetch AccountInfo:', error)
             reject(error)
+          }
+        }));
+      });
+    },
+    async loadContacts() {
+      if (!appWallet) {
+        return new Promise((resolve, reject) => {
+          reject()
+        });
+      }
+      let walletDB: Dexie = await appWallet.getDb()
+
+      // Check if the 'contacts' table exists, if not, create it
+      if (!walletDB.tables.some(table => table.name === 'contacts')) {
+        try {
+          // Close the database first
+          await walletDB.close();
+
+          // Increment the version and define the new schema
+          walletDB = new Dexie(walletDB.name);
+          db.setWalletDBVersionSchema(walletDB)
+
+          // Re-open the database
+          await walletDB.open();
+        } catch (error) {
+          console.error('Error creating table or reopening DB:', error);
+          throw error;
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        subscriptions.push(liveQuery(() => walletDB.table('contacts').toArray()).subscribe({
+          next: newContacts => {
+            this.setContacts(newContacts.reduce(function(map, contact) {
+              map[contact.address] = contact
+              return map;
+            }, {}))
+            resolve(this.contacts);
+          },
+          error: error => {
+            console.error('Failed to Fetch Contacts:', error)
+            reject(error);
           }
         }));
       });
