@@ -70,8 +70,7 @@ export default defineComponent({
   },
   methods: {
     handleOnTransactionsRowClick(row) {
-      console.log(row)
-      // this.transactionInfo = row; TODO
+      this.transactionInfo = row;
     },
     handleTransactionModalClose() {
       this.transactionInfo = null;
