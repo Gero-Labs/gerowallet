@@ -1,3 +1,5 @@
+const baseUrl = process.env['VUE_APP_BACKEND_URL'];
+
 const filters = {
   truncate(value: string) {
     if (!value || value.length <= 16) return 'N/A';
@@ -8,6 +10,23 @@ const filters = {
     const backChars = Math.floor(charsToShow / 2);
 
     return value.substring(0, frontChars) + separator + value.substring(value.length - backChars);
+  },
+  toIPFS(value) {
+    let src
+    let fileSrc
+    if (typeof value == 'string') {
+      fileSrc = value
+    } else if (Array.isArray(value)) {
+      fileSrc = value.join('')
+    }
+    if (fileSrc.startsWith('ar://') || fileSrc.startsWith('ar/')) {
+      src = `${baseUrl}/api/ar/${fileSrc.replace('ar://', '').replace('ar/', '')}`
+    } else if (fileSrc.startsWith('https://')) {
+      src = fileSrc
+    } else {
+      src = `${baseUrl}/api/ipfs?path=${fileSrc.replace('ipfs://', '').replace('ipfs/', '')}`
+    }
+    return src
   },
   shortenStringWithEllipsis(str, maxLength) {
     if (!str) {
@@ -69,50 +88,6 @@ const filters = {
     }
     return (signs ? '- ' : '') + symbolPrefix + (decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString()) + symbolSuffix;
   },
-  stateColor(state: string) {
-    if (state === 'NOT_FOR_SALE') {
-      return 'rgba(137,22,214,0.56)';
-    }
-    if (state === 'FOR_SALE') {
-      return 'rgba(22,125,214,0.56)';
-    }
-    if (state === 'RESERVED') {
-      return 'rgba(22,214,179,0.56)';
-    }
-    if (state === 'MINTING') {
-      return 'rgba(255,87,51,0.56)';
-    }
-    if (state === 'VERIFYING') {
-      return 'rgba(199,0,57,0.56)';
-    }
-    if (state === 'SOLD') {
-      return 'rgba(144,12,63,0.56)';
-    }
-
-    return '';
-  },
-  stateTitle(val: string) {
-    if (val === 'NOT_FOR_SALE') {
-      return 'Not For Sale';
-    }
-    if (val === 'FOR_SALE') {
-      return 'For Sale';
-    }
-    if (val === 'RESERVED') {
-      return 'Reserved';
-    }
-    if (val === 'MINTING') {
-      return 'Minting';
-    }
-    if (val === 'VERIFYING') {
-      return 'Verifying';
-    }
-    if (val === 'SOLD') {
-      return 'Sold';
-    }
-
-    return 'N/A';
-  },
   lastIndex(val: string) {
     const tok = val.split('.');
 
@@ -134,37 +109,27 @@ const filters = {
   capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
-  ipfsStatus(ipfsArray) {
-    if (ipfsArray === 'N/A') {
-      return 'N/A';
-    } else if (ipfsArray && ipfsArray.length >= 1) {
-      const isNA = ipfsArray.every(ipfsStatus => ipfsStatus === 'N/A' || ipfsStatus === undefined);
-      if (isNA) {
-        return 'N/A';
-      }
-      const allPinned = ipfsArray.every(ipfsStatus => {
-        if (ipfsStatus && ipfsStatus.pins) {
-          return (
-            ipfsStatus.pins.every(pin => {
-              if (pin) {
-                return pin.status === 'Pinned';
-              } else {
-                return false;
-              }
-            }) === true
-          );
-        }
-        return false;
-      });
-      if (allPinned) {
-        return 'Pinned';
-      } else {
-        return 'N/A';
-      }
-    } else {
-      return 'N/A';
+  humanFileSize(bytes, si= true, dp=1) {
+    const thresh = si ? 1000 : 1024;
+
+    if (Math.abs(bytes) < thresh) {
+      return bytes + ' B';
     }
-  },
+
+    const units = si
+      ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+      : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    let u = -1;
+    const r = 10**dp;
+
+    do {
+      bytes /= thresh;
+      ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+
+
+    return bytes.toFixed(dp) + ' ' + units[u];
+  }
 };
 
 export default filters;

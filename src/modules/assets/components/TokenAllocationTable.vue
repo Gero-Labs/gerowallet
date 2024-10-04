@@ -7,7 +7,6 @@
         <p class="mr-5 my-auto" style="font-size: 14px">Hide Scam Tokens</p>
         <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
       </div>
-
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn color="black" :value="0" rounded style="text-transform: capitalize">Assets
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{assets?.length}}</v-chip>
@@ -21,10 +20,9 @@
       <v-tabs-items v-model="currentTab" class="transparent">
         <v-tab-item>
           <v-data-table
-            class="token-allocation-table transparent"
+            class="transparent"
             :headers="assetsHeaders"
             :items="assets"
-            @click:row="handleOnRowClick"
             :sort-by.sync="assetsSortBy"
             :sort-desc.sync="assetsSortDesc"
             :items-per-page="5"
@@ -283,8 +281,7 @@ export default {
       this.dialogData = null;
     },
     handleOnRowClick(row) {
-      console.log(row)
-      // this.dialogData = row; TODO
+      this.dialogData = row;
     },
   },
   filters,

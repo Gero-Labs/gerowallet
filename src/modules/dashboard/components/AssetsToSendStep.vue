@@ -289,8 +289,6 @@ export default {
     flex-wrap: wrap;
     gap: 6px;
     justify-content: space-between;
-
-
   }
 }
 .collectible-item {

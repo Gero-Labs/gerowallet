@@ -25,12 +25,12 @@
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
-                        {{ contacts[paymentAddress] != null ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline'}}
+                        {{ contacts && contacts[paymentAddress] != null ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline'}}
                       </v-icon>
                     </v-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="color: white; font-size: 11px">
-                        {{ contacts[paymentAddress] != null ? 'Edit Contact' : 'Save Contact'}}
+                        {{ contacts && contacts[paymentAddress] != null ? 'Edit Contact' : 'Save Contact'}}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -49,7 +49,7 @@
                 <v-card-text class="py-0">
                   <v-list-item dense class="px-0">
                     <v-list-item-avatar size="100" v-if="contact?.img" rounded>
-                      <v-img :src="contact.img" contain :alt="`${asset.name} Logo`">
+                      <v-img :src="contact?.img" contain :alt="`${asset.name} Logo`">
                         <template v-slot:placeholder>
                           <v-row
                             class="fill-height ma-0"
@@ -69,7 +69,7 @@
                         <v-text-field v-model="contact.name" dense outlined label="Name" hide-details :maxlength="40" counter="40"></v-text-field>
                       </v-list-item-title>
                       <v-list-item-title class="py-2">
-                        <v-text-field v-model="contact.address" dense outlined label="Address" hide-details :disabled="contacts[contact.address] != null"></v-text-field>
+                        <v-text-field v-model="contact.address" dense outlined label="Address" hide-details :disabled="contacts && contacts[contact.address] != null"></v-text-field>
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -95,7 +95,7 @@
               max-height="400"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" :disabled="Object.values(contacts)?.length === 0">
+                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
@@ -121,7 +121,7 @@
                   </v-btn>
                 </v-card-title>
                 <v-card-text class="pa-0">
-                  <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders" :items="Object.values(contacts)" hide-default-footer disable-pagination @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
+                  <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders" :items="contacts ? Object.values(contacts) : []" hide-default-footer disable-pagination @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
                     <template v-slot:[`item.address`]="{ item }">
                       {{ item.address | truncate }}<CopyButton x-small :value="item.address" />
                     </template>

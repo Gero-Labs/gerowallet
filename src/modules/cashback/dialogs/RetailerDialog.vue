@@ -79,7 +79,6 @@ export default {
     async activate() {
       try {
         const response = await appWallet.api.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), "")
-        console.log(response)
         if (response.status) {
           this.retailerUrl = response.url
         } else {
@@ -106,7 +105,6 @@ export default {
         this.loading = true
         this.default = true
         const promises = []
-        console.log(this.retailer)
         promises.push(this.getContent());
         promises.push(this.activate());
         Promise.all(promises)
