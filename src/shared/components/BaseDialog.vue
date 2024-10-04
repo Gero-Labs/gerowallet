@@ -16,8 +16,11 @@
             <v-list-item-title style="font-size: 18px">
               {{ title }}
             </v-list-item-title>
-            <v-list-item-subtitle>
+            <v-list-item-subtitle style="white-space: normal;">
               {{subtitle}}
+            </v-list-item-subtitle>
+            <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
+              {{subtitle2 | truncate}}<CopyButton x-small :value="subtitle2" class="ml-1"></CopyButton>
             </v-list-item-subtitle>
           </v-list-item-content>
         </v-list-item>
@@ -30,8 +33,12 @@
   </v-dialog>
 </template>
 <script>
+import filters from '@/shared/utils/filters';
+import CopyButton from '@/shared/components/CopyButton.vue';
+
 export default {
   name: "baseDialog",
+  components: { CopyButton },
   props: {
     isOpen: {
       type: Boolean,
@@ -44,6 +51,9 @@ export default {
       type: String,
     },
     subtitle: {
+      type: String
+    },
+    subtitle2: {
       type: String
     },
     height: {
@@ -63,6 +73,7 @@ export default {
       default: false
     },
   },
+  filters,
   computed: {
     isDialogOpen: {
       get() {

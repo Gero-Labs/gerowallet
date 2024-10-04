@@ -184,7 +184,6 @@
         </v-btn>
       </div>
     </v-card-actions>
-
   </BaseDialog>
 </template>
 <script>
