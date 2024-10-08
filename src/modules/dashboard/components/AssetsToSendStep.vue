@@ -206,7 +206,7 @@ export default {
       if (token.ticker !== nativeTicker) {
         price = token.last_price;
       }
-      return (Number(token.quantity) * price).toLocaleString();
+      return (Number(token.quantity) * price).toLocaleString('en-US');
     },
     decreaseQuantityToSend(item) {
       if (item.toSendQuantity > 1) {

@@ -1,5 +1,3 @@
-import { getAccountPub } from '@/chrome/webpage';
-
 export const TARGET = 'gero-wallet';
 export const SENDER = { extension: 'extension', webpage: 'webpage' };
 export const METHOD = {

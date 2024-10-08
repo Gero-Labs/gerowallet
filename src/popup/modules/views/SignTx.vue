@@ -254,13 +254,13 @@ export default {
 
       const totalGive = payTokens.find(token => token.name === 'cardano').amount;
       const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
-        return { amount: token.amount, currency: token.name };
+        return { amount: token.amount, currency: token.name, id: token.id };
       });
 
       const foundAda = receiveTokens.find(token => token.name === 'cardano');
       const totalReceive = foundAda ? foundAda.amount : 0;
       const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
-        return { amount: token.amount, currency: token.name };
+        return { amount: token.amount, currency: token.name, id: token.id };
       });
 
       return {

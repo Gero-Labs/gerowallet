@@ -14,7 +14,7 @@
           <CopyButton x-small :value="transactionInfo.block_hash" class="ml-1"></CopyButton>
         </div>
         <div>
-          Block Height: <span class="value-text">{{ transactionInfo.block_height.toLocaleString() }}</span>
+          Block Height: <span class="value-text">{{ transactionInfo.block_height.toLocaleString('en-US') }}</span>
         </div>
         <div>
           Network Fee: <span style="color: #FF8E8E">{{ transactionInfo.fee | toCurrency }}</span>
@@ -82,7 +82,7 @@
                           {{input.value | toCurrency}}
                         </div>
                         <div v-for="(asset, assetIndex) in input.asset_list" :key="`input_${index}_asset_${assetIndex}`">
-                          <v-chip class="my-1" small>{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 6})}} </v-chip>
+                          <v-chip class="my-1" small>{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
                         </div>
                       </td>
                     </tr>
@@ -112,7 +112,7 @@
                         {{output.value | toCurrency}}
                       </div>
                       <div v-for="(asset, assetIndex) in output.asset_list" :key="`output_${index}_asset_${assetIndex}`">
-                        <v-chip small class="my-1">{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 6})}} </v-chip>
+                        <v-chip small class="my-1">{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
                       </div>
                     </td>
                   </tr>
@@ -253,7 +253,7 @@
                         {{getFingerprint(asset_minted) }}<CopyButton x-small class="ml-1" :value="getFingerprint(asset_minted)"></CopyButton>
                       </td>
                       <td class="text-center">
-                        {{(Number(asset_minted.quantity) / (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 6})}}
+                        {{(Number(asset_minted.quantity) / (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}}
                       </td>
                     </tr>
                   </tbody>

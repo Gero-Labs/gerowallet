@@ -474,7 +474,6 @@ export default {
         this.txBody = buildTx(this.sendData.selectedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], []);
         this.sendData.minAda = 0
         this.txValid = true
-        console.log(this.txBody.to_json())
         this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
 
         // if (this.currentStep < this.steps.length) {

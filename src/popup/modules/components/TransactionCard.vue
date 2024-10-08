@@ -6,11 +6,11 @@
     <v-card flat :class="withBg ? 'tx-details bg' : 'tx-details'">
       <div class="provider">{{ amount?.provider }}</div>
       <div class="total">{{ amount?.total | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</div>
-      <div class="assets" v-if="amount?.assets?.length">Assets:&nbsp;</div>
+      <div class="assets mr-1" v-if="amount?.assets?.length">Assets:</div>
       <div v-if="amount?.assets?.length">
         <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
           <div>{{ asset.currency }}</div>
-          <div>{{ asset.amount }}</div>
+          <div>{{ asset.amount | toCurrency(false, 0, '', '', false, decimals(asset?.id)) }}</div>
         </div>
         <a v-if="hiddenAssets" class="asset-entry" @click="toggleAllAssets()">
           {{ hiddenAssets }} more types of collectibles
@@ -46,7 +46,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet']),
+    ...mapState(useStore, ['loggedWallet', 'assets']),
   },
   watch: {
     transaction: {
@@ -74,6 +74,13 @@ export default {
   },
   filters,
   methods: {
+    decimals(unit) {
+      let decimals = 0
+      if (unit && this.assets && this.assets[unit] && this.assets[unit].metadata) {
+        decimals = this.assets[unit].metadata.decimals
+      }
+      return decimals
+    },
     toggleAllAssets() {
       this.showAllAssets = !this.showAllAssets;
     },

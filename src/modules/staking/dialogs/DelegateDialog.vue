@@ -31,13 +31,13 @@
           <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage"/>
         </v-list-item-avatar>
       </v-list-item>
-      <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString() }}</v-card-title>
+      <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString('en-US') }}</v-card-title>
       <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
       <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white">{{ pool.live_stake | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))}}</v-card-title>
       <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString(undefined, {maximumFractionDigits: 2}) }}%</v-card-title>
+      <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
       <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white">
         <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="32" :value="pool.live_saturation" striped>
