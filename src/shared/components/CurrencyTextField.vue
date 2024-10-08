@@ -79,7 +79,7 @@ export default {
     formatNumber(value) {
       if (!value) return '0';
       const number = parseFloat(value);
-      return isNaN(number) ? '0' : number.toLocaleString(undefined, { maximumFractionDigits: this.decimals });
+      return isNaN(number) ? '0' : number.toLocaleString('en-US', { maximumFractionDigits: this.decimals });
     }
   }
 };

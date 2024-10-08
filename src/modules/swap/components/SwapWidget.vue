@@ -52,7 +52,7 @@
             :price-impact="calculateWeightedPriceImpact"
             @change="tokenBQuantityChange"
           />
-          <div class="text-left" v-if="price_ba" style="display: flex;">
+          <div class="text-left" v-if="price_ba2" style="display: flex;">
             <v-btn text plain class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
               <v-avatar
                 color="primary"
@@ -225,9 +225,9 @@ export default {
       const tokenA = this.selectedTokenA.ticker;
       const tokenB = this.selectedTokenB.ticker === 'ADA' ? tokenA : this.selectedTokenB.ticker;
       if (!this.pairPriceToggle) {
-        return `1 ${tokenB} = ${this.price_ba?.toFixed(7)} ADA`;
+        return `1 ${tokenB} = ${this.price_ba2?.toFixed(7)} ADA`;
       } else {
-        return `1 ADA = ${this.price_ab?.toFixed(7)} ${tokenB}`;
+        return `1 ADA = ${this.price_ab2?.toFixed(7)} ${tokenB}`;
       }
     },
   },
@@ -250,7 +250,7 @@ export default {
           // Set selectedTokenB to ADA
           this.selectedTokenB = this.availableTokens.find(token => token['ticker'] === 'ADA');
         }
-
+        await this.averagePrice(!this.selectedTokenA.unit ? this.selectedTokenA.ticker : this.selectedTokenA.unit, !this.selectedTokenB.unit ? this.selectedTokenB.ticker : this.selectedTokenB.unit);
         // Estimate prices after updating tokens
         await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
         this.isUpdating = false; // Reset flag
@@ -275,17 +275,11 @@ export default {
             this.selectedTokenA = this.availableTokens.find(token => token['ticker'] === 'ADA');
           }
         }
-
+        await this.averagePrice(!this.selectedTokenA.unit ? this.selectedTokenA.ticker : this.selectedTokenA.unit, !this.selectedTokenB.unit ? this.selectedTokenB.ticker : this.selectedTokenB.unit);
         // Estimate prices after updating tokens
         await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
         this.isUpdating = false; // Reset flag
       },
-    },
-    'resolvedAssets': {
-      handler(val) {
-        console.log(val)
-      },
-      deep: true
     },
   },
   methods: {
@@ -316,7 +310,7 @@ export default {
       if (!token) return '';
       const multiplier = token.ticker === 'ADA' ? 1 : this.price_ba;
 
-      return (Number(token.quantity.replaceAll(',', '')) * multiplier * this.price.lastPrice).toLocaleString();
+      return (Number(token.quantity.replaceAll(',', '')) * multiplier * this.price.lastPrice).toLocaleString('en-US');
     },
     setSlippage(val) {
       this.slippage = val;
@@ -339,8 +333,8 @@ export default {
       }
       const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
       appWallet.api.estimate(amount_in, token_in, token_out, slippage, this.blacklisted_dexes).then(res => {
-        this.price_ab = res.price_ab;
-        this.price_ba = res.price_ba;
+        this.price_ab = res.net_price_reverse;
+        this.price_ba = res.net_price;
         if (update) {
           this.total_output_without_slippage = res.total_output_without_slippage
           this.splits = res.splits
@@ -366,14 +360,28 @@ export default {
       }
       const slippage = this.slippage === 'unlimited' ? -1 : Number(this.slippage);
       const res = await appWallet.api.reverseEstimate(amount_out, token_in, token_out, slippage, this.blacklisted_dexes);
-      this.price_ab = res.price_ab;
-      this.price_ba = res.price_ba;
+      this.price_ab = res.net_price_reverse;
+      this.price_ba = res.net_price;
       if (update) {
         this.total_input_without_slippage = res.total_input_without_slippage
         this.splits = res.splits
         this.estimation = res
         this.selectedTokenA.quantity = filters.toCurrency(this.total_input_without_slippage, false, this.selectedTokenA.decimals, '', '', false, 0);
       }
+    },
+    async averagePrice(token_in, token_out) {
+      if (!appWallet) {
+        return
+      }
+      if (!token_in && !token_out) {
+        return
+      }
+      appWallet.api.getAveragePrice(token_in, token_out).then(res => {
+        this.price_ab2 = res.price_ab;
+        this.price_ba2 = res.price_ba;
+      }).catch(() => {
+        // console.log(e)
+      });
     },
     async performPeriodicEstimate() {
       if (this.lastFunctionCalled === 'estimate') {
@@ -462,6 +470,8 @@ export default {
       },
       price_ab: undefined,
       price_ba: undefined,
+      price_ab2: undefined,
+      price_ba2: undefined,
       total_output_without_slippage: 0,
       total_input_without_slippage: 0,
       estimation: {
@@ -481,7 +491,7 @@ export default {
     };
   },
   async mounted() {
-    await this.estimate(this.selectedTokenA.unit, this.selectedTokenB.unit, 1, false);
+    await this.averagePrice(!this.selectedTokenA.unit ? this.selectedTokenA.ticker : this.selectedTokenA.unit, !this.selectedTokenB.unit ? this.selectedTokenB.ticker : this.selectedTokenB.unit);
     this.intervalId = setInterval(this.performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
   },
   beforeUnmount() {

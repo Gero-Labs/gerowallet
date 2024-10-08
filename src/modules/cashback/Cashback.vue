@@ -25,7 +25,7 @@
                 </v-list-item-title>
                 <v-list-item-subtitle style="display: flex; align-items: center;">
                   <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ eligible ? Number(eligible.totalEstimatedUsd).toLocaleString(undefined, {maximumFractionDigits: 2}) : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ eligible ? Number(eligible.totalEstimatedUsd).toLocaleString('en-US', {maximumFractionDigits: 2}) : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>

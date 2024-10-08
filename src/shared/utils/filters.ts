@@ -84,9 +84,9 @@ const filters = {
       return result
     }
     if (res >= 0) {
-      return (signs ? '+ ' : '') + symbolPrefix + (decimalPlaces ? res.toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : res.toLocaleString()) + symbolSuffix;
+      return (signs ? '+ ' : '') + symbolPrefix + (decimalPlaces ? res.toLocaleString('en-US', {minimumFractionDigits: decimalPlaces}) : res.toLocaleString()) + symbolSuffix;
     }
-    return (signs ? '- ' : '') + symbolPrefix + (decimalPlaces ? Math.abs(res).toLocaleString(undefined, {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString()) + symbolSuffix;
+    return (signs ? '- ' : '') + symbolPrefix + (decimalPlaces ? Math.abs(res).toLocaleString('en-US', {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString()) + symbolSuffix;
   },
   lastIndex(val: string) {
     const tok = val.split('.');

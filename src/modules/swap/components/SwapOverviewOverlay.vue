@@ -23,7 +23,7 @@
               Routes
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['splits']?.length > 0 ? estimation['splits'].length : 'Direct Swap'  }}
+              {{ estimation['splits']?.length > 1 ? estimation['splits'].length : 'Direct'  }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -31,7 +31,7 @@
               Net Price
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['net_price_reverse'] | toCurrency(false, 6, '', ' ADA', false, 0) }}
+              {{ estimation['net_price'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -42,34 +42,34 @@
               {{ estimation['total_output'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
-          <v-col cols="12" xl="4" lg="4" md="4">
-            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-              Order Deposits
-            </v-card-title>
-            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['deposits'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
-            </v-card-subtitle>
-          </v-col>
-          <v-col cols="12" xl="4" lg="4" md="4">
-            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-              Batchers Fees
-            </v-card-title>
-            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['batcher_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
-            </v-card-subtitle>
-          </v-col>
-          <v-col cols="12" xl="4" lg="4" md="4">
-            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-              Frontend Fee
-            </v-card-title>
-            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['partner_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}
-            </v-card-subtitle>
-          </v-col>
+<!--          <v-col cols="12" xl="4" lg="4" md="4">-->
+<!--            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >-->
+<!--              Order Deposits-->
+<!--            </v-card-title>-->
+<!--            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">-->
+<!--              {{ estimation['deposits'] | toCurrency(false, 0, '', ' ADA', false, 0) }}-->
+<!--            </v-card-subtitle>-->
+<!--          </v-col>-->
+<!--          <v-col cols="12" xl="4" lg="4" md="4">-->
+<!--            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >-->
+<!--              Batchers Fees-->
+<!--            </v-card-title>-->
+<!--            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">-->
+<!--              {{ estimation['batcher_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}-->
+<!--            </v-card-subtitle>-->
+<!--          </v-col>-->
+<!--          <v-col cols="12" xl="4" lg="4" md="4">-->
+<!--            <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >-->
+<!--              Frontend Fee-->
+<!--            </v-card-title>-->
+<!--            <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">-->
+<!--              {{ estimation['partner_fee'] | toCurrency(false, 0, '', ' ADA', false, 0) }}-->
+<!--            </v-card-subtitle>-->
+<!--          </v-col>-->
         </v-row>
         <v-divider class="mt-1"></v-divider>
       </v-card-title>
-      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 190px)">
+      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 125px)">
         <v-row no-gutters>
           <v-col cols="6" v-for="(dex,index) in dexes" :key="index" style="height: 38px">
             <v-list-item class="px-2" dense>
@@ -141,9 +141,11 @@ export default defineComponent({
         })
         this.estimation['splits'].forEach(split => {
           const dex = template.find(dex => dex.name === split.dex)
-          dex.amount += split.amount_in
-          dex.priceImpact = split.price_impact
-          dex.percentage = dex.amount / totalAmount * 100
+          if (dex) {
+            dex.amount += split.amount_in
+            dex.priceImpact = split.price_impact
+            dex.percentage = dex.amount / totalAmount * 100
+          }
         })
         return template
       } else {
@@ -181,6 +183,10 @@ export default defineComponent({
       { name: 'SPECTRUM', img: 'https://storage.googleapis.com/dexhunter-images/public/spectrum.png', amount: 0, priceImpact: 0, percentage: 0 },
       { name: 'MINSWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/minswap.png', amount: 0, priceImpact: 0, percentage: 0 },
       { name: 'SUNDAESWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/sundae.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: 'CERRASWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/cerralogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: 'SATURN', img: 'https://storage.googleapis.com/dexhunter-images/public/saturn.jpg', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: 'GENIUS', img: 'https://storage.googleapis.com/dexhunter-images/public/geniusyield.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+      { name: 'MUESLISWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/mueslilogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
     ],
     excluded: [],
     swapData: {

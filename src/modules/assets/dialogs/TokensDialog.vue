@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')"
               :img="tokensData ? tokensData[0].img : null"
-              :title="modalData ? `${modalData.name} (${Number(modalData.quantity).toLocaleString()})` : ''"
+              :title="modalData ? `${modalData.name} (${Number(modalData.quantity).toLocaleString('en-US')})` : ''"
               :subtitle="description" :subtitle2="tokensData ? tokensData[0].policy_id : ''" :width="696" :min-height="646" :height="646">
     <v-card-text class="pa-3 justify-center text-center" style="z-index: 1">
         <v-row v-if="pickedToken === null">

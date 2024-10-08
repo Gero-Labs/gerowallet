@@ -76,7 +76,7 @@
                     {{ Number(item.quantity) | toCurrency(false, 2, '', '', true, item.metadata?.decimals) }}
                   </span>
                 </template>
-                {{ (Number(item.quantity) / (item.metadata?.decimals ? Math.pow(10, item.metadata?.decimals) : 1)).toLocaleString(undefined, {maximumFractionDigits: 2}) }}
+                {{ (Number(item.quantity) / (item.metadata?.decimals ? Math.pow(10, item.metadata?.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 2}) }}
               </v-tooltip>
             </template>
             <template v-slot:[`item.last_price`]="{ item }">
@@ -125,7 +125,7 @@
                     {{ Number(item.mcap) | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true, 0) }}
                   </span>
                 </template>
-                {{ Number(item.mcap).toLocaleString(undefined, {minimumFractionDigits: item.metadata.decimals}) }}
+                {{ Number(item.mcap).toLocaleString('en-US', {minimumFractionDigits: item.metadata.decimals}) }}
               </v-tooltip>
               <span v-else>N/A</span>
             </template>
@@ -199,7 +199,7 @@
               </v-list-item>
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ Number(item.quantity).toLocaleString() }}</span>
+              <span class="table-text">{{ Number(item.quantity).toLocaleString('en-US') }}</span>
             </template>
             <template v-slot:[`item.floor`]="{  }">
               <v-chip outlined x-small color="#F97066">Soon</v-chip>
@@ -382,31 +382,10 @@ export default {
 };
 </script>
 <style>
-.token-allocation-table {
-
-  tbody{
-    cursor: pointer;
-  }
-
-  .table-text {
-    font-size: 12px;
-  }
-
-  .table-text-opacity {
-    font-size: 12px;
-    opacity: 0.5;
-    display: block;
-  }
-  .progress-bar {
-    border-radius: 10px;
-    background-color: #333741;
-    width: 50%;
-    display: inline-block;
-    margin-right: 10px;
-  }
-
-  .avatar {
-    margin-right: 5px;
-  }
+.progress-bar {
+  border-radius: 10px;
+  background-color: #333741;
+  display: inline-block;
+  margin-right: 10px;
 }
 </style>
