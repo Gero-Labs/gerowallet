@@ -45,13 +45,13 @@
                 </v-icon>
               </v-btn>
               <v-btn icon small v-if="poolExtendedInfo?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo?.info?.social?.discord_handle" target="_blank">
-                <v-icon small>
-                  mdi-discord
-                </v-icon>
+                <v-avatar tile size="14">
+                  <v-img :src="require('@/assets/svg/discord.svg')" alt="discord" contain></v-img>
+                </v-avatar>
               </v-btn>
               <v-btn icon small v-if="poolExtendedInfo?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo?.info?.social?.telegram_handle" target="_blank">
                 <v-avatar tile size="14">
-                  <v-img :src="require('@/assets/svg/telegram.svg')" alt="x"></v-img>
+                  <v-img :src="require('@/assets/svg/telegram.svg')" alt="telegram"></v-img>
                 </v-avatar>
               </v-btn>
             </div>

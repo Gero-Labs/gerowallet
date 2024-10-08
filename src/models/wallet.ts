@@ -441,7 +441,6 @@ export class Wallet {
   }
 
   async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any) {
-    console.log('addPendingTx')
     const inputs = []
     txJs.body.inputs.forEach(input => {
       const utxo = utxos.find(utxo => utxo.tx_hash === input.transaction_id && utxo.tx_index === input.index)
@@ -453,9 +452,10 @@ export class Wallet {
     let index = 0
     const totalOutput: BigNum = BigNum.zero()
     txJs.body.outputs.forEach(output => {
-      let stakeAddress
+      let stakeAddress = null
       try {
-        stakeAddress = RewardAddress.new(this.networkId(), stakeCredential(output.address)).to_address().to_bech32();
+        const stakeCred: Credential = stakeCredential(output.address)
+        stakeAddress = RewardAddress.new(this.networkId(), stakeCred).to_address().to_bech32();
       } catch (e) {
         console.log(e)
       }
@@ -467,7 +467,7 @@ export class Wallet {
         inline_datum: null,
         payment_addr: {
           bech32: output.address,
-          cred: paymentCredential(output.address).to_keyhash().to_hex()
+          cred: paymentCredential(output.address)?.to_keyhash()?.to_hex()
         },
         reference_script: output.script_ref,
         stake_addr: stakeAddress,

@@ -98,9 +98,9 @@
                           </v-icon>
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(item)?.info?.social?.discord_handle" target="_blank">
-                          <v-icon small>
-                            mdi-discord
-                          </v-icon>
+                          <v-avatar tile size="14">
+                            <v-img :src="discordLogo" width="14" height="14" alt="discord" contain></v-img>
+                          </v-avatar>
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(item)?.info?.social?.telegram_handle" target="_blank">
                           <v-avatar tile size="14">
@@ -118,13 +118,13 @@
                 </v-list-item>
               </template>
               <template v-slot:[`item.live_delegators`]="{ item }">
-                {{ (item.live_delegators).toLocaleString() }}
+                {{ (item.live_delegators).toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.ros`]="{ item }">
-                {{ item.ros.toLocaleString(undefined, {maximumFractionDigits: 2}) }}
+                {{ item.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}
               </template>
               <template v-slot:[`item.block_count`]="{ item }">
-                {{ item.block_count.toLocaleString() }}
+                {{ item.block_count.toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.live_saturation`]="{ item }">
                 <v-progress-linear rounded :color="getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
@@ -195,13 +195,13 @@
                             </v-icon>
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(pool)?.info?.social?.discord_handle" target="_blank">
-                            <v-icon small>
-                              mdi-discord
-                            </v-icon>
+                            <v-avatar tile size="14">
+                              <v-img :src="discordLogo" alt="discord" width="14" height="14" contain></v-img>
+                            </v-avatar>
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(pool)?.info?.social?.telegram_handle" target="_blank">
                             <v-avatar tile size="14">
-                              <v-img :src="telegramLogo" alt="x"></v-img>
+                              <v-img :src="telegramLogo" alt="telegram"></v-img>
                             </v-avatar>
                           </v-btn>
                         </v-list-item-subtitle>
@@ -423,6 +423,7 @@ export default {
     pledgeMet: true,
     pageCount: 0,
     xLogo: require('@/assets/svg/x.svg'),
+    discordLogo: require('@/assets/svg/discord.svg'),
     telegramLogo: require('@/assets/svg/telegram.svg'),
     errorImage: require('@/assets/img/1x1.png'),
     isDelegateDialogOpen: false,

@@ -423,7 +423,7 @@ export class Api {
 
   async getAveragePrice(tokenIn: string, tokenOut: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/swap/averagePrice/${tokenIn}/${tokenOut}`);
+      const { data, status } = await this.axiosInstance.get(`/api/v2/swap/averagePrice/${tokenIn}/${tokenOut}`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -441,7 +441,7 @@ export class Api {
         token_out,
         blacklisted_dexes,
       }
-      const { data, status } = await this.axiosInstance.post(`/api/swap/estimate`, requestBody);
+      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/estimate`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -459,7 +459,7 @@ export class Api {
         token_out,
         blacklisted_dexes
       }
-      const { data, status } = await this.axiosInstance.post(`/api/swap/reverseEstimate`, requestBody);
+      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -477,7 +477,7 @@ export class Api {
         token_out,
         referrer,
       }
-      const { data, status } = await this.axiosInstance.post(`/api/swap`, requestBody);
+      const { data, status } = await this.axiosInstance.post(`/api/v2/swap`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -491,7 +491,7 @@ export class Api {
         Signatures,
         txCbor,
       }
-      const { data, status } = await this.axiosInstance.post(`/api/swap/sign`, requestBody);
+      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/sign`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -508,7 +508,7 @@ export class Api {
         from,
         to,
       }
-      const { data, status } = await this.axiosInstance.post(`/api/charts`, requestBody);
+      const { data, status } = await this.axiosInstance.post(`/api/v2/charts`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -518,7 +518,7 @@ export class Api {
 
   async mcap(unit: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/mcap/${unit}`);
+      const { data, status } = await this.axiosInstance.get(`/api/v2/mcap/${unit}`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -528,7 +528,7 @@ export class Api {
 
   async dailyPriceChange(tokenIn: string, tokenOut: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/stats/dailyPriceChange/${tokenIn}/${tokenOut}`);
+      const { data, status } = await this.axiosInstance.get(`/api/v2/stats/dailyPriceChange/${tokenIn}/${tokenOut}`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
