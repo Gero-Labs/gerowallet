@@ -99,7 +99,7 @@ export const getUtxos = async (amount?: string, paginate?: Paginate) => {
 export const getCollateral = async (params) => {
   const result = await Messaging.sendToContent( {
     method: METHOD.getCollateral,
-    data: params
+    data: { params }
   });
   return result['data'];
 };
@@ -107,7 +107,7 @@ export const getCollateral = async (params) => {
 export const submitTx = async (tx) => {
   const result = await Messaging.sendToContent({
     method: METHOD.submitTx,
-    data: tx,
+    data: { tx } ,
   });
   return result['data'];
 };

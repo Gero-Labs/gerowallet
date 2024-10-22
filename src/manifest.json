@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gero Dashboard Beta",
   "short_name": "Gero Dashboard Beta",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "key": "MANIFEST_KEY_REMOVED",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
@@ -48,6 +48,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://media.bringweb3.io/ https://sandbox-api.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.handle.me/handles/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://buy.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://media.bringweb3.io/ http://localhost:8081 https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://buy.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'"
   }
 }

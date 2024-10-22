@@ -6,7 +6,7 @@ import {
   AuxiliaryDataHash,
   BaseAddress,
   BigInt,
-  BigNum,
+  BigNum, Bip32PrivateKey,
   Bip32PublicKey,
   ByronAddress,
   ConstrPlutusData,
@@ -17,7 +17,7 @@ import {
   EnterpriseAddress,
   FixedTransaction,
   GeneralTransactionMetadata,
-  hash_plutus_data,
+  hash_plutus_data, make_vkey_witness,
   MetadataJsonSchema,
   MetadataList,
   MultiAsset,
@@ -904,4 +904,83 @@ const getVkeyWitness = (pub2, witnessSignatureHex: string, raw2 = false, hex2 = 
   safeFreeCSLObject(vkey);
   safeFreeCSLObject(signature);
   return vkeyWitness;
+};
+const harden = (num) => 2147483648 + num;
+
+const cslDerivePrvKey = (key3, path3, doHarden) => {
+  const _keyInit = key3;
+  let _key = key3;
+  for (let p2 = 0; p2 < path3.length; p2++) {
+    _key = key3.derive(doHarden ? harden(path3[p2]) : path3[p2]);
+    if (key3 !== _keyInit) {
+      safeFreeCSLObject(key3);
+    }
+    key3 = _key;
+  }
+  if (key3 !== _keyInit) {
+    safeFreeCSLObject(_keyInit);
+  }
+  return _key;
+};
+const getCSLBip32PrivateKey = (bech322, free?) => {
+  const cslBip32PrivateKey = Bip32PrivateKey.from_bech32(bech322);
+  free == null ? void 0 : free.push(cslBip32PrivateKey);
+  return cslBip32PrivateKey;
+};
+const derivePrvKey = (prvBech32, path3, doHarden) => cslDerivePrvKey(getCSLBip32PrivateKey(prvBech32), path3, doHarden);
+
+const createCSLPrvKey = (rootPrvBech32, path3) => {
+  if (!(path3.length === 3 || path3.length === 5)) {
+    return null;
+  }
+  const accountPath = path3.slice(0, 3);
+  const addressPath = path3.slice(3, 5);
+  const cslPrvKeyAccount = derivePrvKey(rootPrvBech32, accountPath, false);
+  if (addressPath.length === 0) {
+    return cslPrvKeyAccount;
+  }
+  const prvKeyBech32Account = cslPrvKeyAccount.to_bech32();
+  safeFreeCSLObject(cslPrvKeyAccount);
+  return derivePrvKey(prvKeyBech32Account, addressPath, false);
+};
+
+export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: Bip32PrivateKey): TransactionWitnessSet => {
+  const cslVkeys = cslWitnessSet.vkeys() ?? Vkeywitnesses.new();
+  const cslVkeysOwned = Vkeywitnesses.new();
+  credList.forEach(cred => {
+    const hdArray = hdPathToArray(cred.path)
+    const prvKeyRaw = prvRootKeyBech32
+      .derive(hdArray[0])
+      .derive(hdArray[1])
+      .derive(hdArray[2])
+      .derive(hdArray[3])
+      .derive(hdArray[4])
+      .to_raw_key();
+    const vkeyWitness = make_vkey_witness(cslTxHash, prvKeyRaw);
+    const vkeyWitnessSig = vkeyWitness.signature();
+    const vkeyWitnessSig32 = vkeyWitnessSig.to_bech32();
+    let keyIncluded = false;
+    for (let i2 = 0; i2 < cslVkeys.len(); i2++) {
+      const _wit = cslVkeys.get(i2);
+      const _witSig = _wit.signature();
+      keyIncluded = vkeyWitnessSig32 === _witSig.to_bech32();
+      safeFreeCSLObject(_witSig);
+      safeFreeCSLObject(_wit);
+      if (keyIncluded) {
+        break;
+      }
+    }
+    if (!keyIncluded) {
+      cslVkeys.add(vkeyWitness);
+      cslVkeysOwned.add(vkeyWitness);
+    }
+    safeFreeCSLObject(vkeyWitnessSig);
+    safeFreeCSLObject(vkeyWitness);
+    safeFreeCSLObject(prvKeyRaw);
+  })
+  cslWitnessSet.set_vkeys(cslVkeys);
+  const cslWitnessSetOwned = TransactionWitnessSet.new();
+  cslWitnessSetOwned.set_vkeys(cslVkeysOwned);
+  safeFreeCSLObject(cslVkeys);
+  return cslWitnessSetOwned;
 };
