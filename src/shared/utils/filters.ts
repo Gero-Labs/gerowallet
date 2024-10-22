@@ -1,5 +1,23 @@
 const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 
+const formatMax6Decimals = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
+  maximumFractionDigits: 6, // Set a high limit to handle precision, but the minimum is prioritized
+  useGrouping: true          // Enables comma separators for thousands
+})
+
+const formatMax4Decimals = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
+  maximumFractionDigits: 4, // Set a high limit to handle precision, but the minimum is prioritized
+  useGrouping: true          // Enables comma separators for thousands
+})
+
+const formatMax2Decimals = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,  // No unnecessary trailing zeroes
+  maximumFractionDigits: 2, // Set a high limit to handle precision, but the minimum is prioritized
+  useGrouping: true          // Enables comma separators for thousands
+})
+
 const filters = {
   truncate(value: string) {
     if (!value || value.length <= 16) return 'N/A';
@@ -83,10 +101,22 @@ const filters = {
         result = symbolPrefix+res.toFixed(4).match(/^-?\d*\.?0*\d?/)[0]+symbolSuffix;
       return result
     }
-    if (res >= 0) {
-      return (signs ? '+ ' : '') + symbolPrefix + (decimalPlaces ? res.toLocaleString('en-US', {minimumFractionDigits: decimalPlaces}) : res.toLocaleString()) + symbolSuffix;
+    if (decimalPlaces == 6) {
+      if (res >= 0) {
+        return (signs ? '+ ' : '') + symbolPrefix + formatMax6Decimals.format(res) + symbolSuffix;
+      }
+      return (signs ? '- ' : '') + symbolPrefix + formatMax6Decimals.format(Math.abs(res)) + symbolSuffix;
+    } else if (decimalPlaces == 4) {
+      if (res >= 0) {
+        return (signs ? '+ ' : '') + symbolPrefix + formatMax4Decimals.format(res) + symbolSuffix;
+      }
+      return (signs ? '- ' : '') + symbolPrefix + formatMax4Decimals.format(Math.abs(res)) + symbolSuffix;
+    } else {
+      if (res >= 0) {
+        return (signs ? '+ ' : '') + symbolPrefix + formatMax2Decimals.format(res) + symbolSuffix;
+      }
+      return (signs ? '- ' : '') + symbolPrefix + formatMax2Decimals.format(Math.abs(res)) + symbolSuffix;
     }
-    return (signs ? '- ' : '') + symbolPrefix + (decimalPlaces ? Math.abs(res).toLocaleString('en-US', {minimumFractionDigits: decimalPlaces}) : Math.abs(res).toLocaleString()) + symbolSuffix;
   },
   lastIndex(val: string) {
     const tok = val.split('.');

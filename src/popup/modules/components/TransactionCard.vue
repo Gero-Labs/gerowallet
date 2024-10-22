@@ -20,7 +20,7 @@
 
     <div class="tx-footer" v-if="amount.txFee">
       <template>
-        Tx Fee&nbsp;<span> {{ 0 - amount?.txFee | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+        Tx Fee<span class="ml-1"> {{ 0 - amount?.txFee | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
       </template>
     </div>
   </v-card>
@@ -178,7 +178,7 @@ export default {
 
   color: var(--v-primary-base);
 
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 13px;
 

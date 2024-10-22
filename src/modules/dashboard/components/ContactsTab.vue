@@ -1,6 +1,7 @@
 <template>
   <v-tab-item>
     <v-data-table
+      v-if="contacts"
       :headers="headers"
       :items="Object.values(contacts)"
       class="transparent"
@@ -188,15 +189,19 @@ export default {
     close() {
       this.dialog = false
       this.$nextTick(() => {
-        this.editedItem = Object.assign({}, this.defaultItem)
-        this.editedAddress = null
+        if (this.defaultItem) {
+          this.editedItem = Object.assign({}, this.defaultItem)
+          this.editedAddress = null
+        }
       })
     },
     closeDelete() {
       this.dialogDelete = false
       this.$nextTick(() => {
-        this.editedItem = Object.assign({}, this.defaultItem)
-        this.editedAddress = null
+        if (this.defaultItem) {
+          this.editedItem = Object.assign({}, this.defaultItem)
+          this.editedAddress = null
+        }
       })
     },
     save() {
