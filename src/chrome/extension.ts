@@ -1,18 +1,29 @@
 import { APIError, DataSignError, NETWORK_ID, POPUP_WINDOW, STORAGE, TxSendError } from './config';
 import {
   Address,
-  BaseAddress, BigNum,
+  BaseAddress,
+  BigNum,
   Bip32PublicKey,
   ByronAddress,
   Credential,
   EnterpriseAddress,
-  PointerAddress, PublicKey,
+  PointerAddress,
+  PublicKey,
   RewardAddress,
-  Transaction, TransactionUnspentOutput,
+  Transaction,
+  TransactionUnspentOutput,
   Value,
 } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/shared/utils/networks';
-import { ChainDerivations, CollateralParams, ERROR, Paginate, STAKING_KEY_INDEX } from '@/models/types';
+import {
+  Blockchain,
+  ChainDerivations,
+  CollateralParams,
+  ERROR,
+  Network,
+  Paginate,
+  STAKING_KEY_INDEX,
+} from '@/models/types';
 import { toUTxO, toValue } from '@/shared/utils/converter';
 
 interface WhitelistedEntry {
@@ -270,9 +281,10 @@ export const getNetwork = async (): Promise<any> => {
 export const getUsedAddresses = async (paginate?: Paginate): Promise<any> => {
   const addresses: {} = await getStorage(STORAGE.addresses);
   let res = []
-  const addressesArray = Object.keys(addresses)
-  if (Array.isArray(addressesArray)) {
-    const addressesArrayHex = Object.keys(addresses).map(address => Address.from_bech32(address).to_hex())
+  const addressesArray: any[] = Object.values(addresses)
+  if (addressesArray && Array.isArray(addressesArray)) {
+    addressesArray.sort((a,b) => (a['path'] > b['path']) ? 1 : ((b['path'] > a['path']) ? -1 : 0))
+    const addressesArrayHex: string[] = addressesArray.map(el => Address.from_bech32(el['address']).to_hex())
     res = paginateArray(addressesArrayHex, paginate);
   }
   return res
@@ -415,21 +427,29 @@ export const verifyTx = async (tx) => {
 
 export const submitTx = async (tx) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  console.log(loggedWallet)
-  const result = await fetch(`/api/transactions/submit-tx?chain=${loggedWallet.chain}&network=${loggedWallet.network}&provider=${loggedWallet.provider}`, {
+  const chain = Object.keys(Blockchain).find(key => Blockchain[key] === loggedWallet.chain);
+  const network = Object.keys(Network).find(key => Network[key] === loggedWallet.network);
+  const response  = await fetch(`http://localhost:8081/api/transactions/submit-tx?chain=${chain}&network=${network}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: tx
   })
-  if (result['error']) {
-    if (result['status_code'] === 400)
-      throw { ...TxSendError.Failure, message: result['message'] };
-    else if (result['status_code'] === 500) throw APIError.InternalError;
-    else if (result['status_code'] === 429) throw TxSendError.Refused;
-    else if (result['status_code'] === 425) throw ERROR.fullMempool;
-    else throw APIError.InvalidRequest;
+
+  if (!response.ok) { // Check if the response is not in the range of 200-299
+    switch (response.status) { // Access the status code directly from response
+      case 400:
+        throw { ...TxSendError.Failure, message: response.statusText };
+      case 500:
+        throw APIError.InternalError;
+      case 429:
+        throw TxSendError.Refused;
+      case 425:
+        throw ERROR.fullMempool;
+      default:
+        throw APIError.InvalidRequest;
+    }
   }
-  return result;
+  return await response.text();
 }
 
 export const getPubDRepKey = async (): Promise<string> => {

@@ -387,16 +387,6 @@ export class Api {
     }
   }
 
-  async getAllTokens(): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/swap/tokens`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getAllBlacklistPolicies(): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/assets/blacklist`);
@@ -414,6 +404,16 @@ export class Api {
           'Content-Type': 'application/json',
         },
       });
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getAllTokens(): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/v2/swap/tokens`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
