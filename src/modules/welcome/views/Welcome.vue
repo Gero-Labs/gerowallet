@@ -139,7 +139,8 @@ export default {
     ...mapActions(useStore, ['login']),
     async submitLogin(walletId) {
       await this.login(walletId)
-      await this.$router.push("/")
+      const path = localStorage.getItem('intendedUrl')?"/report":"/"
+      await this.$router.push(path)
     },
     resolveIcon(icon) {
       if (icon) {

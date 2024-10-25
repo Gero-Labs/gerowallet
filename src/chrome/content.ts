@@ -146,3 +146,77 @@ if (shouldInject()) {
   await injectBring();
   Messaging.createProxyController();
 }
+console.log("Content script loaded");
+const overlay = document.createElement('div');
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'showOverlay') {
+    showOverlay(message.url); // Show overlay on the specific tab with this URL
+  } else if (message.action === 'overlayClosed') {
+    removeOverlay(); // Remove overlay only from the current tab
+  } else if (message.action === 'checkForOverlay') {
+    const hasOverlay = !!document.getElementById('custom-overlay');
+    sendResponse({ hasOverlay });
+  } 
+  else if (message.action === 'reportSite') {
+    sendResponse({action: "navigateToReport" });
+  }
+  // Additional actions can go here...
+});
+// Show overlay function
+function showOverlay(url) {
+  if (!document.getElementById('custom-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.id = 'custom-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(62, 28, 28, 0.9)';
+    overlay.style.color = 'white';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'space-around';
+    overlay.style.zIndex = '10000';
+
+    const imageUrl = chrome.runtime.getURL('assets/logo.png');
+    overlay.innerHTML = `
+    <div>
+    <div style="font-size: 1.5rem;padding:2rem;font-weight: 500;display: flex;align-items: center; justify-content: space-between;">
+    <p>Potentially deceptive site detected</p> 
+    <img src="${imageUrl}" style="height:50px;width:100px;display:block;z-index:2"/>
+    </div>
+    <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem; display:block">
+    Cardano Shield has marked the website you're attempting to access as potentially misleading.
+    There's a risk that attackers could deceive you into engaging in fraudulent actions.
+    </div>
+    <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem;">
+    <div class="list-header">Potential threats on <a style="font-weight: 300; color: #ffffff;" href=${url}>${url}</a></div> 
+    <ul style="padding-left:  1.313rem;">
+    <li>Fraudulent transactions leading to asset loss</li>
+    <li>Theft of secret recovery phrases or passwords</li>
+            <li>Imitations of Cardano Wallets</li>
+            </ul>
+        </div>
+        <div style="padding:2rem; font-size: 1rem;">
+          <div>
+            If we're flagging a legitimate website, please report a <a style="font-weight: 300; color: #ffffff;" href="">detection problem</a>.
+            </div>
+            <div style="color: #e80404;line-height: 2;">
+            Should you be aware of the dangers yet wish to visit the site, you have the option to proceed.
+            </div>
+            </div>
+            </div>
+            `;
+
+    document.body.appendChild(overlay);
+  }
+}
+
+// Remove overlay function
+function removeOverlay() {
+  const overlay = document.getElementById('custom-overlay');
+  if (overlay) {
+    document.body.removeChild(overlay);
+  }
+}
