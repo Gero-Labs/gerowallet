@@ -18,7 +18,8 @@ import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
-
+import WarningPopUp from '@/popup/modules/views/warningPopUp.vue';
+import ReportWebsite from "@/popup/modules/components/ReportWebsite.vue";
 const routes = [
   {
     path: '/',
@@ -127,6 +128,21 @@ const routes = [
       requiresAuth: true,
     },
   },
+  {
+    path: '/warning',
+    name: 'warning',
+    component: WarningPopUp,
+    
+  },
+  {
+    path: '/report',
+    name: 'report',
+    component: ReportWebsite,
+    meta: {
+       layout: ContentLayout,
+      requiresAuth: true,
+      },
+    },
   {
     path: '/plogin',
     name: 'plogin',

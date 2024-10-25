@@ -16,6 +16,7 @@ import {
   getUnregisteredPubStakeKeys,
   getCollateral,
   getPubKey,
+  urlScan
 } from './extension';
 import { Messaging } from './messaging';
 import {
@@ -46,7 +47,30 @@ interface Response {
   data?: any;
   error?: any;
 }
-
+app.add(METHOD.blacklisted, async (request, sendResponse) => {
+  urlScaneRequest(request);
+  return;
+});
+async function urlScaneRequest(request) {
+  let urlstatus;
+  try {
+    const response = await urlScan(request.origin);
+    const res = await response.json();
+    urlstatus = res; // Assign the result to urlstatus
+    if (urlstatus === 'blacklist' || urlstatus === 'suspicious') {
+      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        const tabId = tabs[0].id;
+        // Send the overlay message immediately
+        chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
+      });
+      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?param=${encodeURIComponent(request.origin)}`);
+      const response = await focusOrCreatePopup(popupURL, 470, 600);
+      await Messaging.sendToPopupInternal(response, request);
+    }
+  } catch (error) {
+    return;
+  }
+}
 app.add(METHOD.getBalance, (request, sendResponse) => {
   console.log('getBalance')
   getBalance()
