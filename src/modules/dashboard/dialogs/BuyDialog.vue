@@ -33,11 +33,22 @@ export default {
   computed: {
     ...mapState(useStore, ['baseAddress'])
   },
+  methods: {
+    async fetch() {
+      if (appWallet) {
+        try {
+          this.moonPayUrl = await appWallet.api.moonPaySign(`https://buy.moonpay.com/?apiKey=MOONPAY_API_KEY_REMOVED&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=%232f9cac&baseCurrencyCode=usd`)
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
+  },
   data: () => ({
     moonPayUrl: '',
   }),
   async mounted() {
-    this.moonPayUrl = await appWallet.api.moonPaySign(`https://buy.moonpay.com/?apiKey=MOONPAY_API_KEY_REMOVED&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=%232f9cac&baseCurrencyCode=usd`)
+    await this.fetch()
   }
 }
 </script>

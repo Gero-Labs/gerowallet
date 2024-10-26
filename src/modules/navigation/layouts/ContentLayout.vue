@@ -168,8 +168,11 @@ export default {
   },
   async mounted() {
     if (this.loggedWallet?.id) {
-      console.log('loginApp', this.loggedWallet)
-      await this.login(this.loggedWallet.id)
+      try {
+        await this.login(this.loggedWallet.id)
+      } catch (e) {
+        console.error(e)
+      }
     }
     this.loading.setLoading(false)
   }

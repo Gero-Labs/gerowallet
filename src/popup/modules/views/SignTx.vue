@@ -335,6 +335,7 @@ export default {
       }
     },
     async confirm() {
+      console.log(this.witnesses)
       await this.controller.returnData({ data: this.witnesses, error: undefined });
       window.close();
     }
