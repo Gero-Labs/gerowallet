@@ -440,6 +440,7 @@ export const useStore = defineStore('store', {
       this.stakeAddress = stakeAddress
     },
     async simpleLogin(walletId: number) {
+      console.log('simple login')
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -454,6 +455,7 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      await this.loadAssets()
       socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())
@@ -486,7 +488,11 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
-      socket.stompConnect(appWallet)
+      try {
+        socket.stompConnect(appWallet)
+      } catch (e) {
+        console.error(e)
+      }
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
@@ -566,6 +572,16 @@ export const useStore = defineStore('store', {
     setStakingProView(isPro) {
       this.stakingProView = isPro
     },
+    setAssets(assets) {
+      this.assets = assets
+      if (chrome?.storage) {
+        if (assets) {
+          chrome.storage.local.set({[STORAGE.assets]: assets});
+        } else {
+          chrome.storage.local.remove(STORAGE.assets);
+        }
+      }
+    },
     toggleFavoriteToken(val) {
       const index = this.pinnedTokens.indexOf(val.unit);
       if (index === -1) {
@@ -641,10 +657,10 @@ export const useStore = defineStore('store', {
       return new Promise((resolve, reject) => {
         subscriptions.push(liveQuery(() => db.table('assets').toArray()).subscribe({
           next: newAssets => {
-            this.assets = newAssets.reduce((map, asset) => {
+            this.setAssets(newAssets.reduce((map, asset) => {
               map[asset.asset] = asset;
               return map;
-            }, {});
+            }, {}))
             resolve(this.assets); // Resolve the promise when data is loaded
           },
           error: error => {

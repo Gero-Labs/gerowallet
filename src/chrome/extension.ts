@@ -429,7 +429,7 @@ export const submitTx = async (tx) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const chain = Object.keys(Blockchain).find(key => Blockchain[key] === loggedWallet.chain);
   const network = Object.keys(Network).find(key => Network[key] === loggedWallet.network);
-  const response  = await fetch(`http://localhost:8081/api/transactions/submit-tx?chain=${chain}&network=${network}&provider=KOIOS`, {
+  const response  = await fetch(`https://api.gerowallet.io/api/transactions/submit-tx?chain=${chain}&network=${network}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: tx

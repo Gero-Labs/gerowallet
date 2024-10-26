@@ -138,7 +138,11 @@ export default {
   methods: {
     ...mapActions(useStore, ['login']),
     async submitLogin(walletId) {
-      await this.login(walletId)
+      try {
+        await this.login(walletId)
+      } catch (error) {
+        console.error(error)
+      }
       await this.$router.push("/")
     },
     resolveIcon(icon) {
