@@ -304,7 +304,7 @@ export class Api {
     }
   }
 
-  async retailers(category: number, search?: string, page?: number): Promise<any> {
+  async retailers(category: string, search?: string, page?: number): Promise<any> {
     try {
       const requestBody = {
         type: 'all',
