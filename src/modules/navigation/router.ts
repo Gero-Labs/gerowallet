@@ -18,6 +18,7 @@ import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
+import Blog from '@/modules/blog/Blog.vue';
 
 const routes = [
   {
@@ -86,6 +87,15 @@ const routes = [
     path: '/media-player',
     name: 'mediaPlayer',
     component: MediaPlayer,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/blog',
+    name: 'blog',
+    component: Blog,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
