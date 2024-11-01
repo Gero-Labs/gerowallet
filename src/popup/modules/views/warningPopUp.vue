@@ -49,50 +49,53 @@ export default {
       suspiciousUrl: null,
     };
   },
- async  created() {
-      const hash = window.location.hash;
-      const [path, query] = hash.substring(1).split('?');
-      if (query) {
-        const params = new URLSearchParams(query);
-         this.suspicious_url = params.get('param'); 
-        // console.log(suspicious_url); 
-      } else {
-        console.log('No query parameters found');
-      }
-    },
+  async created() {
+    const hash = window.location.hash;
+    const [path, query] = hash.substring(1).split('?');
+    if (query) {
+      const params = new URLSearchParams(query);
+      this.suspicious_url = params.get('param');
+      // console.log(suspicious_url);
+    } else {
+      console.log('No query parameters found');
+    }
+  },
   methods: {
     proceed() {
-        chrome.tabs.query({}, tabs => {
-          tabs.forEach(tab => {
-            chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
-              if (response && response.hasOverlay) {
-                chrome.tabs.sendMessage(tab.id, { action: 'overlayClosed' });
-              }
-            });
-          });
-
-          // Close the popup tab
-          chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
-            if (activeTabs.length > 0) {
-              chrome.tabs.remove(activeTabs[0].id);
+      chrome.tabs.query({}, tabs => {
+        tabs.forEach(tab => {
+          chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
+            if (response && response.hasOverlay) {
+              chrome.tabs.sendMessage(tab.id, { action: 'overlayClosed' });
             }
           });
         });
+
+        // Close the popup tab
+        chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
+          if (activeTabs.length > 0) {
+            chrome.tabs.remove(activeTabs[0].id);
+          }
+        });
+      });
     },
 
     async safety() {
-      // Loop over all tabs and find which has overlay
-      // Close both the tabs: the popup one and the suspicious one
       chrome.tabs.query({}, async tabs => {
-        // Create an array of promises to check for overlays and remove the tabs
         const overlayRemovalPromises = tabs.map(tab => {
           return new Promise((resolve, reject) => {
             chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
               if (response && response.hasOverlay) {
-                // If the tab has the overlay, close this tab
-                chrome.tabs.remove(tab.id, () => {
-                  resolve(); // Resolve the promise once the tab is closed
-                });
+                if (tabs.length === 2) {
+                  // console.log('tabs inside', tabs.length);
+                  chrome.tabs.update(tab.id, { url: 'https://www.google.com' }, () => {
+                    resolve();
+                  });
+                } else {
+                  chrome.tabs.remove(tab.id, () => {
+                    resolve();
+                  });
+                }
               } else {
                 resolve(); // Resolve immediately if no overlay
               }
@@ -102,7 +105,6 @@ export default {
 
         // Wait for all overlay tabs to be closed
         await Promise.all(overlayRemovalPromises);
-
         // Close the popup tab
         chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
           if (activeTabs.length > 0) {

@@ -339,11 +339,13 @@ export default {
   padding: 9px;
 }
 .custom-textarea {
-  width: 99%;
-  border: 1px solid #9c958b;
-  border-radius: 5px;
-  padding: 10px 5px;
-  color: #ffffff;
+  width: 98%;
+    border: 1px solid #9c958b;
+    border-radius: 5px;
+    padding: 10px 5px;
+    color: #fff;
+    margin: 0px 3px;
+
 }
 /* .error-message {
   color: red;

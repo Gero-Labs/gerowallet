@@ -2,7 +2,7 @@
   <BaseDialog :isOpen="!!transactionInfo" @close="$emit('close')" title="Transaction" :subtitle="new Date(transactionInfo.tx_timestamp * 1000).toLocaleString()" :min-height="600" :height="600">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <div class="transaction-info text-left pb-4">
-        <div>
+        <div class="break-text">
           Transaction ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash | truncate }}</a>
           <CopyButton x-small :value="transactionInfo.tx_hash" class="ml-1"></CopyButton>
         </div>
@@ -470,7 +470,7 @@ export default {
   }
 };
 </script>
-<style scoped>
+<style scoped >
 .transaction-info{
 
   & > div {
