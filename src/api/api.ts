@@ -545,4 +545,38 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async getBlogPosts(pageSize: number, nextPage?: string): Promise<any> {
+    try {
+      let url = `/api/blog/posts?paging.limit=${pageSize}`
+      if (nextPage) {
+        url += `&paging.cursor=${nextPage}`
+      }
+      const { data, status } = await this.axiosInstance.get(url);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getMember(memberId: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/members/${memberId}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getPostMetrics(postId: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/blog/posts/${postId}/metrics`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }
