@@ -20,7 +20,6 @@ import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/warningPopUp.vue';
 import ReportWebsite from "@/popup/modules/components/ReportWebsite.vue";
-import Transactions from "@/modules/Transaction/components/Transactions.vue";
 import Transaction from "@/modules/Transaction/Transaction.vue"
 const routes = [
   {

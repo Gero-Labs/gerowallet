@@ -3,10 +3,10 @@
     <div class="transaction-info text-left pb-4 d-flex">
       <div class="left-section">
         <div>
-          <v-list-item-title>
+          <!-- <v-list-item-title>
             Website: <a href="https://safesite.io" target="_blank">safesite.io</a>
             <v-icon>mdi-shield-check-outline</v-icon>
-          </v-list-item-title>
+          </v-list-item-title> -->
           <v-list-item-subtitle>{{ new Date(transactionInfo.time * 1000).toLocaleString() }}</v-list-item-subtitle>
         </div>
         <div>
@@ -417,6 +417,8 @@
         <v-expansion-panel-content class="content-container"> </v-expansion-panel-content>
       </v-expansion-panel>
     </v-expansion-panels>
+    <TransactionsReportDialog v-if="transactionReport" :transactionReportInfo="transactionReport" @close="reportClose" />
+
   </v-card-text>
 </template>
 
@@ -426,18 +428,26 @@ import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { unitToFingerprint } from '@/shared/utils/converter';
+import TransactionsReportDialog from '@/modules/Transaction/components/TransactionsReportDialog.vue';
 export default {
+  name:'TransactionDetails',
+  components:{TransactionsReportDialog},
   props: {
     transactionInfo: {
       type: Object,
       required: true,
     },
+    // transactionReport: {
+    //   type: Object,
+    //   required: true,
+    // },
   },
   data: () => ({
     txAssets: [],
     residue: [],
     panels: [],
     isExpanded: false,
+    transactionReport:null
   }),
   filters,
   async mounted() {
@@ -556,7 +566,11 @@ export default {
     },
     report() {
       // Report transaction logic here
+      this.transactionReport = this.transactionInfo;
     },
+    reportClose(){
+      this.transactionReport =null;
+    }
   },
 };
 </script>
