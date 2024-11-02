@@ -139,8 +139,13 @@ export default {
     ...mapActions(useStore, ['login']),
     async submitLogin(walletId) {
       await this.login(walletId)
-      const path = localStorage.getItem('intendedUrl')?"/report":"/"
-      await this.$router.push(path)
+      const queryParams = this.$route.query;
+      console.log(queryParams);
+      if (queryParams['redirect']) {
+        await this.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
+      } else {
+        await this.$router.push("/")
+      }
     },
     resolveIcon(icon) {
       if (icon) {

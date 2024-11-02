@@ -56,6 +56,7 @@ import {
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import cardanoShieldApi from '@/api/cardano-shield-api';
 
 export default {
   components: { TransactionCard, DappAddress, TransactionRisk, Select },
@@ -156,7 +157,7 @@ export default {
       this.loading = true
       this.tx = txData
       try {
-        this.risks = await appWallet.api.scanTx({
+        this.risks = await cardanoShieldApi.scanTx({
           cborHex: txData.to_hex(),
           toAddress: this.sendData.recipientAddress,
           fromAddress: this.changeAddress,
