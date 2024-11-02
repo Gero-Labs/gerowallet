@@ -6,16 +6,20 @@
   </v-app>
 </template>
 <script>
-import { mapActions } from 'pinia';
+import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
 
 export default {
   name: 'PopupLayout',
+  computed: {
+    ...mapState(useStore, ['loggedWallet'])
+  },
   methods: {
-    ...mapActions(useStore, 'simpleLogin')
+    ...mapActions(useStore, ['simpleLogin'])
   },
   async mounted() {
+    console.log('mounted')
     if (this.loggedWallet?.id) {
       await this.simpleLogin(this.loggedWallet.id)
     }

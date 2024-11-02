@@ -312,8 +312,8 @@
             <v-card flat v-for="(contract, index) in transactionInfo.plutus_contracts" :key="`contracts_${index}`" class="mb-2">
               <v-card-title>Contract</v-card-title>
               <v-card-subtitle class="text-left">{{contract.address | truncate}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
-              <v-card-title>Redeemer</v-card-title>
-              <v-card-text>
+              <v-card-title v-if="contract?.input?.redeemer">Redeemer</v-card-title>
+              <v-card-text v-if="contract?.input?.redeemer">
                 <v-simple-table dense>
                   <tbody>
                   <tr>
@@ -343,8 +343,8 @@
                   </tbody>
                 </v-simple-table>
               </v-card-text>
-              <v-card-title>Datum</v-card-title>
-              <v-card-text>
+              <v-card-title v-if="contract?.input?.datum">Datum</v-card-title>
+              <v-card-text v-if="contract?.input?.datum">
                 <v-simple-table dense>
                   <tbody>
                     <tr>
