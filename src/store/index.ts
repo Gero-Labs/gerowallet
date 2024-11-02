@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
 
-// import { ChromeSyncStorage } from '@/store/chrome-storage'
-// import { LocalPersistedStorage} from "@/store/local-storage";
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
@@ -24,9 +22,6 @@ import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
 
-// const env = process.env['VUE_APP_ENV']
-// const plugin = env === 'production' ? LocalPersistedStorage:
-// Vue.use(Vuex)
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
 
@@ -440,6 +435,7 @@ export const useStore = defineStore('store', {
       this.stakeAddress = stakeAddress
     },
     async simpleLogin(walletId: number) {
+      console.log('test')
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
