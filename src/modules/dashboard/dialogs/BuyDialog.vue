@@ -33,11 +33,22 @@ export default {
   computed: {
     ...mapState(useStore, ['baseAddress'])
   },
+  methods: {
+    async fetch() {
+      if (appWallet) {
+        try {
+          this.moonPayUrl = await appWallet.api.moonPaySign(`https://buy.moonpay.com/?apiKey=pk_live_0x33XZf4gbMC5g184KIqIkWMVgjJ6PA2&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=%232f9cac&baseCurrencyCode=usd`)
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
+  },
   data: () => ({
     moonPayUrl: '',
   }),
   async mounted() {
-    this.moonPayUrl = await appWallet.api.moonPaySign(`https://buy.moonpay.com/?apiKey=pk_live_0x33XZf4gbMC5g184KIqIkWMVgjJ6PA2&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=%232f9cac&baseCurrencyCode=usd`)
+    await this.fetch()
   }
 }
 </script>

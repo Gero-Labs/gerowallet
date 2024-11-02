@@ -6,7 +6,7 @@
   </div>
 </template>
 <script>
-import {useStore} from "@/store";
+import { appWallet, useStore } from '@/store';
 import {mapState} from "pinia";
 import socket from "@/plugins/socket";
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
@@ -30,19 +30,26 @@ export default {
       deep: true,
     }
   },
-  async mounted() {
-    const provider = useStore().getWallet.api
-    const data = await provider.fetchADAStatistics();
-    this.ticker.prevPrice = this.ticker.lastPrice;
-    this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
-    this.ticker.priceChange = Number(data.priceChange).toFixed(3);
-    this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
-  },
   computed: {
     Blockchain() {
       return Blockchain
     },
     ...mapState(useStore, ['price', 'loggedWallet']),
+  },
+  methods: {
+    async fetch() {
+      if (appWallet) {
+        try {
+          const data = await appWallet.api.fetchADAStatistics();
+          this.ticker.prevPrice = this.ticker.lastPrice;
+          this.ticker.lastPrice = Number(data.lastPrice).toFixed(4);
+          this.ticker.priceChange = Number(data.priceChange).toFixed(3);
+          this.ticker.priceChangePercent = Number(data.priceChangePercent).toFixed(2);
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
   },
   data: () => ({
     networks,
@@ -60,6 +67,9 @@ export default {
     gradient: ['#fff'],
     type: 'trend',
     autoLineWidth: false,
-  })
+  }),
+  async mounted() {
+    await this.fetch()
+  },
 }
 </script>

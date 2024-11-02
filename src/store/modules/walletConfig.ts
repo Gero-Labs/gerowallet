@@ -18,13 +18,13 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
   }),
   getters: {
     getTxAutoSubmit(state) {
-      if ('txAutoSubmit' in state.config) {
+      if (state?.config && 'txAutoSubmit' in state.config) {
         return state.config.txAutoSubmit
       }
       return true
     },
     getHideScamTokens(state) {
-      if ('hideScamTokens' in state.config) {
+      if (state?.config && 'hideScamTokens' in state.config) {
         return state.config.hideScamTokens
       }
       return false

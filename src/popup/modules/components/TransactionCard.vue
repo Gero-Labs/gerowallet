@@ -9,7 +9,7 @@
       <div class="assets mr-1" v-if="amount?.assets?.length">Assets:</div>
       <div v-if="amount?.assets?.length">
         <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
-          <div>{{ asset.currency }}</div>
+          <div class="pr-1">{{ asset.currency }}</div>
           <div>{{ asset.amount | toCurrency(false, 0, '', '', false, decimals(asset?.id)) }}</div>
         </div>
         <a v-if="hiddenAssets" class="asset-entry" @click="toggleAllAssets()">
@@ -30,6 +30,7 @@ import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import networks from '@/shared/utils/networks';
+import { STORAGE } from '@/chrome/config';
 
 export default {
   name: 'TransactionCard',
@@ -235,7 +236,7 @@ a.asset-entry {
 
 .tx-card.risk {
   .tx-header {
-    color: var(--v-error-base);
+    color: var(--v-error);
   }
 
   .tx-details {
