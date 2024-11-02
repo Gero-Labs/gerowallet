@@ -23,20 +23,12 @@
                   >
                     <v-card-text class="pa-0 text-center justify-center" >
                       <v-row no-gutters>
-                        <v-col cols="4" :style="{height: '300px', background: 'url('+getImage(post)+')', backgroundSize: 'cover', backgroundPosition: 'center' }">
+                        <v-col cols="4" :style="{height: '200px', background: 'url('+getImage(post)+')', backgroundSize: 'cover', backgroundPosition: 'center' }">
                         </v-col>
                         <v-col cols="8">
                           <v-card flat class="d-flex row fill-height" style="margin: 0">
                             <v-card-text class="px-6 grow">
-                              <v-card-title class="justify-center text-center pt-0">
-                                <v-avatar size="48">
-                                  <v-img :src="require('@/assets/svg/unknown-profile.svg')"></v-img>
-                                </v-avatar>
-                              </v-card-title>
-                              <v-card-subtitle class="py-0" style="color: white; font-size: 12px">
-                                {{members[post.memberId]?.profile.nickname}}
-                              </v-card-subtitle>
-                              <v-card-subtitle class="py-0" style="color: white; font-size: 12px">
+                              <v-card-subtitle class="py-0 text-left" style="color: white; font-size: 12px">
                                 {{`${new Date(post.lastPublishedDate).toLocaleDateString()} • ${post.minutesToRead} min read` }}
                               </v-card-subtitle>
                               <v-card-title style="word-break: break-word; color: white" class="text-left">
@@ -103,7 +95,6 @@ export default defineComponent({
       this.isIntersecting = entries[0].isIntersecting
     },
     async loadPosts() {
-      const members = new Set<string>()
       let response
       if (this.nextPage) {
         response = await this.api.getBlogPosts(10, this.nextPage)
@@ -116,7 +107,6 @@ export default defineComponent({
       }, {})
       const statsPromises = []
       Object.values(posts).forEach((post: any) => {
-        members.add(post.memberId)
         statsPromises.push(this.api.getPostMetrics(post.id).then(res => {
           posts[post.id].metrics = res.metrics
         }))
@@ -125,19 +115,6 @@ export default defineComponent({
         await Promise.all(statsPromises)
       }
       this.nextPage = response.metaData.cursor || null
-      const membersPromises = []
-      members.forEach((member: string) => {
-        if (!this.members[member]) {
-          membersPromises.push(this.api.getMember(member))
-        }
-      })
-      if (membersPromises.length > 0) {
-        const res = await Promise.all(membersPromises)
-        this.members = res.reduce(function(map, el) {
-          map[el.member.id] = el.member
-          return map
-        }, {})
-      }
       this.posts = {
         ...this.posts,
         ...posts
@@ -163,7 +140,6 @@ export default defineComponent({
       loadingMore: false,
       isLoading: false,
       posts: {} as any,
-      members: {},
       stats: {},
       api: undefined,
       search: '',
