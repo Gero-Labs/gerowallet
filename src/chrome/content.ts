@@ -220,7 +220,7 @@ function appendOverlay(url: string) {
       </div>
       <div style="padding:2rem; font-size: 1rem;">
         <div>
-          If we're flagging a legitimate website, please report a <a style="font-weight: 300; color: #ffffff;" href="">detection problem</a>.
+          If we're flagging a legitimate website, please report a detection problem.
         </div>
         <div style="color: #e80404;line-height: 2;">
           Should you be aware of the dangers yet wish to visit the site, you have the option to proceed.
