@@ -39,7 +39,6 @@ function shouldInject() {
 async function injectBring() {
   await bringInitContentScript({
     text: 'lower',
-    iframeEndpoint: 'https://extension.bringweb3.io/',
     getWalletAddress,
     promptLogin,
     walletAddressListeners: ['gero:login', 'gero:logout'],
@@ -162,7 +161,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === 'checkForOverlay') {
     const hasOverlay = !!document.getElementById('custom-overlay');
     sendResponse({ hasOverlay });
-  } 
+  }
   else if (message.action === 'reportSite') {
     sendResponse({action: "navigateToReport" });
   }
@@ -202,7 +201,7 @@ function appendOverlay(url: string) {
     overlay.innerHTML = `
     <div>
       <div style="font-size: 1.5rem;padding:2rem;font-weight: 500;display: flex;align-items: center; justify-content: space-between;">
-        <p>Potentially deceptive site detected</p> 
+        <p>Potentially deceptive site detected</p>
         <img src="${imageUrl}" style="height:50px;display:block;z-index:2" />
       </div>
       <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem; display:block">
@@ -212,7 +211,7 @@ function appendOverlay(url: string) {
       <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem;">
         <div class="list-header">
           Potential threats on <span style="font-weight: 300; color: #ffffff;">${url}</span>
-        </div> 
+        </div>
         <ul style="padding-left:  1.313rem;">
           <li>Fraudulent transactions leading to asset loss</li>
           <li>Theft of secret recovery phrases or passwords</li>
