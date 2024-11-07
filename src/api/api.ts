@@ -211,26 +211,6 @@ export class Api {
     }
   }
 
-  async scanUrl(url: string) {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/url/scan?url=${url}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async scanTx(txScanRequest: TxScanRequest): Promise<TxScanResponse> {
-    try {
-      const { data, status } = await this.axiosInstance.post(`/api/tx/scan`, txScanRequest);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async submitTx(body: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, body);

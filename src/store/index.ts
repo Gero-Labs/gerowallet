@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
 
-// import { ChromeSyncStorage } from '@/store/chrome-storage'
-// import { LocalPersistedStorage} from "@/store/local-storage";
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
@@ -24,9 +22,6 @@ import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
 
-// const env = process.env['VUE_APP_ENV']
-// const plugin = env === 'production' ? LocalPersistedStorage:
-// Vue.use(Vuex)
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
 
@@ -87,7 +82,7 @@ export const useStore = defineStore('store', {
             const receivedAssets = {};
 
             tx.inputs.forEach(input => {
-              if (input.stake_addr === currentStake) {
+              if (input.stake_addr === currentStake && !input.datum_hash) {
                 sentAmount += +input.value;
                 if (input.asset_list.length) {
                   input.asset_list.forEach(asset => {
@@ -103,7 +98,7 @@ export const useStore = defineStore('store', {
             });
 
             tx.outputs.forEach(output => {
-              if (output.stake_addr === currentStake) {
+              if (output.stake_addr === currentStake && !output.datum_hash) {
                 receivedAmount += +output.value;
                 if (output.asset_list.length > 0) {
                   output.asset_list.forEach(asset => {
@@ -454,6 +449,7 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      await this.loadAssets()
       socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())
@@ -486,7 +482,11 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
-      socket.stompConnect(appWallet)
+      try {
+        socket.stompConnect(appWallet)
+      } catch (e) {
+        console.error(e)
+      }
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
@@ -566,6 +566,16 @@ export const useStore = defineStore('store', {
     setStakingProView(isPro) {
       this.stakingProView = isPro
     },
+    setAssets(assets) {
+      this.assets = assets
+      if (chrome?.storage) {
+        if (assets) {
+          chrome.storage.local.set({[STORAGE.assets]: assets});
+        } else {
+          chrome.storage.local.remove(STORAGE.assets);
+        }
+      }
+    },
     toggleFavoriteToken(val) {
       const index = this.pinnedTokens.indexOf(val.unit);
       if (index === -1) {
@@ -641,10 +651,10 @@ export const useStore = defineStore('store', {
       return new Promise((resolve, reject) => {
         subscriptions.push(liveQuery(() => db.table('assets').toArray()).subscribe({
           next: newAssets => {
-            this.assets = newAssets.reduce((map, asset) => {
+            this.setAssets(newAssets.reduce((map, asset) => {
               map[asset.asset] = asset;
               return map;
-            }, {});
+            }, {}))
             resolve(this.assets); // Resolve the promise when data is loaded
           },
           error: error => {
