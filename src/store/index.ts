@@ -82,7 +82,7 @@ export const useStore = defineStore('store', {
             const receivedAssets = {};
 
             tx.inputs.forEach(input => {
-              if (input.stake_addr === currentStake) {
+              if (input.stake_addr === currentStake && !input.datum_hash) {
                 sentAmount += +input.value;
                 if (input.asset_list.length) {
                   input.asset_list.forEach(asset => {
@@ -98,7 +98,7 @@ export const useStore = defineStore('store', {
             });
 
             tx.outputs.forEach(output => {
-              if (output.stake_addr === currentStake) {
+              if (output.stake_addr === currentStake && !output.datum_hash) {
                 receivedAmount += +output.value;
                 if (output.asset_list.length > 0) {
                   output.asset_list.forEach(asset => {
