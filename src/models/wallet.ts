@@ -19,7 +19,7 @@ import {
   RewardAddress, ScriptHash, Transaction,
   TransactionBody,
   TransactionHash, TransactionJSON,
-  TransactionWitnessSet,
+  TransactionWitnessSet, Vkey, Vkeywitness,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -45,7 +45,14 @@ import { appWallet } from '@/store';
 import {
   addVkeys,
   createCOSEKeyHex,
-  createSignDataBuilder, hdPathToArray, paymentCredential, safeFreeCSLObject, stakeCredential, toHexArray, toHexString,
+  createSignDataBuilder,
+  getOwnedCred,
+  hdPathToArray,
+  paymentCredential,
+  safeFreeCSLObject,
+  stakeCredential,
+  toHexArray,
+  toHexString,
 } from '@/shared/utils/converter';
 
 const blake2b = require('blake2b');
@@ -296,16 +303,6 @@ export class Wallet {
     const baseAddress: Address = this.baseAddress().to_address();
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = new Set()
-    for (let i = 0; i < txBody.inputs().len(); i++) {
-      const input = txBody.inputs().get(i);
-      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
-      const inputTxIndex = input.index();
-      const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
-
-      if (utxo) {
-        credList.add(addresses[utxo.payment_addr.bech32])
-      }
-    }
     const accountData = {
       state: {
         networkId: network.networkId
@@ -325,6 +322,31 @@ export class Wallet {
         drep: [],
         cc_cold: [],
         cc_hot: []
+      }
+    }
+    for (let i = 0; i < txBody.inputs().len(); i++) {
+      const input = txBody.inputs().get(i);
+      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
+      const inputTxIndex = input.index();
+      const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
+
+      if (utxo) {
+        credList.add(addresses[utxo.payment_addr.bech32])
+      }
+    }
+    const vKeyHashes = new Set();
+    if (witnessSet?.vkeys()) {
+      for (let i = 0 ; i < witnessSet.vkeys().len() ; i++) {
+        vKeyHashes.add(witnessSet.vkeys().get(i).vkey().public_key().hash().to_hex())
+      }
+    }
+    if (txBody.required_signers()) {
+      for (let i = 0 ; i < txBody.required_signers().len(); i++) {
+        const requiredKeyHash: Ed25519KeyHash = txBody.required_signers().get(i)
+        const requiredVKeyHash = requiredKeyHash.to_hex()
+        if (!vKeyHashes.has(requiredVKeyHash)) {
+          credList.add(getOwnedCred([accountData.keys], requiredVKeyHash))
+        }
       }
     }
     if (this.type === WalletType.Ledger) { // Ledger Signing Logic

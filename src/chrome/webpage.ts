@@ -45,6 +45,7 @@ export const signTx = async (tx: string, partialSign: boolean = false): Promise<
     method: METHOD.signTx,
     data: { tx, partialSign },
   });
+  console.log('signTx Result', result['data'])
   return result['data'];
 };
 
@@ -109,6 +110,7 @@ export const submitTx = async (tx) => {
     method: METHOD.submitTx,
     data: { tx } ,
   });
+  console.log('submitTx Result', result['data']);
   return result['data'];
 };
 
