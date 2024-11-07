@@ -1,34 +1,27 @@
 import {
-  focusOrCreatePopup,
   extractKeyHash,
+  focusOrCreatePopup,
   getAddress,
   getBalance,
+  getCollateral,
+  getPubDRepKey,
+  getPubKey,
+  getRegisteredPubStakeKeys,
+  getRewardAddresses,
   getStorage,
+  getUnregisteredPubStakeKeys,
+  getUsedAddresses,
+  getUtxos,
   isWhitelisted,
+  submitTx,
+  urlScan,
   verifyPayload,
   verifyTx,
-  getUsedAddresses,
-  getRewardAddresses,
-  getUtxos,
-  submitTx,
-  getPubDRepKey,
-  getRegisteredPubStakeKeys,
-  getUnregisteredPubStakeKeys,
-  getCollateral,
-  getPubKey,
-  urlScan
 } from './extension';
 import { Messaging } from './messaging';
-import {
-  APIError,
-  METHOD,
-  POPUP,
-  SENDER,
-  STORAGE,
-  TARGET,
-} from './config';
+import { APIError, METHOD, POPUP, SENDER, STORAGE, TARGET } from './config';
 import networks from '@/shared/utils/networks';
-import { bringInitBackground } from '@bringweb3/chrome-extension-kit'
+import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import { Address, TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
 
 await bringInitBackground({
@@ -48,22 +41,21 @@ interface Response {
   error?: any;
 }
 app.add(METHOD.blacklisted, async (request, sendResponse) => {
-  urlScaneRequest(request);
+  urlScanRequest(request);
   return;
 });
-async function urlScaneRequest(request) {
+async function urlScanRequest(request) {
   let urlstatus;
   try {
     const response = await urlScan(request.origin);
-    const res = await response.json();
-    urlstatus = res; // Assign the result to urlstatus
+    urlstatus = await response.json(); // Assign the result to url status
     if (urlstatus === 'blacklist' || urlstatus === 'suspicious') {
       chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
         const tabId = tabs[0].id;
         // Send the overlay message immediately
         chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
       });
-      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?param=${encodeURIComponent(request.origin)}`);
+      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?website=${encodeURIComponent(request.origin)}`);
       const response = await focusOrCreatePopup(popupURL, 470, 600);
       await Messaging.sendToPopupInternal(response, request);
     }

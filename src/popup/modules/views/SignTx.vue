@@ -127,6 +127,7 @@ import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import cardanoShieldApi from '@/api/cardano-shield-api';
 
 export default {
   name: 'DappConnect',
@@ -335,6 +336,7 @@ export default {
       }
     },
     async confirm() {
+      console.log(this.witnesses)
       await this.controller.returnData({ data: this.witnesses, error: undefined });
       window.close();
     }
@@ -355,7 +357,7 @@ export default {
       this.tx = Transaction.from_bytes(Buffer.from(txCbor, 'hex'));
       this.queryParams = this.$route.query;
       try {
-        this.risks = await appWallet.api.scanTx({
+        this.risks = await cardanoShieldApi.scanTx({
           cborHex: txCbor,
           toAddress: this.recipient,
           fromAddress: this.changeAddress,

@@ -39,6 +39,17 @@ export default {
       return 0
     }
   },
+  methods: {
+    async fetch() {
+      if (appWallet) {
+        try {
+          this.chart = await appWallet.api.fetchHistory()
+        } catch (error) {
+          console.error(error)
+        }
+      }
+    }
+  },
   data: () => ({
     radius: 0,
     padding: 0,
@@ -49,10 +60,9 @@ export default {
     chart: [],
   }),
   async mounted() {
-    const provider = useStore().getWallet.api
-    this.chart = await provider.fetchHistory()
+    await this.fetch()
     setInterval(async () => {
-      this.chart = await provider.fetchHistory()
+      await this.fetch()
     },60000);
   }
 }
