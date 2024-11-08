@@ -20,7 +20,8 @@ import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/warningPopUp.vue';
 import ReportWebsite from "@/popup/modules/components/ReportWebsite.vue";
-import Transaction from "@/modules/Transaction/Transaction.vue"
+// import Transaction from "@/modules/Transaction/Transaction.vue"
+import Transactions from '@/modules/transactions/Transactions.vue';
 const routes = [
   {
     path: '/',
@@ -75,19 +76,10 @@ const routes = [
       requiresAuth: true,
     },
   },
-  {
-    path: '/transaction',
-    name: 'transaction',
-    component: Transaction,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
   // {
   //   path: '/transaction',
   //   name: 'transaction',
-  //   component: TransactionsN,
+  //   component: Transaction,
   //   meta: {
   //     layout: ContentLayout,
   //     requiresAuth: true,
@@ -151,17 +143,30 @@ const routes = [
     path: '/warning',
     name: 'warning',
     component: WarningPopUp,
-    
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: false,
+      style: 'warning'
+    }
   },
+  // {
+  //   path: '/report',
+  //   name: 'report',
+  //   component: ReportWebsite,
+  //   meta: {
+  //      layout: ContentLayout,
+  //     requiresAuth: true,
+  //     },
+  //   },
   {
-    path: '/report',
-    name: 'report',
-    component: ReportWebsite,
+    path: '/transactions',
+    name: 'transactions',
+    component: Transactions,
     meta: {
        layout: ContentLayout,
-      requiresAuth: true,
-      },
+        requiresAuth: true,
     },
+  },
   {
     path: '/plogin',
     name: 'plogin',
@@ -192,22 +197,47 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
   }
-  const isLoggedIn = store.isLoggedIn;
-  if (to.matched.some(record => record.meta['requiresAuth'])) {
-    // this route requires auth, check if logged in
-    // if not, redirect to login page.
-    if (!isLoggedIn) {
-      next({
-        path: '/welcome',
-      });
+//   const isLoggedIn = store.isLoggedIn;
+//   if (to.matched.some(record => record.meta['requiresAuth'])) {
+//     // this route requires auth, check if logged in
+//     // if not, redirect to login page.
+//     if (!isLoggedIn) {
+//       next({
+//         path: '/welcome',
+//       });
+//     }
+//   } else if (to.name === 'welcome' && isLoggedIn) {
+//     next({
+//       path: '/',
+//     });
+//   }
+//   next();
+//   loading.setLoading(false);
+// });
+
+///////
+const isLoggedIn = store.isLoggedIn;
+if (to.matched.some(record => record.meta['requiresAuth'])) {
+  // this route requires auth, check if logged in
+  // if not, redirect to login page.
+  console.log(to)
+  if (!isLoggedIn) {
+    const redirect = to.fullPath != '/' ? to.fullPath : null;
+    let path = '/welcome'
+    if (redirect) {
+      path += `?redirect=${to.fullPath}`
     }
-  } else if (to.name === 'welcome' && isLoggedIn) {
     next({
-      path: '/',
+      path: path,
     });
   }
-  next();
-  loading.setLoading(false);
+} else if (to.name === 'welcome' && isLoggedIn) {
+  next({
+    path: '/',
+  });
+}
+next();
+loading.setLoading(false);
 });
 
 export default router;
