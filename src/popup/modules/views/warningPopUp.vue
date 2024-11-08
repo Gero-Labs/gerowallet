@@ -1,65 +1,69 @@
 <template>
-  <v-card flat class="outer-container" id="warningPopup">
-    <div class="warning-popup-logo">
-      <div style="width: 100px; margin: auto" class="py-3">
-        <img alt="Gero Logo" id="modal-logo-icon" width="100" :src="require('@/assets/svg/gero-logo.svg')" />
-        <img alt="Gero Logo" id="modal-logo-text" width="100" :src="require('@/assets/svg/gero-text.svg')" />
-      </div>
-    </div>
-    <v-card-title class="title">
-      <div>Warning - Continue With Caution</div>
-      <div class="subtext">Website: {{ suspicious_url }}</div>
-      <div class="sub-title">This website is blacklisted by Cardano Shield</div>
-    </v-card-title>
-    <v-card-text id="main-content">
-      By checking the boxes below, you understand and acknowledge the following:
-      <div class="custom-checkbox">
-        <input type="checkbox" id="checkbox1" name="checkbox1" v-model="checkbox1" />
-        <label for="checkbox1">
-          <p>
-            This Website is blacklisted or suspected of being malicious and may be impersonating another legitimate
-            website.
-          </p>
-        </label>
-      </div>
-
-      <div class="custom-checkbox">
-        <input type="checkbox" id="checkbox2" name="checkbox2" v-model="checkbox2" />
-        <label for="checkbox2">
-          <p>This Website may attempt to steal my funds by presenting false or misleading information</p>
-        </label>
-      </div>
-      <v-row style="justify-content: space-around; margin: 15px 0px">
-        <v-btn id="report-btn" @click="reportSite"> Report this site as safe! </v-btn>
-      </v-row>
-      <v-row style="justify-content: space-between" class="px-4">
-        <button class="backsfty-btn" @click="safety">Back to Safety</button>
-        <v-btn class="continue-btn" @click="proceed" :disabled="!(checkbox1 && checkbox2)">Continue to site</v-btn>
-      </v-row>
-    </v-card-text>
-  </v-card>
+  <v-form ref="form" v-model="valid" class="fill-height">
+    <PopupHeader title="Warning - Continue with Caution!" ref="popupHeader" :show-website="!($route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)" :show-wallet="false">
+      <v-card-subtitle class="sub-title text-center my-2 py-2" style="color: #00221c; font-size: 19px">This website is blacklisted by Cardano Shield</v-card-subtitle>
+      <v-card-text class="d-flex flex-column justify-center py-0 px-3" id="main-content" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height:0;">
+        By checking the boxes below, you understand and acknowledge the following:
+        <div class="checkboxes">
+          <v-checkbox
+            v-model="checkbox1"
+            label="This Website is blacklisted or suspected of being malicious and may be impersonating another legitimate website."
+            hide-details
+            required
+            :rules="[v => !!v || 'You must agree to continue!']"
+          />
+          <v-checkbox
+            v-model="checkbox2"
+            label="This Website may attempt to steal my funds by presenting false or misleading information"
+            hide-details
+            required
+            :rules="[v => !!v || 'You must agree to continue!']"
+          />
+        </div>
+      </v-card-text>
+      <v-card-actions class="d-flex flex-column">
+        <div class="my-2">
+          <v-btn id="report-btn" @click="reportSite">Report this site as safe!</v-btn>
+        </div>
+        <div class="my-2 d-flex" style="justify-content: space-between; width: 100%">
+          <v-btn outlined @click="safety">
+            <v-icon small class="mr-1">
+              mdi-arrow-left
+            </v-icon>
+            Back to Safety
+          </v-btn>
+          <v-btn class="geroButton" @click="proceed" :disabled="!valid" style="text-transform: uppercase; color: black!important;">
+            Continue to site
+            <v-icon small class="mr-1" style="color: black!important;">
+              mdi-arrow-right
+            </v-icon>
+          </v-btn>
+        </div>
+      </v-card-actions>
+    </PopupHeader>
+  </v-form>
 </template>
 <script>
+import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 export default {
   name: 'WarningPopUp',
+  components: { PopupHeader },
   data() {
     return {
+      valid: false,
       checkbox1: false,
       checkbox2: false,
       suspiciousUrl: null,
     };
   },
   async created() {
-    const hash = window.location.hash;
-    const [path, query] = hash.substring(1).split('?');
-    if (query) {
-      const params = new URLSearchParams(query);
-      this.suspicious_url = params.get('param');
-      // console.log(suspicious_url);
-    } else {
-      console.log('No query parameters found');
-    }
-  },
+   const queryParams = this.$route.query;
+      if (Object.keys(queryParams).length > 0) {
+        this.suspicious_url = queryParams['website'];
+      } else {
+        console.warn('No website query parameter found');
+      }
+    },
   methods: {
     proceed() {
       chrome.tabs.query({}, tabs => {
@@ -71,7 +75,6 @@ export default {
           });
         });
 
-        // Close the popup tab
         chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
           if (activeTabs.length > 0) {
             chrome.tabs.remove(activeTabs[0].id);
@@ -87,7 +90,6 @@ export default {
             chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
               if (response && response.hasOverlay) {
                 if (tabs.length === 2) {
-                  // console.log('tabs inside', tabs.length);
                   chrome.tabs.update(tab.id, { url: 'https://www.google.com' }, () => {
                     resolve();
                   });
@@ -97,15 +99,12 @@ export default {
                   });
                 }
               } else {
-                resolve(); // Resolve immediately if no overlay
+                resolve();
               }
             });
           });
         });
-
-        // Wait for all overlay tabs to be closed
         await Promise.all(overlayRemovalPromises);
-        // Close the popup tab
         chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
           if (activeTabs.length > 0) {
             chrome.tabs.remove(activeTabs[0].id);
@@ -113,35 +112,34 @@ export default {
         });
       });
     },
+
     async reportSite() {
-      chrome.tabs.query({}, async tabs => {
-        const navigateToreportPromise = tabs.map(tab => {
-          return new Promise((resolve, reject) => {
-            chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
-              if (response && response.hasOverlay) {
-                chrome.tabs.sendMessage(tab.id, { action: 'reportSite' }, response => {
-                  if (response && response.action === 'navigateToReport') {
-                    chrome.tabs.update(tab.id, { url: chrome.runtime.getURL('index.html#/report') });
-                    localStorage.setItem('intendedUrl', this.suspicious_url);
-                    resolve();
-                  }
-                });
-              } else {
-                resolve(); // Resolve immediately if no overlay
-              }
+      if (chrome?.tabs) {
+        chrome.tabs.query({}, async tabs => {
+          const navigateToreportPromise = tabs.map(tab => {
+            return new Promise((resolve, reject) => {
+              chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
+                if (response && response.hasOverlay) {
+                  chrome.tabs.sendMessage(tab.id, { action: 'reportSite' }, response => {
+                    if (response && response.action === 'navigateToReport') {
+                      chrome.tabs.update(tab.id, { url: chrome.runtime.getURL(`index.html#/transactions?website=${this.suspicious_url}`) });
+                      resolve();
+                    }
+                  });
+                } else {
+                  resolve(); 
+                }
+              });
             });
           });
+          await Promise.all(navigateToreportPromise);
+          chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
+            if (activeTabs.length > 0) {
+              chrome.tabs.remove(activeTabs[0].id);
+            }
+          });
         });
-
-        await Promise.all(navigateToreportPromise);
-
-        // Close the popup tab
-        chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
-          if (activeTabs.length > 0) {
-            chrome.tabs.remove(activeTabs[0].id);
-          }
-        });
-      });
+      }
     },
   },
 };
