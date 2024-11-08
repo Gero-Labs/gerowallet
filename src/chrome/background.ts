@@ -63,7 +63,7 @@ async function urlScaneRequest(request) {
         // Send the overlay message immediately
         chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
       });
-      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?param=${encodeURIComponent(request.origin)}`);
+      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?website=${encodeURIComponent(request.origin)}`);
       const response = await focusOrCreatePopup(popupURL, 470, 600);
       await Messaging.sendToPopupInternal(response, request);
     }
