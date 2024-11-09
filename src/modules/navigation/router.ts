@@ -18,6 +18,8 @@ import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
+import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
+import Transactions from '@/modules/transactions/Transactions.vue';
 
 const routes = [
   {
@@ -128,6 +130,25 @@ const routes = [
     },
   },
   {
+    path: '/warning',
+    name: 'warning',
+    component: WarningPopUp,
+    meta: {
+      layout: PopupLayout,
+      requiresAuth: false,
+      style: 'warning'
+    }
+  },
+  {
+    path: '/transactions',
+    name: 'transactions',
+    component: Transactions,
+    meta: {
+       layout: ContentLayout,
+        requiresAuth: true,
+    },
+  },
+  {
     path: '/plogin',
     name: 'plogin',
     component: Login,
@@ -162,8 +183,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // this route requires auth, check if logged in
     // if not, redirect to login page.
     if (!isLoggedIn) {
+      const redirect = to.fullPath != '/' ? to.fullPath : null;
+      let path = '/welcome'
+      if (redirect) {
+        path += `?redirect=${to.fullPath}`
+      }
       next({
-        path: '/welcome',
+        path: path,
       });
     }
   } else if (to.name === 'welcome' && isLoggedIn) {
