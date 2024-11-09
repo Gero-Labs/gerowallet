@@ -69,6 +69,9 @@
                 </v-list-item-content>
               </v-list-item>
             </template>
+            <template v-slot:[`item.risk`]="{ item }">
+              <v-img width="32" style="margin: auto" v-if="item.risk && item.risk !== 'N/A'" :src="require('@/assets/svg/risk/'+item.risk+'.svg')" :alt="item.risk" />
+            </template>
             <template v-slot:[`item.quantity`]="{ item }">
               <v-tooltip top :open-delay="500">
                 <template v-slot:activator="{ on, attrs }">

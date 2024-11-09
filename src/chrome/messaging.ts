@@ -138,7 +138,7 @@ export const Messaging = {
   },
   sendToPopupInternal: function (tab: chrome.tabs.Tab, request: Message) {
     return new Promise((resolve, reject) => {
-      chrome.runtime.onConnect.addListener(function connetionHandler(port) {
+      chrome.runtime.onConnect.addListener(function connectionHandler(port) {
         function messageHandler(response: any) {
           if (response.tabId !== tab.id) return;
           if (response.method === METHOD.requestData) {
@@ -156,7 +156,7 @@ export const Messaging = {
               error: APIError.Refused,
             });
             if (chrome?.runtime) {
-              chrome.runtime.onConnect.removeListener(connetionHandler);
+              chrome.runtime.onConnect.removeListener(connectionHandler);
             }
             port.onMessage.removeListener(messageHandler);
             chrome.tabs.onRemoved.removeListener(tabsHandler);

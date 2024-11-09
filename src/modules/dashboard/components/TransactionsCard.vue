@@ -40,7 +40,7 @@
 <!--          Show All Transactions-->
 <!--        </v-btn>-->
 <!--      </v-card-actions>-->
-    <TransactionDetailsDialog v-if="transactionInfo" :transactionInfo="transactionInfo" @close="handleTransactionModalClose"></TransactionDetailsDialog>
+    <TransactionDetailsDialog v-if="transactionInfo && state==='/'" :transactionInfo="transactionInfo" @close="handleTransactionModalClose"></TransactionDetailsDialog>
   </v-card>
 </template>
 <script lang="ts">
@@ -68,9 +68,14 @@ export default defineComponent({
       return []
     },
   },
+  created() {
+    console.log("state",this.$route.path);
+    this.state = this.$route.path;
+  },
   methods: {
     handleOnTransactionsRowClick(row) {
       this.transactionInfo = row;
+      this.$emit('row-click', row); 
     },
     handleTransactionModalClose() {
       this.transactionInfo = null;
@@ -97,6 +102,7 @@ export default defineComponent({
     }
   },
   data: () => ({
+    state :null,
     transactionInfo: null,
     activityHeaders: [
       { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'time' },
