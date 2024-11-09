@@ -196,6 +196,7 @@ import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
 import { musicStore } from '@/store/modules/music';
+import { Blockchain } from '@/models/types';
 
 export default {
   name: 'NavigationDrawer',
@@ -239,6 +240,7 @@ export default {
         // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
         // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
         // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
+        {title: 'Blog', icon: require('@/assets/svg/blog.svg'), link: '/blog', enabled: true },
         {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
         {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
         {title: 'Governance', icon: require('@/assets/svg/governance.svg'), link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
