@@ -25,3 +25,13 @@ export interface TxScanRequest {
   fromAddress: string,
   url: string
 }
+
+export enum ReportType {
+  transaction,
+  website
+}
+
+export enum ReportLabel {
+  safe,
+  scam
+}

@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
 
-// import { ChromeSyncStorage } from '@/store/chrome-storage'
-// import { LocalPersistedStorage} from "@/store/local-storage";
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
@@ -24,9 +22,6 @@ import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
 
-// const env = process.env['VUE_APP_ENV']
-// const plugin = env === 'production' ? LocalPersistedStorage:
-// Vue.use(Vuex)
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
 
@@ -87,7 +82,7 @@ export const useStore = defineStore('store', {
             const receivedAssets = {};
 
             tx.inputs.forEach(input => {
-              if (input.stake_addr === currentStake) {
+              if (input.stake_addr === currentStake && !input.datum_hash) {
                 sentAmount += +input.value;
                 if (input.asset_list.length) {
                   input.asset_list.forEach(asset => {
@@ -103,7 +98,7 @@ export const useStore = defineStore('store', {
             });
 
             tx.outputs.forEach(output => {
-              if (output.stake_addr === currentStake) {
+              if (output.stake_addr === currentStake && !output.datum_hash) {
                 receivedAmount += +output.value;
                 if (output.asset_list.length > 0) {
                   output.asset_list.forEach(asset => {
@@ -440,7 +435,6 @@ export const useStore = defineStore('store', {
       this.stakeAddress = stakeAddress
     },
     async simpleLogin(walletId: number) {
-      console.log('simple login')
       const wallet = this.wallets.find(wal => wal.id === walletId);
       if (!wallet) {
         return null;

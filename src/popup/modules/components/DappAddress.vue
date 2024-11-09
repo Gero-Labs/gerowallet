@@ -20,7 +20,7 @@
   </v-card>
 </template>
 <script>
-import { DappRisk } from '@/models/tx-scan';
+import { DappRisk } from '@/models/cardano-shield-types';
 
 export default {
   name: 'DappAddress',

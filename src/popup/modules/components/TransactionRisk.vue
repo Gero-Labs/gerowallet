@@ -37,7 +37,7 @@
   </div>
 </template>
 <script>
-import { DappScore } from '@/models/tx-scan';
+import { DappScore } from '@/models/cardano-shield-types';
 
 export default {
   name: 'TransactionRisk',
