@@ -428,7 +428,7 @@ import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { unitToFingerprint } from '@/shared/utils/converter';
-import TransactionsReportDialog from '@/modules/Transaction/components/TransactionsReportDialog.vue';
+import TransactionsReportDialog from '../dialogs/TransactionsReportDialog.vue';
 export default {
   name:'TransactionDetails',
   components:{TransactionsReportDialog},
@@ -451,7 +451,7 @@ export default {
   }),
   filters,
   async mounted() {
-     console.log("transaction",this.transactionInfo)
+     console.log("transaction detail",this.transactionInfo)
     await this.updateTokens(this.transactionInfo.assets.filter(asset => asset.policy_id !== ''));
   },
   computed: {
