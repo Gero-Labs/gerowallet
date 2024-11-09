@@ -23,19 +23,21 @@
     "type": "module"
   },
   "permissions": [
-    "tabs",
     "activeTab",
+    "alarms",
     "clipboardRead",
-    "storage",
     "favicon",
-    "alarms"
+    "unlimitedStorage",
+    "storage",
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "*://connect.trezor.io/*"
   ],
   "web_accessible_resources": [
     {
-      "resources": ["js/inject.js"],
+      "resources": ["js/inject.js","assets/logo.png"],
       "matches": ["<all_urls>"]
     }
   ],
