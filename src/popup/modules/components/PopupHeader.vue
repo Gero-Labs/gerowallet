@@ -33,7 +33,7 @@
   </v-card>
 </template>
 <script>
-import { DappRisk } from '@/models/tx-scan';
+import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
 import { useStore } from '@/store';
 import { mapState } from 'pinia';

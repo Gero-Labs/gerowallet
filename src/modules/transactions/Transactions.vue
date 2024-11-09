@@ -1,22 +1,33 @@
 <template>
-  <v-card class="transparent" flat>
+  <div id="tsac">
+    <TransactionsCard ref="transactionsCard" @row-click="handleOnTransactionsRowClick" style=" width: 39%;"></TransactionsCard>
+    <TransactionDetails :transactionInfo="transactionInfo" v-if="transactionInfo" style=" width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content;"/>
     <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportSite="reportSite" />
-  </v-card>
+  </div>
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import ReportDialog from '@/modules/transactions/dialogs/ReportDialog.vue';
+import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
+import TransactionDetails from '@/shared/components/TransactionDetails.vue';
+import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 
 export default defineComponent({
   name: 'Transactions',
-  components: { ReportDialog },
+  components: { TransactionDetails, TransactionsCard, ReportDialog },
+  methods: {
+    handleOnTransactionsRowClick(row) {
+      this.transactionInfo = row; // Update transactionInfo with the emitted row data
+    }
+  },
   data: () => ({
     isReportDialogOpen: false,
+    transactionInfo: null,
     reportSite: '' as string | string[],
   }),
   created() {
     const queryParams = this.$route.query;
     if (Object.keys(queryParams).length > 0) {
+      console.log(queryParams)
       this.reportSite = queryParams['website'];
       this.isReportDialogOpen = true;
     }
@@ -24,5 +35,9 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-
+#tsac{
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
 </style>

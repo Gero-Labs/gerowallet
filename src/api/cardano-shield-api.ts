@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
+import { TxScanRequest, TxScanResponse } from '@/models/cardano-shield-types';
 
 const axiosInstance = axios.create({
   baseURL: process.env['VUE_APP_BACKEND_URL'],
@@ -29,5 +29,13 @@ export default {
     } catch (error) {
       throw parseHttpError(error);
     }
+  },
+  async submitReport(formData: FormData): Promise<void> {
+    const { data } = await axiosInstance.post(`/api/report`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    });
+    return data;
   }
 }
