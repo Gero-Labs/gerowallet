@@ -57,14 +57,14 @@ export default {
       suspiciousUrl: null,
     };
   },
- async created() {
-   const queryParams = this.$route.query;
-      if (Object.keys(queryParams).length > 0) {
-        this.suspicious_url = queryParams['website'];
-      } else {
-        console.warn('No website query parameter found');
-      }
-    },
+  async created() {
+    const queryParams = this.$route.query;
+    if (Object.keys(queryParams).length > 0) {
+      this.suspicious_url = queryParams['website'];
+    } else {
+      console.warn('No website query parameter found');
+    }
+  },
   methods: {
     proceed() {
       if (chrome?.tabs) {
