@@ -14,7 +14,6 @@ const getWalletAddress = async (): Promise<string> => {
   return undefined;
 };
 
-
 const injectScript = () => {
   const script = document.createElement('script');
   script.async = false;
@@ -40,7 +39,6 @@ function shouldInject() {
 async function injectBring() {
   await bringInitContentScript({
     text: 'lower',
-    iframeEndpoint: 'https://extension.bringweb3.io/',
     getWalletAddress,
     promptLogin,
     walletAddressListeners: ['gero:login', 'gero:logout'],
@@ -142,7 +140,90 @@ async function injectBring() {
 }
 
 if (shouldInject()) {
-  injectScript();
-  await injectBring();
+  if (document.readyState === 'complete' || document.body) {
+    injectScript();
+    await injectBring();
+  } else {
+    // If DOM isn't ready, wait for it to load before injecting
+    window.addEventListener('load', async () => {
+      injectScript();
+      await injectBring();
+    });
+  }
   Messaging.createProxyController();
+}
+console.log("Content script loaded");
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'showOverlay') {
+    showOverlay(message.url); // Show overlay on the specific tab with this URL
+  } else if (message.action === 'removeOverlay') {
+    const overlay: HTMLElement = document.getElementById('custom-overlay');
+    if (overlay) {
+      document.body.removeChild(overlay);
+    }
+  }
+});
+
+function showOverlay(url: string) {
+  if (document.body) {
+    appendOverlay(url);
+  } else {
+    const onLoad = () => {
+      appendOverlay(url);
+      window.removeEventListener('load', onLoad);
+    };
+    window.addEventListener('load', onLoad);
+  }
+}
+
+function appendOverlay(url: string) {
+  if (!document.getElementById('custom-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.id = 'custom-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(62, 28, 28, 0.96)';
+    overlay.style.color = 'white';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'space-around';
+    overlay.style.zIndex = '10000000000';
+    overlay.style.fontFamily = 'system-ui, sans-serif';
+
+    const imageUrl = chrome.runtime.getURL('assets/logo.png');
+    overlay.innerHTML = `
+    <div>
+      <div style="font-size: 1.5rem;padding:2rem;font-weight: 500;display: flex;align-items: center; justify-content: space-between;">
+        <p>Potentially deceptive site detected</p>
+        <img src="${imageUrl}" style="height:50px;display:block;z-index:2" />
+      </div>
+      <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem; display:block">
+        Cardano Shield has marked the website you're attempting to access as potentially misleading.
+        There's a risk that attackers could deceive you into engaging in fraudulent actions.
+      </div>
+      <div style="padding:.5rem 2rem; font-size: 1rem; max-width: 42.5rem;">
+        <div class="list-header">
+          Potential threats on <span style="font-weight: 300; color: #ffffff;">${url}</span>
+        </div>
+        <ul style="padding-left:  1.313rem;">
+          <li>Fraudulent transactions leading to asset loss</li>
+          <li>Theft of secret recovery phrases or passwords</li>
+          <li>Imitations of Cardano Wallets</li>
+        </ul>
+      </div>
+      <div style="padding:2rem; font-size: 1rem;">
+        <div>
+          If we're flagging a legitimate website, please report a detection problem.
+        </div>
+        <div style="color: #e80404;line-height: 2;">
+          Should you be aware of the dangers yet wish to visit the site, you have the option to proceed.
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+  }
 }

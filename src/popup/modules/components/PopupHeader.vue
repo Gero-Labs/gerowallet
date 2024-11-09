@@ -33,10 +33,11 @@
   </v-card>
 </template>
 <script>
-import { DappRisk } from '@/models/tx-scan';
+import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
 import { useStore } from '@/store';
 import { mapState } from 'pinia';
+import cardanoShieldApi from '@/api/cardano-shield-api';
 
 export default{
   name: 'PopupHeader',
@@ -124,7 +125,7 @@ export default{
   }),
   async created() {
     this.queryParams = this.$route.query;
-    const api = useStore().getWallet.api
+    const api = cardanoShieldApi
     try {
       this.dappRisk = DappRisk[await api.scanUrl(this.queryParams['website'])];
     } catch (e) {

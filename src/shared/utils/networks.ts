@@ -33,6 +33,7 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: true,
       governanceSupport: true,
+      transactionSupport:true,
       swapSupport: true,
       buySupport: true,
       networkParams: {
@@ -66,6 +67,7 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       governanceSupport: true,
+      transactionSupport:true,
       swapSupport: false,
       buySupport: false,
       networkParams: {
@@ -117,6 +119,7 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       governanceSupport: false,
+      transactionSupport:true,
       swapSupport: false,
       buySupport: false,
     },
@@ -135,6 +138,7 @@ export default {
       defaultProvider: Provider.BLOCKFROST,
       cashbackSupport: false,
       governanceSupport: false,
+      transactionSupport:true,
       swapSupport: false,
       buySupport: false,
     },
@@ -177,6 +181,12 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.governanceSupport
+  },
+  resolveTransactionsSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.transactionSupport
   },
   resolveSwapSupport(chain: string, network: string): boolean {
     if (!chain || !network) {
