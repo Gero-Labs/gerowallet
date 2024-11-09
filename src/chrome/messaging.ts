@@ -224,10 +224,7 @@ export const Messaging = {
         method: METHOD.isWhitelisted,
         origin: window.origin,
       });
-      const blacklisted = await Messaging.sendToBackground({
-        method: METHOD.blacklisted,
-        origin: window.origin,
-      });
+
       // protect background by not allowing not whitelisted
       if (!whitelisted || (whitelisted as any).error) {
         window.postMessage({ ...whitelisted as object, id: request.id });

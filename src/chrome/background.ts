@@ -23,12 +23,35 @@ import { APIError, METHOD, POPUP, SENDER, STORAGE, TARGET } from './config';
 import networks from '@/shared/utils/networks';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import { Address, TransactionUnspentOutput } from '@emurgo/cardano-serialization-lib-browser';
+import { getDomain } from 'tldts';
 
 await bringInitBackground({
   identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
   apiEndpoint: 'prod',
   cashbackPagePath: '/wallet/cashback'
 })
+
+const processedDomains = new Set<string>();
+
+chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
+  const domains = result['processedDomains'] || [];
+  domains.forEach((domain: string) => processedDomains.add(domain));
+});
+
+function clearProcessedDomains() {
+  processedDomains.clear();
+  chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {
+    if (chrome.runtime.lastError) {
+      console.error('Error removing processedDomains from storage:', chrome.runtime.lastError);
+    } else {
+      console.log('Processed domains have been cleared.');
+    }
+  });
+}
+
+// Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
+const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
+setInterval(clearProcessedDomains, oneDayInMilliseconds);
 
 console.log('Background Loaded');
 
@@ -40,29 +63,62 @@ interface Response {
   data?: any;
   error?: any;
 }
-app.add(METHOD.blacklisted, async (request, sendResponse) => {
-  urlScanRequest(request);
-  return;
-});
-async function urlScanRequest(request) {
-  let urlstatus;
+
+async function handleBlacklisted(request: any, tabId: number) {
+  let urlStatus;
   try {
     const response = await urlScan(request.origin);
-    urlstatus = await response.json(); // Assign the result to url status
-    if (urlstatus === 'blacklist' || urlstatus === 'suspicious') {
-      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        const tabId = tabs[0].id;
-        // Send the overlay message immediately
-        chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
-      });
+    urlStatus = await response.json();
+
+    if (urlStatus === 'blacklist' || urlStatus === 'suspicious') {
+      // Send the overlay message immediately
+      await chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
+
       const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?website=${encodeURIComponent(request.origin)}`);
-      const response = await focusOrCreatePopup(popupURL, 470, 600);
-      await Messaging.sendToPopupInternal(response, request);
+      const popupResponse: Response = await focusOrCreatePopup(popupURL, 470, 600)
+        .then(tab => Messaging.sendToPopupInternal(tab, request))
+        .then(response => response);
+      console.log(popupResponse)
+      return popupResponse;
     }
+    return 'approved';
   } catch (error) {
-    return;
+    return error;
   }
 }
+
+chrome.webNavigation.onCommitted.addListener(async (details) => {
+  if (details.frameId === 0) { // Only consider top-level navigation
+    const url = new URL(details.url);
+    const origin = url.origin;
+    const domain = getDomain(url.hostname);
+
+    const request = {
+      id: 'unique_id_' + Date.now(), // Generate a unique id
+      origin: origin
+    };
+
+    if (domain && !processedDomains.has(domain)) {
+      const res = await handleBlacklisted(request, details.tabId);
+      if (res['data'] === 'proceed') {
+        processedDomains.add(domain);
+        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+        await chrome.tabs.sendMessage(details.tabId, { action: 'removeOverlay', url: request.origin });
+      } else if (res['data'] === 'safety') {
+        await chrome.tabs.update(details.tabId, { url: 'https://www.google.com' });
+      } else if (res['data'] === 'report') {
+        await chrome.tabs.update(details.tabId, { url: chrome.runtime.getURL(`index.html#/transactions?website=${request.origin}`) });
+      } else if (res === 'approved') {
+        processedDomains.add(domain);
+        await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+      } else {
+        console.log(res['error'])
+      }
+    }
+
+  }
+});
+
 app.add(METHOD.getBalance, (request, sendResponse) => {
   console.log('getBalance')
   getBalance()

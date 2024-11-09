@@ -23,12 +23,14 @@
     "type": "module"
   },
   "permissions": [
-    "tabs",
     "activeTab",
+    "alarms",
     "clipboardRead",
-    "storage",
     "favicon",
-    "alarms"
+    "unlimitedStorage",
+    "storage",
+    "tabs",
+    "webNavigation"
   ],
   "host_permissions": [
     "*://connect.trezor.io/*"
