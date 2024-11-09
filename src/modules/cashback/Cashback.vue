@@ -120,7 +120,7 @@
             </v-avatar>
             <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
             <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
-              <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(0) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
+              <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(2) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
             </v-card-subtitle>
           </v-card>
         </v-col>
@@ -151,7 +151,7 @@
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import {appWallet} from '@/store';
+import { appWallet, useStore } from '@/store';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
 import {mapState} from "pinia";
 import filters from "@/shared/utils/filters";
@@ -201,7 +201,7 @@ export default defineComponent({
     async model(val) {
       this.isLoading = true
       if (val) {
-        const retailers = await appWallet.api.retailers(0, val)
+        const retailers = await appWallet.api.retailers(null, val)
         this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
         this.nextPage = retailers.nextPageNumber
         this.totalItems = retailers.totalItems
@@ -277,10 +277,10 @@ export default defineComponent({
     this.chipLoading = true
     this.isLoading = true
     try {
-      const isAvailable = await appWallet.api.checkAvailability()
+      const isAvailable = await useStore().getWallet.api.checkAvailability()
       if (isAvailable) {
         const res = await appWallet.api.categoriesSearch()
-        this.categories.items = [{ iconSvg: "", id: 0, name: "All Categories"}]
+        this.categories.items = [{ iconSvg: "", id: null, name: "All Categories"}]
         this.categories.items.push(...res.categories.items)
         this.searchTerms = res.searchTerms.items
         this.chipLoading = false
