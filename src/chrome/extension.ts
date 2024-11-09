@@ -424,7 +424,19 @@ export const verifyTx = async (tx) => {
     throw APIError.InvalidRequest;
   }
 };
-
+///////////url scan/////////
+export const urlScan = async url => {
+  const baseUrl = process.env['VUE_APP_BACKEND_URL'];
+  const result = await fetch(`https://api.gerowallet.io/api/url/scan?url=${url}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (result) {
+    console.log('result', result);
+  }
+  return result;
+};
+////////
 export const submitTx = async (tx) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const chain = Object.keys(Blockchain).find(key => Blockchain[key] === loggedWallet.chain);

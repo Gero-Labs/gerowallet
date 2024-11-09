@@ -143,7 +143,13 @@ export default {
       } catch (error) {
         console.error(error)
       }
-      await this.$router.push("/")
+      const queryParams = this.$route.query;
+      console.log(queryParams);
+      if (queryParams['redirect']) {
+        await this.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
+      } else {
+        await this.$router.push("/")
+      }
     },
     resolveIcon(icon) {
       if (icon) {

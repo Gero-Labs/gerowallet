@@ -9,7 +9,7 @@
       </div>
       <v-card-title class="pa-0 px-3 pb-0">
         <v-list-item class="px-0" two-line style="z-index: 1">
-          <v-list-item-avatar v-if="img" size="54">
+          <v-list-item-avatar v-if="img" size="54" tile>
             <v-img :src="img" contain></v-img>
           </v-list-item-avatar>
           <v-list-item-content>

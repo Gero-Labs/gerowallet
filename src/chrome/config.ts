@@ -2,6 +2,7 @@ export const TARGET = 'gero-wallet';
 export const SENDER = { extension: 'extension', webpage: 'webpage' };
 export const METHOD = {
   isWhitelisted: 'isWhitelisted',
+  blacklisted:'blacklisted',
   enable: 'enable',
   isEnabled: 'isEnabled',
   currentWebpage: 'currentWebpage',
@@ -64,7 +65,8 @@ export const POPUP = {
   signTx: 'sign-tx',
   dappConnect: 'dapp-connect',
   dappSignData: 'dapp-sign',
-  login: 'plogin'
+  login: 'plogin',
+  warning:'warning',
 };
 
 export const POPUP_WINDOW = {
