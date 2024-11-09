@@ -2,7 +2,6 @@ import axios, {AxiosError, AxiosInstance} from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { resolveRewardAddress } from '@/shared/utils/resolver';
 import {Blockchain, Network, Proof, Provider} from '@/models/types';
-import { TxScanRequest, TxScanResponse } from '@/models/tx-scan';
 
 export class Api {
   public chain: string;
