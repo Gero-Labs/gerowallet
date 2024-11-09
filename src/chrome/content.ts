@@ -153,21 +153,18 @@ if (shouldInject()) {
   Messaging.createProxyController();
 }
 console.log("Content script loaded");
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'showOverlay') {
     showOverlay(message.url); // Show overlay on the specific tab with this URL
-  } else if (message.action === 'overlayClosed') {
-    removeOverlay(); // Remove overlay only from the current tab
-  } else if (message.action === 'checkForOverlay') {
-    const hasOverlay = !!document.getElementById('custom-overlay');
-    sendResponse({ hasOverlay });
+  } else if (message.action === 'removeOverlay') {
+    const overlay: HTMLElement = document.getElementById('custom-overlay');
+    if (overlay) {
+      document.body.removeChild(overlay);
+    }
   }
-  else if (message.action === 'reportSite') {
-    sendResponse({action: "navigateToReport" });
-  }
-  // Additional actions can go here...
 });
-// Show overlay function
+
 function showOverlay(url: string) {
   if (document.body) {
     appendOverlay(url);
@@ -230,11 +227,3 @@ function appendOverlay(url: string) {
     document.body.appendChild(overlay);
   }
 }
-
-// Remove overlay function
-  function removeOverlay() {
-    const overlay = document.getElementById('custom-overlay');
-    if (overlay) {
-      document.body.removeChild(overlay);
-    }
-  }

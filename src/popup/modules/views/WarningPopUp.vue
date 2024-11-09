@@ -45,6 +45,7 @@
 </template>
 <script>
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import { Messaging } from '@/chrome/messaging';
 
 export default {
   name: 'WarningPopUp',
@@ -55,6 +56,7 @@ export default {
       checkbox1: false,
       checkbox2: false,
       suspiciousUrl: null,
+      controller: Messaging.createInternalController()
     };
   },
   async created() {
@@ -66,86 +68,17 @@ export default {
     }
   },
   methods: {
-    proceed() {
-      if (chrome?.tabs) {
-        chrome.tabs.query({}, tabs => {
-          tabs.forEach(tab => {
-            chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
-              if (response && response.hasOverlay) {
-                chrome.tabs.sendMessage(tab.id, { action: 'overlayClosed' });
-              }
-            });
-          });
-          // Close the popup tab
-          chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
-            if (activeTabs.length > 0) {
-              chrome.tabs.remove(activeTabs[0].id);
-            }
-          });
-        });
-      }
+    async proceed() {
+      await this.controller.returnData({ data: 'proceed', error: {} })
+      window.close();
     },
     async safety() {
-      if (chrome?.tabs) {
-        // Loop over all tabs and find which has overlay
-        // Close both the tabs: the popup one and the suspicious one
-        chrome.tabs.query({}, async tabs => {
-          // Create an array of promises to check for overlays and remove the tabs
-          const overlayRemovalPromises = tabs.map(tab => {
-            return new Promise((resolve, reject) => {
-              chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
-                if (response && response.hasOverlay) {
-                  // If the tab has the overlay, close this tab
-                  chrome.tabs.remove(tab.id, () => {
-                    resolve(); // Resolve the promise once the tab is closed
-                  });
-                } else {
-                  resolve(); // Resolve immediately if no overlay
-                }
-              });
-            });
-          });
-
-          // Wait for all overlay tabs to be closed
-          await Promise.all(overlayRemovalPromises);
-
-          // Close the popup tab
-          chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
-            if (activeTabs.length > 0) {
-              chrome.tabs.remove(activeTabs[0].id);
-            }
-          });
-        });
-      }
+      await this.controller.returnData({ data: 'safety', error: {} })
+      window.close();
     },
     async reportSite() {
-      if (chrome?.tabs) {
-        chrome.tabs.query({}, async tabs => {
-          const navigateToreportPromise = tabs.map(tab => {
-            return new Promise((resolve, reject) => {
-              chrome.tabs.sendMessage(tab.id, { action: 'checkForOverlay' }, response => {
-                if (response && response.hasOverlay) {
-                  chrome.tabs.sendMessage(tab.id, { action: 'reportSite' }, response => {
-                    if (response && response.action === 'navigateToReport') {
-                      chrome.tabs.update(tab.id, { url: chrome.runtime.getURL(`index.html#/transactions?website=${this.suspicious_url}`) });
-                      resolve();
-                    }
-                  });
-                } else {
-                  resolve(); // Resolve immediately if no overlay
-                }
-              });
-            });
-          });
-          await Promise.all(navigateToreportPromise);
-          // Close the popup tab
-          chrome.tabs.query({ active: true, currentWindow: true }, activeTabs => {
-            if (activeTabs.length > 0) {
-              chrome.tabs.remove(activeTabs[0].id);
-            }
-          });
-        });
-      }
+      await this.controller.returnData({ data: 'report', error: {} })
+      window.close();
     },
   },
 };

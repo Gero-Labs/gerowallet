@@ -54,6 +54,7 @@
     "qrcode": "^1.5.4",
     "sockjs-client": "^1.6.1",
     "stompjs": "^2.3.3",
+    "tldts": "^6.1.59",
     "vue": "^2.7.16",
     "vue-class-component": "^7.2.3",
     "vue-flag-icon": "^2.1.0",
