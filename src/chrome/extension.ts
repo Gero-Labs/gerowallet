@@ -427,7 +427,6 @@ export const verifyTx = async (tx) => {
 ///////////url scan/////////
 export const urlScan = async url => {
   const baseUrl = process.env['VUE_APP_BACKEND_URL'];
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
   const result = await fetch(`https://api.gerowallet.io/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },

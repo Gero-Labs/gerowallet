@@ -17,7 +17,6 @@ export default defineComponent({
   created() {
     const queryParams = this.$route.query;
     if (Object.keys(queryParams).length > 0) {
-      console.log(queryParams)
       this.reportSite = queryParams['website'];
       this.isReportDialogOpen = true;
     }
