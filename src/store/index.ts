@@ -80,7 +80,6 @@ export const useStore = defineStore('store', {
             let receivedAmount: number = 0;
             const sentAssets = {};
             const receivedAssets = {};
-
             tx.inputs.forEach(input => {
               if (input.stake_addr === currentStake && !input.datum_hash) {
                 sentAmount += +input.value;
@@ -88,9 +87,10 @@ export const useStore = defineStore('store', {
                   input.asset_list.forEach(asset => {
                     const assetName = asset.policy_id + asset.asset_name;
                     if (sentAssets[assetName]) {
-                      sentAssets[assetName].quantity += Number(sentAssets[assetName].quantity);
+                      sentAssets[assetName].quantity += Number(asset.quantity);
                     } else {
                       sentAssets[assetName] = structuredClone(asset);
+                      sentAssets[assetName].quantity = Number(sentAssets[assetName].quantity);
                     }
                   });
                 }
@@ -104,9 +104,10 @@ export const useStore = defineStore('store', {
                   output.asset_list.forEach(asset => {
                     const assetName = asset.policy_id + asset.asset_name;
                     if (receivedAssets[assetName]) {
-                      receivedAssets[assetName].quantity += Number(receivedAssets[assetName].quantity);
+                      receivedAssets[assetName].quantity += Number(asset.quantity);
                     } else {
                       receivedAssets[assetName] = structuredClone(asset);
+                      receivedAssets[assetName].quantity = Number(receivedAssets[assetName].quantity);
                     }
                   });
                 }
