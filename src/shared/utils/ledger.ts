@@ -183,6 +183,7 @@ export default {
   async txToLedger(
     tx: FixedTransaction,
     wallet: Wallet,
+    creds: Set<any>,
     index: number = 0,
     addresses: any,
     usedUtxos?: any[],
@@ -193,7 +194,13 @@ export default {
     const address: Address = wallet.baseAddress().to_address();
     const stakeAddress: Address = wallet.stakeAddress().to_address();
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
-
+    const credList = Array.from(creds).map(el => {
+      return {
+        cred: el.cred,
+        address: el.address,
+        path: hdPathToArray(el.path)
+      }
+    })
     const accountData = {
       state: {
         networkId: network.networkId
@@ -215,15 +222,15 @@ export default {
         cc_hot: []
       }
     }
-    const credList = [
-      {
-        cred: BaseAddress.from_address(address).payment_cred().to_keyhash().to_hex(),
-        path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0]
-      },
-      {
-        cred: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash().to_hex(),
-        path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0]
-      }]
+    // const credList = [
+    //   {
+    //     cred: BaseAddress.from_address(address).payment_cred().to_keyhash().to_hex(),
+    //     path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0]
+    //   },
+    //   {
+    //     cred: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash().to_hex(),
+    //     path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0]
+    //   }]
     // Process Inputs
     const inputs = this.generateLedgerInputs(accountData, txBody.inputs(), usedUtxos);
     // Collateral Inputs
@@ -253,7 +260,7 @@ export default {
     };
 
     if (txBody.ttl()) {
-      lTx['ttl'] = txBody.ttl();
+      lTx['ttl'] = txBody.ttl().toString();
     }
     if (txBody.donation()) {
       lTx['donation'] = txBody.donation();
@@ -288,7 +295,7 @@ export default {
       lTx['scriptDataHashHex'] = txBody.script_data_hash().to_hex();
     }
     if (txBody.validity_start_interval() != null) {
-      lTx['validityIntervalStart'] = txBody.validity_start_interval();
+      lTx['validityIntervalStart'] = txBody.validity_start_interval().toString();
     }
     if (txBody.required_signers()) {
       lTx['requiredSigners'] = this.generateRequiredSigners(accountData, txBody.required_signers());

@@ -15,7 +15,7 @@
 <!--        <AssetsPieChart></AssetsPieChart>-->
 <!--      </v-col>-->
       <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <quick-actions></quick-actions>
+        <QuickActions></QuickActions>
       </v-col>
       <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
         <TokenAllocationTable></TokenAllocationTable>

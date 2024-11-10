@@ -5,21 +5,27 @@ import * as CryptoTS from 'crypto-ts';
 import cryptoRandomString from 'crypto-random-string';
 import {
   Address,
-  BaseAddress, BigNum,
+  BaseAddress,
+  BigNum,
   Bip32PrivateKey,
   Bip32PublicKey,
   Credential,
-  decrypt_with_password, DRep, Ed25519KeyHash,
+  decrypt_with_password,
+  DRep,
+  Ed25519KeyHash,
   encrypt_with_password,
   EnterpriseAddress,
   FixedTransaction,
   PointerAddress,
   PrivateKey,
   PublicKey,
-  RewardAddress, ScriptHash, Transaction,
+  RewardAddress,
+  ScriptHash,
+  Transaction,
   TransactionBody,
-  TransactionHash, TransactionJSON,
-  TransactionWitnessSet, Vkey, Vkeywitness,
+  TransactionHash,
+  TransactionJSON,
+  TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
 import networks from '@/shared/utils/networks';
@@ -27,7 +33,8 @@ import {
   Blockchain,
   ChainDerivations,
   CoinTypes,
-  ERROR, purpose,
+  ERROR,
+  purpose,
   STAKING_KEY_INDEX,
   WalletType,
   WalletTypePurpose,
@@ -35,7 +42,7 @@ import {
 import db from '@/db';
 import { chunkArray } from 'array-chunk-by-size';
 import { extractKeyHash } from '@/chrome/extension';
-import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/chrome/config';
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
@@ -302,7 +309,7 @@ export class Wallet {
     const txBody: TransactionBody = rawTx.body();
     const baseAddress: Address = this.baseAddress().to_address();
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
-    const credList = new Set()
+    const credList: Set<any> = new Set()
     const accountData = {
       state: {
         networkId: network.networkId
@@ -350,7 +357,7 @@ export class Wallet {
       }
     }
     if (this.type === WalletType.Ledger) { // Ledger Signing Logic
-      const wit: string = await ledger.txToLedger(rawTx, this, 0, addresses, utxos, isUsb);
+      const wit: string = await ledger.txToLedger(rawTx, this, credList, 0, addresses, utxos, isUsb);
       return { witnesses: wit };
     } else if (this.type === WalletType.Trezor) { // Trezor Signing Logic
       console.log('Signing with Trezor...');
@@ -383,22 +390,25 @@ export class Wallet {
 
   async submitTx(tx: Transaction, utxos) {
     const txCbor = tx.to_hex()
-    const response = await this.api.submitTx(txCbor);
-    if (response.error) {
-      if (response.status_code === 400) {
-        throw new Error(TxSendError.Failure.info.concat('.', ' ', response.message));
-      } else if (response.status_code === 500) {
+    try {
+      const txId = await this.api.submitTx(txCbor);
+      console.log('txId', txId)
+      await this.addPendingTx(txId, tx.to_js_value(), utxos)
+      return txId;
+    } catch (error) {
+      console.log(error)
+      if (error['response'].status === 400) {
+        throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      } else if (error['response'].status === 500) {
         throw new Error(APIError.InternalError.info);
-      } else if (response.status_code === 429) {
+      } else if (error['response'].status === 429) {
         throw new Error(TxSendError.Refused.info);
-      } else if (response.status_code === 425) {
+      } else if (error['response'].status === 425) {
         throw new Error(ERROR.fullMempool);
       } else {
-        throw new Error(APIError.InvalidRequest.info);
+        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
       }
     }
-    await this.addPendingTx(response, tx.to_js_value(), utxos)
-    return response;
   }
 
   async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any) {
@@ -1013,16 +1023,24 @@ export class Wallet {
       // Check if the domain already exists in the table
       const existingDapp = await dappsTable.get({ domain: domain });
 
-      // If the domain already exists, we ignore the insertion
       if (existingDapp) {
         console.log(`Domain ${domain} already exists, ignoring.`);
-        return; // Exit the function if the domain already exists
+        return;
       }
 
-      // If domain doesn't exist, insert it
-      await dappsTable.put({ domain: domain, time: new Date().getTime() });
+      // Insert new domain
+      const domainObject = { domain, time: new Date().getTime() }
+      domainObject['id'] = await dappsTable.put(domainObject)
       console.log(`Domain ${domain} added successfully.`);
 
+      // Update chrome storage if available
+      if (chrome?.storage) {
+        const res = await chrome.storage.local.get([STORAGE.whitelisted]);
+        const whitelisted = res[STORAGE.whitelisted] || [];
+        whitelisted.push(domainObject);
+        await chrome.storage.local.set({ [STORAGE.whitelisted]: whitelisted });
+        console.log(`Updated chrome storage with new domain:`, domainObject);
+      }
     } catch (err) {
       console.error(`Failed to add connected dapp: ${err}`);
     }

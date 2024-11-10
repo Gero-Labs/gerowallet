@@ -408,7 +408,7 @@ export default {
           this.$emit('close')
         } catch (e) {
           snackbar.setError(e)
-          console.log(e);
+          console.error(e);
         }
         this.txSubmitLoading = false
       };

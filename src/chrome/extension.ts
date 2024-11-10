@@ -381,25 +381,25 @@ export const extractKeyHash = async (address: string) => {
     const addr: BaseAddress = BaseAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e);
+    // console.log(e);
   }
   try {
     const addr: EnterpriseAddress = EnterpriseAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e);
+    // console.log(e);
   }
   try {
     const addr: PointerAddress = PointerAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('addr_vkh');
   } catch (e) {
-    console.log(e);
+    // console.log(e);
   }
   try {
     const addr: RewardAddress = RewardAddress.from_address(addressObject);
     return addr.payment_cred().to_keyhash().to_bech32('stake_vkh');
   } catch (e) {
-    console.log(e);
+    // console.log(e);
   }
   throw DataSignError.AddressNotPK;
 };

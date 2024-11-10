@@ -23,10 +23,13 @@
           <div>
             Network Fee: <span style="color: #FF8E8E">{{ transactionInfo.fee | toCurrency }}</span>
           </div>
-          <div>
+          <div style="align-items: center">
             {{ (Number(transactionInfo.ada) > 0 ? 'Received: ' : 'Sent: ') }}
             <span :style="Number(transactionInfo.ada) > 0 ? { color: '#00DFF3' } : { color: '#FF8E8E' }">
-            {{Number(transactionInfo.ada) | toCurrency}}{{ (Number(transactionInfo?.assets.length) > 1 ? ', '+Number(transactionInfo.assets.length-1)+ ' Assets' : '') }}
+            {{Number(transactionInfo.ada) | toCurrency}}
+              <v-chip class="mr-1" outlined v-for="(asset, index) in txAssets" :key="`asset_${index}`" x-small :color="Number(transactionInfo.ada) > 0 ? '#00DFF3' : '#FF8E8E'">
+                {{asset.quantity | toCurrency(false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
+              </v-chip>
           </span>
           </div>
           <div style="display: flex; width: 100%; align-items: baseline;">

@@ -28,6 +28,12 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
         return state.config.hideScamTokens
       }
       return false
+    },
+    getVerifiedTokens(state) {
+      if (state?.config && 'verifiedTokens' in state.config) {
+        return state.config.verifiedTokens
+      }
+      return false
     }
   },
   actions: {
@@ -85,8 +91,16 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       db.table('config').put({key: 'txAutoSubmit', value: val})
     },
     async setHideScamTokens(val) {
-      const db: Dexie = await appWallet.getDb()
-      db.table('config').put({key: 'hideScamTokens', value: val})
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'hideScamTokens', value: val})
+      }
+    },
+    async setVerifiedTokens(val) {
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'verifiedTokens', value: val})
+      }
     },
     setContacts(contacts) {
       this.contacts = contacts

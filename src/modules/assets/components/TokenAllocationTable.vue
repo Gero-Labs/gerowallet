@@ -4,6 +4,10 @@
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
       <div style="display: flex;">
+        <p class="mr-5 my-auto" style="font-size: 14px">Verified Tokens</p>
+        <v-switch v-model="verifiedOnly" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
+      </div>
+      <div style="display: flex;">
         <p class="mr-5 my-auto" style="font-size: 14px">Hide Scam Tokens</p>
         <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
       </div>
@@ -25,7 +29,7 @@
             :items="assets"
             :sort-by.sync="assetsSortBy"
             :sort-desc.sync="assetsSortDesc"
-            :items-per-page="5"
+            :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
           >
             <template v-slot:[`item.name`]="{ item }">
@@ -160,7 +164,7 @@
             :headers="collectiblesHeaders"
             :items="collectibles"
             @click:row="handleOnRowClick"
-            :items-per-page="5"
+            :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :sort-by.sync="collectiblesSortBy"
             :sort-desc.sync="collectiblesSortDesc"
@@ -273,10 +277,13 @@ export default {
   watch: {
     async hideScam(val) {
       await this.setHideScamTokens(val)
+    },
+    async verifiedOnly(val) {
+      await this.setVerifiedTokens(val)
     }
   },
   methods: {
-    ...mapActions(walletConfigStore, ['setHideScamTokens']),
+    ...mapActions(walletConfigStore, ['setHideScamTokens', 'setVerifiedTokens']),
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -296,7 +303,7 @@ export default {
       return Blockchain
     },
     ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
-    ...mapState(walletConfigStore, 'getHideScamTokens'),
+    ...mapState(walletConfigStore, ['getHideScamTokens', 'getVerifiedTokens']),
     filters() {
       return filters
     },
@@ -334,6 +341,9 @@ export default {
         if (this.hideScam) {
           res = res.filter(token => !token.isScam)
         }
+        if (this.verifiedOnly) {
+          res = res.filter(token => token.verified)
+        }
         return res
       }
       return this.resolvedAssets
@@ -348,6 +358,7 @@ export default {
   },
   data: () => ({
     hideScam: false,
+    verifiedOnly: true,
     assetsSortBy: 'name',
     assetsSortDesc: false,
     collectiblesSortBy: 'name',
@@ -356,7 +367,7 @@ export default {
     chartData: [],
     assetsHeaders: [
       { text: "Asset", align: "start", sortable: true, value: "name" },
-      { text: "Risk", align: "center", sortable: true, value: "risk", width: "100" },
+      { text: "Risk", align: "center", sortable: true, value: "risk", width: "64" },
       { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "100" },
       { text: "Last Price", align: "center", sortable: true, value: "last_price", width: "100"  },
       { text: "Change", align: "center", sortable: true, value: "change", width: "85" },
@@ -381,6 +392,7 @@ export default {
   }),
   mounted() {
     this.hideScam = walletConfigStore().getHideScamTokens
+    this.verifiedOnly = walletConfigStore().getVerifiedTokens
   }
 };
 </script>
