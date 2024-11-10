@@ -66,7 +66,7 @@ window.cardano = {
     async isEnabled(): Promise<boolean> {
       return isEnabled()
     },
-    apiVersion: '0.1.0',
+    apiVersion: '2.0.0',
     name: 'GeroWallet',
     supportedExtensions: [
       { cip: 30 },
