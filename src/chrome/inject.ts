@@ -26,6 +26,7 @@ declare global {
 
 // CIP-30
 window.cardano = {
+  ...(window.cardano||{}),
   gerowallet: {
     async enable(extensions: Extensions): Promise<any> {
       const enabled = await enable();
@@ -65,7 +66,7 @@ window.cardano = {
     async isEnabled(): Promise<boolean> {
       return isEnabled()
     },
-    apiVersion: '2.0.0',
+    apiVersion: '0.1.0',
     name: 'GeroWallet',
     supportedExtensions: [
       { cip: 30 },

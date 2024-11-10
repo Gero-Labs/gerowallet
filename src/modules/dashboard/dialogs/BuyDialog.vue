@@ -30,6 +30,13 @@ export default {
       default: false,
     },
   },
+  watch: {
+    isOpen(val) {
+      if (val && !this.moonPayUrl) {
+        this.fetch();
+      }
+    }
+  },
   computed: {
     ...mapState(useStore, ['baseAddress'])
   },
@@ -46,10 +53,7 @@ export default {
   },
   data: () => ({
     moonPayUrl: '',
-  }),
-  async mounted() {
-    await this.fetch()
-  }
+  })
 }
 </script>
 

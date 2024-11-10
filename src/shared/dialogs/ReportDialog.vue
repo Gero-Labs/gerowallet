@@ -49,7 +49,7 @@
               <v-label small class="white--text pr-1" style="align-content: center;">Website:</v-label>
               {{ reportSite }}
             </div>
-            <div class="d-flex mb-1" v-if="reportTx">
+            <div class="d-flex mb-3" v-if="reportTx">
               <v-label small class="white--text" style="align-content: center;">Transaction ID:</v-label>
               <div>
                 <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ reportTx | truncate }}</a>
@@ -60,7 +60,7 @@
               v-model="label"
               :items="labels"
               label="Mark as "
-              class="select-item width-50"
+              class="select-item width-50 mb-4"
               required
               hide-details
               :rules="[rules.required]"
@@ -74,7 +74,6 @@
               v-model="description"
               placeholder="Write your description here..."
               required
-              class="mt-3"
               :maxlength="250"
               counter
               :rules="[rules.required, rules.maxCharacters(250)]"
@@ -91,14 +90,15 @@
               counter
             ></v-textarea>
             <v-list class="transparent py-0">
-              <p>
+              <div>
                 - Attach any screenshots, transaction details, communication logs, or other relevant documents.
-              </p>
-              <p>
+              </div>
+              <div>
                 - Provide links or references to any external information that supports your claim.
-              </p>
+              </div>
             </v-list>
             <v-file-input
+              class="mt-4"
               v-model="uploadFile"
               dense hide-details
               outlined type="file"

@@ -87,7 +87,7 @@ async function handleBlacklisted(request: any, tabId: number) {
   }
 }
 
-chrome.webNavigation.onCommitted.addListener(async (details) => {
+chrome.webNavigation?.onCommitted.addListener(async (details) => {
   if (details.frameId === 0) { // Only consider top-level navigation
     const url = new URL(details.url);
     const origin = url.origin;
