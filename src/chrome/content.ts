@@ -140,16 +140,8 @@ async function injectBring() {
 }
 
 if (shouldInject()) {
-  if (document.readyState === 'complete' || document.body) {
-    injectScript();
-    await injectBring();
-  } else {
-    // If DOM isn't ready, wait for it to load before injecting
-    window.addEventListener('load', async () => {
-      injectScript();
-      await injectBring();
-    });
-  }
+  injectScript();
+  await injectBring();
   Messaging.createProxyController();
 }
 console.log("Content script loaded");
