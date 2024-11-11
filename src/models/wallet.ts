@@ -9,6 +9,8 @@ import {
   BigNum,
   Bip32PrivateKey,
   Bip32PublicKey,
+  Certificate,
+  CertificateKind,
   Credential,
   decrypt_with_password,
   DRep,
@@ -308,6 +310,7 @@ export class Wallet {
     const witnessSet: TransactionWitnessSet = rawTx.witness_set();
     const txBody: TransactionBody = rawTx.body();
     const baseAddress: Address = this.baseAddress().to_address();
+    const stakeAddress: RewardAddress = this.stakeAddress()
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList: Set<any> = new Set()
     const accountData = {
@@ -339,6 +342,64 @@ export class Wallet {
 
       if (utxo) {
         credList.add(addresses[utxo.payment_addr.bech32])
+      }
+    }
+    if (txBody.certs()) {
+      console.log('certs')
+      for (let i = 0 ; i < txBody.certs().len() ; i++) {
+        const certificate: Certificate = txBody.certs().get(i);
+        let keyHash
+        if (certificate.kind() == CertificateKind.StakeRegistration) {
+          const stakeRegistration = certificate.as_stake_registration()
+          keyHash = stakeRegistration.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.StakeDeregistration) {
+          const stakeDeregistration = certificate.as_stake_deregistration()
+          keyHash = stakeDeregistration.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.StakeDelegation) {
+          const stakeDelegation = certificate.as_stake_delegation()
+          keyHash = stakeDelegation.stake_credential().to_keyhash().to_hex();
+        }
+        // else if (certificate.kind() == CertificateKind.PoolRegistration) {
+        //
+        // } else if (certificate.kind() == CertificateKind.PoolRetirement) {
+        //
+        // } else if (certificate.kind() == CertificateKind.GenesisKeyDelegation) {
+        //
+        // } else if (certificate.kind() == CertificateKind.MoveInstantaneousRewardsCert) {
+        //
+        // } else if (certificate.kind() == CertificateKind.CommitteeHotAuth) {
+        //
+        // } else if (certificate.kind() == CertificateKind.CommitteeColdResign) {
+        //
+        // } else if (certificate.kind() == CertificateKind.DRepDeregistration) {
+        //
+        // } else if (certificate.kind() == CertificateKind.DRepRegistration) {
+        //
+        // } else if (certificate.kind() == CertificateKind.DRepUpdate) {
+        //
+        // } else if (certificate.kind() == CertificateKind.StakeAndVoteDelegation) {
+        //
+        // }
+        else if (certificate.kind() == CertificateKind.StakeRegistrationAndDelegation) {
+          const stakeRegistrationAndDelegation = certificate.as_stake_registration_and_delegation()
+          keyHash = stakeRegistrationAndDelegation.stake_credential().to_keyhash().to_hex();
+        }
+        // else if (certificate.kind() == CertificateKind.StakeVoteRegistrationAndDelegation) {
+        //
+        // } else if (certificate.kind() == CertificateKind.VoteDelegation) {
+        //
+        // } else if (certificate.kind() == CertificateKind.VoteRegistrationAndDelegation) {
+        //
+        // }
+        if (accountData.keys.stake[0].cred === keyHash) {
+          credList.add(accountData.keys.stake[0])
+        }
+      }
+    }
+    if (txBody.withdrawals()) {
+      const bigNum = txBody.withdrawals().get(stakeAddress)
+      if (bigNum) {
+        credList.add(accountData.keys.stake[0])
       }
     }
     const vKeyHashes = new Set();
