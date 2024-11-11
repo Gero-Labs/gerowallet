@@ -420,9 +420,13 @@ export default {
           console.log('signRes', signRes)
           await this.submit(signRes.cbor)
         }
-      } catch (e) {
-        snackbar.setError(e)
-        console.log(e)
+      } catch (error) {
+        if (error['response']) {
+          snackbar.setError(`Swap Failed. Error Code: ${error['response'].status} - ${JSON.stringify(error['response'].data)}`)
+        } else {
+          snackbar.setError(error)
+        }
+        console.error(error)
       }
       this.loading = false
     },

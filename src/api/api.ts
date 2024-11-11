@@ -211,7 +211,7 @@ export class Api {
   }
 
   async submitTx(body: string): Promise<any> {
-    const { data } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, body);
+    const { data } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`, body);
     return data
   }
 
@@ -442,35 +442,25 @@ export class Api {
   }
 
   async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
-    try {
-      const requestBody = {
-        amount_in,
-        buyer_address,
-        slippage,
-        token_in,
-        token_out,
-        referrer,
-      }
-      const { data, status } = await this.axiosInstance.post(`/api/v2/swap`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
+    const requestBody = {
+      amount_in,
+      buyer_address,
+      slippage,
+      token_in,
+      token_out,
+      referrer,
     }
+    const { data } = await this.axiosInstance.post(`/api/v2/swap`, requestBody);
+    return data
   }
 
   async swapSign(Signatures: number, txCbor: string): Promise<any> {
-    try {
-      const requestBody = {
-        Signatures,
-        txCbor,
-      }
-      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/sign`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
+    const requestBody = {
+      Signatures,
+      txCbor,
     }
+    const { data } = await this.axiosInstance.post(`/api/v2/swap/sign`, requestBody);
+    return data
   }
 
   async charts(tokenIn: string, tokenOut: string, period: string, from: number, to: number): Promise<any> {
