@@ -59,6 +59,9 @@ export default {
     retailerTermsBasePath: {
       type: String,
       default: 'https://media.bringweb3.io/cashback-terms'
+    },
+    searchTerm: {
+      type: String,
     }
   },
   filters,
@@ -78,7 +81,11 @@ export default {
     },
     async activate() {
       try {
-        const response = await appWallet.api.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), "")
+        let search = ''
+        if (this.searchTerm) {
+          search = this.searchTerm
+        }
+        const response = await appWallet.api.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), search)
         if (response.status) {
           this.retailerUrl = response.url
         } else {
@@ -101,6 +108,7 @@ export default {
   watch: {
     isOpen(val) {
       if (val) {
+        console.log(val)
         this.retailerUrl = null
         this.loading = true
         this.default = true

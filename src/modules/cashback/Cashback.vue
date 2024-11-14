@@ -145,7 +145,7 @@
       </v-card-title>
     </v-card-actions>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
-    <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath"></RetailerDialog>
+    <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath" :search-term="searchTerm"></RetailerDialog>
     <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
   </v-card>
 </template>
@@ -211,6 +211,7 @@ export default defineComponent({
         this.nextPage = retailers.nextPageNumber
         this.totalItems = retailers.totalItems
       }
+      this.searchTerm = val
       this.isLoading = false
     },
     async selectedCategory() {
@@ -270,7 +271,8 @@ export default defineComponent({
       generalTermsUrl: null,
       retailerTermsBasePath: null,
       totalItems: null,
-      supported: true
+      supported: true,
+      searchTerm: '',
     }
   },
   async mounted() {

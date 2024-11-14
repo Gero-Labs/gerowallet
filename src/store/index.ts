@@ -267,10 +267,10 @@ export const useStore = defineStore('store', {
           if (token.unit && dexHunterStore().dexHunterTokens[token.unit]) {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
-            try {
-              const stats = await appWallet.api.mcap(token.unit);
+            const promises = []
+            promises.push(appWallet.api.mcap(token.unit).then(stats => {
               token['mcap'] = stats.mcap;
-              token['last_price'] = stats.price * Number(this.price.lastPrice);
+              token['last_price'] = stats.price;
               token['value'] = Number(filters.toCurrency(
                 token['last_price'] * Number(token.quantity),
                 false,
@@ -280,26 +280,25 @@ export const useStore = defineStore('store', {
                 false,
                 token.metadata?.decimals
               ).replaceAll(",", ""));
-            } catch (err) {
+            }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
-            }
-
-            try {
-              const changeStats = await appWallet.api.dailyPriceChange(
-                networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network),
-                token.unit
-              );
-              token['change'] = changeStats.change;
-            } catch (err) {
-              console.error(`Error fetching daily price change for ${token.unit}:`, err);
-            }
-
-            try {
-              const riskStats = await appWallet.api.assetRisk(unitToFingerprint(token.unit));
+            }))
+           promises.push(appWallet.api.dailyPriceChange(networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), token.unit)
+             .then(changeStats => {
+               token['change'] = changeStats.change;
+             }).catch(err => {
+               console.error(`Error fetching daily price change for ${token.unit}:`, err);
+             }));
+            promises.push(appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
               token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
-            } catch (err) {
+            }).catch(err => {
               console.error(`Error fetching risk for ${token.unit}:`, err);
               token['risk'] = 'N/A';
+            }))
+            try {
+              await Promise.all(promises)
+            } catch (e) {
+              console.error(e)
             }
           } else if (token['name'] === 'Cardano' && this.price) {
             token['value'] = Number(filters.toCurrency(
@@ -311,6 +310,7 @@ export const useStore = defineStore('store', {
               false,
               token.metadata?.decimals
             ).replaceAll(",", ""));
+            token['risk'] = 'AAA'
           }
           return token;
         });
@@ -536,7 +536,7 @@ export const useStore = defineStore('store', {
       this.transactions = undefined;
       this.assets = undefined;
       await walletConfigStore().setUtxos(undefined)
-      this.resolvedAssets = undefined
+      this.setResolvedAssets(undefined)
       this.pools = []
       await walletConfigStore().setAccount(undefined);
       this.latestTip = undefined;

@@ -75,7 +75,7 @@ export default defineComponent({
   methods: {
     handleOnTransactionsRowClick(row) {
       this.transactionInfo = row;
-      this.$emit('row-click', row); 
+      this.$emit('row-click', row);
     },
     handleTransactionModalClose() {
       this.transactionInfo = null;
