@@ -82,7 +82,7 @@ const filters = {
     if (decimals == undefined) {
       decimals = 6
     }
-    const res: number = Number(value) / Math.pow(10, decimals);
+    let res: number = Number(value) / Math.pow(10, decimals);
     if (human) {
       const lookup = [
         {value: 1, symbol: ""},
@@ -96,10 +96,11 @@ const filters = {
       const item = lookup.slice().reverse().find(function (item) {
         return res >= item.value;
       });
-      let result = symbolPrefix+(item ? (res / item.value).toFixed(decimalPlaces).replace(rx, "$1") + item.symbol : "0")+symbolSuffix
-      if (result === symbolPrefix+'0'+symbolSuffix)
-        result = symbolPrefix+res.toFixed(4).match(/^-?\d*\.?0*\d?/)[0]+symbolSuffix;
-      return result
+
+      if (item && item.symbol) {
+        symbolSuffix = item.symbol+symbolSuffix
+        res = res / item.value
+      }
     }
     if (decimalPlaces == 6) {
       if (res >= 0) {

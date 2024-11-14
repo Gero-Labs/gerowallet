@@ -3,15 +3,73 @@
     <v-card-title>
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
-      <div style="display: flex;">
-        <p class="mr-5 my-auto" style="font-size: 14px">Verified Tokens</p>
-        <v-switch v-model="verifiedOnly" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
-      </div>
-      <div style="display: flex;">
-        <p class="mr-5 my-auto" style="font-size: 14px">Hide Scam Tokens</p>
-        <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
-      </div>
-      <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
+      <v-menu
+        v-model="filtersMenu"
+        :close-on-content-click="false"
+        offset-y
+      >
+        <template v-slot:activator="{ on, attrs }">
+          <v-badge
+            :value="filtersAmount"
+            :content="filtersAmount"
+            bordered
+            color="primary"
+            dot
+            overlap
+          >
+            <v-btn
+              icon
+              plain
+              v-bind="attrs"
+              v-on="on"
+            >
+              <v-icon>
+                mdi-filter
+              </v-icon>
+            </v-btn>
+          </v-badge>
+        </template>
+        <v-card outlined style="background-color: #1e1e1e!important;">
+          <v-card-text class="pa-0">
+            <v-list dense class="transparent">
+              <v-list-item>
+                <v-list-item-action>
+                  <v-switch v-model="hideUnverified" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
+                </v-list-item-action>
+                <v-list-item-title>
+                  Hide Unverified Tokens
+                </v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <v-list-item-action>
+                  <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
+                </v-list-item-action>
+                <v-list-item-title>
+                  Hide Scam Tokens
+                </v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <v-list-item-action>
+                  <v-switch v-model="hideUnrated" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
+                </v-list-item-action>
+                <v-list-item-title>
+                  Hide Unrated Tokens
+                </v-list-item-title>
+              </v-list-item>
+            </v-list>
+            <v-divider></v-divider>
+          </v-card-text>
+          <v-card-actions class="justify-center">
+            <v-btn block small color="error" :disabled="filtersAmount === 0" @click="clearFilters">
+              <v-icon small class="pr-1">
+                mdi-filter-remove
+              </v-icon>
+              Clear Filters
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-menu>
+      <v-btn-toggle class="ml-4" mandatory active-class="highlight" @change="handleSwitchTab">
         <v-btn color="black" :value="0" rounded style="text-transform: capitalize">Assets
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{assets?.length}}</v-chip>
         </v-btn>
@@ -27,10 +85,11 @@
             class="transparent"
             :headers="assetsHeaders"
             :items="assets"
-            :sort-by.sync="assetsSortBy"
-            :sort-desc.sync="assetsSortDesc"
+            :sort-by.sync="assetsSort.by"
+            :sort-desc.sync="assetsSort.desc"
             :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+            :custom-sort="customSort"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -80,16 +139,24 @@
               <v-tooltip top :open-delay="500">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ Number(item.quantity) | toCurrency(false, 2, '', '', true, item.metadata?.decimals) }}
+                    {{ item.quantity | toCurrency(false, 2, '', '', true, 0) }}
                   </span>
                 </template>
-                {{ (Number(item.quantity) / (item.metadata?.decimals ? Math.pow(10, item.metadata?.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 2}) }}
+                {{ item.quantity | toCurrency(false, 6, '', '', false, 0) }}
               </v-tooltip>
             </template>
             <template v-slot:[`item.last_price`]="{ item }">
-              <div v-if="item.name === 'Cardano' && price">{{Number(price.lastPrice) | toCurrency(false, 4, '$', '', false, 0)}}</div>
-              <span v-else-if="!item.last_price">N/A</span>
-              <span v-else>{{item.last_price | toCurrency(false, 4, '$', '', false, 0)}}</span>
+              <span v-if="!item.last_price">N/A</span>
+              <span v-else>
+                <v-tooltip top :open-delay="500">
+                  <template v-slot:activator="{ on, attrs }">
+                    <span v-bind="attrs" v-on="on">
+                      {{ item.last_price | toCurrency(false, 4, '$', '', true, 0) }}
+                    </span>
+                  </template>
+                  {{ item.last_price | toCurrency(false, 6, '$', '', false, 0) }}
+                </v-tooltip>
+              </span>
             </template>
             <template v-slot:[`item.change`]="{ item }">
               <div style="display: flex" v-if="item.change !== undefined ">
@@ -112,9 +179,17 @@
               <span v-else>N/A</span>
             </template>
             <template v-slot:[`item.value`]="{ item }">
-              <div v-if="item.name === 'Cardano' && price">{{item.quantity * Number(price.lastPrice) | toCurrency(false, 2, '$', '', true, item.metadata?.decimals)}}</div>
-              <span v-else-if="!item.last_price">N/A</span>
-              <span v-else>{{item.value | toCurrency(false, 2, '$', '', true, 0)}}</span>
+              <span v-if="!item.last_price">N/A</span>
+              <span v-else>
+                 <v-tooltip top :open-delay="500">
+                  <template v-slot:activator="{ on, attrs }">
+                    <span v-bind="attrs" v-on="on">
+                      {{ item.value | toCurrency(false, 2, '$', '', true, 0) }}
+                    </span>
+                  </template>
+                  {{ item.value | toCurrency(false, 6, '$', '', false, 0) }}
+                </v-tooltip>
+              </span>
             </template>
 <!--            <template v-slot:[`item.cost_basis`]="{ }">-->
 <!--              <v-chip outlined x-small color="#F97066">Soon</v-chip>-->
@@ -275,15 +350,24 @@ export default {
   name: "tokenAllocationTable",
   components: { TokensDialog, Sparkline },
   watch: {
+    async hideUnverified(val) {
+      await this.setHideUnverifiedTokens(val)
+    },
     async hideScam(val) {
       await this.setHideScamTokens(val)
     },
-    async verifiedOnly(val) {
-      await this.setVerifiedTokens(val)
-    }
+    async hideUnrated(val) {
+      await this.setHideUnratedTokens(val)
+    },
+    assetsSort: {
+      async handler(val) {
+        await this.setTokenAllocationTableSort(val)
+      },
+      deep: true
+    },
   },
   methods: {
-    ...mapActions(walletConfigStore, ['setHideScamTokens', 'setVerifiedTokens']),
+    ...mapActions(walletConfigStore, ['setHideScamTokens', 'setHideUnverifiedTokens', 'setHideUnratedTokens', 'setTokenAllocationTableSort']),
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -293,9 +377,63 @@ export default {
     handleOnRowClick(row) {
       this.dialogData = row;
     },
+    clearFilters() {
+      this.hideUnverified = false
+      this.hideScam = false
+      this.hideUnrated = false
+    },
+    customSort(items, sortBy, sortDesc) {
+      if (!sortBy.length) return items;
+
+      return items.sort((a, b) => {
+        const sortKey = sortBy[0];
+        const compareA = a[sortKey];
+        const compareB = b[sortKey];
+        if (sortKey === 'risk') {
+          const riskOrder = {
+            'AAA': 1,
+            'AA': 2,
+            'A': 3,
+            'BBB': 4,
+            'BB': 5,
+            'B': 6,
+            'CCC': 7,
+            'CC': 8,
+            'C': 9,
+            'D': 10
+          };
+
+          const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
+          const rankB = riskOrder[compareB] || 11;
+
+          return sortDesc[0] ? rankB - rankA : rankA - rankB;
+        } else {
+          let result;
+          if (typeof compareA === 'string' && typeof compareB === 'string') {
+            result = compareA.localeCompare(compareB);
+          } else {
+            result = compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
+          }
+          return sortDesc[0] ? -result : result;
+        }
+      });
+    },
   },
   filters,
   computed: {
+    filtersAmount() {
+      let amt = 0
+      if (this.hideScam) {
+        amt++
+      }
+      if (this.hideUnrated) {
+        amt++
+      }
+      if (this.hideUnverified) {
+        amt++
+      }
+      return amt
+    },
     Network() {
       return Network
     },
@@ -303,7 +441,7 @@ export default {
       return Blockchain
     },
     ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
-    ...mapState(walletConfigStore, ['getHideScamTokens', 'getVerifiedTokens']),
+    ...mapState(walletConfigStore, ['getHideScamTokens', 'getHideUnverifiedTokens', 'getHideUnratedTokens', 'getTokenAllocationTableSort']),
     filters() {
       return filters
     },
@@ -323,16 +461,22 @@ export default {
     },
     assets() {
       let totalAllocation = 0
-      if (this.resolvedAssets && this.price) {
-        this.resolvedAssets.forEach(token => {
+      const resolvedAssets = structuredClone(this.resolvedAssets)
+      if (resolvedAssets && this.price) {
+        resolvedAssets.forEach(token => {
           if (token.value) {
             totalAllocation += token.value
           }
         })
-        let res = this.resolvedAssets.map(token => {
+        let res = resolvedAssets.map(token => {
+          token['quantity'] = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
           if (token['name'] === 'Cardano') {
-            token['value'] = Number(filters.toCurrency(token.quantity * Number(this.price.lastPrice), false, token.metadata?.decimals, '', '', false, token.metadata?.decimals).replaceAll(",", ""))
+            token['last_price'] = Number(filters.toCurrency(this.price.lastPrice, false, 4, '', '', true, 0).replaceAll(",", ""))
+            token['change'] = Number(this.price.priceChangePercent)
+          } else {
+            token['last_price'] = Number(filters.toCurrency(token.last_price * Number(this.price.lastPrice), false, 6, '', '', false, 0).replaceAll(',', ''))
           }
+          token['value'] = Number(filters.toCurrency(token.quantity * token.last_price, false, 4, '', '', false, 0).replaceAll(",", ""))
           if (token['value']) {
             token['total_allocation'] = token['value'] / totalAllocation * 100
           }
@@ -341,12 +485,17 @@ export default {
         if (this.hideScam) {
           res = res.filter(token => !token.isScam)
         }
-        if (this.verifiedOnly) {
+        if (this.hideUnverified) {
           res = res.filter(token => token.verified)
+        }
+        if (this.hideUnrated) {
+          res = res.filter(token => {
+            return token.risk
+          })
         }
         return res
       }
-      return this.resolvedAssets
+      return resolvedAssets
     },
     collectibles() {
       let res =  this.resolvedCollections
@@ -357,8 +506,14 @@ export default {
     }
   },
   data: () => ({
+    filtersMenu: false,
     hideScam: false,
-    verifiedOnly: true,
+    hideUnverified: false,
+    hideUnrated: false,
+    assetsSort: {
+      by: 'total_allocation',
+      desc: true
+    },
     assetsSortBy: 'name',
     assetsSortDesc: false,
     collectiblesSortBy: 'name',
@@ -391,8 +546,10 @@ export default {
     dialogData: null,
   }),
   mounted() {
+    this.hideUnverified = walletConfigStore().getHideUnverifiedTokens
     this.hideScam = walletConfigStore().getHideScamTokens
-    this.verifiedOnly = walletConfigStore().getVerifiedTokens
+    this.hideUnrated = walletConfigStore().getHideUnratedTokens
+    this.assetsSort = walletConfigStore().getTokenAllocationTableSort
   }
 };
 </script>

@@ -44,8 +44,8 @@
                     <span style="font-size: 10px">{{ `${collection.name} (${collection.items.length})`  }}</span>
                     <v-row :key="index" no-gutters>
                       <v-col
-                        v-for="(item) in collection.items"
-                        :key="item.name"
+                        v-for="(item, itemIndex) in collection.items"
+                        :key="`${item.name}_${itemIndex}`"
                         cols="12"
                         sm="4"
                         xs="12"
