@@ -91,8 +91,9 @@
                   <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly" @change="quantityChange"></CurrencyTextField>
                 </v-list-item-title>
                 <v-list-item-subtitle class="light-text" v-if="selectedToken.ticker === networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) && minimum > selectedToken.quantity" style="color: #f97066!important;">
-                  Min. Required: {{ minimum +" " + selectedToken.ticker}}
+                  <v-btn class="pa-0" :ripple="false" color="error" text plain x-small style="text-transform: unset; letter-spacing: normal; font-size: 14px" @click="selectedToken.quantity = minimum+''">Min. Required: {{ minimum +" " + selectedToken.ticker}}</v-btn>
                 </v-list-item-subtitle>
+
                 <v-list-item-subtitle class="light-text" :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}" v-else-if="!isNaN(price.replaceAll(',', ''))">
                   {{ '~$' + price }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B">mdi-alert-rhombus-outline</v-icon>
                 </v-list-item-subtitle>
@@ -222,6 +223,7 @@ export default {
 
 .light-text {
   color: #61646C !important;
+  height: 21px
 }
 
 .v-text-field.v-text-field--solo:not(.v-text-field--solo-flat) > .v-input__control > .v-input__slot {

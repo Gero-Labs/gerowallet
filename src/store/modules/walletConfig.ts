@@ -29,11 +29,27 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       return false
     },
-    getVerifiedTokens(state) {
-      if (state?.config && 'verifiedTokens' in state.config) {
-        return state.config.verifiedTokens
+    getHideUnverifiedTokens(state) {
+      if (state?.config && 'hideUnverifiedTokens' in state.config) {
+        return state.config.hideUnverifiedTokens
       }
       return false
+    },
+    getHideUnratedTokens(state) {
+      if (state?.config && 'hideUnratedTokens' in state.config) {
+        return state.config.hideUnratedTokens
+      }
+      return false
+    },
+    getTokenAllocationTableSort(state) {
+      console.log(state.config)
+      if (state?.config && 'tokenAllocationSort' in state.config) {
+        return state.config.tokenAllocationSort
+      }
+      return {
+        by: 'total_allocation',
+        desc: true
+      }
     }
   },
   actions: {
@@ -96,10 +112,22 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
         db.table('config').put({key: 'hideScamTokens', value: val})
       }
     },
-    async setVerifiedTokens(val) {
+    async setHideUnverifiedTokens(val) {
       if (appWallet) {
         const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'verifiedTokens', value: val})
+        db.table('config').put({key: 'hideUnverifiedTokens', value: val})
+      }
+    },
+    async setHideUnratedTokens(val) {
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'hideUnratedTokens', value: val})
+      }
+    },
+    async setTokenAllocationTableSort(val) {
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'tokenAllocationSort', value: val})
       }
     },
     setContacts(contacts) {

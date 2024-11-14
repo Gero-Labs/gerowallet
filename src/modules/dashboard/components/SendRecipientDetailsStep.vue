@@ -299,7 +299,7 @@ export default {
         .finally(() => {
           this.loading = false
         })
-    }, 300),
+    }, 2000),
   },
   data: () => ({
     valid: false,
