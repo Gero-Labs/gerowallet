@@ -5,16 +5,16 @@
         <div class="transaction-info text-left pb-4">
           <div>
             Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash | truncate }}</a>
-            <CopyButton x-small :value="transactionInfo.tx_hash" class="ml-1"></CopyButton>
+            <CopyButton x-small :value="transactionInfo['tx_hash']" class="ml-1"></CopyButton>
           </div>
           <div>
-            Time: <span class="value-text">{{new Date(transactionInfo.tx_timestamp * 1000).toLocaleString()}}</span>
+            Time: <span class="value-text">{{new Date(transactionInfo['tx_timestamp'] * 1000).toLocaleString()}}</span>
           </div>
           <div>
-            Tx Size: <span class="value-text">{{transactionInfo.tx_size | humanFileSize}}</span>
+            Tx Size: <span class="value-text">{{transactionInfo['tx_size'] | humanFileSize}}</span>
           </div>
           <div>
-            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo.block_hash}`" target="_blank">{{ transactionInfo.block_hash | truncate }}</a>
+            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ transactionInfo.block_hash | truncate }}</a>
             <CopyButton x-small :value="transactionInfo.block_hash" class="ml-1"></CopyButton>
           </div>
           <div>
