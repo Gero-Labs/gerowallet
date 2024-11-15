@@ -125,6 +125,13 @@
                     <template v-slot:[`item.address`]="{ item }">
                       {{ item.address | truncate }}<CopyButton x-small :value="item.address" />
                     </template>
+                    <template v-slot:[`item.actions`]="{ item }">
+                      <v-btn color="error" icon x-small @click="removeCont(item)">
+                        <v-icon x-small>
+                          mdi-trash-can
+                        </v-icon>
+                      </v-btn>
+                    </template>
                   </v-data-table>
                 </v-card-text>
               </v-card>
@@ -249,6 +256,7 @@ export default {
       this.contactsMenu = false
     },
     saveContact() {
+      this.asset = undefined
       this.contact = {}
       let name
       const address = this.paymentAddress
@@ -264,9 +272,14 @@ export default {
         address
       }
     },
-    removeCont() {
-      this.removeContact(this.contact.address)
-      this.saveContactMenu = false
+    removeCont(item) {
+      if (item && item.address) {
+        this.removeContact(item.address)
+        this.contactsMenu = false
+      } else {
+        this.removeContact(this.contact.address)
+        this.saveContactMenu = false
+      }
     },
     resolveAddress(val) {
       if (val && val.startsWith('$') && this.loggedWallet.network === Network.MAINNET && this.loggedWallet.chain === Blockchain.CARDANO) {
@@ -317,8 +330,9 @@ export default {
       img: undefined
     },
     contactsHeaders: [
-      { text: 'Name', value: 'name', width: '20%' },
-      { text: 'Address', value: 'address', width: '80%' },
+      { text: 'Name', value: 'name' },
+      { text: 'Address', value: 'address' },
+      { text: '', align: 'right', sortable: false, value: 'actions' },
     ]
   })
 };

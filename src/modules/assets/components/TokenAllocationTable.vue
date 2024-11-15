@@ -90,6 +90,7 @@
             :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :custom-sort="customSort"
+            @click:row="handleTokenRowClick"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -377,6 +378,9 @@ export default {
     handleOnRowClick(row) {
       this.dialogData = row;
     },
+    handleTokenRowClick(row) {
+      console.log(row)
+    },
     clearFilters() {
       this.hideUnverified = false
       this.hideScam = false
@@ -490,7 +494,7 @@ export default {
         }
         if (this.hideUnrated) {
           res = res.filter(token => {
-            return token.risk
+            return token.risk && token.risk !== 'N/A'
           })
         }
         return res

@@ -1,8 +1,20 @@
 <template>
   <div id="tsac">
-    <TransactionsCard ref="transactionsCard" @row-click="handleOnTransactionsRowClick" style=" width: 39%;"></TransactionsCard>
-    <TransactionDetails :transactionInfo="transactionInfo" v-if="transactionInfo" style=" width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content;"/>
-    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportSite="reportSite" />
+    <TransactionsCard
+      ref="transactionsCard"
+      @row-click="handleOnTransactionsRowClick"
+      style=" width: 39%;"
+    />
+    <TransactionDetails
+      :transactionInfo="transactionInfo"
+      v-if="transactionInfo"
+      style="overflow-y: auto; width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);"
+    />
+    <ReportDialog
+      :isOpen="isReportDialogOpen"
+      @close="isReportDialogOpen = false"
+      :reportSite="reportSite"
+    />
   </div>
 </template>
 <script lang="ts">
@@ -22,13 +34,13 @@ export default defineComponent({
   data: () => ({
     isReportDialogOpen: false,
     transactionInfo: null,
-    reportSite: '' as string | string[],
+    reportSite: '' as string,
   }),
   created() {
     const queryParams = this.$route.query;
     if (Object.keys(queryParams).length > 0) {
       console.log(queryParams)
-      this.reportSite = queryParams['website'];
+      this.reportSite = queryParams['website'].toString();
       this.isReportDialogOpen = true;
     }
   }

@@ -103,8 +103,10 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
     },
     async setTxAutoSubmit(val) {
-      const db: Dexie = await appWallet.getDb()
-      db.table('config').put({key: 'txAutoSubmit', value: val})
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'txAutoSubmit', value: val})
+      }
     },
     async setHideScamTokens(val) {
       if (appWallet) {
