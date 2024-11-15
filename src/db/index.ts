@@ -124,6 +124,13 @@ export default {
       }
     });
   },
+  async deleteWallet(walletId: number) {
+    await db['wallets'].delete(walletId)
+    const dbName = 'wallet-' + walletId;
+    await Dexie.delete(dbName).catch(err => {
+      console.error(`Failed to delete database '${dbName}': ${err.stack || err}`);
+    });
+  },
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database
