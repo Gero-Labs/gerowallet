@@ -58,16 +58,17 @@ export default {
 }
 </script>
 <style lang="scss">
-.v-application {
-  background-color: var(--v-background-base) !important;
-}
-.v-navigation-drawer {
-  background-color: var(--v-navigationDrawerBackground-base) !important;
-}
-.v-app-bar.v-toolbar.v-sheet {
-  background-color: transparent !important;
-}
-.v-card {
-  background-color: var(--v-cardBackground-base) !important;
-}
+  @import url('@/assets/root.scss');
+  .v-application {
+    background-color: var(--v-background-base) !important;
+  }
+  .v-navigation-drawer {
+    background-color: var(--v-navigationDrawerBackground-base) !important;
+  }
+  .v-app-bar.v-toolbar.v-sheet {
+    background-color: transparent !important;
+  }
+  .v-card {
+    background-color: var(--v-cardBackground-base) !important;
+  }
 </style>

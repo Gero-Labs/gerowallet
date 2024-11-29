@@ -1,0 +1,35 @@
+:root{
+    --gero-teal: #00DFF3;
+    --gero-dark: #0F0F0F;
+    --gero-deep-blue: #161B26;
+}
+
+@font-face{
+    font-family: 'Metrophobic';
+    src: url('@/assets/font/Metrophobic-Regular.ttf');
+}
+.gero-metrophobic{
+    font-family: 'Metrophobic', sans-serif;
+}
+.text-blue{
+    font-size: 40px;
+    background: linear-gradient(91.2deg, #00C7F3 40.76%, #00FFD1 103.06%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent; 
+}
+.bg-blue{
+    background: linear-gradient(91.2deg, #00C7F3 40.76%, #00FFD1 103.06%);
+}
+.deep-blue{
+    background-color: var(--gero-deep-blue);
+}
+.border-gradient-gero-teal{
+    background: linear-gradient(var(--gero-deep-blue), var(--gero-deep-blue)) padding-box,
+              linear-gradient(to right, #33374100, #00DFF3) border-box;
+    border-radius: 10px;
+    border: 1px solid transparent;
+}
+.gero-dark{
+    background-color: var(--gero-dark);
+}
