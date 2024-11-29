@@ -28,7 +28,7 @@ export let subscriptions: Subscription[] = []
 export const useStore = defineStore('store', {
   persist: {
     paths: [
-      'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens'
+      'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens', 'referrals'
     ]
   },
   state: () => ({
@@ -55,6 +55,7 @@ export const useStore = defineStore('store', {
     fiatRates: undefined,
     currency: undefined,
     pinnedTokens: [],
+    referrals: {}
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -201,6 +202,7 @@ export const useStore = defineStore('store', {
       return []
     },
     getPools: state => state.pools,
+    getReferrals: state => state.referrals
   },
   actions: {
     setLoadingTxs(value) {
@@ -503,6 +505,7 @@ export const useStore = defineStore('store', {
       promises.push(this.loadConnectedDapps())
       promises.push(walletConfigStore().loadContacts())
       promises.push(bringStore().loadBringCache())
+      promises.push(this.loadReferrals())
       await Promise.all(promises)
       try {
         const tip = await appWallet.fetchTip()
@@ -738,6 +741,13 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       db.table('connected_dapps').delete(id)
+    },
+    async loadReferrals() {
+      /* TODO: change this mock into real db connection */
+      this.referrals = {
+        refAddress: '$GERO-referral-jnv01mvmkauna20n74',
+        referrals: []
+      }
     }
   },
 });
