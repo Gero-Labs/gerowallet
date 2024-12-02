@@ -64,7 +64,7 @@
             >
             </v-skeleton-loader>
           </v-chip-group>
-          <v-chip-group v-else v-model="selectedCategoryIndex" column mandatory active-class="geroButton" >
+          <v-chip-group v-else v-model="selectedCategoryIndex" column active-class="geroButton" >
             <v-chip class="ma-1" style="border: 1px solid rgba(51, 55, 65, 0.5); background-color: #141414!important;" v-for="item in categories?.items" :key="item.id">
               {{ item.name }}
             </v-chip>
@@ -201,12 +201,8 @@ export default defineComponent({
     async model(val) {
       this.isLoading = true
       if (val) {
+        this.selectedCategoryIndex = null
         const retailers = await appWallet.api.retailers(null, val)
-        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
-        this.nextPage = retailers.nextPageNumber
-        this.totalItems = retailers.totalItems
-      } else {
-        const retailers = await appWallet.api.retailers(this.selectedCategory.id)
         this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
         this.nextPage = retailers.nextPageNumber
         this.totalItems = retailers.totalItems
