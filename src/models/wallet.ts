@@ -17,8 +17,7 @@ import {
   Ed25519KeyHash,
   encrypt_with_password,
   EnterpriseAddress,
-  FixedTransaction,
-  PointerAddress,
+  FixedTransaction, PointerAddress,
   PrivateKey,
   PublicKey,
   RewardAddress,
@@ -454,7 +453,7 @@ export class Wallet {
     try {
       const txId = await this.api.submitTx(txCbor);
       console.log('txId', txId)
-      await this.addPendingTx(txId, tx.to_js_value(), utxos)
+      await this.addPendingTx(txId, tx.to_js_value(), utxos, JSON.parse(tx.to_json()))
       return txId;
     } catch (error) {
       console.log(error)
@@ -472,7 +471,7 @@ export class Wallet {
     }
   }
 
-  async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any) {
+  async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any, txJ: any) {
     const inputs = []
     txJs.body.inputs.forEach(input => {
       const utxo = utxos.find(utxo => utxo.tx_hash === input.transaction_id && utxo.tx_index === input.index)
@@ -483,7 +482,7 @@ export class Wallet {
     const outputs = []
     let index = 0
     const totalOutput: BigNum = BigNum.zero()
-    txJs.body.outputs.forEach(output => {
+    txJ.body.outputs.forEach(output => {
       let stakeAddress = null
       try {
         const stakeCred: Credential = stakeCredential(output.address)
@@ -492,8 +491,23 @@ export class Wallet {
         console.log(e)
       }
       totalOutput.checked_add(BigNum.from_str(output.amount.coin))
-      const asset_list = output.amount.multiasset ? output.amount.multiasset : []
-        outputs.push({
+      const asset_list = []
+      const multiAsset = output.amount.multiasset
+      if (multiAsset) {
+        Object.keys(multiAsset).forEach(policyId => {
+          console.log(policyId)
+          const assets = multiAsset[policyId];
+          for (const assetName in assets) {
+            const quantity = assets[assetName];
+            asset_list.push({
+              policy_id: policyId,
+              asset_name: assetName,
+              quantity: quantity,
+            });
+          }
+        });
+      }
+      outputs.push({
         asset_list,
         datum_hash: null,
         inline_datum: null,
