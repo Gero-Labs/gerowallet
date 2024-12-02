@@ -71,7 +71,10 @@
                 </v-list-item>
               </template>
               <template v-slot:[`item.eligibleDate`]="{ item }">
-                <Countdown :deadline="new Date(item.eligibleDate)"></Countdown>
+                <Countdown v-if="item['eligibleDate']" :deadline="new Date(item['eligibleDate'])"></Countdown>
+                <span v-else-if="item.status === 'pending'">Pending</span>
+                <span v-else-if="item.status === 'completed'">Completed</span>
+                <span v-else>N/A</span>
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
                 <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
@@ -138,12 +141,12 @@ import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
 import { bringStore } from '@/store/modules/bring';
 import networks from '@/shared/utils/networks';
-import { stringToHex, toHexBuffer, toHexString } from '@/shared/utils/converter';
+import { stringToHex } from '@/shared/utils/converter';
 import rules from '@/shared/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
-import { Address, BaseAddress } from '@emurgo/cardano-serialization-lib-browser';
+import { Address } from '@emurgo/cardano-serialization-lib-browser';
 
 export default {
   name: 'ViewRewardsDialog',
