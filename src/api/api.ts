@@ -282,9 +282,11 @@ export class Api {
     try {
       const requestBody = {
         type: 'all',
-        category: category,
         page: page ? page : 0,
         pageSize: 28
+      }
+      if (category) {
+        requestBody['category'] = category;
       }
       if (search) {
         requestBody['search'] = search
