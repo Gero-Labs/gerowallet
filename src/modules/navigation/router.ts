@@ -21,7 +21,7 @@ import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
-import ReferalMain from '../referal/views/ReferalMain.vue';
+import ReferralMain from '../referal/views/ReferralMain.vue';
 
 const routes = [
   {
@@ -171,7 +171,7 @@ const routes = [
   {
     path: '/referral',
     name: 'referral',
-    component: ReferalMain,
+    component: ReferralMain,
     meta: {
       layout: ContentLayout,
       requiresAuth: false,
