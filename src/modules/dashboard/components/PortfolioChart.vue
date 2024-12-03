@@ -106,6 +106,11 @@ export default {
         credits: {
           enabled: false,
         },
+        tooltip: {
+          formatter: function () {
+            return `${new Date(this.key).toLocaleString()}<br> <b>${filters.toCurrency(this.y, false, 2, '$', '', true, 0)}</b>`;
+          }
+        },
         xAxis: {
           crosshair: true,
           allowDecimals: false,
@@ -253,14 +258,7 @@ export default {
       }
     },
     generateTitleText() {
-      if (this.adaPrice) {
-        return (
-          `<span style="color: #FFF; font-weight: bold; font-size: 40px;">${filters.toCurrency(this.adaPrice, false, 2, this.resolveCurrency, '', true, 0)}</span>`
-          /*+`<span style="margin-left:12px; position: absolute"><span style="color: #47cd89;">▲ 14%</span> <span style="color: #94969c;">${this.tab.vsLabel}</span></span>`*/
-        );
-      } else {
-        return ''
-      }
+      return ''
     },
   },
   data() {
@@ -293,6 +291,7 @@ export default {
         if (this.arraysEqual(newVal,oldVal)) {
           return;
         }
+
         this.loadChart(newVal)
       },
       deep: true,
@@ -304,6 +303,7 @@ export default {
     }
   },
   mounted() {
+    console.log(this.chartData)
     this.loadChart(this.chartData)
   }
 };
