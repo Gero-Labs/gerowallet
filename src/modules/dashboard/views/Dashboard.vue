@@ -3,33 +3,34 @@
     <v-row no-gutters>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle>{{ `${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} Balance`}}</v-card-subtitle>
-          <v-card-title></v-card-title>
+          <v-card-subtitle class="pb-0">{{ `Portfolio Value`}}</v-card-subtitle>
+          <v-card-title class="pt-0">{{ computedValues.totalValue | toCurrency(false, 2, '₳', "", true, 0)}}</v-card-title>
+          <v-card-subtitle>{{ Number(computedValues.totalValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle>{{ `Assets Balance`}}</v-card-subtitle>
-          <v-card-title></v-card-title>
+          <v-card-subtitle class="pb-0">{{ `Assets Value`}}</v-card-subtitle>
+          <v-card-title class="pt-0">{{computedValues.assetsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
+          <v-card-subtitle>{{ Number(computedValues.assetsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle>{{ `Collectibles Balance`}}</v-card-subtitle>
-          <v-card-title></v-card-title>
+          <v-card-subtitle class="pb-0">{{ `Collectibles Value`}}</v-card-subtitle>
+          <v-card-title class="pt-0">{{computedValues.collectibles | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
+          <v-card-subtitle>{{ Number(computedValues.collectibles) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle>{{ `Liquidity Provided`}}</v-card-subtitle>
-          <v-card-title></v-card-title>
+          <v-card-subtitle class="pb-0">{{ `Liquidity Value`}}</v-card-subtitle>
+          <v-card-title class="pt-0">{{computedValues.lpsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
+          <v-card-subtitle>{{ Number(computedValues.lpsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
-          <v-card-title class="row no-gutters d-flex justify-space-between">
-            Portfolio
-          </v-card-title>
           <v-card-text>
             <PortfolioChart :chart-data="computeChartData" :loading="loadingChart"></PortfolioChart>
           </v-card-text>
@@ -60,7 +61,7 @@ import filters from '@/shared/utils/filters';
 import QuickActions from '@/modules/dashboard/components/QuickActions.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import { useStore } from '@/store';
-import {Network} from "@/models/types";
+import { Blockchain, Network } from '@/models/types';
 import {mapState} from "pinia";
 // import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
@@ -68,6 +69,7 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import networks from '../../../shared/utils/networks';
+import { tapToolsStore } from '@/store/modules/tapTools';
 
 export default {
   name: 'dashboard',
@@ -76,15 +78,41 @@ export default {
     // AssetsPieChart,
     QuickActions, PortfolioChart, NoTokensCard },
   computed: {
+    computedValues() {
+      let assetsValue = 0
+      if (this.portfolio?.positionsFt) {
+        this.portfolio.positionsFt.forEach(position => {
+          assetsValue += position.adaValue
+        })
+      }
+      let collectibles = 0
+      if (this.portfolio?.positionsNft) {
+        this.portfolio.positionsNft.forEach(position => {
+          collectibles += position.adaValue
+        })
+      }
+      let lpsValue = 0
+      if (this.portfolio?.positionsLp) {
+        this.portfolio.positionsLp.forEach(position => {
+          lpsValue += position.adaValue
+        })
+      }
+      const totalValue = assetsValue + collectibles + lpsValue
+      return { totalValue, assetsValue, collectibles, lpsValue }
+    },
     networks() {
       return networks
     },
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'loggedWallet', 'loadingTxs']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'loggedWallet', 'loadingTxs', 'price']),
     ...mapState(walletConfigStore, ['account']),
+    ...mapState(tapToolsStore, ['portfolio', 'portfolioTrendedValue']),
     computeChartData() {
+      if (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) {
+        return this.portfolioTrendedValue
+      }
       let graphData = undefined
       let currentBalance = 0
       if (this.calculatedTransactions) {

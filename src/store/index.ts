@@ -21,6 +21,7 @@ import filters from '@/shared/utils/filters';
 import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
+import { tapToolsStore } from '@/store/modules/tapTools';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
@@ -420,6 +421,7 @@ export const useStore = defineStore('store', {
           }
         });
       }
+      await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
       await appWallet.syncAddresses(Array.from(addresses))
         .then(() => walletConfigStore().setUtxos(utxos))
         .then(() => this.loadResolvedAssets())

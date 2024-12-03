@@ -5,8 +5,8 @@
         <v-row no-gutters>
           <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SEND">
-                <v-avatar tile size="80">
+              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.SEND">
+                <v-avatar tile size="50">
                   <v-img
                     :src="require('@/assets/svg/send.svg')"
                     alt="Send"
@@ -22,8 +22,8 @@
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.RECEIVE">
-                <v-avatar tile size="80">
+              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.RECEIVE">
+                <v-avatar tile size="50">
                   <v-img
                     :src="require('@/assets/svg/qr-code.svg')"
                     alt="Receive"
@@ -39,10 +39,10 @@
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.SWAP"
+              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.SWAP"
                      :disabled="isSwapDisabled"
               >
-                <v-avatar tile size="80">
+                <v-avatar tile size="50">
                   <v-img
                     :src="require('@/assets/svg/swap.svg')"
                     alt="Swap"
@@ -63,13 +63,13 @@
                 plain
                 rounded
                 class="px-0"
-                height="100"
-                width="100"
+                height="60"
+                width="60"
                 @click="currentDialog = dialogs.BUY"
                 :disabled="isBuyDisabled"
                 :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
               >
-                <v-avatar tile size="80">
+                <v-avatar tile size="50">
                   <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Buy" contain></v-img>
                 </v-avatar>
               </v-btn>
