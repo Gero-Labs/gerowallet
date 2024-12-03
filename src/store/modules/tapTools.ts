@@ -1,37 +1,42 @@
 import { defineStore } from 'pinia';
 import { appWallet } from '@/store';
-import Dexie from 'dexie';
-
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
 
 export const tapToolsStore = defineStore( 'tapToolsStore', {
   persist: {
-    paths: ['portfolio']
+    paths: ['portfolio', 'portfolioTrendedValue']
   },
   state: () => ({
     portfolio: undefined,
+    portfolioTrendedValue: undefined
   }),
   getters: {
     getNativeTokenStats(state) {
-      if (state?.portfolio && 'nativeTokenStats' in state.portfolio) {
-        return state.portfolio.nativeTokenStats
+      if (state?.portfolio) {
+        return state.portfolio
       }
       return undefined
     },
   },
   actions: {
-    async setNativeTokenBalance(val) {
-      if (appWallet) {
-        const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'nativeTokenStats', value: val})
-      }
-    },
     async loadPortfolio() {
       if (!appWallet) {
         return
       }
       try {
-        const res = await appWallet.api.getAllTokens();
+        this.portfolio = await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32());
+        console.log(this.portfolio)
+      } catch (e) {
+        console.error(e);
+      }
+    },
+    async loadPortfolioTrendedValue() {
+      if (!appWallet) {
+        return
+      }
+      try {
+        const res = await appWallet.api.getPortfolioTrendedValue(appWallet.stakeAddress().to_address().to_bech32());
+        this.portfolioTrendedValue = res.map(element => [element.time * 1000, element.value])
+        console.log(this.portfolioTrendedValue)
       } catch (e) {
         console.error(e);
       }
