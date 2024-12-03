@@ -545,4 +545,24 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async getPortfolio(stakeAddress: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getPortfolioTrendedValue(stakeAddress: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/wallet/value/trended?address=${stakeAddress}&timeframe=1y&quote=USD`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }
