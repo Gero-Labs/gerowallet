@@ -2,30 +2,39 @@
   <v-tab-item>
     <v-layout class="py-2" column>
       <v-row no-gutters class="py-2">
-        <v-col cols="7" class="text-left">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">Shop & Earn Pop-ups</h3>
+          <span class="helper my-0">Get real-time cashback notifications as you explore supported retailer websites.</span>
+        </v-col>
+        <v-col cols="3" style="align-content: center;">
+          <v-switch dense inset v-model="cashbackPopups" hide-details style="margin: auto"></v-switch>
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="9" class="text-left">
           <h3 style="color: white">Tx Auto Submit</h3>
           <span class="helper my-0">Automatically submit transactions after signing.</span>
         </v-col>
-        <v-col cols="5" style="align-content: center;">
+        <v-col cols="3" style="align-content: center;">
           <v-switch dense inset v-model="txAutoSubmit" hide-details style="margin: auto"></v-switch>
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
-        <v-col cols="7" class="text-left">
+        <v-col cols="9" class="text-left">
           <h3 style="color: white">Re-Sync Wallet</h3>
           <span class="helper my-0">Replacing wallet data from the blockchain. (Might take a while).</span>
         </v-col>
-        <v-col cols="5" style="align-content: center;">
+        <v-col cols="3" style="align-content: center;">
           <v-btn
             block
             outlined
             color="white"
-            @click="resync"
-            :disabled="resyncLoading"
-            :loading="resyncLoading"
+            @click="reSync"
+            :disabled="reSyncLoading"
+            :loading="reSyncLoading"
           >
             <v-icon
-              right
+              left
               dark
               class="mr-1"
             >
@@ -44,12 +53,11 @@
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
           <v-row no-gutters class="py-2">
-            <v-col cols="7" class="text-left">
+            <v-col cols="9" class="text-left pr-1">
               <h3 class="white--text">Delete Wallet</h3>
-
               <span class="helper my-0">Deleting this wallet removes it from Gero Dashboard, and any remaining funds will be inaccessible. To regain access, restore using your recovery phrase.</span>
             </v-col>
-            <v-col cols="5" style="align-content: center;">
+            <v-col cols="3" style="align-content: end;">
               <v-btn
                 block
                 outlined
@@ -90,12 +98,20 @@ import { mapActions, mapState } from 'pinia';
 import { appWallet, useStore } from '@/store';
 import db from '@/db';
 import snackbar from '@/plugins/snackbar';
+import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
 
 export default {
   name: 'AdvancedSettingsTab',
+  watch: {
+    cashbackPopupsDisabled(newVal, oldVal) {
+      console.log('newVal', newVal)
+      console.log('oldVal', oldVal)
+      this.updateCashbackPopups(newVal);
+    },
+  },
   computed: {
     ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit']),
+    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup']),
     txAutoSubmit: {
       get() {
         return this.getTxAutoSubmit
@@ -103,16 +119,31 @@ export default {
       async set(val) {
         await this.setTxAutoSubmit(val)
       }
+    },
+    cashbackPopups: {
+      get() {
+        return !this.cashbackPopupsDisabled
+      },
+      set(val) {
+        this.cashbackPopupsDisabled = !val
+      }
     }
   },
   methods: {
     ...mapActions(useStore, ['logout']),
     ...mapActions(walletConfigStore, ['setTxAutoSubmit']),
-    async resync() {
-      this.resyncLoading = true
+    async loadCashbackPopups() {
+      const val = await getTurnOff()
+      this.cashbackPopupsDisabled = val.isTurnedOff;
+    },
+    async updateCashbackPopups(val) {
+      await setTurnOff(val);
+    },
+    async reSync() {
+      this.reSyncLoading = true
       this.$emit('loading', true)
       await appWallet.resync()
-      this.resyncLoading = false
+      this.reSyncLoading = false
       this.$emit('loading', false)
     },
     async deleteWalletConfirm() {
@@ -128,10 +159,14 @@ export default {
     },
   },
   data: () => ({
-    resyncLoading: false,
+    reSyncLoading: false,
     deleteWalletDialog: false,
-    deleteWalletLoading: false
+    deleteWalletLoading: false,
+    cashbackPopupsDisabled: false,
   }),
+  created() {
+    this.loadCashbackPopups();
+  }
 }
 </script>
 <style scoped>

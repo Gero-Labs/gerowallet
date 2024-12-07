@@ -253,7 +253,9 @@ export default {
       const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
       const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
 
-      const totalGive = payTokens.find(token => token.name === 'cardano').amount;
+      const cardanoToken = payTokens.find(token => token.name === 'cardano')
+      let totalGive = cardanoToken ? cardanoToken.amount : 0;
+
       const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
         return { amount: token.amount, currency: token.name, id: token.id };
       });
