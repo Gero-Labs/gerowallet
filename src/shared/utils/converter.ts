@@ -750,6 +750,20 @@ export const getAddressCredentials = (addrHexOrBech32, cslAddr = null, getBytes 
   return res;
 };
 
+export function parseAddress(address: string): Address {
+  try {
+    return Address.from_bech32(address)
+  } catch (error) {
+    //
+  }
+  try {
+    return ByronAddress.from_base58(address).to_address();
+  } catch (error) {
+    //
+  }
+  return undefined;
+}
+
 const getCSLAddressOrNull = (addr, free?) => {
   const cslAddress = parseAddress$1(addr);
   if (cslAddress) {
