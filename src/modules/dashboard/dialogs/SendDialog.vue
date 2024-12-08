@@ -194,12 +194,12 @@ import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import { appWallet, useStore } from '@/store';
 import { mapState } from 'pinia';
-import { assetsToValue, toUTxO } from '@/shared/utils/converter';
+import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import rules from '@/shared/utils/rules';
 import { Network, WalletType } from '@/models/types';
 import {
-  Address, Transaction,
+  Transaction,
   TransactionOutput,
   TransactionOutputs,
   TransactionUnspentOutputs, TransactionWitnessSet,
@@ -260,8 +260,7 @@ export default {
     },
     isValid() {
       if (this.currentStep === 1) {
-        const prefix = this.loggedWallet?.network !== Network.MAINNET ? 'addr_test1' : 'addr1';
-        return this.sendData.recipientAddress?.startsWith(prefix);
+        return rules.paymentAddress(this.loggedWallet?.network !== Network.MAINNET)(this.sendData.recipientAddress)
       }
       if (this.currentStep === 2) {
         if (!this.txValid) {
@@ -292,6 +291,7 @@ export default {
           this.buildTx()
           this.txValid = true
         } catch(e) {
+          console.error(e)
           if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
             const match = e.match(/minimum UTXO value (\d+)/);
             const number = match ? parseInt(match[1], 10) : null;
@@ -467,7 +467,7 @@ export default {
         });
       }
       const outputs = TransactionOutputs.new();
-      outputs.add(TransactionOutput.new(Address.from_bech32(recipientAddress), assetsToValue(tokens)));
+      outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();
       this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
       try {
