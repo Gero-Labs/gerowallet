@@ -205,10 +205,10 @@
               <v-tooltip top :open-delay="500" v-if="item.mcap">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ Number(item.mcap) | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true, 0) }}
+                    {{ Number(item.mcap) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0) }}
                   </span>
                 </template>
-                {{ Number(item.mcap).toLocaleString('en-US', {minimumFractionDigits: item.metadata.decimals}) }}
+                {{ Number(item.mcap) * price.lastPrice | toCurrency(false, 4, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 0) }}
               </v-tooltip>
               <span v-else>N/A</span>
             </template>
@@ -412,6 +412,18 @@ export default {
 
           return sortDesc[0] ? rankB - rankA : rankA - rankB;
         } else {
+          // Explicit undefined checks:
+          if (compareA === undefined && compareB !== undefined) {
+            // A is undefined, B is defined -> A should go to bottom
+            return sortDesc[0] ? 1 : -1;
+          } else if (compareB === undefined && compareA !== undefined) {
+            // B is undefined, A is defined -> B should go to bottom
+            return sortDesc[0] ? -1 : 1;
+          } else if (compareA === undefined && compareB === undefined) {
+            // Both undefined, consider them equal
+            return 0;
+          }
+
           let result;
           if (typeof compareA === 'string' && typeof compareB === 'string') {
             result = compareA.localeCompare(compareB);
@@ -425,6 +437,17 @@ export default {
   },
   filters,
   computed: {
+    totalAllocation() {
+      let totalAllocation = 0
+      if (this.resolvedAssets) {
+        this.resolvedAssets.forEach(token => {
+          if (token.value) {
+            totalAllocation += token.value
+          }
+        })
+      }
+      return totalAllocation * this.price?.lastPrice
+    },
     filtersAmount() {
       let amt = 0
       if (this.hideScam) {
@@ -464,14 +487,8 @@ export default {
       return amount
     },
     assets() {
-      let totalAllocation = 0
       const resolvedAssets = structuredClone(this.resolvedAssets)
       if (resolvedAssets && this.price) {
-        resolvedAssets.forEach(token => {
-          if (token.value) {
-            totalAllocation += token.value
-          }
-        })
         let res = resolvedAssets.map(token => {
           token['quantity'] = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
           if (token['name'] === 'Cardano') {
@@ -482,7 +499,7 @@ export default {
           }
           token['value'] = Number(filters.toCurrency(token.quantity * token.last_price, false, 4, '', '', false, 0).replaceAll(",", ""))
           if (token['value']) {
-            token['total_allocation'] = token['value'] / totalAllocation * 100
+            token['total_allocation'] = token['value'] / this.totalAllocation * 100
           }
           return token
         })
