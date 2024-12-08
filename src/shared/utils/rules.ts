@@ -27,9 +27,9 @@ export default {
     return !!value || 'Field is required';
   },
   paymentAddress: (test: Boolean) => {
-    return (value: string) => (test ? value.startsWith('addr_test1') : value.startsWith('addr1')) || 'Invalid Payment Address';
+    return (value: string) => (test ? value.startsWith('addr_test1') : value.startsWith('addr1') || value.startsWith('DdzFF')) || 'Invalid Payment Address';
   },
   paymentAddressOrAdaHandle: () => {
-    return (value: string) => (value && (value.startsWith('addr1') || (value.startsWith('$') && value.length > 1))) || 'Invalid Payment Address';
+    return (value: string) => (value && (value.startsWith('addr1') || value.startsWith('DdzFF') || (value.startsWith('$') && value.length > 1))) || 'Invalid Payment Address';
   },
 };
