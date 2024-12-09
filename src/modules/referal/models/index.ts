@@ -3,5 +3,6 @@ export interface Referral{
 }
 export interface RefInfo{
     refAddress: string;
-    referrals: Referral[];
+    referrals?: Referral[];
+    currentView: 'refer' | 'redeem';
 }

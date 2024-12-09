@@ -2,6 +2,8 @@
     --gero-teal: #00DFF3;
     --gero-dark: #0F0F0F;
     --gero-deep-blue: #161B26;
+
+    --radius-10: 10px;
 }
 
 @font-face{
@@ -27,7 +29,7 @@
 .border-gradient-gero-teal{
     background: linear-gradient(var(--gero-deep-blue), var(--gero-deep-blue)) padding-box,
               linear-gradient(to right, #33374100, #00DFF3) border-box;
-    border-radius: 10px;
+    border-radius: var(--radius-10);
     border: 1px solid transparent;
 }
 .gero-dark{
