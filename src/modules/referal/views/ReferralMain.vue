@@ -1,7 +1,9 @@
 <script setup lang="ts">
     import { provide } from 'vue';
     import ReferralHeader from './ReferralHeader.vue';
-    import { useStore } from '@/store';
+    import ReferrerTab from './ReferrerTab.vue';
+    import RedeemTab from './RedeemTab.vue';
+    import { appWallet, useStore } from '@/store';
 
     const store = useStore();
     store.loadReferrals();
@@ -11,5 +13,7 @@
 <template>
     <div>
         <ReferralHeader/>
+        <ReferrerTab v-if="store.referrals.currentView === 'refer'" />
+        <RedeemTab v-if="store.referrals.currentView === 'redeem'"/>
     </div>
 </template>

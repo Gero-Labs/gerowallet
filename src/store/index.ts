@@ -21,9 +21,37 @@ import filters from '@/shared/utils/filters';
 import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
+import { RefInfo } from '@/modules/referal/models';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
+
+type StoreState = {
+  loggedWallet: any,
+  baseAddress: any,
+  stakeAddress: any,
+  wallets: any[],
+  locale: string,
+  network: any,
+  provider: any,
+  price: any,
+  transactions: any,
+  pendingTxs: any,
+  loadingTxs: boolean,
+  isSyncing: boolean,
+  assets: any,
+  pools: any[],
+  rewards: any[],
+  connectedDapps: any[],
+  latestTip: any,
+  stakingProView: boolean,
+  resolvedAssets: any,
+  resolvedCollections: any,
+  fiatRates: any,
+  currency: any,
+  pinnedTokens: any[],
+  referrals: RefInfo
+}
 
 export const useStore = defineStore('store', {
   persist: {
@@ -31,7 +59,7 @@ export const useStore = defineStore('store', {
       'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens', 'referrals'
     ]
   },
-  state: () => ({
+  state: (): StoreState => ({
     loggedWallet: undefined,
     baseAddress: undefined,
     stakeAddress: undefined,
@@ -55,7 +83,10 @@ export const useStore = defineStore('store', {
     fiatRates: undefined,
     currency: undefined,
     pinnedTokens: [],
-    referrals: {}
+    referrals: {
+      refAddress: '',
+      currentView: 'refer'
+    }
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -746,8 +777,9 @@ export const useStore = defineStore('store', {
       /* TODO: change this mock into real db connection */
       this.referrals = {
         refAddress: '$GERO-referral-jnv01mvmkauna20n74',
-        referrals: []
-      }
+        referrals: [],
+        currentView: 'refer'
+      };
     }
   },
 });
