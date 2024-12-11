@@ -4,27 +4,25 @@
     const badges: BadgeType[] = [
         {
             icon: {
-                path: 'UsersSVG',
-                color: 'blue'
+                path: 'UsersSVG'
             },
             title: 'Total Referrals',
             value: 5,
         },
         {
             icon: {
-                path: 'CurrencyDollarSVG',
-                color: 'green'
+                path: 'CurrencyDollarSVG'
             },
             title: '$GERO earned',
             value: 1024,
-            translateValueToUSD: true
+            valueInADA: 10
         }
     ];
 </script>
 
 <template>
     <div class="badges-container ma-4">
-        <Badge v-for="(badge, index) in badges" :key="index" :icon="badge.icon" :title="badge.title" :value="badge.value" :translateValueToUSD="badge.translateValueToUSD" />
+        <Badge v-for="(badge, index) in badges" :key="index" :icon="badge.icon" :title="badge.title" :value="badge.value" :valueInADA="badge.valueInADA" />
     </div>
 </template>
 
