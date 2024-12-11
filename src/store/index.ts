@@ -777,7 +777,43 @@ export const useStore = defineStore('store', {
       /* TODO: change this mock into real db connection */
       this.referrals = {
         refAddress: '$GERO-referral-jnv01mvmkauna20n74',
-        referrals: [],
+        referrals: [
+          {
+            walletAddress: '91082hjado19024jr1qefoaisopflakj',
+            name: '$gerowallet',
+            redeemDate: new Date().getTime(),
+            elibility: false,
+            reward: 500
+          },
+          {
+            walletAddress: '91082hjado19024jr1qefoaisopflakj',
+            name: '$gerowallet',
+            redeemDate: new Date().getTime(),
+            elibility: false,
+            reward: 500
+          },
+          {
+            walletAddress: '91082hjado19024jr1qefoaisopflakj',
+            name: '$gerowallet',
+            redeemDate: new Date().getTime(),
+            elibility: true,
+            reward: 500
+          },
+          {
+            walletAddress: '91082hjado19024jr1qefoaisopflakj',
+            name: '$gerowallet',
+            redeemDate: new Date().getTime(),
+            elibility: true,
+            reward: 500
+          },
+          {
+            walletAddress: '91082hjado19024jr1qefoaisopflakj',
+            name: '$gerowallet',
+            redeemDate: new Date().getTime(),
+            elibility: false,
+            reward: 500
+          },
+        ],
         currentView: 'refer'
       };
     }
