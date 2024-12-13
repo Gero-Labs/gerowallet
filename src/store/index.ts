@@ -85,7 +85,9 @@ export const useStore = defineStore('store', {
     pinnedTokens: [],
     referrals: {
       refAddress: '',
-      currentView: 'refer'
+      currentView: 'refer',
+      totalRewards: 0,
+      totalRewardsInADA: 0
     }
   }),
   getters: {
@@ -779,42 +781,16 @@ export const useStore = defineStore('store', {
         refAddress: '$GERO-referral-jnv01mvmkauna20n74',
         referrals: [
           {
-            walletAddress: '91082hjado19024jr1qefoaisopflakj',
-            name: '$gerowallet',
-            redeemDate: new Date().getTime(),
-            elibility: false,
-            reward: 500
-          },
-          {
-            walletAddress: '91082hjado19024jr1qefoaisopflakj',
-            name: '$gerowallet',
-            redeemDate: new Date().getTime(),
-            elibility: false,
-            reward: 500
-          },
-          {
-            walletAddress: '91082hjado19024jr1qefoaisopflakj',
-            name: '$gerowallet',
-            redeemDate: new Date().getTime(),
-            elibility: true,
-            reward: 500
-          },
-          {
-            walletAddress: '91082hjado19024jr1qefoaisopflakj',
-            name: '$gerowallet',
-            redeemDate: new Date().getTime(),
-            elibility: true,
-            reward: 500
-          },
-          {
-            walletAddress: '91082hjado19024jr1qefoaisopflakj',
-            name: '$gerowallet',
-            redeemDate: new Date().getTime(),
-            elibility: false,
+            name: 'gerowallet',
+            walletAddress: 'anvnkals19240kfamsfmzxvmfa1243',
+            dateRedeemed: '2024-10-10 16:00:00',
+            eligible: true,
             reward: 500
           },
         ],
-        currentView: 'refer'
+        currentView: 'refer',
+        totalRewards: 2501,
+        totalRewardsInADA: 44.2
       };
     }
   },
