@@ -85,7 +85,9 @@ export const useStore = defineStore('store', {
     pinnedTokens: [],
     referrals: {
       refAddress: '',
-      currentView: 'refer'
+      currentView: 'refer',
+      totalRewards: 0,
+      totalRewardsInADA: 0
     }
   }),
   getters: {
@@ -777,8 +779,18 @@ export const useStore = defineStore('store', {
       /* TODO: change this mock into real db connection */
       this.referrals = {
         refAddress: '$GERO-referral-jnv01mvmkauna20n74',
-        referrals: [],
-        currentView: 'refer'
+        referrals: [
+          {
+            name: 'gerowallet',
+            address: 'anvnkals19240kfamsfmzxvmfa1243',
+            dateRedeemed: '2024-10-10 16:00:00',
+            eligible: true,
+            reward: 500
+          },
+        ],
+        currentView: 'refer',
+        totalRewards: 2501,
+        totalRewardsInADA: 44.2
       };
     }
   },

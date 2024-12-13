@@ -1,5 +1,8 @@
 <script setup lang="ts">
     import Badge, { BadgeType } from '@/shared/components/Badge.vue';
+    import { inject, ref } from 'vue';
+    import { RefInfo } from '../models';
+    const refInfo: RefInfo = inject('refInfo');
 
     const badges: BadgeType[] = [
         {
@@ -7,15 +10,15 @@
                 path: 'UsersSVG'
             },
             title: 'Total Referrals',
-            value: 5,
+            value: refInfo.referrals?.length,
         },
         {
             icon: {
                 path: 'CurrencyDollarSVG'
             },
             title: '$GERO earned',
-            value: 1024,
-            valueInADA: 10
+            value: refInfo.totalRewards,
+            valueInADA: refInfo.totalRewardsInADA
         }
     ];
 </script>
