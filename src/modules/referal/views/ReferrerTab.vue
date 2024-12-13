@@ -26,7 +26,7 @@
 <template>
     <div class="referrer-view">
         <div class="badges-container ma-4">
-            <Badge v-for="(badge, index) in badges" :key="index" :icon="badge.icon" :title="badge.title" :value="badge.value" :translateValueToUSD="badge.translateValueToUSD" />
+            <Badge v-for="(badge, index) in badges" :key="index" :icon="badge.icon" :title="badge.title" :value="badge.value" :valueInADA="badge.valueInADA" />
         </div>
         <div>
             <v-data-table :items="refInfo.referrals"></v-data-table>
