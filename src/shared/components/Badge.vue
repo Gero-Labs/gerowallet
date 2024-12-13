@@ -14,7 +14,6 @@ export type BadgeType = {
 const props = defineProps<BadgeType>();
 const SVGComponent = () => import(`@/assets/icons/${props.icon.path}.vue`);
 const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
-console.log('-----> lastprice', lastPrice);
 
 </script>
 
