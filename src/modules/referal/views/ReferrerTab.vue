@@ -54,7 +54,15 @@
                 <template v-slot:[`item.walletAddress`]="{ item }">
                     <v-list-item>
                         <v-list-text style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
-                            {{ item.walletAddress }}
+                            <v-tooltip bottom>
+                                <template v-slot:activator="{ on, attrs }">
+                                    <span
+                                        v-bind="attrs"
+                                        v-on="on"
+                                    >{{ item.walletAddress }}</span>
+                                </template>
+                                <span>{{ item.walletAddress }}</span>
+                            </v-tooltip>
                         </v-list-text>
                     </v-list-item>
                 </template>
