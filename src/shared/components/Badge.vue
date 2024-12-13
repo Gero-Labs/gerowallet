@@ -26,7 +26,7 @@ console.log('-----> lastprice', lastPrice);
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="badge-title">
-            {{ title}}
+            {{ title }}
           </v-list-item-title>
           <v-list-item-subtitle class="badge-value">
             {{ filters.toCurrency(value, false, 2, '', '', true, 0)  }}
