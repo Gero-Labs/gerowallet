@@ -4,6 +4,7 @@ export interface Referral{
     dateRedeemed: string;
     eligible: boolean;
     reward: number;
+    rewardInADA: number;
 }
 export interface RefInfo{
     refAddress: string;

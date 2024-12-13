@@ -784,13 +784,22 @@ export const useStore = defineStore('store', {
             name: 'gerowallet',
             walletAddress: 'anvnkals19240kfamsfmzxvmfa1243',
             dateRedeemed: '2024-10-10 16:00:00',
+            eligible: false,
+            reward: 500,
+            rewardInADA: 45
+          },
+          {
+            name: 'SNEKKK',
+            walletAddress: 'anvnkals19240kfamsfmzxvmfa1243',
+            dateRedeemed: '2024-10-08 16:00:00',
             eligible: true,
-            reward: 500
+            reward: 500,
+            rewardInADA: 45
           },
         ],
         currentView: 'refer',
-        totalRewards: 2501,
-        totalRewardsInADA: 44.2
+        totalRewards: 1000,
+        totalRewardsInADA: 90
       };
     }
   },
