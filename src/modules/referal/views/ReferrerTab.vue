@@ -25,12 +25,12 @@
     ];
 
     const referralsTableHeaders: any[] = [
-        { text: "Wallets that redeemed the code", align: "start", sortable: false, value: "walletAddress" },
-        { text: "Contact Name", align: "start", sortable: false, value: "name" },
-        { text: "Date Redeemed", align: "start", sortable: true, value: "dateRedeemed" },
-        { text: "Eligible?", align: "start", sortable: true, value: "eligible" },
-        { text: "Reward", align: "start", sortable: true, value: "reward" },
-        { text: "Claim", align: "start", sortable: false, value: "claim" },
+        { text: "Wallets that redeemed the code", align: "start", sortable: false, value: "walletAddress", width: 400 },
+        { text: "Contact Name", align: "start", sortable: false, value: "name", width: 150 },
+        { text: "Date Redeemed", align: "start", sortable: true, value: "dateRedeemed", width: 150 },
+        { text: "Eligible?", align: "start", sortable: true, value: "eligible", width: 50 },
+        { text: "Reward", align: "start", sortable: true, value: "reward", width: 150 },
+        { text: "Claim", align: "start", sortable: false, value: "claim", width: 50 },
     ];
 
     const claimClick = () => {
@@ -51,6 +51,13 @@
                 class="transparent"
                 :items="refInfo.referrals"
                 :headers="referralsTableHeaders">
+                <template v-slot:[`item.walletAddress`]="{ item }">
+                    <v-list-item>
+                        <v-list-text style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                            {{ item.walletAddress }}
+                        </v-list-text>
+                    </v-list-item>
+                </template>
                 <template v-slot:[`item.eligible`]="{ item }">
                     <v-list-item dense>
                         <v-list-item-action class="my-0">
