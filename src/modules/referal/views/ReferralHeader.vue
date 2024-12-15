@@ -15,13 +15,14 @@
 </template>
 
 <style lang="scss" scoped>
-    #referral-header{
-        background: url('@/assets/img/referral/ref-bg.png') rgba(0,0,0, .5);
-        background-size: 100% 140%;
-        background-blend-mode: hard-light;
-        width: auto;
-        min-height: 20vw;
-        position: relative;
+    #referral-header {
+      background: url('@/assets/img/referral/ref-bg.png') rgba(0,0,0, .5);
+      background-size: 100% 140%;
+      background-blend-mode: hard-light;
+      width: auto;
+      min-height: 20vw;
+      position: relative;
+      border-radius: 12px;
     }
     .ref-wrapper{
         max-width: 50vw;
