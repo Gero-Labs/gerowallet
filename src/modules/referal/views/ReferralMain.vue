@@ -15,6 +15,6 @@
         <ReferralHeader />
         <ReferrerTab v-if="store.referrals.currentView === 'refer'" />
         <RedeemTab v-if="store.referrals.currentView === 'redeem'"/>
-        <hr />
+        <v-divider />
     </div>
 </template>
