@@ -53,7 +53,7 @@
                 :headers="referralsTableHeaders">
                 <template v-slot:[`item.walletAddress`]="{ item }">
                     <v-list-item>
-                        <v-list-text style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        <v-list-item-content style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
                             <v-tooltip bottom>
                                 <template v-slot:activator="{ on, attrs }">
                                     <span
@@ -63,7 +63,7 @@
                                 </template>
                                 <span>{{ item.walletAddress }}</span>
                             </v-tooltip>
-                        </v-list-text>
+                        </v-list-item-content>
                     </v-list-item>
                 </template>
                 <template v-slot:[`item.eligible`]="{ item }">

@@ -1,13 +1,28 @@
-<script setup lang="ts">
+<script lang="ts">
     import ReferralTitle from '@/modules/referal/components/ReferralTitle.vue';
     import ReferralToggle from '../components/ReferralToggle.vue';
     import ReferralBox from '../components/ReferralBox.vue';
+
+    export default {
+        components: {
+            ReferralTitle,
+            ReferralToggle,
+            ReferralBox
+        },
+        methods: {
+            toggleRefView(val){
+                this.$emit('toggleRefView', val);
+            }
+        }
+    }
+
+
 </script>
 
 <template>
     <div id="referral-header">
         <v-container class="ref-wrapper">
-            <ReferralToggle />
+            <ReferralToggle @toggleRefView="toggleRefView" />
             <ReferralTitle />
             <ReferralBox />
         </v-container>
