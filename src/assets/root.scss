@@ -2,6 +2,9 @@
     --gero-teal: #00DFF3;
     --gero-dark: #0F0F0F;
     --gero-deep-blue: #161B26;
+    --gero-white: #FFFFFF;
+
+    --radius-10: 10px;
 }
 
 @font-face{
@@ -27,9 +30,15 @@
 .border-gradient-gero-teal{
     background: linear-gradient(var(--gero-deep-blue), var(--gero-deep-blue)) padding-box,
               linear-gradient(to right, #33374100, #00DFF3) border-box;
-    border-radius: 10px;
+    border-radius: var(--radius-10) !important;
     border: 1px solid transparent;
 }
 .gero-dark{
     background-color: var(--gero-dark);
+}
+.border-gradient-gero-white{
+    background: linear-gradient(var(--gero-dark), var(--gero-dark)) padding-box,
+              linear-gradient(to top, transparent, rgba(255,255,255, .12)) border-box;
+    border-radius: var(--radius-10) !important;
+    border: 1px solid transparent;
 }
