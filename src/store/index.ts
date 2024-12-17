@@ -782,7 +782,7 @@ export const useStore = defineStore('store', {
         referrals: [
           {
             name: 'gerowallet',
-            walletAddress: 'anvnkals19240kfamsfmzxvmfa1243',
+            walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
             dateRedeemed: '2024-10-10 16:00:00',
             eligible: false,
             reward: 500,
@@ -790,7 +790,7 @@ export const useStore = defineStore('store', {
           },
           {
             name: 'SNEKKK',
-            walletAddress: 'anvnkals19240kfamsfmzxvmfa1243',
+            walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
             dateRedeemed: '2024-10-08 16:00:00',
             eligible: true,
             reward: 500,
