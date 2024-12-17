@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import { provide } from 'vue';
+    import { provide, ref, watch } from 'vue';
     import ReferralHeader from './ReferralHeader.vue';
     import ReferrerTab from './ReferrerTab.vue';
     import RedeemTab from './RedeemTab.vue';
@@ -9,14 +9,25 @@
     const store = useStore();
     store.loadReferrals();
     provide('refInfo', store.referrals);
+
+    let currentViewRefer = ref(false);
+    let currentViewRedeem = ref(false);
+
+    watch(currentViewRefer, () => {});
+    watch(currentViewRedeem, () => {});
+
+    const toggleRedeemerReferrerView = () => {
+
+    }
+
 </script>
 
 <template>
     <div>
-        <ReferralHeader />
-        <ReferrerTab v-if="store.referrals.currentView === 'refer'" />
-        <RedeemTab v-if="store.referrals.currentView === 'redeem'"/>
-        <v-divider />
+        <ReferralHeader @toggleRefView="toggleRedeemerReferrerView" />
+        <ReferrerTab v-model="currentViewRefer" />
+        <RedeemTab v-model="currentViewRedeem"/>
+        <hr />
         <ReferralFAQ />
     </div>
 </template>
