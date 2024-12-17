@@ -3,7 +3,8 @@
     import ReferralHeader from './ReferralHeader.vue';
     import ReferrerTab from './ReferrerTab.vue';
     import RedeemTab from './RedeemTab.vue';
-    import { appWallet, useStore } from '@/store';
+    import { useStore } from '@/store';
+    import ReferralFAQ from './ReferralFAQ.vue';
 
     const store = useStore();
     store.loadReferrals();
@@ -16,5 +17,6 @@
         <ReferrerTab v-if="store.referrals.currentView === 'refer'" />
         <RedeemTab v-if="store.referrals.currentView === 'redeem'"/>
         <v-divider />
+        <ReferralFAQ />
     </div>
 </template>

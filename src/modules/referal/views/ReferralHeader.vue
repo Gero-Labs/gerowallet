@@ -25,14 +25,14 @@
       border-radius: 12px;
     }
     .ref-wrapper{
-        max-width: 50vw;
+        max-width: 50%;
         margin: 0 auto;
         display: flex;
         flex-direction: column;
         justify-content: space-around;
         height: 100%;
         position: absolute;
-        left: calc(50% - 25vw)
+        left: 25%
     }
 
     /* mobile simulation */
