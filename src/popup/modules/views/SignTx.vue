@@ -39,6 +39,9 @@
             <TransactionRisk :risk="risks?.score" :loading="loading" />
           </v-col>
         </v-row>
+        <div style="text-align: right; position: absolute; float: right; right: 8px; bottom: 125px;">
+          <CopyButton x-small :value="this.request.data.tx" :title="'CBOR'"></CopyButton>
+        </div>
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
         <v-layout>
@@ -128,10 +131,11 @@ import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import cardanoShieldApi from '@/api/cardano-shield-api';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 export default {
   name: 'DappConnect',
-  components: { USBBluetoothSwitch, TransactionRisk, TransactionCard, DappAddress, PopupHeader },
+  components: { CopyButton, USBBluetoothSwitch, TransactionRisk, TransactionCard, DappAddress, PopupHeader },
   data() {
     return {
       isBT: false,
