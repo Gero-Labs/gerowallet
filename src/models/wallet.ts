@@ -209,12 +209,12 @@ export class Wallet {
 
   baseAddress(): BaseAddress {
     return this.deriveAddressFromPath(0);
-    // return BaseAddress.from_address(Address.from_bech32("addr1q9degghjuxxsgym6f78l24q4z55psgfpfsu24e29zgq0ea02w7m2c6t0s57zl6nfe3455p9hzfajwkegk0w387ggsp6skdphkp"))
+    // return BaseAddress.from_address(Address.from_bech32("addr1q9tz7aw9kvefmk744ndfkh3asw247j9n4v29825uzjxkez0jedcrlwrl6aj72syq7ysqx7ps7rd383dtlrxhgtpn96yqr6cfuq"))
   }
 
   stakeAddress(): RewardAddress {
     return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
-    // return RewardAddress.from_address(Address.from_bech32("stake1u8480d4vd9hc20p0af5uc662qjm3y7e8tv5t8hgnlyygqag9dj4wl"))
+    // return RewardAddress.from_address(Address.from_bech32("stake1u8evkuplhplawe09gzq0zgqr0qc0pkcnck4l3nt59sejazqp7yceu"))
   }
 
   drepId(): DRep {
