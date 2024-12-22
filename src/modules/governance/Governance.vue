@@ -223,11 +223,11 @@ export default defineComponent({
           res = 'Abstain'
         } else {
           const drep = this.dreps[this.account.drep_id]
-          if (drep && drep['metadata']?.json?.body?.givenName) {
-            if (drep['metadata'].json.body.givenName['@value']) {
-              res = drep['metadata'].json.body.givenName['@value']
+          if (drep && drep['metadata']?.meta_json?.body?.givenName) {
+            if (drep['metadata'].meta_json.body.givenName['@value']) {
+              res = drep['metadata'].meta_json.body.givenName['@value']
             } else {
-              res = drep['metadata'].json.body.givenName
+              res = drep['metadata'].meta_json.body.givenName
             }
           }
         }
@@ -242,16 +242,16 @@ export default defineComponent({
           .filter(drep => drep != null)
           .map(drep => {
           let name = 'N/A'
-          if (drep['metadata']?.json?.body?.givenName) {
-            if (drep['metadata'].json.body.givenName['@value']) {
-              name = drep['metadata'].json.body.givenName['@value']
+          if (drep['metadata']?.meta_json?.body?.givenName) {
+            if (drep['metadata'].meta_json.body.givenName['@value']) {
+              name = drep['metadata'].meta_json.body.givenName['@value']
             } else {
-              name = drep['metadata'].json.body.givenName
+              name = drep['metadata'].meta_json.body.givenName
             }
           }
           let image
-          if (drep['metadata']?.json?.body?.image?.contentUrl) {
-            image = drep['metadata'].json.body.image.contentUrl
+          if (drep['metadata']?.meta_json?.body?.image?.contentUrl) {
+            image = drep['metadata'].meta_json.body.image.contentUrl
           }
           return {
             id: drep['drep_id'],
@@ -260,7 +260,7 @@ export default defineComponent({
             delegators: drep['delegators'].length,
             votes: drep['votes'].length,
             voting_power: Number(drep['amount']),
-            links: drep['metadata']?.json?.body?.references,
+            links: drep['metadata']?.meta_json?.body?.references,
             hex: drep['hex'],
             registered: drep['registered'],
             has_script: drep['has_script'],
