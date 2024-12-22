@@ -110,7 +110,7 @@ export default {
     ...mapState(walletConfigStore, ['account']),
     ...mapState(tapToolsStore, ['portfolio', 'portfolioTrendedValue']),
     computeChartData() {
-      if (this.loggedWallet.chain === Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET) {
+      if (this.loggedWallet?.chain === Blockchain.CARDANO && this.loggedWallet?.network === Network.MAINNET) {
         return this.portfolioTrendedValue
       }
       let graphData = undefined

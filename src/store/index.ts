@@ -421,7 +421,9 @@ export const useStore = defineStore('store', {
           }
         });
       }
-      await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
+      if (Array.isArray(transactions) && transactions.length > 0) {
+        await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
+      }
       await appWallet.syncAddresses(Array.from(addresses))
         .then(() => walletConfigStore().setUtxos(utxos))
         .then(() => this.loadResolvedAssets())
@@ -545,6 +547,8 @@ export const useStore = defineStore('store', {
       this.resolvedCollections = undefined
       await walletConfigStore().setAddresses(undefined)
       walletConfigStore().setContacts(undefined)
+      tapToolsStore().setPortfolio(undefined)
+      tapToolsStore().setPortfolioTrendedValue(undefined)
       this.baseAddress = undefined
       this.stakeAddress = undefined
       appWallet = undefined

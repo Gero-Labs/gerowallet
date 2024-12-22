@@ -313,7 +313,10 @@ export default {
       return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
     },
     delegatingToGero() {
-      return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network) === this.account.pool_id
+      if (this.account) {
+        return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network) === this.account.pool_id
+      }
+      return false
     },
     ...mapState(useStore, ['pools', 'loggedWallet', 'latestTip', 'baseAddress']),
     ...mapState(walletConfigStore, ['utxos', 'account']),
