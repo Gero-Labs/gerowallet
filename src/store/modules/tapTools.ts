@@ -18,13 +18,18 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
     },
   },
   actions: {
+    setPortfolio(portfolio: any) {
+      this.portfolio = portfolio
+    },
+    setPortfolioTrendedValue(portfolioTrendedValue: any) {
+      this.portfolioTrendedValue = portfolioTrendedValue
+    },
     async loadPortfolio() {
       if (!appWallet) {
         return
       }
       try {
-        this.portfolio = await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32());
-        console.log(this.portfolio)
+        this.setPortfolio(await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32()))
       } catch (e) {
         console.error(e);
       }
@@ -35,8 +40,7 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
       }
       try {
         const res = await appWallet.api.getPortfolioTrendedValue(appWallet.stakeAddress().to_address().to_bech32());
-        this.portfolioTrendedValue = res.map(element => [element.time * 1000, element.value])
-        console.log(this.portfolioTrendedValue)
+        this.setPortfolioTrendedValue(res.map(element => [element.time * 1000, element.value]))
       } catch (e) {
         console.error(e);
       }
