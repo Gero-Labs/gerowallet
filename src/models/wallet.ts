@@ -494,7 +494,7 @@ export class Wallet {
       const asset_list = []
       const multiAsset = output.amount.multiasset
       if (multiAsset) {
-        Object.keys(multiAsset).forEach(policyId => {
+        Object.keys(multiAsset).forEach((policyId: string) => {
           console.log(policyId)
           const assets = multiAsset[policyId];
           for (const assetName in assets) {
@@ -527,7 +527,7 @@ export class Wallet {
     if (txJs.body.certs?.length > 0) {
       let index = 0
       txJs.body.certs.forEach(cert => {
-        if (cert['StakeDeregistration']) {
+        if (cert['StakeDeregistration']?.stake_credential?.Key) {
           const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDeregistration']['stake_credential']['Key'])
           certificates.push({
             index: index++,
@@ -536,7 +536,7 @@ export class Wallet {
             },
             type: 'stake_deregistration'
           })
-        } else if (cert['StakeRegistration']) {
+        } else if (cert['StakeRegistration']?.stake_credential?.Key) {
           const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeRegistration']['stake_credential']['Key'])
           certificates.push({
             index: index++,
@@ -546,7 +546,7 @@ export class Wallet {
             },
             type: 'stake_registration'
           })
-        } else if (cert['StakeDelegation']) {
+        } else if (cert['StakeDelegation']?.stake_credential?.Key && cert['StakeDelegation']?.pool_keyhash) {
           const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['stake_credential']['Key'])
           const poolKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['pool_keyhash'])
           certificates.push({
@@ -558,7 +558,7 @@ export class Wallet {
             },
             type: 'pool_delegation'
           })
-        } else if (cert['VoteDelegation']) {
+        } else if (cert['VoteDelegation']?.stake_credential?.Key && cert['VoteDelegation']?.drep?.ScriptHash) {
           const stakeKeyHash = Ed25519KeyHash.from_hex(cert['VoteDelegation']['stake_credential']['Key'])
           const drep = DRep.new_script_hash(ScriptHash.from_hex(cert['VoteDelegation']['drep']['ScriptHash']))
           certificates.push({
@@ -604,8 +604,6 @@ export class Wallet {
       pending: true
     }
     await this.setAccountTransactions([tx])
-    console.log(tx)
-    console.log(txJs)
   }
 
   async getLastSyncInfo() {
