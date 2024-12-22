@@ -1,5 +1,6 @@
 <template>
-  <v-btn icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
+  <v-btn :icon="!!!title" :text="!!title" :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
+    <span v-if="title" class="mr-1">{{title}}</span>
     <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
       {{ icon }}
     </v-icon>
@@ -37,6 +38,10 @@ export default {
       type: String,
       required: false,
     },
+    title: {
+      type: String,
+      required: false,
+    }
   },
   data() {
     return {
