@@ -75,7 +75,7 @@
                     <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="fallbackImage" eager></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
-                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name}` }}
+                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
                       <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
                           <v-icon small>
@@ -171,7 +171,7 @@
                     <v-list-item v-if="pool">
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
-                          {{`[${pool.ticker}] ${pool.name}` }}
+                          {{`[${pool.ticker}] ${pool.name ? pool.name : ''}` }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
                           <v-btn icon x-small v-if="pool?.homepage" @click.stop="" :href="pool?.homepage" target="_blank">
@@ -312,9 +312,12 @@ export default {
     geroPoolExists() {
       return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
     },
+    geroPoolId() {
+      return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
+    },
     delegatingToGero() {
       if (this.account) {
-        return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network) === this.account.pool_id
+        return this.geroPoolId === this.account.pool_id
       }
       return false
     },
@@ -329,13 +332,17 @@ export default {
         let filteredPools = this.pools.filter(pool => pool.pool_status === 'registered')
         if (this.search) {
           filteredPools = filteredPools.filter(pool => (pool.ticker && pool.ticker.toLowerCase().includes(this.search.toLowerCase())) || (pool.name && pool.name.toLowerCase().includes(this.search.toLowerCase())))
-          console.log(filteredPools)
         }
         if (this.pledgeMet) {
           filteredPools = filteredPools.filter(pool => {
             return Number(pool.pledge) <= Number(pool.live_pledge)
           })
         }
+        filteredPools.sort((a, b) => {
+          if (a.pool_id_bech32 === this.geroPoolId) return -1;
+          if (b.pool_id_bech32 === this.geroPoolId) return 1;
+          return 0;
+        });
         return filteredPools
       }
       return []
