@@ -147,6 +147,7 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
+import cashbackApi from '@/api/cashback-api';
 
 export default {
   name: 'ViewRewardsDialog',
@@ -227,7 +228,7 @@ export default {
     async claim() {
       this.loading = true
       try {
-        const res = await appWallet.api.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
+        const res = await cashbackApi.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
         const messageToSign = res.messageToSign
         const request = {
           method: METHOD.signData,
@@ -237,7 +238,7 @@ export default {
         if (signature.error) {
           snackbar.setError(signature.error.info)
         } else {
-          const status = await appWallet.api.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
+          const status = await cashbackApi.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
           if (status === 202) {
             snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
             await this.loadBringCache()
@@ -268,13 +269,6 @@ export default {
     rules,
     loading: false,
   }),
-  watch: {
-    isOpen(val) {
-      if (val) {
-        // appWallet.api.
-      }
-    }
-  },
 };
 </script>
 <style scoped>
