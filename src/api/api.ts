@@ -543,4 +543,9 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async getReferrerCode() {
+    // TODO[@KyrSmaw]: call the BE for the referrer code
+    return '$GERO-referrer-f31285twergufibhnwqyd'
+  }
 }

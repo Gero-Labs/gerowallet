@@ -10,7 +10,7 @@
   <v-container class="deep-blue border-gradient-gero-teal">
     <v-row class="bg-blue rounded" style="height: 32px">
       <v-col class="black--text py-0" style="align-content: center;">
-        {{ $t('Limited offer - Get $25 worth of $GERO for each referral!') }}
+        {{ 'Limited offer - Get $25 worth of $GERO for each referral!' }}
       </v-col>
       <v-col class="text-right py-0"  style="align-content: center;">
         <v-chip color="#00000033" style="color:#000; font-weight: bold" small>30 days remaining</v-chip>
