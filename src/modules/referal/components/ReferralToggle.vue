@@ -1,11 +1,13 @@
 <script lang="ts">
-    export default {
+    import { defineComponent } from 'vue';
+
+    export default defineComponent({
         methods: {
             refToggle(val){
                 this.$emit('toggleRefView', val);
             }
         }
-    }
+    })
 </script>
 
 <template>

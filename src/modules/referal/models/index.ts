@@ -9,7 +9,6 @@ export interface Referral{
 export interface RefInfo{
     refAddress: string;
     referrals?: Referral[];
-    currentView: 'refer' | 'redeem';
     totalRewards: number; // in $GERO
-    totalRewardsInADA: number // in ADA
+    totalRewardsInADA?: number // in ADA
 }

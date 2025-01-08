@@ -3,12 +3,12 @@
     import ReferralHeader from './ReferralHeader.vue';
     import ReferrerTab from './ReferrerTab.vue';
     import RedeemTab from './RedeemTab.vue';
-    import { useStore } from '@/store';
     import ReferralFAQ from './ReferralFAQ.vue';
+    import { useStore } from '@/store';
 
-    const store = useStore();
-    store.loadReferrals();
-    provide('refInfo', store.referrals);
+    const referralsStore = useStore();
+    referralsStore.initReferrals();
+    provide('refInfo', referralsStore.referral);
 
     let currentViewRefer = ref(false);
     let currentViewRedeem = ref(false);

@@ -2,8 +2,9 @@
     import ReferralTitle from '@/modules/referal/components/ReferralTitle.vue';
     import ReferralToggle from '../components/ReferralToggle.vue';
     import ReferralBox from '../components/ReferralBox.vue';
+    import { defineComponent } from 'vue';
 
-    export default {
+    export default defineComponent({
         components: {
             ReferralTitle,
             ReferralToggle,
@@ -14,9 +15,7 @@
                 this.$emit('toggleRefView', val);
             }
         }
-    }
-
-
+    })
 </script>
 
 <template>

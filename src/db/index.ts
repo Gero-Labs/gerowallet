@@ -6,7 +6,7 @@ import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/typ
 
 const db = new Dexie('GeroWalletDatabase');
 const blockChainDBVersion = 2;
-const walletDBVersion = 2;
+const walletDBVersion = 3;
 
 await db.version(1).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
@@ -168,6 +168,7 @@ export default {
       rewards: 'epoch, amount, pool_id, type',
       transactions: 'id',
       connected_dapps: '++id, domain, time',
+      referrals: '++id,  walletAddress, name, dateRedeemed, eligible, reward, rewardInADA'
     });
   }
 };
