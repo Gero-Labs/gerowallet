@@ -86,6 +86,9 @@ export const useStore = defineStore('store', {
     referral: {
       refAddress: '',
       referrals: [],
+      redeem: {
+        canClaim: false
+      },
       totalRewards: 0
     }
   }),
@@ -782,6 +785,9 @@ export const useStore = defineStore('store', {
       // pull total referrals and their satus from BE
       this.referral.referrals = await this.getReferrals();
       this.referral.totalRewards = this.referral.referrals.reduce( (acc, current) => acc + current.reward, 0);
+      // get redeem info
+      this.referral.redeem.canClaim = false;
+      this.referral.redeem.actions = await this.getRedeemActions();
     },
     async getReferrals() {
        // TODO: @KyrSmaw - wire to the correct API once ready
@@ -803,6 +809,20 @@ export const useStore = defineStore('store', {
               rewardInADA: 45
           },
       ];
+    },
+    async getRedeemActions(){
+      return [
+        {
+          name: 'swap',
+          done: false,
+          info: 'Spend at least 50 ADA in a swap transation with Gero Dashboard'
+        },
+        {
+          name: 'stake',
+          done: true,
+          info: 'Stake at least 1,000 ADA into the GERO2 POOL for at least 1 epoch (5 days)'
+        }
+      ]
     }
   },
 });
