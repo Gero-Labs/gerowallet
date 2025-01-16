@@ -788,7 +788,7 @@ export const useStore = defineStore('store', {
        return [
           {
               name: 'gerowallet',
-              walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
+              walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9149irouqmk7ygdfhsjkjbna',
               dateRedeemed: '2024-10-10 16:00:00',
               eligible: false,
               reward: 500,
