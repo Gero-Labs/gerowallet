@@ -1,43 +1,64 @@
-<script setup lang="ts">
-    import { computed, inject } from 'vue';
+<script lang="ts">
+    import { inject } from 'vue';
     import Badge, { BadgeType } from '@/shared/components/Badge.vue';
     import { RefInfo } from '../models';
     import filters from '@/shared/utils/filters';
     import { useStore } from '@/store';
+    import CopyButton from '@/shared/components/CopyButton.vue';
     
-    const refInfo: RefInfo = inject('refInfo');
-    const badges: BadgeType[] = [
-        {
-            icon: {
-                path: 'UsersSVG'
-            },
-            title: 'Total Referrals',
-            value: refInfo.referrals?.length,
+    export default {
+        name: 'ReferrerTab',
+        components: {CopyButton, Badge},
+        setup(){
+            const refInfo: RefInfo = inject('refInfo');
+            const badges: BadgeType[] = [
+                {
+                    icon: {
+                        path: 'UsersSVG'
+                    },
+                    title: 'Total Referrals',
+                    value: refInfo.referrals?.length,
+                },
+                {
+                    icon: {
+                        path: 'CurrencyDollarSVG'
+                    },
+                    title: '$GERO earned',
+                    value: refInfo.totalRewards,
+                    valueInADA: refInfo.totalRewardsInADA
+                }
+            ];
+
+            const lastPrice = Number(useStore().price.lastPrice.value);
+
+            const referralsTableHeaders: any[] = [
+                { text: "Wallets that redeemed the code", align: "start", sortable: false, value: "walletAddress", width: 400 },
+                { text: "Contact Name", align: "start", sortable: false, value: "name", width: 150 },
+                { text: "Date Redeemed", align: "start", sortable: true, value: "dateRedeemed", width: 150 },
+                { text: "Eligible?", align: "start", sortable: true, value: "eligible", width: 50 },
+                { text: "Reward", align: "start", sortable: true, value: "reward", width: 150 },
+                { text: "Claim", align: "start", sortable: false, value: "claim", width: 50 },
+            ];
+
+            return {
+                refInfo,
+                badges,
+                referralsTableHeaders,
+                filters,
+                lastPrice
+            }
         },
-        {
-            icon: {
-                path: 'CurrencyDollarSVG'
+        methods: {
+            claimClick(){
+                alert('you clicked!');
             },
-            title: '$GERO earned',
-            value: refInfo.totalRewards,
-            valueInADA: refInfo.totalRewardsInADA
+            copyAddress(refId){
+                // @ts-ignore
+                this.$refs[`copyAddress-${refId}`].copy();
+            }
         }
-    ];
-
-    const referralsTableHeaders: any[] = [
-        { text: "Wallets that redeemed the code", align: "start", sortable: false, value: "walletAddress", width: 400 },
-        { text: "Contact Name", align: "start", sortable: false, value: "name", width: 150 },
-        { text: "Date Redeemed", align: "start", sortable: true, value: "dateRedeemed", width: 150 },
-        { text: "Eligible?", align: "start", sortable: true, value: "eligible", width: 50 },
-        { text: "Reward", align: "start", sortable: true, value: "reward", width: 150 },
-        { text: "Claim", align: "start", sortable: false, value: "claim", width: 50 },
-    ];
-
-    const claimClick = () => {
-        alert('you clicked!');
     }
-
-    const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
+   
 </script>
 
 <template>
@@ -51,18 +72,11 @@
                 class="transparent"
                 :items="refInfo.referrals"
                 :headers="referralsTableHeaders">
-                <template v-slot:[`item.walletAddress`]="{ item }">
+                <template v-slot:[`item.walletAddress`]="{ item, index }">
                     <v-list-item>
-                        <v-list-item-content style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
-                            <v-tooltip bottom>
-                                <template v-slot:activator="{ on, attrs }">
-                                    <span
-                                        v-bind="attrs"
-                                        v-on="on"
-                                    >{{ item.walletAddress }}</span>
-                                </template>
-                                <span>{{ item.walletAddress }}</span>
-                            </v-tooltip>
+                        <v-list-item-content style="width: 400px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; display: unset;">
+                            <a style="font-size: 12px; color: white; margin-right: 0.25rem;" @click="copyAddress(index)">{{ filters.shortenStringWithEllipsis(item.walletAddress, 14) }}</a>
+                            <CopyButton :ref="`copyAddress-${index}`" x-small :value="item.walletAddress" v-if="item.walletAddress" />
                         </v-list-item-content>
                     </v-list-item>
                 </template>
