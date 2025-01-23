@@ -1,19 +1,25 @@
-<script lang="ts" setup>
+<script lang="ts">
   import { computed, defineProps } from 'vue';
   import { useStore } from '@/store';
   import filters from '@/shared/utils/filters';
 
-  export type BadgeType = {
-      icon: {
-          path: string;
-      };
-      title: string;
-      value?: number;
-      valueInADA?: number;
+  import { BadgeType } from '../types/BadgeType';
+
+  export default {
+    setup(){
+      const props = defineProps<BadgeType>();
+      const SVGComponent = () => import(`@/assets/icons/${props.icon.path}.vue`);
+      const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
+
+      return {
+        ...props,
+        SVGComponent,
+        lastPrice,
+        filters
+      }
+    }
   }
-  const props = defineProps<BadgeType>();
-  const SVGComponent = () => import(`@/assets/icons/${props.icon.path}.vue`);
-  const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
+  
 </script>
 
 <template>

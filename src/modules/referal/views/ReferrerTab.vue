@@ -1,10 +1,11 @@
 <script lang="ts">
     import { inject } from 'vue';
-    import Badge, { BadgeType } from '@/shared/components/Badge.vue';
+    import Badge from '@/shared/components/Badge.vue';
     import { RefInfo } from '../models';
     import filters from '@/shared/utils/filters';
     import { useStore } from '@/store';
     import CopyButton from '@/shared/components/CopyButton.vue';
+    import { BadgeType } from '@/shared/types/BadgeType';
     
     export default {
         name: 'ReferrerTab',
@@ -45,7 +46,7 @@
                 badges,
                 referralsTableHeaders,
                 filters,
-                lastPrice
+                lastPrice 
             }
         },
         methods: {
