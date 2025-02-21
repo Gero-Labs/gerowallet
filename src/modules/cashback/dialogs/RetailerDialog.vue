@@ -31,7 +31,7 @@
         class="geroButton"
         :disabled="disabled || !retailerUrl"
         style="color: black!important;"
-        :href="retailerUrl" target="_blank"
+        @click="startShopping()"
       >Start Shopping</v-btn>
       <v-card-subtitle class="pa-0 pt-3">By clicking Start Shopping, I accept the terms above.</v-card-subtitle>
     </v-card-actions>
@@ -44,6 +44,7 @@ import axios from 'axios';
 import { appWallet, useStore } from '@/store';
 import { mapState } from 'pinia';
 import networks from '@/shared/utils/networks';
+import cashbackApi from '@/api/cashback-api';
 
 export default {
   name: 'RetailerDialog',
@@ -69,6 +70,12 @@ export default {
     ...mapState(useStore, ['baseAddress', 'loggedWallet']),
   },
   methods: {
+    startShopping() {
+      if (this.retailerUrl) {
+        window.open(this.retailerUrl, '_blank');
+        cashbackApi.analytics(this.retailer.id, this.retailer.name, this.baseAddress, networks.resolveCurrencySymbol(this.loggedWallet?.chain, this.loggedWallet?.network), this.searchTerm);
+      }
+    },
     async getContent() {
       this.fileContent = "";
       try {
@@ -85,7 +92,7 @@ export default {
         if (this.searchTerm) {
           search = this.searchTerm
         }
-        const response = await appWallet.api.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), search)
+        const response = await cashbackApi.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), search)
         if (response.status) {
           this.retailerUrl = response.url
         } else {
@@ -108,7 +115,6 @@ export default {
   watch: {
     isOpen(val) {
       if (val) {
-        console.log(val)
         this.retailerUrl = null
         this.loading = true
         this.default = true

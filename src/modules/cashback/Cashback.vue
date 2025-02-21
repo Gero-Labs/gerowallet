@@ -158,6 +158,7 @@ import filters from "@/shared/utils/filters";
 import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
 import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
 import { bringStore } from '@/store/modules/bring';
+import cashbackApi from '@/api/cashback-api';
 
 export default defineComponent({
   name: 'Cashback.vue',
@@ -191,7 +192,7 @@ export default defineComponent({
       if (val) {
         if (this.nextPage) {
           this.loadingMore = true
-          const retailers = await appWallet.api.retailers(this.selectedCategory?.id, this.model, this.nextPage)
+          const retailers = await cashbackApi.retailers(this.selectedCategory?.id, this.model, this.nextPage)
           this.retailers = {...this.retailers, ...retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {}) }
           this.nextPage = retailers.nextPageNumber
           this.loadingMore = false
@@ -202,7 +203,7 @@ export default defineComponent({
       this.isLoading = true
       if (val) {
         this.selectedCategoryIndex = null
-        const retailers = await appWallet.api.retailers(null, val)
+        const retailers = await cashbackApi.retailers(null, val)
         this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
         this.nextPage = retailers.nextPageNumber
         this.totalItems = retailers.totalItems
@@ -213,7 +214,7 @@ export default defineComponent({
     async selectedCategory() {
       this.model = ""
       if (this.selectedCategory) {
-        const retailers = await appWallet.api.retailers(this.selectedCategory.id)
+        const retailers = await cashbackApi.retailers(this.selectedCategory.id)
         this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
         this.nextPage = retailers.nextPageNumber
         this.generalTermsUrl = retailers.generalTermsUrl
@@ -275,9 +276,9 @@ export default defineComponent({
     this.chipLoading = true
     this.isLoading = true
     try {
-      const isAvailable = await useStore().getWallet.api.checkAvailability()
+      const isAvailable = await cashbackApi.checkAvailability()
       if (isAvailable) {
-        const res = await appWallet.api.categoriesSearch()
+        const res = await cashbackApi.categoriesSearch()
         this.categories.items = [{ iconSvg: "", id: null, name: "All Categories"}]
         this.categories.items.push(...res.categories.items)
         this.searchTerms = res.searchTerms.items
