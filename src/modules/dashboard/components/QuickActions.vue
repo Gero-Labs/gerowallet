@@ -5,7 +5,7 @@
         <v-row no-gutters>
           <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.SEND">
+              <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.SEND">
                 <v-avatar tile size="50">
                   <v-img
                     :src="require('@/assets/svg/send.svg')"
@@ -22,7 +22,7 @@
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.RECEIVE">
+              <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.RECEIVE">
                 <v-avatar tile size="50">
                   <v-img
                     :src="require('@/assets/svg/qr-code.svg')"
@@ -39,7 +39,7 @@
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
             <v-layout column style="align-items: center">
-              <v-btn text plain rounded class="px-0" height="60" width="60" @click="currentDialog = dialogs.SWAP"
+              <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.SWAP"
                      :disabled="isSwapDisabled"
               >
                 <v-avatar tile size="50">
@@ -61,7 +61,6 @@
               <v-btn
                 text
                 plain
-                rounded
                 class="px-0"
                 height="60"
                 width="60"

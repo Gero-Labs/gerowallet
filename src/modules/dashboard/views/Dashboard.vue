@@ -1,6 +1,6 @@
 <template>
-  <v-layout>
-    <v-row no-gutters>
+  <v-layout column>
+    <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
           <v-card-subtitle class="pb-0">{{ `Portfolio Value`}}</v-card-subtitle>
@@ -29,6 +29,8 @@
           <v-card-subtitle>{{ Number(computedValues.lpsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
+    </v-row>
+    <v-row no-gutters>
       <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-text>
@@ -78,6 +80,9 @@ export default {
     // AssetsPieChart,
     QuickActions, PortfolioChart, NoTokensCard },
   computed: {
+    Blockchain() {
+      return Blockchain
+    },
     computedValues() {
       let assetsValue = 0
       if (this.portfolio?.positionsFt) {
