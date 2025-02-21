@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { appWallet } from '@/store';
+import { Blockchain, Network } from '@/models/types';
 
 export const tapToolsStore = defineStore( 'tapToolsStore', {
   persist: {
@@ -25,7 +26,7 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
       this.portfolioTrendedValue = portfolioTrendedValue
     },
     async loadPortfolio() {
-      if (!appWallet) {
+      if (!appWallet || !(appWallet.network == Network.MAINNET && appWallet.chain == Blockchain.CARDANO)) {
         return
       }
       try {
@@ -35,7 +36,7 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
       }
     },
     async loadPortfolioTrendedValue() {
-      if (!appWallet) {
+      if (!appWallet || !(appWallet.network == Network.MAINNET && appWallet.chain == Blockchain.CARDANO)) {
         return
       }
       try {

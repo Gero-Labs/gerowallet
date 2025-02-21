@@ -4,18 +4,20 @@
       <v-row no-gutters>
         <v-col :cols="collections?.length > 0 ? 6 : 12" class="selectors-container px-2" :style="collections?.length > 0 ? {} : {alignItems: 'center'}">
           <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto; max-width: 350px;" >
-            <template v-for="index in selectedTokens?.length">
-              <TokenSelector
-                class="pb-1"
-                v-model="selectedTokens[index-1]"
-                :available="tokens"
-                :index="index-1"
-                :key="index"
-                @remove="removeTokenSelector"
-                :price="getPrice(selectedTokens[index-1])"
-                :minimum="value.minAda"
-              ></TokenSelector>
-            </template>
+            <TokenSelector
+              v-for="(token, index) in tokenModel"
+              :key="index"
+              class="pb-1"
+              v-model="tokenModel[index]"
+              :available="getAvailableTokens(index)"
+              :index="index"
+              @remove="removeTokenSelector"
+              :price="getPrice(token)"
+              :minimum="index === 0 && value ? value.minAda : 0"
+              :ada-shortage="index === 0 && value ? value.adaShortage : 0"
+              @setMax="setMax"
+              :token-lock="index === 0"
+            ></TokenSelector>
             <v-card-actions class="justify-center text-center" v-if="missingTokens?.length > 0">
               <v-btn text class="add-token-button" @click="addToken">
                 <v-icon class="plus-icon" color="#00c7f3" small>mdi-plus</v-icon>
@@ -135,6 +137,21 @@ export default {
       const existingTokens = this.selectedTokens.map(token => token?.ticker)
       return this.tokens.filter(token => !existingTokens.includes(token.ticker))
     },
+    tokenModel: {
+      get() {
+        // Use the parent's value as the source of truth.
+        return this.value?.selectedTokens || [];
+      },
+      set(newTokens) {
+        // Emit an update only if the new tokens differ from the current ones.
+        // (Optionally, you can add a deep comparison check here.)
+        this.$emit('input', {
+          ...this.value,
+          selectedTokens: newTokens,
+          selectedCollectibles: this.selectedCollectibles,
+        });
+      },
+    },
     collections() {
       let collections = structuredClone(this.resolvedCollections)
       if (this.search) {
@@ -199,6 +216,22 @@ export default {
     },
   },
   methods: {
+    getAvailableTokens(currentIndex) {
+      const currentSelected = this.tokenModel[currentIndex];
+      // Collect tickers that have been selected in other selectors
+      const selectedTickers = this.tokenModel
+        .filter((token, index) => index !== currentIndex && token)
+        .map(token => token.ticker);
+
+      return this.tokens.filter(token => {
+        // Always include the token already selected in the current selector.
+        if (currentSelected && token.ticker === currentSelected.ticker) {
+          return true;
+        }
+        // Otherwise, include tokens not selected elsewhere.
+        return !selectedTickers.includes(token.ticker);
+      });
+    },
     getPrice(token) {
       if (!token) return '';
       let price = this.price.lastPrice
@@ -219,13 +252,20 @@ export default {
         item.toSendQuantity++
       }
     },
+    removeTokenSelector(index) {
+      const updatedTokens = [...this.tokenModel];
+      updatedTokens.splice(index, 1);
+      this.tokenModel = updatedTokens;
+    },
     addToken() {
-      if (this.missingTokens?.length > 0) {
-        this.selectedTokens.push(this.missingTokens[0])
+      const existingTickers = this.tokenModel.map(token => token?.ticker);
+      const missing = this.tokens.filter(token => !existingTickers.includes(token.ticker));
+      if (missing.length > 0) {
+        this.tokenModel = [...this.tokenModel, missing[0]];
       }
     },
-    removeTokenSelector(index) {
-      this.selectedTokens.splice(index,1)
+    setMax(index) {
+      this.$emit('setMax', index)
     }
   },
   data() {

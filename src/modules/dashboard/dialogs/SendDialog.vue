@@ -40,6 +40,7 @@
             v-model="sendData"
             @select="selectCollectible"
             :tokens="tokens"
+            @setMax="setMax"
           ></AssetsToSendStep>
         </v-stepper-content>
         <v-stepper-content step="3">
@@ -288,7 +289,10 @@ export default {
     sendData: {
       handler(val, oldVal) {
         try {
-          this.buildTx()
+          if (!val.recipientAddress) {
+            return;
+          }
+          this.buildTx(this.sendData.selectedTokens)
           this.txValid = true
         } catch(e) {
           console.error(e)
@@ -296,6 +300,10 @@ export default {
             const match = e.match(/minimum UTXO value (\d+)/);
             const number = match ? parseInt(match[1], 10) : null;
             this.sendData.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
+          } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+            const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+            const number = parseInt(match[2], 10) - parseInt(match[1], 10)
+            this.sendData.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
           }
           this.txValid = false
         }
@@ -335,6 +343,7 @@ export default {
       recipientAddress: '',
       selectedWallet: {},
       minAda: 0,
+      adaShortage: 0
     },
     txValid: false,
     isBT: false,
@@ -440,11 +449,11 @@ export default {
         await signAndReturnTx();
       }
     },
-    buildTx() {
+    buildTx(sendTokens) {
       const recipientAddress = this.sendData.recipientAddress;
       const tokens = [];
-      if (this.sendData.selectedTokens.length > 0) {
-        this.sendData.selectedTokens.forEach(token => {
+      if (sendTokens.length > 0) {
+        sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals).forEach(token => {
           if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
             tokens.push({
               unit: 'lovelace',
@@ -473,12 +482,9 @@ export default {
       try {
         this.txBody = buildTx(this.sendData.selectedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], []);
         this.sendData.minAda = 0
+        this.sendData.adaShortage = 0
         this.txValid = true
         this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
-
-        // if (this.currentStep < this.steps.length) {
-        //   this.currentStep++;
-        // }
       } catch (e) {
         console.log(e)
         throw e
@@ -509,6 +515,39 @@ export default {
         this.$delete(this.sendData.selectedCollectibles, collectible.name);
       } else {
         this.$set(this.sendData.selectedCollectibles, collectible.name, collectible);
+      }
+    },
+    setMax(index) {
+      const sendTokensCopy = JSON.parse(JSON.stringify(this.sendData.selectedTokens));
+      const selectedToken = sendTokensCopy[index];
+
+      if (selectedToken.decimals) {
+        selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
+      } else {
+        selectedToken.quantity = Number(selectedToken.balance);
+      }
+      this.tryBuildMaxTx(sendTokensCopy, index);
+    },
+    tryBuildMaxTx(tokens, index) {
+      try {
+        this.buildTx(tokens)
+      } catch (e) {
+        if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+          const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+          const maxBalance = Number(match[2]) - Number(match[3])
+          this.sendData.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
+        } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
+          const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
+          console.log(match)
+          const adaMinBalance = match[2]
+          const nativeToken = this.sendData.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network))
+          if (nativeToken) {
+            nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
+            this.sendData.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
+          }
+        } else {
+          console.log(e)
+        }
       }
     },
     resetData() {
