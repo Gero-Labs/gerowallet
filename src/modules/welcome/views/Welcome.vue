@@ -8,7 +8,7 @@
         <network-selector ref="networkSelector"></network-selector>
       </v-card-title>
       <v-card-text class="pb-12 px-12">
-        <div v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
+        <div v-if="walletSetup || !Array.isArray(availableWallets) || !availableWallets.length">
           <v-row class="fill-height">
             <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">
               <parallax-card style="margin-left: auto; margin-right: auto;"
@@ -41,14 +41,14 @@
             </v-col>
           </v-row>
           <div class="text-center justify-center">
-            <v-btn class="mt-4" :ripple="false" text plain @click="walletSetup = false" v-show="wallets?.length > 0">{{$t('signIn')}}&nbsp;<v-icon small>mdi-chevron-right</v-icon></v-btn>
+            <v-btn class="mt-4" :ripple="false" text plain @click="walletSetup = false" v-show="availableWallets?.length > 0">{{$t('signIn')}}&nbsp;<v-icon small>mdi-chevron-right</v-icon></v-btn>
           </div>
         </div>
         <v-card v-else class="transparent" flat style="max-width: 400px; margin: auto">
           <v-card-text class="px-2 py-0" style="max-height: 177px; overflow-y: auto">
             <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
               <v-list-item-group v-model="selectedWallet" color="primary">
-                <v-list-item v-for="(item, i) in wallets" :key="i" @click="submitLogin(item.id)">
+                <v-list-item v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item.id)">
                   <v-list-item-icon>
                     <v-badge
                         overlap
@@ -116,6 +116,9 @@ export default {
       return WalletType
     },
     ...mapState(useStore, ['wallets','network']),
+    availableWallets() {
+      return this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network))
+    },
     walletCreateCardBg() {
       if (this.network?.blockchain?.includes("Apex")) {
         return this.walletCreateApexBg

@@ -22,6 +22,7 @@ import { bringStore } from '@/store/modules/bring';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
 import { tapToolsStore } from '@/store/modules/tapTools';
+import router from '@/modules/navigation/router';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Subscription[] = []
@@ -265,7 +266,7 @@ export const useStore = defineStore('store', {
       const resolvingAsset = resolvedAssets
         .filter(asset => asset?.metadata || asset?.name === ticker)
         .map(async (token) => {
-          if (token.unit && dexHunterStore().dexHunterTokens[token.unit]) {
+          if (token.unit && dexHunterStore().dexHunterTokens[token.unit] && unitToFingerprint(token.unit) != 'asset1yxmhmq2sqddn4vfl0um2dtlg4r7g2p9u9ed6rc') {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             const promises = []
@@ -440,7 +441,7 @@ export const useStore = defineStore('store', {
       this.stakeAddress = stakeAddress
     },
     async simpleLogin(walletId: number) {
-      const wallet = this.wallets.find(wal => wal.id === walletId);
+      const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
       }
@@ -465,7 +466,7 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
     },
-    async login(walletId: number) {
+    async login(walletId: number): Promise<void> {
       loading.setLoading(true);
       this.setLoadingTxs(true)
       console.log('login')
@@ -473,9 +474,13 @@ export const useStore = defineStore('store', {
         sub.unsubscribe();
       })
       subscriptions = []
-      const wallet = this.wallets.find(wal => wal.id === walletId);
+      const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
-        return null;
+        await this.logout();
+        this.setLoadingTxs(false);
+        loading.setLoading(false);
+        await router.push("/welcome");
+        return;
       }
       await this.setLoggedWallet(wallet);
       try {

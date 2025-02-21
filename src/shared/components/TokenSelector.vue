@@ -6,6 +6,7 @@
           <span v-if="title" :style="{ color: titleColor }">{{title}}</span>
           <v-spacer></v-spacer>
           <v-btn text plain small @click="setMax" :ripple="false" color="#00DFF3" class="px-0" v-if="maxButtonEnabled" :style="index !== 0 ? { marginRight: '30px' } : {}">MAX</v-btn>
+          <span v-else style="height: 10px"></span>
         </v-col>
       </v-row>
       <div style="display: flex; align-items: center;">
@@ -18,7 +19,33 @@
             <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left;">
               <v-list-item-content class="py-0">
                 <v-list-item-title class="ma-0">
+                  <span v-if="tokenLock" style="font-size: 22px">
+                    <v-badge
+                      overlap
+                      avatar
+                      color="transparent"
+                      :offset-y="45"
+                      v-if="selectedToken.verified"
+                      class="mr-1"
+                    >
+                      <template v-slot:badge>
+                        <v-avatar color="transparent" tile >
+                          <v-icon small color="primary">
+                            mdi-check-decagram
+                          </v-icon>
+                        </v-avatar>
+                      </template>
+                      <v-avatar size="40">
+                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                      </v-avatar>
+                    </v-badge>
+                    <v-avatar size="40" v-else class="mr-1">
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                    </v-avatar>
+                    {{ selectedToken.ticker }}
+                  </span>
                   <v-btn
+                    v-else
                     x-large
                     text
                     plain
@@ -50,7 +77,7 @@
                       <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
                     </v-avatar>
                     {{ selectedToken.ticker }}
-                    <v-icon class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small>mdi-chevron-down</v-icon>
+                    <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small>mdi-chevron-down</v-icon>
                   </v-btn>
                 </v-list-item-title>
 
@@ -90,10 +117,15 @@
                 <v-list-item-title>
                   <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly" @change="quantityChange"></CurrencyTextField>
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text" v-if="selectedToken.ticker === networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) && minimum > selectedToken.quantity" style="color: #f97066!important;">
-                  <v-btn class="pa-0" :ripple="false" color="error" text plain x-small style="text-transform: unset; letter-spacing: normal; font-size: 14px" @click="selectedToken.quantity = minimum+''">Min. Required: {{ minimum +" " + selectedToken.ticker}}</v-btn>
+                <v-list-item-subtitle class="light-text" v-if="adaShortage !== 0" style="color: #f97066!important;">
+                  Insufficient Funds
+<!--                  Shortage: {{ adaShortage | toCurrency(false, 3, '', ' '+selectedToken.ticker, true, 0) }}-->
                 </v-list-item-subtitle>
-
+                <v-list-item-subtitle class="light-text" v-else-if="selectedToken.ticker === networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) && minimum > selectedToken.quantity" style="color: #f97066!important;">
+                  <v-btn class="pa-0" :ripple="false" color="error" text plain x-small style="text-transform: unset; letter-spacing: normal; font-size: 14px" @click="selectedToken.quantity = minimum+''">
+                    Min. Required: {{ minimum +" " + selectedToken.ticker}}
+                  </v-btn>
+                </v-list-item-subtitle>
                 <v-list-item-subtitle class="light-text" :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}" v-else-if="!isNaN(price.replaceAll(',', ''))">
                   {{ '~$' + price }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B">mdi-alert-rhombus-outline</v-icon>
                 </v-list-item-subtitle>
@@ -153,7 +185,7 @@ export default {
     },
     maxButtonEnabled: {
       type: Boolean,
-      default: true
+      default: false
     },
     readOnly: {
       type: Boolean,
@@ -169,6 +201,14 @@ export default {
     priceImpact: {
       type: Number,
       default: 0
+    },
+    adaShortage: {
+      type: Number,
+      default: 0,
+    },
+    tokenLock: {
+      type: Boolean,
+      default: false
     }
   },
   filters,
@@ -191,6 +231,15 @@ export default {
         this.$emit('input', newToken)
       }
     },
+    errors() {
+      const errors = []
+      if (this.adaShortage !== 0) {
+        errors.push(`Insufficient Funds. Shortage: ${filters.toCurrency(this.adaShortage, false, 3, '', ' '+this.selectedToken.ticker, true, 0)}`)
+      } else if (this.selectedToken.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network) && this.minimum > this.selectedToken.quantity) {
+        errors.push(`Min. Required: ${this.minimum +" " + this.selectedToken.ticker}`)
+      }
+      return errors
+    },
   },
   data() {
     return {
@@ -204,7 +253,7 @@ export default {
       this.$emit('change', val ? val.replace(/^0+/, '') : 0)
     },
     setMax() {
-      console.log(this.balance)
+      // this.$emit('setMax', this.index)
       this.selectedToken.quantity = this.balance.replaceAll(",","")
     },
     removeTokenSelector() {

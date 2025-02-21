@@ -372,9 +372,11 @@ export class Wallet {
         //
         // } else if (certificate.kind() == CertificateKind.DRepDeregistration) {
         //
-        // } else if (certificate.kind() == CertificateKind.DRepRegistration) {
+        // }
+        // else if (certificate.kind() == CertificateKind.DRepRegistration) {
         //
-        // } else if (certificate.kind() == CertificateKind.DRepUpdate) {
+        // }
+        // else if (certificate.kind() == CertificateKind.DRepUpdate) {
         //
         // } else if (certificate.kind() == CertificateKind.StakeAndVoteDelegation) {
         //
@@ -385,9 +387,12 @@ export class Wallet {
         }
         // else if (certificate.kind() == CertificateKind.StakeVoteRegistrationAndDelegation) {
         //
-        // } else if (certificate.kind() == CertificateKind.VoteDelegation) {
-        //
-        // } else if (certificate.kind() == CertificateKind.VoteRegistrationAndDelegation) {
+        // }
+        else if (certificate.kind() == CertificateKind.VoteDelegation) {
+          const voteDelegation = certificate.as_vote_delegation()
+          keyHash = voteDelegation.stake_credential().to_keyhash().to_hex();
+        }
+        // else if (certificate.kind() == CertificateKind.VoteRegistrationAndDelegation) {
         //
         // }
         if (accountData.keys.stake[0].cred === keyHash) {

@@ -1,10 +1,10 @@
 <template>
   <v-app>
     <v-main>
-      <v-container class="pa-0" style="background-color: #141414;" >
+      <v-container class="pa-0" >
         <v-layout :align-start="true">
           <navigation-drawer ></navigation-drawer>
-          <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: #121212;">
+          <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent" >
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
               <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px">
                 <PriceTicker></PriceTicker>
