@@ -6,34 +6,50 @@
           <navigation-drawer ></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent" >
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
-              <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px">
+              <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;" >
                 <PriceTicker></PriceTicker>
-                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="networks.resolveNetwork(loggedWallet?.chain, loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></v-divider>
-                <span style="font-size: 14px">{{'Epoch ' + latestTip?.epoch}}</span>
+                <v-divider vertical class="mx-2" style="max-height: 30px; min-height: 30px;align-self: center;" v-if="networks.resolveNetwork(loggedWallet?.chain, loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></v-divider>
                 <v-progress-linear v-if="epochSlotPercentage"
                     striped
                     :value="epochSlotPercentage"
-                    height="20"
+                    height="22"
                     rounded
                     style="width: 100px"
-                    class="ml-2"
                     :buffer-value="100"
                 >
                   <template v-slot:default="{ value }">
-                    <strong style="font-size: 10px">{{ Math.ceil(value) }}%</strong>
+                    <v-list-item two-line>
+                      <v-list-item-content class="py-0 text-center">
+                        <v-list-item-title style="font-size: 10px" class="ma-0">{{'Epoch ' + latestTip?.epoch}}</v-list-item-title>
+                        <v-list-item-subtitle style="font-size: 8px; color: white">{{ Math.ceil(value) }}%</v-list-item-subtitle>
+                      </v-list-item-content>
+                    </v-list-item>
                   </template>
                 </v-progress-linear>
-                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;"></v-divider>
-                <v-icon small class="mr-1" :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
-                  {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
-                </v-icon>
-                <span style="font-size: 12px; min-width: 101px; width: 101px; line-height: 1;" v-if="latestTip">{{loggedWallet?.network}} - Synced {{new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000))}}</span>
-                <v-avatar tile size="16" class="ml-4 mr-1">
+                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
+                <v-list-item v-if="latestTip" two-line class="px-0" style="min-height: auto; flex: unset">
+                  <v-list-item-icon class="ma-0" style="align-self: center;">
+                    <v-icon small class="mr-1" :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
+                      {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
+                    </v-icon>
+                  </v-list-item-icon>
+                  <v-list-item-content class="my-0" style="padding:0 !important; width: 86px;">
+                    <v-list-item-title style="font-size: 12px;" class="ma-0">
+                      {{loggedWallet?.network}}
+                    </v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 10px">
+                      Synced {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000)) }}
+                    </v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
+                <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
+                <v-avatar tile size="16" class="mr-1">
                   <v-img :src="require('@/assets/svg/wallet.svg')" contain></v-img>
                 </v-avatar>
                 <a style="font-size: 12px; color: white" class="mr-1" @click="copyAddress">{{baseAddress | shortenStringWithEllipsis(14)}}</a>
                 <CopyButton ref="copyAddress" x-small :value="baseAddress" v-if="baseAddress"></CopyButton>
                 <v-spacer></v-spacer>
+                <QuickActionsBox />
                 <v-btn icon class="ml-2" :loading="loading.isSyncing" disabled>
                   <v-avatar size="20">
                     <v-icon>mdi-sync</v-icon>
@@ -122,10 +138,11 @@ import loading from '@/plugins/loading';
 import { musicStore } from '@/store/modules/music';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue';
 
 export default {
   name: 'ContentLayout',
-  components: { CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks
@@ -178,15 +195,10 @@ export default {
   }
 };
 </script>
-
 <style scoped>
-.theme--dark.v-input--switch.v-input--is-label-active .v-input--switch__track {
-  color: #00c7f3 !important;
-  opacity: 0.9;
-}
-
-.v-input--switch__thumb {
-  color: #ffffff !important;
+div.v-toolbar__content {
+  padding-right: 8px!important;
+  padding-left: 8px!important;
 }
 
 .custom-loader {

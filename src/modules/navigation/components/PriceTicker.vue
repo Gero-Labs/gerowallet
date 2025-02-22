@@ -1,8 +1,9 @@
 <template>
-  <div class="d-flex column" v-if="networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)?.blockchain === Blockchain.CARDANO">
-    <v-img width="28" :src="require('@/assets/svg/cardano.svg')" class="mr-2" contain></v-img>
+  <div class="d-flex column">
+    <v-img width="28" :src="currencyIcon" class="mr-2" contain></v-img>
     <span v-if="ticker.lastPrice" style="align-content: center; width: 58px; font-size: 14px" v-bind:style="{color: ticker.prevPrice === ticker.lastPrice ? '#fff' : (ticker.prevPrice > ticker.lastPrice ? '#ff6464' : '#47cd89')}">{{ '$'+ticker.lastPrice }}</span>
-    <sparkline :divider="true"></sparkline>
+    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
+    <Sparkline v-if="networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></Sparkline>
   </div>
 </template>
 <script>
@@ -33,6 +34,12 @@ export default {
   computed: {
     Blockchain() {
       return Blockchain
+    },
+    currencyIcon() {
+      if (this.loggedWallet) {
+        return networks.resolveCurrencyImage(this.loggedWallet?.chain, this.loggedWallet?.network);
+      }
+      return ''
     },
     ...mapState(useStore, ['price', 'loggedWallet']),
   },
