@@ -440,6 +440,9 @@ export default {
     totalAllocation() {
       let totalAllocation = 0
       if (this.resolvedAssets) {
+        if (this.resolvedAssets.length === 1) {
+          return this.resolvedAssets[0].value;
+        }
         this.resolvedAssets.forEach(token => {
           if (token.value) {
             totalAllocation += token.value
@@ -491,7 +494,7 @@ export default {
       if (resolvedAssets && this.price) {
         let res = resolvedAssets.map(token => {
           token['quantity'] = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
-          if (token['name'] === 'Cardano') {
+          if (token['name'] === 'Cardano' || token['name'] === 'Apex Fusion') {
             token['last_price'] = Number(filters.toCurrency(this.price.lastPrice, false, 4, '', '', true, 0).replaceAll(",", ""))
             token['change'] = Number(this.price.priceChangePercent)
           } else {

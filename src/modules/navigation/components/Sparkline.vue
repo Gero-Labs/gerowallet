@@ -1,6 +1,5 @@
 <template>
   <div style="width: 120px; display: inline-flex" v-if="chart.length > 0">
-    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;border-color: #00DFF3;" v-if="divider"></v-divider>
     <v-sparkline :value="chart"
                  :gradient="priceChange > 0 ? ['#47cd89'] : ['#f97066']"
                  :smooth="radius || false"
@@ -21,10 +20,6 @@ import { mapState } from 'pinia';
 export default {
   name: 'Sparkline',
   props: {
-    divider: {
-      type: Boolean,
-      default: false
-    },
     width: {
       type: Number,
       default: 2

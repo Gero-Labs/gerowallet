@@ -3,28 +3,28 @@
     <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle class="pb-0">{{ `Portfolio Value`}}</v-card-subtitle>
+          <v-card-subtitle class="pb-0">{{ `Portfolio`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{ computedValues.totalValue | toCurrency(false, 2, '₳', "", true, 0)}}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.totalValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle class="pb-0">{{ `Assets Value`}}</v-card-subtitle>
+          <v-card-subtitle class="pb-0">{{ `Assets`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{computedValues.assetsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.assetsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle class="pb-0">{{ `Collectibles Value`}}</v-card-subtitle>
+          <v-card-subtitle class="pb-0">{{ `Collectibles`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{computedValues.collectibles | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.collectibles) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
         <v-card outlined>
-          <v-card-subtitle class="pb-0">{{ `Liquidity Value`}}</v-card-subtitle>
+          <v-card-subtitle class="pb-0">{{ `Liquidity`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{computedValues.lpsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.lpsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
@@ -38,12 +38,12 @@
           </v-card-text>
         </v-card>
       </v-col>
-<!--      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="false">-->
-<!--        <AssetsPieChart></AssetsPieChart>-->
-<!--      </v-col>-->
       <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <QuickActions></QuickActions>
+        <AssetsPieChart></AssetsPieChart>
       </v-col>
+<!--      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">-->
+<!--        <QuickActions></QuickActions>-->
+<!--      </v-col>-->
       <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
         <TokenAllocationTable></TokenAllocationTable>
       </v-col>
@@ -60,12 +60,11 @@
 <script>
 import PortfolioChart from '../components/PortfolioChart.vue';
 import filters from '@/shared/utils/filters';
-import QuickActions from '@/modules/dashboard/components/QuickActions.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import { useStore } from '@/store';
 import { Blockchain, Network } from '@/models/types';
 import {mapState} from "pinia";
-// import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
+import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
@@ -76,9 +75,9 @@ import { tapToolsStore } from '@/store/modules/tapTools';
 export default {
   name: 'dashboard',
   components: {
+    AssetsPieChart,
     TransactionsCard, StakingCard2, TokenAllocationTable,
-    // AssetsPieChart,
-    QuickActions, PortfolioChart, NoTokensCard },
+    PortfolioChart, NoTokensCard },
   computed: {
     Blockchain() {
       return Blockchain

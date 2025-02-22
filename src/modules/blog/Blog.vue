@@ -9,7 +9,7 @@
 
         </v-col>
         <v-col cols="12" xl="4" lg="4" md="4">
-          <v-text-field v-model="search" clearable hide-details solo dense prepend-inner-icon="mdi-magnify" label="Search" outlined></v-text-field>
+          <v-text-field class="blog-search" v-model="search" clearable hide-details solo dense prepend-inner-icon="mdi-magnify" label="Search" outlined></v-text-field>
         </v-col>
         <v-col cols="12">
           <v-card flat :loading="isLoading" class="transparent">
@@ -23,18 +23,18 @@
                   >
                     <v-card-text class="pa-0 text-center justify-center" >
                       <v-row no-gutters>
-                        <v-col cols="4" :style="{height: '200px', background: 'url('+getImage(post)+')', backgroundSize: 'cover', backgroundPosition: 'center' }">
+                        <v-col cols="3" :style="{height: '200px', background: 'url('+getImage(post)+')', backgroundSize: 'cover', backgroundPosition: 'center' }">
                         </v-col>
-                        <v-col cols="8">
+                        <v-col cols="9">
                           <v-card flat class="d-flex row fill-height" style="margin: 0">
-                            <v-card-text class="px-6 grow">
+                            <v-card-text class="px-6 grow pb-0">
                               <v-card-subtitle class="py-0 text-left" style="color: white; font-size: 12px">
                                 {{`${new Date(post.lastPublishedDate).toLocaleDateString()} • ${post.minutesToRead} min read` }}
                               </v-card-subtitle>
                               <v-card-title style="word-break: break-word; color: white" class="text-left">
                                 {{post.title}}
                               </v-card-title>
-                              <v-card-subtitle  style="word-break: break-word" class="text-left">
+                              <v-card-subtitle  style="word-break: break-word" class="text-left pb-0">
                                 {{post.excerpt}}
                               </v-card-subtitle>
                             </v-card-text>
@@ -158,6 +158,8 @@ export default defineComponent({
   }
 });
 </script>
-<style scoped>
-
+<style lang="scss">
+.blog-search.theme--dark.v-text-field--solo > .v-input__control > .v-input__slot {
+  background-color: var(--v-cardBackground-base) !important;
+}
 </style>
