@@ -140,7 +140,6 @@ export const useStore = defineStore('store', {
             currentBalance += totalAmount
 
             const statuses = []
-
             if (tx.certificates?.length > 0) {
               tx.certificates.forEach(certificate => {
                 if (certificate.type === 'stake_registration') {
@@ -273,15 +272,6 @@ export const useStore = defineStore('store', {
             promises.push(appWallet.api.mcap(token.unit).then(stats => {
               token['mcap'] = stats.mcap;
               token['last_price'] = stats.price;
-              token['value'] = Number(filters.toCurrency(
-                token['last_price'] * Number(token.quantity),
-                false,
-                token.metadata?.decimals,
-                '',
-                '',
-                false,
-                token.metadata?.decimals
-              ).replaceAll(",", ""));
             }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
             }))
@@ -314,6 +304,15 @@ export const useStore = defineStore('store', {
             ).replaceAll(",", ""));
             token['risk'] = 'AAA'
           }
+          token['value'] = Number(filters.toCurrency(
+            this.price.lastPrice * Number(token.quantity),
+            false,
+            token.metadata?.decimals,
+            '',
+            '',
+            false,
+            token.metadata?.decimals
+          ).replaceAll(",", ""));
           return token;
         });
 
@@ -375,7 +374,6 @@ export const useStore = defineStore('store', {
             collection['name'] = longestCommonStartingSubstring(items.map(item => item[Object.keys(item).find(key => key.toLowerCase() === 'name')]))
           }
           if (!collection['name']) {
-            console.log('')
             collection['name'] = items[0]['policy_id']
           }
         }
@@ -567,7 +565,7 @@ export const useStore = defineStore('store', {
     },
     setPrice(price) {
       if (this.loggedWallet && (this.loggedWallet.chain === Blockchain.APEX_VECTOR || this.loggedWallet.chain === Blockchain.APEX_PRIME)) {
-        this.price = 1
+        this.price = price
       } else {
         this.price = price
       }

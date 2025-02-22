@@ -115,7 +115,7 @@ export default {
         price_step: 0.0000721,
         coins_per_utxo_size: "4310"
       },
-      // geroPool: 'pool1kvdf7svevc4d5j5ll0l0094s5m9xmpvkhtq9up0j3nlwytnyq8f',
+      geroPool: 'pool13k76f7tt46psnhp75cwnfg5dtkjvwq64fg53tp2zthnzqyge58k',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       governanceSupport: false,
@@ -160,6 +160,12 @@ export default {
       return ''
     }
     return this.resolveNetwork(chain, network)?.currencyTicker
+  },
+  resolveCurrencyImage(chain: string, network: string): string {
+    if (!chain || !network) {
+      return ''
+    }
+    return this.resolveNetwork(chain, network)?.currencyImage
   },
   resolvePool(chain: string, network: string): string {
     return this.resolveNetwork(chain, network)?.geroPool

@@ -488,6 +488,9 @@ export default defineComponent({
         case "pool_delegation": {
           return 'Pool Delegation'
         }
+        case "pool_update": {
+          return 'Pool Update'
+        }
         case "stake_deregistration": {
           return "Stake De-Registration"
         }

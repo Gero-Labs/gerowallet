@@ -47,9 +47,10 @@
               <v-chip
                   v-if="item.soon"
                   class="ma-2"
-                  color="primary"
+                  color="#333741"
                   x-small
                   outlined
+                  style="color: #9e9fa1"
               >
                 Soon
               </v-chip>
@@ -327,15 +328,32 @@ export default {
 }
 
 .activePageDark {
-  color: black;
-  background: linear-gradient(45deg, #00c7f3, #00ffd1);
+  color: #F5F5F5;
+  background: #0C0E12;
+
+  /* Border */
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background:
+    linear-gradient(to right, #0C0E12, #0C0E12),
+    linear-gradient(to right, #0C0E12 8%, #00D1FF);
+  background-clip: padding-box, border-box;
+  background-origin: padding-box, border-box;
 }
 
 .activePageDark .v-image {
-  filter: none!important;
+  filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)!important;
+}
+
+.theme--dark.v-list-item:not(.v-list-item--active):not(.v-list-item--disabled) {
+  color: #F5F5F5!important;
 }
 
 .menuItem.v-list-item--link:before {
-  background: linear-gradient(45deg, #00c7f3, #00ffd1);
+  background: #0C0E12;
+}
+
+.menuItem.v-list-item--link:not(.activePageDark):hover {
+  background: #0C0E12;
 }
 </style>
