@@ -67,7 +67,7 @@
       </v-col>
     </v-row>
     <v-expansion-panels v-model="panels" multiple class="accordion-container">
-      <v-expansion-panel>
+      <v-expansion-panel style="background-color: #1e273ab3">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -80,7 +80,7 @@
           <v-card flat class="transparent">
             <v-card-title>Inputs ({{transactionInfo.inputs.length}})</v-card-title>
             <v-card-text>
-              <v-simple-table dense>
+              <v-simple-table dense style="background-color: transparent">
                 <thead class="grey--text">
                 <tr>
                   <td class="text-left">UTxO</td>
@@ -90,12 +90,12 @@
                 </thead>
                 <tbody>
                 <tr v-for="(input, index) in transactionInfo.inputs" :key="`input_${index}`">
-                  <td class="text-left" style="align-content: start;">
+                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{ `${input.tx_hash}#${input.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
-                  <td class="text-left" style="align-content: start;">
+                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{input.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
                     </div>
@@ -114,7 +114,7 @@
             </v-card-text>
             <v-card-title>Outputs ({{transactionInfo.outputs.length}})</v-card-title>
             <v-card-text>
-              <v-simple-table dense>
+              <v-simple-table dense  style="background-color: transparent">
                 <thead class="grey--text">
                 <tr>
                   <td class="text-left">UTxO</td>
@@ -124,12 +124,12 @@
                 </thead>
                 <tbody>
                 <tr v-for="(output, index) in transactionInfo.outputs" :key="`output_${index}`">
-                  <td class="text-left" style="align-content: start;">
+                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{ `${output.tx_hash}#${output.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
-                  <td class="text-left" style="align-content: start;">
+                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{output.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
                     </div>
@@ -156,7 +156,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="transactionInfo?.certificates?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.certificates?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -169,7 +169,7 @@
           <v-card flat v-for="(certificate, index) in transactionInfo.certificates" :key="index" class="mb-2 transparent">
             <v-card-title>{{getCertificateType(certificate.type)}}</v-card-title>
             <v-card-text>
-              <v-simple-table dense>
+              <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr v-if="certificate.info.drep_id">
                   <td class="text-left grey--text" >
@@ -225,7 +225,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="transactionInfo?.metadata">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.metadata">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -247,7 +247,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="transactionInfo?.assets_minted?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.assets_minted?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -289,7 +289,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="transactionInfo?.withdrawals?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.withdrawals?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -302,7 +302,7 @@
           <v-card flat class="transparent" v-for="(withdrawal, index) in transactionInfo.withdrawals" :key="`withdrawal_${index}`">
             <v-card-title>Withdrawal</v-card-title>
             <v-card-text>
-              <v-simple-table dense>
+              <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr>
                   <td class="text-left grey--text">
@@ -326,7 +326,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="transactionInfo?.plutus_contracts?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.plutus_contracts?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -341,7 +341,7 @@
             <v-card-subtitle class="text-left">{{contract.address | truncate}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
             <v-card-title v-if="contract?.input?.redeemer">Redeemer</v-card-title>
             <v-card-text v-if="contract?.input?.redeemer">
-              <v-simple-table dense>
+              <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr>
                   <td class="text-left grey--text">
@@ -372,7 +372,7 @@
             </v-card-text>
             <v-card-title v-if="contract?.input?.datum">Datum</v-card-title>
             <v-card-text v-if="contract?.input?.datum">
-              <v-simple-table dense>
+              <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr>
                   <td class="text-left grey--text">
@@ -396,7 +396,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel v-if="false">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="false">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">

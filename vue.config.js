@@ -5,7 +5,7 @@ module.exports = defineConfig({
   chainWebpack: config => {
     config.plugin('html')
       .tap(args => {
-        args[0].title = "Gero Dashboard Beta | A Multi-chain Light Wallet Merging Web2 and Web3";
+        args[0].title = "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3";
         return args;
       });
   },

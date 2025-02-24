@@ -83,7 +83,6 @@ class BackgroundController {
   listen = () => {
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
-        console.log(request)
         if (request.sender === SENDER.webpage) {
           this._methodList[request.method](request, sendResponse);
         }
@@ -106,7 +105,6 @@ export const Messaging = {
     return new Promise((resolve, reject) => {
       const requestId = Math.random().toString(36).substr(2, 9);
       function responseHandler(e: MessageEvent) {
-        console.log('message', e)
         const response = e.data;
         if (
           typeof response !== 'object' ||
@@ -142,7 +140,6 @@ export const Messaging = {
         function messageHandler(response: any) {
           if (response.tabId !== tab.id) return;
           if (response.method === METHOD.requestData) {
-            console.log('sending Request', request)
             port.postMessage(request);
           }
           if (response.method === METHOD.returnData) {
