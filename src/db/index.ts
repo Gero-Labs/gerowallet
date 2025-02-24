@@ -4,14 +4,55 @@ import { useStore } from '@/store';
 import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 
-const db = new Dexie('GeroWalletDatabase');
-const blockChainDBVersion = 2;
-const walletDBVersion = 2;
+const db: Dexie = new Dexie('GeroWalletDatabase');
+const blockChainDBVersion: number = 2;
+const walletDBVersion: number = 2;
 
-await db.version(1).stores({
+db.version(10).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
   config: '++id, key, value',
   provider: '++id, [name+chain+network], baseUrl, apiKey',
+})
+  .upgrade(async (tx) => {
+  const oldWallets = await tx.table('conceptualWallet').toArray();
+  const keys = await tx.table('key').toArray();
+  const publicKeyMap: Map<number, string> = new Map();
+  const encryptedPrivateKeyMap: Map<number, string> = new Map();
+  for (const key of keys) {
+    const id = key.conceptualWalletId;
+    if (key.hash.includes('xpub')) {
+      publicKeyMap.set(id, key.hash);
+    } else if (key.isEncrypted) {
+      encryptedPrivateKeyMap.set(id, key.hash)
+    }
+  }
+
+  // Check if the old table exists. If so, we are upgrading from the old version.
+  if (oldWallets) {
+    console.log('Migrating data from old schema (v9.2) to new schema (v10)...');
+
+    for (const oldWallet of oldWallets) {
+      const walletId = oldWallet.conceptualWalletId;
+      // Map fields from the old schema to the new one.
+      // For example:
+      const newWallet = {
+        id: walletId,
+        name: oldWallet.name,
+        icon: oldWallet.color,  // Default or map using your own logic
+        type: oldWallet.walletType || 'Normal',
+        theme: 'gero',
+        order: oldWallet.listOrder,
+        encryptedPrivateKey: encryptedPrivateKeyMap.get(walletId),
+        publicKey: publicKeyMap.get(walletId),
+        passwordLastUpdate: new Date(),
+        chain: 'Cardano',
+        network: 'Mainnet',
+      };
+
+      // Add the new wallet into the new wallets table.
+      await tx.table('wallets').add(newWallet);
+    }
+  }
 });
 
 db.open().catch(err => {

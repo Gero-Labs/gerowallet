@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Gero Dashboard Beta",
-  "short_name": "Gero Dashboard Beta",
-  "version": "2.3.11 BETA",
+  "name": "Gero Dashboard",
+  "short_name": "Gero Dashboard",
+  "version": "2.4.0",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",
@@ -15,7 +15,7 @@
       "48": "./assets/logo48.png",
       "128": "./assets/logo128.png"
     },
-    "default_title": "Gero Dashboard Beta | A Multi-chain Light Wallet Merging Web2 and Web3"
+    "default_title": "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
   },
   "background": {
     "service_worker": "js/background.js",

@@ -44,16 +44,16 @@
           <v-list-item-content>
             <v-list-item-title style="font-weight: 800">
               {{ item.title }}
-              <v-chip
-                  v-if="item.soon"
-                  class="ma-2"
-                  color="#333741"
-                  x-small
-                  outlined
-                  style="color: #9e9fa1"
-              >
-                Soon
-              </v-chip>
+<!--              <v-chip-->
+<!--                  v-if="item.soon"-->
+<!--                  class="ma-2"-->
+<!--                  color="#333741"-->
+<!--                  x-small-->
+<!--                  outlined-->
+<!--                  style="color: #9e9fa1"-->
+<!--              >-->
+<!--                Soon-->
+<!--              </v-chip>-->
             </v-list-item-title>
           </v-list-item-content>
         </v-list-item>
@@ -323,12 +323,16 @@ export default {
 }
 </script>
 <style scoped>
+.menuItem {
+  border: 1px solid transparent;
+}
+
 .activePage {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);
 }
 
 .activePageDark {
-  color: #F5F5F5;
+  color: #FFFFFF;
   background: #0C0E12;
 
   /* Border */
@@ -346,14 +350,28 @@ export default {
 }
 
 .theme--dark.v-list-item:not(.v-list-item--active):not(.v-list-item--disabled) {
-  color: #F5F5F5!important;
+  color: #FFFFFF!important;
 }
 
 .menuItem.v-list-item--link:before {
   background: #0C0E12;
+  border: 1px solid transparent;
 }
 
 .menuItem.v-list-item--link:not(.activePageDark):hover {
   background: #0C0E12;
+  border: 1px solid transparent;
+}
+
+.theme--dark.v-list-item:focus::before {
+  opacity: 0!important;
+}
+
+.theme--dark.v-list-item--active:focus::before {
+  opacity: 0!important;
+}
+
+.theme--dark.v-list-item--active:hover::before, .theme--dark.v-list-item--active::before {
+  opacity: 0!important;
 }
 </style>
