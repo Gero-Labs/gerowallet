@@ -25,6 +25,7 @@ import {
   STAKING_KEY_INDEX,
 } from '@/models/types';
 import { toUTxO, toValue } from '@/shared/utils/converter';
+import * as cbor from 'cbor';
 
 interface WhitelistedEntry {
   domain: string;
@@ -200,77 +201,126 @@ export const getDRepKey = async (): Promise<PublicKey> => {
 };
 
 export const getCollateral = async (params: CollateralParams): Promise<TransactionUnspentOutput[]> => {
-  const collateral = await getStorage(STORAGE.collateral)
-  if (!params || !params.amount) {
-    if (collateral) {
-      return [toUTxO(collateral)];
-    }
-    return null
-  }
-  const amount = params.amount
+  // Default to 5000000 lovelaces (5 ADA) if no amount parameter is provided.
+  const inputAmount = (params && params.amount != null) ? params.amount : "5000000";
 
-  // Convert the amount to a BigNum for comparison
-  let targetValue;
+  // Decode the amount parameter.
+  let decodedAmount: string;
   try {
-    targetValue = BigNum.from_str(String(amount));
+    decodedAmount = decodeCollateralAmount(inputAmount);
   } catch (e) {
-    const error = APIError.InvalidRequest
-    error.info = 'Invalid amount parameter.'
-    throw error
+    const error = APIError.InvalidRequest;
+    error.info = 'Invalid amount parameter.';
+    throw error;
   }
 
-  // Enforce a maximum collateral limit (e.g., 5 ADA)
-  const maxCollateral = BigNum.from_str("5000000"); // 5 ADA in lovelaces
+  // Convert the decoded amount to a BigNum.
+  let targetValue: BigNum;
+  try {
+    targetValue = BigNum.from_str(decodedAmount);
+  } catch (e) {
+    const error = APIError.InvalidRequest;
+    error.info = 'Invalid amount parameter conversion.';
+    throw error;
+  }
+
+  // Enforce the maximum collateral limit (5 ADA = 5,000,000 lovelaces).
+  const maxCollateral = BigNum.from_str("5000000");
   if (targetValue.compare(maxCollateral) === 1) {
-    const error = APIError.InvalidRequest
-    error.info = 'The requested collateral exceeds the allowed maximum of 5 ADA.'
-    throw error
+    const error = APIError.InvalidRequest;
+    error.info = 'The requested collateral exceeds the allowed maximum of 5 ADA.';
+    throw error;
   }
 
-  if (!collateral) {
-    return null;
+  // Retrieve UTXOs from storage.
+  const storedUtxos = await getStorage(STORAGE.utxos);
+  if (!storedUtxos || !Array.isArray(storedUtxos)) {
+    const error = APIError.InvalidRequest;
+    error.info = 'No UTXOs available in wallet.';
+    throw error;
   }
 
-  // Convert the collateral to a UTXO
-  const collateralUtxo = toUTxO(collateral)
+  // Filter for pure ADA UTXOs (asset_list exists and is empty).
+  const pureUtxos = storedUtxos
+    .filter(utxo => Array.isArray(utxo.asset_list) && utxo.asset_list.length === 0)
+    .map(utxo => toUTxO(utxo));
 
-  // Check if the collateral UTXO meets the required amount
-  const collateralValue = collateralUtxo.output().amount().coin();
-  if (collateralValue.compare(targetValue) !== -1) {
-    // Return the collateral UTXO if it meets or exceeds the target value
-    return [collateralUtxo];
+  if (pureUtxos.length === 0) {
+    const error = APIError.InvalidRequest;
+    error.info = 'No pure ADA UTXOs available in wallet.';
+    throw error;
   }
+  console.log('pureUtxos', pureUtxos)
+  // Sort the pure ADA UTXOs in ascending order by coin value.
+  pureUtxos.sort((a, b) =>
+    a.output().amount().coin().compare(b.output().amount().coin())
+  );
 
-  // If collateral UTXO does not meet the required value, attempt to gather more UTXOs
-  const utxos = await getStorage(STORAGE.utxos);
-  const suitableUtxos: TransactionUnspentOutput[] = [];
+  const selectedUtxos: TransactionUnspentOutput[] = [];
   let accumulatedValue = BigNum.zero();
 
-  if (utxos) {
-    const convertedUtxos: TransactionUnspentOutput[] = utxos.filter(utxo => Array.isArray(utxo.asset_list) || !utxo.asset_list.length).map(utxo => toUTxO(utxo))
+  // Greedily accumulate UTXOs until the target is met, optimizing by removing any excess smallest UTXO.
+  for (const utxo of pureUtxos) {
+    selectedUtxos.push(utxo);
+    accumulatedValue = accumulatedValue.checked_add(utxo.output().amount().coin());
 
-    for (const convertedUtxo of convertedUtxos) {
-      suitableUtxos.push(convertedUtxo);
-      accumulatedValue = accumulatedValue.checked_add(convertedUtxo.output().amount().coin());
-
-      // Stop if we've gathered enough UTXOs to meet the target value
-      if (accumulatedValue.compare(targetValue) !== -1) {
+    // Try to remove the smallest UTXO if the remaining sum still meets the target.
+    while (selectedUtxos.length > 0) {
+      const smallestUtxo = selectedUtxos[0];
+      const potentialSum = accumulatedValue.checked_sub(smallestUtxo.output().amount().coin());
+      if (potentialSum.compare(targetValue) !== -1) {
+        // Removing the smallest UTXO still meets the required amount.
+        selectedUtxos.shift();
+        accumulatedValue = potentialSum;
+      } else {
         break;
       }
     }
+
+    if (accumulatedValue.compare(targetValue) !== -1) {
+      break;
+    }
   }
 
-  // Check if we accumulated enough collateral
+  // If the accumulated collateral is less than the required amount, throw an error.
   if (accumulatedValue.compare(targetValue) === -1) {
-    throw {
-      message: 'Unable to gather enough collateral for the requested amount.',
-      blockingProblem: 'Not enough ADA in the wallet to meet the collateral requirements.',
-    };
+    const error = APIError.InvalidRequest;
+    error.info = 'Not enough ADA in the wallet to meet the collateral requirements.';
+    throw error;
   }
 
-  // Return the suitable UTXOs
-  return suitableUtxos;
+  return selectedUtxos;
+};
 
+/**
+ * Decodes the collateral amount parameter.
+ * - If the input is a number, returns its string representation.
+ * - If the input is a string containing only digits, returns it directly.
+ * - Otherwise, if the string is a valid hex string (i.e. contains [0-9a-fA-F]) assume it is CBOR encoded and decode it.
+ * @throws Error if the input is not in one of the expected formats.
+ */
+const decodeCollateralAmount = (input: string | number): string => {
+  if (typeof input === "number") {
+    return String(input);
+  }
+  if (/^[0-9]+$/.test(input)) {
+    // A decimal string.
+    return input;
+  }
+  if (/^[0-9a-fA-F]+$/.test(input)) {
+    try {
+      console.log(input)
+      const buffer = Buffer.from(input, "hex");
+      const decoded = cbor.decodeFirstSync(buffer);
+      if (typeof decoded === "number" || typeof decoded === "bigint") {
+        return String(decoded);
+      }
+      throw new Error("Decoded value is not a number");
+    } catch (e) {
+      throw new Error("Invalid CBOR encoded amount");
+    }
+  }
+  throw new Error("Invalid amount format");
 };
 
 export const getNetwork = async (): Promise<any> => {

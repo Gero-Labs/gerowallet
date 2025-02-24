@@ -5,11 +5,12 @@
       @row-click="handleOnTransactionsRowClick"
       style=" width: 39%;"
     />
-    <TransactionDetails
-      :transactionInfo="transactionInfo"
-      v-if="transactionInfo"
-      style="overflow-y: auto; width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);"
-    />
+    <v-card v-if="transactionInfo" style="overflow-y: auto; width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);">
+      <TransactionDetails
+        :transactionInfo="transactionInfo"
+      />
+    </v-card>
+
     <ReportDialog
       :isOpen="isReportDialogOpen"
       @close="isReportDialogOpen = false"

@@ -36,6 +36,16 @@
                   <v-list-item-content class="my-0" style="padding:0 !important; width: 86px;">
                     <v-list-item-title style="font-size: 12px;" class="ma-0">
                       {{loggedWallet?.network}}
+                      <v-btn x-small icon class="mx-0" :loading="loading.isSyncing" disabled>
+                        <v-avatar size="20">
+                          <v-icon x-small>mdi-sync</v-icon>
+                        </v-avatar>
+                        <template v-slot:loader>
+                          <span class="custom-loader">
+                            <v-icon x-small>mdi-sync</v-icon>
+                          </span>
+                        </template>
+                      </v-btn>
                     </v-list-item-title>
                     <v-list-item-subtitle style="font-size: 10px">
                       Synced {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000)) }}
@@ -50,16 +60,6 @@
                 <CopyButton ref="copyAddress" x-small :value="baseAddress" v-if="baseAddress"></CopyButton>
                 <v-spacer></v-spacer>
                 <QuickActionsBox />
-                <v-btn icon class="ml-2" :loading="loading.isSyncing" disabled>
-                  <v-avatar size="20">
-                    <v-icon>mdi-sync</v-icon>
-                  </v-avatar>
-                  <template v-slot:loader>
-                    <span class="custom-loader">
-                      <v-icon>mdi-sync</v-icon>
-                    </span>
-                  </template>
-                </v-btn>
                 <v-btn icon text :plain="!context.shown" v-if="musicPlaylist?.length > 0" @click="setMediaPlayerShown(!context.shown)">
                   <v-avatar size="20" >
                     <img
@@ -93,7 +93,7 @@
 <!--                    >-->
 <!--                  </v-avatar>-->
 <!--                </v-btn>-->
-                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="">
+                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="ml-1">
                   <v-avatar size="20">
                     <img
                         :src="require('@/assets/svg/settings-02.svg')"
