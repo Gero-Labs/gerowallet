@@ -1,7 +1,7 @@
 <template>
   <v-tab-item>
     <v-layout class="py-2" column>
-      <v-row no-gutters class="py-2">
+      <v-row no-gutters class="py-2" v-if="networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">Shop & Earn Pop-ups</h3>
           <span class="helper my-0">Get real-time cashback notifications as you explore supported retailer websites.</span>
@@ -99,6 +99,7 @@ import { appWallet, useStore } from '@/store';
 import db from '@/db';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
+import networks from '@/shared/utils/networks';
 
 export default {
   name: 'AdvancedSettingsTab',
@@ -110,6 +111,9 @@ export default {
     },
   },
   computed: {
+    networks() {
+      return networks
+    },
     ...mapState(useStore, ['loggedWallet']),
     ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup']),
     txAutoSubmit: {

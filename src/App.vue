@@ -40,11 +40,10 @@ import loading from "@/plugins/loading";
 import snackbar from "@/plugins/snackbar";
 
 export default {
-  components: {BlankLayout, ContentLayout},
+  components: { BlankLayout, ContentLayout },
   data: () => ({
     loading,
     snackbar,
-    store: useStore()
   }),
   computed: {
     ...mapState(useStore, ['loggedWallet', 'assets', 'resolvedAssets', 'resolvedCollections', 'loadingTxs']),
@@ -69,5 +68,15 @@ export default {
 }
 .v-card {
   background-color: var(--v-cardBackground-base) !important;
+}
+.v-dialog__content--active {
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.transparent90 {
+  opacity: 0.9;
+}
+.v-carousel__controls {
+  background-color: transparent!important;
 }
 </style>
