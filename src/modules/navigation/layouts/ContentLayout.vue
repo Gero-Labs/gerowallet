@@ -109,19 +109,12 @@
                 </keep-alive>
               </v-sheet>
             </v-layout>
-
-<!--            <v-app-bar >-->
-<!--              <v-container class="pa-0">-->
-<!--                <v-card height="64" style="background-color: black">-->
-<!--                  Test Test Test Test Test Test Test Test Test Test Test Test-->
-<!--                </v-card>-->
-<!--              </v-container>-->
-<!--            </v-app-bar>-->
             <Player v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown" style="position: -webkit-sticky; position: sticky; bottom: 0;" />
           </v-sheet>
         </v-layout>
       </v-container>
     </v-main>
+    <WelcomeDialog />
   </v-app>
 </template>
 <script>
@@ -139,10 +132,11 @@ import { musicStore } from '@/store/modules/music';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue';
+import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 
 export default {
   name: 'ContentLayout',
-  components: { QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { WelcomeDialog, QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks

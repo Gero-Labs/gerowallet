@@ -1,0 +1,77 @@
+name: Chrome Extension CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:   # Manual trigger for publish job
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Chrome Extension
+        run: npm run build
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Bump Version in package.json and manifest.json
+        id: bump
+        run: |
+          # Get the current version from package.json
+          current_version=$(node -p "require('./package.json').version")
+          echo "Current version: $current_version"
+
+          # Increment the patch version (you can change to 'minor' or 'major' as needed)
+          new_version=$(node -p "require('semver').inc('$current_version', 'patch')")
+          echo "New version: $new_version"
+
+          # Update package.json without auto-committing or tagging
+          npm version $new_version --no-git-tag-version
+
+          # Update manifest.json version using jq (make sure jq is available in your runner)
+          jq --arg ver "$new_version" '.version = $ver' manifest.json > tmp.json && mv tmp.json manifest.json
+
+          echo "New version set to $new_version"
+          echo "::set-output name=new_version::$new_version"
+
+      - name: Commit Version Bump
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add package.json manifest.json
+          git commit -m "chore: bump version to $(node -p \"require('./package.json').version\")"
+
+      - name: Create Git Tag
+        run: |
+          version=$(node -p "require('./package.json').version")
+          git tag "v$version"
+          git push origin --tags
+
+      - name: Push Changes
+        run: git push origin HEAD:main

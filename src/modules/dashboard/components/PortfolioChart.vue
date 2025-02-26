@@ -36,7 +36,7 @@ import Highstock from "highcharts/highstock";
 import filters from "@/shared/utils/filters";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
-import { Blockchain, Network } from '@/models/types';
+import networks from '@/shared/utils/networks';
 
 export default {
   props: {
@@ -48,16 +48,6 @@ export default {
   filters,
   computed: {
     ...mapState(useStore, ['loggedWallet', 'price', 'loadingTxs']),
-    resolveCurrency() {
-      if (this.loggedWallet.chain === Blockchain.APEX_PRIME || this.loggedWallet.chain === Blockchain.APEX_VECTOR) {
-        if (this.loggedWallet.network === Network.MAINNET) {
-          return 'Â '
-        }
-        return 'tÂ '
-      } else {
-        return '$'
-      }
-    },
     adaPrice() {
       const price = this.chartData[this.chartData.length - 1][1]
       if (this.lastPrice === -1) {
@@ -71,6 +61,7 @@ export default {
       if (!newVal.length) {
         return;
       }
+      const currency = networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network)
       const data = {
         accessibility: {
           enabled: false,
@@ -107,8 +98,14 @@ export default {
           enabled: false,
         },
         tooltip: {
+          backgroundColor: "rgb(12,14,18)",
+          borderColor: "#1F242F",
+          style: {
+            fontFamily: "Inter",
+            color: "#fff",
+          },
           formatter: function () {
-            return `${new Date(this.key).toLocaleString()}<br> <b>${filters.toCurrency(this.y, false, 2, '$', '', true, 0)}</b>`;
+            return `${new Date(this.key).toLocaleString()}<br> <b>${filters.toCurrency(this.y, false, 2, currency, '', true, 0)}</b>`;
           }
         },
         xAxis: {
@@ -160,13 +157,13 @@ export default {
         },
         series: [
           {
-            type: "area",
+            type: "areaspline",
             name: "Balance",
             data: newVal,
             showInLegend: true,
             marker: {
               symbol: "circle",
-              enabled: null,
+              enabled: false,
               radius: 3,
               lineWidth: 1,
               lineColor: null,

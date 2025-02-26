@@ -116,7 +116,13 @@ export default {
           },
         },
         tooltip: {
-          pointFormat: '{point.name}: <b>{point.percentage:.1f}%</b>'
+          backgroundColor: "rgb(12,14,18)",
+          borderColor: "#1F242F",
+          style: {
+            fontFamily: "Inter",
+            color: "#fff",
+          },
+          pointFormat: '<b>{point.percentage:.1f}%</b>'
         },
         exporting: {
           enabled: false,
