@@ -4,6 +4,7 @@
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
       <v-menu
+        v-if="loggedWallet.chain === Blockchain.CARDANO && loggedWallet.network === Network.MAINNET"
         v-model="filtersMenu"
         :close-on-content-click="false"
         offset-y
@@ -69,19 +70,22 @@
           </v-card-actions>
         </v-card>
       </v-menu>
-      <v-btn-toggle class="ml-4" mandatory active-class="highlight" @change="handleSwitchTab">
-        <v-btn color="black" :value="0" rounded style="text-transform: capitalize">Assets
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{assets?.length}}</v-chip>
-        </v-btn>
-        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="collectiblesLength === 0">Collectibles
-          <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-1">{{collectiblesLength}}</v-chip>
-        </v-btn>
-      </v-btn-toggle>
+      <v-tabs class="ml-1" @change="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" background-color="transparent">
+        <v-tab>
+          Assets
+         <span style="color: white">&nbsp;{{ `(${assets ? assets.length : 0})` }}</span>
+        </v-tab>
+        <v-tab :disabled="collectiblesLength === 0">
+          Collectibles
+          <span style="color: white">&nbsp;{{`(${collectiblesLength})`}}</span>
+        </v-tab>
+      </v-tabs>
     </v-card-title>
     <v-card-text class="pa-0">
       <v-tabs-items v-model="currentTab" class="transparent">
         <v-tab-item>
           <v-data-table
+            dense
             class="transparent"
             :headers="assetsHeaders"
             :items="assets"
@@ -213,7 +217,7 @@
               <span v-else>N/A</span>
             </template>
             <template v-slot:[`item.total_allocation`]="{ item }">
-              <span v-if="!item.last_price && item.name !== 'Cardano'">N/A</span>
+              <span v-if="!item.last_price && item.name !== networks.resolveCurrencyName(loggedWallet?.chain, loggedWallet?.network)">N/A</span>
               <v-progress-linear
                 v-else
                 class="progress-bar"
@@ -441,7 +445,14 @@ export default {
       let totalAllocation = 0
       if (this.resolvedAssets) {
         if (this.resolvedAssets.length === 1) {
-          return this.resolvedAssets[0].value;
+          const token = this.resolvedAssets[0]
+          let res;
+          if (token.metadata.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
+            res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * this.price?.lastPrice
+          } else {
+            res = this.resolvedAssets[0].value
+          }
+          return res;
         }
         this.resolvedAssets.forEach(token => {
           if (token.value) {
@@ -494,12 +505,13 @@ export default {
       if (resolvedAssets && this.price) {
         let res = resolvedAssets.map(token => {
           token['quantity'] = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
-          if (token['name'] === 'Cardano' || token['name'] === 'Apex Fusion') {
+          if (token['name'] === networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network)) {
             token['last_price'] = Number(filters.toCurrency(this.price.lastPrice, false, 4, '', '', true, 0).replaceAll(",", ""))
             token['change'] = Number(this.price.priceChangePercent)
           } else {
             token['last_price'] = Number(filters.toCurrency(token.last_price * Number(this.price.lastPrice), false, 6, '', '', false, 0).replaceAll(',', ''))
           }
+
           token['value'] = Number(filters.toCurrency(token.quantity * token.last_price, false, 4, '', '', false, 0).replaceAll(",", ""))
           if (token['value']) {
             token['total_allocation'] = token['value'] / this.totalAllocation * 100
@@ -583,5 +595,8 @@ export default {
   background-color: #333741;
   display: inline-block;
   margin-right: 10px;
+}
+.badge .v-badge__wrapper {
+  margin: 0
 }
 </style>

@@ -161,6 +161,12 @@ export default {
     }
     return this.resolveNetwork(chain, network)?.currencyTicker
   },
+  resolveCurrencyName(chain: string, network: string): string {
+    if (!chain || !network) {
+      return ''
+    }
+    return this.resolveNetwork(chain, network)?.currencyName
+  },
   resolveCurrencyImage(chain: string, network: string): string {
     if (!chain || !network) {
       return ''
