@@ -29,7 +29,7 @@
 <!--      />-->
 
       <v-tabs-items v-model="tab" class="transparent">
-        <ProfileTab />
+        <ProfileTab @close="$emit('close')" />
 <!--        <PasswordTab />-->
         <CollateralTab />
         <ContactsTab />

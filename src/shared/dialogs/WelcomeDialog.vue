@@ -238,6 +238,9 @@
               Get Started!
             </v-btn>
           </div>
+          <div style="position: absolute; bottom: 50px; justify-self: anchor-center; z-index: 2; font-size: 14px">
+            Need a refresher? You can always revisit this guide via your wallet settings.
+          </div>
         </v-img>
       </v-carousel-item>
     </v-carousel>
@@ -251,6 +254,13 @@ import { Blockchain, Network } from '@/models/types';
 
 export default defineComponent({
   name: 'WelcomeDialog',
+  watch: {
+    welcomeDone(value) {
+      if (value) {
+        setTimeout(() => this.carousel = 0, 2000);
+      }
+    }
+  },
   computed: {
     ...mapState(useStore, ['welcomeDone', 'loggedWallet']),
     welcomeScreenDialog: {
