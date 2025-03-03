@@ -266,7 +266,7 @@ export const useStore = defineStore('store', {
       const resolvingAsset = resolvedAssets
         .filter(asset => asset?.metadata || asset?.name === ticker)
         .map(async (token) => {
-          if (token.unit && dexHunterStore().dexHunterTokens[token.unit] && unitToFingerprint(token.unit) != 'asset1yxmhmq2sqddn4vfl0um2dtlg4r7g2p9u9ed6rc') {
+          if (token.unit && dexHunterStore().dexHunterTokens && dexHunterStore().dexHunterTokens[token.unit] && unitToFingerprint(token.unit) != 'asset1yxmhmq2sqddn4vfl0um2dtlg4r7g2p9u9ed6rc') {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             const promises = []
@@ -302,7 +302,7 @@ export const useStore = defineStore('store', {
             } catch (e) {
               console.error(e)
             }
-          } else if (token['name'] === 'Cardano' && this.price) {
+          } else if (token && token['name'] === 'Cardano' && this.price) {
             token['value'] = Number(filters.toCurrency(
               Number(token.quantity) * Number(this.price.lastPrice),
               false,
