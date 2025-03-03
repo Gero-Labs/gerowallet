@@ -342,7 +342,10 @@ export class Wallet {
       const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
 
       if (utxo) {
-        credList.add(addresses[utxo.payment_addr.bech32])
+        const address: string = addresses[utxo.payment_addr.bech32]
+        if (address) {
+          credList.add(address)
+        }
       }
     }
     if (txBody.certs()) {
@@ -1109,7 +1112,7 @@ export class Wallet {
   }
 
 
-  /** 
+  /**
    * Referral program
    */
 
