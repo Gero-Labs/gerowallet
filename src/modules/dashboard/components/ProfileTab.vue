@@ -18,7 +18,7 @@
         <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap;">
           <v-row no-gutters>
             <v-col cols="12" class="text-center py-2">
-              <v-avatar size="150" rounded>
+              <v-avatar size="100" rounded>
                 <v-img v-if="loggedWallet" :src="avatar"></v-img>
               </v-avatar>
             </v-col>
@@ -112,6 +112,22 @@
           <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
         </v-col>
       </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="7" class="text-left">
+          <h3>Welcome Guide</h3>
+          <span class="helper">Display the introductory guide to help you navigate your wallet</span>
+        </v-col>
+        <v-col cols="5" style="align-content: center;">
+          <v-btn
+            block
+            outlined
+            color="grey"
+            @click="showGuide"
+          >
+            <span class="capitalize">Show Guide</span>
+          </v-btn>
+        </v-col>
+      </v-row>
     </v-layout>
   </v-tab-item>
 </template>
@@ -142,7 +158,11 @@ export default {
     },
   },
   methods: {
-    ...mapActions(useStore, ['setLocale']),
+    ...mapActions(useStore, ['setLocale', 'setWelcomeDone']),
+    showGuide() {
+      this.$emit('close');
+      this.setWelcomeDone(false);
+    },
     resolveIcon(icon) {
       return require('@/assets/svg/' + icon + '.svg');
     }

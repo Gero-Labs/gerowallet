@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gero Dashboard",
   "short_name": "Gero Dashboard",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",
