@@ -1,5 +1,5 @@
 <template>
-  <div style="width: 120px; display: inline-flex" v-if="chart.length > 0">
+  <div style="width: 120px; min-width: 50px; display: inline-flex" v-if="chart.length > 0">
     <v-sparkline :value="chart"
                  :gradient="priceChange > 0 ? ['#47cd89'] : ['#f97066']"
                  :smooth="radius || false"
@@ -53,12 +53,16 @@ export default {
     type: 'trend',
     autoLineWidth: false,
     chart: [],
+    intervalId: undefined
   }),
   async mounted() {
     await this.fetch()
-    setInterval(async () => {
+    this.intervalId = setInterval(async () => {
       await this.fetch()
     },60000);
+  },
+  beforeDestroy() {
+    clearInterval(this.intervalId);
   }
 }
 </script>

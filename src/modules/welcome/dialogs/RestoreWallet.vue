@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" scrollable
+  <v-dialog content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" scrollable
             max-width="850"
             min-height="742"
             :persistent="persistent"
@@ -366,11 +366,9 @@ export default {
   })
 }
 </script>
-<style>
-.dialogStyle {
-  -webkit-backdrop-filter: blur(12px) brightness(0.2);
-  backdrop-filter: blur(12px);
-  background: #000000ab;
-  border: solid 2px #ffffff44;
+<style scoped>
+.v-dialog__content--active {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 </style>

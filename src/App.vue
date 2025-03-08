@@ -71,12 +71,26 @@ export default {
 }
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 .transparent90 {
   opacity: 0.9;
 }
 .v-carousel__controls {
   background-color: transparent!important;
+}
+.dialogStyle {
+  -webkit-backdrop-filter: blur(12px) brightness(0.2);
+  backdrop-filter: blur(12px);
+  background: #000000ab;
+  border: solid 2px #ffffff44;
+}
+
+.dialogStyle.darken {
+  background: #000000e0;
+}
+
+.v-dialog:not(.v-dialog--fullscreen) {
+  max-height: 100%;
 }
 </style>

@@ -4,7 +4,6 @@ import loading from '@/plugins/loading';
 import db from '@/db';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
-import socket from '@/plugins/socket';
 import { STORAGE } from '@/chrome/config';
 import {
   findCollectionDescription,
@@ -30,7 +29,7 @@ export const useStore = defineStore('store', {
   persist: {
     paths: [
       'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
-      'welcomeDone'
+      'welcomeDone', 'connected', 'intervals'
     ]
   },
   state: () => ({
@@ -58,6 +57,12 @@ export const useStore = defineStore('store', {
     currency: undefined,
     pinnedTokens: [],
     welcomeDone: false,
+    connected: false,
+    intervals: {
+      syncIntervalId: null,
+      fiatRatesIntervalId: null,
+      tickerStatisticsIntervalId: null
+    },
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -205,6 +210,16 @@ export const useStore = defineStore('store', {
     getPools: state => state.pools,
   },
   actions: {
+    async setLogin(walletId: number) {
+      const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
+      if (!wallet) {
+        return null;
+      }
+      await this.setLoggedWallet(wallet);
+    },
+    setConnected(connected) {
+      this.connected = connected
+    },
     setLoadingTxs(value) {
       this.loadingTxs = value
     },
@@ -285,7 +300,7 @@ export const useStore = defineStore('store', {
             }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
             }))
-           promises.push(appWallet.api.dailyPriceChange(networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), token.unit)
+           promises.push(appWallet.api.dailyPriceChange(networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network), token.unit)
              .then(changeStats => {
                token['change'] = changeStats.change;
              }).catch(err => {
@@ -425,7 +440,10 @@ export const useStore = defineStore('store', {
         await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
       }
       await appWallet.syncAddresses(Array.from(addresses))
-        .then(() => walletConfigStore().setUtxos(utxos))
+        .then((resolvedAddresses: Set<string>) => {
+          const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
+          walletConfigStore().setUtxos(filteredKnownUtxos)
+        })
         .then(() => this.loadResolvedAssets())
         .then(assets => this.resolveCollections(assets))
         .then((resolvedCollections) => {
@@ -446,7 +464,7 @@ export const useStore = defineStore('store', {
       }
       await this.setLoggedWallet(wallet);
       try {
-        this.provider = networks.resolveDefaultProvider(this.loggedWallet.chain, this.loggedWallet. network);
+        this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
       } catch (err) {
         console.log(err)
       }
@@ -455,15 +473,9 @@ export const useStore = defineStore('store', {
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
       await this.loadAssets()
-      socket.stompConnect(appWallet)
       const promises = []
       promises.push(this.loadSync())
-      try {
-        const tip = await appWallet.fetchTip()
-        await appWallet.sync(tip)
-      } catch (err) {
-        console.log(err)
-      }
+      this.intervals = await appWallet.startSync(this.intervals);
     },
     async login(walletId: number): Promise<void> {
       loading.setLoading(true);
@@ -483,7 +495,7 @@ export const useStore = defineStore('store', {
       }
       await this.setLoggedWallet(wallet);
       try {
-        this.provider = networks.resolveDefaultProvider(this.loggedWallet.chain, this.loggedWallet. network);
+        this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
       } catch (err) {
         console.log(err)
       }
@@ -491,11 +503,7 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
-      try {
-        socket.stompConnect(appWallet)
-      } catch (e) {
-        console.error(e)
-      }
+      this.intervals = await appWallet.startSync(this.intervals);
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
@@ -512,22 +520,21 @@ export const useStore = defineStore('store', {
       promises.push(walletConfigStore().loadContacts())
       promises.push(bringStore().loadBringCache())
       await Promise.all(promises)
-      try {
-        const tip = await appWallet.fetchTip()
-        await appWallet.sync(tip)
-      } catch (err) {
-        console.log(err)
-      }
       this.setLoadingTxs(false)
       loading.setLoading(false);
     },
     async logout() {
       loading.setLoading(true);
+      appWallet.endSync(this.intervals);
+      this.intervals = {
+        syncIntervalId: null,
+        fiatRatesIntervalId: null,
+        tickerStatisticsIntervalId: null,
+      }
       subscriptions.forEach(sub => {
         sub.unsubscribe();
       })
       subscriptions = []
-      socket.stompDisconnect();
       await this.setLoggedWallet(undefined)
       if (chrome?.storage) {
         await chrome.storage.local.remove(STORAGE.whitelisted);
@@ -558,6 +565,11 @@ export const useStore = defineStore('store', {
       appWallet = undefined
       loading.setLoading(false);
     },
+    async sync() {
+      if (!appWallet) {
+        await appWallet.sync()
+      }
+    },
     setLocale(locale) {
       this.locale = locale;
     },
@@ -567,7 +579,7 @@ export const useStore = defineStore('store', {
     setPrice(price) {
       this.price = price
     },
-    async setFiatRates(fiatRates) {
+    setFiatRates(fiatRates) {
       this.fiatRates = fiatRates
     },
     setWelcomeDone(welcomeDone) {

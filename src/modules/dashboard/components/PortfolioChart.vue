@@ -61,7 +61,7 @@ export default {
       if (!newVal.length) {
         return;
       }
-      const currency = networks.resolveCurrencySymbol(this.loggedWallet.chain, this.loggedWallet.network)
+      const currency = networks.resolveCurrencySymbol(this.loggedWallet?.chain, this.loggedWallet?.network)
       const data = {
         accessibility: {
           enabled: false,
@@ -300,7 +300,6 @@ export default {
     }
   },
   mounted() {
-    console.log(this.chartData)
     this.loadChart(this.chartData)
   }
 };
