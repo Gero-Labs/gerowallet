@@ -23,11 +23,20 @@ export class Api {
     });
   }
 
-  async sync(fromBlockHeight, address: string, prevAccountInfo: any) {
+  async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
     try {
-      const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
-      const { data, status } = await this.axiosInstance.get(
-        `/api/sync?chain=${this.chain}&network=${this.network}&provider=${this.provider}&from=${fromBlockHeight}&address=${rewardAddress}&rewards_sum=${prevAccountInfo.rewards_sum}&controlled_amount=${prevAccountInfo.controlled_amount}`
+      const { data, status } = await this.axiosInstance.post(
+        `/api/sync`,{
+          chain: this.chain,
+          network: this.network,
+          provider: this.provider,
+          from,
+          to,
+          address,
+          rewards_sum,
+          controlled_amount,
+          withdrawable_amount
+        }
       );
       if (status === 200) return data;
       throw parseHttpError(data);
@@ -153,13 +162,7 @@ export class Api {
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    return await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
   }
 
   async getAssetNFTAddress(policyId: string, assetName: string): Promise<any> {
@@ -173,31 +176,23 @@ export class Api {
   }
 
   async getTip() {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    const { data, status } = await this.axiosInstance.get(
+      `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    );
+    if (status === 200) return data;
+    return parseHttpError(data);
   }
 
-  async fetchHistory() {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/crypto/history/ADAUSDT`);
-      if (status === 200) {
-        const chart = [];
-        for (let i = 0; i < data.length; i++) {
-          chart.push(Number(data[i][4]));
-        }
-        return chart;
-      }
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+  async fetchTickerStatistics() {
+    const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
+    if (status === 200) return data;
+    return parseHttpError(data);
+  }
+
+  async fetchFiatRates() {
+    const { data, status } = await this.axiosInstance.get(`/api/price/fiatRates`);
+    if (status === 200) return data;
+    return parseHttpError(data);
   }
 
   async fetchADAStatistics() {
@@ -239,13 +234,7 @@ export class Api {
   }
 
   async getAllBlacklistPolicies(): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/assets/blacklist`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    return await this.axiosInstance.get(`/api/assets/blacklist`);
   }
 
   async moonPaySign(url: string): Promise<any> {
@@ -358,18 +347,12 @@ export class Api {
   }
 
   async mcap(unit: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/v2/mcap/${unit}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    return await this.axiosInstance.get(`/api/v2/mcap/${unit}`);
   }
 
-  async dailyPriceChange(tokenIn: string, tokenOut: string): Promise<any> {
+  async dailyPriceChange(unit: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/v2/stats/dailyPriceChange/${tokenIn}/${tokenOut}`);
+      const { data, status } = await this.axiosInstance.get(`/api/token/prices/chg?unit=${unit}`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -422,13 +405,7 @@ export class Api {
   }
 
   async getPortfolio(stakeAddress: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    return await this.axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
   }
 
   async getPortfolioTrendedValue(stakeAddress: string): Promise<any> {

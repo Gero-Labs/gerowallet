@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
+  <v-dialog content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -530,13 +530,7 @@ export default {
   })
 }
 </script>
-<style>
-.dialogStyle {
-  -webkit-backdrop-filter: blur(12px) brightness(0.2);
-  backdrop-filter: blur(12px);
-  background: #000000ab;
-  border: solid 2px #ffffff44;
-}
+<style scoped>
 #qr-code > svg {
   border-radius: 10px;
 }
@@ -565,4 +559,9 @@ export default {
 .qr-result {
   margin-top: 20px;
 }
+
+ .v-dialog__content--active {
+   -webkit-backdrop-filter: blur(8px);
+   backdrop-filter: blur(8px);
+ }
 </style>

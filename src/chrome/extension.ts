@@ -86,53 +86,107 @@ export const getBalance = async (): Promise<Value> => {
   return balance;
 };
 
-export const getUtxos = async (amount: string = undefined, paginate: Paginate = undefined): Promise<TransactionUnspentOutput[] | null> => {
-  let utxos = await getStorage(STORAGE.utxos)
-  const collateral = await getStorage(STORAGE.collateral)
+export const getUtxos = async (
+  amount: string = undefined,
+  paginate: Paginate = undefined
+): Promise<TransactionUnspentOutput[] | null> => {
+  let utxos = await getStorage(STORAGE.utxos);
+  const collateral = await getStorage(STORAGE.collateral);
 
   // Exclude collateral input from the overall UTXO set
   if (collateral) {
-    utxos = utxos.filter((utxo) => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index));
+    utxos = utxos.filter(
+      (utxo) =>
+        !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index)
+    );
   }
 
   // Convert raw UTXOs to the appropriate format
   const converted: TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
 
-  // If no amount is specified, return all UTXOs
+  // If no amount is specified, return all UTXOs (with optional pagination)
   if (!amount) {
     if (paginate) {
-      // Check if the requested page and limit exceed the maximum page size
-      // if (paginate.page * paginate.limit >= maxPageSize) {
-      //   throw { maxSize: maxPageSize } as PaginateError;
-      // }
-
-      // Handle pagination
       const start = paginate.page * paginate.limit;
       const end = start + paginate.limit;
       return converted.slice(start, end);
     }
-    return converted; // Return all UTXOs if pagination is not provided
+    return converted;
   }
 
-  // If amount is specified, filter and accumulate UTXOs to match the target value
+  // Parse the target value from the provided hex string
   let targetValue;
   try {
-    targetValue = Value.from_bytes(Buffer.from(amount, 'hex'));
+    targetValue = Value.from_hex(amount);
   } catch (e) {
     throw APIError.InvalidRequest;
   }
 
-  // Accumulate UTXOs until the combined value meets or exceeds the target value
-  let accumulatedValue = Value.zero();
+  // Determine if the target is pure ADA (i.e. no multiassets)
+  const targetMultiasset = targetValue.multiasset();
+  const isPureTarget = !targetMultiasset || targetMultiasset.len() === 0;
+
+  // Separate UTXOs into pure ADA and those with multiassets
+  const pureUtxos: TransactionUnspentOutput[] = [];
+  const multiUtxos: TransactionUnspentOutput[] = [];
+  for (const utxo of converted) {
+    const utxoValue = utxo.output().amount();
+    const ma = utxoValue.multiasset();
+    if (!ma || ma.len() === 0) {
+      pureUtxos.push(utxo);
+    } else {
+      multiUtxos.push(utxo);
+    }
+  }
+
   const selectedUtxos: TransactionUnspentOutput[] = [];
+  let accumulatedValue: Value = Value.zero();
 
-  for (const unspent of converted) {
-    selectedUtxos.push(unspent);
-    accumulatedValue = accumulatedValue.checked_add(unspent.output().amount());
+  if (isPureTarget) {
+    // --- Try to accumulate from pure ADA UTXOs first ---
+    pureUtxos.sort((a, b) => {
+      const aAda = BigInt(a.output().amount().coin().to_str());
+      const bAda = BigInt(b.output().amount().coin().to_str());
+      return aAda < bAda ? -1 : aAda > bAda ? 1 : 0;
+    });
 
-    // If the accumulated value is enough, stop accumulating
-    if (accumulatedValue.compare(targetValue) !== -1) {
-      break;
+    for (const utxo of pureUtxos) {
+      selectedUtxos.push(utxo);
+      accumulatedValue = accumulatedValue.checked_add(utxo.output().amount());
+      // Break if we've reached or exceeded the target value
+      if (accumulatedValue.compare(targetValue) !== -1) {
+        break;
+      }
+    }
+
+    // --- If pure ADA UTXOs were insufficient, add multiasset UTXOs ---
+    if (accumulatedValue.compare(targetValue) === -1) {
+      multiUtxos.sort((a, b) => {
+        const aAda = BigInt(a.output().amount().coin().to_str());
+        const bAda = BigInt(b.output().amount().coin().to_str());
+        return aAda < bAda ? -1 : aAda > bAda ? 1 : 0;
+      });
+      for (const utxo of multiUtxos) {
+        selectedUtxos.push(utxo);
+        accumulatedValue = accumulatedValue.checked_add(utxo.output().amount());
+        if (accumulatedValue.compare(targetValue) !== -1) {
+          break;
+        }
+      }
+    }
+  } else {
+    // For targets that include multiassets, accumulate from all UTXOs
+    const sortedUtxos = [...converted].sort((a, b) => {
+      const aAda = BigInt(a.output().amount().coin().to_str());
+      const bAda = BigInt(b.output().amount().coin().to_str());
+      return aAda < bAda ? -1 : aAda > bAda ? 1 : 0;
+    });
+    for (const utxo of sortedUtxos) {
+      selectedUtxos.push(utxo);
+      accumulatedValue = accumulatedValue.checked_add(utxo.output().amount());
+      if (accumulatedValue.compare(targetValue) !== -1) {
+        break;
+      }
     }
   }
 
@@ -141,12 +195,8 @@ export const getUtxos = async (amount: string = undefined, paginate: Paginate = 
     return null;
   }
 
-  // Handle pagination on the selected UTXOs
+  // Apply pagination if provided
   if (paginate) {
-    // Check if the requested page and limit exceed the maximum page size
-    // if (paginate.page * paginate.limit >= maxPageSize) {
-    //   throw { maxSize: maxPageSize } as PaginateError;
-    // }
     const start = paginate.page * paginate.limit;
     const end = start + paginate.limit;
     return selectedUtxos.slice(start, end);
@@ -489,8 +539,8 @@ export const urlScan = async url => {
 
 export const submitTx = async (tx) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  const chain = Object.keys(Blockchain).find(key => Blockchain[key] === loggedWallet.chain);
-  const network = Object.keys(Network).find(key => Network[key] === loggedWallet.network);
+  const chain = Object.keys(Blockchain).find(key => Blockchain[key] === loggedWallet?.chain);
+  const network = Object.keys(Network).find(key => Network[key] === loggedWallet?.network);
   const response  = await fetch(`https://api.gerowallet.io/api/transactions/submit-tx?chain=${chain}&network=${network}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -109,13 +109,13 @@ export default defineComponent({
     },
     isSwapDisabled() {
       if (this.loggedWallet) {
-        return !networks.resolveSwapSupport(this.loggedWallet.chain, this.loggedWallet.network);
+        return !networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network);
       }
       return true;
     },
     currencyTicker() {
       if (this.loggedWallet) {
-        return networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network);
+        return networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network);
       }
       return '';
     },

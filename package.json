@@ -52,8 +52,6 @@
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
     "qrcode": "^1.5.4",
-    "sockjs-client": "^1.6.1",
-    "stompjs": "^2.3.3",
     "tldts": "^6.1.59",
     "vue": "^2.7.16",
     "vue-class-component": "^7.2.3",
@@ -63,7 +61,7 @@
     "vue-qrcode-reader": "^3.2.0",
     "vue-router": "^3.6.5",
     "vue-showdown": "^2.4.1",
-    "vuetify": "^2.7.1",
+    "vuetify": "^2.7.2",
     "webextension-polyfill": "^0.10.0"
   },
   "devDependencies": {
@@ -73,8 +71,6 @@
     "@types/chrome": "^0.0.268",
     "@types/howler": "^2.2.11",
     "@types/lodash": "^4.17.7",
-    "@types/sockjs-client": "^1.5.4",
-    "@types/stompjs": "^2.3.9",
     "@types/w3c-web-usb": "^1.0.10",
     "@typescript-eslint/eslint-plugin": "^5.4.0",
     "@typescript-eslint/parser": "^5.4.0",

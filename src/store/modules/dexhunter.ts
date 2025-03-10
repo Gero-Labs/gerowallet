@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { appWallet } from '@/store';
 import { Chain } from '@keystonehq/keystone-sdk/dist/chains/keystone';
 import { Blockchain, Network } from '@/models/types';
+import { parseHttpError } from '@/shared/utils/parser';
 
 export const dexHunterStore = defineStore( 'dexHunterStore', {
   persist: {
@@ -44,7 +45,12 @@ export const dexHunterStore = defineStore( 'dexHunterStore', {
         return
       }
       try {
-        this.setBlacklistPolicies(await appWallet.api.getAllBlacklistPolicies())
+        const res = await appWallet.api.getAllBlacklistPolicies()
+        if (res.status === 200) {
+          this.setBlacklistPolicies(res.data)
+        } else {
+          console.log(parseHttpError(res))
+        }
       } catch (e) {
         console.error(e)
       }
