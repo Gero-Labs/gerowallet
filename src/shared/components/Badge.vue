@@ -1,40 +1,45 @@
-<script lang="ts" setup>
-import { computed, defineProps } from 'vue';
-import { useStore } from '@/store';
-import filters from '@/shared/utils/filters';
+<script lang="ts">
+  import { computed, defineProps } from 'vue';
+  import { useStore } from '@/store';
+  import filters from '@/shared/utils/filters';
 
-export type BadgeType = {
-    icon: {
-        path: string;
-    };
-    title: string;
-    value?: number;
-    valueInADA?: number;
-}
-const props = defineProps<BadgeType>();
-const SVGComponent = () => import(`@/assets/icons/${props.icon.path}.vue`);
-const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
+  import { BadgeType } from '../types/BadgeType';
 
+  export default {
+    setup(){
+      const props = defineProps<BadgeType>();
+      const SVGComponent = () => import(`@/assets/icons/${props.icon.path}.vue`);
+      const lastPrice = Number(computed(() => useStore().price.lastPrice).value);
+
+      return {
+        ...props,
+        SVGComponent,
+        lastPrice,
+        filters
+      }
+    }
+  }
+  
 </script>
 
 <template>
-    <v-container class="badge">
-      <v-list-item>
-        <v-list-item-avatar>
-          <component :is="SVGComponent" />
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title class="badge-title">
-            {{ title }}
-          </v-list-item-title>
-          <v-list-item-subtitle class="badge-value">
-            {{ filters.toCurrency(value, false, 2, '', '', true, 0)  }}
-            <span class="badge-currency-value" v-if="valueInADA">{{ filters.toCurrency(valueInADA * lastPrice, false, 2, '$', '', true, 0) }}</span>
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-    </v-container>
-  </template>
+  <v-container class="badge">
+    <v-list-item>
+      <v-list-item-avatar>
+        <component :is="SVGComponent" />
+      </v-list-item-avatar>
+      <v-list-item-content>
+        <v-list-item-title class="badge-title">
+          {{ title }}
+        </v-list-item-title>
+        <v-list-item-subtitle class="badge-value">
+          {{ filters.toCurrency(value, false, 2, '', '', true, 0)  }}
+          <span class="badge-currency-value" v-if="valueInADA">{{ filters.toCurrency(valueInADA * lastPrice, false, 2, '$', '', true, 0) }}</span>
+        </v-list-item-subtitle>
+      </v-list-item-content>
+    </v-list-item>
+  </v-container>
+</template>
 
 <style scoped lang="scss">
     .badge{

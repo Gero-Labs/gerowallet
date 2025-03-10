@@ -106,6 +106,7 @@ export class Wallet {
     wal.db = new Dexie('wallet-' + wallet.id);
     wal.db.open().catch(async err => {
       if (err.name === 'NoSuchDatabaseError') {
+        // TODO: @edridudi - we need to add a condition here that will check the synchonicity of the wallet db not just if the db exists
         await db.createNewWalletDb(wallet.id);
       }
       console.log(err);
@@ -149,7 +150,7 @@ export class Wallet {
     let accountKey: Bip32PrivateKey;
     try {
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
-      const buffer: Buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      const buffer: any = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
       accountKey = Bip32PrivateKey.from_bytes(buffer)
         .derive(WalletTypePurpose.CIP1852) // purpose
         .derive(CoinTypes.CARDANO) // coin type;
@@ -433,7 +434,7 @@ export class Wallet {
     } else { // Software Wallet Signing
       console.log('Signing with Software Wallet...');
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
-      const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      const decodedHash: any = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
       password = null;
       if (!decodedHash && partialSign === false) {
         throw TxSignError.ProofGeneration;
@@ -1105,5 +1106,36 @@ export class Wallet {
     } catch (err) {
       console.error(`Failed to add connected dapp: ${err}`);
     }
+  }
+
+
+  /** 
+   * Referral program
+   */
+
+  // Get referral code
+  // check indexed DB for the value,
+  // if doesn't exist, pull from BE and update the DB
+  // within the context of the wallet
+  async getReferralCode(){
+    return this.db.open().then( async (db) => {
+      const configTable = db.table('config');
+      if (!configTable) throw new Error('Config table not found.');
+
+      let referrerCode = await configTable.where({ key: 'referrerCode' }).first();
+      referrerCode = referrerCode?.value || undefined;
+      if(!referrerCode){
+        // fetch from API and put into db table
+        referrerCode = await this.api.getReferrerCode();
+        if( referrerCode !== null ){
+          await configTable.put({ key: 'referrerCode', value: referrerCode });
+        }
+      }
+
+      return referrerCode;
+    })
+    .catch( er => {
+      console.log(er);
+    });
   }
 }

@@ -50,13 +50,13 @@ type StoreState = {
   fiatRates: any,
   currency: any,
   pinnedTokens: any[],
-  referrals: RefInfo
+  referral: RefInfo
 }
 
 export const useStore = defineStore('store', {
   persist: {
     paths: [
-      'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens', 'referrals'
+      'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens', 'referral'
     ]
   },
   state: (): StoreState => ({
@@ -83,11 +83,13 @@ export const useStore = defineStore('store', {
     fiatRates: undefined,
     currency: undefined,
     pinnedTokens: [],
-    referrals: {
+    referral: {
       refAddress: '',
-      currentView: 'refer',
-      totalRewards: 0,
-      totalRewardsInADA: 0
+      referrals: [],
+      redeem: {
+        canClaim: false
+      },
+      totalRewards: 0
     }
   }),
   getters: {
@@ -234,8 +236,7 @@ export const useStore = defineStore('store', {
       }
       return []
     },
-    getPools: state => state.pools,
-    getReferrals: state => state.referrals
+    getPools: state => state.pools
   },
   actions: {
     setLoadingTxs(value) {
@@ -495,6 +496,7 @@ export const useStore = defineStore('store', {
       } catch (err) {
         console.log(err)
       }
+      this.initReferrals();
     },
     async login(walletId: number) {
       loading.setLoading(true);
@@ -515,6 +517,7 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
+      
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
@@ -538,7 +541,6 @@ export const useStore = defineStore('store', {
       promises.push(this.loadConnectedDapps())
       promises.push(walletConfigStore().loadContacts())
       promises.push(bringStore().loadBringCache())
-      promises.push(this.loadReferrals())
       await Promise.all(promises)
       try {
         const tip = await appWallet.fetchTip()
@@ -546,7 +548,8 @@ export const useStore = defineStore('store', {
       } catch (err) {
         console.log(err)
       }
-      this.setLoadingTxs(false)
+      this.setLoadingTxs(false);
+      this.initReferrals();
       loading.setLoading(false);
     },
     async logout() {
@@ -775,32 +778,51 @@ export const useStore = defineStore('store', {
       const db = await appWallet.getDb()
       db.table('connected_dapps').delete(id)
     },
-    async loadReferrals() {
-      /* TODO: change this mock into real db connection */
-      this.referrals = {
-        refAddress: '$GERO-referral-jnv01mvmkauna20n74',
-        referrals: [
+    async initReferrals(){
+      if (!appWallet) { return; }
+      // pull share code from BE
+      this.referral.refAddress = await appWallet.getReferralCode();
+      // pull total referrals and their satus from BE
+      this.referral.referrals = await this.getReferrals();
+      this.referral.totalRewards = this.referral.referrals.reduce( (acc, current) => acc + current.reward, 0);
+      // get redeem info
+      this.referral.redeem.canClaim = false;
+      this.referral.redeem.actions = await this.getRedeemActions();
+    },
+    async getReferrals() {
+       // TODO: @KyrSmaw - wire to the correct API once ready
+       return [
           {
-            name: 'gerowallet',
-            walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
-            dateRedeemed: '2024-10-10 16:00:00',
-            eligible: false,
-            reward: 500,
-            rewardInADA: 45
+              name: 'gerowallet',
+              walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9149irouqmk7ygdfhsjkjbna',
+              dateRedeemed: '2024-10-10 16:00:00',
+              eligible: false,
+              reward: 500,
+              rewardInADA: 45
           },
           {
-            name: 'SNEKKK',
-            walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
-            dateRedeemed: '2024-10-08 16:00:00',
-            eligible: true,
-            reward: 500,
-            rewardInADA: 45
+              name: 'SNEKKK',
+              walletAddress: 'addr1q8atctf93yjnultrqeq5ep50tnvfxpcxpw0hg48mxd3xsn62fuuvu4ryffmkv3m9zcxtfs9rxx9mpv2pwws7m69w0e4qjw595h',
+              dateRedeemed: '2024-10-08 16:00:00',
+              eligible: true,
+              reward: 500,
+              rewardInADA: 45
           },
-        ],
-        currentView: 'refer',
-        totalRewards: 1000,
-        totalRewardsInADA: 90
-      };
+      ];
+    },
+    async getRedeemActions(){
+      return [
+        {
+          name: 'swap',
+          done: false,
+          info: 'Spend at least 50 ADA in a swap transation with Gero Dashboard'
+        },
+        {
+          name: 'stake',
+          done: true,
+          info: 'Stake at least 1,000 ADA into the GERO2 POOL for at least 1 epoch (5 days)'
+        }
+      ]
     }
   },
 });

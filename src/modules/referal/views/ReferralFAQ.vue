@@ -68,9 +68,9 @@
                         <v-icon class="pa-4" x-large>{{ faq.icon }}</v-icon>
                     </v-avatar>
                 </v-card>
-                <v-list-title class="text-xl">{{ faq.content.title }}</v-list-title>
-                <v-list-subtitle class="text-md" v-if="faq.content.subtitle">{{ faq.content.subtitle }}</v-list-subtitle>
-                <v-list-text v-if="faq.content.content" v-html="faq.content.content"></v-list-text>
+                <v-list-item-title class="text-xl">{{ faq.content.title }}</v-list-item-title>
+                <v-list-item-subtitle class="text-md" v-if="faq.content.subtitle">{{ faq.content.subtitle }}</v-list-item-subtitle>
+                <v-list-item-content v-if="faq.content.content" v-html="faq.content.content"></v-list-item-content>
             </v-list-item>
         </v-list>
     </div>
@@ -85,9 +85,12 @@
             border: 2px solid;
             border-image-source: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 100%);
         }
+        .v-list-item__content{
+            overflow: unset !important;
+        }
 
         .v-list-item{
-            flex: 1 0 30%;
+            flex: 1 1 30%;
             display: flex;
             flex-direction: column;
             align-items: flex-start;
@@ -97,7 +100,9 @@
                 text-align: center;
                 font-weight: 600;
                 margin-bottom: 1rem;
-                line-height: 20px;
+                line-height: 30px;
+                white-space: unset !important;
+                overflow: unset !important;
             }
 
             .text-md{
@@ -105,6 +110,8 @@
                 font-weight: 400;
                 margin-bottom: 1rem;
                 line-height: 20px;
+                white-space: unset !important;
+                overflow: unset !important;
             }
         }
     }
