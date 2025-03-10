@@ -4,7 +4,7 @@
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
       <v-menu
-        v-if="loggedWallet.chain === Blockchain.CARDANO && loggedWallet.network === Network.MAINNET"
+        v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"
         v-model="filtersMenu"
         :close-on-content-click="false"
         offset-y
@@ -447,7 +447,7 @@ export default {
         if (this.resolvedAssets.length === 1) {
           const token = this.resolvedAssets[0]
           let res;
-          if (token.metadata.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
+          if (token.metadata.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)) {
             res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * this.price?.lastPrice
           } else {
             res = this.resolvedAssets[0].value

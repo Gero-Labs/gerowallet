@@ -300,10 +300,14 @@ export default {
         .then(async address => {
           console.log(address)
           this.paymentAddress = address.payment_address
-          const assetInfo = await appWallet.api.getDetailedAssetsInfo('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$', '')).toString('hex'))
-          this.asset = await resolveAsset(assetInfo, assetInfo)
-          this.$emit('updateRecipientAddress', address.payment_address)
-          this.resolved = true
+          const res = await appWallet.api.getDetailedAssetsInfo('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$', '')).toString('hex'))
+          if (res.status === 200) {
+            this.asset = await resolveAsset(res.data, res.data)
+            this.$emit('updateRecipientAddress', address.payment_address)
+            this.resolved = true
+          } else {
+            this.resolved = false
+          }
         })
         .catch(() => {
           this.$emit('updateRecipientAddress', '')
@@ -312,7 +316,7 @@ export default {
         .finally(() => {
           this.loading = false
         })
-    }, 2000),
+    }, 1000),
   },
   data: () => ({
     valid: false,

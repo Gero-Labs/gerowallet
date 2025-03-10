@@ -157,7 +157,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('config').toArray()).subscribe({
+        subscriptions.set('config', liveQuery(() => db.table('config').toArray()).subscribe({
           next: value => {
             this.config = value.reduce(function(map, val) {
               map[val.key] = val.value
@@ -176,7 +176,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('addresses').toArray()).subscribe({
+        subscriptions.set('addresses', liveQuery(() => db.table('addresses').toArray()).subscribe({
           next: value => {
             this.setAddresses(value.reduce(function(map, val) {
               map[val.address] = val
@@ -195,7 +195,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
+        subscriptions.set('accountInfo', liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
           next: newAccount => {
             this.setAccount(newAccount)
             resolve(this.account)
@@ -234,7 +234,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
 
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => walletDB.table('contacts').toArray()).subscribe({
+        subscriptions.set('contacts', liveQuery(() => walletDB.table('contacts').toArray()).subscribe({
           next: newContacts => {
             this.setContacts(newContacts.reduce(function(map, contact) {
               map[contact.address] = contact

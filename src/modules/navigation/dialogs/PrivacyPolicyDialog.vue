@@ -803,11 +803,3 @@ export default {
   data: () => ({})
 }
 </script>
-<style scoped>
-.dialogStyle {
-  -webkit-backdrop-filter: blur(12px) brightness(0.2);
-  backdrop-filter: blur(12px);
-  background: #000000ab;
-  border: solid 2px #ffffff44;
-}
-</style>

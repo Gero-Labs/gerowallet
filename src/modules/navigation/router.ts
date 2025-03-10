@@ -182,8 +182,8 @@ const router = new VueRouter({
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   loading.setLoading(true);
-  const store= useStore();
-  await store.loadWallets();
+  const store = useStore();
+  await store.subscribeWallets();
   const wallets: any[] = store.wallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();

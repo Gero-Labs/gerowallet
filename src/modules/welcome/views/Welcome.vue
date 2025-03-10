@@ -139,10 +139,10 @@ export default {
     }
   },
   methods: {
-    ...mapActions(useStore, ['login']),
+    ...mapActions(useStore, ['setLogin']),
     async submitLogin(walletId) {
       try {
-        await this.login(walletId)
+        await this.setLogin(walletId)
       } catch (error) {
         console.error(error)
       }

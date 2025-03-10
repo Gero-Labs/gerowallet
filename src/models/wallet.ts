@@ -17,7 +17,8 @@ import {
   Ed25519KeyHash,
   encrypt_with_password,
   EnterpriseAddress,
-  FixedTransaction, PointerAddress,
+  FixedTransaction,
+  PointerAddress,
   PrivateKey,
   PublicKey,
   RewardAddress,
@@ -25,6 +26,7 @@ import {
   Transaction,
   TransactionBody,
   TransactionHash,
+  TransactionInput,
   TransactionJSON,
   TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
@@ -47,9 +49,8 @@ import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/ch
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import trezor from '@/shared/utils/trezor';
-import socket from '@/plugins/socket';
 import loading from '@/plugins/loading';
-import { appWallet } from '@/store';
+import { appWallet, useStore } from '@/store';
 import {
   addVkeys,
   createCOSEKeyHex,
@@ -62,6 +63,7 @@ import {
   toHexArray,
   toHexString,
 } from '@/shared/utils/converter';
+import { parseHttpError } from '@/shared/utils/parser';
 
 const blake2b = require('blake2b');
 
@@ -334,16 +336,14 @@ export class Wallet {
       }
     }
     for (let i = 0; i < txBody.inputs().len(); i++) {
-      const input = txBody.inputs().get(i);
+      const input: TransactionInput = txBody.inputs().get(i);
       const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
       const inputTxIndex = input.index();
       const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
 
       if (utxo) {
         const address: string = addresses[utxo.payment_addr.bech32]
-        if (address) {
-          credList.add(address)
-        }
+        credList.add(address)
       }
     }
     if (txBody.certs()) {
@@ -685,7 +685,66 @@ export class Wallet {
     };
   }
 
-  async sync(tip): Promise<void> {
+  async startSync() {
+    console.log('startSync');
+    useStore().clearSyncIntervals()
+    // Chain Tip
+    try {
+      await appWallet.sync()
+    } catch (err) {
+      console.log(err)
+    }
+    if (!useStore().intervals.syncIntervalId) {
+      useStore().intervals.syncIntervalId = setInterval(async () => {
+        try {
+          console.log('sync scheduled')
+          await appWallet.sync()
+        } catch (err) {
+          console.log(err)
+        }
+      }, 20000)
+    }
+
+    // Ticker Price
+    try {
+      useStore().setPrice(await appWallet.fetchTickerStatistics())
+    } catch (err) {
+      console.log(err)
+    }
+    if (!useStore().intervals.tickerStatisticsIntervalId) {
+      useStore().intervals.tickerStatisticsIntervalId = setInterval(async () => {
+        try {
+          useStore().setPrice(await appWallet.fetchTickerStatistics())
+        } catch (err) {
+          console.log(err)
+        }
+      }, 20000)
+    }
+
+    // Fiat Rates
+    try {
+      useStore().setFiatRates(await appWallet.fetchFiatRates())
+    } catch (err) {
+      console.log(err)
+    }
+    if (!useStore().intervals.fiatRatesIntervalId) {
+      useStore().intervals.fiatRatesIntervalId = setInterval(async () => {
+        try {
+          useStore().setFiatRates(await appWallet.fetchFiatRates())
+        } catch (err) {
+          console.log(err)
+        }
+      }, 14400000);
+    }
+  }
+
+  endSync() {
+    clearInterval(useStore().intervals.syncIntervalId)
+    clearInterval(useStore().intervals.fiatRatesIntervalId)
+    clearInterval(useStore().intervals.tickerStatisticsIntervalId)
+  }
+
+  async sync(newTip?: any): Promise<void> {
     if (this.syncLock) {
       // If sync is already running, wait for it to complete
       await this.syncLock;
@@ -693,8 +752,14 @@ export class Wallet {
     }
     this.syncLock = (async () => {
       try {
-        console.log('sync');
         loading.setSyncing(true);
+        console.log('sync');
+        let tip
+        if (!newTip) {
+          tip = await this.fetchTip();
+        } else {
+          tip = newTip;
+        }
         const lastSyncInfo = await this.getLastSyncInfo();
         if (!lastSyncInfo) {
           // loading.setText('Restoring Wallet Data. Please Wait ...')
@@ -703,11 +768,19 @@ export class Wallet {
           loading.setRestoring(false);
         } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
           const promises = [];
-          promises.push(this.syncTable(1)); //Sync Staking Pools
-          promises.push(this.syncTable(2)); //Sync DReps
+          promises.push(this.syncTable(1)); // Sync Staking Pools
+          promises.push(this.syncTable(2)); // Sync DReps
           const prevAccountInfo = await this.getAccountInfo();
-          socket.sendSync(!lastSyncInfo ? 0 : lastSyncInfo['height'], tip, this.stakeAddress().to_address().to_bech32(), prevAccountInfo?.rewards_sum, prevAccountInfo?.controlled_amount, prevAccountInfo?.withdrawable_amount);
+          const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
+          const to = tip;
+          const address: string = this.stakeAddress().to_address().to_bech32();
+          const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
+          const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
+          const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
+          await this.setSync(await this.api.sync(from, to, address, rewards_sum, controlled_amount, withdrawable_amount));
         }
+      } catch (err) {
+        console.log(err);
       } finally {
         // Release the lock after execution
         this.syncLock = null;
@@ -789,12 +862,7 @@ export class Wallet {
       .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
       });
-    try {
-      const tip = await appWallet.fetchTip();
-      await appWallet.sync(tip);
-    } catch (err) {
-      console.log(err);
-    }
+    await appWallet.sync();
   }
 
   async setSync(syncObject) {
@@ -868,13 +936,16 @@ export class Wallet {
       // const blockchainDB: Dexie = await this.getBlockchainDb();
       // const assetsTable = blockchainDB.table('assets');
       const res = await this.api.getDetailedAssetsInfo(policyId, assetName);
-      if (res) {
+      if (res.status === 200) {
         // assetsTable.bulkPut(res);
-        return res;
+        return res.data;
+      } else {
+        console.log(parseHttpError(res))
       }
     } catch (e) {
       console.log(e);
     }
+    return null;
   }
 
   private async getStakingPools() {
@@ -933,7 +1004,22 @@ export class Wallet {
   }
 
   async fetchTip(): Promise<any> {
-    return await this.api.getTip();
+    try {
+      const tip = await this.api.getTip();
+      useStore().setConnected(true)
+      return tip
+    } catch (e) {
+      useStore().setConnected(false)
+      throw e
+    }
+  }
+
+  async fetchTickerStatistics(): Promise<any> {
+    return await this.api.fetchTickerStatistics();
+  }
+
+  async fetchFiatRates(): Promise<any> {
+    return await this.api.fetchFiatRates();
   }
 
   async syncAccountInfo(): Promise<any> {
@@ -947,34 +1033,43 @@ export class Wallet {
     }
   }
 
-  async syncAddresses(knownAddresses: string[]): Promise<void> {
-    await this.db
-      .open()
-      .then(async db => {
-        const addressesTable = db.table('addresses');
-        if (!addressesTable) throw new Error('No Addresses table.');
-        // const storedAddresses = await addressesTable.toArray()
-        // const storedAddressSet = new Set(storedAddresses.map(addr => addr.address));
-        // const missingAddresses = knownAddresses.filter(address => !storedAddressSet.has(address));
-        const resolvedAddress = this.resolvePathsForMissingAddresses(knownAddresses);
-        if (resolvedAddress?.length > 0) {
-          addressesTable.bulkPut(resolvedAddress);
-        }
+  async syncAddresses(knownAddresses: string[]): Promise<Set<string>> {
+    const resolvedAddressesSet: Set<string> = new Set();
+    try {
+      const db = await this.db.open();
+      const addressesTable = db.table('addresses');
+      if (!addressesTable) {
+        throw new Error('No Addresses table.');
+      }
+
+      // Resolve the addresses using your helper function.
+      const resolvedAddresses = this.resolvePathsForMissingAddresses(knownAddresses);
+
+      // If we found any resolved addresses, bulk insert them.
+      if (resolvedAddresses?.length > 0) {
+        await addressesTable.bulkPut(resolvedAddresses);
+      }
+
+      // Return the resolved addresses.
+      resolvedAddresses.forEach(address => {
+        resolvedAddressesSet.add(address.address);
       })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
+      return resolvedAddressesSet;
+    } catch (err) {
+      console.error(`Failed to open database: ${err}`);
+      return resolvedAddressesSet;
+    }
   }
 
   resolvePathsForMissingAddresses(usedAddresses: string[]) {
     const resolvedAddresses = [];
-    let addressIndex = 0;       // Start from the first address index
-    let consecutiveUnused = 0;  // Track consecutive unused addresses
+    let addressIndex: number = 0;       // Start from the first address index
+    let consecutiveUnused: number = 0;  // Track consecutive unused addresses
     const GAP_LIMIT = 20;       // Define the gap limit as 20
     while (consecutiveUnused < GAP_LIMIT) {
-      const derivedAddress = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
-      const internalDerivedAddress = this.deriveInternalAddressFromPath(addressIndex).to_address().to_bech32();
-      let found = false;
+      const derivedAddress: string = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
+      const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).to_address().to_bech32();
+      let found: boolean = false;
       if (usedAddresses.includes(derivedAddress)) {
         resolvedAddresses.push({
           address: derivedAddress,
