@@ -3,6 +3,7 @@
   "name": "Gero Dashboard",
   "short_name": "Gero Dashboard",
   "version": "2.4.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAghg0AeHu/YbOFrU/NlZvof6l2BYwOdhYQJC6OQgQG/X2mhTQM4oOkQ0+7YNuzX2V0/xzp3hONFo11dS82mWGKkBS3DHH2hIKiSou+Uv5Thwpgmm6TPU9aF8MhXzApfrfhXqkaNMlknyFlfVXMWd3/GC/VYDi/vWD/zlE7IIlfq9ohhnA9CSNKLhaoEU56p6J7EoPg7pw6nIhZA0f4xX9ISSJPAPDsiinmUlJSdaCgwpLMoV1phrvFwhCD2Uixy5cW1oW35/0BdBDYyq2MKI6vmi4vYMesDTxylPucFc9bRmr1COdeb70WRHA0NJjtlLRm8EyUSr/qoEeyMDBDCQJGQIDAQAB",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "icons": {
     "16": "./assets/logo16.png",

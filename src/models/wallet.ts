@@ -63,6 +63,7 @@ import {
   toHexArray,
   toHexString,
 } from '@/shared/utils/converter';
+import { parseHttpError } from '@/shared/utils/parser';
 
 const blake2b = require('blake2b');
 
@@ -684,22 +685,24 @@ export class Wallet {
     };
   }
 
-  async startSync(intervals) {
+  async startSync() {
     console.log('startSync');
+    useStore().clearSyncIntervals()
     // Chain Tip
     try {
       await appWallet.sync()
     } catch (err) {
       console.log(err)
     }
-    if (!intervals.syncIntervalId) {
-      intervals.syncIntervalId = setInterval(async () => {
+    if (!useStore().intervals.syncIntervalId) {
+      useStore().intervals.syncIntervalId = setInterval(async () => {
         try {
+          console.log('sync scheduled')
           await appWallet.sync()
         } catch (err) {
           console.log(err)
         }
-      }, 40000)
+      }, 20000)
     }
 
     // Ticker Price
@@ -708,8 +711,8 @@ export class Wallet {
     } catch (err) {
       console.log(err)
     }
-    if (!intervals.tickerStatisticsIntervalId) {
-      intervals.tickerStatisticsIntervalId = setInterval(async () => {
+    if (!useStore().intervals.tickerStatisticsIntervalId) {
+      useStore().intervals.tickerStatisticsIntervalId = setInterval(async () => {
         try {
           useStore().setPrice(await appWallet.fetchTickerStatistics())
         } catch (err) {
@@ -724,8 +727,8 @@ export class Wallet {
     } catch (err) {
       console.log(err)
     }
-    if (!intervals.fiatRatesIntervalId) {
-      intervals.fiatRatesIntervalId = setInterval(async () => {
+    if (!useStore().intervals.fiatRatesIntervalId) {
+      useStore().intervals.fiatRatesIntervalId = setInterval(async () => {
         try {
           useStore().setFiatRates(await appWallet.fetchFiatRates())
         } catch (err) {
@@ -733,13 +736,12 @@ export class Wallet {
         }
       }, 14400000);
     }
-    return intervals;
   }
 
-  endSync(intervals) {
-    clearInterval(intervals.syncIntervalId)
-    clearInterval(intervals.fiatRatesIntervalId)
-    clearInterval(intervals.tickerStatisticsIntervalId)
+  endSync() {
+    clearInterval(useStore().intervals.syncIntervalId)
+    clearInterval(useStore().intervals.fiatRatesIntervalId)
+    clearInterval(useStore().intervals.tickerStatisticsIntervalId)
   }
 
   async sync(newTip?: any): Promise<void> {
@@ -750,14 +752,14 @@ export class Wallet {
     }
     this.syncLock = (async () => {
       try {
+        loading.setSyncing(true);
         console.log('sync');
         let tip
         if (!newTip) {
-          tip = await this.api.getTip();
+          tip = await this.fetchTip();
         } else {
           tip = newTip;
         }
-        loading.setSyncing(true);
         const lastSyncInfo = await this.getLastSyncInfo();
         if (!lastSyncInfo) {
           // loading.setText('Restoring Wallet Data. Please Wait ...')
@@ -934,13 +936,16 @@ export class Wallet {
       // const blockchainDB: Dexie = await this.getBlockchainDb();
       // const assetsTable = blockchainDB.table('assets');
       const res = await this.api.getDetailedAssetsInfo(policyId, assetName);
-      if (res) {
+      if (res.status === 200) {
         // assetsTable.bulkPut(res);
-        return res;
+        return res.data;
+      } else {
+        console.log(parseHttpError(res))
       }
     } catch (e) {
       console.log(e);
     }
+    return null;
   }
 
   private async getStakingPools() {

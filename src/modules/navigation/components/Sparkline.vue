@@ -14,8 +14,9 @@
   </div>
 </template>
 <script>
-import { appWallet, useStore } from '@/store';
+import { useStore } from '@/store';
 import { mapState } from 'pinia';
+import cryptoApi from '@/api/crypto-api';
 
 export default {
   name: 'Sparkline',
@@ -36,12 +37,10 @@ export default {
   },
   methods: {
     async fetch() {
-      if (appWallet) {
-        try {
-          this.chart = await appWallet.api.fetchHistory()
-        } catch (error) {
-          console.error(error)
-        }
+      try {
+        this.chart = await cryptoApi.fetchHistory()
+      } catch (error) {
+        console.error(error)
       }
     }
   },

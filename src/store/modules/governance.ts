@@ -45,7 +45,7 @@ export const governanceStore = defineStore( 'governanceStore', {
       }
 
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => blockchainDB.table('dreps').toArray()).subscribe({
+        subscriptions.set('governance', liveQuery(() => blockchainDB.table('dreps').toArray()).subscribe({
           next: newDReps => {
             this.dreps = newDReps.reduce(function(map, drep) {
               map[drep.drep_id] = drep

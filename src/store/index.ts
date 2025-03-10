@@ -21,9 +21,14 @@ import { walletConfigStore } from '@/store/modules/walletConfig';
 import { governanceStore } from '@/store/modules/governance';
 import { tapToolsStore } from '@/store/modules/tapTools';
 import router from '@/modules/navigation/router';
+import { parseHttpError } from '@/shared/utils/parser';
+import { loadWallets, subscribeWallets } from '@/store/loaders/walletLoader';
+import { loadSync, subscribeSync } from '@/store/loaders/syncLoader';
+import { loadTransactions, subscribeTransactions } from '@/store/loaders/transactionsLoader';
+import { loadAssets } from '@/store/loaders/assetsLoader';
 
 export let appWallet: Wallet = undefined;
-export let subscriptions: Subscription[] = []
+export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
 
 export const useStore = defineStore('store', {
   persist: {
@@ -217,7 +222,7 @@ export const useStore = defineStore('store', {
       }
       await this.setLoggedWallet(wallet);
     },
-    setConnected(connected) {
+    setConnected(connected: boolean) {
       this.connected = connected
     },
     setLoadingTxs(value) {
@@ -285,24 +290,29 @@ export const useStore = defineStore('store', {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             const promises = []
-            promises.push(appWallet.api.mcap(token.unit).then(stats => {
-              token['mcap'] = stats.mcap;
-              token['last_price'] = stats.price;
-              token['value'] = Number(filters.toCurrency(
-                token['last_price'] * Number(token.quantity),
-                false,
-                token.metadata?.decimals,
-                '',
-                '',
-                false,
-                token.metadata?.decimals
-              ).replaceAll(",", ""));
+            promises.push(appWallet.api.mcap(token.unit).then(res => {
+              if (res?.status === 200) {
+                const stats = res.data;
+                token['mcap'] = stats.mcap;
+                token['last_price'] = stats.price;
+                token['value'] = Number(filters.toCurrency(
+                  token['last_price'] * Number(token.quantity),
+                  false,
+                  token.metadata?.decimals,
+                  '',
+                  '',
+                  false,
+                  token.metadata?.decimals
+                ).replaceAll(",", ""));
+              } else {
+                console.log(parseHttpError(res))
+              }
             }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
             }))
-           promises.push(appWallet.api.dailyPriceChange(networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network), token.unit)
+           promises.push(appWallet.api.dailyPriceChange(token.unit)
              .then(changeStats => {
-               token['change'] = changeStats.change;
+               token['change'] = changeStats['24h'] * 100;
              }).catch(err => {
                console.error(`Error fetching daily price change for ${token.unit}:`, err);
              }));
@@ -457,6 +467,12 @@ export const useStore = defineStore('store', {
     setStakeAddress(stakeAddress) {
       this.stakeAddress = stakeAddress
     },
+    unsubscribeAll() {
+      Array.from(subscriptions.values()).forEach(sub => {
+        sub.unsubscribe();
+      })
+      subscriptions = new Map<string, Subscription>();
+    },
     async simpleLogin(walletId: number) {
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
@@ -475,16 +491,14 @@ export const useStore = defineStore('store', {
       await this.loadAssets()
       const promises = []
       promises.push(this.loadSync())
-      this.intervals = await appWallet.startSync(this.intervals);
+      promises.push(this.subscribeSync())
+      await appWallet.startSync();
     },
     async login(walletId: number): Promise<void> {
       loading.setLoading(true);
       this.setLoadingTxs(true)
       console.log('login')
-      subscriptions.forEach(sub => {
-        sub.unsubscribe();
-      })
-      subscriptions = []
+      this.unsubscribeAll()
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
         await this.logout();
@@ -503,7 +517,7 @@ export const useStore = defineStore('store', {
       this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
       this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
       governanceStore().setDRepId(appWallet.drepId().to_bech32())
-      this.intervals = await appWallet.startSync(this.intervals);
+      await appWallet.startSync();
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
@@ -511,6 +525,7 @@ export const useStore = defineStore('store', {
       await walletConfigStore().loadConfig()
       promises.push(walletConfigStore().loadAddresses())
       promises.push(this.loadSync())
+      promises.push(this.subscribeSync())
       promises.push(walletConfigStore().loadAccountInfo())
       promises.push(this.loadPools())
       promises.push(governanceStore().loadDReps())
@@ -522,19 +537,20 @@ export const useStore = defineStore('store', {
       await Promise.all(promises)
       this.setLoadingTxs(false)
       loading.setLoading(false);
+      this.subscribeTransactions();
     },
-    async logout() {
-      loading.setLoading(true);
-      appWallet.endSync(this.intervals);
+    clearSyncIntervals() {
+      appWallet.endSync();
       this.intervals = {
         syncIntervalId: null,
         fiatRatesIntervalId: null,
         tickerStatisticsIntervalId: null,
       }
-      subscriptions.forEach(sub => {
-        sub.unsubscribe();
-      })
-      subscriptions = []
+    },
+    async logout() {
+      loading.setLoading(true);
+      this.clearSyncIntervals();
+      this.unsubscribeAll()
       await this.setLoggedWallet(undefined)
       if (chrome?.storage) {
         await chrome.storage.local.remove(STORAGE.whitelisted);
@@ -606,85 +622,26 @@ export const useStore = defineStore('store', {
         this.pinnedTokens.splice(index, 1);
       }
     },
-    async loadWallets(): Promise<void> {
-      subscriptions.push(liveQuery(() => db.getAllWallets()).subscribe({
-        next: wallets => {
-          this.wallets = wallets
-        },
-        error: error => {
-          console.error('Failed to get all Wallets:', error)
-        }
-      }));
+    async loadWallets() {
+      await loadWallets(this);
+    },
+    async subscribeWallets() {
+      await subscribeWallets(this, subscriptions)
     },
     async loadSync() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db = await appWallet.getDb()
-      return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('sync').orderBy('height').last()).subscribe({
-          next: newTip => {
-            this.latestTip = newTip
-            console.log('latestTip', this.latestTip)
-            resolve(this.latestTip)
-          },
-          error: error => {
-            console.error('Failed to Fetch Tip:', error)
-            reject(error)
-          }
-        }));
-      });
+      return await loadSync(this, appWallet);
+    },
+    async subscribeSync() {
+      await subscribeSync(this, appWallet, subscriptions)
     },
     async loadTransactions() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db: Dexie = await appWallet.getDb()
-      return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('transactions').toArray()).subscribe({
-          next: async newTransactions => {
-            const newT = newTransactions.map(tx => tx.transaction)
-            if (newT !== this.transactions) {
-              this.transactions = newT
-              await this.setUtxosAndAddresses(newT)
-              console.log('setNew')
-              resolve(this.transactions)
-            }
-          },
-          error: error => {
-            console.error('Failed to Fetch Transactions:', error)
-            reject(error)
-          }
-        }));
-      });
+      return await loadTransactions(this, appWallet);
+    },
+    async subscribeTransactions() {
+      return await subscribeTransactions(this, appWallet, subscriptions);
     },
     async loadAssets() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db: Dexie = await appWallet.getBlockchainDb();
-      // Return a promise that resolves when the data is fully loaded
-      return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('assets').toArray()).subscribe({
-          next: newAssets => {
-            this.setAssets(newAssets.reduce((map, asset) => {
-              map[asset.asset] = asset;
-              return map;
-            }, {}))
-            resolve(this.assets); // Resolve the promise when data is loaded
-          },
-          error: error => {
-            console.error('Failed to Fetch Assets:', error);
-            reject(error); // Reject the promise if an error occurs
-          }
-        }));
-      });
+      return await loadAssets(this, appWallet, subscriptions);
     },
     async loadPools() {
       if (!appWallet) {
@@ -694,7 +651,7 @@ export const useStore = defineStore('store', {
       }
       const db: Dexie = await appWallet.getBlockchainDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('pools').toArray()).subscribe({
+        subscriptions.set('pools', liveQuery(() => db.table('pools').toArray()).subscribe({
           next: newPools => {
             this.pools = newPools
             resolve(this.pools);
@@ -714,7 +671,7 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
+        subscriptions.set('rewards', liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
           next: newRewards => {
             this.rewards = newRewards
             resolve(this.rewards)
@@ -734,7 +691,7 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       return new Promise((resolve, reject) => {
-        subscriptions.push(liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
+        subscriptions.set('dapps', liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
           next: newConnectedDapps => {
             this.connectedDapps = newConnectedDapps
             if (chrome?.storage) {

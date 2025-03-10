@@ -111,13 +111,62 @@
           </v-card-text>
         </v-card>
       </v-col>
+      <v-col cols="12" class="pa-2">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+          <v-card-title class="row no-gutters d-flex justify-space-between">
+            Utxo Cbor to Json
+          </v-card-title>
+          <v-card-text>
+            <v-row no-gutters>
+              <v-col cols="6">
+                <v-textarea
+                  v-model="utxoCbor"
+                  outlined
+                  hide-details
+                >
+                </v-textarea>
+              </v-col>
+              <v-col cols="6" class="px-3">
+                {{ utxoJson }}
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" class="pa-2">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+          <v-card-title class="row no-gutters d-flex justify-space-between">
+            Lovelace to Value
+          </v-card-title>
+          <v-card-text>
+            <v-row no-gutters>
+              <v-col cols="6">
+                <v-textarea
+                  v-model="lovelace"
+                  outlined
+                  hide-details
+                >
+                </v-textarea>
+              </v-col>
+              <v-col cols="6" class="px-3">
+                {{ value }}
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
   </v-layout>
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import { Address, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
-import { stringToHex } from '@/shared/utils/converter';
+import {
+  Address,
+  Transaction,
+  TransactionUnspentOutput,
+  TransactionWitnessSet,
+} from '@emurgo/cardano-serialization-lib-browser';
+import { stringToHex, toValue } from '@/shared/utils/converter';
 
 export default defineComponent({
   name: 'DevTools',
@@ -152,6 +201,12 @@ export default defineComponent({
     },
     messageDataText(val) {
       this.messageDataHex = stringToHex(val)
+    },
+    utxoCbor(val) {
+      this.utxoJson = TransactionUnspentOutput.from_hex(val).to_json()
+    },
+    lovelace(val) {
+      this.value = toValue([], val).to_hex()
     }
   },
   data() {
@@ -166,6 +221,10 @@ export default defineComponent({
         addressInHex: null,
         messageDataText: '',
         messageDataHex: null,
+        utxoCbor: '',
+        utxoJson: '',
+        lovelace: '',
+        value: '',
       };
   },
 });
