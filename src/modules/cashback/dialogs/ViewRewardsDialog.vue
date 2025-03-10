@@ -238,7 +238,7 @@ export default {
         if (signature.error) {
           snackbar.setError(signature.error.info)
         } else {
-          const status = await cashbackApi.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
+          const status = await cashbackApi.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
           if (status === 202) {
             snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
             await this.loadBringCache()
@@ -272,13 +272,6 @@ export default {
 };
 </script>
 <style scoped>
-.dialogStyle {
-  -webkit-backdrop-filter: blur(12px) brightness(0.2);
-  backdrop-filter: blur(12px);
-  background: #000000ab;
-  border: solid 2px #ffffff44;
-}
-
 .card-text {
   width: 100%;
   padding: 10px;

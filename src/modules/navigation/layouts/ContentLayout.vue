@@ -8,13 +8,14 @@
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
               <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;" >
                 <PriceTicker></PriceTicker>
-                <v-divider vertical class="mx-2" style="max-height: 30px; min-height: 30px;align-self: center;" v-if="networks.resolveNetwork(loggedWallet?.chain, loggedWallet?.network)?.blockchain === Blockchain.CARDANO"></v-divider>
+                <Sparkline v-if="loggedWallet?.chain === Blockchain.CARDANO"></Sparkline>
+                <v-divider vertical class="mx-2" style="max-height: 30px; min-height: 30px;align-self: center;" v-if="loggedWallet?.chain === Blockchain.CARDANO"></v-divider>
                 <v-progress-linear v-if="epochSlotPercentage"
                     striped
                     :value="epochSlotPercentage"
                     height="22"
                     rounded
-                    style="width: 100px"
+                    style="width: 100px; min-width: 50px;"
                     :buffer-value="100"
                 >
                   <template v-slot:default="{ value }">
@@ -29,8 +30,8 @@
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
                 <v-list-item v-if="latestTip" two-line class="px-0" style="min-height: auto; flex: unset">
                   <v-list-item-icon class="ma-0" style="align-self: center;">
-                    <v-icon small class="mr-1" :color="socket.isConnected() ? '#47cd89' : '#ff6464'">
-                      {{ socket.isConnected() ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
+                    <v-icon small class="mr-1" :color="connected ? '#47cd89' : '#ff6464'">
+                      {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect'}}
                     </v-icon>
                   </v-list-item-icon>
                   <v-list-item-content class="my-0" style="padding:0 !important; width: 86px;">
@@ -120,7 +121,6 @@
 <script>
 import NavigationDrawer from "../components/NavigationDrawer.vue";
 import {useStore} from "@/store";
-import socket from "@/plugins/socket";
 import PriceTicker from "@/modules/navigation/components/PriceTicker.vue";
 import { mapActions, mapState } from 'pinia';
 import SettingsDialog from "@/modules/dashboard/dialogs/SettingsDialog.vue";
@@ -133,10 +133,11 @@ import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue';
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
+import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 
 export default {
   name: 'ContentLayout',
-  components: { WelcomeDialog, QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { Sparkline, WelcomeDialog, QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks
@@ -147,7 +148,7 @@ export default {
     currentPage() {
       return this.$route
     },
-    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs', 'baseAddress']),
+    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs', 'baseAddress', 'connected']),
     ...mapState(musicStore, ['musicPlaylist', 'context']),
     epochSlotPercentage() {
       if (this.latestTip) {
@@ -161,7 +162,6 @@ export default {
   },
   filters,
   data: () => ({
-    socket,
     currentDialog: null,
     dialogs: {
       SETTINGS: 'SETTINGS',
@@ -169,7 +169,7 @@ export default {
   }),
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
-    ...mapActions(useStore, ['login']),
+    ...mapActions(useStore, ['login', 'sync']),
     copyAddress() {
       this.$refs.copyAddress.copy()
     },
@@ -180,6 +180,7 @@ export default {
   async mounted() {
     if (this.loggedWallet?.id) {
       try {
+        console.log('login mounted')
         await this.login(this.loggedWallet.id)
       } catch (e) {
         console.error(e)
@@ -230,5 +231,9 @@ div.v-toolbar__content {
   to {
     transform: rotate(-360deg);
   }
+}
+.v-dialog__content--active {
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 </style>

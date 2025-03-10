@@ -15,7 +15,7 @@
       <div class="stake-apex-info">
         <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
         <v-card-text class="subtitle-1" v-if="loggedWallet"
-          >Earn rewards by staking your {{assetType}} tokens with {{loggedWallet.chain}}'s extensive network of stake pools.</v-card-text
+          >Earn rewards by staking your {{assetType}} tokens with {{loggedWallet?.chain}}'s extensive network of stake pools.</v-card-text
         >
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
           Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
@@ -54,7 +54,7 @@ export default {
   computed: {
     geroPoolExists() {
       if (this.loggedWallet) {
-        return !!networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+        return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
       }
       return false
     },
@@ -62,7 +62,7 @@ export default {
       if (!this.loggedWallet) {
         return ''
       }
-      return networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
+      return networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)
     },
     hasAssets() {
       return !!this.account
@@ -75,7 +75,7 @@ export default {
   },
   methods: {
     delegateToGero() {
-      const poolId = networks.resolvePool(this.loggedWallet.chain, this.loggedWallet.network)
+      const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
       this.selectedPool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
       if (!this.selectedPool) {
         console.log('Pool Not Found')

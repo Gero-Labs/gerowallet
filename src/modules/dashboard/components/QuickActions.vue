@@ -112,13 +112,13 @@ export default {
     ...mapState(useStore, ['loggedWallet', 'baseAddress']),
     isBuyDisabled() {
       if (this.loggedWallet) {
-        return !networks.resolveBuySupported(this.loggedWallet.chain, this.loggedWallet.network)
+        return !networks.resolveBuySupported(this.loggedWallet?.chain, this.loggedWallet?.network)
       }
       return true
     },
     isSwapDisabled() {
       if (this.loggedWallet) {
-        return !networks.resolveSwapSupport(this.loggedWallet.chain, this.loggedWallet.network)
+        return !networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network)
       }
       return true
     },

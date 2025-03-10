@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { appWallet } from '@/store';
 import { Blockchain, Network } from '@/models/types';
+import { parseHttpError } from '@/shared/utils/parser';
 
 export const tapToolsStore = defineStore( 'tapToolsStore', {
   persist: {
@@ -30,7 +31,12 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
         return
       }
       try {
-        this.setPortfolio(await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32()))
+        const res = await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32())
+        if (res?.status == 200) {
+          this.setPortfolio(res.data)
+        } else {
+          console.log(parseHttpError(res))
+        }
       } catch (e) {
         console.error(e);
       }
