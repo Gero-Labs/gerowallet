@@ -1,10 +1,19 @@
 <template>
   <v-container fluid class="multisig-container">
     <v-row>
-      <v-col cols="12">
+      <v-col cols="10">
         <h1 class="multisig-title">Multisig Transactions</h1>
-        <p class="multisig-description">Manage your multi-signature transactions securely</p>
+        <p class="multisig-description">A multisig transaction on Cardano is a transaction that requires multiple signatures from different parties to authorize spending from a shared address.</p>
       </v-col>
+      <v-col cols="2">
+        <v-btn variant="outlined" class="text-caption text-capitalize" prepend-icon="mdi-account">
+          <v-icon small color="#00DFF3">
+              mdi-qrcode
+            </v-icon>
+          Create Multisig Wallet
+        </v-btn>
+      </v-col>
+      
     </v-row>
 
     <v-row>
@@ -21,7 +30,7 @@
               loading-text="Loading transactions..."
               no-data-text="No pending multisig transactions"
             >
-              <template v-slot:item.status="{ item }">
+              <!-- <template v-slot:item.status="{ item }">
                 <v-chip :color="getStatusColor(item.status)" small class="status-chip">
                   {{ item.status }}
                 </v-chip>
@@ -37,7 +46,7 @@
                 >
                   Sign
                 </v-btn>
-              </template>
+              </template> -->
             </v-data-table>
           </v-card-text>
         </v-card>

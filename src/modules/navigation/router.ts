@@ -20,12 +20,13 @@ import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
+import MultisigTransactions from '@/modules/multisig/MultisigTransactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
 
 const routes = [
   {
     path: '/',
-    name: 'dashboard',
+    name: 'dashboards',
     component: Dashboard,
     meta: {
       layout: ContentLayout,
@@ -96,8 +97,17 @@ const routes = [
   },
   {
     path: '/blog',
-    name: 'blog',
+    name: 'blogx',
     component: Blog,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/multisig',
+    name: 'multisig',
+    component: MultisigTransactions,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
