@@ -15,8 +15,14 @@
                 :src="require('../assets/gero_dashboards.svg')" width="100" alt="logo"
             />
           </v-list-item-title>
-          <v-list-item-subtitle style="color: orange">
-            {{ `v${version}` }}
+          <v-list-item-subtitle>
+            <v-btn color="orange" text plain @click="changeLogDialog = true">
+              {{ `v${version}` }}
+              <v-icon small class="ml-1">
+                mdi-lightning-bolt
+              </v-icon>
+            </v-btn>
+            <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -197,10 +203,11 @@ import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
 import { musicStore } from '@/store/modules/music';
-import { Blockchain } from '@/models/types';
+import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 
 export default {
   name: 'NavigationDrawer',
+  components: { ChangeLogDialog },
   props: {
     value: {
       type: Boolean,
@@ -281,7 +288,8 @@ export default {
     avatars: [],
     changeAvatarDialog: false,
     errorImage: require('@/assets/img/1x1.png'),
-    version: require('@/manifest.json').version
+    version: require('@/manifest.json').version,
+    changeLogDialog: false,
   }),
   methods: {
     ...mapActions(useStore, ['logout']),
