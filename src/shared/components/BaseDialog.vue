@@ -1,5 +1,11 @@
 <template>
-  <v-dialog v-model="isDialogOpen" persistent :width="width" scrollable overlay-color="#1f242f" overlay-opacity="0.7">
+  <v-dialog
+    v-model="isDialogOpen"
+    :persistent="persistent"
+    :width="width"
+    scrollable overlay-color="#1f242f"
+    overlay-opacity="0.7"
+  >
     <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
@@ -72,15 +78,24 @@ export default {
       type: Boolean,
       default: false
     },
+    persistent: {
+      type: Boolean,
+      default: true
+    }
   },
   filters,
+  watch: {
+
+  },
   computed: {
     isDialogOpen: {
       get() {
         return this.isOpen;
       },
       set(val) {
-        console.log(val)
+        if (!val) {
+          this.$emit('close');
+        }
       }
     },
   },
