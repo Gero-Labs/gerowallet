@@ -79,8 +79,21 @@
         >
           {{ $t('termsOfService') }}
         </v-btn>
+        <div class="mx-1" style="height: 20px">
+          <v-divider vertical></v-divider>
+        </div>
+        <v-btn
+          text
+          plain
+          :ripple="false"
+          style="text-transform: none"
+          @click="changeLogDialog = true"
+        >
+          Change Log ({{ `v${version}` }})
+        </v-btn>
       </v-container>
     </v-footer>
+    <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
   </v-app>
 </template>
 <script>
@@ -89,10 +102,13 @@ import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
+import changeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 
 export default {
   name: 'BlankLayout',
   components: {
+    ChangeLogDialog,
     PrivacyPolicyDialog,
     // LanguageSelector
   },
@@ -122,6 +138,8 @@ export default {
     privacyPolicyDialog: false,
     geroLogoApex: require('@/modules/navigation/assets/gero_logo_apex.png'),
     geroLogo: require('@/modules/navigation/assets/gero_logo.png'),
+    changeLogDialog: false,
+    version: require('@/manifest.json').version,
   }),
   mounted() {
     loading.setLoading(false)
