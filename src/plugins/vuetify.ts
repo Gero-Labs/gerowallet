@@ -23,6 +23,7 @@ export default new Vuetify({
         accent: '#8c9eff',
         success: '#75E0A7',
         error: '#ff6464',
+        geroTeal: '#00DFF3',
         background: '#000',
         contentBackground: '#000',
         navigationDrawerBackground: '#000',

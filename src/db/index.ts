@@ -83,10 +83,25 @@ export default {
   },
   async setConfiguration(key, value) {
     if (value) {
-      db['config'].put({ key: key, value: value });
+      const existing = await db['config'].where('key').equals(key).first();
+      if (existing) {
+        await db['config'].update(existing.id, { value });
+      } else {
+        await db['config'].add({ key, value });
+      }
     } else {
-      db['config'].where({ key: key}).delete();
+      await db['config'].where('key').equals(key).delete();
     }
+  },
+  async getGeroConfig() {
+    const geroConfigArray = await db['config'].toArray()
+    if (geroConfigArray && geroConfigArray.length > 0) {
+      return geroConfigArray.reduce((map: Record<string, any>, config: any) => {
+        map[config.key] = config.value;
+        return map;
+      }, {});
+    }
+    return { };
   },
   async getConfiguration(key) {
     return db['config'].where({ key: key }).first();

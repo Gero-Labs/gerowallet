@@ -12,8 +12,6 @@
     >
       <v-container class="py-0 fill-height" style="max-width: 1000px">
         <v-spacer></v-spacer>
-
-<!--        <language-selector></language-selector>-->
         <v-btn
           plain
           large
@@ -39,12 +37,12 @@
             height: '120px',
             position: 'absolute',
             top: '50px',
-            right: 'calc(50% - 53px)',
+            right: 'calc(50% - 53px)'
         }"
       />
     </v-app-bar>
 
-    <v-main class="d-flex align-center">
+    <v-main class="d-flex align-center" :style="$vuetify.breakpoint.mobile ? { paddingTop: '50px' } : {}">
       <router-view></router-view>
     </v-main>
 
@@ -102,8 +100,8 @@ import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
-import changeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import assets from '@/utils/assets';
 
 export default {
   name: 'BlankLayout',
@@ -118,13 +116,13 @@ export default {
       if (this.network?.blockchain?.includes('Apex')) {
         return this.apexBackground;
       }
-      return this.bg;
+      return this.cardanoBackground;
     },
     logo() {
       if (this.network?.blockchain?.includes('Apex')) {
         return this.geroLogoApex;
       }
-      return this.geroLogo;
+      return this.geroDashboardLogo;
     },
   },
   methods: {
@@ -133,13 +131,13 @@ export default {
     },
   },
   data: () => ({
-    apexBackground: require('@/assets/background2.png'),
-    bg: require('@/assets/background3.png'),
+    apexBackground: assets.apexBackground,
+    cardanoBackground: assets.cardanoBackground,
     privacyPolicyDialog: false,
-    geroLogoApex: require('@/modules/navigation/assets/gero_logo_apex.png'),
-    geroLogo: require('@/modules/navigation/assets/gero_logo.png'),
+    geroLogoApex: assets.geroLogoApex,
+    geroDashboardLogo: assets.geroDashboard,
     changeLogDialog: false,
-    version: require('@/manifest.json').version,
+    version: assets.manifest.version
   }),
   mounted() {
     loading.setLoading(false)

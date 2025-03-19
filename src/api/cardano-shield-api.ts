@@ -3,7 +3,7 @@ import { parseHttpError } from '@/shared/utils/parser';
 import { TxScanRequest, TxScanResponse } from '@/models/cardano-shield-types';
 
 const axiosInstance = axios.create({
-  baseURL: process.env['VUE_APP_BACKEND_URL'],
+  baseURL: import.meta.env['VITE_BACKEND_URL'],
   timeout: 120000,
   headers: {
     'Content-Type': 'application/json',

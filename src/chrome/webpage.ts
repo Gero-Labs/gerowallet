@@ -1,19 +1,25 @@
-import { METHOD } from './config';
-import { Messaging } from './messaging';
+import { METHOD } from '@/chrome/config';
+import { Messaging } from '@/chrome/messaging';
 import { DataSignature, Paginate } from '@/models/types';
 
 export const getBalance = async (): Promise<string> => {
-  const result = await Messaging.sendToContent({ method: METHOD.getBalance,data: {} });
+  const result = await Messaging.sendToContent({
+    method: METHOD.getBalance,data: {}
+  });
   return result['data'];
 };
 
-export const enable = async () => {
-  const result = await Messaging.sendToContent({ method: METHOD.enable,data: {} });
+export const enable = async (): Promise<any> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.enable,data: {}
+  });
   return result['data'];
 };
 
 export const isEnabled = async (): Promise<boolean> => {
-  const result = await Messaging.sendToContent({ method: METHOD.isEnabled,data: {} });
+  const result = await Messaging.sendToContent({
+    method: METHOD.isEnabled,data: {}
+  });
   return result['data'];
 };
 

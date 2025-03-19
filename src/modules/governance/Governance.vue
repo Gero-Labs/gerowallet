@@ -199,9 +199,9 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import { walletConfigStore } from '@/store/modules/walletConfig';
-import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
+import { sendMessage } from 'webext-bridge/options';
 
 export default defineComponent({
   name: 'Governance',
@@ -322,17 +322,14 @@ export default defineComponent({
         const tx: Transaction = Transaction.new(txBody, TransactionWitnessSet.new())
         const txCbor = tx.to_hex()
         const partialSign = true
-        const signaturesRes = await Messaging.sendToBackground({
-          method: METHOD.signTx,
-          data: { tx: txCbor, partialSign },
-        });
-        if (signaturesRes['error']) {
-          snackbar.setError(signaturesRes['error'].info)
+        const signaturesRes: any = await sendMessage(METHOD.signTx, { tx: txCbor, partialSign }, 'background');
+        if (signaturesRes.error) {
+          snackbar.setError(signaturesRes.error.info)
         } else {
           console.log(signaturesRes)
           const signedTx = Transaction.new(
             txBody,
-            TransactionWitnessSet.from_bytes(Buffer.from(signaturesRes['data'], "hex")),
+            TransactionWitnessSet.from_bytes(Buffer.from(signaturesRes.data, "hex")),
             undefined // TODO Transaction metadata
           );
           console.log(signedTx.to_json())

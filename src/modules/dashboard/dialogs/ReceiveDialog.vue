@@ -49,6 +49,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import assets from '@/utils/assets';
 
 export default {
   name: 'ReceiveDialog',
@@ -80,7 +81,7 @@ export default {
         height: 160,
         type: 'svg',
         data: this.baseAddress,
-        image: require('@/assets/img/bkp/logo48.png'),
+        image: assets.geroLogo,
         margin: 2,
         qrOptions: {
           typeNumber: 0,
@@ -139,6 +140,7 @@ export default {
     showUsed: true,
     qrCode: undefined,
     extension: 'svg',
+    assets,
   }),
   mounted() {
     this.qrCode = new QRCodeStyling(this.options);

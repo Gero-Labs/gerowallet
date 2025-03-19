@@ -135,7 +135,7 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { useStore } from '@/store';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
@@ -144,10 +144,10 @@ import networks from '@/shared/utils/networks';
 import { stringToHex } from '@/shared/utils/converter';
 import rules from '@/shared/utils/rules';
 import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
 import cashbackApi from '@/api/cashback-api';
+import { sendMessage } from 'webext-bridge/options'
 
 export default {
   name: 'ViewRewardsDialog',
@@ -230,11 +230,9 @@ export default {
       try {
         const res = await cashbackApi.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
         const messageToSign = res.messageToSign
-        const request = {
-          method: METHOD.signData,
-          data: { address: Address.from_bech32(this.baseAddress).to_hex(), payload: stringToHex(messageToSign) },
-        }
-        const signature = await Messaging.sendToBackground(request);
+        const signature = sendMessage(METHOD.signData,
+          { address: Address.from_bech32(this.baseAddress).to_hex(), payload: stringToHex(messageToSign) },
+          'background')
         if (signature.error) {
           snackbar.setError(signature.error.info)
         } else {
