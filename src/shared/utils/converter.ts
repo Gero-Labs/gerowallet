@@ -61,7 +61,7 @@ import {
   TxOutputDestinationType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
-const cbor = require('cbor')
+import cbor from 'cbor';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -252,14 +252,6 @@ export function stakeCredential(address: string): Credential {
     return BaseAddress.from_address(keyAddress).stake_cred();
   } catch (e) {
     //
-  }
-  return undefined;
-}
-
-export function toStakeKeyHash(address: string): Ed25519KeyHash {
-  const credential: Credential = stakeCredential(address)
-  if (credential) {
-    return credential.to_keyhash();
   }
   return undefined;
 }
@@ -918,44 +910,6 @@ const getVkeyWitness = (pub2, witnessSignatureHex: string, raw2 = false, hex2 = 
   safeFreeCSLObject(vkey);
   safeFreeCSLObject(signature);
   return vkeyWitness;
-};
-const harden = (num) => 2147483648 + num;
-
-const cslDerivePrvKey = (key3, path3, doHarden) => {
-  const _keyInit = key3;
-  let _key = key3;
-  for (let p2 = 0; p2 < path3.length; p2++) {
-    _key = key3.derive(doHarden ? harden(path3[p2]) : path3[p2]);
-    if (key3 !== _keyInit) {
-      safeFreeCSLObject(key3);
-    }
-    key3 = _key;
-  }
-  if (key3 !== _keyInit) {
-    safeFreeCSLObject(_keyInit);
-  }
-  return _key;
-};
-const getCSLBip32PrivateKey = (bech322, free?) => {
-  const cslBip32PrivateKey = Bip32PrivateKey.from_bech32(bech322);
-  free == null ? void 0 : free.push(cslBip32PrivateKey);
-  return cslBip32PrivateKey;
-};
-const derivePrvKey = (prvBech32, path3, doHarden) => cslDerivePrvKey(getCSLBip32PrivateKey(prvBech32), path3, doHarden);
-
-const createCSLPrvKey = (rootPrvBech32, path3) => {
-  if (!(path3.length === 3 || path3.length === 5)) {
-    return null;
-  }
-  const accountPath = path3.slice(0, 3);
-  const addressPath = path3.slice(3, 5);
-  const cslPrvKeyAccount = derivePrvKey(rootPrvBech32, accountPath, false);
-  if (addressPath.length === 0) {
-    return cslPrvKeyAccount;
-  }
-  const prvKeyBech32Account = cslPrvKeyAccount.to_bech32();
-  safeFreeCSLObject(cslPrvKeyAccount);
-  return derivePrvKey(prvKeyBech32Account, addressPath, false);
 };
 
 export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: Bip32PrivateKey): TransactionWitnessSet => {

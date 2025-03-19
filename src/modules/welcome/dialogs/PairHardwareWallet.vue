@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
+  <v-dialog content-class="rounded-xxl dialogStyle darken" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -305,7 +305,7 @@
     </v-card>
     <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-        <video :src="require('@/assets/output.webm')" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
+        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
         <v-progress-linear
             buffer-value="0"
@@ -336,6 +336,7 @@ import Vue from 'vue';
 import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
 import snackbar from '@/plugins/snackbar';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
+import assets from '@/utils/assets';
 
 export default {
   name: "PairHardwareWallet",
@@ -502,21 +503,21 @@ export default {
         name: 'Ledger',
         description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.',
         enabled: true,
-        icon: require('@/assets/ledger.svg'),
+        icon: assets.ledgerLogoSvg,
         support: 'Nano S, Nano S Plus, Nano X'
       },
       {
         name: 'Trezor',
         description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.',
         enabled: false,
-        icon: require('@/assets/trezor.svg'),
+        icon: assets.trezorLogoSvg,
         support: 'Model T, Safe 3'
       },
       {
         name: 'Keystone',
         description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
         enabled: false,
-        icon: require('@/assets/svg/keystone-3-pro.svg'),
+        icon: assets.keystoneLogoSvg,
         support: '3 Pro'
       },
     ],
@@ -527,6 +528,7 @@ export default {
     persistent: false,
     qrCode: undefined,
     keystoneScan: false,
+    assets,
   })
 }
 </script>

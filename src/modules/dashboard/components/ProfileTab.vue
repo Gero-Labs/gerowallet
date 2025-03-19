@@ -135,6 +135,7 @@
 import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import languages from '@/plugins/languages';
+import assets from '@/utils/assets';
 
 export default {
   name: 'ProfileTab',
@@ -144,7 +145,7 @@ export default {
       if (this.loggedWallet.icon.includes('http')) {
         return this.loggedWallet.icon;
       } else {
-        return this.resolveIcon(this.loggedWallet.icon);
+        return assets.resolveIcon(this.loggedWallet.icon);
       }
     },
   },
@@ -162,9 +163,6 @@ export default {
     showGuide() {
       this.$emit('close');
       this.setWelcomeDone(false);
-    },
-    resolveIcon(icon) {
-      return require('@/assets/svg/' + icon + '.svg');
     }
   },
   data: () => ({
@@ -173,6 +171,7 @@ export default {
     selectedCurrency: 'USD',
     walletName: 'MyWalletName',
     loc: undefined,
+    assets,
   }),
   created() {
     console.log(this.loggedWallet);

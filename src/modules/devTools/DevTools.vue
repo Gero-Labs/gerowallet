@@ -210,23 +210,23 @@ export default defineComponent({
     }
   },
   data() {
-      return {
-        txCborHex: '',
-        tx: null,
-        witnessSetCborHex: '',
-        witnesses: null,
-        addressHex: '',
-        address: null,
-        addressBech32: '',
-        addressInHex: null,
-        messageDataText: '',
-        messageDataHex: null,
-        utxoCbor: '',
-        utxoJson: '',
-        lovelace: '',
-        value: '',
-      };
-  },
+    return {
+      txCborHex: '',
+      tx: null,
+      witnessSetCborHex: '',
+      witnesses: null,
+      addressHex: '',
+      address: null,
+      addressBech32: '',
+      addressInHex: null,
+      messageDataText: '',
+      messageDataHex: null,
+      utxoCbor: '',
+      utxoJson: '',
+      lovelace: '',
+      value: '',
+    };
+  }
 });
 </script>
 

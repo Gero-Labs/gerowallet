@@ -65,7 +65,7 @@ import {
 } from '@/shared/utils/converter';
 import { parseHttpError } from '@/shared/utils/parser';
 
-const blake2b = require('blake2b');
+import blake2b from 'blake2b';
 
 export class Wallet {
   db: Dexie;

@@ -92,10 +92,10 @@ import filters from '@/shared/utils/filters';
 import networks, { cardanoLogo } from '@/shared/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import { sendMessage } from 'webext-bridge/options';
 
 export default {
   name: 'SwapWidget',
@@ -408,10 +408,7 @@ export default {
         const swapRes = await appWallet.api.swap(amount, this.baseAddress, this.selectedTokenA['unit'], this.selectedTokenB['unit'], slippage)
         const txCbor = swapRes.cbor
         const partialSign = true
-        const signaturesRes = await Messaging.sendToBackground({
-          method: METHOD.signTx,
-          data: { tx: txCbor, partialSign },
-        });
+        const signaturesRes = await sendMessage(METHOD.signTx, { tx: txCbor, partialSign }, 'background');
         if (signaturesRes.error) {
           snackbar.setError(signaturesRes.error.info)
         } else {

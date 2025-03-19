@@ -110,10 +110,12 @@ export type TransactionSignatureRequest = {
   cbor: string;
   partialSign: boolean;
 };
+
 export type DataSignature = {
   signature: string;
   key: string;
 };
+
 export type Paginate = {
   page: number,
   limit: number,

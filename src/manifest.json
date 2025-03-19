@@ -1,54 +1,59 @@
 {
   "manifest_version": 3,
   "name": "Gero Dashboard",
-  "short_name": "Gero Dashboard",
   "version": "2.4.2",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
+  "action": {
+    "default_icon": "./assets/logo128.png"
+  },
+  "options_ui": {
+    "page": "./dist/options/index.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "./dist/background/index.mjs"
+  },
   "icons": {
     "16": "./assets/logo16.png",
     "48": "./assets/logo48.png",
     "128": "./assets/logo128.png"
   },
-  "action": {
-    "default_icon": {
-      "16": "./assets/logo16.png",
-      "48": "./assets/logo48.png",
-      "128": "./assets/logo128.png"
-    },
-    "default_title": "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
-  },
-  "background": {
-    "service_worker": "js/background.js",
-    "type": "module"
-  },
   "permissions": [
-    "activeTab",
-    "alarms",
-    "clipboardRead",
-    "favicon",
-    "unlimitedStorage",
-    "storage",
     "tabs",
-    "webNavigation"
+    "activeTab",
+    "clipboardRead",
+    "storage",
+    "favicon",
+    "sidePanel",
+    "alarms"
   ],
   "host_permissions": [
-    "*://connect.trezor.io/*"
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["js/inject.js","assets/logo.png"],
-      "matches": ["<all_urls>"]
-    }
+    "*://*/*"
   ],
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*", "file://*/*"],
-      "js": ["js/content.js"],
-      "run_at": "document_start",
-      "all_frames": true
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "dist/contentScripts/index.global.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/contentScripts/style.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://media.bringweb3.io/ http://localhost:8081 https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://buy.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://media.bringweb3.io/ http://localhost:* https://api.bringweb3.io ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://buy.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'"
+  },
+  "side_panel": {
+    "default_path": "dist/sidepanel/index.html"
   }
 }

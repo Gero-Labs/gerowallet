@@ -1,5 +1,5 @@
 <template>
-  <v-dialog style="opacity: 0.9" max-width="1000" content-class="rounded-xxl dialogStyle transparent90" :persistent="true" v-model="welcomeScreenDialog">
+  <v-dialog style="opacity: 0.9" max-width="1000" content-class="rounded-xxl dialogStyle" :persistent="true" v-model="welcomeScreenDialog">
     <v-carousel v-model="carousel" height="500" :continuous="false">
       <v-carousel-item>
         <v-card style="position: relative; display: grid;">
@@ -262,10 +262,10 @@ export default defineComponent({
     }
   },
   computed: {
-    ...mapState(useStore, ['welcomeDone', 'loggedWallet']),
+    ...mapState(useStore, ['getWelcomeDone', 'loggedWallet']),
     welcomeScreenDialog: {
       get() {
-        return !this.welcomeDone && this.loggedWallet.chain == Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET
+        return !this.getWelcomeDone && this.loggedWallet.chain == Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET
       },
       set(value) {
         this.setWelcomeDone(!value);

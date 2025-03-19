@@ -16,7 +16,7 @@
               </v-avatar>
             </v-btn>
           </template>
-          <span>Buy {{ currencyTicker }}</span>
+          <span>Buy / Sell</span>
         </v-tooltip>
       </div>
       <div style="align-content: center; text-align: center;">
@@ -95,6 +95,8 @@ import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import networks from '@/shared/utils/networks';
+// import { loadMoonPay } from '@/moonpay-js/src';
+// import moonPayApi from '@/api/moonpay-api';
 
 export default defineComponent({
   name: 'QuickActionsBox',
@@ -133,7 +135,33 @@ export default defineComponent({
       SWAP: 'SWAP',
       BUY: 'BUY',
     },
+    moonPayWidget: undefined
   }),
+  async mounted() {
+    // const moonPayUrl = await moonPayApi.moonPaySign(`https://buy.moonpay.com/?apiKey=${process.env["VUE_APP_MOONPAY_API_KEY"]}&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=${encodeURIComponent('#2f9cac')}&baseCurrencyCode=usd&mpSdk=${encodeURIComponent('{"version":"1.9.4","environment":"production","flow":"buy","variant":"overlay","platform":"web"}')}`);
+    // const uriParams = new URL(moonPayUrl).searchParams
+    // const signature = uriParams.get('signature')
+    // const moonPay = await loadMoonPay();
+    // this.moonPayWidget = moonPay?.({
+    //   flow: "buy",
+    //   environment: "production",
+    //   params: {
+    //     apiKey: process.env["VUE_APP_MOONPAY_API_KEY"],
+    //     theme: 'dark',
+    //     currencyCode: 'ada',
+    //     walletAddress: this.baseAddress,
+    //     colorCode: '#2f9cac',
+    //     baseCurrencyCode: 'usd', //TODO
+    //     signature,
+    //   },
+    //   variant: "overlay",
+    //   handlers: {
+    //     async onTransactionCompleted(props) {
+    //       console.log("onTransactionCompleted", props);
+    //     },
+    //   },
+    // });
+  }
 });
 </script>
 <style scoped>

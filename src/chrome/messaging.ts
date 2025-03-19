@@ -1,4 +1,4 @@
-import { APIError, METHOD, SENDER, TARGET } from './config';
+import { APIError, METHOD, SENDER, TARGET } from '@/chrome/config';
 
 interface Message {
   method?: string;
@@ -73,34 +73,7 @@ class InternalController {
   };
 }
 
-class BackgroundController {
-  private _methodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
-
-  add = (method: string, func: (request: any, sendResponse: any) => void) => {
-    this._methodList[method] = func;
-  };
-
-  listen = () => {
-    if (chrome?.runtime) {
-      chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
-        if (request.sender === SENDER.webpage) {
-          this._methodList[request.method](request, sendResponse);
-        }
-        return true;
-      });
-    }
-  };
-}
-
 export const Messaging = {
-  sendToBackground: async function (request: Message) {
-    return new Promise((resolve, reject) =>
-      chrome.runtime.sendMessage(
-        { ...request, target: TARGET, sender: SENDER.webpage },
-        (response) => resolve(response)
-      )
-    );
-  },
   sendToContent: function ({ method, data }: { method: string; data: any }) {
     return new Promise((resolve, reject) => {
       const requestId = Math.random().toString(36).substr(2, 9);
@@ -135,7 +108,7 @@ export const Messaging = {
     });
   },
   sendToPopupInternal: function (tab: chrome.tabs.Tab, request: Message) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _reject) => {
       chrome.runtime.onConnect.addListener(function connectionHandler(port) {
         function messageHandler(response: any) {
           if (response.tabId !== tab.id) return;
@@ -164,73 +137,4 @@ export const Messaging = {
     });
   },
   createInternalController: () => new InternalController(),
-  createProxyController: () => {
-    // listen to events from background
-    if (chrome?.runtime) {
-      chrome.runtime.onMessage.addListener(async (response) => {
-        if (
-          typeof response !== 'object' ||
-          response === null ||
-          !response.target ||
-          response.target !== TARGET ||
-          !response.sender ||
-          response.sender !== SENDER.extension ||
-          !response.event
-        )
-          return;
-
-        const whitelisted = await Messaging.sendToBackground({
-          method: METHOD.isWhitelisted,
-          origin: window.origin,
-        });
-
-        // protect background by not allowing not whitelisted
-        if (!whitelisted || (whitelisted as any).error) return;
-        const event = new CustomEvent(`${TARGET}${response.event}`, {
-          detail: response.data,
-        });
-
-        window.dispatchEvent(event);
-      });
-    }
-    // listen to function calls from webpage
-    window.addEventListener('message', async function (e) {
-      const request = e.data;
-      if (
-        typeof request !== 'object' ||
-        request === null ||
-        !request.target ||
-        request.target !== TARGET ||
-        !request.sender ||
-        request.sender !== SENDER.webpage
-      )
-        return;
-      request.origin = window.origin;
-      // only allow enable function, before checking for whitelisted
-      if (
-        request.method === METHOD.enable ||
-        request.method === METHOD.isEnabled
-      ) {
-        Messaging.sendToBackground({
-          ...request,
-        }).then((response) => window.postMessage(response));
-        return;
-      }
-
-      const whitelisted = await Messaging.sendToBackground({
-        method: METHOD.isWhitelisted,
-        origin: window.origin,
-      });
-
-      // protect background by not allowing not whitelisted
-      if (!whitelisted || (whitelisted as any).error) {
-        window.postMessage({ ...whitelisted as object, id: request.id });
-        return;
-      }
-      await Messaging.sendToBackground(request).then((response) => {
-        window.postMessage(response);
-      });
-    });
-  },
-  createBackgroundController: () => new BackgroundController(),
 };

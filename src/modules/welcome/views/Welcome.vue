@@ -5,7 +5,7 @@
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-else>{{ $t('chooseAWallet') }}</v-card-subtitle>
       <v-card-title class="justify-center pt-0" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
-        <network-selector ref="networkSelector"></network-selector>
+        <network-selector ref="networkSelector" />
       </v-card-title>
       <v-card-text class="pb-12 px-12">
         <div v-if="walletSetup || !Array.isArray(availableWallets) || !availableWallets.length">
@@ -76,10 +76,10 @@
                     </v-list-item-subtitle>
                   </v-list-item-content>
                   <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
-                    <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
+                    <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
                   </v-list-item-avatar>
                   <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
-                    <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
+                    <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
                   </v-list-item-avatar>
                 </v-list-item>
               </v-list-item-group>
@@ -107,6 +107,7 @@ import RestoreWallet from "@/modules/welcome/dialogs/RestoreWallet.vue";
 import networks from "@/shared/utils/networks";
 import NetworkSelector from '@/modules/navigation/components/NetworkSelector.vue';
 import { WalletType } from '@/models/types';
+import assets from '@/utils/assets';
 
 export default {
   name: 'welcome',
@@ -156,7 +157,7 @@ export default {
     },
     resolveIcon(icon) {
       if (icon) {
-        return require('@/assets/svg/'+icon+'.svg')
+        return assets.resolveIcon(icon)
       }
       return ''
     },
@@ -185,12 +186,13 @@ export default {
     pairHardwareWalletDialog: false,
     walletSetup: false,
     selectedWallet: {},
-    walletCreateBg: require('@/modules/welcome/assets/wallet_new.png'),
-    walletRestoreBg: require('@/modules/welcome/assets/wallet_restore.png'),
-    hardwareWalletBg: require('@/modules/welcome/assets/hardware_wallet.png'),
-    walletCreateApexBg: require('@/modules/welcome/assets/wallet_new_apex.png'),
-    walletRestoreApexBg: require('@/modules/welcome/assets/wallet_restore_apex.png'),
-    hardwareWalletApexBg: require('@/modules/welcome/assets/hardware_wallet_apex.png')
+    walletCreateBg: assets.walletCreateBg,
+    walletRestoreBg: assets.walletRestoreBg,
+    hardwareWalletBg: assets.hardwareWalletBg,
+    walletCreateApexBg: assets.walletCreateApexBg,
+    walletRestoreApexBg: assets.walletRestoreApexBg,
+    hardwareWalletApexBg: assets.hardwareWalletApexBg,
+    assets,
   }),
   mounted() {
 

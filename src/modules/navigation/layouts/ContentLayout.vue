@@ -3,10 +3,11 @@
     <v-main>
       <v-container class="pa-0" >
         <v-layout :align-start="true">
-          <navigation-drawer ></navigation-drawer>
+          <navigation-drawer v-model="drawer"></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent" >
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
               <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;" >
+                <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
                 <PriceTicker></PriceTicker>
                 <Sparkline v-if="loggedWallet?.chain === Blockchain.CARDANO"></Sparkline>
                 <v-divider vertical class="mx-2" style="max-height: 30px; min-height: 30px;align-self: center;" v-if="loggedWallet?.chain === Blockchain.CARDANO"></v-divider>
@@ -166,6 +167,7 @@ export default {
     dialogs: {
       SETTINGS: 'SETTINGS',
     },
+    drawer: false,
   }),
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
@@ -180,7 +182,6 @@ export default {
   async mounted() {
     if (this.loggedWallet?.id) {
       try {
-        console.log('login mounted')
         await this.login(this.loggedWallet.id)
       } catch (e) {
         console.error(e)
