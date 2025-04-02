@@ -3,9 +3,11 @@ node_modules
 /dist
 
 # local env files
-.env.local
-.env.*.local
+.env
+.env.production
 
+extension/dist
+*.d.ts
 # Log files
 npm-debug.log*
 yarn-debug.log*

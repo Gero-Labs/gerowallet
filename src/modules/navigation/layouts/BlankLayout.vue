@@ -12,8 +12,6 @@
     >
       <v-container class="py-0 fill-height" style="max-width: 1000px">
         <v-spacer></v-spacer>
-
-<!--        <language-selector></language-selector>-->
         <v-btn
           plain
           large
@@ -35,16 +33,16 @@
             backgroundImage: `url(${logo}`,
             backgroundSize: 'contain',
             backgroundRepeat: 'no-repeat',
-            width: '106px',
-            height: '120px',
+            width: '114px',
+            height: '122px',
             position: 'absolute',
-            top: '50px',
-            right: 'calc(50% - 53px)',
+            top: '20px',
+            right: 'calc(50% - 57px)'
         }"
       />
     </v-app-bar>
 
-    <v-main class="d-flex align-center">
+    <v-main class="d-flex align-center" :style="$vuetify.breakpoint.mobile ? { paddingTop: '50px' } : {}">
       <router-view></router-view>
     </v-main>
 
@@ -87,13 +85,14 @@
           plain
           :ripple="false"
           style="text-transform: none"
-          @click="changeLogDialog = true"
+          @click="changeLog.setEnabled(true)"
         >
           Change Log ({{ `v${version}` }})
         </v-btn>
       </v-container>
     </v-footer>
-    <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
+    {{this.$route.query['changeLog']}}
+    <ChangeLogDialog :isOpen="changeLog.enabled || this.$route.query['changeLog'] === 'true'" @close="closeChangeLogDialog()" :persistent="false" />
   </v-app>
 </template>
 <script>
@@ -102,7 +101,8 @@ import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
-import changeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import changeLog from '@/plugins/changeLog'
+import assets from '@/utils/assets';
 import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 
 export default {
@@ -118,31 +118,37 @@ export default {
       if (this.network?.blockchain?.includes('Apex')) {
         return this.apexBackground;
       }
-      return this.bg;
+      return this.cardanoBackground;
     },
     logo() {
       if (this.network?.blockchain?.includes('Apex')) {
         return this.geroLogoApex;
       }
-      return this.geroLogo;
+      return this.geroDashboardLogo;
     },
   },
   methods: {
     privacyPolicyDialogChange(value) {
       this.privacyPolicyDialog = value;
     },
+    closeChangeLogDialog() {
+      changeLog.setEnabled(false)
+      this.$router.replace({'query': null});
+    }
   },
   data: () => ({
-    apexBackground: require('@/assets/background2.png'),
-    bg: require('@/assets/background3.png'),
+    apexBackground: assets.apexBackground,
+    cardanoBackground: assets.cardanoBackground,
     privacyPolicyDialog: false,
-    geroLogoApex: require('@/modules/navigation/assets/gero_logo_apex.png'),
-    geroLogo: require('@/modules/navigation/assets/gero_logo.png'),
-    changeLogDialog: false,
-    version: require('@/manifest.json').version,
+    geroLogoApex: assets.geroLogoApex,
+    geroDashboardLogo: assets.geroDashboard,
+    version: '',
+    changeLog,
   }),
   mounted() {
+    this.version = APP_VERSION
     loading.setLoading(false)
+
   }
 };
 </script>

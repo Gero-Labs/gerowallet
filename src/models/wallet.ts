@@ -8,26 +8,20 @@ import {
   BaseAddress,
   BigNum,
   Bip32PrivateKey,
-  Bip32PublicKey,
   Certificate,
   CertificateKind,
-  Credential,
   decrypt_with_password,
   DRep,
-  Ed25519KeyHash,
   encrypt_with_password,
-  EnterpriseAddress,
   FixedTransaction,
-  PointerAddress,
   PrivateKey,
   PublicKey,
   RewardAddress,
   ScriptHash,
+  StakeDeregistration,
   Transaction,
   TransactionBody,
-  TransactionHash,
   TransactionInput,
-  TransactionJSON,
   TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
@@ -38,7 +32,6 @@ import {
   CoinTypes,
   ERROR,
   purpose,
-  STAKING_KEY_INDEX,
   WalletType,
   WalletTypePurpose,
 } from '@/models/types';
@@ -48,24 +41,37 @@ import { extractKeyHash } from '@/chrome/extension';
 import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/chrome/config';
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
-import trezor from '@/shared/utils/trezor';
+// import trezor from '@/shared/utils/trezor';
 import loading from '@/plugins/loading';
 import { appWallet, useStore } from '@/store';
 import {
   addVkeys,
   createCOSEKeyHex,
-  createSignDataBuilder,
-  getOwnedCred,
-  hdPathToArray,
+  createSignDataBuilder, getOwnedCred, hdPathToArray,
   paymentCredential,
   safeFreeCSLObject,
-  stakeCredential,
   toHexArray,
   toHexString,
 } from '@/shared/utils/converter';
 import { parseHttpError } from '@/shared/utils/parser';
-
-const blake2b = require('blake2b');
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import {
+  buildBaseAddress,
+  buildEnterpriseAddress,
+  buildRewardAddress,
+  getAddress,
+  getCip129DrepId,
+  getDrepKey,
+  getPublicKey,
+  getRewardAddress,
+  getStakeKey,
+  paymentKeyHash,
+  stakeKeyHash,
+  toStakeCredential,
+} from '@/chrome/serialization';
+import { Ed25519KeyHash, Ed25519PublicKey, Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import trezor from '@/shared/utils/trezor';
+import { walletDBSchema, walletDBVersion } from '@/db/schema';
 
 export class Wallet {
   db: Dexie;
@@ -103,8 +109,8 @@ export class Wallet {
     const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     wal.api = new Api(wallet, provider);
-    console.log('class');
     wal.db = new Dexie('wallet-' + wallet.id);
+    wal.db.version(walletDBVersion).stores(walletDBSchema);
     wal.db.open().catch(async err => {
       if (err.name === 'NoSuchDatabaseError') {
         await db.createNewWalletDb(wallet.id);
@@ -181,79 +187,59 @@ export class Wallet {
     return networks.resolveNetworkId(this.chain, this.network);
   }
 
-  pubKey(index: number): PublicKey {
-    return Bip32PublicKey.from_bech32(this.publicKey)
-      .derive(ChainDerivations.EXTERNAL)
-      .derive(index)
-      .to_raw_key();
+  pubKey(index: number): Ed25519PublicKey {
+    return getPublicKey(this.publicKey)
+      .derive([ChainDerivations.EXTERNAL, index])
+      .toRawKey();
   }
 
-  pubKeyInternal(index: number): PublicKey {
-    return Bip32PublicKey.from_bech32(this.publicKey)
-      .derive(ChainDerivations.INTERNAL)
-      .derive(index)
-      .to_raw_key();
+  pubKeyInternal(index: number): Ed25519PublicKey {
+    return getPublicKey(this.publicKey)
+      .derive([ChainDerivations.INTERNAL, index])
+      .toRawKey();
   }
 
-  stakeKey(): PublicKey {
-    return Bip32PublicKey.from_bech32(this.publicKey)
-      .derive(ChainDerivations.CHIMERIC_ACCOUNT)
-      .derive(STAKING_KEY_INDEX)
-      .to_raw_key();
+  stakeKey(): Ed25519PublicKey {
+    return getStakeKey(this.publicKey, 0)
   }
 
-  drepKey(): PublicKey {
-    return Bip32PublicKey.from_bech32(this.publicKey)
-      .derive(ChainDerivations.DREP)
-      .derive(STAKING_KEY_INDEX)
-      .to_raw_key();
+  drepKey(): Ed25519PublicKey {
+    return getDrepKey(this.publicKey, 0)
   }
 
-  baseAddress(): BaseAddress {
+  baseAddress(): Cardano.Address {
     return this.deriveAddressFromPath(0);
-    // return BaseAddress.from_address(Address.from_bech32("addr1qyxzlaga6gug9qw966jke074r25q20zwch3zacwvwpj7z98ecuzxt53xna28u653gmdkjg89nqmjvxefpg2ucv0gs22qnr9hqa"))
+    // return BaseAddress.from_address(Address.from_bech32("addr1q8gzvfe9dxc2csqcra6u78a9t2qyg5u2k3zkllsynu975yt4raqscm7t80hqu0lq3vxtphzz7fx2xt5vm0he5fmf0nzq2et2pa"))
   }
 
-  stakeAddress(): RewardAddress {
-    return RewardAddress.new(this.networkId(), Credential.from_keyhash(this.stakeKey().hash()));
-    // return RewardAddress.from_address(Address.from_bech32("stake1u8uuwpr96gnf74r7d2g5dkmfyrjesdexrv5s59wvx85g99qgga38a"))
+  stakeAddress(): Cardano.Address {
+    return getRewardAddress(this.publicKey, this.chain, this.network)
+    // return RewardAddress.from_address(Address.from_bech32("stake1u9637sgvdl9nhmsw8lsgkr9sm3p0yn9r96xdhmu6ya5he3q847rpv"))
   }
 
-  drepId(): DRep {
-    return DRep.new_from_credential(Credential.from_keyhash(this.drepKey().hash()))
+  drepId(): Cardano.DRepID {
+    return getCip129DrepId(this.publicKey);
   }
 
-  paymentKeyHash(address: string): Uint8Array {
-    const keyAddress: Address = Address.from_bech32(address);
+  paymentKeyHash(address: string): Hash28ByteBase16 {
+    const keyAddress: Cardano.Address = Cardano.Address.fromBech32(address);
     try {
-      const baseKeyAddress: Ed25519KeyHash = BaseAddress.from_address(keyAddress)
-        .payment_cred()
-        .to_keyhash();
-      return baseKeyAddress.to_bytes();
+      return Cardano.BaseAddress.fromAddress(keyAddress).getPaymentCredential().hash;
     } catch (e) {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const enterpriseKeyAddress: Ed25519KeyHash = EnterpriseAddress.from_address(keyAddress)
-        .payment_cred()
-        .to_keyhash();
-      return enterpriseKeyAddress.to_bytes();
+      return Cardano.EnterpriseAddress.fromAddress(keyAddress).getPaymentCredential().hash
     } catch (e) {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const pointerKeyAddress: Ed25519KeyHash = PointerAddress.from_address(keyAddress)
-        .payment_cred()
-        .to_keyhash();
-      return pointerKeyAddress.to_bytes();
+      return Cardano.PointerAddress.fromAddress(keyAddress).getPaymentCredential().hash
     } catch (e) {
       // I want application to not crush, but don't care about the message
     }
     try {
-      const rewardKeyAddress: Ed25519KeyHash = RewardAddress.from_address(keyAddress)
-        .payment_cred()
-        .to_keyhash();
-      return rewardKeyAddress.to_bytes();
+      return Cardano.RewardAddress.fromAddress(keyAddress).getPaymentCredential().hash
     } catch (e) {
       // I want application to not crush, but don't care about the message
     }
@@ -306,12 +292,99 @@ export class Wallet {
     return { signature: signatureHex, key: keyHex };
   }
 
+  getAddresses(pubKey: string, index) {
+    const baseAddress = buildBaseAddress(
+      this.networkId(),
+      Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(getPublicKey(pubKey), index).hex()),
+      Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(getPublicKey(pubKey), 0).hex())
+    ).toAddress();
+    const enterpriseAddress = buildEnterpriseAddress(
+      this.networkId(),
+      Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(getPublicKey(pubKey), index).hex())
+    ).toAddress();
+    const rewardAddress = buildRewardAddress(
+      this.networkId(),
+      Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(getPublicKey(pubKey), 0).hex())
+    ).toAddress();
+    return {
+      baseAddress,
+      enterpriseAddress,
+      rewardAddress
+    };
+  }
+
+  // async signTx(unsignedTx: string, partialSign: boolean = false, password: string, keyIndex = 0, utxos, addresses: string[], isUsb?: boolean) {
+  //   try {
+  //     await Crypto.ready()
+  //     const rawTx = deserializeTx(unsignedTx);
+  //     const txBody: TransactionBody = rawTx.body();
+  //     const credList: Set<any> = new Set()
+  //     for (let i = 0; i < txBody.inputs().values().length ; i++) {
+  //       const input: TransactionInput = txBody.inputs().values()[i];
+  //       const inputTxHash = input.transactionId();
+  //       const inputTxIndex = input.index();
+  //       const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
+  //
+  //       if (utxo) {
+  //         const address: string = addresses[utxo.payment_addr.bech32]
+  //         credList.add(address)
+  //       }
+  //     }
+  //
+  //     // if (this.type === WalletType.Ledger) { // Ledger Signing Logic
+  //     //   const wit: string = await ledger.txToLedger(rawTx, this, credList, 0, addresses, utxos, isUsb);
+  //     //   return { witnesses: wit };
+  //     // } else if (this.type === WalletType.Trezor) { // Trezor Signing Logic
+  //     //   console.log('Signing with Trezor...');
+  //     //   const wit: TransactionWitnessSet = <TransactionWitnessSet>(
+  //     //     await trezor.txToTrezor(txBody, this.baseAddress().toBech32(), 0, true, utxos)
+  //     //   );
+  //     //   if (!wit) {
+  //     //     throw new Error('Trezor did not return a valid witness set.');
+  //     //   }
+  //     //   const witnessHex = Buffer.from(wit.to_bytes()).toString('hex');
+  //     //   return { witnesses: witnessHex };
+  //     // } else { // Software Wallet Signing
+  //
+  //       if (
+  //         !partialSign &&
+  //         rawTx.witnessSet().vkeys() !== undefined &&
+  //         rawTx.witnessSet().vkeys()!.size() !== 0
+  //       )
+  //         throw new Error(
+  //           "Signatures already exist in the transaction in a non partial sign call",
+  //         );
+  //
+  //       const txHash = deserializeTxHash(resolveTxHash(unsignedTx));
+  //
+  //       console.log('Signing with Software Wallet...');
+  //       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+  //       const decodedHash = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+  //       password = null;
+  //       if (!decodedHash && partialSign === false) {
+  //         throw TxSignError.ProofGeneration;
+  //       }
+  //       const prvPaymentKey = resolvePrivatePaymentKey(decodedHash, keyIndex);
+  //
+  //       const vkeyWitness = new VkeyWitness(
+  //         prvPaymentKey.toPublic().hex(),
+  //         prvPaymentKey.sign(HexBlob(txHash)).hex(),
+  //       );
+  //       return {
+  //         witnesses: addWitnessSets(unsignedTx, [vkeyWitness])
+  //       };
+  //     // }
+  //   } catch (error) {
+  //     throw new Error(`An error occurred during signTx: ${error}.`);
+  //   }
+  // }
+
   async signTx(txCbor: string, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{ witnesses: string }> {
     const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
     const witnessSet: TransactionWitnessSet = rawTx.witness_set();
     const txBody: TransactionBody = rawTx.body();
-    const baseAddress: Address = this.baseAddress().to_address();
-    const stakeAddress: RewardAddress = this.stakeAddress()
+    const baseAddress: Cardano.Address = this.baseAddress();
+    const stakeAddress: RewardAddress = RewardAddress.from_address(Address.from_bech32(this.stakeAddress().toBech32()))
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList: Set<any> = new Set()
     const accountData = {
@@ -325,7 +398,7 @@ export class Wallet {
       keys: {
         payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
         stake: [{
-          cred: BaseAddress.from_address(baseAddress).stake_cred().to_keyhash().to_hex(),
+          cred: Serialization.Credential.fromCore(Cardano.BaseAddress.fromAddress(baseAddress).getStakeCredential()).value().hash,
           path: `m/${purpose.hdwallet}'/1815'/${accountIndex}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
         }],
         change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
@@ -355,7 +428,7 @@ export class Wallet {
           const stakeRegistration = certificate.as_stake_registration()
           keyHash = stakeRegistration.stake_credential().to_keyhash().to_hex();
         } else if (certificate.kind() == CertificateKind.StakeDeregistration) {
-          const stakeDeregistration = certificate.as_stake_deregistration()
+          const stakeDeregistration: StakeDeregistration = certificate.as_stake_deregistration()
           keyHash = stakeDeregistration.stake_credential().to_keyhash().to_hex();
         } else if (certificate.kind() == CertificateKind.StakeDelegation) {
           const stakeDelegation = certificate.as_stake_delegation()
@@ -417,7 +490,7 @@ export class Wallet {
     }
     if (txBody.required_signers()) {
       for (let i = 0 ; i < txBody.required_signers().len(); i++) {
-        const requiredKeyHash: Ed25519KeyHash = txBody.required_signers().get(i)
+        const requiredKeyHash = txBody.required_signers().get(i)
         const requiredVKeyHash = requiredKeyHash.to_hex()
         if (!vKeyHashes.has(requiredVKeyHash)) {
           credList.add(getOwnedCred([accountData.keys], requiredVKeyHash))
@@ -430,7 +503,7 @@ export class Wallet {
     } else if (this.type === WalletType.Trezor) { // Trezor Signing Logic
       console.log('Signing with Trezor...');
       const wit: TransactionWitnessSet = <TransactionWitnessSet>(
-        await trezor.txToTrezor(txBody, this.baseAddress().to_address().to_bech32(), accountIndex, true, utxos)
+        await trezor.txToTrezor(txBody, this.baseAddress().toBech32(), accountIndex, true, utxos)
       );
       if (!wit) {
         throw new Error('Trezor did not return a valid witness set.');
@@ -446,8 +519,7 @@ export class Wallet {
         throw TxSignError.ProofGeneration;
       }
       const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.from_bytes(decodedHash)
-      const txHashHex = blake2b(new Uint8Array(32).length).update(rawTx.raw_body()).digest('hex');
-      const txHash = TransactionHash.from_bytes(Buffer.from(txHashHex, 'hex'));
+      const txHash = rawTx.transaction_hash();
 
       addVkeys(txHash, witnessSet, credList, prvRootKeyBech32)
       return {
@@ -479,7 +551,7 @@ export class Wallet {
     }
   }
 
-  async addPendingTx(txId: string, txJs: TransactionJSON, utxos: any, txJ: any) {
+  async addPendingTx(txId: string, txJs: any, utxos: any, txJ: any) {
     const inputs = []
     txJs.body.inputs.forEach(input => {
       const utxo = utxos.find(utxo => utxo.tx_hash === input.transaction_id && utxo.tx_index === input.index)
@@ -493,8 +565,8 @@ export class Wallet {
     txJ.body.outputs.forEach(output => {
       let stakeAddress = null
       try {
-        const stakeCred: Credential = stakeCredential(output.address)
-        stakeAddress = RewardAddress.new(this.networkId(), stakeCred).to_address().to_bech32();
+        const stakeCred: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(output.address))
+        stakeAddress = Cardano.RewardAddress.fromCredentials(this.networkId(), stakeCred).toAddress().toBech32();
       } catch (e) {
         console.log(e)
       }
@@ -536,45 +608,60 @@ export class Wallet {
       let index = 0
       txJs.body.certs.forEach(cert => {
         if (cert['StakeDeregistration']?.stake_credential?.Key) {
-          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDeregistration']['stake_credential']['Key'])
+          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDeregistration']['stake_credential']['Key']).hex()
           certificates.push({
             index: index++,
             info: {
-              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
+                type: Cardano.CredentialType.KeyHash,
+                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
+              }).toAddress().toBech32()
             },
             type: 'stake_deregistration'
           })
         } else if (cert['StakeRegistration']?.stake_credential?.Key) {
-          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeRegistration']['stake_credential']['Key'])
+          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeRegistration']['stake_credential']['Key']).hex()
           certificates.push({
             index: index++,
             info: {
               deposit: "2000000",
-              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
+                type: Cardano.CredentialType.KeyHash,
+                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
+              }).toAddress().toBech32()
             },
             type: 'stake_registration'
           })
         } else if (cert['StakeDelegation']?.stake_credential?.Key && cert['StakeDelegation']?.pool_keyhash) {
-          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['stake_credential']['Key'])
-          const poolKeyHash = Ed25519KeyHash.from_hex(cert['StakeDelegation']['pool_keyhash'])
+          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDelegation']['stake_credential']['Key']).hex()
+          const poolKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDelegation']['pool_keyhash']).hex()
           certificates.push({
             index: index++,
             info: {
-              pool_id_bech32: poolKeyHash.to_bech32('pool'),
-              pool_id_hex: poolKeyHash.to_hex(),
-              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+              pool_id_bech32: Cardano.PoolId.fromKeyHash(poolKeyHashHex),
+              pool_id_hex: poolKeyHashHex,
+              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
+                type: Cardano.CredentialType.KeyHash,
+                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
+              }).toAddress().toBech32()
             },
             type: 'pool_delegation'
           })
         } else if (cert['VoteDelegation']?.stake_credential?.Key && cert['VoteDelegation']?.drep?.ScriptHash) {
-          const stakeKeyHash = Ed25519KeyHash.from_hex(cert['VoteDelegation']['stake_credential']['Key'])
+          const stakeKeyHash: Ed25519KeyHash = Ed25519KeyHash.fromHex(cert['VoteDelegation']['stake_credential']['Key'])
           const drep = DRep.new_script_hash(ScriptHash.from_hex(cert['VoteDelegation']['drep']['ScriptHash']))
           certificates.push({
             index: index++,
             info: {
               drep_hex: drep.to_hex(),
               drep_id: drep.to_bech32(),
-              stake_address: RewardAddress.new(this.networkId(), Credential.from_keyhash(stakeKeyHash)).to_address().to_bech32()
+              stake_address: Cardano.RewardAddress.fromCredentials(
+                this.networkId(),
+                {
+                  type: Cardano.CredentialType.KeyHash,
+                  hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash.hex())
+                }
+              ).toAddress().toBech32()
             },
             type: 'vote_delegation'
           })
@@ -641,12 +728,11 @@ export class Wallet {
         return accountTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
+        console.debug(`Failed to open database: ${err.stack || err}`);
       });
   }
 
   async setLastSyncInfo(tip): Promise<void> {
-    console.log(tip);
     await this.db
       .open()
       .then(db => {
@@ -669,15 +755,16 @@ export class Wallet {
       .open()
       .then(db => {
         const accountTable = db.table('account');
-        if (!accountTable) throw new Error('No Account table.');
-        if (resAccount) {
-          return accountTable.update(resAccount.id, acc);
-        } else {
+        if (accountTable) {
+          if (resAccount) {
+            acc.id = resAccount.id;
+          }
           return accountTable.put(acc);
         }
+        return null;
       })
       .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
+        console.error(`${err.stack || err}`);
       });
     return {
       id: accountInfoId,
@@ -697,7 +784,6 @@ export class Wallet {
     if (!useStore().intervals.syncIntervalId) {
       useStore().intervals.syncIntervalId = setInterval(async () => {
         try {
-          console.log('sync scheduled')
           await appWallet.sync()
         } catch (err) {
           console.log(err)
@@ -773,7 +859,7 @@ export class Wallet {
           const prevAccountInfo = await this.getAccountInfo();
           const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
           const to = tip;
-          const address: string = this.stakeAddress().to_address().to_bech32();
+          const address: string = this.stakeAddress().toBech32();
           const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
           const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
           const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
@@ -891,8 +977,7 @@ export class Wallet {
     loading.setSyncing(false);
   }
 
-  async syncAssets(units: string[], force?: boolean): Promise<void> {
-    console.log('syncAssets');
+  async syncAssets(units: string[], _force?: boolean): Promise<void> {
     const blockchainDB: Dexie = await this.getBlockchainDb();
     await this.setAssets(units, blockchainDB);
   }
@@ -1024,7 +1109,7 @@ export class Wallet {
 
   async syncAccountInfo(): Promise<any> {
     try {
-      const res = await this.api.getAccountInfo(this.stakeAddress().to_address().to_bech32());
+      const res = await this.api.getAccountInfo(this.stakeAddress().toBech32());
       if (res) {
         return await this.setAccountInfo(res);
       }
@@ -1067,14 +1152,14 @@ export class Wallet {
     let consecutiveUnused: number = 0;  // Track consecutive unused addresses
     const GAP_LIMIT = 20;       // Define the gap limit as 20
     while (consecutiveUnused < GAP_LIMIT) {
-      const derivedAddress: string = this.deriveAddressFromPath(addressIndex).to_address().to_bech32();
-      const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).to_address().to_bech32();
+      const derivedAddress: string = this.deriveAddressFromPath(addressIndex).toBech32();
+      const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).toAddress().toBech32();
       let found: boolean = false;
       if (usedAddresses.includes(derivedAddress)) {
         resolvedAddresses.push({
           address: derivedAddress,
           path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
-          cred: Buffer.from(this.paymentKeyHash(derivedAddress)).toString('hex'),
+          cred: this.paymentKeyHash(derivedAddress),
         });
         consecutiveUnused = 0;  // Reset unused counter if we find a match
         found = true;
@@ -1083,7 +1168,7 @@ export class Wallet {
         resolvedAddresses.push({
           address: internalDerivedAddress,
           path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
-          cred: Buffer.from(this.paymentKeyHash(internalDerivedAddress)).toString('hex'),
+          cred: this.paymentKeyHash(internalDerivedAddress)
         });
         consecutiveUnused = 0;  // Reset unused counter if we find a match
         found = true;
@@ -1100,25 +1185,27 @@ export class Wallet {
     return resolvedAddresses;
   }
 
-  deriveAddressFromPath(addressIndex) {
-    return BaseAddress.new(
-      this.networkId(),
-      Credential.from_keyhash(this.pubKey(addressIndex).hash()),
-      Credential.from_keyhash(this.stakeKey().hash()),
-    );
+  deriveAddressFromPath(addressIndex: number): Cardano.Address {
+    return getAddress(this.publicKey, this.chain, this.network, addressIndex)
   }
 
   deriveInternalAddressFromPath(addressIndex) {
-    return BaseAddress.new(
+    return Cardano.BaseAddress.fromCredentials(
       this.networkId(),
-      Credential.from_keyhash(this.pubKeyInternal(addressIndex).hash()),
-      Credential.from_keyhash(this.stakeKey().hash()),
+      {
+        type: Cardano.CredentialType.KeyHash,
+        hash: Hash28ByteBase16.fromEd25519KeyHashHex(this.pubKeyInternal(addressIndex).hash().hex())
+      },
+      {
+        type: Cardano.CredentialType.KeyHash,
+        hash: Hash28ByteBase16.fromEd25519KeyHashHex(this.stakeKey().hash().hex())
+      }
     );
   }
 
   async syncAccountRewards(): Promise<void> {
     try {
-      const res = await this.api.getAccountRewards(this.stakeAddress().to_address().to_bech32());
+      const res = await this.api.getAccountRewards(this.stakeAddress().toBech32());
       if (res) {
         await this.setAccountRewards(res);
       }
@@ -1149,7 +1236,7 @@ export class Wallet {
 
   async syncAccountTransactions(height: number): Promise<any> {
     try {
-      const res = await this.api.getAccountTransactions(this.stakeAddress().to_address().to_bech32(), height);
+      const res = await this.api.getAccountTransactions(this.stakeAddress().toBech32(), height);
       if (res && Array.isArray(res)) {
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);

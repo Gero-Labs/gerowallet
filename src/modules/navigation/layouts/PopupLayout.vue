@@ -19,7 +19,6 @@ export default {
     ...mapActions(useStore, ['simpleLogin'])
   },
   async mounted() {
-    console.log('mounted')
     if (this.loggedWallet?.id) {
       await this.simpleLogin(this.loggedWallet.id)
     }

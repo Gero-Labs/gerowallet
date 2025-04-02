@@ -155,7 +155,7 @@ export default {
     },
     ...mapState(useStore, ['assets']),
     fingerprint() {
-      return AssetFingerprint.fromParts(Buffer.from(this.asset.policy_id, 'hex'), Buffer.from(this.asset.unit.slice(56), 'hex')).fingerprint()
+      return AssetFingerprint.fromParts(Buffer.from(this.asset.policy_id, 'hex'), Buffer.from(this.asset.unit.slice(56), 'hex'))?.fingerprint()
     },
     ableToSave() {
       return JSON.stringify(this.asset) !== JSON.stringify(this.editedAsset)

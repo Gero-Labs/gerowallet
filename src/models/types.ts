@@ -63,8 +63,6 @@ const ChainDerivations = {
   DREP: 3,
 };
 
-const STAKING_KEY_INDEX = 0;
-
 enum Provider {
   UNDEFINED,
   KOIOS,
@@ -110,10 +108,12 @@ export type TransactionSignatureRequest = {
   cbor: string;
   partialSign: boolean;
 };
+
 export type DataSignature = {
   signature: string;
   key: string;
 };
+
 export type Paginate = {
   page: number,
   limit: number,
@@ -124,7 +124,7 @@ export type PaginateError = {
 };
 
 export type CollateralParams = {
-  amount: string | number
+  amount: string | number;
 }
 
 export type WalletInstance = {
@@ -203,7 +203,6 @@ export {
   CoinTypes,
   BIP44_SCAN_SIZE,
   ChainDerivations,
-  STAKING_KEY_INDEX,
   Provider,
   Blockchain,
   Network,

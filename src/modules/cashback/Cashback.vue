@@ -17,7 +17,7 @@
           <div class="left-section">
             <v-list-item two-line dense style="width: min-content; min-width: 250px">
               <v-list-item-avatar size="40" tile>
-                <v-img :src="require('@/assets/svg/gift.svg')" contain></v-img>
+                <v-img :src="assets.giftSvg" contain></v-img>
               </v-list-item-avatar>
               <v-list-item-content>
                 <v-list-item-title style="font-size: 14px">
@@ -33,7 +33,7 @@
           <div class="right-section">
             <v-list-item two-line dense style="width: min-content; min-width: 250px">
               <v-list-item-avatar size="40" tile>
-                <v-img :src="require('@/assets/svg/pending.svg')" contain></v-img>
+                <v-img :src="assets.pendingSvg" contain></v-img>
               </v-list-item-avatar>
               <v-list-item-content>
                 <v-list-item-title style="font-size: 14px">
@@ -159,6 +159,7 @@ import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
 import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
 import { bringStore } from '@/store/modules/bring';
 import cashbackApi from '@/api/cashback-api';
+import assets from '@/utils/assets';
 
 export default defineComponent({
   name: 'Cashback.vue',
@@ -270,6 +271,7 @@ export default defineComponent({
       totalItems: null,
       supported: true,
       searchTerm: '',
+      assets,
     }
   },
   async mounted() {

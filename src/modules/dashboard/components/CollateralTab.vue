@@ -52,13 +52,13 @@ import {
   TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { assetsToValue, toUTxO } from '@/shared/utils/converter';
-import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '../../../shared/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import { Messaging } from '@/chrome/messaging';
 
 export default {
   name: 'CollateralTab',

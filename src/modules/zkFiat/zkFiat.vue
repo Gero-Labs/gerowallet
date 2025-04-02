@@ -8,7 +8,7 @@
               <v-btn text plain rounded class="px-0" height="100" width="100" @click="currentDialog = dialogs.DEPOSIT">
                 <v-avatar tile size="80">
                   <v-img
-                      :src="require('@/assets/svg/piggybank.svg')"
+                      :src="assets.piggyBankSvg"
                       alt="Send"
                       contain
                   ></v-img>
@@ -22,7 +22,7 @@
               <v-btn text plain rounded class="px-0" height="100" width="100" :disabled="true" @click="currentDialog = dialogs.WITHDRAWAL">
                 <v-avatar tile size="80">
                   <v-img
-                      :src="require('@/assets/svg/withdrawal.svg')"
+                      :src="assets.withdrawalSvg"
                       alt="Receive"
                       contain
                   ></v-img>
@@ -41,6 +41,7 @@
 <script lang="ts">
 import {defineComponent} from 'vue'
 import DepositDialog from "@/modules/zkFiat/DepositDialog.vue";
+import assets from '@/utils/assets';
 
 export default defineComponent({
   name: "zkFiat",
@@ -59,6 +60,7 @@ export default defineComponent({
       DEPOSIT: "DEPOSIT",
       WITHDRAWAL: "WITHDRAWAL"
     },
+    assets,
   }),
 })
 </script>

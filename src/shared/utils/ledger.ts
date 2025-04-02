@@ -27,11 +27,10 @@ import {
   CborContainerType,
   CertificateKind,
   Certificates, CommitteeColdResign, CommitteeHotAuth,
-  Credential, DRepDeregistration, DRepKind, DRepRegistration, DRepUpdate,
+  DRepDeregistration, DRepKind, DRepRegistration, DRepUpdate,
   Ed25519KeyHashes,
   FixedTransaction,
   MultiAsset,
-  RewardAddress,
   ScriptHash, StakeDelegation, StakeDeregistration, StakeRegistration,
   TransactionInputs,
   TransactionOutputs, VoteDelegation, VotingProcedures,
@@ -56,9 +55,7 @@ import {
   isSameArray, isScriptStakeAddress,
   toHexString,
 } from '@/shared/utils/converter';
-
-const CertificateTypes = Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
-
+Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
     setTimeout(() => {
@@ -191,8 +188,7 @@ export default {
   ): Promise<string> {
     const txBody = tx.body();
     console.log(txBody.to_json());
-    const address: Address = wallet.baseAddress().to_address();
-    const stakeAddress: Address = wallet.stakeAddress().to_address();
+    const address: Address = Address.from_bech32(wallet.baseAddress().toBech32());
     const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = Array.from(creds).map(el => {
       return {

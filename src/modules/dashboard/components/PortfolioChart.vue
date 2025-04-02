@@ -4,7 +4,7 @@
     <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
       <v-avatar size="24" v-if="!loadingTxs">
         <v-img
-          :src="require('@/assets/svg/wallet.svg')"
+          :src="assets.walletSvg"
           alt="Wallet"
           style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness(105%) contrast(104%)"
         ></v-img>
@@ -37,6 +37,7 @@ import filters from "@/shared/utils/filters";
 import {mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
+import assets from '@/utils/assets';
 
 export default {
   props: {
@@ -271,6 +272,7 @@ export default {
         WEEK: { value: "WEEK", label: "7 Days", vsLabel: "vs last week" },
         DAY: { value: "DAY", label: "24 Hours", vsLabel: "vs last day" },
       },
+      assets,
     };
   },
   watch: {

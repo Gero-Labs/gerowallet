@@ -31,13 +31,14 @@
     <div id="risk-powered">
       <span>Powered by</span>
       <a href="https://cardanoshield.com/" target="_blank">
-        <img alt="Cardano Shield" :src="require('@/assets/img/cardano-shield/logo.png')" style="height: 30px" />
+        <img alt="Cardano Shield" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>
     </div>
   </div>
 </template>
 <script>
 import { DappScore } from '@/models/cardano-shield-types';
+import assets from '@/utils/assets';
 
 export default {
   name: 'TransactionRisk',
@@ -50,18 +51,6 @@ export default {
     }
   },
   methods: {
-    getIcon(risk) {
-      switch (DappScore[risk]) {
-        case DappScore.low:
-          return 'risk-low.svg';
-        case DappScore.medium:
-          return 'risk-medium.svg';
-        case DappScore.high:
-          return 'risk-high.svg';
-        default:
-          return 'risk-unknown.svg';
-      }
-    },
     getLabel(risk) {
       switch (DappScore[risk]) {
         case DappScore.low:
@@ -77,12 +66,15 @@ export default {
   },
   computed: {
     icon() {
-      return require(`@/assets/img/cardano-shield/${this.getIcon(this.risk)}`);
+      return assets.resolveCardanoShieldRisk(this.risk)
     },
     label() {
       return this.getLabel(this.risk);
     },
   },
+  data: () => ({
+    assets,
+  })
 };
 </script>
 <style scoped>

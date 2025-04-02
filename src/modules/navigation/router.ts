@@ -193,10 +193,14 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // this route requires auth, check if logged in
     // if not, redirect to login page.
     if (!isLoggedIn) {
-      const redirect = to.fullPath != '/' ? to.fullPath : null;
+      console.log('to', to)
+      const redirect = to.path != '/' ? to.path : null;
       let path = '/welcome'
       if (redirect) {
         path += `?redirect=${to.fullPath}`
+      }
+      if (to.query && Object.keys(to?.query).length !== 0) {
+        path += `?${(new URLSearchParams(to.query)).toString()}`;
       }
       next({
         path: path,

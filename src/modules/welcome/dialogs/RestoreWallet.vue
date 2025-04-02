@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" scrollable
+  <v-dialog content-class="rounded-xxl dialogStyle darken" v-model="dialogLocal" scrollable
             max-width="850"
             min-height="742"
             :persistent="persistent"
@@ -74,7 +74,7 @@
                 </v-card-text>
                 <v-card-actions class="pa-0 align-self-end" style="width: 100%">
                   <v-btn
-                    outlined
+                    text
                     color="primary"
                     @click="pasteFromClipboard"
                     elevation="0"
@@ -116,42 +116,42 @@
                     <v-radio value="green">
                       <template v-slot:label>
                         <v-avatar size="32"  >
-                          <v-img :src="require('@/assets/svg/green.svg')" cover></v-img>
+                          <v-img :src="assets.greenSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="purple">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/purple.svg')" cover></v-img>
+                          <v-img :src="assets.purpleSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="pink">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/pink.svg')" cover></v-img>
+                          <v-img :src="assets.pinkSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="orange">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/orange.svg')" cover></v-img>
+                          <v-img :src="assets.orangeSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="blue">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/blue.svg')" cover></v-img>
+                          <v-img :src="assets.blueSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="grey">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/grey.svg')" cover></v-img>
+                          <v-img :src="assets.greySvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
@@ -247,6 +247,7 @@ import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";
 import MnemonicAutocomplete from "@/modules/welcome/components/MnemonicAutocomplete.vue";
+import assets from '@/utils/assets';
 
 export default {
   name: "RestoreWallet",
@@ -272,6 +273,11 @@ export default {
     },
     dialogLocal: {
       get() {
+        if (this.dialog) {
+          document.addEventListener( "keydown", this.onKeydown );
+        } else {
+          document.removeEventListener('keydown', this.onKeydown)
+        }
         return this.dialog
       },
       set(value) {
@@ -289,6 +295,11 @@ export default {
     },
   },
   methods: {
+    onKeydown(event) {
+      if (event.code === "KeyV" && event.ctrlKey) {
+        this.pasteFromClipboard()
+      }
+    },
     focusNextCell(el) {
       console.log('nextCell')
       const currentCell = el.closest('.v-input');
@@ -303,6 +314,9 @@ export default {
     async pasteFromClipboard() {
       const text = await navigator.clipboard.readText();
       this.recoverySeedPhrase = text.split(" ")
+      if ([12,15,24].includes(this.recoverySeedPhrase.length)) {
+        this.seedPhraseLength = this.recoverySeedPhrase.length+''
+      }
     },
     walletCreationStep1() {
       if (this.$refs.form.validate()) {
@@ -363,6 +377,7 @@ export default {
     store: useStore(),
     seedPhraseLength: '24',
     recoverySeedPhrase: ['','','','','','','','','','','','','','','','','','','','','','','',''],
+    assets,
   })
 }
 </script>

@@ -35,6 +35,9 @@
       </v-col>
       <v-col cols="6" style="align-content: center">
         <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
+        <div style="flex-flow: row; display: flex; justify-content: center;">
+          <CopyButton v-if="this.tx?.to_hex()" x-small :value="this.tx?.to_hex()" :title="'Copy CBOR'"></CopyButton>
+        </div>
       </v-col>
     </v-row>
   </v-card>
@@ -57,9 +60,10 @@ import {
 } from '@/shared/utils/builder';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import cardanoShieldApi from '@/api/cardano-shield-api';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 export default {
-  components: { TransactionCard, DappAddress, TransactionRisk, Select },
+  components: { CopyButton, TransactionCard, DappAddress, TransactionRisk, Select },
   name: 'SummaryStep',
   props: {
     sendData: {

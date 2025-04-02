@@ -108,13 +108,14 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
   console.log("req_json", JSON.stringify(req_json));
   return sdk.cardano.generateSignRequest(req)
 }
+import logo128Url from '@/assets/img/bkp/logo128.png';
 
 export const qrCodeOptions = (encodedUR: string, size: number): Options => {
   return {
     width: size,
     height: size,
     data: encodedUR,
-    image: require('@/assets/img/bkp/logo128.png'),
+    image: logo128Url,
     type: 'svg',
     margin: 0,
     qrOptions: {

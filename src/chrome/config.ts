@@ -13,6 +13,7 @@ export const METHOD = {
   getCollateral: 'getCollateral',
   getRewardAddresses: 'getRewardAddresses',
   getUsedAddresses: 'getUsedAddresses',
+  getUnusedAddresses: 'getUnusedAddresses',
   getAddress: 'getAddress',
   getAddressBech32: 'getAddressBech32',
   signData: 'signData',

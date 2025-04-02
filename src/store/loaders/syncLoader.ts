@@ -9,7 +9,6 @@ export async function loadSync(
   // Initial load
   try {
     store.latestTip = await dbInstance.table('sync').orderBy('height').last();
-    console.log('Initial latestTip:', store.latestTip);
   } catch (error) {
     console.error('Initial load failed for sync:', error);
   }
@@ -28,7 +27,6 @@ export async function subscribeSync(
     ).subscribe({
       next: (newTip: any) => {
         store.latestTip = newTip;
-        console.log('Updated latestTip:', store.latestTip);
       },
       error: (error: any) => {
         console.error('Failed to fetch sync tip:', error);
