@@ -1,7 +1,6 @@
-import { sendMessage } from 'webext-bridge/content-script'
+import { Messaging } from './messaging';
 import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
 import { getAddressBech32, promptLogin } from '@/chrome/webpage';
-import { METHOD, SENDER, TARGET } from '@/chrome/config';
 
 const getWalletAddress = async (): Promise<string> => {
   try {
@@ -19,7 +18,7 @@ const injectScript = () => {
   const script = document.createElement('script');
   script.async = false;
   if (chrome?.runtime) {
-    script.src = chrome.runtime.getURL('js/inject.js');
+    script.src = chrome.runtime.getURL('content/_virtual_inject.js');
   }
   script.onload = () => {
     script.remove();
@@ -144,10 +143,10 @@ async function injectBring() {
 if (shouldInject()) {
   injectScript();
   await injectBring();
-  createProxyController();
+  Messaging.createProxyController();
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
   if (message.action === 'showOverlay') {
     showOverlay(message.url); // Show overlay on the specific tab with this URL
   } else if (message.action === 'removeOverlay') {
@@ -157,76 +156,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 });
-
-function createProxyController() {
-  // listen to events from background
-  if (chrome?.runtime) {
-    chrome.runtime.onMessage.addListener(async (response) => {
-      if (
-        typeof response !== 'object' ||
-        response === null ||
-        !response.target ||
-        response.target !== TARGET ||
-        !response.sender ||
-        response.sender !== SENDER.extension ||
-        !response.event
-      )
-        return;
-
-      const whitelisted = await sendMessage(METHOD.isWhitelisted, {
-        origin: window.origin,
-      }, 'background')
-
-      // protect background by not allowing not whitelisted
-      if (!whitelisted || (whitelisted as any).error) return;
-      const event = new CustomEvent(`${TARGET}${response.event}`, {
-        detail: response.data,
-      });
-
-      window.dispatchEvent(event);
-    });
-  }
-  // listen to function calls from webpage
-  window.addEventListener('message', async function(e) {
-    const request = e.data;
-    if (
-      typeof request !== 'object' ||
-      request === null ||
-      !request.target ||
-      request.target !== TARGET ||
-      !request.sender ||
-      request.sender !== SENDER.webpage
-    )
-      return;
-    request.origin = window.origin;
-    // only allow enable function, before checking for whitelisted
-    if (
-      request.method === METHOD.enable ||
-      request.method === METHOD.isEnabled
-    ) {
-      sendMessage(request.method, request, 'background')
-        .then((response) => {
-          window.postMessage(response) // Respond to webpage
-        });
-      return;
-    }
-
-    const whitelisted = await sendMessage(METHOD.isWhitelisted, {
-      origin: window.origin,
-    }, 'background')
-
-    // protect background by not allowing not whitelisted
-    if (!whitelisted || (whitelisted as any).error) {
-      window.postMessage({ ...whitelisted as object, id: request.id });
-      return;
-    }
-    console.debug('Content::Cip30Message:Request',request)
-    await sendMessage(request.method, request, 'background')
-      .then((response) => {
-        window.postMessage(response) // Respond to webpage
-      });
-  });
-}
 
 function showOverlay(url: string) {
   if (document.body) {

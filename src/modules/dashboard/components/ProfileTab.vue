@@ -115,7 +115,7 @@
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3>Welcome Guide</h3>
-          <span class="helper">Display the introductory guide to help you navigate your wallet</span>
+          <span class="helper">Display the introductory guide to help you navigate your wallet (temporarily disabled).</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
           <v-btn
@@ -123,6 +123,7 @@
             outlined
             color="grey"
             @click="showGuide"
+            disabled
           >
             <span class="capitalize">Show Guide</span>
           </v-btn>

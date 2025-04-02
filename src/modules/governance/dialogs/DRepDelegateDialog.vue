@@ -212,6 +212,7 @@ import QRCodeStyling from 'qr-code-styling';
 import { QrcodeStream } from "vue-qrcode-reader";
 import Vue from 'vue';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import assets from '@/utils/assets';
 
 export default {
   name: 'DRepDelegateDialog',
@@ -259,7 +260,7 @@ export default {
       if (this.tx?.body()?.inputs()) {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
           const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
+          const utxo = this.utxos?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
           if (utxo) {
             totalAdaOutput -= Number(utxo.value)
           }
@@ -414,9 +415,9 @@ export default {
   },
   filters,
   data: () => ({
-    xLogo: require('@/assets/svg/x.svg'),
-    telegramLogo: require('@/assets/svg/telegram.svg'),
-    errorImage: require('@/assets/img/1x1.png'),
+    xLogo: assets.xSvg,
+    telegramLogo: assets.telegramSvg,
+    errorImage: assets.errorImage,
     networks,
     loading: false,
     spendingPassword: '',
@@ -435,6 +436,7 @@ export default {
     cbor: undefined,
     keystoneScan: false,
     isInit: false,
+    assets,
   }),
 }
 </script>

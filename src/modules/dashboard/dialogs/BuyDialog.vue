@@ -30,7 +30,7 @@
                 <v-row>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseBuy">
-                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="require('@/modules/dashboard/assets/buy-ada.png')">
+                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="assets.buyAda">
                         <h1 slot="header" style="line-height: 1;">Buy ADA</h1>
                         <p slot="content">Use Credit Card or Other Payment Methods to Buy ADA</p>
                       </parallax-card>
@@ -38,7 +38,7 @@
                   </v-col>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseSell">
-                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="require('@/modules/dashboard/assets/sell-ada.png')">
+                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="assets.sellAda">
                         <h1 slot="header" style="line-height: 1;">Sell ADA</h1>
                         <p slot="content">Choose from multiple methods to instantly convert your ADA to cash</p>
                       </parallax-card>
@@ -119,8 +119,8 @@ import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 
-const moonPayApiKey = process.env.VUE_APP_MOONPAY_API_KEY;
-const guardarianApiKey = process.env.VUE_APP_GUARDARIAN_API_KEY;
+const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
+const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
 
 export default {
   name: 'BuyDialog',

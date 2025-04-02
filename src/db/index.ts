@@ -3,10 +3,10 @@ import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { useStore } from '@/store';
 import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
+import { walletDBSchema, walletDBVersion } from '@/db/schema';
 
 const db: Dexie = new Dexie('GeroWalletDatabase');
 const blockChainDBVersion: number = 2;
-const walletDBVersion: number = 2;
 
 db.version(10).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
@@ -83,12 +83,11 @@ export default {
   },
   async setConfiguration(key, value) {
     if (value) {
-      const existing = await db['config'].where('key').equals(key).first();
-      if (existing) {
-        await db['config'].update(existing.id, { value });
-      } else {
-        await db['config'].add({ key, value });
+      const val = {
+        key: key,
+        value: value
       }
+      await db['config'].put(val);
     } else {
       await db['config'].where('key').equals(key).delete();
     }
@@ -219,15 +218,7 @@ export default {
     });
   },
   setWalletDBVersionSchema(db: Dexie) {
-    db.version(walletDBVersion).stores({
-      config: 'key, value',
-      sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-      account: '++id, walletId, active, controlled_amount, rewards_sum, reserves_sum, withdrawals_sum, treasury_sum, withdrawal_amount, pool_id',
-      addresses: 'address',
-      contacts: 'address, name',
-      rewards: 'epoch, amount, pool_id, type',
-      transactions: 'id',
-      connected_dapps: '++id, domain, time',
-    });
+    console.log('setWalletDBVersionSchema')
+    db.version(walletDBVersion).stores(walletDBSchema);
   }
 };

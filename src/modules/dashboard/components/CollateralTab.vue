@@ -58,7 +58,7 @@ import networks from '../../../shared/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { walletConfigStore } from '@/store/modules/walletConfig';
-import { sendMessage } from 'webext-bridge/options';
+import { Messaging } from '@/chrome/messaging';
 
 export default {
   name: 'CollateralTab',
@@ -85,7 +85,10 @@ export default {
       this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
       const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
       const tx = Transaction.new(txBody, TransactionWitnessSet.new())
-      const res = sendMessage(METHOD.signTx, { tx: tx.to_hex(), partialSign: true }, 'background');
+      const res = await Messaging.sendToBackground({
+        method: METHOD.signTx,
+        data: { tx: tx.to_hex(), partialSign: true },
+      });
       if (res.data) {
         const signedTx = Transaction.new(
           tx.body(),

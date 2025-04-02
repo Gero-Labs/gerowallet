@@ -37,10 +37,10 @@
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
-                <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
+                <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
               </v-list-item-avatar>
               <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
-                <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
+                <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
               </v-list-item-avatar>
             </v-list-item>
           </v-list-item-group>
@@ -81,7 +81,7 @@ export default {
     },
     resolveIcon(icon) {
       if (icon) {
-        return require('@/assets/svg/'+icon+'.svg')
+        return assets.resolveIcon(icon)
       }
       return ''
     },

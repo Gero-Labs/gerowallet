@@ -12,69 +12,36 @@
     </v-card-title>
     <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1; min-height: 0; height: 608px">
       <v-timeline align-top dense class="pt-0 mt-4">
-        <v-timeline-item small color="#00DFF3">
+        <v-timeline-item small color="#00DFF3" v-for="(release, index) in releases" :key="index">
           <v-card class="transparent" flat style="background-image: linear-gradient(90deg, rgba(153, 153, 153, 0.05) 0%, rgba(163.62, 238.55, 255, 0.05) 100%); border-radius: 24px; ">
             <v-card-text class="text-left">
-              <v-expansion-panels v-model="panel"  flat >
-                <v-expansion-panel class="transparent" flat >
+              <v-expansion-panels :value="0" flat>
+                <v-expansion-panel class="transparent" flat>
                   <v-expansion-panel-header class="pa-0">
-                    <v-card-title class="py-0">v2.4.2</v-card-title>
+                    <v-list-item two-line>
+                      <v-list-item-content>
+                        <v-list-item-title>
+                          <strong>{{release.name}}</strong>
+                        </v-list-item-title>
+                        <v-list-item-subtitle>
+                          <v-tooltip top >
+                            <template v-slot:activator="{ on, attrs }">
+                          <span
+                            v-bind="attrs"
+                            v-on="on"
+                          >
+                            {{ time.format(new Date(release.publishedAt)) }}
+                          </span>
+                            </template>
+                            <span>{{ new Date(release.publishedAt).toLocaleString() }}</span>
+                          </v-tooltip>
+                        </v-list-item-subtitle>
+                      </v-list-item-content>
+                    </v-list-item>
+                    <v-card-title class="py-0"></v-card-title>
                   </v-expansion-panel-header>
                   <v-expansion-panel-content>
-
-                  </v-expansion-panel-content>
-                </v-expansion-panel>
-              </v-expansion-panels>
-            </v-card-text>
-          </v-card>
-        </v-timeline-item>
-        <v-timeline-item small color="#00DFF3">
-          <v-card class="transparent" flat style="background-image: linear-gradient(90deg, rgba(153, 153, 153, 0.05) 0%, rgba(163.62, 238.55, 255, 0.05) 100%); border-radius: 24px; ">
-            <v-card-text class="text-left">
-              <v-expansion-panels flat >
-                <v-expansion-panel class="transparent" flat >
-                  <v-expansion-panel-header class="pa-0">
-                    <v-card-title class="py-0">v2.4.1</v-card-title>
-                  </v-expansion-panel-header>
-                  <v-expansion-panel-content>
-                    <h2 class="pb-2"><u>New Features</u></h2>
-                    <h3>Welcome Screen</h3>
-                    <p>With every major version update, we now introduce a welcome screen that highlights what's new. For the official release of Gero Dashboard 2.4, a welcome flow is available and can be accessed anytime from the wallet settings.</p>
-
-                    <h3>Price % Change Display</h3>
-                    <p>We have added a new feature to display the 24-hour percentage change for ADA and Apex prices.</p>
-
-                    <h3>Dev Tools</h3>
-                    <p>Developers now have access to a secret developer screen for blockchain-related converters. You can access this screen by appending <code>/dev-tools</code> to the extension URL. The tools available include:</p>
-                    <ul>
-                      <li>Tx CBOR Hex to JSON Converter</li>
-                      <li>WitnessSet CBOR Hex to JSON Converter</li>
-                      <li>Address CBOR Hex to Bech32 Converter</li>
-                      <li>Address Bech32 to Hex Converter</li>
-                      <li>String to Hex Converter</li>
-                      <li>UTxO CBOR to JSON Converter</li>
-                      <li>Lovelace to Value Converter</li>
-                    </ul>
-                    <br>
-                    <h2 class="pb-2"><u>Bug Fixes</u></h2>
-                    <h3>Token Table Price Change</h3>
-                    <p>Resolved an issue where the price change in the tokens table was displaying incorrect percentages.</p>
-
-                    <h3>CIP-30 Address Issues</h3>
-                    <p>Fixed a problem with unused addresses as per CIP-30 requirements.</p>
-
-                    <h3>CIP-30 UTxO Retrieval</h3>
-                    <p>Addressed issues related to <code>getUtxos</code>: Fixed a bug affecting unfrack.it, where UTxOs with amount were not correctly processed. Fixed retrieval of unsignable UTxOs beyond the 20-gap limit.</p>
-
-                    <h2 class="pb-2"><u>Performance Enhancements</u></h2>
-                    <h3>Removed WebSockets</h3>
-                    <p>WebSockets have been removed to streamline real-time communications.</p>
-
-                    <h3>Backend Caching Improvements</h3>
-                    <p>We have made significant improvements to backend caching, ensuring faster data retrieval and a smoother user experience.</p>
-
-                    <h3>Better Error Handling</h3>
-                    <p>Enhanced error handling mechanisms to provide clearer feedback and a more robust overall experience.</p>
+                    <VueShowdown :markdown="release.body" flavor="vanilla" :options="{ emoji: true }"/>
                   </v-expansion-panel-content>
                 </v-expansion-panel>
               </v-expansion-panels>
@@ -87,12 +54,9 @@
 </template>
 <script>
 import BaseDialog from '@/shared/components/BaseDialog.vue';
-import ContactsTab from '@/modules/dashboard/components/ContactsTab.vue';
-import PasswordTab from '@/modules/dashboard/components/PasswordTab.vue';
-import CollateralTab from '@/modules/dashboard/components/CollateralTab.vue';
-import ProfileTab from '@/modules/dashboard/components/ProfileTab.vue';
-import ConnectedDappsTab from '@/modules/dashboard/components/ConnectedDappsTab.vue';
-import AdvancedSettingsTab from '@/modules/dashboard/components/AdvancedSettingsTab.vue';
+import time from '@/plugins/time'
+import cryptoApi from '@/api/crypto-api';
+import packageJson from '@/../package.json';
 
 export default {
   name: 'ChangeLogDialog',
@@ -107,10 +71,51 @@ export default {
       default: true,
     }
   },
+  methods: {
+    normalizeVersion(version) {
+      // Helper to remove the leading 'v' if present
+      return version.startsWith('v') ? version.substring(1) : version;
+    },
+    isVersionHigher(newVersion) {
+      // Normalize and split the version strings into parts
+      const [newMajor, newMinor, newPatch] = this.normalizeVersion(newVersion)
+        .split('.')
+        .map(num => parseInt(num, 10));
+      const [currMajor, currMinor, currPatch] = this.normalizeVersion(this.currentVersion)
+        .split('.')
+        .map(num => parseInt(num, 10));
+
+      // Compare major versions first
+      if (newMajor > currMajor) return true;
+      if (newMajor < currMajor) return false;
+
+      // If major versions are equal, compare minor versions
+      if (newMinor > currMinor) return true;
+      if (newMinor < currMinor) return false;
+
+      // If minor versions are equal, compare patch versions
+      return newPatch > currPatch;
+    }
+  },
   data: () => ({
     loading: false,
-    panel: 0
+    panel: 0,
+    releases: [],
+    time,
+    currentVersion: packageJson.version,
   }),
+ async mounted() {
+    this.loading = true;
+    try {
+      const res = await cryptoApi.fetchReleases(0);
+      if (res.status === 200) {
+        this.releases = res.data.content.filter(el => !this.isVersionHigher(el.tagName));
+      }
+    } catch (e) {
+      console.log(e);
+    }
+    this.loading = false;
+  }
 };
 </script>
 <style>

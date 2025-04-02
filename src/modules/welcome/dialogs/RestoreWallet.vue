@@ -74,7 +74,7 @@
                 </v-card-text>
                 <v-card-actions class="pa-0 align-self-end" style="width: 100%">
                   <v-btn
-                    outlined
+                    text
                     color="primary"
                     @click="pasteFromClipboard"
                     elevation="0"
@@ -273,6 +273,11 @@ export default {
     },
     dialogLocal: {
       get() {
+        if (this.dialog) {
+          document.addEventListener( "keydown", this.onKeydown );
+        } else {
+          document.removeEventListener('keydown', this.onKeydown)
+        }
         return this.dialog
       },
       set(value) {
@@ -290,6 +295,11 @@ export default {
     },
   },
   methods: {
+    onKeydown(event) {
+      if (event.code === "KeyV" && event.ctrlKey) {
+        this.pasteFromClipboard()
+      }
+    },
     focusNextCell(el) {
       console.log('nextCell')
       const currentCell = el.closest('.v-input');
@@ -304,6 +314,9 @@ export default {
     async pasteFromClipboard() {
       const text = await navigator.clipboard.readText();
       this.recoverySeedPhrase = text.split(" ")
+      if ([12,15,24].includes(this.recoverySeedPhrase.length)) {
+        this.seedPhraseLength = this.recoverySeedPhrase.length+''
+      }
     },
     walletCreationStep1() {
       if (this.$refs.form.validate()) {

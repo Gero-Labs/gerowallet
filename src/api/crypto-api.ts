@@ -21,5 +21,8 @@ export default {
       return chart;
     }
     return parseHttpError(data);
+  },
+  async fetchReleases(page: number) {
+    return await axiosInstance.get(`/api/github/releases?page=${page}&size=10`);
   }
 }

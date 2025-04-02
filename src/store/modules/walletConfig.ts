@@ -42,7 +42,6 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       return false
     },
     getTokenAllocationTableSort(state) {
-      console.log(state.config)
       if (state?.config && 'tokenAllocationSort' in state.config) {
         return state.config.tokenAllocationSort
       }
@@ -54,7 +53,6 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
   },
   actions: {
     async setUtxos(utxos) {
-      console.log('Setting UTXOs:', utxos);
       this.utxos = utxos
       if (this.utxos) {
         const collateralCandidates = this.utxos.filter(utxo => utxo.asset_list.length === 0 && Number(utxo.value) >= 5000000 && Number(utxo.value) <= 20000000).sort((a, b) => {

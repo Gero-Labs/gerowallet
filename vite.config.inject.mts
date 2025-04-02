@@ -2,9 +2,8 @@ import { defineConfig } from 'vite';
 import { sharedConfig } from './vite.config.mts';
 import { isDev, r } from './scripts/utils';
 import packageJson from './package.json';
-import rollupTla from 'rollup-plugin-tla';
-import commonjs from '@rollup/plugin-commonjs';
 
+// bundling the content script using Vite
 export default defineConfig({
   ...sharedConfig,
   define: {
@@ -15,30 +14,26 @@ export default defineConfig({
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   build: {
-    minify: isDev ? false : 'terser',
     target: 'esnext',
     assetsDir: '.',
-    watch: isDev ? {} : undefined,
-    outDir: r('extension/background'),
+    watch: isDev
+      ? {}
+      : undefined,
+    outDir: r('extension/content'),
     cssCodeSplit: false,
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,
     lib: {
-      entry: r('src/chrome/background.ts'),
+      entry: r('src/chrome/inject.ts'),
       name: packageJson.name,
       formats: ['iife'],
     },
     rollupOptions: {
       output: {
-        entryFileNames: 'index.js',
-        chunkFileNames: 'chunk-[name].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        entryFileNames: '[name].js',
         extend: true,
+        inlineDynamicImports: false,
       },
-      plugins: [
-        rollupTla(),
-        commonjs()
-      ]
     },
   },
 });

@@ -18,15 +18,15 @@ async function getManifest() {
     //   open_in_tab: true,
     // },
     icons: {
-      16: './assets/logo16.png',
-      48: './assets/logo48.png',
-      128: './assets/logo128.png',
+      16: './public/logo16.png',
+      48: './public/logo48.png',
+      128: './public/logo128.png',
     },
     action: {
       default_icon: {
-        16: "./assets/logo16.png",
-        48: "./assets/logo48.png",
-        128: "./assets/logo128.png"
+        16: "./public/logo16.png",
+        48: "./public/logo48.png",
+        128: "./public/logo128.png"
       },
       default_title: "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
     },
@@ -51,21 +51,26 @@ async function getManifest() {
       'notifications'
     ],
     host_permissions: ['*://*/*'],
-    web_accessible_resources: [],
+    web_accessible_resources: [
+      {
+        resources: ["public/logo.png", "public/logo128.png", "content/_virtual_inject.js", "public/2.4.2.png"],
+        matches: ["<all_urls>"]
+      }
+    ],
     content_scripts: [
       {
         matches: [
           '<all_urls>',
         ],
-        js: [ 'content/_virtual_index.js' ],
+        js: [ 'content/content.js' ],
         run_at: "document_start",
         all_frames: true
       },
     ],
     content_security_policy: {
       extension_pages: isDev ?
-        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://media.bringweb3.io/ http://localhost:* https://api.bringweb3.io ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://buy.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'`
-        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://media.bringweb3.io/ http://localhost:8081 https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://buy.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'`
+        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://media.bringweb3.io/ https://sandbox-api.bringweb3.io http://localhost:* ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'`
+        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'`
     },
   }
 
@@ -81,6 +86,10 @@ async function getManifest() {
   //     default_path: 'dist/sidepanel/index.html',
   //   }
   // }
+
+  if (!isDev) {
+    manifest['key'] = process.env['MANIFEST_KEY']
+  }
 
   // FIXME: not work in MV3
   if (isDev && false) {

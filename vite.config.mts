@@ -1,6 +1,6 @@
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
-import { loadEnv, defineConfig, UserConfig } from 'vite';
+import { defineConfig, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
 import { VuetifyResolver } from "unplugin-vue-components/resolvers";
 import Components from "unplugin-vue-components/vite";
@@ -8,6 +8,7 @@ import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import copy from 'rollup-plugin-copy';
 
 export const sharedConfig: UserConfig = {
   root: r('src'),
@@ -24,6 +25,7 @@ export const sharedConfig: UserConfig = {
     global: 'window',
     __DEV__: isDev,
     __NAME__: JSON.stringify(packageJson.name),
+    APP_VERSION: JSON.stringify(packageJson.version),
   },
   plugins: [
     Vue(),
@@ -69,8 +71,6 @@ export const sharedConfig: UserConfig = {
 };
 
 export default defineConfig(({ command }) => {
-  const env = loadEnv(command, process.cwd());
-
   return {
     ...sharedConfig,
     base: command === 'serve' ? `http://localhost:${port}/` : '.',
@@ -101,7 +101,16 @@ export default defineConfig(({ command }) => {
           options: r('src/options/index.html'),
           // popup: r('src/popup/index.html'),
           // sidepanel: r('src/sidepanel/index.html'),
-        }
+        },
+        plugins: [
+          copy({
+            targets: [
+              { src: 'src/assets/public/*', dest: 'extension/public' },
+              { src: 'src/assets/notifications/*', dest: 'extension/public' },
+            ],
+            hook: 'writeBundle',
+          }),
+        ]
       },
     },
     test: {

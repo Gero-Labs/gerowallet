@@ -2,7 +2,7 @@ import { Howl } from 'howler';
 import { getArtists } from '@/shared/utils/converter';
 import { defineStore } from 'pinia';
 
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export const musicStore = defineStore( 'musicStore', {
   persist: {

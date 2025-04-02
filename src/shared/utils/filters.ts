@@ -1,4 +1,4 @@
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 const formatMax6Decimals = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,  // No unnecessary trailing zeroes
@@ -37,6 +37,7 @@ const filters = {
     } else if (Array.isArray(value)) {
       fileSrc = value.join('')
     }
+    console.log(baseUrl)
     if (fileSrc.startsWith('ar://') || fileSrc.startsWith('ar/')) {
       src = `${baseUrl}/api/ar/${fileSrc.replace('ar://', '').replace('ar/', '')}`
     } else if (fileSrc.startsWith('https://')) {
@@ -92,7 +93,6 @@ const filters = {
         {value: 1e12, symbol: "T"},
         {value: 1e15, symbol: "Q"}
       ];
-      const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
       const item = lookup.slice().reverse().find(function (item) {
         return res >= item.value;
       });

@@ -1,13 +1,13 @@
 <template>
   <v-container class="py-0" :style="{direction: $t('rtl') === 'true' ? 'rtl' : 'ltr', maxWidth: '1000px'}">
-    <v-card flat class="transparent pa-0" style="top: 40px">
+    <v-card flat class="transparent pa-0" style="top: 40px" v-if="!loading.loading && !loading.isRestoring && !loadingTxs">
       <v-card-title class="justify-center" style="color: white; font-size: 32px;">{{$t('welcome') }}</v-card-title>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">{{ $t('chooseAnOption') }}</v-card-subtitle>
       <v-card-subtitle class="text-center pt-1" style="font-size: 20px" v-else>{{ $t('chooseAWallet') }}</v-card-subtitle>
       <v-card-title class="justify-center pt-0" v-if="walletSetup || !Array.isArray(wallets) || !wallets.length">
         <network-selector ref="networkSelector" />
       </v-card-title>
-      <v-card-text class="pb-12 px-12">
+      <v-card-text class="pb-6 px-12">
         <div v-if="walletSetup || !Array.isArray(availableWallets) || !availableWallets.length">
           <v-row class="fill-height">
             <v-col cols="12" md="4" lg="4" class="d-flex align-center" @click="createWalletDialog = true">
@@ -46,7 +46,7 @@
         </div>
         <v-card v-else class="transparent" flat style="max-width: 400px; margin: auto">
           <v-card-text class="px-2 py-0" style="max-height: 177px; overflow-y: auto">
-            <v-list nav dense class="pa-0" style="background-color: #ffffff0a;">
+            <v-list nav dense class="pa-0" style="background-color: #ffffff0a; backdrop-filter: blur(4px); min-height: 51px;">
               <v-list-item-group v-model="selectedWallet" color="primary">
                 <v-list-item v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item.id)">
                   <v-list-item-icon>
@@ -108,6 +108,7 @@ import networks from "@/shared/utils/networks";
 import NetworkSelector from '@/modules/navigation/components/NetworkSelector.vue';
 import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
+import loading from "@/plugins/loading";
 
 export default {
   name: 'welcome',
@@ -116,7 +117,7 @@ export default {
     WalletType() {
       return WalletType
     },
-    ...mapState(useStore, ['wallets','network']),
+    ...mapState(useStore, ['wallets','network', 'loadingTxs']),
     availableWallets() {
       return this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network))
     },
@@ -148,7 +149,6 @@ export default {
         console.error(error)
       }
       const queryParams = this.$route.query;
-      console.log(queryParams);
       if (queryParams['redirect']) {
         await this.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
       } else {
@@ -193,6 +193,7 @@ export default {
     walletRestoreApexBg: assets.walletRestoreApexBg,
     hardwareWalletApexBg: assets.hardwareWalletApexBg,
     assets,
+    loading,
   }),
   mounted() {
 

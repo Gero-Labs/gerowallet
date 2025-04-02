@@ -1,35 +1,124 @@
-import { Blockchain, ChainDerivations, CollateralParams, Network, Paginate } from '@/models/types';
+import { Blockchain, ChainDerivations, Network, Paginate } from '@/models/types';
 import { APIError, POPUP_WINDOW } from './config';
-import * as cbor from 'cbor';
 import networks from '../shared/utils/networks';
-import { Bip32PublicKey, Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto';
-import { Cardano, Serialization, Asset } from '@cardano-sdk/core';
-import { HexBlob, BigIntMath } from '@cardano-sdk/util';
+import {
+  Bip32PrivateKey,
+  Bip32PublicKey,
+  Ed25519KeyHash,
+  Ed25519PublicKey,
+  Ed25519PrivateKey,
+  Hash28ByteBase16,
+} from '@cardano-sdk/crypto';
+import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
+import { BigIntMath, HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
-import { toUTxO, toValue } from '@/shared/utils/converter2';
+import { Buffer } from 'buffer';
 
-export function getAddress(xpub: string, chain: string, network: string): Cardano.Address {
-  const networkId = networks.resolveNetworkId(chain, network);
-  const pubKey = getPublicKey(xpub);
-  const paymentKeyHash = pubKey
-    .derive([ChainDerivations.EXTERNAL, 0])
-    .toRawKey()
-    .hash();
-  const stakeKeyHash = pubKey
-    .derive([ChainDerivations.CHIMERIC_ACCOUNT, 0])
-    .toRawKey()
-    .hash();
-  const baseAddress: Cardano.BaseAddress = Cardano.BaseAddress.fromCredentials(
-    networkId,
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
+
+export function resolvePrivatePaymentKey(decodedHash: Buffer, keyIndex: number): Ed25519PrivateKey {
+  const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
+  return prvRootKeyBech32.derive([ChainDerivations.EXTERNAL, keyIndex]).toRawKey();
+}
+
+export function toUTxO(utxo: any): Serialization.TransactionUnspentOutput {
+  const tokenMap = utxo.asset_list.reduce((map: Map<Cardano.AssetId, bigint>, asset: any) => {
+    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
+    const current: bigint = map.get(assetId) ?? BigInt(0);
+    map.set(assetId, current + BigInt(asset.quantity));
+    return map;
+  }, new Map<Cardano.AssetId, bigint>());
+
+  return Serialization.TransactionUnspentOutput.fromCore([
     {
-      type: Cardano.CredentialType.KeyHash,
-      hash: Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash.hex()),
+      txId: Cardano.TransactionId.fromHexBlob(utxo.tx_hash),
+      index: utxo.tx_index
     },
     {
-      type: Cardano.CredentialType.KeyHash,
-      hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash.hex()),
-    });
-  return baseAddress.toAddress();
+      address: Cardano.PaymentAddress(utxo.payment_addr.bech32),
+      value: {
+        coins: BigInt(utxo.value),
+        assets: tokenMap,
+      },
+      datumHash: utxo.datum_hash,
+      datum: utxo.inline_datum,
+      scriptReference: utxo.reference_script
+    }
+  ]);
+}
+
+export function toValue(assets: any[], lovelace: string): Serialization.Value {
+  const tokenMap = assets.reduce((map, asset) => {
+    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
+    const current = map.get(assetId) ?? BigInt(0);
+    map.set(assetId, current + BigInt(asset.quantity));
+    return map;
+  }, new Map<Cardano.AssetId, bigint>());
+  return new Serialization.Value(BigInt(lovelace), tokenMap)
+}
+
+export function toStakeCredential(address: Cardano.Address): Cardano.Credential {
+  return Cardano.BaseAddress.fromAddress(address)?.getStakeCredential();
+}
+
+export function toPaymentCredential(address: Cardano.Address): Cardano.Credential {
+  const baseAddress = Cardano.BaseAddress.fromAddress(address)
+  if (baseAddress)
+    return baseAddress.getPaymentCredential();
+  const enterpriseAddress = Cardano.EnterpriseAddress.fromAddress(address)
+  if (enterpriseAddress)
+    return enterpriseAddress.getPaymentCredential();
+  return undefined;
+}
+
+export function paymentKeyHash(pubKey: Bip32PublicKey, index: number): Ed25519KeyHash {
+  return pubKey
+    .derive([ChainDerivations.EXTERNAL, index])
+    .toRawKey()
+    .hash();
+}
+
+export function stakeKeyHash(pubKey: Bip32PublicKey, index: number): Ed25519KeyHash {
+  return pubKey
+    .derive([ChainDerivations.CHIMERIC_ACCOUNT, index])
+    .toRawKey()
+    .hash();
+}
+
+export function getAddress(xpub: string, chain: string, network: string, index: number = 0): Cardano.Address {
+  const networkId = networks.resolveNetworkId(chain, network);
+  const pubKey = getPublicKey(xpub);
+  return buildBaseAddress(networkId,
+    Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(pubKey, index).hex()),
+    Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(pubKey, 0).hex())).toAddress();
+}
+
+export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: Hash28ByteBase16, stakeKeyHash: Hash28ByteBase16) {
+  return Cardano.BaseAddress.fromCredentials(
+    networkId,
+    {
+      hash: paymentKeyHash,
+      type: Cardano.CredentialType.KeyHash
+    },
+    {
+      hash: stakeKeyHash,
+      type: Cardano.CredentialType.KeyHash
+    }
+  );
+}
+
+export function buildEnterpriseAddress(networkId: Cardano.NetworkId, paymentKeyHash: Hash28ByteBase16) {
+  return Cardano.EnterpriseAddress.fromCredentials(networkId, {
+    hash: paymentKeyHash,
+    type: Cardano.CredentialType.KeyHash
+  });
+}
+
+export function buildRewardAddress(networkId: Cardano.NetworkId, stakeKeyHash: Hash28ByteBase16) {
+  return Cardano.RewardAddress.fromCredentials(networkId, {
+    type: Cardano.CredentialType.KeyHash,
+    hash: stakeKeyHash
+  });
 }
 
 export function getUtxos(
@@ -151,9 +240,12 @@ export function getUtxos(
   return selectedUtxos;
 }
 
-export function getBalance(utxos: any[]): Serialization.Value {
+export function getBalance(utxos: any[], collateral: any): Serialization.Value {
   const assets: any[] = []
-  let lovelace = 0
+  let lovelace = 0;
+  if (collateral) {
+    utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
+  }
   utxos.forEach(utxo => {
     assets.push(...utxo.asset_list)
     lovelace += Number(utxo.value)
@@ -165,136 +257,90 @@ export function coalesceValueQuantities(quantities: Serialization.Value[]): Seri
   return new Serialization.Value(BigIntMath.sum(quantities.map(({ coin }) => coin())), Asset.util.coalesceTokenMaps(quantities.map(({ multiasset }) => multiasset())));
 }
 
-export function getRewardAddresses(xpub: string, chain: string, network: string) {
+export function getRewardAddress(xpub: string, chain: string, network: string): Cardano.Address {
   const stakeKey = getStakeKey(xpub, 0);
   const networkId = networks.resolveNetworkId(chain, network)
-  return [Cardano.RewardAddress.fromCredentials(
+  return Cardano.RewardAddress.fromCredentials(
     networkId,
     {
       type: Cardano.CredentialType.KeyHash,
       hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKey.hash().hex())
-    }).toAddress().toBytes()]
+    }).toAddress()
 }
 
-export function getCollateral(params: CollateralParams, storedUtxos: any[]): Serialization.TransactionUnspentOutput[] {
-  // Default to 5000000 lovelaces (5 ADA) if no amount parameter is provided.
-  const inputAmount = (params && params.amount != null) ? params.amount : "5000000";
+export function getCip129DrepId(xpub: string): Cardano.DRepID {
+  const drepKey = getDrepKey(xpub, 0);
+  return Cardano.DRepID.cip129FromCredential(
+    {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16.fromEd25519KeyHashHex(drepKey.hash().hex())
+    })
+}
 
-  // Decode the amount parameter.
-  let decodedAmount: string;
-  try {
-    decodedAmount = decodeCollateralAmount(inputAmount);
-  } catch (e) {
-    const error = APIError.InvalidRequest;
-    error.info = 'Invalid amount parameter.';
-    throw error;
-  }
-  // Convert the decoded amount to a BigNum.
-  let targetValue;
-  try {
-    targetValue = BigInt(decodedAmount);
-  } catch (e) {
-    const error = APIError.InvalidRequest;
-    error.info = 'Invalid amount parameter conversion.';
-    throw error;
-  }
+const MAX_COLLATERAL_AMOUNT = 5_000_000n;
 
-  // Enforce the maximum collateral limit (5 ADA = 5,000,000 lovelaces).
-  const maxCollateral = BigInt("5000000");
-  if (targetValue > maxCollateral) {
-    const error = APIError.InvalidRequest;
-    error.info = 'The requested collateral exceeds the allowed maximum of 5 ADA.';
-    throw error;
+const getFilterAsBigNum = (amount: string): bigint => {
+  const reader = new Serialization.CborReader(HexBlob(amount));
+
+  if (
+    reader.peekState() === Serialization.CborReaderState.Tag &&
+    reader.peekTag() === Serialization.CborTag.UnsignedBigNum
+  ) {
+    reader.readTag();
+    return BigInt(`0x${HexBlob.fromBytes(reader.readByteString())}`).valueOf();
   }
 
-  // Retrieve UTXOs from storage.
+  return reader.readInt();
+};
+
+const getFilterAmount = (amount: string): bigint => {
+    const filterAmount = getFilterAsBigNum(amount);
+
+    if (filterAmount > MAX_COLLATERAL_AMOUNT) {
+      const error = APIError.InvalidRequest;
+      error.info = 'The Requested Amount is Too Big';
+      throw error
+    }
+    return filterAmount;
+};
+
+export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: any[]): string[] {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
     error.info = 'No UTXOs available in wallet.';
     throw error;
   }
-
-  // Filter for pure ADA UTXOs (asset_list exists and is empty).
-  const pureUtxos: Serialization.TransactionUnspentOutput[] = storedUtxos
-    .filter(utxo => Array.isArray(utxo.asset_list) && utxo.asset_list.length === 0)
-    .map((utxo: any) => toUTxO(utxo));
-
-  if (pureUtxos.length === 0) {
+  let filteredUtxos = storedUtxos.filter(utxo => Array.isArray(utxo.asset_list) && utxo.asset_list.length === 0)
+  if (filteredUtxos.length === 0) {
     const error = APIError.InvalidRequest;
-    error.info = 'No pure ADA UTXOs available in wallet.';
+    error.info = 'No UTXOs available in wallet.';
     throw error;
   }
-  // Sort the pure ADA UTXOs in ascending order by coin value.
-  pureUtxos.sort((a: Serialization.TransactionUnspentOutput, b: Serialization.TransactionUnspentOutput) => {
-    const coinA = a.output().amount().coin();
-    const coinB = b.output().amount().coin();
-    return coinA < coinB ? -1 : coinA > coinB ? 1 : 0;
-  });
-
-  const selectedUtxos: Serialization.TransactionUnspentOutput[] = [];
-  let accumulatedValue: bigint = BigInt(0);
-
-  // Greedily accumulate UTXOs until the target is met, optimizing by removing any excess smallest UTXO.
-  for (const utxo of pureUtxos) {
-    selectedUtxos.push(utxo);
-    accumulatedValue = accumulatedValue + utxo.output().amount().coin();
-
-    // Try to remove the smallest UTXO if the remaining sum still meets the target.
-    while (selectedUtxos.length > 0) {
-      const smallestUtxo = selectedUtxos[0];
-      const potentialSum = accumulatedValue - smallestUtxo.output().amount().coin();
-      if (potentialSum >= targetValue) {
-        // Removing the smallest UTXO still meets the required amount.
-        selectedUtxos.shift();
-        accumulatedValue = potentialSum;
-      } else {
-        break;
-      }
-    }
-
-    if (accumulatedValue >= targetValue) {
-      break;
-    }
-  }
-
-  // If the accumulated collateral is less than the required amount, throw an error.
-  if (accumulatedValue < targetValue) {
-    const error = APIError.InvalidRequest;
-    error.info = 'Not enough ADA in the wallet to meet the collateral requirements.';
-    throw error;
-  }
-
-  return selectedUtxos;
-}
-
-/**
- * Decodes the collateral amount parameter.
- * - If the input is a number, returns its string representation.
- * - If the input is a string containing only digits, returns it directly.
- * - Otherwise, if the string is a valid hex string (i.e. contains [0-9a-fA-F]) assume it is CBOR encoded and decode it.
- * @throws Error if the input is not in one of the expected formats.
- */
-const decodeCollateralAmount = (input: string | number): string => {
-  if (typeof input === "number") {
-    return String(input);
-  }
-  if (/^[0-9]+$/.test(input)) {
-    // A decimal string.
-    return input;
-  }
-  if (/^[0-9a-fA-F]+$/.test(input)) {
+  if (amount) {
+    let filterAmount = MAX_COLLATERAL_AMOUNT;
     try {
-      const buffer = Buffer.from(input, "hex");
-      const decoded = cbor.decodeFirstSync(buffer);
-      if (typeof decoded === "number" || typeof decoded === "bigint") {
-        return String(decoded);
-      }
-      throw new Error("Decoded value is not a number");
+      filterAmount = getFilterAmount(amount);
     } catch (e) {
-      throw new Error("Invalid CBOR encoded amount");
+      const error = APIError.InternalError;
+      error.info = (e as Error)?.message || 'Unknown error';
+      throw error;
     }
+    const utxos = [];
+    let totalCoins = 0n;
+    for (const utxo of filteredUtxos) {
+      const coin = utxo.value;
+      totalCoins += BigInt(coin);
+      utxos.push(utxo);
+      if (totalCoins >= filterAmount) break;
+    }
+    if (totalCoins < filterAmount) {
+      const error = APIError.Refused;
+      error.info = 'not enough coins in configured collateral UTxOs';
+      throw error
+    }
+    filteredUtxos = utxos;
   }
-  throw new Error("Invalid amount format");
+  return filteredUtxos.map((utxo) => toUTxO(utxo).toCbor());
 }
 
 export function getUsedAddresses(addresses: {}, paginate?: Paginate): HexBlob[] {
@@ -306,6 +352,23 @@ export function getUsedAddresses(addresses: {}, paginate?: Paginate): HexBlob[] 
     res = paginateArray(addressesArrayHex, paginate);
   }
   return res
+}
+
+export function getUnusedAddresses(xpub: string, chain: string, network: string, addresses: {}): HexBlob[] {
+  console.debug('getting unused addresses');
+  let addressesArray: any[] = Object.values(addresses)
+  let highestIndex: number = 0;
+  if (addressesArray && Array.isArray(addressesArray)) {
+    addressesArray.forEach(el => {
+      const hdPath: number[] = hdPathToArray(el['path'])
+      if (hdPath[3] === 0) {
+        if (hdPath[4] > highestIndex) {
+          highestIndex = hdPath[4]
+        }
+      }
+    })
+  }
+  return [getAddress(xpub, chain, network, highestIndex + 1).toBytes()]
 }
 
 function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
@@ -359,8 +422,7 @@ export async function focusOrCreatePopup(url: string, width: number, height: num
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
   const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain);
   const networkEnum: string = Object.keys(Network).find(key => Network[key] === network);
-  // TODO fix base URL from env
-  return await fetch(`https://api.gerowallet.io/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
+  return await fetch(`${baseUrl}/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: tx
@@ -368,8 +430,7 @@ export async function submitTx(tx: string, chain: string, network: string): Prom
 }
 
 export const urlScan = async url => {
-  // TODO fix base URL from env
-  const result = await fetch(`https://api.gerowallet.io/api/url/scan?url=${url}`, {
+  const result = await fetch(`${baseUrl}/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -395,4 +456,20 @@ export function getDrepKey(xpub: string, index): Ed25519PublicKey {
   return getPublicKey(xpub)
     .derive([ChainDerivations.DREP, index])
     .toRawKey()
+}
+
+export function hdPathToArray(path: string): number[] {
+  // Remove the 'm/' part of the path and split by '/'
+  const parts = path.replace('m/', '').split('/');
+
+  // Convert each part to an integer, handling hardened indices
+  return parts.map(part => {
+    if (part.endsWith("'")) {
+      // If the part ends with an apostrophe, it's a hardened index
+      return parseInt(part.slice(0, -1), 10) + 0x80000000; // Add the hardened flag
+    } else {
+      // Otherwise, it's a normal index
+      return parseInt(part, 10);
+    }
+  });
 }

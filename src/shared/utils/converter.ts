@@ -14,8 +14,7 @@ import {
   decode_metadatum_to_json_str,
   Ed25519KeyHash,
   Ed25519Signature,
-  EnterpriseAddress,
-  FixedTransaction,
+  EnterpriseAddress, FixedTransaction,
   GeneralTransactionMetadata,
   hash_plutus_data, make_vkey_witness,
   MetadataJsonSchema,
@@ -29,8 +28,7 @@ import {
   PointerAddress,
   PublicKey,
   RewardAddress,
-  ScriptHash,
-  TransactionHash,
+  ScriptHash, TransactionHash,
   TransactionInput,
   TransactionOutput,
   TransactionUnspentOutput,
@@ -428,8 +426,7 @@ export const isSameArray = (a1, a2) => {
 };
 
 export const hasConwaySetTag = (tx2: FixedTransaction) => {
-  tx2 = getDecodedCbor(tx2.to_hex());
-  const decodedTx = tx2;
+  const decodedTx = getDecodedCbor(tx2.to_hex());
   const decodedTxBody = getDecodedTxBody(decodedTx);
   for (const item of decodedTxBody) {
     const key3 = item[0];
@@ -441,7 +438,7 @@ export const hasConwaySetTag = (tx2: FixedTransaction) => {
   return false;
 };
 
-export const getDecodedCbor = (cborHex) => {
+export const getDecodedCbor = (cborHex): Array<any> | null  => {
   try {
     return !cborHex ? null : cbor.decodeAllSync(Buffer.from(cborHex, 'hex'));
   } catch (e) {
@@ -840,7 +837,7 @@ export const getRewardAddressFromCred = (stakeCred, network2: number) => {
   return addr;
 };
 
-const getCSLCredential = (cred, free?) => {
+const getCSLCredential = (cred, _free?) => {
   const cslKeyHash = Ed25519KeyHash.from_bytes(toHexBuffer(cred));
   const cslCred = Credential.from_keyhash(cslKeyHash);
   safeFreeCSLObject(cslKeyHash);

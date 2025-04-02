@@ -13,17 +13,16 @@
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-                :src="require('../assets/gero_dashboards.svg')" width="100" alt="logo"
+                :src="assts.geroDashboard" width="100" alt="logo"
             />
           </v-list-item-title>
           <v-list-item-subtitle>
-            <v-btn color="orange" text plain @click="changeLogDialog = true">
+            <v-btn color="orange" text plain @click="changeLog.setEnabled(true)">
               {{ `v${version}` }}
               <v-icon small class="ml-1">
                 mdi-lightning-bolt
               </v-icon>
             </v-btn>
-            <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -189,7 +188,7 @@
           <v-list-item-action style="margin: auto">
             <v-btn icon @click="submitLogout">
               <v-avatar tile size="18">
-                <v-img :src="require('@/assets/svg/log-out-01.svg')" alt="logout"></v-img>
+                <v-img :src="assts.logout" alt="logout"></v-img>
               </v-avatar>
             </v-btn>
           </v-list-item-action>
@@ -204,13 +203,11 @@ import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
 import { musicStore } from '@/store/modules/music';
-import { Blockchain } from '@/models/types';
-import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 import assts from '@/utils/assets';
+import changeLog from '@/plugins/changeLog'
 
 export default {
   name: 'NavigationDrawer',
-  components: { ChangeLogDialog },
   props: {
     value: {
       type: Boolean,
@@ -289,9 +286,9 @@ export default {
     avatars: [],
     changeAvatarDialog: false,
     errorImage: assts.errorImage,
-    version: assts.manifest.version,
-    changeLogDialog: false,
+    changeLog,
     assts,
+    version: ''
   }),
   methods: {
     ...mapActions(useStore, ['logout']),
@@ -329,6 +326,9 @@ export default {
     fallbackImage(e) {
       e.target.src = this.errorImage
     }
+  },
+  mounted() {
+    this.version = APP_VERSION
   }
 }
 </script>

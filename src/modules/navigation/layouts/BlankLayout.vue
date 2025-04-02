@@ -33,11 +33,11 @@
             backgroundImage: `url(${logo}`,
             backgroundSize: 'contain',
             backgroundRepeat: 'no-repeat',
-            width: '106px',
-            height: '120px',
+            width: '114px',
+            height: '122px',
             position: 'absolute',
-            top: '50px',
-            right: 'calc(50% - 53px)'
+            top: '20px',
+            right: 'calc(50% - 57px)'
         }"
       />
     </v-app-bar>
@@ -85,13 +85,14 @@
           plain
           :ripple="false"
           style="text-transform: none"
-          @click="changeLogDialog = true"
+          @click="changeLog.setEnabled(true)"
         >
           Change Log ({{ `v${version}` }})
         </v-btn>
       </v-container>
     </v-footer>
-    <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
+    {{this.$route.query['changeLog']}}
+    <ChangeLogDialog :isOpen="changeLog.enabled || this.$route.query['changeLog'] === 'true'" @close="closeChangeLogDialog()" :persistent="false" />
   </v-app>
 </template>
 <script>
@@ -100,8 +101,9 @@ import PrivacyPolicyDialog from '../dialogs/PrivacyPolicyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import loading from '@/plugins/loading';
-import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import changeLog from '@/plugins/changeLog'
 import assets from '@/utils/assets';
+import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
 
 export default {
   name: 'BlankLayout',
@@ -129,6 +131,10 @@ export default {
     privacyPolicyDialogChange(value) {
       this.privacyPolicyDialog = value;
     },
+    closeChangeLogDialog() {
+      changeLog.setEnabled(false)
+      this.$router.replace({'query': null});
+    }
   },
   data: () => ({
     apexBackground: assets.apexBackground,
@@ -136,11 +142,13 @@ export default {
     privacyPolicyDialog: false,
     geroLogoApex: assets.geroLogoApex,
     geroDashboardLogo: assets.geroDashboard,
-    changeLogDialog: false,
-    version: assets.manifest.version
+    version: '',
+    changeLog,
   }),
   mounted() {
+    this.version = APP_VERSION
     loading.setLoading(false)
+
   }
 };
 </script>

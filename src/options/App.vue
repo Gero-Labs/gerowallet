@@ -48,7 +48,7 @@ export default {
     assts,
   }),
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'assets', 'resolvedAssets', 'resolvedCollections', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'loadingTxs']),
   },
   methods: {
     ...mapActions(useStore, ['login', 'setLoadingTxs']),
@@ -91,5 +91,13 @@ export default {
 
 .v-dialog:not(.v-dialog--fullscreen) {
   max-height: 100%;
+}
+
+.smallToolTip {
+  padding: 1px 2px;
+  background-color: rgba(30, 30, 30, 0.88);
+  border: 1px solid #404040;
+  font-size: 10px !important;
+  opacity: 0.9 !important;
 }
 </style>

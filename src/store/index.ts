@@ -91,7 +91,7 @@ export const useStore = defineStore('store', {
     getPrice: state => state.price,
     calculatedTransactions(state) {
       if (state.transactions) {
-        const currentStake = appWallet.stakeAddress().to_address().to_bech32();
+        const currentStake = appWallet.stakeAddress().toBech32();
         let currentBalance: number = 0;
         return structuredClone(state.transactions)
           .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
@@ -228,6 +228,27 @@ export const useStore = defineStore('store', {
         return null;
       }
       await this.setLoggedWallet(wallet);
+    },
+    closeAllOtherExtensionPopups() {
+      // First, get the current window's ID.
+      chrome.windows.getCurrent(function(currentWindow) {
+        const currentId = currentWindow.id;
+        // Get all open windows.
+        chrome.windows.getAll({}, function(windows) {
+          windows.forEach(function(win) {
+            // Check if the window is a popup and is not the current one.
+            if (win.id !== currentId && win.type === 'popup') {
+              chrome.windows.remove(win.id, function() {
+                if (chrome.runtime.lastError) {
+                  console.error('Error closing window:', chrome.runtime.lastError);
+                } else {
+                  console.log('Closed popup window with id:', win.id);
+                }
+              });
+            }
+          });
+        });
+      });
     },
     setConnected(connected: boolean) {
       this.connected = connected
@@ -425,7 +446,7 @@ export const useStore = defineStore('store', {
       if (!appWallet) {
         return
       }
-      const stakeAddress: string = appWallet.stakeAddress().to_address().to_bech32()
+      const stakeAddress: string = appWallet.stakeAddress().toBech32()
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -481,6 +502,7 @@ export const useStore = defineStore('store', {
       subscriptions = new Map<string, Subscription>();
     },
     async simpleLogin(walletId: number) {
+      console.log('simpleLogin')
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -492,9 +514,9 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
-      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
-      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
-      governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      this.setBaseAddress(appWallet.baseAddress().toBech32())
+      this.setStakeAddress(appWallet.stakeAddress().toBech32())
+      governanceStore().setDRepId(appWallet.drepId())
       await this.loadAssets()
       const promises = []
       promises.push(this.loadSync())
@@ -502,9 +524,9 @@ export const useStore = defineStore('store', {
       await appWallet.startSync();
     },
     async login(walletId: number): Promise<void> {
+      console.log('login')
       loading.setLoading(true);
       this.setLoadingTxs(true)
-      console.log('login')
       this.unsubscribeAll()
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
@@ -522,9 +544,9 @@ export const useStore = defineStore('store', {
       }
       appWallet = Wallet.class(wallet, this.provider);
       await this.loadConfig()
-      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
-      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
-      governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      this.setBaseAddress(appWallet.baseAddress().toBech32())
+      this.setStakeAddress(appWallet.stakeAddress().toBech32())
+      governanceStore().setDRepId(appWallet.drepId())
       await appWallet.startSync();
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
@@ -557,6 +579,8 @@ export const useStore = defineStore('store', {
       }
     },
     async logout() {
+      console.log('logout')
+      this.closeAllOtherExtensionPopups()
       loading.setLoading(true);
       this.clearSyncIntervals();
       this.unsubscribeAll()

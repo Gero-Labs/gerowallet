@@ -70,6 +70,7 @@ export async function resolveAsset(asset, token): Promise<any> {
         } else if (Array.isArray(asset.onchain_metadata.image)) {
           imgString = asset.onchain_metadata.image.join('')
         }
+        console.log(baseUrl)
         if (imgString.startsWith('ar://') || imgString.startsWith('ar/')) {
           img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
         } else if (imgString.startsWith('https://') || imgString.startsWith('data:image')) {

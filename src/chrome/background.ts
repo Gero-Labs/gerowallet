@@ -1,4 +1,3 @@
-import { onMessage } from 'webext-bridge/background'
 import { Messaging } from '@/chrome/messaging';
 import {
   APIError,
@@ -19,10 +18,11 @@ import {
   getAddress,
   getUtxos,
   getBalance,
-  getRewardAddresses,
+  getRewardAddress,
   getStakeKey,
   getDrepKey,
   urlScan,
+  getUnusedAddresses,
 } from '@/chrome/serialization';
 import { ERROR } from '@/models/types';
 import Tab = chrome.tabs.Tab;
@@ -36,32 +36,30 @@ if (import.meta.hot) {
   import('./contentScriptHMR')
 }
 
-// TODO Use Env Variables
 (async () => {
   await bringInitBackground({
-    identifier: '94cnbcoEYv5A6z1yxSizi8RAa7kq71nq6miZeSNh',
-    apiEndpoint: 'prod',
+    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
+    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
     cashbackPagePath: '/index.html#/cashback'
   })
 })();
 
 chrome.runtime.onInstalled.addListener((details) => {
-  console.log(details);
   if (details.reason === 'update') {
     const currentVersion = chrome.runtime.getManifest().version;
     chrome.notifications.create('updateNotification', {
       type: 'image',
       title: 'Extension Updated',
-      message: `Your extension has been updated to version ${currentVersion}!`,
-      iconUrl: chrome.runtime.getURL('assets/logo128.png'),
-      imageUrl: chrome.runtime.getURL('assets/logo.png'),
+      message: `Gero Dashboard has been updated to version ${currentVersion}!`,
+      iconUrl: chrome.runtime.getURL('public/logo128.png'),
+      imageUrl: chrome.runtime.getURL('public/2.4.2.png'),
     });
   }
 });
 chrome.notifications.onClicked.addListener(function(notificationId) {
   if (notificationId === 'updateNotification') {
     // Perform your action here, for example, open a URL in a new tab
-    chrome.tabs.create({ url: 'https://google.com' });
+    chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
 
     // Optionally, clear the notification if needed
     chrome.notifications.clear(notificationId);
@@ -93,6 +91,13 @@ setInterval(clearProcessedDomains, oneDayInMilliseconds);
 console.log('Background Loaded');
 
 let lastFullscreenTabId = -1;
+
+const app = Messaging.createBackgroundController();
+
+interface Response {
+  data?: any;
+  error?: any;
+}
 
 async function handleBlacklisted(request: any, tabId: number) {
   let urlStatus;
@@ -147,83 +152,181 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
   }
 });
 
-async function getBalanceCip30(request: any): Promise<any> {
-  const utxosFromStorage = await getStorage(STORAGE.utxos);
-  if (!utxosFromStorage) {
-    return {
-      id: request.id,
-      error: APIError.AccountNotSet,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } else {
-    const balance = getBalance(utxosFromStorage);
-    return {
+app.add(METHOD.getBalance, async (request, sendResponse) => {
+  console.log('getBalance', request)
+  try {
+    const collateral = await getStorage(STORAGE.collateral);
+    const utxosFromStorage = await getStorage(STORAGE.utxos);
+    const balance = getBalance(utxosFromStorage, collateral)
+    sendResponse({
       id: request.id,
       data: balance.toCbor(),
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
   }
-}
+});
 
-async function enable(request: any): Promise<any> {
+app.add(METHOD.enable, async (request, sendResponse) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } else {
     try {
       const whitelisted = await isWhitelisted(request.origin);
       if (whitelisted) {
-        return {
+        sendResponse({
           id: request.id,
           data: true,
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       } else {
         const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(request.origin)}`);
-        const response: any = await focusOrCreatePopup(popupURL, 470, 600)
+        const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
           .then(tab => Messaging.sendToPopupInternal(tab, request))
           .then(response => response);
         if (response.data === true) {
-          return {
+          sendResponse({
             id: request.id,
             data: true,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         } else if (response.error) {
-          return {
+          sendResponse({
             id: request.id,
             error: response.error,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         } else {
-          return {
+          sendResponse({
             id: request.id,
             error: APIError.InternalError,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         }
       }
     } catch (error) {
-      return {
+      sendResponse({
         id: request.id,
         error: APIError.InternalError,
         target: TARGET,
         sender: SENDER.extension,
-      };
+      });
     }
   }
-}
+});
+
+app.add(METHOD.isEnabled, (request, sendResponse) => {
+  isWhitelisted(request.origin)
+    .then((whitelisted) => {
+      sendResponse({
+        id: request.id,
+        data: whitelisted,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    })
+    .catch(() => {
+      sendResponse({
+        id: request.id,
+        error: APIError.InternalError,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
+
+app.add(METHOD.getAddress, async (request, sendResponse) => {
+  console.log('getAddress', request)
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  if (!loggedWallet || !loggedWallet.publicKey) {
+    sendResponse({
+      id: request.id,
+      error: APIError.AccountNotSet,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  const address = await getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+  if (address) {
+    sendResponse({
+      id: request.id,
+      data: address.toBytes(),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  if (!loggedWallet || !loggedWallet.publicKey) {
+    sendResponse({
+      id: request.id,
+      error: APIError.AccountNotSet,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  const address = getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+  if (address) {
+    sendResponse({
+      id: request.id,
+      data: address.toBech32(),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
+  const whitelisted = await isWhitelisted(request.origin);
+  console.log(request.origin)
+  if (whitelisted) {
+    sendResponse({
+      data: whitelisted,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } else {
+    console.log('refuse')
+    sendResponse({
+      error: APIError.Refused,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
 
 interface WhitelistedEntry {
   domain: string;
@@ -242,313 +345,250 @@ async function getWhitelisted(): Promise<WhitelistedEntry[]> {
   return Array.isArray(result) ? result : [];
 }
 
-async function isEnabled(request: any): Promise<any> {
-  try {
-    const whitelisted = await isWhitelisted(request.origin)
-    return {
-      id: request.id,
-      data: whitelisted,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } catch (error) {
-    console.log(error);
-    return {
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function getAddressCip30(request: any): Promise<any> {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
-    return {
-      id: request.id,
-      error: APIError.AccountNotSet,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-  const address = getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    return {
-      id: request.id,
-      data: address.toBytes(),
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } else {
-    return {
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function getAddressBech32(request: any): Promise<any> {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
-    return {
-      id: request.id,
-      error: APIError.AccountNotSet,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-  const address = getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    return {
-      id: request.id,
-      data: address.toBech32(),
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } else {
-    return {
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function isWhitelistedCip30(request: any): Promise<any> {
-  const whitelisted = await isWhitelisted(request.origin);
-  console.debug('Background::isWhitelisted:origin', request.origin)
-  if (whitelisted) {
-    return {
-      data: whitelisted,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } else {
-    console.debug('refuse')
-    return {
-      error: APIError.Refused,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function getNetworkId(request: any): Promise<any> {
+app.add(METHOD.getNetworkId, async (request, sendResponse) => {
+  console.log('getNetworkId', request)
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } else {
-    return {
+    sendResponse({
       id: request.id,
       data: networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']),
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function getRewardAddressesCip30(request: any): Promise<any> {
+app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
+  console.log('getRewardAddresses', request)
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } else {
-    const addresses = getRewardAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-    return {
+    const address = getRewardAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+    sendResponse({
       id: request.id,
-      data: addresses,
+      data: [address.toBytes()],
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function getUtxosCip30(request: any): Promise<any> {
-  const utxosFromStorage = await getStorage(STORAGE.utxos);
-  const collateral = await getStorage(STORAGE.collateral);
-  const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
-  let res: string[] | null;
-  if (utxos) {
-    // LEGACY support => TODO change in the future
-    res = utxos.map((utxo) => utxo.toCbor())
-  } else {
-    res = null
-  }
-  return {
-    id: request.id,
-    data: res,
-    target: TARGET,
-    sender: SENDER.extension,
-  };
-}
-
-async function getCollateralCip30(request: any): Promise<any> {
-  console.log('Background::getCollateralCip30:request', JSON.stringify(request.data));
-  const storedUtxos = await getStorage(STORAGE.utxos);
+app.add(METHOD.getUtxos, async (request, sendResponse) => {
+  console.log('getUtxos', request)
   try {
-    const utxos = getCollateral(request.data.params, storedUtxos)
-    const res: string[] = utxos.map((utxo) => utxo.toCbor());
-    console.log(res)
-    return {
+    const utxosFromStorage = await getStorage(STORAGE.utxos);
+    const collateral = await getStorage(STORAGE.collateral);
+    const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
+    let res: string[] | null;
+    if (utxos) {
+      // LEGACY support => TODO change in the future
+      res = utxos.map((utxo) => utxo.toCbor())
+    } else {
+      res = null
+    }
+    sendResponse({
       id: request.id,
       data: res,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } catch (e) {
-    return {
-      id: request.id,
-      data: e,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function getUsedAddressesCip30(request: any): Promise<any> {
-  try {
-    const addresses = getUsedAddresses(await getStorage(STORAGE.addresses), request?.data?.paginate);
-    return {
-      id: request.id,
-      data: addresses,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } catch (e) {
-    return {
-      id: request.id,
-      data: e,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  }
-}
-
-async function popupLogin(request: any): Promise<any> {
-  try {
-    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.login}`);
-    const response: any = await focusOrCreatePopup(popupURL, 470, 600)
-      .then((tab: Tab) => Messaging.sendToPopupInternal(tab, request))
-    return {
-      id: request.id,
-      data: response.data,
-      target: TARGET,
-      sender: SENDER.extension,
-    };
-  } catch (e) {
-    return {
+    sendResponse({
       id: request.id,
       error: e,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function signData(request: any): Promise<any> {
+app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  const storedUtxos = await getStorage(STORAGE.utxos);
+  try {
+    const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
+    sendResponse({
+      id: request.id,
+      data: utxos,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
+  console.log('getUsedAddresses', request)
+  try {
+    const addresses = getUsedAddresses(await getStorage(STORAGE.addresses), request?.data?.paginate);
+    sendResponse({
+      id: request.id,
+      data: addresses,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
+  console.log('getUnusedAddresses', request)
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const addresses = await getStorage(STORAGE.addresses)
+  try {
+    const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, addresses);
+    sendResponse({
+      id: request.id,
+      data: addressesRes,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.popupLogin, async (request, sendResponse) => {
+  try {
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.login}`);
+    const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
+      .then((tab) => Messaging.sendToPopupInternal(tab, request))
+      .then((response) => response);
+    sendResponse({
+      id: request.id,
+      data: response.data,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (e) {
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.add(METHOD.signData, async (request, sendResponse) => {
   try {
     const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
     await focusOrCreatePopup(popupURL, 470, 600)
       .then((tab: Tab) => Messaging.sendToPopupInternal(tab, request))
       .then((response: any) => {
         if (response.data) {
-          return {
+          sendResponse({
             id: request.id,
             data: response.data,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         } else if (response.error) {
-          return {
+          sendResponse({
             id: request.id,
             error: response.error,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         } else {
-          return {
+          sendResponse({
             id: request.id,
             error: APIError.InternalError,
             target: TARGET,
             sender: SENDER.extension,
-          };
+          });
         }
       });
   } catch (e) {
-    return {
+    sendResponse({
       id: request.id,
       error: e,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function signTx(request: any): Promise<any> {
+app.add(METHOD.signTx, async (request, sendResponse) => {
   try {
     const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
-    await focusOrCreatePopup(popupURL, 470, 852)
-      .then((tab: Tab) => Messaging.sendToPopupInternal(tab, request))
-      .then((response: any) => {
-        if (response.data) {
-          return {
-            id: request.id,
-            data: response.data,
-            target: TARGET,
-            sender: SENDER.extension,
-          };
-        } else if (response.error) {
-          return {
-            id: request.id,
-            error: response.error,
-            target: TARGET,
-            sender: SENDER.extension,
-          };
-        } else {
-          return {
-            id: request.id,
-            error: APIError.InternalError,
-            target: TARGET,
-            sender: SENDER.extension,
-          };
-        }
+    const tab: Tab = await focusOrCreatePopup(popupURL, 470, 852);
+    const response: any = await Messaging.sendToPopupInternal(tab, request);
+    console.log(response)
+    if (response.data) {
+      sendResponse({
+        id: request.id,
+        data: response.data,
+        target: TARGET,
+        sender: SENDER.extension,
       });
+    } else if (response.error) {
+      sendResponse({
+        id: request.id,
+        error: response.error,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        error: APIError.InternalError,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
   } catch (e) {
-    return {
+    sendResponse({
       id: request.id,
       error: e,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function submitTxCip30(request: any): Promise<any> {
+app.add(METHOD.submitTx, async (request, sendResponse) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet || !loggedWallet.publicKey) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
 
   submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
-    .then(async (response: Response) => {
+    .then(async (response: any) => {
       if (!response.ok) {
         switch (response.status) {
           case 400:
@@ -563,12 +603,17 @@ async function submitTxCip30(request: any): Promise<any> {
             throw APIError.InvalidRequest;
         }
       }
-      return {
+      // const utxos = await getStorage(STORAGE.utxos);
+      // const txCbor = request.data.tx
+      const txId = await response.text();
+      // const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
+      // await setAccountTransactions(loggedWallet.id, [tx])
+      sendResponse({
         id: request.id,
-        data: await response.text(),
+        data: txId,
         target: TARGET,
         sender: SENDER.extension,
-      };
+      });
     })
     .catch(e => {
       return {
@@ -578,166 +623,163 @@ async function submitTxCip30(request: any): Promise<any> {
         sender: SENDER.extension,
       };
     });
-}
+});
 
-async function getPubDRepKey(request: any): Promise<any> {
+app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet || !loggedWallet.publicKey) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-
   try {
     const key = getDrepKey(loggedWallet.publicKey, 0);
-    return {
+    sendResponse({
       id: request.id,
       data: key.hex(),
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } catch (error) {
     console.error("Error deserializing Drep key:", error);
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function getRegisteredPubStakeKeys(request: any): Promise<any> {
+app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
   try {
     const account = await getStorage(STORAGE.account);
     if (!account) {
-      return {
+      sendResponse({
         id: request.id,
         error: APIError.Refused,
         target: TARGET,
         sender: SENDER.extension,
-      };
+      });
     }
     if (account.active) {
       const loggedWallet = await getStorage(STORAGE.loggedWallet);
       if (!loggedWallet || !loggedWallet.publicKey) {
-        return {
+        sendResponse({
           id: request.id,
           error: APIError.AccountNotSet,
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       }
       const key: string = getStakeKey(loggedWallet.publicKey, 0).hex()
       if (key) {
-        return {
+        sendResponse({
           id: request.id,
           data: [key],
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       } else {
-        return {
+        sendResponse({
           id: request.id,
           data: [],
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       }
     }
   } catch (error) {
     console.error("Error in getUnregisteredPubStakeKeys:", error);
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function getUnregisteredPubStakeKeys(request: any): Promise<any> {
+app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
   try {
     const account = await getStorage(STORAGE.account);
     if (!account) {
-      return {
+      sendResponse({
         id: request.id,
         error: APIError.Refused,
         target: TARGET,
         sender: SENDER.extension,
-      };
+      });
     }
     if (account.active) {
       const loggedWallet = await getStorage(STORAGE.loggedWallet);
       if (!loggedWallet || !loggedWallet.publicKey) {
-        return {
+        sendResponse({
           id: request.id,
           error: APIError.AccountNotSet,
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       }
       const key: string = getStakeKey(loggedWallet.publicKey, 0).hex()
       if (key) {
-        return {
+        sendResponse({
           id: request.id,
           data: [],
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       } else {
-        return {
+        sendResponse({
           id: request.id,
           data: [key],
           target: TARGET,
           sender: SENDER.extension,
-        };
+        });
       }
     }
   } catch (error) {
     console.error("Error in getUnregisteredPubStakeKeys:", error);
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
-async function getAccountPub(request: any): Promise<any> {
+app.add(METHOD.getAccountPub, async (request, sendResponse) => {
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
-
   if (!loggedWallet || !loggedWallet.publicKey) {
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-
   try {
     const key = getPublicKey(loggedWallet.publicKey).toRawKey().hex();
-    return {
+    sendResponse({
       id: request.id,
       data: key,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   } catch (error) {
     console.error("Error deserializing public key:", error);
-    return {
+    sendResponse({
       id: request.id,
       error: APIError.InternalError,
       target: TARGET,
       sender: SENDER.extension,
-    };
+    });
   }
-}
+});
 
 const getStorage = (key) =>
   new Promise<any>((res, rej) =>
@@ -771,7 +813,7 @@ const openDashboard = () => {
     checkTabOpen(lastFullscreenTabId).then((isOpen) => {
       if (!isOpen) {
         chrome.tabs.create({
-          url: chrome.runtime.getURL("options/index.html"),
+          url: chrome.runtime.getURL("index.html"),
           active: true
         }, (tab) => {
           lastFullscreenTabId = tab?.id ?? -1;
@@ -810,84 +852,4 @@ const openUI = async () => {
 
 chrome.action.onClicked.addListener(openUI);
 
-onMessage(METHOD.getBalance, async ({ data }) => {
-  return await getBalanceCip30(data);
-})
-
-onMessage(METHOD.enable, async ({ data }) => {
-  console.info('Background::enable:request', data)
-  const enableResponse = await enable(data);
-  console.info('Background::enable:response', enableResponse);
-  return enableResponse;
-})
-
-onMessage(METHOD.isEnabled, async ({ data }) => {
-  console.info('Background::isEnabled:request', data)
-  const isEnabledResponse = await isEnabled(data);
-  console.info('Background::isEnabled:response', isEnabledResponse);
-  return isEnabledResponse;
-})
-
-onMessage(METHOD.getAddress, async ({ data }) => {
-  return await getAddressCip30(data);
-})
-
-onMessage(METHOD.getAddressBech32, async ({ data }) => {
-  return await getAddressBech32(data);
-})
-
-onMessage(METHOD.isWhitelisted, async ({ data }) => {
-  return await isWhitelistedCip30(data);
-})
-
-onMessage(METHOD.getNetworkId, async ({ data }) => {
-  return await getNetworkId(data);
-})
-
-onMessage(METHOD.getRewardAddresses, async ({ data }) => {
-  return await getRewardAddressesCip30(data);
-})
-
-onMessage(METHOD.getUtxos, async ({ data }) => {
-  return await getUtxosCip30(data);
-})
-
-onMessage(METHOD.getCollateral, async ({ data }) => {
-  return await getCollateralCip30(data);
-})
-
-onMessage(METHOD.getUsedAddresses, async ({ data }) => {
-  return await getUsedAddressesCip30(data);
-})
-
-onMessage(METHOD.popupLogin, async ({ data }) => {
-  return await popupLogin(data);
-})
-
-onMessage(METHOD.signData, async ({ data }) => {
-  return await signData(data);
-})
-
-onMessage(METHOD.signTx, async ({ data }) => {
-  return await signTx(data);
-})
-
-onMessage(METHOD.submitTx, async ({ data }) => {
-  return await submitTxCip30(data);
-})
-
-onMessage(METHOD.getPubDRepKey, async ({ data }) => {
-  return await getPubDRepKey(data);
-})
-
-onMessage(METHOD.getRegisteredPubStakeKeys, async ({ data }) => {
-  return await getRegisteredPubStakeKeys(data);
-})
-
-onMessage(METHOD.getUnregisteredPubStakeKeys, async ({ data }) => {
-  return await getUnregisteredPubStakeKeys(data);
-})
-
-onMessage(METHOD.getAccountPub, async ({ data }) => {
-  return await getAccountPub(data);
-})
+app.listen();
