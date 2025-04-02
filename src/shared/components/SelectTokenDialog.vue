@@ -3,7 +3,7 @@
     <v-card-title class="pa-0 px-2">
       <v-text-field
         v-model="search"
-        placeholder="Search by name or policy"
+        placeholder="Search by name, ticker or policy"
         outlined
         prepend-inner-icon="mdi-magnify"
         @input="onSearchInput"
@@ -147,7 +147,7 @@ export default defineComponent({
         token =>
           token['name'].toLowerCase().includes(lowerCaseSearch) ||
           token['ticker'].toLowerCase().includes(lowerCaseSearch) ||
-          token['unit'].toLowerCase().includes(lowerCaseSearch)
+          token['policy_id'].toLowerCase().includes(lowerCaseSearch)
       );
     },
   },

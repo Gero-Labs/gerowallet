@@ -279,6 +279,7 @@ import { toUTxO } from '@/shared/utils/converter';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from "@/shared/utils/networks";
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import assets from '@/utils/assets';
 
 export default {
   name: 'Staking',
@@ -396,11 +397,11 @@ export default {
       // Registration Certificate
       const certificates = [];
       if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
+        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
         certificates.push(registrationCertificate);
       }
       // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(wallet.stakeKey().hash()), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
+      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
       certificates.push(delegationCertificate);
       // UTxOs
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();
@@ -432,14 +433,15 @@ export default {
     hideSaturated: true,
     pledgeMet: true,
     pageCount: 0,
-    xLogo: require('@/assets/svg/x.svg'),
-    discordLogo: require('@/assets/svg/discord.svg'),
-    telegramLogo: require('@/assets/svg/telegram.svg'),
-    errorImage: require('@/assets/img/1x1.png'),
+    xLogo: assets.xSvg,
+    discordLogo: assets.discordSvg,
+    telegramLogo: assets.telegramSvg,
+    errorImage: assets.errorImage,
     isDelegateDialogOpen: false,
     selectedPool: undefined,
     txData: undefined,
     networks,
+    assets,
   })
 }
 </script>

@@ -11,7 +11,7 @@ import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/shared/utils/converter';
 import { dexHunterStore } from '@/store/modules/dexhunter';
 
-const baseUrl = process.env['VUE_APP_BACKEND_URL'];
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export const resolveRewardAddress = (bech32: string) => {
   try {
@@ -53,6 +53,9 @@ export async function resolveAsset(asset, token): Promise<any> {
     img = token.logo;
     name = 'ADA'
   } else if (asset) {
+    if (asset.asset_name === '0014df1050454e43494c') {
+      console.log('0014df1050454e43494c')
+    }
     if (asset?.metadata) {
       metadata = asset.metadata
       name = asset.metadata.ticker
@@ -67,6 +70,7 @@ export async function resolveAsset(asset, token): Promise<any> {
         } else if (Array.isArray(asset.onchain_metadata.image)) {
           imgString = asset.onchain_metadata.image.join('')
         }
+        console.log(baseUrl)
         if (imgString.startsWith('ar://') || imgString.startsWith('ar/')) {
           img = `${baseUrl}/api/ar/${imgString.replace('ar://', '').replace('ar/', '')}`;
         } else if (imgString.startsWith('https://') || imgString.startsWith('data:image')) {
@@ -98,6 +102,7 @@ export async function resolveAsset(asset, token): Promise<any> {
       } else { // CIP 68
         const label: number = cip68Label(asset);
         if (label) {
+          console.log(label)
           const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
           if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
             const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);

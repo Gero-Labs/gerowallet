@@ -212,6 +212,11 @@ export default {
     }
   },
   filters,
+  watch: {
+    value(val) {
+      this.selectedToken = val
+    }
+  },
   computed: {
     ...mapState(useStore, ['loggedWallet']),
     networks() {
@@ -228,6 +233,7 @@ export default {
         return this.value
       },
       set(newToken) {
+        console.log(newToken)
         this.$emit('input', newToken)
       }
     },

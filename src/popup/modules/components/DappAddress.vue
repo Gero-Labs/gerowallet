@@ -4,10 +4,10 @@
       To
     </v-card-title>
     <v-card-text id="dapp-receiver-wrap" :class="withBg ? {
-      unknown: DappRisk[risk] === DappRisk.unknown,
-      suspicious: DappRisk[risk] === DappRisk.suspicious,
-      blacklist: DappRisk[risk] === DappRisk.blacklist,
-      whitelist: DappRisk[risk] === DappRisk.whitelist,
+      unknown: this.DappRisk[this.risk] === this.DappRisk.unknown,
+      suspicious: this.DappRisk[this.risk] === this.DappRisk.suspicious,
+      blacklist: this.DappRisk[this.risk] === this.DappRisk.blacklist,
+      whitelist: this.DappRisk[this.risk] === this.DappRisk.whitelist
     } : {}">
       <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row; text-align: left;">
         <div style="width: 18px; height: 18px" id="dapp-receiver-check">
@@ -21,6 +21,7 @@
 </template>
 <script>
 import { DappRisk } from '@/models/cardano-shield-types';
+import assets from '@/utils/assets';
 
 export default {
   name: 'DappAddress',
@@ -41,23 +42,12 @@ export default {
       return DappRisk
     },
     riskIcon() {
-      switch (DappRisk[this.risk]) {
-        case DappRisk.whitelist:
-          return require('@/assets/img/cardano-shield/dapp-safe.png');
-        case DappRisk.blacklist:
-          return require('@/assets/img/cardano-shield/dapp-phishing.png');
-        case DappRisk.suspicious:
-          return require('@/assets/img/cardano-shield/dapp-suspicious.png');
-        case DappRisk.timeout:
-          return require('@/assets/img/cardano-shield/dapp-timeout.png');
-        case DappRisk.unknown:
-        default:
-          return require('@/assets/img/cardano-shield/dapp-unknown.png');
-      }
+      return assets.resolveDappRisk(this.risk)
     },
   },
   data: () => ({
     loading: true,
+    assets,
   }),
 }
 </script>

@@ -31,7 +31,7 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
         return
       }
       try {
-        const res = await appWallet.api.getPortfolio(appWallet.stakeAddress().to_address().to_bech32())
+        const res = await appWallet.api.getPortfolio(appWallet.stakeAddress().toBech32())
         if (res?.status == 200) {
           this.setPortfolio(res.data)
         } else {
@@ -46,7 +46,7 @@ export const tapToolsStore = defineStore( 'tapToolsStore', {
         return
       }
       try {
-        const res = await appWallet.api.getPortfolioTrendedValue(appWallet.stakeAddress().to_address().to_bech32());
+        const res = await appWallet.api.getPortfolioTrendedValue(appWallet.stakeAddress().toBech32());
         this.setPortfolioTrendedValue(res.map(element => [element.time * 1000, element.value]))
       } catch (e) {
         console.error(e);

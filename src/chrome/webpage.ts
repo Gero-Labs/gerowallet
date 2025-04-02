@@ -1,19 +1,25 @@
-import { METHOD } from './config';
-import { Messaging } from './messaging';
+import { METHOD } from '@/chrome/config';
+import { Messaging } from '@/chrome/messaging';
 import { DataSignature, Paginate } from '@/models/types';
 
 export const getBalance = async (): Promise<string> => {
-  const result = await Messaging.sendToContent({ method: METHOD.getBalance,data: {} });
+  const result = await Messaging.sendToContent({
+    method: METHOD.getBalance,data: {}
+  });
   return result['data'];
 };
 
-export const enable = async () => {
-  const result = await Messaging.sendToContent({ method: METHOD.enable,data: {} });
+export const enable = async (): Promise<any> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.enable,data: {}
+  });
   return result['data'];
 };
 
 export const isEnabled = async (): Promise<boolean> => {
-  const result = await Messaging.sendToContent({ method: METHOD.isEnabled,data: {} });
+  const result = await Messaging.sendToContent({
+    method: METHOD.isEnabled,data: {}
+  });
   return result['data'];
 };
 
@@ -57,14 +63,6 @@ export const getAddress = async (): Promise<string[]> => {
   return result['data'];
 };
 
-export const getUnusedAddresses = async (): Promise<string[]> => {
-  const result = await Messaging.sendToContent({
-    method: METHOD.getAddress,
-    data: {}
-  });
-  return [result['data']];
-};
-
 export const getAddressBech32 = async (): Promise<string[]> => {
   const result = await Messaging.sendToContent({
     method: METHOD.getAddressBech32,
@@ -85,6 +83,14 @@ export const getUsedAddresses = async (paginate?: Paginate): Promise<string[]> =
   const result = await Messaging.sendToContent({
     method: METHOD.getUsedAddresses,
     data: { paginate }
+  });
+  return result['data'];
+};
+
+export const getUnusedAddresses = async (): Promise<string[]> => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getUnusedAddresses,
+    data: {}
   });
   return result['data'];
 };
@@ -110,6 +116,7 @@ export const getCollateral = async (params) => {
     method: METHOD.getCollateral,
     data: { params }
   });
+  console.log('getCollateral Result', result);
   return result['data'];
 };
 

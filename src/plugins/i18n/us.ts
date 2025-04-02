@@ -10,11 +10,11 @@ export default {
   termsOfService: 'Terms of Service',
   privacyPolicy: 'Privacy Policy',
   createWallet: 'Create Wallet',
-  createWalletSubtitle: 'Create a new wallet with a new seed phrase',
+  createWalletSubtitle: 'Set up a new wallet to securely manage your digital assets across multiple blockchains.',
   restoreWallet: 'Restore Wallet',
-  restoreWalletSubtitle: 'Restore your existing wallet using a seed phrase',
+  restoreWalletSubtitle: 'Restore your existing wallet using your recovery phrase to regain access to your assets.',
   hardwareWallet: 'Hardware Wallet',
-  hardwareWalletSubtitle: 'Connect your hardware wallet (Cold Wallet) via USB or Bluetooth',
+  hardwareWalletSubtitle: 'Connect your hardware wallet for enhanced security and manage your assets safely.',
   walletSetup: 'Wallet Setup',
   signIn: 'Sign In'
 };

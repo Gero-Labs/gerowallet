@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
+    "incremental": false,
+    "resolveJsonModule": true,
     "strict": true,
     "sourceMap": true,
     "declaration": false,
@@ -17,7 +19,7 @@
     "strictPropertyInitialization": false,
     "noImplicitAny": false,
     "noImplicitThis": true,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
     "noImplicitReturns": true,
     "noImplicitOverride": true,
     "noUnusedParameters": false,
@@ -29,37 +31,17 @@
     "skipLibCheck": true,
     "allowJs": true,
     "jsx": "preserve",
-    "target": "esnext",
-    "module": "esnext",
-    "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules/vuetify/types"
-    ],
+    "target": "ES2020",
+    "module": "ESNext",
     "types": [
-      "vuetify",
-      "webpack-env",
-      "chrome"
+      "chrome",
+      "unplugin-fonts/client",
+      "vite/client"
     ],
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
+      "@/*": ["src/*"]
     },
-    "lib": [
-      "esnext",
-      "dom",
-      "dom.iterable",
-      "scripthost"
-    ]
+    "lib": ["DOM", "ESNext"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "tests/**/*.ts",
-    "tests/**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["dist", "node_modules"]
 }

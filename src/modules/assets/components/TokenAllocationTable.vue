@@ -138,7 +138,7 @@
               </v-list-item>
             </template>
             <template v-slot:[`item.risk`]="{ item }">
-              <v-img width="32" style="margin: auto" v-if="item.risk && item.risk !== 'N/A'" :src="require('@/assets/svg/risk/'+item.risk+'.svg')" :alt="item.risk" />
+              <v-img width="32" style="margin: auto" v-if="item.risk && item.risk !== 'N/A'" :src="assts.resolveRisk(item.risk)" :alt="item.risk" />
             </template>
             <template v-slot:[`item.quantity`]="{ item }">
               <v-tooltip top :open-delay="500">
@@ -169,10 +169,10 @@
                   <v-img
                     :src="
                       item.change === 0
-                        ? require('@/assets/svg/arrow-right.svg')
+                        ? assts.arrowRightSvg
                         : item.change > 0
-                        ? require('@/assets/svg/trend-up-01.svg')
-                        : require('@/assets/svg/trend-down-01.svg')
+                        ? assts.trendUpSvg
+                        : assts.trendDownSvg
                     "
                     alt="trend"
                   ></v-img>
@@ -350,6 +350,7 @@ import filters from '@/shared/utils/filters';
 import networks from '../../../shared/utils/networks';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import { Blockchain, Network } from '@/models/types';
+import assts from '@/utils/assets'
 
 export default {
   name: "tokenAllocationTable",
@@ -580,6 +581,7 @@ export default {
       { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days", width: "140" },
     ],
     dialogData: null,
+    assts,
   }),
   mounted() {
     this.hideUnverified = walletConfigStore().getHideUnverifiedTokens

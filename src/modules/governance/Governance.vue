@@ -202,6 +202,7 @@ import { walletConfigStore } from '@/store/modules/walletConfig';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
+import assets from '@/utils/assets';
 
 export default defineComponent({
   name: 'Governance',
@@ -293,7 +294,7 @@ export default defineComponent({
       const wallet = appWallet;
       const certificates = [];
       if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
+        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
         certificates.push(registrationCertificate);
         // safeFreeCSLObject(registrationCertificate);
       }
@@ -309,7 +310,7 @@ export default defineComponent({
         this.delegateLoading = false
         return // TODO
       }
-      const delegationCertificate = Certificate.new_vote_delegation(VoteDelegation.new(Credential.from_keyhash(wallet.stakeKey().hash()), dRep));
+      const delegationCertificate = Certificate.new_vote_delegation(VoteDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), dRep));
       certificates.push(delegationCertificate);
       // safeFreeCSLObject(delegationCertificate);
       // safeFreeCSLObject(drepHash);
@@ -322,17 +323,17 @@ export default defineComponent({
         const tx: Transaction = Transaction.new(txBody, TransactionWitnessSet.new())
         const txCbor = tx.to_hex()
         const partialSign = true
-        const signaturesRes = await Messaging.sendToBackground({
+        const signaturesRes: any = await Messaging.sendToBackground({
           method: METHOD.signTx,
           data: { tx: txCbor, partialSign },
         });
-        if (signaturesRes['error']) {
-          snackbar.setError(signaturesRes['error'].info)
+        if (signaturesRes.error) {
+          snackbar.setError(signaturesRes.error.info)
         } else {
           console.log(signaturesRes)
           const signedTx = Transaction.new(
             txBody,
-            TransactionWitnessSet.from_bytes(Buffer.from(signaturesRes['data'], "hex")),
+            TransactionWitnessSet.from_bytes(Buffer.from(signaturesRes.data, "hex")),
             undefined // TODO Transaction metadata
           );
           console.log(signedTx.to_json())
@@ -352,14 +353,14 @@ export default defineComponent({
       const wallet = appWallet;
       const certificates = [];
       if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(wallet.stakeKey().hash())))
+        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Ed25519KeyHash.from_hex(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())))))
         certificates.push(registrationCertificate);
         // safeFreeCSLObject(registrationCertificate);
       }
       // Delegation Certificate
       const drepHash = this.selectedDRep.has_script ? ScriptHash.from_hex(this.selectedDRep.hex) : Ed25519KeyHash.from_hex(this.selectedDRep.hex);
       const dRep = this.selectedDRep.has_script ? DRep.new_script_hash(drepHash) : DRep.new_key_hash(drepHash);
-      const delegationCertificate = Certificate.new_vote_delegation(VoteDelegation.new(Credential.from_keyhash(wallet.stakeKey().hash()), dRep));
+      const delegationCertificate = Certificate.new_vote_delegation(VoteDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), dRep));
       certificates.push(delegationCertificate);
       // safeFreeCSLObject(delegationCertificate);
       // safeFreeCSLObject(drepHash);
@@ -381,8 +382,8 @@ export default defineComponent({
     isDelegateDialogOpen: false,
     selectedDRep: undefined,
     delegationModel: undefined,
-    xLogo: require('@/assets/svg/x.svg'),
-    telegramLogo: require('@/assets/svg/telegram.svg'),
+    xLogo: assets.xSvg,
+    telegramLogo: assets.telegramSvg,
     sortBy: 'voting_power',
     sortDesc: true,
     search: '',
@@ -392,7 +393,8 @@ export default defineComponent({
       {text: 'Delegators', sortable: true, align: 'left', value: 'delegators', width: '120' },
       {text: 'Votes', sortable: true, align: 'left', value: 'votes', width: '80'},
       {text: 'Voting Power', sortable: true, align: 'left', value: 'voting_power', width: '120'},
-    ]
+    ],
+    assets,
   })
 });
 </script>

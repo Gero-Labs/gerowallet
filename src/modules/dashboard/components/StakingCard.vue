@@ -40,7 +40,7 @@
                   </v-btn>
                   <v-btn icon small v-if="poolExtendedInfo?.info?.social?.twitter_handle" :href="'https://x.com/'+poolExtendedInfo?.info?.social?.twitter_handle" target="_blank">
                     <v-avatar tile size="14">
-                      <v-img :src="require('@/assets/svg/x.svg')" alt="x"></v-img>
+                      <v-img :src="assets.xSvg" alt="x"></v-img>
                     </v-avatar>
                   </v-btn>
                   <v-btn icon small v-if="poolExtendedInfo?.info?.social?.youtube_handle" :href="'https://youtube.com/'+poolExtendedInfo?.info?.social?.youtube_handle" target="_blank">
@@ -50,12 +50,12 @@
                   </v-btn>
                   <v-btn icon small v-if="poolExtendedInfo?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo?.info?.social?.discord_handle" target="_blank">
                     <v-avatar tile size="14">
-                      <v-img :src="require('@/assets/svg/discord.svg')" width="14" height="14" alt="discord" contain></v-img>
+                      <v-img :src="assets.discordSvg" width="14" height="14" alt="discord" contain></v-img>
                     </v-avatar>
                   </v-btn>
                   <v-btn icon small v-if="poolExtendedInfo?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo?.info?.social?.telegram_handle" target="_blank">
                     <v-avatar tile size="14">
-                      <v-img :src="require('@/assets/svg/telegram.svg')" alt="telegram"></v-img>
+                      <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
                     </v-avatar>
                   </v-btn>
                 </div>
@@ -140,7 +140,7 @@
                     <template v-slot:[`item.change`]="{ item }">
                       <v-avatar tile size="20" class="mr-1">
                         <v-img
-                          :src="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? require('@/assets/svg/arrow-right.svg') : change(item) >= 0 ? require('@/assets/svg/trend-up-01.svg') : require('@/assets/svg/trend-down-01.svg')"
+                          :src="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? assets.arrowRightSvg : change(item) >= 0 ? assets.trendUpSvg : assets.trendDownSvg"
                           alt="trend"></v-img>
                       </v-avatar>
                       <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
@@ -177,7 +177,7 @@ import {mapState} from "pinia";
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import {
   Certificate,
-  Credential,
+  Credential, Ed25519KeyHash,
   StakeDeregistration,
   Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
@@ -186,6 +186,7 @@ import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/shared/utils/networks';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import assets from '@/utils/assets';
 
 export default {
   components: {WithdrawalDialog, UnstakeDialog, CopyButton, RewardsChart},
@@ -262,6 +263,7 @@ export default {
       unstakeDialog: false,
       withdrawalDialog: false,
       txData: undefined,
+      assets,
     }
   },
   filters,
@@ -284,11 +286,10 @@ export default {
       this.withdrawalDialog = true
     },
     unstake() {
-      console.log('test')
       const certificates = [];
       if (this.account?.active) {
         // DeRegistration Certificate
-        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(appWallet.stakeKey().hash())))
+        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(appWallet.stakeKey().hash().hex()))))
         certificates.push(deRegistrationCertificate);
         // Withdrawals
         const withdrawals = []

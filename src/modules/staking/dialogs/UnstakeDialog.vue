@@ -145,7 +145,7 @@ export default {
       if (this.tx?.body()?.inputs()) {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
           const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
+          const utxo = this.utxos?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
           if (utxo) {
             totalAdaOutput -= Number(utxo.value)
           }

@@ -1,28 +1,28 @@
 <template>
   <v-navigation-drawer
       v-model="drawer"
+      :temporary="$vuetify.breakpoint.mobile"
       width="270"
       height="100vh"
       style="min-width: 270px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
       class="px-3"
-      v-show="!$vuetify.breakpoint.mobile || drawer"
+      :absolute="$vuetify.breakpoint.mobile"
   >
     <template v-slot:prepend>
       <v-list-item class="text-center">
         <v-list-item-content class="py-2">
           <v-list-item-title>
             <img
-                :src="require('../assets/gero_dashboards.svg')" width="100" alt="logo"
+                :src="assts.geroDashboard" width="100" alt="logo"
             />
           </v-list-item-title>
           <v-list-item-subtitle>
-            <v-btn color="orange" text plain @click="changeLogDialog = true">
+            <v-btn color="orange" text plain @click="changeLog.setEnabled(true)">
               {{ `v${version}` }}
               <v-icon small class="ml-1">
                 mdi-lightning-bolt
               </v-icon>
             </v-btn>
-            <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
@@ -188,7 +188,7 @@
           <v-list-item-action style="margin: auto">
             <v-btn icon @click="submitLogout">
               <v-avatar tile size="18">
-                <v-img :src="require('@/assets/svg/log-out-01.svg')" alt="logout"></v-img>
+                <v-img :src="assts.logout" alt="logout"></v-img>
               </v-avatar>
             </v-btn>
           </v-list-item-action>
@@ -203,11 +203,11 @@ import {mapActions, mapState} from "pinia";
 import {useStore} from "@/store";
 import networks from '@/shared/utils/networks';
 import { musicStore } from '@/store/modules/music';
-import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import assts from '@/utils/assets';
+import changeLog from '@/plugins/changeLog'
 
 export default {
   name: 'NavigationDrawer',
-  components: { ChangeLogDialog },
   props: {
     value: {
       type: Boolean,
@@ -216,8 +216,10 @@ export default {
   },
   filters,
   watch: {
-    value(val) {
-      this.drawer = val
+    '$vuetify.breakpoint.mobile'(newVal, oldVal) {
+      if (oldVal === false && newVal === true) {
+        this.drawer = false;
+      }
     }
   },
   computed: {
@@ -240,23 +242,19 @@ export default {
       return null
     },
     items() {
-
       return [
         // { header: 'Home' },
-        {title: 'Dashboard', icon: require('@/assets/svg/bar-chart-07.svg'), link: '/', enabled: true},
-        {title: 'Staking', icon: require('@/assets/svg/coins-stacked-02.svg'), link: '/staking', enabled: true},
-        // {title: 'Send', icon: require('@/assets/svg/send.svg'), link: '/send'},
-        // {title: 'Receive', icon: require('@/assets/svg/qr-code.svg'), link: '/receive'},
-        // {title: 'Market', icon: require('@/assets/svg/currency-dollar.svg'), link: '/market'},
-        {title: 'Blog', icon: require('@/assets/svg/blog.svg'), link: '/blog', enabled: true },
-        {title: 'Media Player', icon: require('@/assets/svg/play-square.svg'), link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
-        {title: 'Cashback', icon: require('@/assets/svg/cashback.svg'), link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Governance', icon: require('@/assets/svg/governance.svg'), link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Transactions', icon: require('@/assets/svg/transaction.svg'),link: '/transactions', enabled: networks.resolveTransactionsSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Market', icon: require('@/assets/svg/finance.svg'), link: '/market', enabled: false, soon: true},
-        {title: 'zkFiat', icon: require('@/assets/svg/euro.svg'), link: '/zkFiat', soon: true},
-        {title: 'Claim Rewards', icon: require('@/assets/svg/infinity.svg'), link: '/claim-rewards', soon: true},
-        {title: 'Referral', icon: require('@/assets/svg/users-plus.svg'), link: '/referral', soon: true},
+        {title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true},
+        {title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: true},
+        {title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
+        {title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
+        {title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Market', icon: assts.market, link: '/market', enabled: false, soon: true},
+        {title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', soon: true},
+        {title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', soon: true},
+        {title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true},
         // { header: 'Tools' },
         // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
         // { title: 'IPFS Cache', icon: 'mdi-cube', link: '/ipfs-cache', soon: true },
@@ -268,14 +266,14 @@ export default {
     },
     drawer: {
       get() {
-        if (!this.$vuetify.breakpoint.mobile) {
-          return true;
-        } else {
+        if (this.$vuetify.breakpoint.mobile) {
           return this.value
+        } else {
+          return true
         }
       },
       set(val) {
-        this.$emit('value', val)
+        this.$emit('input', val)
       }
     }
   },
@@ -287,9 +285,10 @@ export default {
     selectedAvatar: undefined,
     avatars: [],
     changeAvatarDialog: false,
-    errorImage: require('@/assets/img/1x1.png'),
-    version: require('@/manifest.json').version,
-    changeLogDialog: false,
+    errorImage: assts.errorImage,
+    changeLog,
+    assts,
+    version: ''
   }),
   methods: {
     ...mapActions(useStore, ['logout']),
@@ -298,7 +297,7 @@ export default {
       await this.$router.push("/welcome")
     },
     resolveIcon(icon) {
-      return require('@/assets/svg/' + icon + '.svg')
+      return assts.resolveIcon(icon)
     },
     async selectAvatar() {
       // if (this.avatars && this.avatars.length > 0 && this.selectedAvatar && this.avatars[this.selectedAvatar]) {
@@ -327,6 +326,9 @@ export default {
     fallbackImage(e) {
       e.target.src = this.errorImage
     }
+  },
+  mounted() {
+    this.version = APP_VERSION
   }
 }
 </script>

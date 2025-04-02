@@ -18,8 +18,22 @@
                 {{ item.status }}
                 <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
               </v-list-item-title>
-              <v-list-item-subtitle style="font-size: 10px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;"
-              >{{ new Date(item.time * 1000).toLocaleString() }}
+              <v-list-item-subtitle
+                style="font-size: 10px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;"
+              >
+                <v-tooltip top >
+                  <template v-slot:activator="{ on, attrs }">
+                    <span
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      {{ time.format(new Date(item.time * 1000)) }}
+                    </span>
+                  </template>
+                  <span>
+                    {{ new Date(item.time * 1000).toLocaleString() }}
+                  </span>
+                </v-tooltip>
               </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
@@ -51,6 +65,7 @@ import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
 import networks from '@/shared/utils/networks';
+import time from '@/plugins/time';
 
 export default defineComponent({
   name: 'TransactionsCard',
@@ -69,7 +84,6 @@ export default defineComponent({
     },
   },
   created() {
-    console.log("state",this.$route.path);
     this.state = this.$route.path;
   },
   methods: {
@@ -79,16 +93,6 @@ export default defineComponent({
     },
     handleTransactionModalClose() {
       this.transactionInfo = null;
-    },
-    getIcon(item) {
-      if (item.status === 'Pending') {
-        return require('@/assets/svg/arrows-right.svg');
-      } else if (item.status === 'Received') {
-        return require('@/assets/svg/arrows-up.svg');
-      } else if (item.status === 'Sent') {
-        return require('@/assets/svg/arrows-down.svg');
-      }
-      return '';
     },
     getColor(item) {
       if (item.status === 'Pending') {
@@ -111,6 +115,7 @@ export default defineComponent({
     ],
     sortBy: 'time',
     sortDesc: true,
+    time,
   })
 });
 </script>

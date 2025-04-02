@@ -453,7 +453,7 @@ export default {
       const recipientAddress = this.sendData.recipientAddress;
       const tokens = [];
       if (sendTokens.length > 0) {
-        sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals).forEach(token => {
+        sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
           if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
             tokens.push({
               unit: 'lovelace',

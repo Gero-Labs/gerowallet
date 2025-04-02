@@ -1,5 +1,5 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
+  <v-dialog content-class="rounded-xxl dialogStyle darken" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -133,9 +133,9 @@
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
-                  <img v-if="walletType === WalletType.Ledger" :src="require('@/assets/svg/connect_ledger.svg')" alt="Connect Ledger">
-                  <img v-if="walletType === WalletType.Trezor" :src="require('@/assets/svg/connect_trezor.svg')" alt="Connect Trezor">
-                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="require('@/assets/svg/connect_keystone.svg')" style="width: 230px; height: 126px" alt="Connect Keystone">
+                  <img v-if="walletType === WalletType.Ledger" :src="assets.connectLedgerSvg" alt="Connect Ledger">
+                  <img v-if="walletType === WalletType.Trezor" :src="assets.connectTrezorSvg" alt="Connect Trezor">
+                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="assets.connectKeystoneSvg" style="width: 230px; height: 126px" alt="Connect Keystone">
                   <v-alert
                       color="white"
                       dense
@@ -229,42 +229,42 @@
                     <v-radio value="green">
                       <template v-slot:label>
                         <v-avatar size="32"  >
-                          <v-img :src="require('@/assets/svg/green.svg')" cover></v-img>
+                          <v-img :src="assets.greenSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="purple">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/purple.svg')" cover></v-img>
+                          <v-img :src="assets.purpleSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="pink">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/pink.svg')" cover></v-img>
+                          <v-img :src="assets.pinkSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="orange">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/orange.svg')" cover></v-img>
+                          <v-img :src="assets.orangeSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="blue">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/blue.svg')" cover></v-img>
+                          <v-img :src="assets.blueSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="grey">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/grey.svg')" cover></v-img>
+                          <v-img :src="assets.greySvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
@@ -305,7 +305,7 @@
     </v-card>
     <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-        <video :src="require('@/assets/output.webm')" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
+        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
         <v-progress-linear
             buffer-value="0"
@@ -336,6 +336,7 @@ import Vue from 'vue';
 import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
 import snackbar from '@/plugins/snackbar';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
+import assets from '@/utils/assets';
 
 export default {
   name: "PairHardwareWallet",
@@ -502,21 +503,21 @@ export default {
         name: 'Ledger',
         description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.',
         enabled: true,
-        icon: require('@/assets/ledger.svg'),
+        icon: assets.ledgerLogoSvg,
         support: 'Nano S, Nano S Plus, Nano X'
       },
       {
         name: 'Trezor',
         description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.',
         enabled: false,
-        icon: require('@/assets/trezor.svg'),
+        icon: assets.trezorLogoSvg,
         support: 'Model T, Safe 3'
       },
       {
         name: 'Keystone',
         description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
         enabled: false,
-        icon: require('@/assets/svg/keystone-3-pro.svg'),
+        icon: assets.keystoneLogoSvg,
         support: '3 Pro'
       },
     ],
@@ -527,6 +528,7 @@ export default {
     persistent: false,
     qrCode: undefined,
     keystoneScan: false,
+    assets,
   })
 }
 </script>

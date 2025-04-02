@@ -26,6 +26,7 @@ import { loadWallets, subscribeWallets } from '@/store/loaders/walletLoader';
 import { loadSync, subscribeSync } from '@/store/loaders/syncLoader';
 import { loadTransactions, subscribeTransactions } from '@/store/loaders/transactionsLoader';
 import { loadAssets } from '@/store/loaders/assetsLoader';
+import { loadConfig, subscribeConfig } from '@/store/loaders/geroConfigLoader';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
@@ -34,7 +35,7 @@ export const useStore = defineStore('store', {
   persist: {
     paths: [
       'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
-      'welcomeDone', 'connected', 'intervals'
+      'geroConfig', 'connected', 'intervals'
     ]
   },
   state: () => ({
@@ -61,7 +62,7 @@ export const useStore = defineStore('store', {
     fiatRates: undefined,
     currency: undefined,
     pinnedTokens: [],
-    welcomeDone: false,
+    geroConfig: undefined,
     connected: false,
     intervals: {
       syncIntervalId: null,
@@ -81,10 +82,16 @@ export const useStore = defineStore('store', {
       }
       return appWallet;
     },
+    getWelcomeDone(state) {
+      if (state?.geroConfig) {
+        return state.geroConfig.welcomeDone
+      }
+      return true
+    },
     getPrice: state => state.price,
     calculatedTransactions(state) {
       if (state.transactions) {
-        const currentStake = appWallet.stakeAddress().to_address().to_bech32();
+        const currentStake = appWallet.stakeAddress().toBech32();
         let currentBalance: number = 0;
         return structuredClone(state.transactions)
           .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
@@ -222,6 +229,27 @@ export const useStore = defineStore('store', {
       }
       await this.setLoggedWallet(wallet);
     },
+    closeAllOtherExtensionPopups() {
+      // First, get the current window's ID.
+      chrome.windows.getCurrent(function(currentWindow) {
+        const currentId = currentWindow.id;
+        // Get all open windows.
+        chrome.windows.getAll({}, function(windows) {
+          windows.forEach(function(win) {
+            // Check if the window is a popup and is not the current one.
+            if (win.id !== currentId && win.type === 'popup') {
+              chrome.windows.remove(win.id, function() {
+                if (chrome.runtime.lastError) {
+                  console.error('Error closing window:', chrome.runtime.lastError);
+                } else {
+                  console.log('Closed popup window with id:', win.id);
+                }
+              });
+            }
+          });
+        });
+      });
+    },
     setConnected(connected: boolean) {
       this.connected = connected
     },
@@ -319,7 +347,7 @@ export const useStore = defineStore('store', {
             promises.push(appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
               token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
             }).catch(err => {
-              console.error(`Error fetching risk for ${token.unit}:`, err);
+              console.warn(`Error fetching risk for ${token.unit}: ${err.message}`);
               token['risk'] = 'N/A';
             }))
             try {
@@ -418,7 +446,7 @@ export const useStore = defineStore('store', {
       if (!appWallet) {
         return
       }
-      const stakeAddress: string = appWallet.stakeAddress().to_address().to_bech32()
+      const stakeAddress: string = appWallet.stakeAddress().toBech32()
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -474,6 +502,7 @@ export const useStore = defineStore('store', {
       subscriptions = new Map<string, Subscription>();
     },
     async simpleLogin(walletId: number) {
+      console.log('simpleLogin')
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
         return null;
@@ -485,9 +514,9 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
-      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
-      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
-      governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      this.setBaseAddress(appWallet.baseAddress().toBech32())
+      this.setStakeAddress(appWallet.stakeAddress().toBech32())
+      governanceStore().setDRepId(appWallet.drepId())
       await this.loadAssets()
       const promises = []
       promises.push(this.loadSync())
@@ -495,9 +524,9 @@ export const useStore = defineStore('store', {
       await appWallet.startSync();
     },
     async login(walletId: number): Promise<void> {
+      console.log('login')
       loading.setLoading(true);
       this.setLoadingTxs(true)
-      console.log('login')
       this.unsubscribeAll()
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
@@ -514,9 +543,10 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
-      this.setBaseAddress(appWallet.baseAddress().to_address().to_bech32())
-      this.setStakeAddress(appWallet.stakeAddress().to_address().to_bech32())
-      governanceStore().setDRepId(appWallet.drepId().to_bech32())
+      await this.loadConfig()
+      this.setBaseAddress(appWallet.baseAddress().toBech32())
+      this.setStakeAddress(appWallet.stakeAddress().toBech32())
+      governanceStore().setDRepId(appWallet.drepId())
       await appWallet.startSync();
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()
@@ -525,7 +555,6 @@ export const useStore = defineStore('store', {
       await walletConfigStore().loadConfig()
       promises.push(walletConfigStore().loadAddresses())
       promises.push(this.loadSync())
-      promises.push(this.subscribeSync())
       promises.push(walletConfigStore().loadAccountInfo())
       promises.push(this.loadPools())
       promises.push(governanceStore().loadDReps())
@@ -537,7 +566,9 @@ export const useStore = defineStore('store', {
       await Promise.all(promises)
       this.setLoadingTxs(false)
       loading.setLoading(false);
+      this.subscribeConfig()
       this.subscribeTransactions();
+      this.subscribeSync()
     },
     clearSyncIntervals() {
       appWallet.endSync();
@@ -548,6 +579,8 @@ export const useStore = defineStore('store', {
       }
     },
     async logout() {
+      console.log('logout')
+      this.closeAllOtherExtensionPopups()
       loading.setLoading(true);
       this.clearSyncIntervals();
       this.unsubscribeAll()
@@ -598,8 +631,10 @@ export const useStore = defineStore('store', {
     setFiatRates(fiatRates) {
       this.fiatRates = fiatRates
     },
-    setWelcomeDone(welcomeDone) {
-      this.welcomeDone = welcomeDone
+    async setWelcomeDone(welcomeDone) {
+      if (appWallet) {
+        await db.setConfiguration('welcomeDone', welcomeDone)
+      }
     },
     setStakingProView(isPro) {
       this.stakingProView = isPro
@@ -621,6 +656,12 @@ export const useStore = defineStore('store', {
       } else {
         this.pinnedTokens.splice(index, 1);
       }
+    },
+    async loadConfig() {
+      await loadConfig(this)
+    },
+    async subscribeConfig() {
+      await subscribeConfig(this, subscriptions)
     },
     async loadWallets() {
       await loadWallets(this);

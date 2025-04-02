@@ -8,7 +8,7 @@
               <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.SEND">
                 <v-avatar tile size="50">
                   <v-img
-                    :src="require('@/assets/svg/send.svg')"
+                    :src="assets.sendSvg"
                     alt="Send"
                     contain
                     style="
@@ -25,7 +25,7 @@
               <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.RECEIVE">
                 <v-avatar tile size="50">
                   <v-img
-                    :src="require('@/assets/svg/qr-code.svg')"
+                    :src="assets.qrCodeSvg"
                     alt="Receive"
                     contain
                     style="
@@ -44,7 +44,7 @@
               >
                 <v-avatar tile size="50">
                   <v-img
-                    :src="require('@/assets/svg/swap.svg')"
+                    :src="assets.swapSvg"
                     alt="Swap"
                     contain
                     style="
@@ -69,7 +69,7 @@
                 :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
               >
                 <v-avatar tile size="50">
-                  <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Buy" contain></v-img>
+                  <v-img :src="assets.dollarShieldSvg" alt="Buy" contain></v-img>
                 </v-avatar>
               </v-btn>
               <span>Buy</span>
@@ -93,6 +93,7 @@ import { useStore } from '@/store';
 import SendDialog from "../dialogs/SendDialog.vue";
 import {mapState} from "pinia";
 import networks from '@/shared/utils/networks';
+import assets from '@/utils/assets';
 
 export default {
   name: "QuickActions",
@@ -136,6 +137,7 @@ export default {
       SWAP: "SWAP",
       BUY: "BUY",
     },
+    assets,
   }),
 };
 </script>
