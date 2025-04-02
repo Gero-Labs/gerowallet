@@ -6,10 +6,10 @@ import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
 import { createPinia, Pinia, PiniaVuePlugin } from 'pinia';
 import VueShowdown from 'vue-showdown'
-import i18n from '@/plugins/i18n';
-import vuetify from '@/plugins/vuetify';
+import i18n from '../plugins/i18n';
+import vuetify from '../plugins/vuetify';
 import VueQrcodeReader from 'vue-qrcode-reader'
-import router from '@/modules/navigation/router';
+import router from '../modules/navigation/router';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 
 import App from './App.vue';

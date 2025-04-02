@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :img="require('@/assets/svg/cardano_shield_logo.svg')"
+    :img="cardanoShieldLogo"
     :isOpen="isOpen"
     @close="$emit('close')"
     :title="'Report '+ (reportSite ? 'Website' : 'Transaction')"
@@ -175,6 +175,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import { ReportLabel, ReportType } from '@/models/cardano-shield-types';
 import snackbar from '@/plugins/snackbar';
 import { AxiosError } from 'axios';
+import assets from '@/utils/assets';
 
 export default {
   name: "ReportDialog",
@@ -284,6 +285,7 @@ export default {
   },
   data() {
     return {
+      cardanoShieldLogo: assets.cardanoShieldLogo,
       rules,
       currentStep: 1,
       imageUrl: '',

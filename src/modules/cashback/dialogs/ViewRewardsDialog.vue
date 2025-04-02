@@ -135,7 +135,7 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { useStore } from '@/store';
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
@@ -144,10 +144,10 @@ import networks from '@/shared/utils/networks';
 import { stringToHex } from '@/shared/utils/converter';
 import rules from '@/shared/utils/rules';
 import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
 import cashbackApi from '@/api/cashback-api';
+import { Messaging } from '@/chrome/messaging';
 
 export default {
   name: 'ViewRewardsDialog',

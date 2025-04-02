@@ -14,7 +14,6 @@ export async function loadTransactions(
     if (store.setUtxosAndAddresses) {
       await store.setUtxosAndAddresses(newT);
     }
-    console.log('Initial transactions loaded');
   } catch (error) {
     console.error('Initial load failed for transactions:', error);
   }
@@ -37,7 +36,6 @@ export async function subscribeTransactions(
         if (store.setUtxosAndAddresses) {
           await store.setUtxosAndAddresses(newT);
         }
-        console.log('Transactions updated');
       },
       error: (error: any) => {
         console.error('Failed to fetch transactions:', error);

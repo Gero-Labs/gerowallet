@@ -2,8 +2,8 @@
   <v-form ref="form" class="fill-height">
     <v-card outlined class="pa-4 fill-height transparent">
       <div style="width: 100px; margin: auto" class="py-3">
-        <img alt="Gero Logo" id="modal-logo-icon" width="100" :src="require('@/assets/svg/gero-logo.svg')"/>
-        <img alt="Gero Logo" id="modal-logo-text" width="100" :src="require('@/assets/svg/gero-text.svg')"/>
+        <img alt="Gero Logo" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
+        <img alt="Gero Logo" id="modal-logo-text" width="100" :src="assets.geroText"/>
       </div>
       <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">Select a Wallet to Login</v-card-title>
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
@@ -37,10 +37,10 @@
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
-                <v-img :src="require('@/assets/svg/ledger.svg')" contain width="18"></v-img>
+                <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
               </v-list-item-avatar>
               <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
-                <v-img :src="require('@/assets/svg/keystone.svg')" contain width="18"></v-img>
+                <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
               </v-list-item-avatar>
             </v-list-item>
           </v-list-item-group>
@@ -59,6 +59,7 @@ import { mapActions, mapState } from 'pinia';
 import networks from '@/shared/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
+import assets from '@/utils/assets';
 
 export default {
   name: 'Login',
@@ -80,7 +81,7 @@ export default {
     },
     resolveIcon(icon) {
       if (icon) {
-        return require('@/assets/svg/'+icon+'.svg')
+        return assets.resolveIcon(icon)
       }
       return ''
     },
@@ -95,7 +96,8 @@ export default {
   data() {
     return {
       selectedWallet: {},
-      controller: Messaging.createInternalController()
+      controller: Messaging.createInternalController(),
+      assets,
     };
   },
 };

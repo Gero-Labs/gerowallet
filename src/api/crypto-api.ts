@@ -2,7 +2,7 @@ import axios from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 
 const axiosInstance = axios.create({
-  baseURL: process.env['VUE_APP_BACKEND_URL'],
+  baseURL: import.meta.env['VITE_BACKEND_URL'],
   timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
@@ -21,5 +21,8 @@ export default {
       return chart;
     }
     return parseHttpError(data);
+  },
+  async fetchReleases(page: number) {
+    return await axiosInstance.get(`/api/github/releases?page=${page}&size=10`);
   }
 }

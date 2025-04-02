@@ -3,30 +3,30 @@
     <div
       style="display: flex; height: 44px; border: 1px solid rgba(128,128,128,0.15); background-color: transparent!important; border-radius: 12px; padding: 8px; gap: 8px;">
       <div style="align-content: center; text-align: center;" v-if="!isBuyDisabled">
-        <v-tooltip bottom>
+        <v-tooltip bottom content-class="smallToolTip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn color="#FFF59E1A" class="px-0" height="28" min-width="28" max-width="28"
                    @click="currentDialog = dialogs.BUY" v-bind="attrs" v-on="on">
               <v-avatar tile size="18">
                 <v-img
-                  :src="require('@/assets/svg/dollar-shield.svg')"
+                  :src="assets.dollarShieldSvg"
                   alt="Buy"
                   contain
                 ></v-img>
               </v-avatar>
             </v-btn>
           </template>
-          <span>Buy {{ currencyTicker }}</span>
+          <span>Buy / Sell</span>
         </v-tooltip>
       </div>
       <div style="align-content: center; text-align: center;">
-        <v-tooltip bottom>
+        <v-tooltip bottom content-class="smallToolTip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn color="#00DFF31A" class="px-0" height="28" min-width="28" max-width="28"
                    @click="currentDialog = dialogs.SEND" v-bind="attrs" v-on="on">
               <v-avatar tile size="18">
                 <v-img
-                  :src="require('@/assets/svg/send.svg')"
+                  :src="assets.sendSvg"
                   alt="Send"
                   contain
                   style="
@@ -40,13 +40,13 @@
         </v-tooltip>
       </div>
       <div style="align-content: center; text-align: center;">
-        <v-tooltip bottom>
+        <v-tooltip bottom content-class="smallToolTip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn color="#75E0A71A" class="px-0" height="28" min-width="28" max-width="28"
                    @click="currentDialog = dialogs.RECEIVE" v-bind="attrs" v-on="on">
               <v-avatar tile size="18">
                 <v-img
-                  :src="require('@/assets/svg/qr-code.svg')"
+                  :src="assets.qrCodeSvg"
                   alt="Receive"
                   contain
                   style="
@@ -60,13 +60,13 @@
         </v-tooltip>
       </div>
       <div style="align-content: center; text-align: center;" v-if="!isSwapDisabled">
-        <v-tooltip bottom>
+        <v-tooltip bottom content-class="smallToolTip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn color="#FDA29B1A" class="px-0" height="28" min-width="28" max-width="28"
                    @click="currentDialog = dialogs.SWAP" v-bind="attrs" v-on="on">
               <v-avatar tile size="18">
                 <v-img
-                  :src="require('@/assets/svg/swap.svg')"
+                  :src="assets.swapSvg"
                   alt="Swap"
                   contain
                   style="
@@ -95,6 +95,9 @@ import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
 import { mapState } from 'pinia';
 import { useStore } from '@/store';
 import networks from '@/shared/utils/networks';
+import assets from '@/utils/assets';
+// import { loadMoonPay } from '@/moonpay-js/src';
+// import moonPayApi from '@/api/moonpay-api';
 
 export default defineComponent({
   name: 'QuickActionsBox',
@@ -133,7 +136,34 @@ export default defineComponent({
       SWAP: 'SWAP',
       BUY: 'BUY',
     },
+    moonPayWidget: undefined,
+    assets,
   }),
+  async mounted() {
+    // const moonPayUrl = await moonPayApi.moonPaySign(`https://buy.moonpay.com/?apiKey=${process.env["VUE_APP_MOONPAY_API_KEY"]}&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=${encodeURIComponent('#2f9cac')}&baseCurrencyCode=usd&mpSdk=${encodeURIComponent('{"version":"1.9.4","environment":"production","flow":"buy","variant":"overlay","platform":"web"}')}`);
+    // const uriParams = new URL(moonPayUrl).searchParams
+    // const signature = uriParams.get('signature')
+    // const moonPay = await loadMoonPay();
+    // this.moonPayWidget = moonPay?.({
+    //   flow: "buy",
+    //   environment: "production",
+    //   params: {
+    //     apiKey: process.env["VUE_APP_MOONPAY_API_KEY"],
+    //     theme: 'dark',
+    //     currencyCode: 'ada',
+    //     walletAddress: this.baseAddress,
+    //     colorCode: '#2f9cac',
+    //     baseCurrencyCode: 'usd', //TODO
+    //     signature,
+    //   },
+    //   variant: "overlay",
+    //   handlers: {
+    //     async onTransactionCompleted(props) {
+    //       console.log("onTransactionCompleted", props);
+    //     },
+    //   },
+    // });
+  }
 });
 </script>
 <style scoped>

@@ -1,5 +1,5 @@
 <template>
-  <v-dialog style="opacity: 0.9" content-class="rounded-xxl dialogStyle darken transparent90" v-model="dialogLocal" scrollable max-width="850" :persistent="persistent">
+  <v-dialog style="opacity: 0.9" content-class="rounded-xxl dialogStyle darken" v-model="dialogLocal" scrollable max-width="850" :persistent="persistent">
     <v-card
         class="py-0 rounded-xxl transparent fill-height"
     >
@@ -53,42 +53,42 @@
                     <v-radio value="green">
                       <template v-slot:label>
                         <v-avatar size="32"  >
-                          <v-img :src="require('@/assets/svg/green.svg')" cover></v-img>
+                          <v-img :src="assets.greenSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="purple">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/purple.svg')" cover></v-img>
+                          <v-img :src="assets.purpleSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="pink">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/pink.svg')" cover></v-img>
+                          <v-img :src="assets.pinkSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="orange">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/orange.svg')" cover></v-img>
+                          <v-img :src="assets.orangeSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="blue">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/blue.svg')" cover></v-img>
+                          <v-img :src="assets.blueSvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
                     <v-radio value="grey">
                       <template v-slot:label>
                         <v-avatar size="32" >
-                          <v-img :src="require('@/assets/svg/grey.svg')" cover></v-img>
+                          <v-img :src="assets.greySvg" cover></v-img>
                         </v-avatar>
                       </template>
                     </v-radio>
@@ -309,7 +309,8 @@ import rules from "@/shared/utils/rules";
 import {Theme} from "@/models/types"
 import db from "@/db";
 import { useStore } from "@/store";
-import { mapState } from 'pinia';
+import { mapActions, mapState } from 'pinia';
+import assets from '@/utils/assets';
 
 export default {
   name: "CreateWallet",
@@ -337,6 +338,7 @@ export default {
     },
   },
   methods: {
+    ...mapActions(useStore, ['login']),
     isNextToFill(index) {
       return index === this.seedPhraseToConfirm.indexOf("")
     },
@@ -380,7 +382,7 @@ export default {
       const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr(), this.newWallet.password, this.network.blockchain, this.network.network)
       this.dialogLocal = false
       this.resetDialog()
-      await this.store.login(walletId)
+      await this.login(walletId)
       await this.$router.push('/')
     },
     randomReplace(array, count) {
@@ -463,7 +465,7 @@ export default {
     overlay: true,
     opacity: 0.8,
     persistent: false,
-    store: useStore()
+    assets,
   }),
 }
 </script>

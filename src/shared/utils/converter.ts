@@ -14,8 +14,7 @@ import {
   decode_metadatum_to_json_str,
   Ed25519KeyHash,
   Ed25519Signature,
-  EnterpriseAddress,
-  FixedTransaction,
+  EnterpriseAddress, FixedTransaction,
   GeneralTransactionMetadata,
   hash_plutus_data, make_vkey_witness,
   MetadataJsonSchema,
@@ -29,8 +28,7 @@ import {
   PointerAddress,
   PublicKey,
   RewardAddress,
-  ScriptHash,
-  TransactionHash,
+  ScriptHash, TransactionHash,
   TransactionInput,
   TransactionOutput,
   TransactionUnspentOutput,
@@ -61,7 +59,7 @@ import {
   TxOutputDestinationType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
-const cbor = require('cbor')
+import cbor from 'cbor';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -256,14 +254,6 @@ export function stakeCredential(address: string): Credential {
   return undefined;
 }
 
-export function toStakeKeyHash(address: string): Ed25519KeyHash {
-  const credential: Credential = stakeCredential(address)
-  if (credential) {
-    return credential.to_keyhash();
-  }
-  return undefined;
-}
-
 export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
   const free: any[] = [];
   const protectedHeaders = HeaderMap.new();
@@ -436,8 +426,7 @@ export const isSameArray = (a1, a2) => {
 };
 
 export const hasConwaySetTag = (tx2: FixedTransaction) => {
-  tx2 = getDecodedCbor(tx2.to_hex());
-  const decodedTx = tx2;
+  const decodedTx = getDecodedCbor(tx2.to_hex());
   const decodedTxBody = getDecodedTxBody(decodedTx);
   for (const item of decodedTxBody) {
     const key3 = item[0];
@@ -449,7 +438,7 @@ export const hasConwaySetTag = (tx2: FixedTransaction) => {
   return false;
 };
 
-export const getDecodedCbor = (cborHex) => {
+export const getDecodedCbor = (cborHex): Array<any> | null  => {
   try {
     return !cborHex ? null : cbor.decodeAllSync(Buffer.from(cborHex, 'hex'));
   } catch (e) {
@@ -848,7 +837,7 @@ export const getRewardAddressFromCred = (stakeCred, network2: number) => {
   return addr;
 };
 
-const getCSLCredential = (cred, free?) => {
+const getCSLCredential = (cred, _free?) => {
   const cslKeyHash = Ed25519KeyHash.from_bytes(toHexBuffer(cred));
   const cslCred = Credential.from_keyhash(cslKeyHash);
   safeFreeCSLObject(cslKeyHash);
@@ -918,44 +907,6 @@ const getVkeyWitness = (pub2, witnessSignatureHex: string, raw2 = false, hex2 = 
   safeFreeCSLObject(vkey);
   safeFreeCSLObject(signature);
   return vkeyWitness;
-};
-const harden = (num) => 2147483648 + num;
-
-const cslDerivePrvKey = (key3, path3, doHarden) => {
-  const _keyInit = key3;
-  let _key = key3;
-  for (let p2 = 0; p2 < path3.length; p2++) {
-    _key = key3.derive(doHarden ? harden(path3[p2]) : path3[p2]);
-    if (key3 !== _keyInit) {
-      safeFreeCSLObject(key3);
-    }
-    key3 = _key;
-  }
-  if (key3 !== _keyInit) {
-    safeFreeCSLObject(_keyInit);
-  }
-  return _key;
-};
-const getCSLBip32PrivateKey = (bech322, free?) => {
-  const cslBip32PrivateKey = Bip32PrivateKey.from_bech32(bech322);
-  free == null ? void 0 : free.push(cslBip32PrivateKey);
-  return cslBip32PrivateKey;
-};
-const derivePrvKey = (prvBech32, path3, doHarden) => cslDerivePrvKey(getCSLBip32PrivateKey(prvBech32), path3, doHarden);
-
-const createCSLPrvKey = (rootPrvBech32, path3) => {
-  if (!(path3.length === 3 || path3.length === 5)) {
-    return null;
-  }
-  const accountPath = path3.slice(0, 3);
-  const addressPath = path3.slice(3, 5);
-  const cslPrvKeyAccount = derivePrvKey(rootPrvBech32, accountPath, false);
-  if (addressPath.length === 0) {
-    return cslPrvKeyAccount;
-  }
-  const prvKeyBech32Account = cslPrvKeyAccount.to_bech32();
-  safeFreeCSLObject(cslPrvKeyAccount);
-  return derivePrvKey(prvKeyBech32Account, addressPath, false);
 };
 
 export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: Bip32PrivateKey): TransactionWitnessSet => {

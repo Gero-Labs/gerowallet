@@ -262,7 +262,7 @@ export default {
       if (this.tx?.body()?.inputs()) {
         for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
           const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
+          const utxo = this.utxos?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
           if (utxo) {
             totalAdaOutput -= Number(utxo.value)
           }
@@ -273,8 +273,6 @@ export default {
           const output = this.tx?.body()?.outputs().get(i)
           totalAdaOutput += Number(output.amount().coin().to_str())
         }
-        console.log('totalAdaBalance', totalAdaBalance.to_str())
-        console.log('totalAdaOutput', totalAdaOutput)
         depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str())
         return depositFee*-1;
       }

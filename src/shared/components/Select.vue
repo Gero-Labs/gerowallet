@@ -16,13 +16,13 @@
     >
       <template v-slot:item="{ item }">
         <v-avatar v-if="item.icon" size="20" class="mr-2">
-          <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
+          <v-img :src="assets.resolveIcon(item.icon)"></v-img>
         </v-avatar>
         {{ item.name }}
       </template>
       <template v-slot:selection="{ item }">
         <v-avatar v-if="item.icon" size="20" class="mr-2">
-          <v-img :src="require('@/assets/svg/' + item.icon + '.svg')"></v-img>
+          <v-img :src="assets.resolveIcon(item.icon)"></v-img>
         </v-avatar>
         {{ item.name }}
       </template>
@@ -31,6 +31,8 @@
 </template>
 
 <script>
+import assets from '@/utils/assets';
+
 export default {
   name: "SelectComponent",
   props: {
@@ -54,7 +56,10 @@ export default {
       default: false,
     },
   },
-};
+  data: () => ({
+    assets,
+  })
+}
 </script>
 <style>
 .custom-select {

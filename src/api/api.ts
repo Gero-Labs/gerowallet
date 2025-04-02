@@ -14,7 +14,7 @@ export class Api {
     this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
     this.provider = Provider[provider]
     this.axiosInstance = axios.create({
-      baseURL: process.env['VUE_APP_BACKEND_URL'],
+      baseURL: import.meta.env['VITE_BACKEND_URL'],
       timeout: 120000,
       headers: {
         'Content-Type': 'application/json',
@@ -237,20 +237,6 @@ export class Api {
     return await this.axiosInstance.get(`/api/assets/blacklist`);
   }
 
-  async moonPaySign(url: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.post(`/api/moonpay/sign`, url, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getAllTokens(): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/v2/swap/tokens`);
@@ -361,13 +347,9 @@ export class Api {
   }
 
   async assetRisk(fingerprint: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+    const { data, status } = await this.axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
+    if (status === 200) return data;
+    return parseHttpError(data);
   }
 
   async getBlogPosts(pageSize: number, nextPage?: string): Promise<any> {

@@ -1,9 +1,9 @@
 <template>
-  <v-dialog style="opacity: 0.9" max-width="1000" content-class="rounded-xxl dialogStyle transparent90" :persistent="true" v-model="welcomeScreenDialog">
+  <v-dialog style="opacity: 0.9" max-width="1000" content-class="rounded-xxl dialogStyle" :persistent="true" v-model="welcomeScreenDialog">
     <v-carousel v-model="carousel" height="500" :continuous="false">
       <v-carousel-item>
         <v-card style="position: relative; display: grid;">
-          <video :src="require('@/assets/video/welcome.mp4')" playsinline autoplay muted loop
+          <video :src="assets.welcomeVideo" playsinline autoplay muted loop
                  style="width: 100%; min-height: 500px; grid-column: 1; z-index: 1;
   grid-row: 1; object-fit: cover; object-position: center bottom; left: 0; top: 0;">
             Your browser does not support the video tag.
@@ -14,8 +14,8 @@
               Welcome to your new single pane of glass
             </div>
             <div style="max-height: 70px; height: 100%">
-              <img style="height: 100%" :src="require('@/assets/gero-logo.svg')" alt="Gero Logo" />
-              <img style="height: 100%" class="ml-6" :src="require('@/assets/gero-dashboard.svg')" alt="Gero Dashboard" />
+              <img style="height: 100%" :src="assets.geroLogo" alt="Gero Logo" />
+              <img style="height: 100%" class="ml-6" :src="assets.geroDashboardText" alt="Gero Dashboard" />
             </div>
           </div>
         </v-card>
@@ -34,31 +34,31 @@
                 <v-card-text>
                   <v-list class="transparent">
                     <v-list-item link @mouseenter="setNewDesign" class="my-3 px-0" style="background-color: #0F0F0F; border-radius: 12px;">
-                      <img style="height: 54px" :src="require('@/shared/assets/welcome/new_design.png')" alt="New Design">
+                      <img style="height: 54px" :src="assets.newDesignSS" alt="New Design">
                       <v-list-item-title class="text-center">
                         All New Design
                       </v-list-item-title>
                     </v-list-item>
                     <v-list-item link @mouseenter="setCashback" class="my-3 px-0" style="background-color: #0F0F0F; border-radius: 12px">
-                      <img style="height: 54px" :src="require('@/shared/assets/welcome/cashback.png')" alt="New Design">
+                      <img style="height: 54px" :src="assets.cashbackSS" alt="New Design">
                       <v-list-item-title class="text-center">
                         Cashback
                       </v-list-item-title>
                     </v-list-item>
                     <v-list-item link @mouseenter="setGovernance" class="my-3 px-0" style="background-color: #0F0F0F; border-radius: 12px">
-                      <img style="height: 54px" :src="require('@/shared/assets/welcome/governance.png')" alt="New Design">
+                      <img style="height: 54px" :src="assets.governanceSS" alt="New Design">
                       <v-list-item-title class="text-center">
                         Governance
                       </v-list-item-title>
                     </v-list-item>
                     <v-list-item link @mouseenter="setMoreSecure" class="my-3 px-0" style="background-color: #0F0F0F; border-radius: 12px">
-                      <img style="height: 54px" :src="require('@/shared/assets/welcome/cardano_shield.png')" alt="New Design">
+                      <img style="height: 54px" :src="assets.cardanoShieldSS" alt="New Design">
                       <v-list-item-title class="text-center">
                         More Secure
                       </v-list-item-title>
                     </v-list-item>
                     <v-list-item link @mouseenter="setUpToDate" class="my-3 px-0" style="background-color: #0F0F0F; border-radius: 12px">
-                      <img style="height: 54px" :src="require('@/shared/assets/welcome/blog.png')" alt="New Design">
+                      <img style="height: 54px" :src="assets.blogSS" alt="New Design">
                       <v-list-item-title class="text-center">
                         Stay up to date
                       </v-list-item-title>
@@ -103,7 +103,7 @@
                             <v-hover v-slot="{hover}">
                               <v-avatar tile :size="hover ? 60 : 50">
                                 <v-img
-                                  :src="require('@/assets/svg/send.svg')"
+                                  :src="assets.sendSvg"
                                   alt="Send"
                                   contain
                                   style="
@@ -123,7 +123,7 @@
                             <v-hover v-slot="{hover}">
                               <v-avatar tile :size="hover ? 60 : 50">
                                 <v-img
-                                  :src="require('@/assets/svg/qr-code.svg')"
+                                  :src="assets.qrCodeSvg"
                                   alt="Receive"
                                   contain
                                   style="
@@ -142,7 +142,7 @@
                             <v-hover v-slot="{hover}">
                               <v-avatar tile :size="hover ? 60 : 50">
                                 <v-img
-                                  :src="require('@/assets/svg/swap.svg')"
+                                  :src="assets.swapSvg"
                                   alt="Swap"
                                   contain
                                   style="
@@ -166,7 +166,7 @@
                           >
                             <v-hover v-slot="{hover}">
                               <v-avatar tile :size="hover ? 60 : 50">
-                                <v-img :src="require('@/assets/svg/dollar-shield.svg')" alt="Buy" contain></v-img>
+                                <v-img :src="assets.dollarShieldSvg" alt="Buy" contain></v-img>
                               </v-avatar>
                             </v-hover>
                           </v-btn>
@@ -209,7 +209,7 @@
         </div>
       </v-carousel-item>
       <v-carousel-item>
-        <v-img :src="require('@/shared/assets/welcome/background.png')" class="pa-8" style="height: 100%" >
+        <v-img :src="assets.cardanoBackground" class="pa-8" style="height: 100%" >
           <div class="text-center">
             <p><strong>Our mission is to unify Web2 and Web3</strong></p>
             <p>We have many things in store, check out our blog posts for the latest news</p>
@@ -220,17 +220,17 @@
             <div>
               <v-btn icon href="https://twitter.com/GeroWallet" target="_blank">
                 <v-avatar tile>
-                  <v-img :src="require('@/assets/svg/x.svg')" width="16" height="16" alt="x" contain></v-img>
+                  <v-img :src="assets.xSvg" width="16" height="16" alt="x" contain></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://discord.com/invite/Wj4EyjNdNb" target="_blank">
                 <v-avatar tile>
-                  <v-img :src="require('@/assets/svg/discord.svg')" width="16" height="16" alt="discord" contain></v-img>
+                  <v-img :src="assets.discordSvg" width="16" height="16" alt="discord" contain></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://t.me/GeroWallet" target="_blank">
                 <v-avatar tile>
-                  <v-img :src="require('@/assets/svg/telegram.svg')" width="16" height="16" alt="x" contain></v-img>
+                  <v-img :src="assets.telegramSvg" width="16" height="16" alt="x" contain></v-img>
                 </v-avatar>
               </v-btn>
             </div>
@@ -251,6 +251,7 @@ import { defineComponent } from 'vue';
 import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/store';
 import { Blockchain, Network } from '@/models/types';
+import assets from '@/utils/assets';
 
 export default defineComponent({
   name: 'WelcomeDialog',
@@ -262,12 +263,12 @@ export default defineComponent({
     }
   },
   computed: {
-    ...mapState(useStore, ['welcomeDone', 'loggedWallet']),
+    ...mapState(useStore, ['getWelcomeDone', 'loggedWallet']),
     welcomeScreenDialog: {
       get() {
-        return !this.welcomeDone && this.loggedWallet.chain == Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET
+        return !this.getWelcomeDone && this.loggedWallet.chain == Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET
       },
-      set(value) {
+      set(value: any) {
         this.setWelcomeDone(!value);
       }
     },
@@ -280,7 +281,7 @@ export default defineComponent({
            <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`
     },
     setCashback() {
-      this.text = `<p>We've partnered with <strong>Bring</strong>, Cardan's first white-label crypto cashback provider, to integrate crypto cashback directly into the Gero Dashboard.</p>
+      this.text = `<p>We've partnered with <strong>Bring</strong>, Cardano's first white-label crypto cashback provider, to integrate crypto cashback directly into the Gero Dashboard.</p>
                    <p>Earn cryptocurrency on everyday purchases from over 750 top retailers</p>`
     },
     setGovernance() {
@@ -301,7 +302,8 @@ export default defineComponent({
     carousel: 0,
     text: `<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
            <p>Rebuilt from the ground up with a fresh architecture and user interface.</p>
-           <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`
+           <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`,
+    assets,
   }),
 });
 </script>

@@ -3,10 +3,11 @@
     <v-main>
       <v-container class="pa-0" >
         <v-layout :align-start="true">
-          <navigation-drawer ></navigation-drawer>
+          <navigation-drawer v-model="drawer"></navigation-drawer>
           <v-sheet style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent" >
             <v-layout column class="no-gutters px-4 transparent" :justify-start="true" style="min-height: calc(100vh - 90px); flex-direction: column;">
               <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;" >
+                <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
                 <PriceTicker></PriceTicker>
                 <Sparkline v-if="loggedWallet?.chain === Blockchain.CARDANO"></Sparkline>
                 <v-divider vertical class="mx-2" style="max-height: 30px; min-height: 30px;align-self: center;" v-if="loggedWallet?.chain === Blockchain.CARDANO"></v-divider>
@@ -49,13 +50,23 @@
                       </v-btn>
                     </v-list-item-title>
                     <v-list-item-subtitle style="font-size: 10px">
-                      Synced {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000)) }}
+                      <v-tooltip bottom content-class="smallToolTip">
+                        <template v-slot:activator="{ on, attrs }">
+                          <span
+                            v-bind="attrs"
+                            v-on="on"
+                          >
+                            {{ time.format(new Date(latestTip?.time * 1000)) }}
+                          </span>
+                        </template>
+                        <span>{{new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false}).format(new Date(latestTip?.time * 1000))}}</span>
+                      </v-tooltip>
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
                 <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
                 <v-avatar tile size="16" class="mr-1">
-                  <v-img :src="require('@/assets/svg/wallet.svg')" contain></v-img>
+                  <v-img :src="assets.walletSvg" contain></v-img>
                 </v-avatar>
                 <a style="font-size: 12px; color: white" class="mr-1" @click="copyAddress">{{baseAddress | shortenStringWithEllipsis(14)}}</a>
                 <CopyButton ref="copyAddress" x-small :value="baseAddress" v-if="baseAddress"></CopyButton>
@@ -64,7 +75,7 @@
                 <v-btn icon text :plain="!context.shown" v-if="musicPlaylist?.length > 0" @click="setMediaPlayerShown(!context.shown)">
                   <v-avatar size="20" >
                     <img
-                        :src="require('@/assets/svg/play-square.svg')"
+                        :src="assets.mediaPlayer"
                         alt="Media Player"
                         style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
                     >
@@ -97,7 +108,7 @@
                 <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="ml-1">
                   <v-avatar size="20">
                     <img
-                        :src="require('@/assets/svg/settings-02.svg')"
+                        :src="assets.settingsSvg"
                         alt="Settings"
                     >
                   </v-avatar>
@@ -116,6 +127,7 @@
       </v-container>
     </v-main>
     <WelcomeDialog />
+    <ChangeLogDialog :isOpen="changeLog.enabled || this.$route.query['changeLog'] === 'true'" @close="closeChangeLogDialog" :persistent="false" />
   </v-app>
 </template>
 <script>
@@ -134,10 +146,14 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue';
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
+import assets from '@/utils/assets';
+import ChangeLogDialog from '@/modules/navigation/dialogs/ChangeLogDialog.vue';
+import changeLog from '@/plugins/changeLog'
+import time from '../../../plugins/time';
 
 export default {
   name: 'ContentLayout',
-  components: { Sparkline, WelcomeDialog, QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
+  components: { ChangeLogDialog, Sparkline, WelcomeDialog, QuickActionsBox, CopyButton, Player, PriceTicker, NavigationDrawer, SettingsDialog},
   computed: {
     networks() {
       return networks
@@ -166,6 +182,10 @@ export default {
     dialogs: {
       SETTINGS: 'SETTINGS',
     },
+    drawer: false,
+    assets,
+    changeLog,
+    time,
   }),
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
@@ -176,11 +196,14 @@ export default {
     closeDialog() {
       this.currentDialog = null;
     },
+    closeChangeLogDialog() {
+      changeLog.setEnabled(false)
+      this.$router.replace({'query': null});
+    }
   },
   async mounted() {
     if (this.loggedWallet?.id) {
       try {
-        console.log('login mounted')
         await this.login(this.loggedWallet.id)
       } catch (e) {
         console.error(e)
