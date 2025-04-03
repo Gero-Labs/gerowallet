@@ -44,7 +44,6 @@ async function getManifest() {
       'clipboardRead',
       'storage',
       'favicon',
-      'sidePanel',
       'alarms',
       'unlimitedStorage',
       'webNavigation',
