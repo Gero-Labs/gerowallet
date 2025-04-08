@@ -26,7 +26,7 @@ export class Api {
   async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.post(
-        `/api/sync`,{
+        `/api/sync`,{  
           chain: this.chain,
           network: this.network,
           provider: this.provider,
@@ -417,4 +417,35 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  async createMultisigWallet(multisig, parentWalletAddress) {
+    try {
+      const { data, status } = await this.axiosInstance.post(
+        `/api/multisig/add`,
+        {
+          multisig,
+          parentWalletAddress
+        }
+      );
+      console.log("data::::", data);
+      console.log("status:::", status);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      if (error.response?.status === 404) {
+        return []
+      }
+      console.log("FAILED:::");
+      throw parseHttpError(error);
+    }
+  }
+
+  async submitMultisigTx(body: string, wallet): Promise<any> {
+    //  parentAddress
+    // multisig Address
+    //parent
+    const { data } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`, body);
+    return data
+  }
+
 }

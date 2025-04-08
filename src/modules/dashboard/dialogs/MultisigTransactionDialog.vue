@@ -1,6 +1,6 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
-              :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="New Multisig Transaction" :loading="txSubmitLoading" :min-height="0"
+              :subtitle="'A multisig wallet requires multiple parties signatures to authorize any transaction.'">
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
         <v-stepper-header>
@@ -30,12 +30,12 @@
     <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
       <CustomStepper :currentStep="currentStep" :steps="steps">
         <v-stepper-content step="1">
-          <SendRecipientDetailsStep
+          <SendRecipientDetailsStepMultisig
             :sendData="sendData"
             :recipientAddress="recipientAddressProp"
             @moveNext="nextStep"
             @updateRecipientAddress="updateRecipientAddress"
-          ></SendRecipientDetailsStep>
+          ></SendRecipientDetailsStepMultisig>
         </v-stepper-content>
         <v-stepper-content step="2">
           <AssetsToSendStep
@@ -192,7 +192,7 @@
 <script>
 import BaseDialog from '@/shared/components/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
-import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
+import SendRecipientDetailsStepMultisig from '../components/SendRecipientDetailsStepMultisig.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 import { appWallet, useStore } from '@/store';
@@ -220,8 +220,8 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 
 export default {
-  name: 'SendDialog',
-  components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
+  name: 'MultisigTransactionDialog',
+  components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStepMultisig, AssetsToSendStep, SummaryStep },
   props: {
     isOpen: {
       type: Boolean,
@@ -230,10 +230,6 @@ export default {
     recipientAddressProp: {
       type: String,
       default: ''
-    },
-    isMultisig:{
-      type: Boolean,
-      default: false
     }
   },
   computed: {
@@ -243,7 +239,7 @@ export default {
     networks() {
       return networks
     },
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'pinnedTokens']),
+    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'pinnedTokens', 'selectedMultisig']),
     ...mapState(walletConfigStore, ['utxos', 'addresses']),
     tokens() {
       if (this.resolvedAssets) {
@@ -579,7 +575,7 @@ export default {
         selectedTokens: [foundAsset],
         selectedCollectibles: [],
         recipientAddress: this.recipientAddressProp,
-        selectedWallet: this.loggedWallet,
+        selectedWallet: this.isMultisig? this.loggedWallet: "",
       };
       console.log("recipientAddress in resetData:::", this.recipientAddressProp);
       console.log("resetData sendData::", this.sendData);

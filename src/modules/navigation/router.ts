@@ -105,6 +105,15 @@ const routes = [
     },
   },
   {
+    path: '/send',
+    name: 'multisig',
+    component: MultisigTransactions,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/multisig',
     name: 'multisig',
     component: MultisigTransactions,

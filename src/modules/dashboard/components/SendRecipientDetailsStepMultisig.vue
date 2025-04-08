@@ -4,12 +4,31 @@
       <div class="item-container">
         <v-row>
           <v-col cols="12" class="py-0 px-2">
-            <Select
-              :value="sendData.selectedWallet"
-              :items="[sendData.selectedWallet]"
+            <span>From Multisig Wallet</span>
+            <!-- <Select
+              :value="selectedMultisig.id"
+              :items="[{icon: 'account-multiple-outline-custom', name:'DJKDJK'}]"
+              :items-dsdd="0"
               label="Wallet"
               :readonly="true"
-            ></Select>
+            ></Select> -->
+            <v-select
+            v-model="SourceWallet"
+            :items="[{...SourceWallet}]"
+            item-text="name"
+            item-value="id"
+            outlined
+            hide-details
+          >
+            <template v-slot:prepend>
+              <img
+                src="@/assets/svg/account-multiple-outline-custom.svg"
+                alt="Icon"
+                width="24"
+                height="24"
+              />
+            </template>
+            </v-select>
           </v-col>
           <v-col cols="12" style="color: #61646C; min-height: 52px; font-style: italic; align-content: center;" class="py-0 px-2">
           </v-col>
@@ -194,12 +213,13 @@ import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import { multisigStore } from '@/store/modules/multisig';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 
 export default {
-  components: { CopyButton, Select },
-  name: 'SendRecipientDetailsStep',
+  components: { CopyButton },
+  name: 'SendRecipientDetailsStepMultisig',
   props: {
     sendData: {
       type: Object,
@@ -225,6 +245,7 @@ export default {
   filters,
   computed: {
     ...mapState(useStore, ['loggedWallet']),
+    ...mapState(multisigStore, ['selectedMultisig']),
     ...mapState(walletConfigStore, ['contacts']),
     recipientRules() {
       if (this.loggedWallet.network === Network.MAINNET) {
@@ -246,6 +267,9 @@ export default {
     },
     Network() {
       return Network
+    },
+    SourceWallet() {
+      return this.selectedMultisig;
     },
   },
   methods: {
@@ -343,11 +367,14 @@ export default {
     console.log("mounted send recipient ::", this.sendData);
     this.recipientAddress = this.sendData.recipientAddress;
     this.resolveAddress(this.recipientAddress);
+    console.log("multisig wallet selected:::",this.selectedMultisig);
   },
   created() {
     console.log("created send recipient ::", this.sendData);
     this.recipientAddress = this.sendData.recipientAddress;
     this.resolveAddress(this.recipientAddress);
+    console.log("multisig wallet selected:::",this.selectedMultisig);
+
     // this.$emit('updateRecipientAddress', this.recipientAddress);
   }
 };

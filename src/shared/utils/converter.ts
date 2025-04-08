@@ -21,6 +21,9 @@ import {
   MetadataJsonSchema,
   MetadataList,
   MultiAsset,
+  NativeScript,
+  NativeScriptKind,
+  NativeScripts,
   PlutusData,
   PlutusDatumSchema,
   PlutusList,
@@ -29,7 +32,11 @@ import {
   PointerAddress,
   PublicKey,
   RewardAddress,
+  ScriptAll,
+  ScriptAny,
   ScriptHash,
+  ScriptPubkey,
+  ScriptNOfK,
   TransactionHash,
   TransactionInput,
   TransactionOutput,
@@ -998,3 +1005,126 @@ export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: B
   safeFreeCSLObject(cslVkeys);
   return cslWitnessSetOwned;
 };
+
+export const jsonToNativeScript = (json) => {
+  if (json.type === "sig") {
+    // Single signature case
+    const keyHashHex = json.keyHash;
+    const keyHashBytes = toHexArray(keyHashHex);// Buffer.from(keyHashHex, 'hex');
+    const ed25519KeyHash = Ed25519KeyHash.from_bytes(keyHashBytes);
+    return NativeScript.new_script_pubkey(ScriptPubkey.new(ed25519KeyHash));
+  } else if (json.type === "all") {
+    // ALL case - all scripts must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_all(ScriptAll.new(scripts));
+  } else if (json.type === "any") {
+    // ANY case - any one script must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_any(ScriptAny.new(scripts));
+  } else if (json.type === "atLeast") {
+    // N-of-K case - at least N scripts must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_n_of_k(ScriptNOfK.new(json.required, scripts));
+  } else {
+    throw new Error("Unknown script type: " + json.type);
+  }
+};
+
+export const multisigJsonToBech32 = (multisigJson, networkId = 1) => { //networkId: 1-mainnet, 0-testnet
+  try {
+    // Convert the JSON multisig script to NativeScript
+    const nativeScript = jsonToNativeScript(multisigJson);
+    
+    // Create script hash
+    const scriptHash = nativeScript.hash();
+    
+    // Create stake credential from script hash
+    const stakeCredential = Credential.from_scripthash(scriptHash);
+    
+    // Create enterprise address (payment part only, no staking)
+    const address = EnterpriseAddress.new(
+      networkId, // 0 for testnet, 1 for mainnet
+      stakeCredential
+    );
+    
+    // Convert to bech32
+    return {
+      bech32Address: address.to_address().to_bech32(),
+      scriptCBOR: Buffer.from(nativeScript.to_bytes()).toString('hex') //CBOR
+    };
+
+  } catch (error) {
+    console.error("Error converting multisig to address:", error);
+    throw error;
+  }
+};
+export const addressBech32ToKeyHash = (bech32Address) =>{
+  const address = Address.from_bech32(bech32Address);
+  const paymentCred = address.to_bytes().slice(0, 29);
+  const keyHash = paymentCred.slice(1, 29);
+  return Array.from(keyHash)
+  .map(b => b.toString(16).padStart(2, '0'))
+  .join('');
+};
+
+/*======generateshortaddressID
+
+  const address = 'addr_test1qq7jvvt8xkckzy7fsw5es3wc6h74wx9mfrk4qx3qap54ctqq7cmhf29c028lu7ulctlld4twh028srvc3dxr4s0zutwqp2y6tl';
+  generateShortAddressId(address).then(shortId => { console.log(shortId); });
+*/
+export const generateShortAddressId = async (address) => {
+  // Encode the address to a Uint8Array
+  const encoder = new TextEncoder();
+  const data = encoder.encode(address);
+
+  // Generate SHA-256 hash
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  
+  // Convert to hex
+  const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+
+  // Generate the short ID without "..."
+  return `${address.slice(0, 6)}${address.slice(-6)}${hashHex.slice(0, 8)}`;
+}
+
+// extract signers from NativeScript
+export const extractSigners = (nativeScript:NativeScript) => {
+  if (nativeScript.kind() === NativeScriptKind.ScriptPubkey) {
+      // Single key hash script
+      return { requiredSigners: 1, totalSigners: 1 };
+  } else if (nativeScript.kind() === NativeScriptKind.ScriptAll) {
+      // AND condition - All keys must sign
+      const scripts = nativeScript.as_script_all().native_scripts();
+      let totalSigners = 0;
+      for (let index = 0; index < scripts.len(); index++) {
+        const counts = extractSigners(scripts.get(index));
+        totalSigners += counts.totalSigners;
+      }
+
+      return { requiredSigners: totalSigners, totalSigners };
+  } else if (nativeScript.kind() === NativeScriptKind.ScriptAny) {
+      // OR condition - At least one signer required
+      const scripts = nativeScript.as_script_any().native_scripts();
+      return { requiredSigners: 1, totalSigners: scripts.len() };
+  } else if (nativeScript.kind() === NativeScriptKind.ScriptNOfK) {
+      // M-of-N multisig script
+      const script = nativeScript.as_script_n_of_k();
+      return {
+          requiredSigners: script.n(),
+          totalSigners: script.native_scripts().len(),
+      };
+  } else {
+      throw new Error("Unsupported script type");
+  }
+}
+

@@ -28,15 +28,13 @@ import { loadTransactions, subscribeTransactions } from '@/store/loaders/transac
 import { loadAssets } from '@/store/loaders/assetsLoader';
 
 export let appWallet: Wallet = undefined;
-export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>();
-// //eslint-disable-next-line prefer-const
-// export let selectedMultisig: Wallet = undefined;
+export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
 
-export const useStore = defineStore('store', {
+export const multisigStore = defineStore('multisigStore', {
   persist: {
     paths: [
       'loggedWallet', 'wallets', 'locale', 'network', 'provider', 'price', 'stakingProView', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
-      'welcomeDone', 'connected', 'intervals', 'selectedMultisig'
+      'welcomeDone', 'connected', 'intervals'
     ]
   },
   state: () => ({
@@ -70,8 +68,7 @@ export const useStore = defineStore('store', {
       fiatRatesIntervalId: null,
       tickerStatisticsIntervalId: null
     },
-    multisig: undefined,
-    selectedMultisig: undefined
+    selectedMultisig: undefined,
   }),
   getters: {
     isLoggedIn: state => !!state.loggedWallet,
@@ -538,7 +535,6 @@ export const useStore = defineStore('store', {
       promises.push(this.loadConnectedDapps())
       promises.push(walletConfigStore().loadContacts())
       promises.push(bringStore().loadBringCache())
-      // promises.push(multisigStore().getallwallets()[])) // loading all 
       await Promise.all(promises)
       this.setLoadingTxs(false)
       loading.setLoading(false);
@@ -727,27 +723,3 @@ export const useStore = defineStore('store', {
     }
   },
 });
-
-// export default {
-//     namespaced: true,
-//     save(key, value) {
-//         if (env === 'production') {
-//             // eslint-disable-next-line
-//             chrome.storage.sync.set({ [key]: value });
-//         } else {
-//             localStorage.setItem(key, JSON.stringify(value))
-//         }
-//     },
-//     async get(key) {
-//         if (env === 'production') {
-//             // eslint-disable-next-line
-//             const res = await chrome.storage.sync.get([key])
-//             if (Object.keys(res).length === 0) {
-//                 return null
-//             }
-//             return res[key];
-//         } else {
-//             return JSON.parse(localStorage.getItem(key))
-//         }
-//     }
-// }

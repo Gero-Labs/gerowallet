@@ -18,6 +18,7 @@ import {
   encrypt_with_password,
   EnterpriseAddress,
   FixedTransaction,
+  NativeScript,
   PointerAddress,
   PrivateKey,
   PublicKey,
@@ -86,7 +87,7 @@ export class Wallet {
   passwordLastUpdate: Date;
 
   constructor(id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network) {
-    this.id = id;
+    this.id = id; 
     this.name = name;
     this.icon = icon;
     this.type = type;
@@ -456,7 +457,7 @@ export class Wallet {
     }
   }
 
-  async submitTx(tx: Transaction, utxos) {
+  async submitTx(tx: Transaction, utxos, isMultisig = false) {
     const txCbor = tx.to_hex()
     try {
       const txId = await this.api.submitTx(txCbor);
@@ -690,7 +691,7 @@ export class Wallet {
     useStore().clearSyncIntervals()
     // Chain Tip
     try {
-      await appWallet.sync()
+      await appWallet.sync();
     } catch (err) {
       console.log(err)
     }
@@ -1221,4 +1222,43 @@ export class Wallet {
       console.error(`Failed to add connected dapp: ${err}`);
     }
   }
+
+  async createMultisig(multisig: NativeScript) {
+    return this.db.open()
+      .then(db => {
+        const multisigTable = db.table('multisig');
+        
+        if (multisigTable) {
+          multisigTable.put({
+            id: multisig.to_hex()
+          });
+        }
+      }).catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async submitMultisigTx(tx: Transaction, utxos, isMultisig = false) {
+    const txCbor = tx.to_hex()
+    try {
+      const txId = await this.api.submitTx(txCbor);
+      console.log('txId', txId)
+      await this.addPendingTx(txId, tx.to_js_value(), utxos, JSON.parse(tx.to_json()))
+      return txId;
+    } catch (error) {
+      console.log(error)
+      if (error['response'].status === 400) {
+        throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      } else if (error['response'].status === 500) {
+        throw new Error(APIError.InternalError.info);
+      } else if (error['response'].status === 429) {
+        throw new Error(TxSendError.Refused.info);
+      } else if (error['response'].status === 425) {
+        throw new Error(ERROR.fullMempool);
+      } else {
+        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      }
+    }
+  }
+
 }

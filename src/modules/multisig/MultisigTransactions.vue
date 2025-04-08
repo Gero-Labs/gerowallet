@@ -1,16 +1,26 @@
 <template>
+  <div>
+    <div>
   <v-container fluid class="multisig-container">
     <v-row>
-      <v-col cols="10">
+      <v-col cols="8">
         <h1 class="multisig-title">Multisig Transactions</h1>
         <p class="multisig-description">A multisig transaction on Cardano is a transaction that requires multiple signatures from different parties to authorize spending from a shared address.</p>
       </v-col>
       <v-col cols="2">
-        <v-btn variant="outlined" class="text-caption text-capitalize" prepend-icon="mdi-account">
-          <v-icon small color="#00DFF3">
-              mdi-qrcode
+        <v-btn variant="outlined" class="text-caption text-capitalize" prepend-icon="mdi-account" @click="showCreateMultisigDialog = true">
+          <v-icon small color="#00DFF3" left>
+            mdi-wallet-plus
             </v-icon>
           Create Multisig Wallet
+        </v-btn>
+      </v-col>
+      <v-col cols="2">
+        <v-btn variant="outlined" class="text-caption text-capitalize" prepend-icon="mdi-account" @click="showNewMultisigTransaction = true">
+          <v-icon small color="#00DFF3" left>
+            mdi-wallet-plus
+            </v-icon>
+          New Transaction
         </v-btn>
       </v-col>
       
@@ -18,6 +28,44 @@
 
     <v-row>
       <v-col cols="12">
+        <v-row class="pt-3">
+          <v-col cols="4">
+            <v-select
+              label="Select Multisig to manage"
+              v-model="selectedMultisigWallet"
+              :items="this.multisigWallets"
+              item-text="name"
+              item-value="addressBech32"
+              outlined
+              hide-details
+              @change="onSelectedWallet"
+            >
+              <template v-slot:prepend>
+                <img
+                  src="@/assets/svg/account-multiple-outline-custom.svg"
+                  alt="Icon"
+                  width="24"
+                  height="24"
+                />
+              </template>
+            </v-select>
+            <!-- <span class="text-left d-block"
+              >The minimum number of signers required to execute a transaction</span
+            > -->
+          </v-col>
+          <v-col cols="3">
+            <v-btn color="primary" text block @click="showMultisigWalletDetails" class="mt-4">
+              <img src="@/assets/svg/file.svg" alt="File Icon" class="svg-icon" /> <!-- SVG treated as an icon -->
+              Wallet Details
+            </v-btn>
+          </v-col>
+          <v-col cols="3">
+            <v-btn color="primary" text block @click="fundMultisigWallet" class="mt-4">
+              <img src="@/assets/svg/credit-card-download.svg" alt="File Icon" class="svg-icon" /> <!-- SVG treated as an icon -->
+              Fund Wallet
+            </v-btn>
+          </v-col>
+      </v-row>
         <v-card class="multisig-card">
           <v-card-title>Pending Transactions</v-card-title>
           <v-card-text>
@@ -85,15 +133,44 @@
       </v-col>
     </v-row>
   </v-container>
+</div>
+  <CreateMultisigWalletDialog :isOpen="showCreateMultisigDialog" @close="showCreateMultisigDialog = false"></CreateMultisigWalletDialog>
+  <FundWallet :isOpen="showFundWallet" @close="showFundWallet = false" :recipientAddressProp="this.selectedAddress" :isMultisig="true"></FundWallet>
+  <MultisigTransactionDialog :isOpen="showNewMultisigTransaction" @close="showNewMultisigTransaction = false"></MultisigTransactionDialog>
+</div>
 </template>
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator';
+import CreateMultisigWalletDialog from '@/modules/multisig/dialogs/CreateMultisigWalletDialog.vue';
+import FundWallet from '@/modules/dashboard/dialogs/SendDialog.vue';
+import MultisigTransactionDialog from '@/modules/dashboard/dialogs/MultisigTransactionDialog.vue'; 
 import { MessageTypes } from '@/models/MessageTypes';
+import { walletConfigStore } from "@/store/modules/walletConfig";
+import { Wallet } from "@/models/wallet";
+import { appWallet, useStore } from "@/store";
+import { multisigStore } from '@/store/modules/multisig';
 
-@Component
+import { mapState } from "pinia";
+import db from '@/db';
+import Dexie from 'dexie';
+import networks from "@/shared/utils/networks";
+import {NativeScript} from '@emurgo/cardano-serialization-lib-browser';
+
+
+
+@Component({
+  components:{
+    FundWallet,
+    CreateMultisigWalletDialog,
+    MultisigTransactionDialog
+  }
+})
 export default class MultisigTransactions extends Vue {
   loading = false;
+  showCreateMultisigDialog = false;
+  showNewMultisigTransaction = false;
+  showFundWallet = false;
   headers = [
     { text: 'Transaction ID', value: 'id' },
     { text: 'Date', value: 'date' },
@@ -110,9 +187,16 @@ export default class MultisigTransactions extends Vue {
   wallets = [
     // Sample data - would be loaded from API/store in real implementation
   ];
-
+  multisigWallets = [];
+  selectedMultisigWallet = {};
+  selectedAddress="";
+  myStore = useStore();
+  multisigStore = multisigStore();
+  loggedWallet = this.myStore.loggedWallet;
+  
   mounted() {
     this.loadData();
+    this.myStore.loggedWallet
   }
 
   async loadData() {
@@ -149,6 +233,34 @@ export default class MultisigTransactions extends Vue {
           totalSigners: 5,
         },
       ];
+     const dbWallet = new Dexie('wallet-'+this.loggedWallet.id);
+     await dbWallet.open();
+     let multisigs = await dbWallet.table('multisig').toArray();
+     //sort by latest first
+     multisigs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+     console.log("multisig:::::", multisigs[0]);
+     const multisigsOriginal = multisigs;
+     multisigs = multisigs.map((row, index) => ({
+      addressBech32: row.id, //multisig address
+      index,
+      name: row.name,
+      signaturesRequired: row.requiredSigners || 1,
+      totalSigners: NativeScript.from_hex(row.multisigScriptCBOR).get_required_signers().len(),
+      scriptCBOR: row.multisigScriptCBOR
+     }));
+     this.multisigWallets = multisigs;
+     this.selectedMultisigWallet = multisigs[0];
+     this.myStore.setSelectedMultisig(multisigs[0]);
+     this.multisigStore.setSelectedMultisig(multisigsOriginal[0]);
+     this.selectedAddress = multisigs[0].addressBech32;
+     console.log("all wallets now:::", multisigs);
+     /* await multisigStore().getallwallets()[0].loadTransactions()
+      or await multisigStore().loadTransactions("multisigAddressBench32Id") //this would load them straight from the backend or preferabl
+
+     */
+
+      // await db
+      // this.multisigWallets = 
     } catch (error) {
       console.error('Failed to load multisig data:', error);
     } finally {
@@ -182,6 +294,24 @@ export default class MultisigTransactions extends Vue {
   createNewWallet() {
     // Implementation for creating a new multisig wallet
     console.log('Create new multisig wallet');
+  }
+
+  onSelectedWallet(selectedValue) {
+    this.selectedAddress = selectedValue;
+    console.log("selected item changed to::", typeof selectedValue);
+    console.log("Selected multisig wallet object:::"+typeof this.selectedMultisigWallet+"::"+this.selectedMultisigWallet);
+    const selected = this.multisigWallets.filter(imultisig => imultisig.addressBech32 === selectedValue);
+    this.myStore.setSelectedMultisig(selected);
+    console.log("Selected Address:::", this.selectedAddress);
+
+  }
+  fundMultisigWallet() {
+    //openfundingdialog
+    console.log("show the funding dialog form.");
+    this.showFundWallet = true;
+  }
+  showMultisigWalletDetails() {
+    console.log("render the multisig create dialog but with the selected multisig rendered, only name should be editable.");
   }
 }
 </script>
@@ -244,5 +374,13 @@ export default class MultisigTransactions extends Vue {
 
 .create-btn {
   margin-top: 8px;
+}
+
+.svg-icon {
+  width: 24px; /* Set the width of the icon */
+  height: 24px; /* Set the height of the icon */
+  margin-right: 8px; /* Space between the icon and text */
+  vertical-align: middle; /* Align the icon vertically with the text */
+  display: inline-block; /* Ensure the icon behaves like an inline element */
 }
 </style>

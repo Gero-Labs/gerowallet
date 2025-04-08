@@ -12,6 +12,8 @@ db.version(10).stores({
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
   config: '++id, key, value',
   provider: '++id, [name+chain+network], baseUrl, apiKey',
+  //multisig: '++id, name, details, ', // { id - address, name, details: {signersaddresses: [], requiredSigners: int }}
+  //multisigtx: '++id, multisigaddress, txid, unsignedCBOR, signedby ', // witnessset: [], signedby: { signerAddress, witnessSet, signedOn, signedCBOR } 
 })
   .upgrade(async (tx) => {
     try {
@@ -151,10 +153,11 @@ export default {
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewWalletDb(walletId: number) {
-    const db = new Dexie('wallet-' + walletId);
+  async createNewWalletDb(walletId: number, isMultisig=false) { 
+    const walletPrefix = isMultisig? '' : 'wallet-';
+    const db = new Dexie(walletPrefix + walletId);
     this.setWalletDBVersionSchema(db)
-    db.open().catch(err => {
+    db.open().catch(err => { 
       console.error(`Failed to open database: ${err.stack || err}`);
     });
     await db['config'].toArray().then(async rows => {
@@ -169,9 +172,9 @@ export default {
       }
     });
   },
-  async deleteWallet(walletId: number) {
+  async deleteWallet(walletId: number, isMultisig=false) {
     await db['wallets'].delete(walletId)
-    const dbName = 'wallet-' + walletId;
+    const dbName = (isMultisig?'':'wallet-') + walletId;
     await Dexie.delete(dbName).catch(err => {
       console.error(`Failed to delete database '${dbName}': ${err.stack || err}`);
     });
@@ -213,6 +216,7 @@ export default {
       rewards: 'epoch, amount, pool_id, type',
       transactions: 'id',
       connected_dapps: '++id, domain, time',
+      multisig:'id', 
     });
-  }
+  },
 };
