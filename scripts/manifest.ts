@@ -52,7 +52,7 @@ async function getManifest() {
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
       {
-        resources: ["public/logo.png", "public/logo128.png", "content/_virtual_inject.js", "public/2.4.2.png"],
+        resources: ["public/logo.png", "public/logo128.png", "content/_virtual_inject.js", "public/2.5.0.png"],
         matches: ["<all_urls>"]
       }
     ],
