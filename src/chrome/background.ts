@@ -52,7 +52,7 @@ chrome.runtime.onInstalled.addListener((details) => {
       title: 'Extension Updated',
       message: `Gero Dashboard has been updated to version ${currentVersion}!`,
       iconUrl: chrome.runtime.getURL('public/logo128.png'),
-      imageUrl: chrome.runtime.getURL('public/2.4.2.png'),
+      imageUrl: chrome.runtime.getURL('public/2.5.0.png'),
     });
   }
 });
