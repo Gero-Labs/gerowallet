@@ -344,12 +344,12 @@ export const useStore = defineStore('store', {
              }).catch(err => {
                console.error(`Error fetching daily price change for ${token.unit}:`, err);
              }));
-            promises.push(appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
+            appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
               token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
             }).catch(err => {
               console.warn(`Error fetching risk for ${token.unit}: ${err.message}`);
               token['risk'] = 'N/A';
-            }))
+            })
             try {
               await Promise.all(promises)
             } catch (e) {
