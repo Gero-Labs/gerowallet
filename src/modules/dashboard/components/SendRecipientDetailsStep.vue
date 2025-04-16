@@ -177,8 +177,15 @@
               </template>
             </v-textarea>
           </v-col>
-          <v-col cols="12" style="color: #61646C; min-height: 52px; font-style: italic; align-content: center;" class="py-0">
-            <span v-if="resolved">{{paymentAddress}}</span>
+          <v-col cols="12" style="color: #61646C; min-height: 96px; font-style: italic; align-content: center;" class="py-0">
+            <v-list-item v-if="resolved" class="px-0">
+              <v-list-item-avatar v-if="asset.img" size="80" rounded>
+                <v-img :src="asset.img" contain></v-img>
+              </v-list-item-avatar>
+              <v-list-item-subtitle style="white-space: normal">
+                {{paymentAddress}}
+              </v-list-item-subtitle>
+            </v-list-item>
           </v-col>
         </v-row>
       </div>
@@ -196,6 +203,7 @@ import { resolveAsset } from '@/shared/utils/resolver';
 import { walletConfigStore } from '@/store/modules/walletConfig';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
+import adaHandleApi from '@/api/ada-handle.api';
 
 export default {
   components: { CopyButton, Select },
@@ -256,7 +264,6 @@ export default {
       this.contactsMenu = false
     },
     saveContact() {
-      this.asset = undefined
       this.contact = {}
       let name
       const address = this.paymentAddress
@@ -265,6 +272,9 @@ export default {
         name = ''
       } else {
         name = this.contacts[this.paymentAddress].name
+      }
+      if (!name && this.asset.name) {
+        name = this.asset.name
       }
       this.contact = {
         img,
@@ -296,26 +306,22 @@ export default {
         return
       }
       this.loading = true
-      appWallet.api.getAssetNFTAddress('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$','')).toString('hex'))
-        .then(async address => {
-          console.log(address)
-          this.paymentAddress = address.payment_address
-          const res = await appWallet.api.getDetailedAssetsInfo('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$', '')).toString('hex'))
-          if (res.status === 200) {
-            this.asset = await resolveAsset(res.data, res.data)
-            this.$emit('updateRecipientAddress', address.payment_address)
-            this.resolved = true
-          } else {
-            this.resolved = false
-          }
-        })
-        .catch(() => {
-          this.$emit('updateRecipientAddress', '')
+      adaHandleApi.resolve(val.replace('$','')).then(async res => {
+        if (res.status === 200 && res.data?.resolved_addresses?.ada) {
+          const assetRes = await appWallet.api.getDetailedAssetsInfo(res.data.policy, res.data.hex)
+          this.asset = await resolveAsset(assetRes.data, assetRes.data)
+          this.paymentAddress = res.data.resolved_addresses.ada
+          this.$emit('updateRecipientAddress', res.data.resolved_addresses.ada)
+          this.resolved = true
+        } else {
           this.resolved = false
-        })
-        .finally(() => {
-          this.loading = false
-        })
+        }
+      }).catch(() => {
+        this.$emit('updateRecipientAddress', '')
+        this.resolved = false
+      }).finally(() => {
+        this.loading = false
+      })
     }, 1000),
   },
   data: () => ({
