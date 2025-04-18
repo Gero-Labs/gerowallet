@@ -16,6 +16,10 @@ import { Buffer } from 'buffer';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
+export function isPaymentAddress(address: string): boolean {
+  return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
+}
+
 export function resolvePrivatePaymentKey(decodedHash: Buffer, keyIndex: number): Ed25519PrivateKey {
   const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
   return prvRootKeyBech32.derive([ChainDerivations.EXTERNAL, keyIndex]).toRawKey();
