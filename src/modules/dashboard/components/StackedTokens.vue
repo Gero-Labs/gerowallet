@@ -34,7 +34,7 @@
 </template>
 <script>
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { appWallet, useStore } from '@/store';
 import { resolveAsset } from '@/shared/utils/resolver';
 
 export default {
@@ -57,7 +57,12 @@ export default {
   },
   methods: {
     async updateTokens(tokens) {
-      this.collect = await Promise.all(tokens.slice(0, 4).map(token => resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)));
+      this.collect = await Promise.all(tokens.slice(0, 4).map(token => {
+        if (token['policy_id'] !== '' && !this.assets[token['policy_id']+token['asset_name']]) {
+          appWallet.syncAssets([token['policy_id']+token['asset_name']], true)
+        }
+        return resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)
+      }));
     },
   },
   computed: {

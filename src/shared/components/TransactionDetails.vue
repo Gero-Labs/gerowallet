@@ -452,7 +452,10 @@ export default defineComponent({
       this.isExpanded = true
     },
     async updateTokens(tokens) {
-      const assets = await Promise.all(tokens.map(token => resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)));
+      const assets = await Promise.all(tokens.map(token => {
+        const asset = this.assets[token['policy_id']+token['asset_name']]
+        resolveAsset(asset, token)
+      }));
       this.txAssets = assets.slice(0, 4)
       if (assets?.length > 4) {
         this.residue = assets.slice(4)

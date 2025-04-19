@@ -16,6 +16,46 @@ import { Buffer } from 'buffer';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
+export function jsonToPlutusData(jsonObj): Serialization.PlutusData {
+  function parsePlutusData(data) {
+    if ('bytes' in data) {
+      return Serialization.PlutusData.newBytes(Buffer.from(data.bytes, 'hex'));
+    } else if (data.int !== undefined) {
+      return Serialization.PlutusData.newInteger(BigInt(data.int.toString()));
+    } else if (data.list) {
+      const plutusList: Serialization.PlutusList = new Serialization.PlutusList();
+      data.list.forEach(item => {
+        plutusList.add(parsePlutusData(item));
+      });
+      return Serialization.PlutusData.newList(plutusList);
+    } else if (data.map) {
+      const plutusMap: Serialization.PlutusMap = new Serialization.PlutusMap();
+      data.map.forEach(item => {
+        const key = parsePlutusData(item.k);
+        const value = parsePlutusData(item.v);
+        const values = new Serialization.PlutusList();
+        values.add(value)
+        plutusMap.insert(key, Serialization.PlutusData.newList(values));
+      });
+      return Serialization.PlutusData.newMap(plutusMap);
+    } else if (data.constructor !== undefined && data.fields) {
+      const constrFields = new Serialization.PlutusList();
+      data.fields.forEach(field => {
+        constrFields.add(parsePlutusData(field));
+      });
+      return Serialization.PlutusData.newConstrPlutusData(
+        new Serialization.ConstrPlutusData(
+          BigInt(data.constructor.toString()),
+          constrFields
+        )
+      );
+    } else {
+      throw new Error('Unsupported Plutus Data format');
+    }
+  }
+  return parsePlutusData(jsonObj);
+}
+
 export function isPaymentAddress(address: string): boolean {
   return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
 }

@@ -53,16 +53,13 @@ export async function resolveAsset(asset, token): Promise<any> {
     img = token.logo;
     name = 'ADA'
   } else if (asset) {
-    if (asset.asset_name === '0014df1050454e43494c') {
-      console.log('0014df1050454e43494c')
-    }
-    if (asset?.metadata) {
+    if (asset.metadata) {
       metadata = asset.metadata
       name = asset.metadata.ticker
       if (asset.metadata?.logo) {
         img = `data:image/png;base64,${asset.metadata.logo}`;
       }
-    } else if (asset?.onchain_metadata) {
+    } else if (asset.onchain_metadata) {
       if (asset.onchain_metadata?.image) {
         let imgString
         if (typeof asset.onchain_metadata.image == "string") {
@@ -78,7 +75,7 @@ export async function resolveAsset(asset, token): Promise<any> {
         } else {
           img = `${baseUrl}/api/ipfs?path=${imgString.replace('ipfs://', '').replace('ipfs/', '')}`;
         }
-      } else if (asset?.onchain_metadata['721'] && asset?.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
+      } else if (asset.onchain_metadata['721'] && asset.onchain_metadata['721'][asset.policy_id] && asset.onchain_metadata['721'][asset.policy_id][name]) {
         const obj = asset.onchain_metadata['721'][asset.policy_id][name];
         onchain_metadata = obj
         if (obj.image) {
@@ -102,19 +99,40 @@ export async function resolveAsset(asset, token): Promise<any> {
       } else { // CIP 68
         const label: number = cip68Label(asset);
         if (label) {
-          console.log(label)
           const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
           if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
             const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
             const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
             if (label == 333) {
               metadata = metadataJson
+              if (Array.isArray(metadataJson.logo)) {
+                metadataJson.logo = metadataJson.logo.join('')
+              }
               img = `${baseUrl}/api/ipfs?path=${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
             } else if (label == 222) {
               img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
             }
             name = metadataJson.name
           }
+        }
+      }
+    } else {
+      const assetInfo = await appWallet.getDetailedAssetsInfo(token.policy_id, token.asset_name);
+      if (assetInfo?.cip68_metadata) {
+        const label: number = cip68Label(asset);
+        if (assetInfo.cip68_metadata[label]) {
+          const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
+          const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
+          if (label == 333) {
+            if (Array.isArray(metadataJson.logo)) {
+              metadataJson.logo = metadataJson.logo.join('')
+            }
+            metadata = metadataJson
+            img = `${baseUrl}/api/ipfs?path=${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
+          } else if (label == 222) {
+            img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+          }
+          name = metadataJson.name
         }
       }
     }
