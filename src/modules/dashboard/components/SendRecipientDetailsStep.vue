@@ -22,7 +22,7 @@
               max-width="452"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact">
+                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="!valid">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
