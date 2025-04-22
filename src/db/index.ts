@@ -82,14 +82,15 @@ export default {
     return db['provider'].where('[name+chain+network]').equals([provider.value, chain, network]).first();
   },
   async setConfiguration(key, value) {
-    if (value) {
-      const val = {
+    const configuration = await this.getConfiguration(key);
+    if (!configuration) {
+      await db['config'].put({
         key: key,
         value: value
-      }
-      await db['config'].put(val);
+      });
     } else {
-      await db['config'].where('key').equals(key).delete();
+      configuration.value = value;
+      await db['config'].put(configuration);
     }
   },
   async getGeroConfig() {
