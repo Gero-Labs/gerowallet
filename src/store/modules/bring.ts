@@ -15,7 +15,7 @@ export const bringStore = defineStore( 'bringStore', {
         return
       }
       try {
-        const bringCache = await cashbackApi.cache(appWallet.baseAddress().to_address().to_bech32())
+        const bringCache = await cashbackApi.cache(appWallet.baseAddress().toBech32())
         this.setBringCache(bringCache)
       } catch (e) {
         // console.log(e)
