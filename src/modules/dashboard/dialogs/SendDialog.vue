@@ -216,6 +216,8 @@ import { QrcodeStream } from "vue-qrcode-reader";
 // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import { UREncoder } from '@keystonehq/keystone-sdk';
 import { walletConfigStore } from '@/store/modules/walletConfig';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { isPaymentAddress, isPaymentAddressOrHandle } from '@/chrome/serialization';
 
 export default {
   name: 'SendDialog',
@@ -451,6 +453,9 @@ export default {
       }
     },
     buildTx(sendTokens) {
+      if (!this.sendData.recipientAddress || !isPaymentAddress(this.sendData.recipientAddress)) {
+        return
+      }
       const recipientAddress = this.sendData.recipientAddress;
       const tokens = [];
       if (sendTokens.length > 0) {
