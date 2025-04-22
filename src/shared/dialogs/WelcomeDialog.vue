@@ -1,5 +1,11 @@
 <template>
-  <v-dialog style="opacity: 0.9" max-width="1000" content-class="rounded-xxl dialogStyle" :persistent="true" v-model="welcomeScreenDialog">
+  <v-dialog
+    style="opacity: 0.9"
+    max-width="1000"
+    content-class="rounded-xxl dialogStyle"
+    :persistent="true"
+    :value="isOpen"
+  >
     <v-carousel v-model="carousel" height="500" :continuous="false">
       <v-carousel-item>
         <v-card style="position: relative; display: grid;">
@@ -234,7 +240,7 @@
                 </v-avatar>
               </v-btn>
             </div>
-            <v-btn class="geroButton mt-4" x-large style="font-size: 14px" @click="setWelcomeDone(true)">
+            <v-btn class="geroButton mt-4" x-large style="font-size: 14px" @click="setWelcomeDone()">
               Get Started!
             </v-btn>
           </div>
@@ -255,26 +261,24 @@ import assets from '@/utils/assets';
 
 export default defineComponent({
   name: 'WelcomeDialog',
+  props: {
+    isOpen: {
+      type: Boolean,
+      default: false,
+    }
+  },
   watch: {
-    welcomeDone(value) {
-      if (value) {
+    isOpen(value) {
+      if (!value) {
         setTimeout(() => this.carousel = 0, 2000);
       }
     }
   },
-  computed: {
-    ...mapState(useStore, ['getWelcomeDone', 'loggedWallet']),
-    welcomeScreenDialog: {
-      get() {
-        return !this.getWelcomeDone && this.loggedWallet.chain == Blockchain.CARDANO && this.loggedWallet.network === Network.MAINNET
-      },
-      set(value: any) {
-        this.setWelcomeDone(!value);
-      }
-    },
-  },
   methods: {
-    ...mapActions(useStore, ['login', 'setWelcomeDone']),
+    ...mapActions(useStore, ['login']),
+    setWelcomeDone() {
+      this.$emit('close')
+    },
     setNewDesign() {
       this.text = `<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
            <p>Rebuilt from the ground up with a fresh architecture and user interface.</p>

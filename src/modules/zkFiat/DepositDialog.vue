@@ -38,7 +38,7 @@
                   outlined
                   label="Spending Password"
                   :type="show1 ? 'text' : 'password'"
-                  :rules="[rules.required]"
+                  :rules="[rules.required()]"
                   hide-details
                   class="my-3"
                   required

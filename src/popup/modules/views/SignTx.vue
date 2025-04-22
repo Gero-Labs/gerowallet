@@ -63,7 +63,7 @@
                     placeholder="Type your spending password"
                     label="Spending Password"
                     :type="showPassword ? 'text' : 'password'"
-                    :rules="[rules.required]"
+                    :rules="[rules.required()]"
                     required
                     @keydown.enter.stop="sign"
                   >

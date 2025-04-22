@@ -50,7 +50,7 @@
                           label="Name"
                           :maxlength="40"
                           counter="40"
-                          :rules="[rules.required, rules.maxCharacters(40), rules.minCharacters(3)]"
+                          :rules="[rules.required(), rules.maxCharacters(40), rules.minCharacters(3)]"
                         ></v-text-field>
                       </v-col>
                       <v-col cols="12" sm="12" md="12" class="py-0">
@@ -59,7 +59,7 @@
                           dense
                           v-model="editedItem.address"
                           label="Address"
-                          :rules="[rules.required, rules.paymentAddress(loggedWallet.network === Network.TESTNET)]"
+                          :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
                         ></v-text-field>
                       </v-col>
                     </v-row>

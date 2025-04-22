@@ -143,7 +143,7 @@
               outlined
               label="Spending Password"
               :type="show1 ? 'text' : 'password'"
-              :rules="[rules.required]"
+              :rules="[rules.required()]"
               hide-details
               class="mb-2"
               required
@@ -198,7 +198,7 @@ import { mapState } from 'pinia';
 import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import rules from '@/shared/utils/rules';
-import { Network, WalletType } from '@/models/types';
+import { WalletType } from '@/models/types';
 import {
   Transaction,
   TransactionOutput,
@@ -261,7 +261,8 @@ export default {
     },
     isValid() {
       if (this.currentStep === 1) {
-        return rules.paymentAddress(this.loggedWallet?.network !== Network.MAINNET)(this.sendData.recipientAddress)
+        const fn = rules.recipientRules(this.loggedWallet?.chain, this.loggedWallet?.network);
+        return fn(this.sendData.recipientAddress) !== 'Invalid Payment Address'
       }
       if (this.currentStep === 2) {
         if (!this.txValid) {

@@ -1,6 +1,5 @@
 import axios, {AxiosError, AxiosInstance} from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { resolveRewardAddress } from '@/shared/utils/resolver';
 import {Blockchain, Network, Proof, Provider} from '@/models/types';
 
 export class Api {
@@ -45,9 +44,8 @@ export class Api {
     }
   }
 
-  async getAccountInfo(address: string) {
+  async getAccountInfo(rewardAddress: string) {
     try {
-      const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
       const { data, status } = await this.axiosInstance.get(
         `/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`
       );
@@ -58,10 +56,9 @@ export class Api {
     }
   }
 
-  async getAccountRewards(address: string) {
+  async getAccountRewards(rewardAddress: string) {
     try {
       const size = this.provider === Provider[Provider.BLOCKFROST] ? 100 : 1000;
-      const rewardAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
       let page = 1;
       let allRewards: any[] = []; // Accumulator for all rewards
       let morePages = true; // Condition to control the loop
@@ -89,9 +86,8 @@ export class Api {
     }
   }
 
-  async getAccountTransactions(address: string, fromBlockHeight: number) {
+  async getAccountTransactions(stakeAddress: string, fromBlockHeight: number) {
     try {
-      const stakeAddress = address.startsWith('addr') ? resolveRewardAddress(address) : address;
       const { data, status } = await this.axiosInstance.get(
         `/api/account/txs?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${stakeAddress}&from=${fromBlockHeight}`
       );
