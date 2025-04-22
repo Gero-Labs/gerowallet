@@ -63,7 +63,7 @@
               class="select-item width-50 mb-4"
               required
               hide-details
-              :rules="[rules.required]"
+              :rules="[rules.required()]"
               outlined
               dense
             ></v-select>
@@ -76,7 +76,7 @@
               required
               :maxlength="250"
               counter
-              :rules="[rules.required, rules.maxCharacters(250)]"
+              :rules="[rules.required(), rules.maxCharacters(250)]"
             ></v-textarea>
             <v-textarea
               outlined
@@ -86,7 +86,7 @@
               required
               placeholder="Write your evidence here..."
               :maxlength="250"
-              :rules="[rules.required, rules.maxCharacters(250)]"
+              :rules="[rules.required(), rules.maxCharacters(250)]"
               counter
             ></v-textarea>
             <v-list class="transparent py-0">

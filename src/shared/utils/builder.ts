@@ -28,7 +28,7 @@ export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));
 };
 
-export function  getTransactionBuilder(chain: string, network: string): TransactionBuilder {
+export function getTransactionBuilder(chain: string, network: string): TransactionBuilder {
   const pp = networks.resolveNetwork(chain, network).protocolParams;
 
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()

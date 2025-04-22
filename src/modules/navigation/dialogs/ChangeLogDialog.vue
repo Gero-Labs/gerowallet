@@ -60,7 +60,7 @@ import packageJson from '@/../package.json';
 
 export default {
   name: 'ChangeLogDialog',
-  components: { BaseDialog},
+  components: { BaseDialog },
   props: {
     isOpen: {
       type: Boolean,

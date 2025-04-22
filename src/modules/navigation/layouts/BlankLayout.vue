@@ -133,7 +133,9 @@ export default {
     },
     closeChangeLogDialog() {
       changeLog.setEnabled(false)
-      this.$router.replace({'query': null});
+      if (Object.keys(this.$route.query).length > 0) {
+        this.$router.replace({ query: null });
+      }
     }
   },
   data: () => ({

@@ -4,32 +4,34 @@
       <v-col cols="7">
         <div class="transaction-info text-left pb-4">
           <div>
-            Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo.tx_hash}`" target="_blank">{{ transactionInfo.tx_hash | truncate }}</a>
+            Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['tx_hash']}`" target="_blank">{{ transactionInfo['tx_hash'] | truncate }}</a>
             <CopyButton x-small :value="transactionInfo['tx_hash']" class="ml-1"></CopyButton>
           </div>
           <div>
             Time: <span class="value-text">{{new Date(transactionInfo['tx_timestamp'] * 1000).toLocaleString()}}</span>
           </div>
           <div>
-            Tx Size: <span class="value-text">{{transactionInfo['tx_size'] | humanFileSize}}</span>
+            Tx Size: <span class="value-text">{{ transactionInfo['tx_size'] | humanFileSize }}</span>
           </div>
           <div>
-            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ transactionInfo.block_hash | truncate }}</a>
-            <CopyButton x-small :value="transactionInfo.block_hash" class="ml-1"></CopyButton>
+            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ transactionInfo['block_hash'] | truncate }}</a>
+            <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
           </div>
           <div>
-            Block Height: <span class="value-text">{{ transactionInfo.block_height.toLocaleString('en-US') }}</span>
+            Block Height: <span class="value-text">{{ transactionInfo['block_height'].toLocaleString('en-US') }}</span>
           </div>
           <div>
-            Network Fee: <span style="color: #FF8E8E">{{ transactionInfo.fee | toCurrency }}</span>
+            Network Fee: <span style="color: #FF8E8E">{{ transactionInfo['fee'] | toCurrency }}</span>
           </div>
           <div style="align-items: center">
-            {{ (Number(transactionInfo.ada) > 0 ? 'Received: ' : 'Sent: ') }}
-            <span :style="Number(transactionInfo.ada) > 0 ? { color: '#00DFF3' } : { color: '#FF8E8E' }">
-            {{Number(transactionInfo.ada) | toCurrency}}
-              <v-chip class="mr-1" outlined v-for="(asset, index) in txAssets" :key="`asset_${index}`" x-small :color="Number(transactionInfo.ada) > 0 ? '#00DFF3' : '#FF8E8E'">
-                {{asset.quantity | toCurrency(false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
+            {{ (Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ') }}
+            <span :style="Number(transactionInfo['ada']) > 0 ? { color: '#00DFF3' } : { color: '#FF8E8E' }">
+            {{Number(transactionInfo['ada']) | toCurrency}}
+            <template v-for="(asset, index) in txAssets">
+              <v-chip class="mr-1" outlined  :key="`asset_${index}`" x-small :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'">
+                {{ asset.quantity | toCurrency(false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
               </v-chip>
+            </template>
           </span>
           </div>
           <div style="display: flex; width: 100%; align-items: baseline;">
@@ -54,7 +56,6 @@
                 </v-avatar>
               </v-btn>
             </div>
-
           </div>
         </div>
       </v-col>
@@ -78,7 +79,7 @@
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
           <v-card flat class="transparent">
-            <v-card-title>Inputs ({{transactionInfo.inputs.length}})</v-card-title>
+            <v-card-title>Inputs ({{transactionInfo['inputs'].length}})</v-card-title>
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
                 <thead class="grey--text">
@@ -89,7 +90,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(input, index) in transactionInfo.inputs" :key="`input_${index}`">
+                <tr v-for="(input, index) in transactionInfo['inputs']" :key="`input_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{ `${input.tx_hash}#${input.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
@@ -105,14 +106,16 @@
                       {{input.value | toCurrency}}
                     </div>
                     <div>
-                      <v-chip v-for="(asset, assetIndex) in input.asset_list" :key="`input_${index}_asset_${assetIndex}`" class="px-1" x-small>{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
+                      <template v-for="(asset, assetIndex) in input.asset_list">
+                        <v-chip :key="`input_${index}_asset_${assetIndex}`" class="px-1" x-small>{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
+                      </template>
                     </div>
                   </td>
                 </tr>
                 </tbody>
               </v-simple-table>
             </v-card-text>
-            <v-card-title>Outputs ({{transactionInfo.outputs.length}})</v-card-title>
+            <v-card-title>Outputs ({{transactionInfo['outputs'].length}})</v-card-title>
             <v-card-text>
               <v-simple-table dense  style="background-color: transparent">
                 <thead class="grey--text">
@@ -123,7 +126,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(output, index) in transactionInfo.outputs" :key="`output_${index}`">
+                <tr v-for="(output, index) in transactionInfo['outputs']" :key="`output_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
                       {{ `${output.tx_hash}#${output.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
@@ -148,7 +151,7 @@
                   <tr>
                     <td class="text-left">Total Output</td>
                     <td></td>
-                    <td class="text-right">{{transactionInfo.total_output | toCurrency}}</td>
+                    <td class="text-right">{{transactionInfo['total_output'] | toCurrency}}</td>
                   </tr>
                 </tfoot>
               </v-simple-table>
@@ -156,17 +159,17 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.certificates?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['certificates'].length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-certificate-outline</v-icon>
             </div>
-            <h3>Certificates ({{transactionInfo.certificates.length}})</h3>
+            <h3>Certificates ({{transactionInfo['certificates'].length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat v-for="(certificate, index) in transactionInfo.certificates" :key="index" class="mb-2 transparent">
+          <v-card flat v-for="(certificate, index) in transactionInfo['certificates']" :key="index" class="mb-2 transparent">
             <v-card-title>{{getCertificateType(certificate.type)}}</v-card-title>
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
@@ -225,7 +228,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.metadata">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['metadata']">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -239,21 +242,21 @@
             <v-card-title class="pb-0">
               <v-spacer>
               </v-spacer>
-              <CopyButton :value="JSON.stringify(transactionInfo.metadata)" small></CopyButton>
+              <CopyButton :value="JSON.stringify(transactionInfo['metadata'])" small></CopyButton>
             </v-card-title>
             <v-card-text class="text-left" style="font-size: 12px;font-family: monospace!important;">
-              {{JSON.stringify(transactionInfo.metadata, null, 2)}}
+              {{JSON.stringify(transactionInfo['metadata'], null, 2)}}
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.assets_minted?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['assets_minted']?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
-            <h3>Assets Minted ({{transactionInfo.assets_minted.length}})</h3>
+            <h3>Assets Minted ({{transactionInfo['assets_minted'].length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -269,7 +272,7 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(asset_minted, index) in transactionInfo.assets_minted" :key="`asset_minted_${index}`">
+                <tr v-for="(asset_minted, index) in transactionInfo['assets_minted']" :key="`asset_minted_${index}`">
                   <td class="text-left">
                     {{asset_minted.policy_id | truncate}}<CopyButton x-small class="ml-1" :value="asset_minted.policy_id"></CopyButton>
                   </td>
@@ -289,17 +292,17 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.withdrawals?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['withdrawals']?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-bank-transfer-out</v-icon>
             </div>
-            <h3>Withdrawals ({{transactionInfo.withdrawals.length}})</h3>
+            <h3>Withdrawals ({{transactionInfo['withdrawals'].length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat class="transparent" v-for="(withdrawal, index) in transactionInfo.withdrawals" :key="`withdrawal_${index}`">
+          <v-card flat class="transparent" v-for="(withdrawal, index) in transactionInfo['withdrawals']" :key="`withdrawal_${index}`">
             <v-card-title>Withdrawal</v-card-title>
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
@@ -326,17 +329,17 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.plutus_contracts?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['plutus_contracts'].length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-file-sign</v-icon>
             </div>
-            <h3>Contracts ({{transactionInfo.plutus_contracts.length}})</h3>
+            <h3>Contracts ({{transactionInfo['plutus_contracts'].length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat v-for="(contract, index) in transactionInfo.plutus_contracts" :key="`contracts_${index}`" class="mb-2 transparent">
+          <v-card flat v-for="(contract, index) in transactionInfo['plutus_contracts']" :key="`contracts_${index}`" class="mb-2 transparent">
             <v-card-title>Contract</v-card-title>
             <v-card-subtitle class="text-left">{{contract.address | truncate}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
             <v-card-title v-if="contract?.input?.redeemer">Redeemer</v-card-title>
@@ -452,7 +455,10 @@ export default defineComponent({
       this.isExpanded = true
     },
     async updateTokens(tokens) {
-      const assets = await Promise.all(tokens.map(token => resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)));
+      const assets = await Promise.all(tokens.map(token => {
+        const asset = this.assets[token['policy_id']+token['asset_name']]
+        return resolveAsset(asset, token)
+      }));
       this.txAssets = assets.slice(0, 4)
       if (assets?.length > 4) {
         this.residue = assets.slice(4)
