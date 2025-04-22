@@ -23,13 +23,13 @@ import {
   getDrepKey,
   urlScan,
   getUnusedAddresses,
-  convertToTxSchema,
+  // convertToTxSchema,
 } from '@/chrome/serialization';
 import { ERROR } from '@/models/types';
 import Tab = chrome.tabs.Tab;
 import networks from '../shared/utils/networks';
 import { getDomain } from 'tldts';
-import { setAccountTransactions } from '@/chrome/backgroundWalletDB';
+// import { setAccountTransactions } from '@/chrome/backgroundWalletDB';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -605,11 +605,11 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
             throw APIError.InvalidRequest;
         }
       }
-      const utxos = await getStorage(STORAGE.utxos);
-      const txCbor = request.data.tx
+      // const utxos = await getStorage(STORAGE.utxos);
+      // const txCbor = request.data.tx
       const txId = await response.text();
-      const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
-      await setAccountTransactions(loggedWallet.id, [tx])
+      // const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
+      // await setAccountTransactions(loggedWallet.id, [tx])
       sendResponse({
         id: request.id,
         data: txId,
