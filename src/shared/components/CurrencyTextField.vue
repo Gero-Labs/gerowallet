@@ -8,7 +8,7 @@
       maxlength="16"
       @input="handleInput"
       class="text-right transparent"
-      :rules="[rules.required, v => parseFloat(v) <= maximum || 'Insufficient Funds', v => parseFloat(v) > minimum || `Minimum Required ${minimum}`]"
+      :rules="[rules.required(), (v => parseFloat(v) <= maximum || 'Insufficient Funds'), (v => parseFloat(v) > minimum || `Minimum Required ${minimum}`)]"
       :readonly="readOnly"
     ></v-text-field>
   </v-form>

@@ -116,7 +116,7 @@ export default {
     },
     spendingPassword(val) {
       this.passwordRules = [
-        rules.required
+        rules.required()
       ]
     }
   },
@@ -226,7 +226,7 @@ export default {
     },
     valid: false,
     passwordRules: [
-      rules.required
+      rules.required()
     ],
     isBT: false,
   }),

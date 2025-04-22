@@ -17,11 +17,12 @@
             <v-menu
               v-model="saveContactMenu"
               :close-on-content-click="false"
+              :close-on-click="valid"
               offset-y
               max-width="452"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" :disabled="!valid" v-bind="attrs" v-on="on" @click="saveContact">
+                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
@@ -40,7 +41,7 @@
                 <v-card-title>
                   Contact Added
                   <v-spacer></v-spacer>
-                  <v-btn icon small @click="saveContactMenu = false">
+                  <v-btn icon small @click="saveContactMenu = false" :disabled="!valid">
                     <v-icon>
                       mdi-window-close
                     </v-icon>
@@ -66,16 +67,33 @@
                     </v-list-item-avatar>
                     <v-list-item-content>
                       <v-list-item-title class="py-2">
-                        <v-text-field v-model="contact.name" dense outlined label="Name" hide-details :maxlength="40" counter="40"></v-text-field>
+                        <v-text-field
+                          v-model="contact.name"
+                          dense
+                          outlined
+                          label="Name"
+                          hide-details
+                          :maxlength="40"
+                          counter="40"
+                          :rules="[rules.required(), rules.maxCharacters(40), rules.minCharacters(3)]"
+                        ></v-text-field>
                       </v-list-item-title>
                       <v-list-item-title class="py-2">
-                        <v-text-field v-model="contact.address" dense outlined label="Address" hide-details :disabled="contacts && contacts[contact.address] != null"></v-text-field>
+                        <v-text-field
+                          v-model="contact.address"
+                          dense
+                          outlined
+                          label="Address"
+                          hide-details
+                          :disabled="contacts && contacts[contact.address] != null"
+                          :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
+                        ></v-text-field>
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
                 </v-card-text>
                 <v-card-actions class="justify-center">
-                  <v-btn text @click="saveContactMenu = false">
+                  <v-btn text @click="saveContactMenu = false" :disabled="!valid">
                     Done
                   </v-btn>
                   <v-btn color="primary" text @click="removeCont">
@@ -161,7 +179,7 @@
               :placeholder="`Enter a Recipient Address${loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? ' or an ADA Handle' : ''}`"
               rows="3"
               outlined
-              :rules="recipientRules"
+              :rules="[rules.recipientRules(this.loggedWallet?.chain, this.loggedWallet?.network)]"
               class="recipient-address"
               @input="resolveAddress"
               :loading="loading"
@@ -234,21 +252,6 @@ export default {
   computed: {
     ...mapState(useStore, ['loggedWallet']),
     ...mapState(walletConfigStore, ['contacts']),
-    recipientRules() {
-      if (this.loggedWallet.network === Network.MAINNET) {
-        if (this.loggedWallet.chain === Blockchain.CARDANO) {
-          if (this.recipientAddress?.startsWith('$')) {
-            return [rules.required, rules.paymentAddressOrAdaHandle(), !!this.resolved]
-          } else {
-            return [rules.required, rules.paymentAddressOrAdaHandle()]
-          }
-        } else {
-          return [rules.required, rules.paymentAddress(false)]
-        }
-      } else {
-        return [rules.required, rules.paymentAddress(true)]
-      }
-    },
     Blockchain() {
       return Blockchain
     },
@@ -260,6 +263,7 @@ export default {
     ...mapActions(walletConfigStore, ['addOrUpdateContact', 'removeContact']),
     selectContact(item) {
       this.recipientAddress = item.address
+      this.paymentAddress = item.address
       this.$emit('updateRecipientAddress', this.recipientAddress)
       this.contactsMenu = false
     },
@@ -273,7 +277,7 @@ export default {
       } else {
         name = this.contacts[this.paymentAddress].name
       }
-      if (!name && this.asset.name) {
+      if (!name && this.asset?.name) {
         name = this.asset.name
       }
       this.contact = {

@@ -6,18 +6,15 @@ import cryptoRandomString from 'crypto-random-string';
 import {
   Address,
   BaseAddress,
-  BigNum,
   Bip32PrivateKey,
   Certificate,
   CertificateKind,
   decrypt_with_password,
-  DRep,
   encrypt_with_password,
   FixedTransaction,
   PrivateKey,
   PublicKey,
   RewardAddress,
-  ScriptHash,
   StakeDeregistration,
   Transaction,
   TransactionBody,
@@ -48,7 +45,6 @@ import {
   addVkeys,
   createCOSEKeyHex,
   createSignDataBuilder, getOwnedCred, hdPathToArray,
-  paymentCredential,
   safeFreeCSLObject,
   toHexArray,
   toHexString,
@@ -58,7 +54,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import {
   buildBaseAddress,
   buildEnterpriseAddress,
-  buildRewardAddress,
+  buildRewardAddress, convertToTxSchema,
   getAddress,
   getCip129DrepId,
   getDrepKey,
@@ -67,9 +63,8 @@ import {
   getStakeKey,
   paymentKeyHash,
   stakeKeyHash,
-  toStakeCredential,
 } from '@/chrome/serialization';
-import { Ed25519KeyHash, Ed25519PublicKey, Ed25519KeyHashHex, Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
 
@@ -532,8 +527,9 @@ export class Wallet {
     const txCbor = tx.to_hex()
     try {
       const txId = await this.api.submitTx(txCbor);
-      console.log('txId', txId)
-      await this.addPendingTx(txId, tx.to_js_value(), utxos, JSON.parse(tx.to_json()))
+      const tx = convertToTxSchema(txId, txCbor, utxos, this.networkId())
+      this.setAccountTransactions([tx])
+        .catch(e => console.log(e))
       return txId;
     } catch (error) {
       console.log(error)
@@ -549,156 +545,6 @@ export class Wallet {
         throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
       }
     }
-  }
-
-  async addPendingTx(txId: string, txJs: any, utxos: any, txJ: any) {
-    const inputs = []
-    txJs.body.inputs.forEach(input => {
-      const utxo = utxos.find(utxo => utxo.tx_hash === input.transaction_id && utxo.tx_index === input.index)
-      if (utxo) {
-        inputs.push(utxo)
-      }
-    })
-    const outputs = []
-    let index = 0
-    const totalOutput: BigNum = BigNum.zero()
-    txJ.body.outputs.forEach(output => {
-      let stakeAddress = null
-      try {
-        const stakeCred: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(output.address))
-        stakeAddress = Cardano.RewardAddress.fromCredentials(this.networkId(), stakeCred).toAddress().toBech32();
-      } catch (e) {
-        console.log(e)
-      }
-      totalOutput.checked_add(BigNum.from_str(output.amount.coin))
-      const asset_list = []
-      const multiAsset = output.amount.multiasset
-      if (multiAsset) {
-        Object.keys(multiAsset).forEach((policyId: string) => {
-          console.log(policyId)
-          const assets = multiAsset[policyId];
-          for (const assetName in assets) {
-            const quantity = assets[assetName];
-            asset_list.push({
-              policy_id: policyId,
-              asset_name: assetName,
-              quantity: quantity,
-            });
-          }
-        });
-      }
-      outputs.push({
-        asset_list,
-        datum_hash: null,
-        inline_datum: null,
-        payment_addr: {
-          bech32: output.address,
-          cred: paymentCredential(output.address)?.to_keyhash()?.to_hex()
-        },
-        reference_script: output.script_ref,
-        stake_addr: stakeAddress,
-        tx_hash: txId,
-        tx_index: index++,
-        value: output.amount.coin
-      })
-    })
-    const assets_minted = txJs.body.mint ? txJs.body.mint : []
-    const certificates = []
-    if (txJs.body.certs?.length > 0) {
-      let index = 0
-      txJs.body.certs.forEach(cert => {
-        if (cert['StakeDeregistration']?.stake_credential?.Key) {
-          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDeregistration']['stake_credential']['Key']).hex()
-          certificates.push({
-            index: index++,
-            info: {
-              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
-                type: Cardano.CredentialType.KeyHash,
-                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
-              }).toAddress().toBech32()
-            },
-            type: 'stake_deregistration'
-          })
-        } else if (cert['StakeRegistration']?.stake_credential?.Key) {
-          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeRegistration']['stake_credential']['Key']).hex()
-          certificates.push({
-            index: index++,
-            info: {
-              deposit: "2000000",
-              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
-                type: Cardano.CredentialType.KeyHash,
-                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
-              }).toAddress().toBech32()
-            },
-            type: 'stake_registration'
-          })
-        } else if (cert['StakeDelegation']?.stake_credential?.Key && cert['StakeDelegation']?.pool_keyhash) {
-          const stakeKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDelegation']['stake_credential']['Key']).hex()
-          const poolKeyHashHex: Ed25519KeyHashHex = Ed25519KeyHash.fromHex(cert['StakeDelegation']['pool_keyhash']).hex()
-          certificates.push({
-            index: index++,
-            info: {
-              pool_id_bech32: Cardano.PoolId.fromKeyHash(poolKeyHashHex),
-              pool_id_hex: poolKeyHashHex,
-              stake_address: Cardano.RewardAddress.fromCredentials(this.networkId(), {
-                type: Cardano.CredentialType.KeyHash,
-                hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHashHex)
-              }).toAddress().toBech32()
-            },
-            type: 'pool_delegation'
-          })
-        } else if (cert['VoteDelegation']?.stake_credential?.Key && cert['VoteDelegation']?.drep?.ScriptHash) {
-          const stakeKeyHash: Ed25519KeyHash = Ed25519KeyHash.fromHex(cert['VoteDelegation']['stake_credential']['Key'])
-          const drep = DRep.new_script_hash(ScriptHash.from_hex(cert['VoteDelegation']['drep']['ScriptHash']))
-          certificates.push({
-            index: index++,
-            info: {
-              drep_hex: drep.to_hex(),
-              drep_id: drep.to_bech32(),
-              stake_address: Cardano.RewardAddress.fromCredentials(
-                this.networkId(),
-                {
-                  type: Cardano.CredentialType.KeyHash,
-                  hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash.hex())
-                }
-              ).toAddress().toBech32()
-            },
-            type: 'vote_delegation'
-          })
-        } else {
-          console.log(cert)
-        }
-      })
-
-    }
-    const native_scripts = txJs.auxiliary_data?.native_scripts ? txJs.auxiliary_data.native_scripts : []
-    const plutus_contracts = txJs.auxiliary_data?.plutus_scripts ? txJs.auxiliary_data.plutus_scripts : []
-    const reference_inputs = txJs.body.reference_inputs ? txJs.body.reference_inputs : []
-    const withdrawals = txJs.body.withdrawals ? txJs.body.withdrawals : []
-    const tx = {
-      absolute_slot: 0,
-      assets_minted,
-      block_hash: '',
-      block_height: 0,
-      certificates,
-      deposit: "0",
-      fee: txJs.body.fee,
-      inputs,
-      invalid_after: "",
-      invalid_before: '',
-      metadata: txJs.auxiliary_data?.metadata,
-      native_scripts,
-      outputs,
-      plutus_contracts,
-      reference_inputs,
-      total_output: totalOutput.to_str(),
-      tx_hash: txId,
-      tx_size: 0,
-      tx_timestamp: (new Date()).getTime() / 1000,
-      withdrawals,
-      pending: true
-    }
-    await this.setAccountTransactions([tx])
   }
 
   async getLastSyncInfo() {

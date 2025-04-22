@@ -632,9 +632,7 @@ export const useStore = defineStore('store', {
       this.fiatRates = fiatRates
     },
     async setWelcomeDone(welcomeDone) {
-      if (appWallet) {
-        await db.setConfiguration('welcomeDone', welcomeDone)
-      }
+      await db.setConfiguration('welcomeDone', welcomeDone)
     },
     setStakingProView(isPro) {
       this.stakingProView = isPro
