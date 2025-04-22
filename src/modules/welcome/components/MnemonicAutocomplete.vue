@@ -1,7 +1,7 @@
 <template>
   <v-autocomplete v-model="mnemonic" outlined dense hide-details hide-no-data
                   :search-input.sync="search"
-                  :items="englishWords" auto-select-first :rules="[rules.required]"
+                  :items="englishWords" auto-select-first :rules="[rules.required()]"
                   @keydown.tab.exact="handleTab" @keydown.shift.tab="handleShiftTab"
   >
     <template v-slot:prepend>

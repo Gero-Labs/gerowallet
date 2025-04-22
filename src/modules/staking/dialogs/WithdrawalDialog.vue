@@ -57,6 +57,7 @@
                   hide-details
                   required
                   :disabled="loading"
+                  @keydown.enter.prevent="signWithdrawalTx"
                 >
                   <template v-slot:append>
                     <v-icon @click="showPassword = !showPassword" tabindex="-1">
@@ -117,7 +118,7 @@ export default {
     },
     spendingPassword(val) {
       this.passwordRules = [
-        rules.required
+        rules.required()
       ]
     }
   },
@@ -204,7 +205,7 @@ export default {
     },
     valid: false,
     passwordRules: [
-      rules.required
+      rules.required()
     ],
     isBT: false
   }),

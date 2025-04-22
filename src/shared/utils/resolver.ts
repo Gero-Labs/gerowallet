@@ -1,31 +1,11 @@
-import { toAddress, toBaseAddress } from '@/shared/utils/converter';
-import { buildRewardAddress } from '@/shared/utils/builder';
-import {
-  Address,
-  BaseAddress,
-  Ed25519KeyHash,
-  PlutusData,
-} from '@emurgo/cardano-serialization-lib-browser';
 import { appWallet } from '@/store';
 import { crc8 } from 'crc';
-import { jsonToPlutusData } from '@/shared/utils/converter';
+import { jsonToPlutusData } from '@/chrome/serialization';
 import { dexHunterStore } from '@/store/modules/dexhunter';
+import { Asset, Serialization } from '@cardano-sdk/core';
+import { dummyLogger } from 'ts-log'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
-
-export const resolveRewardAddress = (bech32: string) => {
-  try {
-    const address: Address = toAddress(bech32);
-    const baseAddress: BaseAddress = toBaseAddress(bech32);
-    const stakeKeyHash: Ed25519KeyHash = baseAddress?.stake_cred().to_keyhash();
-
-    if (stakeKeyHash) return buildRewardAddress(address.network_id(), stakeKeyHash).to_address().to_bech32();
-
-    throw new Error(`Couldn't resolve reward address from address: ${bech32}`);
-  } catch (error) {
-    throw new Error(`An error occurred during resolveRewardAddress: ${error}.`);
-  }
-};
 
 function cip68Label(asset: any) {
   const unit = asset.asset;
@@ -37,6 +17,19 @@ function cip68Label(asset: any) {
   const num: number = parseInt(numHex, 16);
   const check = label.slice(5, 7);
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
+}
+
+function resolveCip68(assetInfo, label: number, metadata, img: string, name: string) {
+  const plutusData: Serialization.PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
+  const metadataJson = Asset.NftMetadata.fromPlutusData(plutusData.toCore(), dummyLogger);
+  if (label == 333) {
+    metadata = metadataJson;
+    img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+  } else if (label == 222) {
+    img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+  }
+  name = metadataJson.name;
+  return { metadata, img, name };
 }
 
 export async function resolveAsset(asset, token): Promise<any> {
@@ -101,18 +94,10 @@ export async function resolveAsset(asset, token): Promise<any> {
         if (label) {
           const assetInfo = await appWallet.getDetailedAssetsInfo(asset.policy_id, asset.asset_name);
           if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
-            const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
-            const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
-            if (label == 333) {
-              metadata = metadataJson
-              if (Array.isArray(metadataJson.logo)) {
-                metadataJson.logo = metadataJson.logo.join('')
-              }
-              img = `${baseUrl}/api/ipfs?path=${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
-            } else if (label == 222) {
-              img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
-            }
-            name = metadataJson.name
+            const resolvedCip68 = resolveCip68(assetInfo, label, metadata, img, name);
+            metadata = resolvedCip68.metadata;
+            img = resolvedCip68.img;
+            name = resolvedCip68.name;
           }
         }
       }
@@ -120,19 +105,11 @@ export async function resolveAsset(asset, token): Promise<any> {
       const assetInfo = await appWallet.getDetailedAssetsInfo(token.policy_id, token.asset_name);
       if (assetInfo?.cip68_metadata) {
         const label: number = cip68Label(asset);
-        if (assetInfo.cip68_metadata[label]) {
-          const plutusData: PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
-          const metadataJson = JSON.parse(plutusData.to_json(0)).fields[0];
-          if (label == 333) {
-            if (Array.isArray(metadataJson.logo)) {
-              metadataJson.logo = metadataJson.logo.join('')
-            }
-            metadata = metadataJson
-            img = `${baseUrl}/api/ipfs?path=${metadataJson.logo.replace('ipfs://', '').replace('ipfs/', '')}`;
-          } else if (label == 222) {
-            img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
-          }
-          name = metadataJson.name
+        if (assetInfo?.cip68_metadata && assetInfo?.cip68_metadata[label]) {
+          const resolvedCip68 = resolveCip68(assetInfo, label, metadata, img, name);
+          metadata = resolvedCip68.metadata;
+          img = resolvedCip68.img;
+          name = resolvedCip68.name;
         }
       }
     }

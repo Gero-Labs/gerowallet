@@ -109,7 +109,7 @@
                       filled
                       label="Wallet Name"
                       placeholder="e.g. My New Wallet"
-                      :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
+                      :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
@@ -166,7 +166,7 @@
                       v-model="newWallet.password"
                       filled label="Spending Password"
                       :type="show1 ? 'text' : 'password'"
-                      :rules="[rules.required, rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
+                      :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
                   >
                     <template v-slot:append>
                       <v-icon @click="show1 = !show1" tabindex="-1">
@@ -181,7 +181,7 @@
                       filled
                       label="Confirm Password"
                       :type="show2 ? 'text' : 'password'"
-                      :rules="[rules.required, (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
+                      :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
                   >
                     <template v-slot:append>
                       <v-icon @click="show2 = !show2" tabindex="-1">

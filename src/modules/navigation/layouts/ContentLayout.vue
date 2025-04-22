@@ -126,7 +126,7 @@
         </v-layout>
       </v-container>
     </v-main>
-    <WelcomeDialog />
+    <WelcomeDialog :isOpen="!getWelcomeDone" @close="closeWelcomeDialog" />
     <ChangeLogDialog :isOpen="changeLog.enabled || this.$route.query['changeLog'] === 'true'" @close="closeChangeLogDialog" :persistent="false" />
   </v-app>
 </template>
@@ -164,7 +164,7 @@ export default {
     currentPage() {
       return this.$route
     },
-    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs', 'baseAddress', 'connected']),
+    ...mapState(useStore, ['loggedWallet', "latestTip", 'loadingTxs', 'baseAddress', 'connected', 'getWelcomeDone']),
     ...mapState(musicStore, ['musicPlaylist', 'context']),
     epochSlotPercentage() {
       if (this.latestTip) {
@@ -189,7 +189,10 @@ export default {
   }),
   methods: {
     ...mapActions(musicStore, ['setMediaPlayerShown']),
-    ...mapActions(useStore, ['login', 'sync']),
+    ...mapActions(useStore, ['login', 'sync', 'setWelcomeDone']),
+    closeWelcomeDialog() {
+      this.setWelcomeDone(true)
+    },
     copyAddress() {
       this.$refs.copyAddress.copy()
     },
@@ -198,7 +201,9 @@ export default {
     },
     closeChangeLogDialog() {
       changeLog.setEnabled(false)
-      this.$router.replace({'query': null});
+      if (Object.keys(this.$route.query).length > 0) {
+        this.$router.replace({ query: null });
+      }
     }
   },
   async mounted() {

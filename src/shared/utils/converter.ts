@@ -5,11 +5,10 @@ import {
   AuxiliaryData,
   AuxiliaryDataHash,
   BaseAddress,
-  BigInt,
-  BigNum, Bip32PrivateKey,
+  BigNum,
+  Bip32PrivateKey,
   Bip32PublicKey,
   ByronAddress,
-  ConstrPlutusData,
   Credential,
   decode_metadatum_to_json_str,
   Ed25519KeyHash,
@@ -22,9 +21,6 @@ import {
   MultiAsset,
   PlutusData,
   PlutusDatumSchema,
-  PlutusList,
-  PlutusMap,
-  PlutusMapValues,
   PointerAddress,
   PublicKey,
   RewardAddress,
@@ -69,8 +65,6 @@ const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
 
 export const toAddress = bech32 => Address.from_bech32(bech32);
 
-export const toBaseAddress = bech32 => BaseAddress.from_address(toAddress(bech32));
-
 export function toUTxO(utxo): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
     TransactionInput.new(TransactionHash.from_hex(utxo.tx_hash), utxo.tx_index),
@@ -93,47 +87,6 @@ export function toValue(assets, lovelace) {
   const value = Value.new(BigNum.from_str(lovelace));
   if (assets.length > 0 || !lovelace) value.set_multiasset(multiAsset);
   return value;
-}
-
-export function jsonToPlutusData(jsonObj): PlutusData {
-  function parsePlutusData(data) {
-    if ('bytes' in data) {
-      return PlutusData.new_bytes(Buffer.from(data.bytes, 'hex'));
-    } else if (data.int !== undefined) {
-      return PlutusData.new_integer(BigInt.from_str(data.int.toString()));
-    } else if (data.list) {
-      const plutusList = PlutusList.new();
-      data.list.forEach(item => {
-        plutusList.add(parsePlutusData(item));
-      });
-      return PlutusData.new_list(plutusList);
-    } else if (data.map) {
-      const plutusMap = PlutusMap.new();
-      data.map.forEach(item => {
-        const key = parsePlutusData(item.k);
-        const value = parsePlutusData(item.v);
-        const values = PlutusMapValues.new();
-        values.add(value)
-        plutusMap.insert(key, values);
-      });
-      return PlutusData.new_map(plutusMap);
-    } else if (data.constructor !== undefined && data.fields) {
-      const constrFields = PlutusList.new();
-      data.fields.forEach(field => {
-        constrFields.add(parsePlutusData(field));
-      });
-      return PlutusData.new_constr_plutus_data(
-        ConstrPlutusData.new(
-          BigNum.from_str(data.constructor.toString()),
-          constrFields
-        )
-      );
-    } else {
-      throw new Error('Unsupported PlutusData format');
-    }
-  }
-
-  return parsePlutusData(jsonObj);
 }
 
 export const assetsToValue = (assets) => {
@@ -227,31 +180,6 @@ export function hdPathToArray(path: string): number[] {
       return parseInt(part, 10);
     }
   });
-}
-
-export function paymentCredential(address: string): Credential {
-  const keyAddress: Address = Address.from_bech32(address);
-  try {
-    return BaseAddress.from_address(keyAddress).payment_cred();
-  } catch (e) {
-    console.log()
-  }
-  try {
-    return EnterpriseAddress.from_address(keyAddress).payment_cred();
-  } catch (e) {
-    console.log()
-  }
-  return undefined;
-}
-
-export function stakeCredential(address: string): Credential {
-  const keyAddress: Address = Address.from_bech32(address);
-  try {
-    return BaseAddress.from_address(keyAddress).stake_cred();
-  } catch (e) {
-    //
-  }
-  return undefined;
 }
 
 export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {

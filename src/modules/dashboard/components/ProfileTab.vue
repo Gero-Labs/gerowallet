@@ -123,7 +123,6 @@
             outlined
             color="grey"
             @click="showGuide"
-            disabled
           >
             <span class="capitalize">Show Guide</span>
           </v-btn>

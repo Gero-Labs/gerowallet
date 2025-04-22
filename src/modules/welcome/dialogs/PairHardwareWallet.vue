@@ -221,7 +221,7 @@
                       filled
                       label="Wallet Name"
                       placeholder="e.g. My New Wallet"
-                      :rules="[rules.required, rules.minCharacters(3), rules.maxCharacters(40)]"
+                      :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                       :disabled="creatingWalletLoader"
                   ></v-text-field>
                   <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
