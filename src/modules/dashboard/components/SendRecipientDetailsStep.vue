@@ -198,7 +198,20 @@
           <v-col cols="12" style="color: #61646C; min-height: 96px; font-style: italic; align-content: center;" class="py-0">
             <v-list-item v-if="resolved" class="px-0">
               <v-list-item-avatar v-if="asset.img" size="80" rounded>
-                <v-img :src="asset.img" contain></v-img>
+                <v-img :src="asset.img" contain>
+                  <template v-slot:placeholder>
+                    <v-row
+                      class="fill-height ma-0"
+                      align="center"
+                      justify="center"
+                    >
+                      <v-progress-circular
+                        indeterminate
+                        color="grey lighten-5"
+                      ></v-progress-circular>
+                    </v-row>
+                  </template>
+                </v-img>
               </v-list-item-avatar>
               <v-list-item-subtitle style="white-space: normal">
                 {{paymentAddress}}
