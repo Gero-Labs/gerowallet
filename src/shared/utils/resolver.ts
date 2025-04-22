@@ -2,8 +2,9 @@ import { appWallet } from '@/store';
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
 import { dexHunterStore } from '@/store/modules/dexhunter';
-import { Asset, Serialization } from '@cardano-sdk/core';
-import { dummyLogger } from 'ts-log'
+import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
+import { isNotNil } from '@cardano-sdk/util';
+import { TextDecoder } from 'web-encoding';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -21,16 +22,201 @@ function cip68Label(asset: any) {
 
 function resolveCip68(assetInfo, label: number, metadata, img: string, name: string) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(assetInfo.cip68_metadata[label]);
-  const metadataJson = Asset.NftMetadata.fromPlutusData(plutusData.toCore(), dummyLogger);
+  const metadataJson = fromPlutusData(plutusData.toCore());
+  metadata = metadataJson;
+  if (metadataJson.otherProperties) {
+    metadata['otherProperties'] = Object.fromEntries(metadataJson.otherProperties.entries())
+  }
+  let image = metadataJson.image;
+  if (metadata['otherProperties'] && metadata['otherProperties']['logo'] && !image) {
+    image = metadata['otherProperties']['logo']
+  }
   if (label == 333) {
-    metadata = metadataJson;
-    img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+    img = `${baseUrl}/api/ipfs?path=${image.replace('ipfs://', '').replace('ipfs/', '')}`;
   } else if (label == 222) {
-    img = `${baseUrl}/api/ipfs?path=${metadataJson.image.replace('ipfs://', '').replace('ipfs/', '')}`;
+    img = `${baseUrl}/api/ipfs?path=${image.replace('ipfs://', '').replace('ipfs/', '')}`;
   }
   name = metadataJson.name;
   return { metadata, img, name };
 }
+
+const getConditionalValidators = (strict: boolean) => ({
+  isNameValid: (name: Cardano.PlutusData | string | undefined): name is string | undefined => {
+    if (typeof name === 'string') return true;
+    if (typeof name === 'undefined') {
+      if (strict) {
+        console.debug('Invalid PlutusData: "name" is required');
+        return false;
+      }
+      return true;
+    }
+    console.debug('Invalid PlutusData: "name" must be utf8 bounded bytes');
+    return false;
+  },
+  isValidDatumShape: (plutusData: Cardano.PlutusData | undefined): plutusData is Cardano.ConstrPlutusData => {
+    const minNumberOfFields = strict ? 3 : 2;
+    const isValid =
+      Cardano.util.isConstrPlutusData(plutusData) &&
+      plutusData.constructor === 0n &&
+      plutusData.fields.items.length >= minNumberOfFields;
+    if (!isValid)
+      console.debug(
+        `Invalid PlutusData: expecting ConstrPlutusData with 0th constructor and ${minNumberOfFields} items`
+      );
+    return isValid;
+  }
+});
+
+const utf8Decoder = new TextDecoder('utf8', { fatal: true });
+
+const tryConvertPlutusDataToUtf8String = (data: Cardano.PlutusData): Cardano.PlutusData | string => {
+  if (!Cardano.util.isPlutusBoundedBytes(data)) return data;
+  try {
+    return utf8Decoder.decode(data);
+  } catch {
+    return data;
+  }
+};
+
+const tryConvertPlutusDataToUtf8List = (data: Cardano.PlutusData): Cardano.PlutusData | string => {
+  if (!Cardano.util.isPlutusList(data)) return data;
+  let list: string = "";
+  try {
+    console.log(data.items)
+    data.items.forEach(item => {
+      list += tryConvertPlutusDataToUtf8String(item);
+    })
+    return list;
+  } catch {
+    return data;
+  }
+}
+
+const tryConvertPlutusMapToUtf8Record = (map: Cardano.PlutusMap): Partial<Record<string, string | Cardano.PlutusData>> => {
+  const record: Partial<Record<string, string | Cardano.PlutusData>> = {};
+  for (const [key, value] of map.data.entries()) {
+    const keyAsStr = tryConvertPlutusDataToUtf8String(key);
+    if (typeof keyAsStr !== 'string') {
+      console.warn('Failed to decode plutus map key', key);
+      continue;
+    }
+    if (Cardano.util.isPlutusList(value)) {
+      record[keyAsStr] = tryConvertPlutusDataToUtf8List(value)
+    } else if (Cardano.util.isPlutusBoundedBytes(value)) {
+      record[keyAsStr] = tryConvertPlutusDataToUtf8String(value);
+    }
+  }
+  return record;
+};
+
+export const asString = (value: unknown) => (typeof value === 'string' ? value : undefined);
+
+const tryCoerce = <T>(value: string | Cardano.PlutusData | undefined, ctor: (v: string) => T): T | undefined => {
+  if (typeof value !== 'string')
+    return undefined;
+  try {
+    return ctor(value);
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return undefined;
+  }
+};
+
+const mapFiles = (files: string | Cardano.PlutusData | undefined): Asset.NftMetadataFile[] | undefined => {
+  if (!files) return undefined;
+  if (!Cardano.util.isPlutusList(files)) {
+    console.warn('expected "files" to be a list');
+    return undefined;
+  }
+  return files.items.map((file) => mapFile(file)).filter(isNotNil);
+};
+
+const mapOtherPropertyValue = (value: string | Cardano.PlutusData): Cardano.Metadatum => {
+  if (typeof value === 'string' || Cardano.util.isPlutusBigInt(value) || Cardano.util.isPlutusBoundedBytes(value)) return value;
+  if (Cardano.util.isPlutusMap(value)) {
+    const properties = mapOtherProperties(tryConvertPlutusMapToUtf8Record(value));
+    return new Map(Object.entries(properties));
+  }
+  const list = Cardano.util.isPlutusList(value) ? value.items : value.fields.items;
+  return list.map((item) => mapOtherPropertyValue(item));
+};
+
+const mapOtherProperties = (
+  additionalProperties: Partial<Record<string, string | Cardano.PlutusData>>,
+): Map<string, Cardano.Metadatum> =>
+  Object.entries(additionalProperties).reduce((result, [key, value]) => {
+    if (typeof value !== 'undefined') {
+      result.set(key, mapOtherPropertyValue(value));
+    }
+    return result;
+  }, new Map());
+
+const undefinedIfEmpty = <K, V>(map: Map<K, V>) => (map.size > 0 ? map : undefined);
+
+const mapFile = (file: Cardano.PlutusData): Asset.NftMetadataFile | undefined => {
+  if (!Cardano.util.isPlutusMap(file)) {
+    return undefined;
+  }
+  const {
+    mediaType: mediaTypeStr,
+    src: srcStr,
+    name,
+    ...additionalProperties
+  } = tryConvertPlutusMapToUtf8Record(file);
+  const mediaType = tryCoerce(mediaTypeStr, Asset.MediaType);
+  const src = tryCoerce(srcStr, Asset.Uri);
+  if (typeof src !== 'string' || typeof mediaType !== 'string') {
+    return undefined;
+  }
+  return {
+    mediaType,
+    name: asString(name),
+    otherProperties: undefinedIfEmpty(mapOtherProperties(additionalProperties)),
+    src
+  };
+};
+
+export const fromPlutusData = (
+  plutusData: Cardano.PlutusData | undefined,
+  strict = false
+): Asset.NftMetadata | null => {
+  const conditionalValidators = getConditionalValidators(strict);
+  if (!conditionalValidators.isValidDatumShape(plutusData)) {
+    return null;
+  }
+
+  const [nftMetadata, version] = plutusData.fields.items;
+  if (!Cardano.util.isPlutusMap(nftMetadata) || !Cardano.util.isPlutusBigInt(version)) {
+    console.debug('Invalid PlutusData: expecting a map at [0] and integer at [1]');
+    return null;
+  }
+
+  const nftMetadataRecord = tryConvertPlutusMapToUtf8Record(nftMetadata);
+  const { name, image, mediaType, description, files, ...additionalProperties } = nftMetadataRecord;
+
+  if (!conditionalValidators.isNameValid(name)) {
+    return null;
+  }
+
+  let imageAsUri: Asset.Uri = undefined
+  if (typeof image !== 'string') {
+    console.debug('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
+  } else {
+    imageAsUri = tryCoerce(image, Asset.Uri);
+  }
+
+
+
+  return {
+    description: asString(description),
+    files: mapFiles(files),
+    image: imageAsUri,
+    mediaType: tryCoerce(mediaType, Asset.ImageMediaType),
+    name: name || '',
+    otherProperties: undefinedIfEmpty(mapOtherProperties(additionalProperties)),
+    version: version.toString()
+  };
+};
 
 export async function resolveAsset(asset, token): Promise<any> {
   let img;
