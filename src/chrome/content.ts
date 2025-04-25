@@ -43,7 +43,6 @@ async function injectBring() {
     promptLogin,
     walletAddressListeners: ['gero:login', 'gero:logout'],
     theme: 'dark',
-    switchWallet: false,
     darkTheme: {
       // font
       fontUrl: 'https://fonts.googleapis.com/css2?family=Inter&display=swap',
