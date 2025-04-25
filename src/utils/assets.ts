@@ -48,6 +48,12 @@ import dollarShieldSvg from '@/assets/svg/dollar-shield.svg'
 import swapSvg from '@/assets/svg/swap.svg'
 import qrCodeSvg from '@/assets/svg/qr-code.svg'
 import sendSvg from '@/assets/svg/send.svg'
+import multisigTree from '@/assets/svg/multisig-tree.svg'
+import multisigPaid from '@/assets/svg/multisig_paid.svg'
+import multisigPending from '@/assets/svg/multisig_pending.svg'
+import multisigDollar from '@/assets/svg/multisig_dollar.svg'
+import multisigExpired from '@/assets/svg/multisig_expired.svg'
+import multisigTotal from '@/assets/svg/multisig_stack.svg'
 
 import cardanoBackground from '@/assets/cardanoBg.png'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
@@ -139,7 +145,13 @@ export default {
   swapSvg,
   qrCodeSvg,
   sendSvg,
-
+  multisigTree,
+  multisigPaid,
+  multisigPending,
+  multisigDollar,
+  multisigExpired,
+  multisigTotal,
+  
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
@@ -230,4 +242,64 @@ export default {
         return riskUnknown;
     }
   }
+}
+
+export const svgAssets = {
+  walletCreateBg,
+  walletRestoreBg,
+  hardwareWalletBg,
+  walletCreateApexBg,
+  walletRestoreApexBg,
+  hardwareWalletApexBg,
+  greenSvg,
+  purpleSvg,
+  pinkSvg,
+  orangeSvg,
+  blueSvg,
+  greySvg,
+  ledgerSvg,
+  keystoneSvg,
+  ledgerLogoSvg,
+  trezorLogoSvg,
+  keystoneLogoSvg,
+  connectLedgerSvg,
+  connectTrezorSvg,
+  connectKeystoneSvg,
+  loadingAnimation,
+  errorImage,
+  geroDashboard,
+  barChart,
+  coinsStacked,
+  blog,
+  mediaPlayer,
+  cashback,
+  governance,
+  transactions,
+  market,
+  zkFiat,
+  infinity,
+  usersPlus,
+  logout,
+  walletSvg,
+  settingsSvg,
+  arrowRightSvg,
+  trendUpSvg,
+  trendDownSvg,
+  xSvg,
+  discordSvg,
+  telegramSvg,
+  dollarShieldSvg,
+  swapSvg,
+  qrCodeSvg,
+  sendSvg,
+  multisigTree,
+  multisigPaid,
+  multisigPending,
+  multisigDollar,
+  multisigExpired,
+  multisigTotal,
+  giftSvg,
+  pendingSvg,
+  piggyBankSvg,
+  withdrawalSvg,
 }

@@ -395,4 +395,38 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  multiSig = {
+    async createMultisigWallet(multisig: any, parentWalletAddress: string) {
+      return 'OK';
+      try {
+        const { data, status } = await super.axiosInstance.post(
+          `/api/multisig/add`,
+          {
+            multisig,
+            parentWalletAddress
+          }
+        );
+        console.log("data::::", data);
+        console.log("status:::", status);
+        if (status === 200) return data;
+        throw parseHttpError(data);
+      } catch (error: any | AxiosError) {
+        if (error.response?.status === 404) {
+          return []
+        }
+        console.log("FAILED:::");
+        throw parseHttpError(error);
+      }
+    },
+  
+    async submitMultisigTx(body: string): Promise<any> {
+      const provider = super.provider ?? 'BLOCKFROST';
+      const { data } = await super.axiosInstance.post(
+        `/api/transactions/submit-tx?chain=${super.chain}&network=${super.network}&provider=${provider}`, 
+        body
+      );
+      return data;
+    }
+  }
 }
