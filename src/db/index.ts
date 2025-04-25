@@ -166,8 +166,9 @@ export default {
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewWalletDb(walletId: number) {
-    const db = new Dexie('wallet-' + walletId);
+  async createNewWalletDb(walletId: number|string) {
+    const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
+    const db = new Dexie(walletName);
     this.setWalletDBVersionSchema(db)
     db.open().catch(err => {
       console.error(`Failed to open database: ${err.stack || err}`);
@@ -184,11 +185,11 @@ export default {
       }
     });
   },
-  async deleteWallet(walletId: number) {
+  async deleteWallet(walletId: number|string) {
+    const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
     await db['wallets'].delete(walletId)
-    const dbName = 'wallet-' + walletId;
-    await Dexie.delete(dbName).catch(err => {
-      console.error(`Failed to delete database '${dbName}': ${err.stack || err}`);
+    await Dexie.delete(walletName).catch(err => {
+      console.error(`Failed to delete database '${walletName}': ${err.stack || err}`);
     });
   },
   async checkAndCreateBlockchainDatabase(dbName: string) {

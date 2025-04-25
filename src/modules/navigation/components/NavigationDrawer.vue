@@ -245,16 +245,21 @@ export default {
       return [
         // { header: 'Home' },
         {title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true},
-        {title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: true},
         {title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
-        {title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
-        {title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        { header: 'Activities & Rewards' },
         {title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
-        {title: 'Market', icon: assts.market, link: '/market', enabled: false, soon: true},
-        {title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', soon: true},
         {title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', soon: true},
         {title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true},
+        { header: 'Cardano Essentials' },
+        {title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: true},
+        {title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true},
+        { header: 'Financial Hub' },
+        {title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
+        {title: 'Market', icon: assts.market, link: '/market', enabled: false, soon: true},
+        {title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', soon: true},
+        { header: 'Media' },
+        {title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
         // { header: 'Tools' },
         // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
         // { title: 'IPFS Cache', icon: 'mdi-cube', link: '/ipfs-cache', soon: true },
@@ -332,7 +337,7 @@ export default {
   }
 }
 </script>
-<style scoped>
+<style lang="scss" scoped>
 .menuItem {
   border: 1px solid transparent;
 }
@@ -344,44 +349,68 @@ export default {
 .activePageDark {
   color: #FFFFFF;
   background: #0C0E12;
-
-  /* Border */
   border: 1px solid transparent;
   border-radius: 6px;
-  background:
-    linear-gradient(to right, #0C0E12, #0C0E12),
-    linear-gradient(to right, #0C0E12 8%, #00D1FF);
-  background-clip: padding-box, border-box;
-  background-origin: padding-box, border-box;
+  background: {
+    image: linear-gradient(to right, #0C0E12, #0C0E12),
+             linear-gradient(to right, #0C0E12 8%, #00D1FF);
+    clip: padding-box, border-box;
+    origin: padding-box, border-box;
+  }
+
+  .v-image {
+    filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
+  }
 }
 
-.activePageDark .v-image {
-  filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)!important;
+.theme--dark.v-list-item {
+  &:not(.v-list-item--active):not(.v-list-item--disabled) {
+    color: #FFFFFF !important;
+  }
+
+  &:focus::before {
+    opacity: 0 !important;
+  }
+
+  &--active {
+    &:focus::before,
+    &:hover::before,
+    &::before {
+      opacity: 0 !important;
+    }
+  }
 }
 
-.theme--dark.v-list-item:not(.v-list-item--active):not(.v-list-item--disabled) {
-  color: #FFFFFF!important;
+.menuItem.v-list-item--link {
+  &:before {
+    background: #0C0E12;
+    border: 1px solid transparent;
+  }
+
+  &:not(.activePageDark):hover {
+    background: #0C0E12;
+    border: 1px solid transparent;
+  }
 }
 
-.menuItem.v-list-item--link:before {
-  background: #0C0E12;
-  border: 1px solid transparent;
-}
+.v-subheader {
+  font-size: 10px;
+  text-align: center;
+  line-height: 10px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
 
-.menuItem.v-list-item--link:not(.activePageDark):hover {
-  background: #0C0E12;
-  border: 1px solid transparent;
-}
-
-.theme--dark.v-list-item:focus::before {
-  opacity: 0!important;
-}
-
-.theme--dark.v-list-item--active:focus::before {
-  opacity: 0!important;
-}
-
-.theme--dark.v-list-item--active:hover::before, .theme--dark.v-list-item--active::before {
-  opacity: 0!important;
+  &:before {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: #0C0E12;
+    position: absolute;
+    top: 50%;
+    left: 0;
+    z-index: -1;
+  }
 }
 </style>

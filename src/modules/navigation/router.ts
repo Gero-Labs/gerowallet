@@ -21,6 +21,7 @@ import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
+import MultiSig from '@/modules/multisig/views/MultiSig.vue';
 
 const routes = [
   {
@@ -168,6 +169,15 @@ const routes = [
     },
   },
   {
+    path: '/multisig',
+    name: 'multisig',
+    component: MultiSig,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: false,
+    },
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -200,7 +210,15 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
         path += `?redirect=${to.fullPath}`
       }
       if (to.query && Object.keys(to?.query).length !== 0) {
-        path += `?${(new URLSearchParams(to.query)).toString()}`;
+        const params = new URLSearchParams();
+        Object.entries(to.query).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            value.forEach(v => params.append(key, v));
+          } else if (value) {
+            params.append(key, value.toString());
+          }
+        });
+        path += `?${params.toString()}`;
       }
       next({
         path: path,
