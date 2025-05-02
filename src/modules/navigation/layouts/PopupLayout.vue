@@ -7,7 +7,7 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import loading from '@/plugins/loading';
 
 export default {

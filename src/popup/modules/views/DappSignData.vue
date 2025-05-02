@@ -75,9 +75,9 @@
   </v-form>
 </template>
 <script>
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';

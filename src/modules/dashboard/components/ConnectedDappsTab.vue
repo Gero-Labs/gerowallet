@@ -1,6 +1,6 @@
 <template>
   <v-tab-item>
-    <v-card class="transparent">
+    <v-card flat class="transparent">
       <v-card-text class="px-0">
         <v-data-table
           class="transparent"
@@ -59,7 +59,7 @@
 </template>
 <script >
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 
 export default {
   name: 'CollateralTab',

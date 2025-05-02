@@ -94,9 +94,9 @@
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
 

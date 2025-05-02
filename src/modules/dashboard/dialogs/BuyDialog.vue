@@ -112,9 +112,9 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';

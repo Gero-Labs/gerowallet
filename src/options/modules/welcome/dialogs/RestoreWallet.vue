@@ -73,14 +73,14 @@
                   </v-card>
                 </v-card-text>
                 <v-card-actions class="pa-0 align-self-end" style="width: 100%">
-                  <v-btn
-                    text
-                    color="primary"
-                    @click="pasteFromClipboard"
-                    elevation="0"
-                  >
-                    Paste from Clipboard
-                  </v-btn>
+<!--                  <v-btn-->
+<!--                    text-->
+<!--                    color="primary"-->
+<!--                    @click="pasteFromClipboard"-->
+<!--                    elevation="0"-->
+<!--                  >-->
+<!--                    Paste from Clipboard-->
+<!--                  </v-btn>-->
                   <v-spacer></v-spacer>
                   <v-btn
                       color="primary"
@@ -242,10 +242,10 @@
 </template>
 <script>
 import * as bip39 from "bip39";
-import rules from "@/shared/utils/rules";
+import rules from "@/utils/rules";
 import {Theme} from "@/models/types"
 import db from "@/db";
-import { useStore } from "@/store";
+import { useStore } from "@/stores";
 import MnemonicAutocomplete from "@/modules/welcome/components/MnemonicAutocomplete.vue";
 import assets from '@/utils/assets';
 
@@ -296,7 +296,7 @@ export default {
   },
   methods: {
     onKeydown(event) {
-      if (event.code === "KeyV" && event.ctrlKey) {
+      if ((event.code === "KeyV" && event.ctrlKey) || (event.code === "KeyV" && event.metaKey)) {
         this.pasteFromClipboard()
       }
     },

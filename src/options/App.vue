@@ -35,10 +35,11 @@
 import BlankLayout from "@/modules/navigation/layouts/BlankLayout.vue";
 import ContentLayout from "@/modules/navigation/layouts/ContentLayout.vue";
 import {mapActions, mapState} from "pinia";
-import {useStore} from "@/store";
+import {useStore} from "@/stores";
 import loading from "@/plugins/loading";
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
+import networks from '@/utils/networks';
 
 export default {
   components: { BlankLayout, ContentLayout },
@@ -48,13 +49,16 @@ export default {
     assts,
   }),
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'loadingTxs', 'network']),
   },
   methods: {
-    ...mapActions(useStore, ['login', 'setLoadingTxs']),
+    ...mapActions(useStore, ['login', 'setLoadingTxs', 'setNetwork']),
   },
   mounted() {
-
+    if (!this.network) {
+      this.selectedNetwork = networks.networks[0]
+      useStore().setNetwork(this.selectedNetwork)
+    }
   }
 }
 </script>

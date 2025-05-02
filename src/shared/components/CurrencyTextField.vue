@@ -14,7 +14,7 @@
   </v-form>
 </template>
 <script>
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 
 export default {
   name: 'CurrencyTextField',
