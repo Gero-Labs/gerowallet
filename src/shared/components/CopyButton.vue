@@ -1,6 +1,9 @@
 <template>
-  <v-btn :icon="!!!title" :text="!!title" :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
-    <span v-if="title" class="mr-1">{{title}}</span>
+  <v-btn class="px-1" :icon="!!!title" :text="!!title" :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
+    <v-avatar v-if="avatar" :size="size" style="margin-right: 2px">
+      <v-img :src="avatar" alt="Avatar" contain />
+    </v-avatar>
+    <span v-if="title" class="mr-1" style="text-transform: none">{{title}}</span>
     <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
       {{ icon }}
     </v-icon>
@@ -41,12 +44,25 @@ export default {
     title: {
       type: String,
       required: false,
+    },
+    avatar: {
+      type: Object | String,
+      required: false,
     }
   },
   data() {
     return {
       icon: 'mdi-content-copy',
       colorB: undefined,
+    }
+  },
+  computed: {
+    size() {
+      if (this.xSmall) return 12
+      if (this.small) return 20
+      if (this.large) return 32
+      if (this.xLarge) return 40
+      return 24
     }
   },
   methods: {

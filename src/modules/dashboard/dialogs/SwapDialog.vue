@@ -7,7 +7,7 @@
 </template>
 <script>
 import filters from "@/shared/utils/filters";
-import BaseDialog from "@/shared/components/BaseDialog.vue";
+import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 

@@ -34,7 +34,7 @@
 </template>
 <script>
 import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { resolveAsset } from '@/shared/utils/resolver';
 
 export default {

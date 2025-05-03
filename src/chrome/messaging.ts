@@ -74,17 +74,24 @@ class InternalController {
 }
 
 class BackgroundController {
-  private _methodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
+  private methodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
+  private optionsMethodList: { [key: string]: (request: any, sendResponse: any) => void } = {};
 
   add = (method: string, func: (request: any, sendResponse: any) => void) => {
-    this._methodList[method] = func;
+    this.methodList[method] = func;
+  };
+
+  addToOptions = (method: string, func: (request: any, sendResponse: any) => void) => {
+    this.optionsMethodList[method] = func;
   };
 
   listen = () => {
     if (chrome?.runtime) {
       chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
         if (request.sender === SENDER.webpage) {
-          this._methodList[request.method](request, sendResponse);
+          this.methodList[request.method](request, sendResponse);
+        } else if (request.sender === SENDER.options) {
+          this.optionsMethodList[request.method](request, sendResponse);
         }
         return true;
       });
@@ -93,6 +100,14 @@ class BackgroundController {
 }
 
 export const Messaging = {
+  sendToBackgroundFromOptions: async function (request: Message) {
+    return new Promise((resolve, reject) =>
+      chrome.runtime.sendMessage(
+        { ...request, target: TARGET, sender: SENDER.options },
+        (response) => resolve(response)
+      )
+    );
+  },
   sendToBackground: async function (request: Message) {
     return new Promise((resolve, reject) =>
       chrome.runtime.sendMessage(

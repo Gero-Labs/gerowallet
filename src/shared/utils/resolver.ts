@@ -1,7 +1,7 @@
-import { appWallet } from '@/store';
+import { appWallet } from '@/stores';
 import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
-import { dexHunterStore } from '@/store/modules/dexhunter';
+import { dexHunterStore } from '@/stores/modules/dexhunter';
 import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
 import { isNotNil } from '@cardano-sdk/util';
 import { TextDecoder } from 'web-encoding';

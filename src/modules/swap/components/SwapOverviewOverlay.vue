@@ -105,10 +105,9 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import filters from '@/shared/utils/filters';
-import rules from '@/shared/utils/rules';
 import { mapState } from 'pinia';
-import { useStore} from '@/store';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { useStore} from '@/stores';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default defineComponent({
   name: 'SwapOverviewOverlay',

@@ -22,7 +22,7 @@ import {
   TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Api } from '@/api/api';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import {
   Blockchain,
   ChainDerivations,
@@ -40,7 +40,7 @@ import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app
 import ledger from '@/shared/utils/ledger';
 // import trezor from '@/shared/utils/trezor';
 import loading from '@/plugins/loading';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import {
   addVkeys,
   createCOSEKeyHex,
@@ -67,6 +67,7 @@ import {
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
+import zkFoldApi from '@/api/zk-fold.api';
 
 export class Wallet {
   db: Dexie;
@@ -85,8 +86,11 @@ export class Wallet {
 
   encryptedPrivateKey: any;
   passwordLastUpdate: Date;
+  userId?: string;
+  encryptedMnemonic?: string;
+  zkBaseAddress?: Cardano.Address;
 
-  constructor(id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network) {
+  constructor(id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId?: string, encryptedMnemonic?: string) {
     this.id = id;
     this.name = name;
     this.icon = icon;
@@ -98,20 +102,34 @@ export class Wallet {
     this.passwordLastUpdate = passwordLastUpdate;
     this.chain = chain;
     this.network = network;
+    this.userId = userId
+    this.encryptedMnemonic = encryptedMnemonic
+  }
+
+  async init(): Promise<void> {
+    const promises = []
+    if (this.type === WalletType.Google) {
+      promises.push(zkFoldApi.walletAddress(this.userId).then(res => {
+        if (res['status'] !== 200) {
+          throw new Error('Failed to get address');
+        }
+        this.zkBaseAddress = Cardano.Address.fromBech32(res['data']['address'])
+      }))
+    }
+    promises.push(this.db.open().catch(async err => {
+      if (err.name === 'NoSuchDatabaseError') {
+        await db.createNewWalletDb(this.id, !!this.encryptedMnemonic);
+      }
+    }))
+    await Promise.all(promises)
   }
 
   static class(wallet, provider) {
     const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
-      wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
+      wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network, wallet.userId, wallet.encryptedMnemonic);
     wal.api = new Api(wallet, provider);
     wal.db = new Dexie('wallet-' + wallet.id);
     wal.db.version(walletDBVersion).stores(walletDBSchema);
-    wal.db.open().catch(async err => {
-      if (err.name === 'NoSuchDatabaseError') {
-        await db.createNewWalletDb(wallet.id);
-      }
-      console.log(err);
-    });
     return wal;
   }
 
@@ -203,13 +221,24 @@ export class Wallet {
   }
 
   baseAddress(): Cardano.Address {
-    return this.deriveAddressFromPath(0);
+    let address: Cardano.Address;
+    if (this.type === WalletType.Google) {
+      address = this.zkBaseAddress;
+    } else {
+      address = this.deriveAddressFromPath(0)
+    }
+    return address;
     // return BaseAddress.from_address(Address.from_bech32("addr1q8gzvfe9dxc2csqcra6u78a9t2qyg5u2k3zkllsynu975yt4raqscm7t80hqu0lq3vxtphzz7fx2xt5vm0he5fmf0nzq2et2pa"))
   }
 
   stakeAddress(): Cardano.Address {
     return getRewardAddress(this.publicKey, this.chain, this.network)
     // return RewardAddress.from_address(Address.from_bech32("stake1u9637sgvdl9nhmsw8lsgkr9sm3p0yn9r96xdhmu6ya5he3q847rpv"))
+  }
+
+  isEnterpriseAddress(): boolean {
+    const baseAddress = this.baseAddress();
+    return baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
   }
 
   drepId(): Cardano.DRepID {
@@ -700,12 +729,21 @@ export class Wallet {
           loading.setRestoring(false);
         } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
           const promises = [];
-          promises.push(this.syncTable(1)); // Sync Staking Pools
-          promises.push(this.syncTable(2)); // Sync DReps
+          if (!this.isEnterpriseAddress()) {
+            promises.push(this.syncTable(1)); // Sync Staking Pools
+            promises.push(this.syncTable(2)); // Sync DReps
+          }
           const prevAccountInfo = await this.getAccountInfo();
           const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
           const to = tip;
-          const address: string = this.stakeAddress().toBech32();
+          const baseAddress = this.baseAddress()
+          const isEnterpriseAddress = baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
+          let address: string;
+          if (isEnterpriseAddress) {
+            address = baseAddress.toBech32();
+          } else {
+            address = this.stakeAddress().toBech32();
+          }
           const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
           const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
           const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
@@ -728,12 +766,13 @@ export class Wallet {
 
     // Create an array to hold the promises that need to be awaited
     const promises = [];
+    if (!this.isEnterpriseAddress()) {
+      // Sync staking pools
+      promises.push(this.syncTable(1));
 
-    // Sync staking pools
-    promises.push(this.syncTable(1));
-
-    // Sync DReps
-    promises.push(this.syncTable(2));
+      // Sync DReps
+      promises.push(this.syncTable(2));
+    }
 
     // Sync account info and handle rewards and transactions
     promises.push(this.syncAccountInfo().then(async accountInfo => {
@@ -955,7 +994,12 @@ export class Wallet {
 
   async syncAccountInfo(): Promise<any> {
     try {
-      const res = await this.api.getAccountInfo(this.stakeAddress().toBech32());
+      let res;
+      if (this.isEnterpriseAddress()) {
+        res = await this.api.getAccountInfo(this.baseAddress().toBech32());
+      } else {
+        res = await this.api.getAccountInfo(this.stakeAddress().toBech32());
+      }
       if (res) {
         return await this.setAccountInfo(res);
       }
@@ -1051,6 +1095,9 @@ export class Wallet {
 
   async syncAccountRewards(): Promise<void> {
     try {
+      if (this.isEnterpriseAddress()) {
+        return;
+      }
       const res = await this.api.getAccountRewards(this.stakeAddress().toBech32());
       if (res) {
         await this.setAccountRewards(res);
@@ -1082,7 +1129,12 @@ export class Wallet {
 
   async syncAccountTransactions(height: number): Promise<any> {
     try {
-      const res = await this.api.getAccountTransactions(this.stakeAddress().toBech32(), height);
+      let res
+      if (this.isEnterpriseAddress()) {
+        res = await this.api.getAccountTransactions(this.baseAddress().toBech32(), height);
+      } else {
+        res = await this.api.getAccountTransactions(this.stakeAddress().toBech32(), height);
+      }
       if (res && Array.isArray(res)) {
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);

@@ -54,9 +54,9 @@
   </v-form>
 </template>
 <script>
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { mapActions, mapState } from 'pinia';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';

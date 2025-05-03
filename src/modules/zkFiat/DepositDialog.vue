@@ -67,10 +67,10 @@
   </BaseDialog>
 </template>
 <script lang="ts">
-import {defineComponent} from 'vue'
-import BaseDialog from "@/shared/components/BaseDialog.vue";
-import {mapState} from "pinia";
-import {appWallet, useStore} from "@/store";
+import { defineComponent } from 'vue'
+import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
+import { mapState } from "pinia";
+import { appWallet, useStore } from "@/stores";
 import Select from "@/shared/components/Select.vue";
 import TokenSelector from "@/shared/components/TokenSelector.vue";
 import {
@@ -79,11 +79,11 @@ import {
   TransactionOutputs,
   TransactionUnspentOutputs, TransactionWitnessSet
 } from "@emurgo/cardano-serialization-lib-browser";
-import {assetsToValue, toUTxO} from "@/shared/utils/converter";
-import {Proof} from "@/models/types";
-import {buildTx} from "@/shared/utils/builder";
-import rules from "@/shared/utils/rules";
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { assetsToValue, toUTxO } from "@/shared/utils/converter";
+import { Proof } from "@/models/types";
+import { buildTx } from "@/shared/utils/builder";
+import rules from "@/utils/rules";
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default defineComponent({
   name: "DepositDialog",

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { appWallet } from '@/store';
+import { appWallet } from '@/stores';
 import cashbackApi from '@/api/cashback-api';
 
 export const bringStore = defineStore( 'bringStore', {

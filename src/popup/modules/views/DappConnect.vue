@@ -42,7 +42,7 @@
   </PopupHeader>
 </template>
 <script>
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';

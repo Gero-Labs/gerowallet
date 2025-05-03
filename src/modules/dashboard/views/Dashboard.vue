@@ -47,7 +47,7 @@
       <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
         <TokenAllocationTable></TokenAllocationTable>
       </v-col>
-      <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2" v-if="isStakingEnabled">
         <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
@@ -61,16 +61,17 @@
 import PortfolioChart from '../components/PortfolioChart.vue';
 import filters from '@/shared/utils/filters';
 import NoTokensCard from '../components/NoTokensCard.vue';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import {mapState} from "pinia";
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
-import { walletConfigStore } from '@/store/modules/walletConfig';
-import networks from '../../../shared/utils/networks';
-import { tapToolsStore } from '@/store/modules/tapTools';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import networks from '@/utils/networks';
+import { tapToolsStore } from '@/stores/modules/tapTools';
+import { Cardano } from '@cardano-sdk/core';
 
 export default {
   name: 'dashboard',
@@ -79,6 +80,12 @@ export default {
     TransactionsCard, StakingCard2, TokenAllocationTable,
     PortfolioChart, NoTokensCard },
   computed: {
+    isStakingEnabled() {
+      if (this.baseAddress) {
+        return Cardano.Address.fromBech32(this.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
+      }
+      return false;
+    },
     Blockchain() {
       return Blockchain
     },
@@ -110,7 +117,7 @@ export default {
     Network() {
       return Network
     },
-    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'loggedWallet', 'loadingTxs', 'price']),
+    ...mapState(useStore, ['calculatedTransactions', 'getPools', 'loggedWallet', 'loadingTxs', 'price', 'baseAddress']),
     ...mapState(walletConfigStore, ['account']),
     ...mapState(tapToolsStore, ['portfolio', 'portfolioTrendedValue']),
     computeChartData() {

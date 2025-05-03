@@ -13,13 +13,13 @@
         </v-list-item-subtitle>
       </v-list-item-content>
     </v-list-item>
-    <v-divider vertical class="mx-2" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
+    <v-divider vertical class="mx-1" style="max-height: 30px;min-height: 30px;align-self: center;"></v-divider>
   </div>
 </template>
 <script>
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import {mapState} from "pinia";
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
 
 export default {
