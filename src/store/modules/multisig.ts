@@ -552,7 +552,6 @@ export const multisigStore = defineStore('multisigStore', {
       } catch (e) {
         console.log(e);
       }
-      //this.loadTransactions();
     },
 
     setMultiSigWallets(multiSigWallets: any[]) {
