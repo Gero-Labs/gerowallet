@@ -19,7 +19,7 @@ const formatMax2Decimals = new Intl.NumberFormat('en-US', {
 })
 
 const filters = {
-  truncate(value: string) {
+  truncate(value: string): any {
     if (!value || value.length <= 16) return 'N/A';
     const separator = '...';
     const sepLen = separator.length;

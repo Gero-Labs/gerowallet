@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia';
-import loading from '@/plugins/loading';
 
 import { Wallet } from '@/models/wallet';
-import Dexie, { liveQuery, Subscription } from 'dexie';
+import Dexie, { liveQuery } from 'dexie';
 import { STORAGE } from '@/chrome/config';
 import {
   findCollectionDescription,
@@ -19,24 +18,28 @@ import { parseHttpError } from '@/shared/utils/parser';
 import { loadWallets, subscribeWallets } from '@/store/loaders/walletLoader';
 import { loadTransactions, subscribeTransactions } from '@/store/loaders/transactionsLoader';
 import { loadAssets } from '@/store/loaders/assetsLoader';
-import { appWallet, subscriptions } from '@/store';
+import { subscriptions } from '@/store';
 import { tapToolsStore } from './tapTools';
 import { musicStore } from './music';
+import { chunkArray } from 'array-chunk-by-size';
+import _ from 'lodash';
 
+export let multisigAppWallet: Wallet = undefined;
 
 export const multisigStore = defineStore('multisigStore', {
   persist: {
     paths: [
-      'wallet', 'wallets', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
+      'multiSigWallets', 'multiSigWallet', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
     ]
   },
   state: () => ({
-    wallet: undefined,
+    multiSigWallets: [],
+    multiSigWallet: undefined,
     baseAddress: undefined,
     stakeAddress: undefined,
-    wallets: [],
     transactions: undefined,
     pendingTxs: undefined,
+    provider: undefined,
     loadingTxs: false,
     isSyncing: false,
     assets: undefined,
@@ -46,20 +49,20 @@ export const multisigStore = defineStore('multisigStore', {
     resolvedAssets: undefined,
     resolvedCollections: undefined,
     pinnedTokens: [],
-    selectedMultisig: undefined
+    price: undefined,
   }),
   getters: {
-    getMultiSigWallet: state => state.wallet,
-    getWallets: state => state.wallets,
+    getMultiSigWallet: state => state.multiSigWallet,
+    getMultiSigWallets: state => state.multiSigWallets,
     getWallet: state => {
-      if (!appWallet && state.wallet) {
-        return Wallet.class(state.wallet, mainStore.provider);
+      if (!multisigAppWallet && state.multiSigWallet) {
+        return multisigAppWallet = Wallet.multisigClass(state.multiSigWallet, 1);
       }
-      return appWallet;
+      return multisigAppWallet;
     },
     calculatedTransactions(state) {
       if (state.transactions) {
-        const currentStake = appWallet.stakeAddress().to_address().to_bech32();
+        const currentStake = state.multiSigWallet.stakeAddress;
         let currentBalance: number = 0;
         return structuredClone(state.transactions)
           .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
@@ -164,7 +167,7 @@ export const multisigStore = defineStore('multisigStore', {
             if (tx.withdrawals?.length > 0 && tx.withdrawals.some(withdrawal => withdrawal.stake_addr === this.stakeAddress)) {
               statuses.push('Withdrawal')
             }
-            const network = networks.resolveNetwork(mainStore.loggedWallet?.chain, mainStore.loggedWallet?.network)
+            const network = networks.resolveNetwork(this.multiSigWallet.chain, this.multiSigWallet.network)
             const nativeAsset = {
               policy_id: "",
               asset_name: "lovelace",
@@ -212,13 +215,13 @@ export const multisigStore = defineStore('multisigStore', {
       // Resolve assets
       const assetArray = Object.values(assets);
       const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id'] + asset['asset_name']) in this.assets)).map(asset => (asset['policy_id'] + asset['asset_name']))
-      await appWallet.syncAssets(unresolvedAssets, true)
+      await multisigAppWallet.syncAssets(unresolvedAssets, true)
       const resAssets = assetArray.filter(asset => (asset['policy_id'] + asset['asset_name']) in this.assets)
       const resolvedAssets = await Promise.all(resAssets.map(asset => resolveAsset(this.assets[asset['policy_id'] + asset['asset_name']], asset)));
 
       // Add ADA to resolved assets
       if (adaBalance > 0) {
-        const network = networks.resolveNetwork(mainStore.loggedWallet?.chain, mainStore.loggedWallet?.network);
+        const network = networks.resolveNetwork(this.multiSigWallet?.chain, this.multiSigWallet?.network);
         resolvedAssets.push({
           unit: '',
           name: network?.currencyName,
@@ -237,7 +240,7 @@ export const multisigStore = defineStore('multisigStore', {
       }
 
       // Filter and enrich assets with additional information
-      const ticker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
+      const ticker = networks.resolveCurrencyTicker(multisigAppWallet.chain, multisigAppWallet.network);
       const resolvingAsset = resolvedAssets
         .filter(asset => asset?.metadata || asset?.name === ticker)
         .map(async (token) => {
@@ -245,7 +248,7 @@ export const multisigStore = defineStore('multisigStore', {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             const promises = []
-            promises.push(appWallet.api.mcap(token.unit).then(res => {
+            promises.push(multisigAppWallet.api.mcap(token.unit).then(res => {
               if (res?.status === 200) {
                 const stats = res.data;
                 token['mcap'] = stats.mcap;
@@ -265,13 +268,13 @@ export const multisigStore = defineStore('multisigStore', {
             }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
             }))
-            promises.push(appWallet.api.dailyPriceChange(token.unit)
+            promises.push(multisigAppWallet.api.dailyPriceChange(token.unit)
               .then(changeStats => {
                 token['change'] = changeStats['24h'] * 100;
               }).catch(err => {
                 console.error(`Error fetching daily price change for ${token.unit}:`, err);
               }));
-            promises.push(appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
+            promises.push(multisigAppWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
               token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
             }).catch(err => {
               console.error(`Error fetching risk for ${token.unit}:`, err);
@@ -282,9 +285,9 @@ export const multisigStore = defineStore('multisigStore', {
             } catch (e) {
               console.error(e)
             }
-          } else if (token && token['name'] === 'Cardano' && mainStore.price) {
+          } else if (token && token['name'] === 'Cardano' && this.price) {
             token['value'] = Number(filters.toCurrency(
-              Number(token.quantity) * Number(mainStore.price.lastPrice),
+              Number(token.quantity) * Number(this.price.lastPrice),
               false,
               token.metadata?.decimals,
               '',
@@ -337,7 +340,7 @@ export const multisigStore = defineStore('multisigStore', {
         }
       })
       if (unresolvedUnits.length > 0) {
-        await appWallet.syncAssets(unresolvedUnits, true)
+        await multisigAppWallet.syncAssets(unresolvedUnits, true)
       }
       Object.values(collections).forEach(collection => {
         const items = collection['items']
@@ -370,10 +373,10 @@ export const multisigStore = defineStore('multisigStore', {
       const outputs = [];
       const inputSet = new Set();
       const addresses: Set<string> = new Set();
-      if (!appWallet) {
+      if (!multisigAppWallet) {
         return
       }
-      const stakeAddress: string = appWallet.stakeAddress().to_address().to_bech32()
+      const stakeAddress: string = multisigAppWallet.stakeAddress().toBech32()
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -404,7 +407,7 @@ export const multisigStore = defineStore('multisigStore', {
       if (Array.isArray(transactions) && transactions.length > 0) {
         await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
       }
-      await appWallet.syncAddresses(Array.from(addresses))
+      await multisigAppWallet.syncAddresses(Array.from(addresses))
         .then((resolvedAddresses: Set<string>) => {
           const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
           walletConfigStore().setUtxos(filteredKnownUtxos)
@@ -441,27 +444,27 @@ export const multisigStore = defineStore('multisigStore', {
       }
     },
     async loadWallets() {
-      await loadWallets(this);
+      await loadWallets({ wallets: this.multiSigWallets });
     },
     async subscribeWallets() {
-      await subscribeWallets(this, subscriptions)
+      await subscribeWallets({ wallets: this.multiSigWallets }, subscriptions);
     },
     async loadTransactions() {
-      return await loadTransactions(this, appWallet);
+      return await loadTransactions(this, multisigAppWallet);
     },
     async subscribeTransactions() {
-      return await subscribeTransactions(this, appWallet, subscriptions);
+      return await subscribeTransactions(this, multisigAppWallet, subscriptions);
     },
     async loadAssets() {
-      return await loadAssets(this, appWallet, subscriptions);
+      return await loadAssets(this, multisigAppWallet, subscriptions);
     },
     async loadPools() {
-      if (!appWallet) {
+      if (!multisigAppWallet) {
         return new Promise((resolve, reject) => {
           reject()
         });
       }
-      const db: Dexie = await appWallet.getBlockchainDb()
+      const db: Dexie = await multisigAppWallet.getBlockchainDb()
       return new Promise((resolve, reject) => {
         subscriptions.set('pools', liveQuery(() => db.table('pools').toArray()).subscribe({
           next: newPools => {
@@ -476,12 +479,12 @@ export const multisigStore = defineStore('multisigStore', {
       });
     },
     async loadRewards() {
-      if (!appWallet) {
+      if (!multisigAppWallet) {
         return new Promise((resolve, reject) => {
           reject()
         });
       }
-      const db = await appWallet.getDb()
+      const db = await multisigAppWallet.getDb()
       return new Promise((resolve, reject) => {
         subscriptions.set('rewards', liveQuery(() => db.table('rewards').orderBy("epoch").toArray()).subscribe({
           next: newRewards => {
@@ -496,12 +499,12 @@ export const multisigStore = defineStore('multisigStore', {
       });
     },
     async loadConnectedDapps() {
-      if (!appWallet) {
+      if (!multisigAppWallet) {
         return new Promise((resolve, reject) => {
           reject()
         });
       }
-      const db = await appWallet.getDb()
+      const db = await multisigAppWallet.getDb()
       return new Promise((resolve, reject) => {
         subscriptions.set('dapps', liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
           next: newConnectedDapps => {
@@ -523,14 +526,43 @@ export const multisigStore = defineStore('multisigStore', {
       });
     },
     async disconnectDapp(id: number) {
-      if (!appWallet) {
+      if (!multisigAppWallet) {
         return
       }
-      const db = await appWallet.getDb()
+      const db = await multisigAppWallet.getDb()
       db.table('connected_dapps').delete(id)
     },
-    setSelectedMultisig(selectedMultisig: any) {
-      this.selectedMultisig = selectedMultisig;
+    async setSelectedMultisig(selectedMultisig: any, chain: string, network: string) {
+      this.multiSigWallet = { ...selectedMultisig, chain: chain, network: network };
+      const currentWallet = this.getWallet;
+      try {
+        const res = await currentWallet.api.getAccountTransactions(this.multiSigWallet.stakeAddress, 0);
+        if (res && Array.isArray(res)) {
+          const promises = [];
+          const txHashes: string[] = res.map(tx => tx.tx_hash);
+          const smallerArrays = chunkArray({ input: txHashes, bytesSize: 5 * 1024 });
+          smallerArrays.forEach(smallerArray => {
+            promises.push(currentWallet.api.getTransactionsInfo(smallerArray));
+          });
+          const txs = (await Promise.all(promises)).flat();
+          console.log("txs:::", txs);
+          await currentWallet.setAccountTransactions(txs);
+          this.setTransactions(txs);
+        }
+      } catch (e) {
+        console.log(e);
+      }
+      //this.loadTransactions();
+    },
+
+    setMultiSigWallets(multiSigWallets: any[]) {
+      this.multiSigWallets = multiSigWallets;
+    },
+    generateMultisigDBName(parentWalletPubkey: string, multisigName: string) {
+      return `multisig-${parentWalletPubkey.slice(0,21)}-${_.kebabCase(multisigName)}`;
+    },
+    setTransactions(transactions: any[]) {
+      this.transactions = transactions;
     }
   },
 });

@@ -67,6 +67,7 @@ import {
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
+import _ from 'lodash';
 
 export class Wallet {
   db: Dexie;
@@ -105,6 +106,21 @@ export class Wallet {
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
     wal.api = new Api(wallet, provider);
     wal.db = new Dexie('wallet-' + wallet.id);
+    wal.db.version(walletDBVersion).stores(walletDBSchema);
+    wal.db.open().catch(async err => {
+      if (err.name === 'NoSuchDatabaseError') {
+        await db.createNewWalletDb(wallet.id);
+      }
+      console.log(err);
+    });
+    return wal;
+  }
+
+  static multisigClass(wallet, provider) {
+    const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
+      wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
+    wal.api = new Api(wallet, provider);
+    wal.db = new Dexie(wallet.multisigDBName);
     wal.db.version(walletDBVersion).stores(walletDBSchema);
     wal.db.open().catch(async err => {
       if (err.name === 'NoSuchDatabaseError') {

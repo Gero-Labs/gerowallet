@@ -9,7 +9,7 @@
                             <v-card-subtitle class="multisig-description">{{ $t('multisig.description')
                                 }}</v-card-subtitle>
                         </v-col>
-                        <v-col :cols="selectedMultisigWallet ? 2 : 4" class="text-right">
+                        <v-col :cols="multisigStore.getMultiSigWallet ? 2 : 4" class="text-right">
                             <v-btn color="#CCC" outlined class="ma-4 text-caption text-capitalize"
                                 @click="showCreateMultisigDialog = true">
                                 <v-icon small left>
@@ -18,7 +18,7 @@
                                 {{ $t('multisig.createMultisigWallet') }}
                             </v-btn>
                         </v-col>
-                        <v-col cols="2" v-show="selectedMultisigWallet">
+                        <v-col cols="2" v-show="multisigStore.getMultiSigWallet">
                             <v-btn color="#CCC" outlined class="ma-4 text-caption text-capitalize"
                                 @click="showNewMultisigTransaction = true">
                                 <v-icon small left>
@@ -36,11 +36,11 @@
                                     <v-select 
                                         class="mt-2" 
                                         dense 
-                                        :label="!showMultisigWallets ? $t('multisig.noWalletsToManage') : (selectedMultisigWallet ? '' : $t('multisig.selectMultisigToManage'))"
+                                        :label="!showMultisigWallets ? $t('multisig.noWalletsToManage') : (multisigStore.getMultiSigWallet ? '' : $t('multisig.selectMultisigToManage'))"
                                         :disabled="!showMultisigWallets" 
-                                        v-model="selectedMultisigWallet"
+                                        v-model="multisigStore.getMultiSigWallet"
                                         prepend-inner-icon="mdi-account-multiple-outline" 
-                                        :items="multisigWallets"
+                                        :items="multisigStore.getMultiSigWallets"
                                         item-text="name" 
                                         item-value="addressBech32" 
                                         outlined 
@@ -59,7 +59,7 @@
                                                 </v-avatar>
                                             </v-col>
                                             <v-col cols="9" class="pa-0">
-                                                <v-card-subtitle v-if="info.inlineValue" class="wallet-details pb-0">{{ info.title }}: <span class="wallet-value">{{ info.value }}</span></v-card-subtitle>
+                                                <v-card-subtitle v-if="info.inlineValue.display" class="wallet-details pb-0">{{ info.title }}: <span class="wallet-value">{{ info.inlineValue.value }}</span></v-card-subtitle>
                                                 <v-card-subtitle v-else class="pb-0">{{ info.title }}</v-card-subtitle>
                                                 <v-card-title class="pt-0">{{ filters.toCurrency(info.value, false, 2, '₳', "", true, 2) }}</v-card-title>        
                                             </v-col>
@@ -92,22 +92,37 @@
                     <v-col cols="12">
                         <v-data-table 
                             :headers="headers" 
-                            :items="pendingTransactions" 
-                            :items-per-page="5"
+                            :items="multisigWalletTransactions" 
+                            :items-per-page="10"
                             class="multisig-table" 
                             :loading="loading" 
                             loading-text="Loading transactions..."
                             no-data="No pending multisig transactions"
                             :search="search"
                             hide-default-footer>
+                            <template v-slot:[`item.id`]="{ item }">
+                                <CopyButton :value="item.tx_hash" />
+                            </template>
+                            <template v-slot:[`item.date`]="{ item }">
+                                {{ new Date(item.time * 1000).toLocaleDateString() }}
+                            </template>
+                            <template v-slot:[`item.amount`]="{ item }">
+                                {{ item.amount }}
+                            </template>
+                            <template v-slot:[`item.wallet`]="{ item }">
+                                {{ item.wallet }}
+                            </template>
+                            <template v-slot:[`item.status`]="{ item }">
+                                {{ item.status }}
+                            </template>
                         </v-data-table>
                     </v-col>
                 </v-row>
             </v-container>
         </div>
-        <CreateMultisigWalletDialog :isOpen="showCreateMultisigDialog" @close="showCreateMultisigDialog = false">
+        <CreateMultisigWalletDialog :isOpen="showCreateMultisigDialog" @close="catchCloseDialog">
         </CreateMultisigWalletDialog>
-        <FundWallet :isOpen="showFundWallet" @close="showFundWallet = false"
+        <FundWallet :isOpen="showFundWallet" @close="catchCloseDialog"
             :recipientAddressProp="selectedAddress" :isMultisig="true"></FundWallet>
         <MultisigTransactionDialog :isOpen="showNewMultisigTransaction" @close="catchCloseDialog" />
     </div>
@@ -119,19 +134,15 @@ import { defineComponent } from 'vue';
 import CreateMultisigWalletDialog from '@/modules/multisig/dialogs/CreateMultisigWallet.vue';
 import FundWallet from '@/modules/dashboard/dialogs/SendDialog.vue';
 import MultisigTransactionDialog from '@/modules/multisig/dialogs/MultisigTransaction.vue';
-import { MessageTypes } from '@/models/MessageTypes';
-import { walletConfigStore } from "@/store/modules/walletConfig";
-import { Wallet } from "@/models/wallet";
-import { appWallet, useStore } from "@/store";
+import { useStore } from "@/store";
 import { multisigStore } from '@/store/modules/multisig';
 
 import { mapState } from "pinia";
-import db from '@/db';
 import Dexie from 'dexie';
-import networks from "@/shared/utils/networks";
 import { NativeScript } from '@emurgo/cardano-serialization-lib-browser';
 import filters from "@/shared/utils/filters";       
 import { svgAssets } from "@/utils/assets";   
+import CopyButton from "@/shared/components/CopyButton.vue";
 
 export default defineComponent({
     name: 'MultisigTransactions',
@@ -154,7 +165,7 @@ export default defineComponent({
                 { text: 'Status', value: 'status' },
                 { text: 'Actions', value: 'actions', sortable: false },
             ],
-            pendingTransactions: [],
+            multisigWalletTransactions: [],
             wallets: [],
             multisigWallets: [],
             selectedMultisigWallet: 0,
@@ -170,41 +181,57 @@ export default defineComponent({
     },
     computed: {
         ...mapState(useStore, ['loggedWallet']),
+        ...mapState(multisigStore, ['multiSigWallets', 'multiSigWallet']),
         showMultisigWallets() {
-            return this.multisigWallets.length > 0;
+            return this.multisigStore.getMultiSigWallets.length > 0;
         },
         walletInfo() {
-            const currentWallet = this.multisigWallets.find(wallet => wallet.id === this.currentWallet);
+            const calculatedTransactions = this.multisigStore.calculatedTransactions;
             return [
                 {
                     icon: svgAssets.multisigDollar,
                     title: "Balance",
-                    value: currentWallet?.balance || 0,
-                    inlineValue: false
+                    value: calculatedTransactions?.ada || 0,
+                    inlineValue: {
+                        display: false,
+                        value: calculatedTransactions?.ada || 0
+                    }
                 },
                 {
                     icon: svgAssets.multisigTotal,
                     title: "Total",
-                    value: currentWallet?.total || 0,
-                    inlineValue: true
+                    value: calculatedTransactions?.total || 0,
+                    inlineValue: {
+                        display: true,
+                        value: calculatedTransactions?.total || 0
+                    }
                 },
                 {
                     icon: svgAssets.multisigPaid,
                     title: "Paid",
-                    value: currentWallet?.paid || 0,
-                    inlineValue: true
+                    value: calculatedTransactions?.paid || 0,
+                    inlineValue: {
+                        display: true,
+                        value: calculatedTransactions?.paid || 0
+                    }
                 },
                 {
                     icon: svgAssets.multisigPending,
                     title: "Pending",
-                    value: currentWallet?.pending || 0,
-                    inlineValue: true
+                    value: calculatedTransactions?.pending || 0,
+                    inlineValue: {
+                        display: true,
+                        value: calculatedTransactions?.pending || 0
+                    }
                 },
                 {
                     icon: svgAssets.multisigExpired,
                     title: "Expired",
-                    value: currentWallet?.expired || 0,
-                    inlineValue: true
+                    value: calculatedTransactions?.expired || 0,
+                    inlineValue: {
+                        display: true,
+                        value: calculatedTransactions?.expired || 0
+                    }
                 }
             ]
         }
@@ -214,7 +241,6 @@ export default defineComponent({
     },
     methods: {
         async initialLoad() {
-            console.log("loading data");
             this.loading = true;
             try {
                 const dbWallet = new Dexie('wallet-' + this.loggedWallet.id);
@@ -222,23 +248,11 @@ export default defineComponent({
                 let multisigs = await dbWallet.table('multisig').toArray();
                 if (multisigs.length > 0) {
                     //sort by latest first
-                    multisigs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-                    console.log("multisig:::::", multisigs[0]);
-                    const multisigsOriginal = multisigs;
-                    multisigs = multisigs.map((row, index) => ({
-                        addressBech32: row.id, //multisig address
-                        index,
-                        name: row.name,
-                        signaturesRequired: row.requiredSigners || 1,
-                        totalSigners: NativeScript.from_hex(row.multisigScriptCBOR).get_required_signers().len(),
-                        scriptCBOR: row.multisigScriptCBOR
-                    }));
-                    this.multisigWallets = multisigs;
-                    console.log("multisig wallets:::", this.multisigWallets);
-                    this.selectedMultisigWallet = multisigs[0];
-                    this.multisigStore.setSelectedMultisig(multisigsOriginal[0]);
-                    this.selectedAddress = multisigs[0].addressBech32;
-                    console.log("all wallets now:::", multisigs);
+                    this.parseMultisigWallets(multisigs);
+                    this.multisigStore.setMultiSigWallets(multisigs);
+                    await this.multisigStore.setSelectedMultisig(multisigs[0], this.loggedWallet.chain, this.loggedWallet.network);
+                    this.setMultisigWalletTransactions();
+                    this.setSelectedAddress(multisigs[0].addressBech32);
                 }
             } catch (error) {
                 console.log('Failed to load multisig data:', error);
@@ -247,6 +261,27 @@ export default defineComponent({
             }
         },
 
+        setMultisigWalletTransactions() {
+            this.multisigWalletTransactions = this.multisigStore.calculatedTransactions;
+        },
+
+        setSelectedAddress(address) {
+            this.selectedAddress = address;
+        },
+
+        parseMultisigWallets(multisigs) {
+            multisigs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            multisigs = multisigs.map((row, index) => ({
+                index,
+                addressBech32: row.id, //multisig address
+                name: row.name,
+                signaturesRequired: row.requiredSigners || 1,
+                totalSigners: NativeScript.from_hex(row.multisigScriptCBOR).get_required_signers().len(),
+                scriptCBOR: row.multisigScriptCBOR,
+                stakeAddress: row.stakeAddress,
+                multisigDBName: this.multisigStore.generateMultisigDBName(this.loggedWallet.publicKey, row.name)
+            }));
+        },
         getStatusColor(status) {
             if (status.includes('Awaiting')) return 'warning';
             if (status.includes('Partially')) return 'info';
@@ -273,11 +308,8 @@ export default defineComponent({
 
         onSelectedWallet(selectedValue) {
             this.selectedAddress = selectedValue;
-            console.log("selected item changed to::", typeof selectedValue);
-            console.log("Selected multisig wallet object:::" + typeof this.selectedMultisigWallet + "::" + this.selectedMultisigWallet);
             const selected = this.multisigWallets.filter(imultisig => imultisig.addressBech32 === selectedValue);
-            this.selectedMultisigWallet = selected as any;
-            console.log("Selected Address:::", this.selectedAddress);
+            this.multiSigWallet = selected[0];
         },
 
         fundMultisigWallet() {
@@ -300,7 +332,27 @@ export default defineComponent({
         catchCloseDialog() {
             console.log('catchCloseDialog called');
             this.showNewMultisigTransaction = false;
-            // Any other cleanup or state management you need
+            this.showCreateMultisigDialog = false;
+            this.showFundWallet = false;
+            this.initialLoad();
+        },
+        parseTransactions(transactions) {
+            const parsedTransactions = transactions.map(transaction => {
+                return {
+                    id: transaction.tx_hash,
+                    date: new Date(transaction.tx_timestamp).toLocaleDateString(),
+                    amount: transaction.amount,
+                    wallet: transaction.wallet,
+                    status: transaction.status,
+                    actions: transaction.actions,
+                }
+            });
+            console.log("parsed transactions:::", parsedTransactions);
+            this.setTransactions(parsedTransactions);
+        },
+
+        setTransactions(parsedTransactions) {
+            this.multisigWalletTransactions = parsedTransactions;
         }
     },
     filters,
