@@ -444,6 +444,7 @@ export class Api {
     },
 
     transactions: {
+      // this would called as Wallet.api.multisig.transactions.create()
       /**
        * Create a transaction
        * @param body - The body of the transaction to create
