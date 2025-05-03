@@ -343,12 +343,12 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import filters from '@/shared/utils/filters';
-import networks from '../../../shared/utils/networks';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import networks from '@/utils/networks';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Blockchain, Network } from '@/models/types';
 import assts from '@/utils/assets'
 
@@ -444,6 +444,7 @@ export default {
   computed: {
     totalAllocation() {
       let totalAllocation = 0
+      console.log(this.resolvedAssets)
       if (this.resolvedAssets) {
         if (this.resolvedAssets.length === 1) {
           const token = this.resolvedAssets[0]

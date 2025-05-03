@@ -28,8 +28,8 @@
 <script>
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
-import networks from '@/shared/utils/networks';
+import { useStore } from '@/stores';
+import networks from '@/utils/networks';
 
 export default {
   name: 'TransactionCard',

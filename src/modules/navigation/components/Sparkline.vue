@@ -14,7 +14,7 @@
   </div>
 </template>
 <script>
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { mapState } from 'pinia';
 import cryptoApi from '@/api/crypto-api';
 

@@ -195,14 +195,14 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
-import rules from '@/shared/utils/rules';
-import networks from "@/shared/utils/networks";
+import rules from '@/utils/rules';
+import networks from "@/utils/networks";
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
@@ -211,7 +211,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import QRCodeStyling from 'qr-code-styling';
 import { QrcodeStream } from "vue-qrcode-reader";
 import Vue from 'vue';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
 
 export default {

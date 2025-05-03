@@ -64,10 +64,9 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
-import { musicStore } from '@/store/modules/music';
+import { musicStore } from '@/stores/modules/music';
 
 export default defineComponent({
   name: "MediaPlayer",

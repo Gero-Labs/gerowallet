@@ -105,11 +105,11 @@
 <script>
 // import rarities from '@/api/rarities'
 import filters from '@/shared/utils/filters';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import AssetFingerprint from '@emurgo/cip14-js';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 
 export default {
   name: 'AssetDetails',

@@ -120,13 +120,13 @@
   </v-tab-item>
 </template>
 <script>
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import { Network } from '@/models/types';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: 'ContactsTab',

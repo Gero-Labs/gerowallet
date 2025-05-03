@@ -5,6 +5,7 @@ const WalletType = {
   Ledger: 'Ledger',
   Keystone: 'Keystone',
   Normal: 'Normal',
+  Google: 'Google',
 };
 
 const Theme = {

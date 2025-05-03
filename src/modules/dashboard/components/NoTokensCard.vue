@@ -34,9 +34,9 @@
 </template>
 <script>
 import {mapState} from "pinia";
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import {Blockchain} from "@/models/types";
-import networks from "@/shared/utils/networks";
+import networks from "@/utils/networks";
 import {
   Certificate, Ed25519KeyHash,
   Credential,
@@ -46,7 +46,7 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: "NoTokensCard",

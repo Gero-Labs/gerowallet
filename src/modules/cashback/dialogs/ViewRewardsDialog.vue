@@ -1,5 +1,11 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Your Rewards" subtitle="View your pending and historical rewards">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Your Rewards"
+    subtitle="View your pending and historical rewards"
+    :min-height="0"
+  >
     <div style="z-index: 3" class="px-4">
       <v-row>
         <v-col cols="12" xl="7" lg="7" md="7">
@@ -78,7 +84,7 @@
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
                 <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
-                <div style="color: #475467">{{item.totalEstimatedUsd | toCurrency(false, 2, '$', '', true, 0)}}</div>
+                <div style="color: #475467" v-if="item.totalEstimatedUsd">{{item.totalEstimatedUsd | toCurrency(false, 2, '$', '', true, 0)}}</div>
               </template>
               <template v-slot:expanded-item="{ headers, item }">
                 <td :colspan="headers.length">
@@ -97,10 +103,10 @@
                       </template>
                       <div class="py-4">
                         <h2 :class="`headline font-weight-light mb-4 ${getColor(history.action)}--text`">
-                          {{ getActionTitle(history.actiom)}}
+                          {{ getActionTitle(history.action)}}
                         </h2>
                         <div>
-                          {{ getActionText(history.actiom)}}
+                          {{ history.description }}
                         </div>
                       </div>
                     </v-timeline-item>
@@ -135,14 +141,14 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import { useStore } from '@/stores';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
-import { bringStore } from '@/store/modules/bring';
-import networks from '@/shared/utils/networks';
+import { bringStore } from '@/stores/modules/bring';
+import networks from '@/utils/networks';
 import { stringToHex } from '@/shared/utils/converter';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
@@ -214,15 +220,6 @@ export default {
         return 'Cashback Eligible'
       } else { //PURCHASE_CORRECTED
         return 'Purchase Updated'
-      }
-    },
-    getActionText(action) {
-      if (action === 'PURCHASE_POSTED') {
-        return 'A purchase has been successfully completed.'
-      } else if (action === 'PURCHASE_APPROVED') {
-        return 'Your recent purchase is now eligible for cashback rewards.'
-      } else { //PURCHASE_CORRECTED
-        return 'The amount or release date of your purchase has been adjusted due to a retailer\'s decision or item return.'
       }
     },
     async claim() {

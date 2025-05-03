@@ -1,6 +1,6 @@
 import VueRouter, {NavigationGuardNext, Route} from 'vue-router';
 
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
@@ -21,6 +21,7 @@ import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
+import DAO from '@/modules/dao/DAO.vue';
 
 const routes = [
   {
@@ -154,8 +155,8 @@ const routes = [
     name: 'transactions',
     component: Transactions,
     meta: {
-       layout: ContentLayout,
-        requiresAuth: true,
+      layout: ContentLayout,
+      requiresAuth: true,
     },
   },
   {

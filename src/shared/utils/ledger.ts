@@ -37,8 +37,8 @@ import {
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Wallet } from '@/models/wallet';
-import networks from '@/shared/utils/networks';
-import { appWallet } from '@/store';
+import networks from '@/utils/networks';
+import { appWallet } from '@/stores';
 import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';

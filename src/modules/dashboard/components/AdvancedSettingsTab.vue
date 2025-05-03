@@ -49,6 +49,69 @@
           </v-btn>
         </v-col>
       </v-row>
+      <v-row no-gutters class="py-2" v-if="hasBackup">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">Recovery Phrase
+            <v-tooltip top v-if="backup">
+              <template v-slot:activator="{ on, attrs }">
+                <v-icon
+                  color="primary"
+                  small
+                  v-bind="attrs"
+                  v-on="on"
+                >
+                  mdi-shield-check-outline
+                </v-icon>
+              </template>
+              <span>Your wallet was backed up</span>
+            </v-tooltip>
+          </h3>
+          <span class="helper my-0">{{ backup ? "Your 24-word master key - keep it offline and private." : "Wallet Backup is Required."}}</span>
+        </v-col>
+        <v-col cols="3" style="align-content: center;">
+          <v-badge
+            v-if="!backup"
+            bordered
+            color="error"
+            overlap
+            style="width: 100%"
+          >
+            <v-btn
+              block
+              outlined
+              color="error"
+              @click="backupWalletDialog = true"
+              :disabled="reSyncLoading"
+            >
+              <v-icon
+                left
+                dark
+                class="mr-1"
+              >
+                mdi-key
+              </v-icon>
+              <span class="capitalize">Backup</span>
+            </v-btn>
+          </v-badge>
+          <v-btn
+            v-else
+            block
+            outlined
+            color="white"
+            @click="backupWalletDialog = true"
+            :loading="reSyncLoading"
+          >
+            <v-icon
+              left
+              dark
+              class="mr-1"
+            >
+              mdi-key
+            </v-icon>
+            <span class="capitalize">Show</span>
+          </v-btn>
+        </v-col>
+      </v-row>
       <h2 class="text-left pb-2" style="color: #ff6464">Danger Zone</h2>
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
@@ -90,19 +153,22 @@
         </v-card>
       </v-dialog>
     </v-layout>
+    <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
   </v-tab-item>
 </template>
 <script>
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import db from '@/db';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
+import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 
 export default {
   name: 'AdvancedSettingsTab',
+  components: { BackupWalletDialog },
   watch: {
     cashbackPopupsDisabled(newVal, oldVal) {
       console.log('newVal', newVal)
@@ -115,13 +181,18 @@ export default {
       return networks
     },
     ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup']),
+    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup', 'getBackup', 'hasBackup']),
     txAutoSubmit: {
       get() {
         return this.getTxAutoSubmit
       },
       async set(val) {
         await this.setTxAutoSubmit(val)
+      }
+    },
+    backup: {
+      get() {
+        return this.getBackup
       }
     },
     cashbackPopups: {
@@ -167,6 +238,7 @@ export default {
     deleteWalletDialog: false,
     deleteWalletLoading: false,
     cashbackPopupsDisabled: false,
+    backupWalletDialog: false,
   }),
   created() {
     this.loadCashbackPopups();

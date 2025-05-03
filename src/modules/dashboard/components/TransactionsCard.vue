@@ -62,9 +62,9 @@ import { defineComponent } from 'vue';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import time from '@/plugins/time';
 
 export default defineComponent({
