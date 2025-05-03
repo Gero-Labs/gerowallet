@@ -151,7 +151,7 @@ export default {
 </script>
 <style>
 .transactions-table {
-  tbody {
+  :is(tbody) {
     cursor: pointer;
   }
 }

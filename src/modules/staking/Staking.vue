@@ -460,7 +460,7 @@ export default {
 }
 
 .poolsTable {
-  tbody{
+  :is(tbody) {
     cursor: pointer;
   }
 }

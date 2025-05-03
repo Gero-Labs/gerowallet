@@ -453,7 +453,7 @@ export default defineComponent({
 </style>
 <style>
 .dRepsTable {
-  tbody{
+  :is(tbody) {
     cursor: pointer;
   }
 }

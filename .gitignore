@@ -3,8 +3,7 @@ node_modules
 /dist
 
 # local env files
-.env
-.env.production
+.env*
 
 extension/dist
 *.d.ts
