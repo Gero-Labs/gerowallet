@@ -18,6 +18,8 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
 const key = process.env.MANIFEST_KEY;
 //@ts-ignore
 const client_id = process.env.GOOGLE_CLIENT_ID;
+//@ts-ignore
+const isBeta = Boolean(process.env.VITE_IS_BETA);
 
 async function getManifest() {
   const pkg = await fs.readJSON(r('package.json')) as typeof PkgType
@@ -26,7 +28,7 @@ async function getManifest() {
   // can also be conditional based on your need
   const manifest: ManifestWithOAuth2 = {
     manifest_version: 3,
-    name: pkg.displayName || pkg.name,
+    name: (pkg.displayName || pkg.name) + (isBeta ? ' (Beta)' : '') ,
     version: pkg.version,
     description: pkg.description,
     key,
@@ -114,6 +116,10 @@ async function getManifest() {
 
   if (!isDev) {
     manifest['key'] = process.env['MANIFEST_KEY']
+  }
+
+  if (isBeta) {
+    manifest.permissions = manifest.permissions!.filter((p) => p !== 'notifications')
   }
 
   // FIXME: not work in MV3
