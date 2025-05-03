@@ -1,6 +1,6 @@
 import { Blockchain, ChainDerivations, Network, Paginate } from '@/models/types';
 import { APIError, POPUP_WINDOW } from './config';
-import networks from '../shared/utils/networks';
+import networks from '@/utils/networks';
 import {
   Bip32PrivateKey,
   Bip32PublicKey,

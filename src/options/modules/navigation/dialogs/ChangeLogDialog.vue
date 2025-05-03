@@ -6,16 +6,15 @@
     subtitle="Gero Dashboard change log"
     :loading="loading"
     :min-height="0"
+    scrollable
     :persistent="persistent"
   >
-    <v-card-title class="pa-0">
-    </v-card-title>
-    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1; min-height: 0; height: 608px">
+    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1;">
       <v-timeline align-top dense class="pt-0 mt-4">
         <v-timeline-item small color="#00DFF3" v-for="(release, index) in releases" :key="index">
           <v-card class="transparent" flat style="background-image: linear-gradient(90deg, rgba(153, 153, 153, 0.05) 0%, rgba(163.62, 238.55, 255, 0.05) 100%); border-radius: 24px; ">
             <v-card-text class="text-left">
-              <v-expansion-panels :value="0" flat>
+              <v-expansion-panels :value="index === 0 ? 0 : -1" flat>
                 <v-expansion-panel class="transparent" flat>
                   <v-expansion-panel-header class="pa-0">
                     <v-list-item two-line>
@@ -53,7 +52,7 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import time from '@/plugins/time'
 import cryptoApi from '@/api/crypto-api';
 import packageJson from '@/../package.json';
@@ -135,9 +134,9 @@ export default {
 .v-timeline-item__dot--small .v-timeline-item__inner-dot {
   border-radius: 28px;
   background-color: #00dff3!important;
-  width: 8px;
-  height: 8px;
-  margin: 8px auto auto;
+  width: 8px!important;
+  height: 8px!important;
+  margin: 8px auto auto!important;
 
 }
 </style>

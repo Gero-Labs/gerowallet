@@ -89,10 +89,10 @@
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
 import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import SendDialog from "../dialogs/SendDialog.vue";
 import {mapState} from "pinia";
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 
 export default {

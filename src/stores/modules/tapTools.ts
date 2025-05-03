@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { appWallet } from '@/store';
+import { appWallet } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import { parseHttpError } from '@/shared/utils/parser';
 

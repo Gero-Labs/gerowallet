@@ -30,7 +30,7 @@ import CurrentTrack from '@/modules/media-player/components/CurrentTrack.vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
 import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue';
 import { mapActions, mapState } from 'pinia';
-import { musicStore } from '@/store/modules/music';
+import { musicStore } from '@/stores/modules/music';
 
 export default {
   name: "player",

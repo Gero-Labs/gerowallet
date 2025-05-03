@@ -20,7 +20,7 @@ import {
   Value, Withdrawals,
 
 } from '@emurgo/cardano-serialization-lib-browser';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
 

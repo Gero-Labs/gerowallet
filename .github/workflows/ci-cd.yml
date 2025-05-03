@@ -5,9 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:   # Manual trigger for publish job
+permissions:
+  contents: write
 
 jobs:
   build:
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository

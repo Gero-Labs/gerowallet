@@ -105,11 +105,11 @@
   </v-form>
 </template>
 <script>
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import {
   BigNum,
   decode_metadatum_to_json_str,
@@ -125,11 +125,11 @@ import {
   diffAssetsFromIncomingToOutgoing,
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 

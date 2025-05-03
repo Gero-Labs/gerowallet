@@ -255,7 +255,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
 

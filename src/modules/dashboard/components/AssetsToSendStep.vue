@@ -116,9 +116,9 @@
 </template>
 <script>
 import {mapState} from "pinia";
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 
 export default {
   components: { TokenSelector },

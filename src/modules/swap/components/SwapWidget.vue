@@ -86,16 +86,16 @@ import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
 import { mapActions, mapState } from 'pinia';
-import { dexHunterStore } from '@/store/modules/dexhunter';
-import { appWallet, useStore } from '@/store';
+import { dexHunterStore } from '@/stores/modules/dexhunter';
+import { appWallet, useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
-import networks, { cardanoLogo } from '@/shared/utils/networks';
+import networks, { cardanoLogo } from '@/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: 'SwapWidget',

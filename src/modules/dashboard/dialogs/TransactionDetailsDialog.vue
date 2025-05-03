@@ -4,7 +4,7 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 
 export default {
