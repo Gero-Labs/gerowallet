@@ -61,6 +61,8 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
 import cbor from 'cbor';
+import { Cardano } from '@cardano-sdk/core';
+import { toStakeCredential } from '@/chrome/serialization';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -935,18 +937,26 @@ export const multisigJsonToBech32 = (multisigJson, networkId = 1) => { //network
     
     // Create stake credential from script hash
     const stakeCredential = Credential.from_scripthash(scriptHash);
-    
-    // Create enterprise address (payment part only, no staking)
-    const address = EnterpriseAddress.new(
+
+    const multisigBaseAddress = BaseAddress.new(
       networkId, // 0 for testnet, 1 for mainnet
+      stakeCredential,
       stakeCredential
     );
+
+    const stakeCred: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(multisigBaseAddress.to_address().to_bech32()));
+    const stakeAddress = Cardano.RewardAddress.fromCredentials(networkId, stakeCred).toAddress().toBech32();
     
-    // Convert to bech32
-    return {
-      bech32Address: address.to_address().to_bech32(),
+    const output = {
+      stakeAddress: stakeAddress,
+      bech32Address: multisigBaseAddress.to_address().to_bech32(),
       scriptCBOR: Buffer.from(nativeScript.to_bytes()).toString('hex') //CBOR
     };
+
+    console.log("output:::", output);
+
+    // Convert to bech32
+    return output;
 
   } catch (error) {
     console.error("Error converting multisig to address:", error);

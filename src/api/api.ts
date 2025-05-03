@@ -1,6 +1,6 @@
-import axios, {AxiosError, AxiosInstance} from 'axios';
+import axios, { AxiosError, AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import {Blockchain, Network, Proof, Provider} from '@/models/types';
+import { Blockchain, Network, Proof, Provider } from '@/models/types';
 
 export class Api {
   public chain: string;
@@ -25,17 +25,17 @@ export class Api {
   async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.post(
-        `/api/sync`,{
-          chain: this.chain,
-          network: this.network,
-          provider: this.provider,
-          from,
-          to,
-          address,
-          rewards_sum,
-          controlled_amount,
-          withdrawable_amount
-        }
+        `/api/sync`, {
+        chain: this.chain,
+        network: this.network,
+        provider: this.provider,
+        from,
+        to,
+        address,
+        rewards_sum,
+        controlled_amount,
+        withdrawable_amount
+      }
       );
       if (status === 200) return data;
       throw parseHttpError(data);
@@ -397,8 +397,13 @@ export class Api {
   }
 
   multiSig = {
-    async createMultisigWallet(multisig: any, parentWalletAddress: string) {
-      return 'OK';
+    /**
+     * Create a multisig wallet
+     * @param multisig - The multisig wallet to create
+     * @param parentWalletAddress - The address of the parent wallet
+     * @returns The created multisig wallet or throws an error on failure
+     */
+    async createWallet(multisig: any, parentWalletAddress: string) {
       try {
         const { data, status } = await super.axiosInstance.post(
           `/api/multisig/add`,
@@ -419,14 +424,187 @@ export class Api {
         throw parseHttpError(error);
       }
     },
-  
-    async submitMultisigTx(body: string): Promise<any> {
-      const provider = super.provider ?? 'BLOCKFROST';
-      const { data } = await super.axiosInstance.post(
-        `/api/transactions/submit-tx?chain=${super.chain}&network=${super.network}&provider=${provider}`, 
-        body
-      );
-      return data;
-    }
+
+    /**
+     * Submit a transaction
+     * @param body - The body of the transaction to submit
+     * @returns The submitted transaction or throws an error on failure
+     */
+    async submitTx(body: string): Promise<any> {
+      try {
+        const provider = super.provider ?? 'BLOCKFROST';
+        const { data } = await super.axiosInstance.post(
+          `/api/transactions/submit-tx?chain=${super.chain}&network=${super.network}&provider=${provider}`,
+          body
+        );
+        return data;
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+
+    transactions: {
+      /**
+       * Create a transaction
+       * @param body - The body of the transaction to create
+       * @returns The created transaction or throws an error on failure
+       */
+      async create(body: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.post(
+            `/api/multisig/transactions`,
+            body
+          );
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Get a transaction by ID
+       * @param id - The ID of the transaction to get
+       * @returns The transaction or throws an error on failure
+       */
+      async getByID(id: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.get(`/api/multisig/transactions/${id}`);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Get all transactions by wallet address
+       * @param walletAddress - The address of the wallet to get the transactions for
+       * @returns The transactions or throws an error on failure
+       */
+      async getByWallet(walletAddress: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.get(`/api/multisig/address/${walletAddress}/transactions`);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Update a transaction by ID
+       * @param id - The ID of the transaction to update
+       * @param body - The body of the transaction to update 
+       * body example:
+       * {
+            "multisigAddress": "{multisigAddress}",
+            "txnCBOR": "{txnCBOR}",
+            "requiredSignatures": 2
+        }
+       * @returns The updated transaction
+       */
+
+      async update(id: string, body: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.put(`/api/multisig/transactions/${id}`, body);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Delete a transaction by ID
+       * @param id - The ID of the transaction to delete
+       * @returns The deleted transaction
+       */
+      async delete(id: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.delete(`/api/multisig/transactions/${id}`);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Get the signers of a transaction
+       * @param transactionId - The ID of the transaction to get the signers for
+       * @returns The signers or throws an error on failure
+       */
+      async getSigners(transactionId: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.get(`/api/multisig/transactions/${transactionId}/signers`);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      // TODO: Implement "Get Pending Signature Transactions"
+      // TODO: Implement "Get Fully Signed Transactions"
+    },
+
+    signers: {
+      /**
+       * Add a signer or signers to a transaction
+       * @param transactionId - The ID of the transaction to add the signer to
+       * @param signerAddress - The address of the signer to add | array of addresses
+       * @returns The updated transaction
+       */
+      async add(transactionId: string, signerAddress: string | string[]): Promise<any> {
+        try {
+          let data;
+
+          if (Array.isArray(signerAddress)) {
+            ({ data } = await super.axiosInstance.post(
+              `/api/multisig/transactions/${transactionId}/signers`,
+              signerAddress
+            ));
+          } else {
+            ({ data } = await super.axiosInstance.post(
+              `/api/multisig/transactions/${transactionId}/signers/${signerAddress}`
+            ));
+          }
+
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Record a signature for a signer
+       * @param transactionId - The ID of the transaction to record the signature for
+       * @param signerAddress - The address of the signer to record the signature for
+       * @param signature - The signature to record
+       * @returns The updated transaction
+       */
+      async recordSignature(transactionId: string, signerAddress: string, signature: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.post(
+            `/api/multisig/transactions/${transactionId}/signers/${signerAddress}/signature`,
+            { signature }
+          );
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+      /**
+       * Get the transactions of a signer
+       * @param signerAddress - The address of the signer to get the transactions for
+       * @returns The transactions or throws an error on failure
+       */
+      async getTransactions(signerAddress: string): Promise<any> {
+        try {
+          const { data } = await super.axiosInstance.get(`/api/multisig/signers/${signerAddress}/transactions`);
+          return data;
+        } catch (error) {
+          throw parseHttpError(error);
+        }
+      },
+
+
+    },
   }
 }

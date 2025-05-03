@@ -76,6 +76,7 @@ import Dexie from "dexie";
 import { walletConfigStore } from "@/store/modules/walletConfig";
 import { Wallet } from "@/models/wallet";
 import lodash from "lodash";
+import { multisigStore } from "@/store/modules/multisig";
 
 export default defineComponent({
   name: "CreateMultisignWalletDialog",
@@ -103,7 +104,7 @@ export default defineComponent({
       "latestTip",
       "pinnedTokens",
     ]),
-
+    ...mapState(multisigStore, ["multiSigWallets"]),
     ...mapState(walletConfigStore, ["utxos", "addresses"]),
     isFormValid() {
       const invalidSigners = this.signers.filter(iSigner => !iSigner.address.trim());
@@ -179,14 +180,15 @@ export default defineComponent({
         required: this.requiredSigners,
       };
 
-      const multisigaddress = multisigJsonToBech32(multisigScriptJson, 0);
+      const { bech32Address, scriptCBOR, stakeAddress } = multisigJsonToBech32(multisigScriptJson, 0);
       const multisigWallet = {
-        id: multisigaddress.bech32Address,
+        id: bech32Address,
         name: this.multisigName,
         signers: this.signers,
         requiredSigners: this.requiredSigners,
         createdAt: new Date().toISOString(),
-        multisigScriptCBOR: multisigaddress.scriptCBOR,
+        multisigScriptCBOR: scriptCBOR,
+        stakeAddress: stakeAddress,
       };
       console.log("MultiSIG object::::", multisigWallet);
       console.log("this loggedin wallet db", this.loggedWallet);
@@ -200,7 +202,7 @@ export default defineComponent({
       const parentWalletPubkey = this.parentWalletPubkey();
       const multisigDBName = this.generateMultisigDBName(parentWalletPubkey, this.multisigName);
       console.log("dbname:::::", multisigDBName);
-      await appWallet.api.multiSig.createMultisigWallet(multisigaddress, this.baseAddress); // creates the wallet on Backend.
+      await appWallet.api.multiSig.createWallet({ stakeAddress, bech32Address, scriptCBOR }, this.baseAddress); // creates the wallet on Backend.
       await db.createNewWalletDb(this.loggedWallet.id); // incase of upgraded wallet schema
       const dbParent = new Dexie('wallet-' + this.loggedWallet.id); //parent wallet
       await dbParent.open();
@@ -231,7 +233,7 @@ export default defineComponent({
       }).catch(error => {
         console.error("Error creating multisig Database::", multisigDBName);
       });
-      await appWallet.api.multiSig.createMultisigWallet(multisigaddress, appWallet.baseAddress().toBech32()); // creates the wallet on Backend. 
+      await appWallet.api.multiSig.createWallet({ stakeAddress, bech32Address, scriptCBOR }, appWallet.baseAddress().toBech32()); // creates the wallet on Backend. 
 
       /*const dbM = new Dexie(multisigDBName);
  
