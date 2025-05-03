@@ -73,7 +73,7 @@ export const sharedConfig: UserConfig = {
 export default defineConfig(({ command }) => {
   return {
     ...sharedConfig,
-    base: command === 'serve' ? `http://localhost:${port}/` : '.',
+    base: command === 'serve' ? `http://localhost:${port}/` : './',
     server: {
       port,
       hmr: {
@@ -87,6 +87,7 @@ export default defineConfig(({ command }) => {
       }
     },
     build: {
+      minify: 'terser',
       target: 'esnext',
       watch: isDev ? {} : undefined,
       outDir: r('extension'),
