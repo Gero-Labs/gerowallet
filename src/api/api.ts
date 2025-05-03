@@ -448,6 +448,13 @@ export class Api {
       /**
        * Create a transaction
        * @param body - The body of the transaction to create
+       * body example:
+       * {
+            "txnId": "{txnId}",
+            "multisigAddress": "{multisigAddress}",
+            "txnCBOR": "{txnCBOR}",
+            "requiredSignatures": {requiredSignatures}
+        }
        * @returns The created transaction or throws an error on failure
        */
       async create(body: string): Promise<any> {
