@@ -238,8 +238,7 @@
         'resolvedAssets', 
         'baseAddress', 
         'latestTip', 
-        'pinnedTokens', 
-        'selectedMultisig'
+        'pinnedTokens',
       ]),
       ...mapState(walletConfigStore, [
         'utxos', 
