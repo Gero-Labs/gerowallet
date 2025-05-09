@@ -59,6 +59,11 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Messaging } from '@/chrome/messaging';
+// import { Cardano, Serialization } from '@cardano-sdk/core';
+// import { assetsToValue, toUTxO } from '@/chrome/serialization';
+// import { GenericTxBuilder } from '@cardano-sdk/tx-construction';
+// import { TxBuilderDependencies } from '@cardano-sdk/tx-construction/dist/esm/tx-builder/types';
+// import { TxBuilderProviders } from '@cardano-sdk/tx-construction/dist/esm/types';
 
 export default {
   name: 'CollateralTab',
@@ -79,6 +84,19 @@ export default {
   filters,
   methods: {
     async setCollateral() {
+      // const outputs: Serialization.TransactionOutput[] = []
+      // outputs.push(new Serialization.TransactionOutput(Cardano.Address.fromBech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])))
+      // const transactionUnspentOutputs: Serialization.TransactionUnspentOutput[] = []
+      // this.utxos.forEach((utxo) => transactionUnspentOutputs.push(toUTxO(utxo)));
+      // const txBuilderProviders: TxBuilderProviders
+      // const txBuilderDependencies: TxBuilderDependencies = {
+      //
+      // }
+      // const txBuilder: GenericTxBuilder = new GenericTxBuilder()
+
+      // const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
+
+
       const outputs = TransactionOutputs.new();
       outputs.add(TransactionOutput.new(Address.from_bech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
       const transactionUnspentOutputs = TransactionUnspentOutputs.new();

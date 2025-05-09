@@ -29,6 +29,7 @@ import {
   CoinTypes,
   ERROR,
   purpose,
+  Tip,
   WalletType,
   WalletTypePurpose,
 } from '@/models/types';
@@ -52,17 +53,13 @@ import {
 import { parseHttpError } from '@/shared/utils/parser';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import {
-  buildBaseAddress,
-  buildEnterpriseAddress,
-  buildRewardAddress, convertToTxSchema,
+  convertToTxSchema,
   getAddress,
   getCip129DrepId,
   getDrepKey,
   getPublicKey,
   getRewardAddress,
   getStakeKey,
-  paymentKeyHash,
-  stakeKeyHash,
 } from '@/chrome/serialization';
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
@@ -314,27 +311,6 @@ export class Wallet {
     }
 
     return { signature: signatureHex, key: keyHex };
-  }
-
-  getAddresses(pubKey: string, index) {
-    const baseAddress = buildBaseAddress(
-      this.networkId(),
-      Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(getPublicKey(pubKey), index).hex()),
-      Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(getPublicKey(pubKey), 0).hex())
-    ).toAddress();
-    const enterpriseAddress = buildEnterpriseAddress(
-      this.networkId(),
-      Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(getPublicKey(pubKey), index).hex())
-    ).toAddress();
-    const rewardAddress = buildRewardAddress(
-      this.networkId(),
-      Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(getPublicKey(pubKey), 0).hex())
-    ).toAddress();
-    return {
-      baseAddress,
-      enterpriseAddress,
-      rewardAddress
-    };
   }
 
   // async signTx(unsignedTx: string, partialSign: boolean = false, password: string, keyIndex = 0, utxos, addresses: string[], isUsb?: boolean) {
@@ -607,7 +583,7 @@ export class Wallet {
       });
   }
 
-  async setLastSyncInfo(tip): Promise<void> {
+  async setLastSyncInfo(tip: Tip): Promise<void> {
     await this.db
       .open()
       .then(db => {
@@ -705,7 +681,7 @@ export class Wallet {
     clearInterval(useStore().intervals.tickerStatisticsIntervalId)
   }
 
-  async sync(newTip?: any): Promise<void> {
+  async sync(): Promise<void> {
     if (this.syncLock) {
       // If sync is already running, wait for it to complete
       await this.syncLock;
@@ -715,12 +691,7 @@ export class Wallet {
       try {
         loading.setSyncing(true);
         console.log('sync');
-        let tip
-        if (!newTip) {
-          tip = await this.fetchTip();
-        } else {
-          tip = newTip;
-        }
+        let tip: Tip = await this.fetchTip();
         const lastSyncInfo = await this.getLastSyncInfo();
         if (!lastSyncInfo) {
           // loading.setText('Restoring Wallet Data. Please Wait ...')
@@ -733,11 +704,11 @@ export class Wallet {
             promises.push(this.syncTable(1)); // Sync Staking Pools
             promises.push(this.syncTable(2)); // Sync DReps
           }
+          // promises.push(this.syncProtocolParams(tip.epoch));
           const prevAccountInfo = await this.getAccountInfo();
           const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
-          const to = tip;
-          const baseAddress = this.baseAddress()
-          const isEnterpriseAddress = baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
+          const baseAddress: Cardano.Address = this.baseAddress()
+          const isEnterpriseAddress: boolean = baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
           let address: string;
           if (isEnterpriseAddress) {
             address = baseAddress.toBech32();
@@ -747,7 +718,7 @@ export class Wallet {
           const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
           const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
           const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
-          await this.setSync(await this.api.sync(from, to, address, rewards_sum, controlled_amount, withdrawable_amount));
+          await this.setSync(await this.api.sync(from, tip, address, rewards_sum, controlled_amount, withdrawable_amount));
         }
       } catch (err) {
         console.log(err);
@@ -761,7 +732,7 @@ export class Wallet {
     await this.syncLock;
   }
 
-  async restore(tip): Promise<void> {
+  async restore(tip: Tip): Promise<void> {
     const prevAccountInfo = await this.getAccountInfo();
 
     // Create an array to hold the promises that need to be awaited
@@ -973,7 +944,7 @@ export class Wallet {
     syncTable.put({ id: tableId, time: new Date().getTime() });
   }
 
-  async fetchTip(): Promise<any> {
+  async fetchTip(): Promise<Tip> {
     try {
       const tip = await this.api.getTip();
       useStore().setConnected(true)

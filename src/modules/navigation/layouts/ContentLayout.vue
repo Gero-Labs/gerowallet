@@ -263,7 +263,7 @@ import { useStore } from '@/stores'
 import { musicStore } from '@/stores/modules/music'
 import { walletConfigStore } from '@/stores/modules/walletConfig'
 
-const isBeta: boolean = ref<boolean>(Boolean(import.meta.env['VITE_IS_BETA']));
+const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 
 const vmProxy = getCurrentInstance()!.proxy as any
 

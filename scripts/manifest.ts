@@ -3,8 +3,11 @@ import { isDev, isFirefox, log, r } from './utils';
 import type PkgType from '../package.json';
 import type { Manifest } from 'webextension-polyfill';
 import dotenv from 'dotenv';
+import path from 'node:path'
 
-dotenv.config()
+dotenv.config({
+  path: path.resolve(process.cwd(), `.env.${process.env['NODE_ENV']}`)
+})
 
 interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
   oauth2?: {
@@ -19,7 +22,7 @@ const key = process.env.MANIFEST_KEY;
 //@ts-ignore
 const client_id = process.env.GOOGLE_CLIENT_ID;
 //@ts-ignore
-const isBeta = Boolean(process.env.VITE_IS_BETA);
+const isBeta: boolean = process.env.VITE_IS_BETA === 'true';
 
 async function getManifest() {
   const pkg = await fs.readJSON(r('package.json')) as typeof PkgType
