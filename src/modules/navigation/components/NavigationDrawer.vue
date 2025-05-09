@@ -137,9 +137,7 @@ import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 
 const changeLogRef = ref(changeLog)
-
-const isBeta: boolean = ref<boolean>(import.meta.env['VITE_IS_BETA'])
-
+const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 // Define props and emit
 const props = defineProps<{ value: boolean }>()
 const emit = defineEmits(['input'])
