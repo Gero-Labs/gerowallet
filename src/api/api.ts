@@ -179,6 +179,10 @@ export class Api {
     return parseHttpError(data);
   }
 
+  async getEpochParameters(epochNo: number): Promise<any> {
+    return await this.axiosInstance.get(`/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`);
+  }
+
   async fetchTickerStatistics() {
     const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
     if (status === 200) return data;

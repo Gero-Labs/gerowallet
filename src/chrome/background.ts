@@ -39,7 +39,7 @@ if (import.meta.hot) {
 }
 
 //@ts-ignore
-const isBeta: boolean = Boolean(import.meta.env.VITE_IS_BETA);
+const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 (async () => {
   await bringInitBackground({

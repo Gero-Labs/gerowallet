@@ -275,7 +275,7 @@ export default {
       }
       if (this.currentStep === 3) {
         if (this.loggedWallet?.type === WalletType.Normal) {
-          return Boolean(this.spendingPassword);
+          return !!this.spendingPassword;
         } else {
           return true
         }

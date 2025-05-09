@@ -275,6 +275,7 @@ export default {
       dreps: 'drep_id',
       sync: '++id, time',
       assets: 'asset, fingerprint, asset_name, policy_id',
+      // protocol_params: 'epoch'
     });
   },
   setWalletDBVersionSchema(db: Dexie) {
