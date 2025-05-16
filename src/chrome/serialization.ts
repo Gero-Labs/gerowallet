@@ -1,6 +1,6 @@
-import { Blockchain, ChainDerivations, Network, Paginate } from '@/models/types';
+import { Blockchain, ChainDerivations, Network, Paginate, UTxO } from '@/models/types';
 import { APIError, POPUP_WINDOW } from './config';
-import networks from '../shared/utils/networks';
+import networks from '@/utils/networks';
 import {
   Bip32PrivateKey,
   Bip32PublicKey,
@@ -14,6 +14,8 @@ import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
 import { BigIntMath, HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
 import { Buffer } from 'buffer';
+import { Asset as AssetType } from '@/models/types'
+import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -234,32 +236,6 @@ export function isPaymentAddressOrHandle(address: string): boolean {
 export function resolvePrivatePaymentKey(decodedHash: Buffer, keyIndex: number): Ed25519PrivateKey {
   const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
   return prvRootKeyBech32.derive([ChainDerivations.EXTERNAL, keyIndex]).toRawKey();
-}
-
-export function toUTxO(utxo: any): Serialization.TransactionUnspentOutput {
-  const tokenMap = utxo.asset_list.reduce((map: Map<Cardano.AssetId, bigint>, asset: any) => {
-    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
-    const current: bigint = map.get(assetId) ?? BigInt(0);
-    map.set(assetId, current + BigInt(asset.quantity));
-    return map;
-  }, new Map<Cardano.AssetId, bigint>());
-
-  return Serialization.TransactionUnspentOutput.fromCore([
-    {
-      txId: Cardano.TransactionId.fromHexBlob(utxo.tx_hash),
-      index: utxo.tx_index
-    },
-    {
-      address: Cardano.PaymentAddress(utxo.payment_addr.bech32),
-      value: {
-        coins: BigInt(utxo.value),
-        assets: tokenMap,
-      },
-      datumHash: utxo.datum_hash,
-      datum: utxo.inline_datum,
-      scriptReference: utxo.reference_script
-    }
-  ]);
 }
 
 export function toValue(assets: any[], lovelace: string): Serialization.Value {
@@ -687,4 +663,48 @@ export function hdPathToArray(path: string): number[] {
       return parseInt(part, 10);
     }
   });
+}
+
+export function assetsToValue(assets: AssetType[]): Serialization.Value {
+  const coin: Cardano.Lovelace = BigInt(assets.find((asset) => asset.unit === 'lovelace').quantity)
+  const multiasset: Cardano.TokenMap = new Map<Cardano.AssetId, bigint>()
+  assets // TODO use MAP
+    .filter(asset => asset.unit !== 'lovelace')
+    .forEach(asset => {
+      const assetId: Cardano.AssetId = Cardano.AssetId(asset.unit)
+      let quantity: bigint = multiasset.get(assetId)
+      if (!quantity) {
+        quantity = BigInt(asset.quantity)
+      } else {
+        quantity += BigInt(asset.quantity)
+      }
+      multiasset.set(assetId, quantity);
+    })
+  return new Serialization.Value(coin, multiasset)
+}
+
+export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
+  const tokenMap: Cardano.TokenMap = utxo.asset_list.reduce((map: Cardano.TokenMap, asset: any) => {
+    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
+    const current: bigint = map.get(assetId) ?? BigInt(0);
+    map.set(assetId, current + BigInt(asset.quantity));
+    return map;
+  }, new Map<Cardano.AssetId, bigint>());
+
+  return Serialization.TransactionUnspentOutput.fromCore([
+    {
+      txId: Cardano.TransactionId.fromHexBlob(HexBlob(utxo.tx_hash)),
+      index: utxo.tx_index
+    },
+    {
+      address: Cardano.PaymentAddress(utxo.payment_addr.bech32),
+      value: {
+        coins: BigInt(utxo.value),
+        assets: tokenMap,
+      },
+      datumHash: Hash32ByteBase16.fromHexBlob(HexBlob(utxo.datum_hash)),
+      datum: Serialization.PlutusData.fromCbor(HexBlob(utxo.inline_datum)).toCore(),
+      scriptReference: Serialization.Script.fromCbor(HexBlob(utxo.reference_script)).toCore()
+    }
+  ]);
 }

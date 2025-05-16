@@ -16,7 +16,7 @@ import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 
 Highcharts3D(Highcharts)
 

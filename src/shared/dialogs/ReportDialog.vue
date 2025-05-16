@@ -167,10 +167,10 @@
 </template>
 <script>
 import CustomStepper from '@/shared/components/CustomStepper.vue';
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { ReportLabel, ReportType } from '@/models/cardano-shield-types';
 import snackbar from '@/plugins/snackbar';

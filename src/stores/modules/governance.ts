@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import Dexie, { liveQuery } from 'dexie';
-import { appWallet, subscriptions } from '@/store';
+import { appWallet, subscriptions } from '@/stores';
 import db from '@/db';
 
 export const governanceStore = defineStore( 'governanceStore', {

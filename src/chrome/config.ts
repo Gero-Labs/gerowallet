@@ -1,5 +1,10 @@
 export const TARGET = 'gero-wallet';
-export const SENDER = { extension: 'extension', webpage: 'webpage' };
+export const SENDER = {
+  extension: 'extension',
+  webpage: 'webpage',
+  options: 'options',
+};
+
 export const METHOD = {
   isWhitelisted: 'isWhitelisted',
   blacklisted:'blacklisted',

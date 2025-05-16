@@ -150,9 +150,9 @@
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 
 export default {
   name: 'TokenSelector',

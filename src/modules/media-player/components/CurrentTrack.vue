@@ -25,7 +25,7 @@
 <script>
 import { mapState } from 'pinia';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
-import { musicStore } from '@/store/modules/music';
+import { musicStore } from '@/stores/modules/music';
 
 export default {
   name: "current-track",

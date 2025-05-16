@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import Dexie, { liveQuery } from 'dexie';
-import { appWallet, subscriptions } from '@/store';
+import { appWallet, subscriptions } from '@/stores';
 import { STORAGE } from '@/chrome/config';
 import db from '@/db';
 
@@ -20,6 +20,15 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
     getTxAutoSubmit(state) {
       if (state?.config && 'txAutoSubmit' in state.config) {
         return state.config.txAutoSubmit
+      }
+      return true
+    },
+    hasBackup(state) {
+      return 'backup' in state.config;
+    },
+    getBackup(state) {
+      if (state?.config && this.hasBackup) {
+        return state.config.backup
       }
       return true
     },
@@ -104,6 +113,12 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       if (appWallet) {
         const db: Dexie = await appWallet.getDb()
         db.table('config').put({key: 'txAutoSubmit', value: val})
+      }
+    },
+    async setBackup(val) {
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'backup', value: val})
       }
     },
     async setHideScamTokens(val) {
@@ -191,7 +206,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
           reject()
         });
       }
-      const db = await appWallet.getDb()
+      const db: Dexie = await appWallet.getDb()
       return new Promise((resolve, reject) => {
         subscriptions.set('accountInfo', liveQuery(() => appWallet && db.table('account').where({walletId: appWallet.id}).first()).subscribe({
           next: newAccount => {

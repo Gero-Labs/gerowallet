@@ -51,14 +51,14 @@ import { BigNum, Value } from '@emurgo/cardano-serialization-lib-browser';
 import { Buffer } from 'buffer';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
-import networks from '@/shared/utils/networks';
+import { useStore } from '@/stores';
+import networks from '@/utils/networks';
 import {
   cardanoValueFromRemoteFormat,
   diffAssetsFromIncomingToOutgoing,
   getAssetsFromMultiAsset, getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
