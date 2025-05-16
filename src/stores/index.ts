@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
-
 import db from '@/db';
+import { WalletType } from '@/models/types';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
 import { STORAGE } from '@/chrome/config';
@@ -11,22 +11,22 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
-import networks from '@/shared/utils/networks';
-import { musicStore } from '@/store/modules/music';
-import { dexHunterStore } from '@/store/modules/dexhunter';
+import networks from '@/utils/networks';
+import { musicStore } from '@/stores/modules/music';
+import { dexHunterStore } from '@/stores/modules/dexhunter';
 import { unitToFingerprint } from '@/shared/utils/converter';
 import filters from '@/shared/utils/filters';
-import { bringStore } from '@/store/modules/bring';
-import { walletConfigStore } from '@/store/modules/walletConfig';
-import { governanceStore } from '@/store/modules/governance';
-import { tapToolsStore } from '@/store/modules/tapTools';
+import { bringStore } from '@/stores/modules/bring';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { governanceStore } from '@/stores/modules/governance';
+import { tapToolsStore } from '@/stores/modules/tapTools';
 import router from '@/modules/navigation/router';
 import { parseHttpError } from '@/shared/utils/parser';
-import { loadWallets, subscribeWallets } from '@/store/loaders/walletLoader';
-import { loadSync, subscribeSync } from '@/store/loaders/syncLoader';
-import { loadTransactions, subscribeTransactions } from '@/store/loaders/transactionsLoader';
-import { loadAssets } from '@/store/loaders/assetsLoader';
-import { loadConfig, subscribeConfig } from '@/store/loaders/geroConfigLoader';
+import { loadWallets, subscribeWallets } from '@/stores/loaders/walletLoader';
+import { loadSync, subscribeSync } from '@/stores/loaders/syncLoader';
+import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
+import { loadAssets } from '@/stores/loaders/assetsLoader';
+import { loadConfig, subscribeConfig } from '@/stores/loaders/geroConfigLoader';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
@@ -91,7 +91,13 @@ export const useStore = defineStore('store', {
     getPrice: state => state.price,
     calculatedTransactions(state) {
       if (state.transactions) {
-        const currentStake = appWallet.stakeAddress().toBech32();
+        let currentStake: string = '';
+        let currentAddress: string = '';
+        if (appWallet.isEnterpriseAddress()) {
+          currentAddress = appWallet.baseAddress().toBech32();
+        } else {
+          currentStake = appWallet.stakeAddress().toBech32()
+        }
         let currentBalance: number = 0;
         return structuredClone(state.transactions)
           .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
@@ -101,7 +107,7 @@ export const useStore = defineStore('store', {
             const sentAssets = {};
             const receivedAssets = {};
             tx.inputs.forEach(input => {
-              if (input.stake_addr === currentStake && !input.datum_hash) {
+              if ((input.stake_addr === currentStake || input.payment_addr.bech32 === currentAddress) && !input.datum_hash) {
                 sentAmount += +input.value;
                 if (input.asset_list.length) {
                   input.asset_list.forEach(asset => {
@@ -118,7 +124,7 @@ export const useStore = defineStore('store', {
             });
 
             tx.outputs.forEach(output => {
-              if (output.stake_addr === currentStake && !output.datum_hash) {
+              if ((output.stake_addr === currentStake || output.payment_addr.bech32 === currentAddress) && !output.datum_hash) {
                 receivedAmount += +output.value;
                 if (output.asset_list.length > 0) {
                   output.asset_list.forEach(asset => {
@@ -283,12 +289,12 @@ export const useStore = defineStore('store', {
         return new Promise((resolve, reject) => reject())
       }
       // Resolve assets
+      console.log('assets:', assets)
       const assetArray = Object.values(assets);
       const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id']+asset['asset_name']) in this.assets)).map(asset => (asset['policy_id']+asset['asset_name']))
       await appWallet.syncAssets(unresolvedAssets, true)
       const resAssets = assetArray.filter(asset => (asset['policy_id']+asset['asset_name']) in this.assets)
       const resolvedAssets = await Promise.all(resAssets.map(asset => resolveAsset(this.assets[asset['policy_id']+asset['asset_name']], asset)));
-
       // Add ADA to resolved assets
       if (adaBalance > 0) {
         const network = networks.resolveNetwork(this.loggedWallet?.chain, this.loggedWallet?.network);
@@ -307,6 +313,7 @@ export const useStore = defineStore('store', {
           verified: true,
           onchain_metadata: null,
         });
+        console.log('ADA balance:', resolvedAssets)
       }
 
       // Filter and enrich assets with additional information
@@ -446,7 +453,13 @@ export const useStore = defineStore('store', {
       if (!appWallet) {
         return
       }
-      const stakeAddress: string = appWallet.stakeAddress().toBech32()
+      let stakeAddress: string = '';
+      let address: string = '';
+      if (appWallet.isEnterpriseAddress()) {
+        address = appWallet.baseAddress().toBech32();
+      } else {
+        stakeAddress = appWallet.stakeAddress().toBech32()
+      }
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -457,7 +470,7 @@ export const useStore = defineStore('store', {
           if (tx.inputs) {
             tx.inputs.forEach(input => {
               inputSet.add(`${input.tx_hash}-${input.tx_index}`);
-              if (input.stake_addr && input.stake_addr === stakeAddress) {
+              if (input.stake_addr === stakeAddress || input.payment_addr.bech32 === address) {
                 addresses.add(input.payment_addr.bech32)
               }
             });
@@ -466,10 +479,10 @@ export const useStore = defineStore('store', {
 
         // Check outputs against inputs set
         outputs.forEach(output => {
-          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && stakeAddress === output.stake_addr) {
+          if (!inputSet.has(`${output.tx_hash}-${output.tx_index}`) && (stakeAddress === output.stake_addr || address === output.payment_addr.bech32)) {
             utxos.push(output);
           }
-          if (output.stake_addr && output.stake_addr === stakeAddress) {
+          if (output.stake_addr === stakeAddress || address === output.payment_addr.bech32) {
             addresses.add(output.payment_addr.bech32)
           }
         });
@@ -477,17 +490,25 @@ export const useStore = defineStore('store', {
       if (Array.isArray(transactions) && transactions.length > 0) {
         await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
       }
-      await appWallet.syncAddresses(Array.from(addresses))
-        .then((resolvedAddresses: Set<string>) => {
-          const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
-          walletConfigStore().setUtxos(filteredKnownUtxos)
-        })
-        .then(() => this.loadResolvedAssets())
-        .then(assets => this.resolveCollections(assets))
-        .then((resolvedCollections) => {
-          musicStore().resolveMusicPlaylist(resolvedCollections)
-        });
-
+      if (appWallet.type === WalletType.Google) {
+        await walletConfigStore().setUtxos(utxos)
+          .then(() => this.loadResolvedAssets())
+          .then(assets => this.resolveCollections(assets))
+          .then((resolvedCollections) => {
+            musicStore().resolveMusicPlaylist(resolvedCollections)
+          });
+      } else {
+        await appWallet.syncAddresses(Array.from(addresses))
+          .then((resolvedAddresses: Set<string>) => {
+            const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
+            walletConfigStore().setUtxos(filteredKnownUtxos)
+          })
+          .then(() => this.loadResolvedAssets())
+          .then(assets => this.resolveCollections(assets))
+          .then((resolvedCollections) => {
+            musicStore().resolveMusicPlaylist(resolvedCollections)
+          });
+      }
     },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
@@ -514,6 +535,7 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
+      await appWallet.init()
       this.setBaseAddress(appWallet.baseAddress().toBech32())
       this.setStakeAddress(appWallet.stakeAddress().toBech32())
       governanceStore().setDRepId(appWallet.drepId())
@@ -543,10 +565,13 @@ export const useStore = defineStore('store', {
         console.log(err)
       }
       appWallet = Wallet.class(wallet, this.provider);
+      await appWallet.init()
       await this.loadConfig()
       this.setBaseAddress(appWallet.baseAddress().toBech32())
-      this.setStakeAddress(appWallet.stakeAddress().toBech32())
-      governanceStore().setDRepId(appWallet.drepId())
+      if (appWallet.type !== WalletType.Google) {
+        this.setStakeAddress(appWallet.stakeAddress().toBech32())
+        governanceStore().setDRepId(appWallet.drepId())
+      }
       await appWallet.startSync();
       await this.loadAssets()
       await dexHunterStore().loadBlacklistPolicies()

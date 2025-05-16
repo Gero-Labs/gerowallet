@@ -20,10 +20,9 @@
 </template>
 <script>
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
 import filters from '@/shared/utils/filters';
 import { formatTime } from '@/shared/utils/converter';
-import { musicStore } from '@/store/modules/music';
+import { musicStore } from '@/stores/modules/music';
 import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 
 export default {

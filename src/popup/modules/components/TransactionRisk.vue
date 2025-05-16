@@ -133,11 +133,11 @@ export default {
   text-align: center;
   align-items: center;
   justify-content: center;
-  span {
+  :is(span) {
     font-size: 10px;
     line-height: 16px;
   }
-  img {
+  :is(img) {
     height: 16px;
     margin-left: 2px;
   }

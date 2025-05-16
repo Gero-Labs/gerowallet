@@ -44,11 +44,11 @@
 import QRCodeStyling from 'qr-code-styling';
 import Vue from 'vue';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
 
 export default {

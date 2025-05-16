@@ -23,13 +23,13 @@ import {
   getDrepKey,
   urlScan,
   getUnusedAddresses,
-  // convertToTxSchema,
 } from '@/chrome/serialization';
 import { ERROR } from '@/models/types';
 import Tab = chrome.tabs.Tab;
-import networks from '../shared/utils/networks';
+import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
-// import { setAccountTransactions } from '@/chrome/backgroundWalletDB';
+import { MessageTypes } from '@/models/MessageTypes';
+import { signInWithGoogle } from '@/chrome/auth';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -37,6 +37,9 @@ if (import.meta.hot) {
   // load latest content script
   import('./contentScriptHMR')
 }
+
+//@ts-ignore
+const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 (async () => {
   await bringInitBackground({
@@ -46,27 +49,29 @@ if (import.meta.hot) {
   })
 })();
 
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'update') {
-    const currentVersion = chrome.runtime.getManifest().version;
-    chrome.notifications.create('updateNotification', {
-      type: 'image',
-      title: 'Extension Updated',
-      message: `Gero Dashboard has been updated to version ${currentVersion}!`,
-      iconUrl: chrome.runtime.getURL('public/logo128.png'),
-      imageUrl: chrome.runtime.getURL('public/2.5.1.png'),
-    });
-  }
-});
-chrome.notifications.onClicked.addListener(function(notificationId) {
-  if (notificationId === 'updateNotification') {
-    // Perform your action here, for example, open a URL in a new tab
-    chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
+if (!isBeta) {
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'update') {
+      const currentVersion = chrome.runtime.getManifest().version;
+      chrome.notifications.create('updateNotification', {
+        type: 'image',
+        title: 'Extension Updated',
+        message: `Gero Dashboard has been updated to version ${currentVersion}!`,
+        iconUrl: chrome.runtime.getURL('public/logo128.png'),
+        imageUrl: chrome.runtime.getURL('public/2.5.2.png'),
+      });
+    }
+  });
+  chrome.notifications.onClicked.addListener(function(notificationId) {
+    if (notificationId === 'updateNotification') {
+      // Perform your action here, for example, open a URL in a new tab
+      chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
 
-    // Optionally, clear the notification if needed
-    chrome.notifications.clear(notificationId);
-  }
-});
+      // Optionally, clear the notification if needed
+      chrome.notifications.clear(notificationId);
+    }
+  });
+}
 
 const processedDomains = new Set<string>();
 
@@ -809,7 +814,7 @@ const checkTabOpen = (tabId) => {
   });
 };
 
-// Open the dashboard in a new tab or focus an existing tab
+// Open the dashboard in a new tab or focus on an existing tab
 const openDashboard = () => {
   return new Promise((resolve) => {
     checkTabOpen(lastFullscreenTabId).then((isOpen) => {
@@ -847,6 +852,37 @@ const openDashboard = () => {
     });
   });
 };
+
+app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) => {
+  try {
+    const tokens = await signInWithGoogle();
+    if (tokens) {
+      sendResponse({
+        id: request.id,
+        data: { success: true, tokens },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
+
+
+});
 
 const openUI = async () => {
   await openDashboard();

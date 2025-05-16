@@ -5,6 +5,7 @@ const WalletType = {
   Ledger: 'Ledger',
   Keystone: 'Keystone',
   Normal: 'Normal',
+  Google: 'Google',
 };
 
 const Theme = {
@@ -163,7 +164,7 @@ const Currency = {
   ILS: { short: 'ils', description: 'Israeli Shekel', symbol: '₪' },
 };
 
-export type TransactionToken = {
+export type Asset = {
   unit: string;
   quantity: string;
 };
@@ -175,7 +176,7 @@ export const TX = {
 export type TxOutput = {
   recipientAddress: string;
   value: string;
-  tokens?: TransactionToken[];
+  tokens?: UTxO[];
 };
 
 export type Withdrawal = {
@@ -191,6 +192,41 @@ export type Proof = {
   pi_c: string[];
   protocol: string,
   curve: string,
+}
+
+export type UTxO = {
+  tx_hash: string;
+  tx_index: number;
+  payment_addr: {
+    bech32: string;
+  }
+  asset_list: [
+    policy_id: string,
+    asset_name: string,
+    quantity: string
+  ],
+  datum_hash: string,
+  inline_datum: string,
+  reference_script: string,
+  value: string
+}
+
+export type Tip = {
+  time: number,
+  height: number,
+  hash: string,
+  slot: number,
+  epoch: number,
+  epoch_slot: number,
+  slot_leader: string,
+  size: number,
+  tx_count: number,
+  output: string,
+  fees: string,
+  block_vrf: string,
+  previous_block: string,
+  next_block: string,
+  confirmations: number
 }
 
 export {

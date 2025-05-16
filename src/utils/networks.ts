@@ -33,9 +33,11 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: true,
       governanceSupport: true,
+      daoSupport: true,
       transactionSupport:true,
       swapSupport: true,
       buySupport: true,
+      zkFoldSupport: false,
       networkParams: {
         networkMagic: 764824073
       }
@@ -67,9 +69,11 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       governanceSupport: false,
+      daoSupport: false,
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
+      zkFoldSupport: false,
       networkParams: {
 
       }
@@ -119,9 +123,11 @@ export default {
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
       governanceSupport: false,
+      daoSupport: false,
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
+      zkFoldSupport: false,
     },
     {
       icon: apexIcon,
@@ -138,9 +144,11 @@ export default {
       defaultProvider: Provider.BLOCKFROST,
       cashbackSupport: false,
       governanceSupport: false,
+      daoSupport: false,
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
+      zkFoldSupport: false,
     },
   ],
   resolveNetwork(chain: string, network: string) {
@@ -193,6 +201,12 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.governanceSupport
+  },
+  resolveDaoSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.daoSupport
   },
   resolveTransactionsSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

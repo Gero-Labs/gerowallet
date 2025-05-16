@@ -323,14 +323,14 @@
 </template>
 <script>
 import { QrcodeStream } from "vue-qrcode-reader";
-import rules from "@/shared/utils/rules";
+import rules from "@/utils/rules";
 import { purpose, Theme, WalletType } from '@/models/types';
 import db from "@/db";
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
 import { getKeystonePublicKeyUR, parseMultiAccounts } from '@/shared/utils/keystone';
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import QRCodeStyling from 'qr-code-styling';
 import Vue from 'vue';
 import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';

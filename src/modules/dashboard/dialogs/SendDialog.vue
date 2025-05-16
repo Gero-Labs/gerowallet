@@ -188,16 +188,16 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { mapState } from 'pinia';
 import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import {
   Transaction,
@@ -205,7 +205,7 @@ import {
   TransactionOutputs,
   TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
@@ -215,7 +215,7 @@ import QRCodeStyling from 'qr-code-styling';
 import { QrcodeStream } from "vue-qrcode-reader";
 // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import { UREncoder } from '@keystonehq/keystone-sdk';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { isPaymentAddress, isPaymentAddressOrHandle } from '@/chrome/serialization';
 
@@ -275,7 +275,7 @@ export default {
       }
       if (this.currentStep === 3) {
         if (this.loggedWallet?.type === WalletType.Normal) {
-          return Boolean(this.spendingPassword);
+          return !!this.spendingPassword;
         } else {
           return true
         }
