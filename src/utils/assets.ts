@@ -54,6 +54,8 @@ import multisigPending from '@/assets/svg/multisig_pending.svg'
 import multisigDollar from '@/assets/svg/multisig_dollar.svg'
 import multisigExpired from '@/assets/svg/multisig_expired.svg'
 import multisigTotal from '@/assets/svg/multisig_stack.svg'
+import detailsSvg from '@/assets/svg/details.svg'
+import depositSvg from '@/assets/svg/deposit.svg'
 
 import cardanoBackground from '@/assets/cardanoBg.png'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
@@ -151,6 +153,8 @@ export default {
   multisigDollar,
   multisigExpired,
   multisigTotal,
+  detailsSvg,
+  depositSvg,
   
   cardanoShieldLogo,
   cardanoShieldBigLogo,
@@ -302,4 +306,6 @@ export const svgAssets = {
   pendingSvg,
   piggyBankSvg,
   withdrawalSvg,
+  detailsSvg,
+  depositSvg,
 }

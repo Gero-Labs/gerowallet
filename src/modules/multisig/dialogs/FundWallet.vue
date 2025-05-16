@@ -1,6 +1,6 @@
 <template>
-    <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="New Multisig Transaction" :loading="txSubmitLoading" :min-height="0"
-                :subtitle="'A multisig wallet requires multiple parties signatures to authorize any transaction.'">
+    <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.fundWallet')" :loading="txSubmitLoading" :min-height="0"
+                :subtitle="`Add ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to your multisig wallet.`">
       <v-card-title style="display: block;" class="py-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
@@ -30,12 +30,10 @@
       <v-card-text class="px-3 pb-0 justify-center text-center" style="z-index: 1; min-height: 0; height: 490px; align-content: center;" :style="currentStep === 3 && loggedWallet?.type === WalletType.Normal ? { height: '442px'} : {}">
         <CustomStepper :currentStep="currentStep" :steps="steps">
           <v-stepper-content step="1">
-            <SendRecipientDetailsStepMultisig
+            <SendRecipientDetailsStep
               :sendData="sendData"
-              :recipientAddress="recipientAddressProp"
-              @moveNext="nextStep"
               @updateRecipientAddress="updateRecipientAddress"
-            ></SendRecipientDetailsStepMultisig>
+            ></SendRecipientDetailsStep>
           </v-stepper-content>
           <v-stepper-content step="2">
             <AssetsToSendStep
@@ -145,7 +143,7 @@
                 outlined
                 label="Spending Password"
                 :type="show1 ? 'text' : 'password'"
-                :rules="[rules.required]"
+                :rules="[rules.required()]"
                 hide-details
                 class="mb-2"
                 required
@@ -171,7 +169,7 @@
           <v-btn
             text
             @click="prevStep"
-            v-if="currentStep > 1"
+            v-if="this.currentStep > 1"
             class="mr-2"
             :disabled="txSubmitLoading"
           >
@@ -182,25 +180,25 @@
             @click="nextStep"
             :disabled="!isValid || txSubmitLoading"
             :loading="txSubmitLoading"
-          >{{ currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
+          >{{ this.currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
             <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
         </div>
       </v-card-actions>
     </BaseDialog>
   </template>
-  <script lang="ts">
+  <script>
   import BaseDialog from '@/shared/components/BaseDialog.vue';
   import CustomStepper from '@/shared/components/CustomStepper.vue';
-  import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
-  import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
-  import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
+  import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
+  import AssetsToSendStep from '../components/AssetsToSendStep.vue';
+  import SummaryStep from '../components/SummaryStep.vue';
   import { appWallet, useStore } from '@/store';
   import { mapState } from 'pinia';
   import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
   import { buildTx } from '@/shared/utils/builder';
   import rules from '@/shared/utils/rules';
-  import { Network, WalletType } from '@/models/types';
+  import { WalletType } from '@/models/types';
   import {
     Transaction,
     TransactionOutput,
@@ -218,45 +216,30 @@
   // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
   import { UREncoder } from '@keystonehq/keystone-sdk';
   import { walletConfigStore } from '@/store/modules/walletConfig';
+  import { Cardano, Serialization } from '@cardano-sdk/core';
+  import { isPaymentAddress, isPaymentAddressOrHandle } from '@/chrome/serialization';
   import { multisigStore } from '@/store/modules/multisig';
 
-  export default defineComponent({
-    name: 'MultisigTransactionDialog',
-    components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStepMultisig, AssetsToSendStep, SummaryStep },
+  export default {
+    name: 'FundWallet',
+    components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
     props: {
       isOpen: {
         type: Boolean,
         default: false,
       },
-      recipientAddressProp: {
-        type: String,
-        default: ''
-      },
-      isMultisig: {
-        type: Boolean,
-        default: false,
-      }
     },
     computed: {
-      ...mapState(useStore, [
-        'loggedWallet', 
-        'baseAddress', 
-        'latestTip', 
-        'pinnedTokens',
-      ]),
-      ...mapState(multisigStore, ['multiSigWallet', 'multiSigWallets', 'resolvedAssets']),
-      ...mapState(walletConfigStore, [
-        'utxos', 
-        'addresses'
-      ]),
       WalletType() {
         return WalletType
       },
       networks() {
         return networks
       },
+      ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'pinnedTokens']),
+      ...mapState(multisigStore, ['multiSigWallet']),
+      ...mapState(walletConfigStore, ['utxos', 'addresses']),
       tokens() {
-        console.log('this.resolvedAssets', this.resolvedAssets)
         if (this.resolvedAssets) {
           const tokens = this.resolvedAssets.map(token => {
             return {
@@ -282,7 +265,8 @@
       },
       isValid() {
         if (this.currentStep === 1) {
-          return rules.paymentAddress(this.loggedWallet?.network !== Network.MAINNET)(this.sendData.recipientAddress)
+          const fn = rules.recipientRules(this.loggedWallet?.chain, this.loggedWallet?.network);
+          return fn(this.sendData.recipientAddress) !== 'Invalid Payment Address'
         }
         if (this.currentStep === 2) {
           if (!this.txValid) {
@@ -359,14 +343,14 @@
       show1: false,
       rules,
       sendData: {
+        isMultisigFunding: true,
         selectedTokens: [],
         selectedCollectibles: [],
-        recipientAddress: '', // this.recipientAddressProp || '',
+        recipientAddress: '',
         selectedWallet: {},
-        minAda: 0,
-        adaShortage: 0,
-        senderWallet: '',
         availableWallets: [],
+        minAda: 0,
+        adaShortage: 0
       },
       txValid: false,
       isBT: false,
@@ -375,7 +359,6 @@
       cbor: undefined,
       keystoneScan: false,
       isInit: false,
-      qrCode: null,
     }),
     methods: {
       backScan() {
@@ -440,7 +423,7 @@
             snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
             this.$emit('close')
           } catch (e) {
-            snackbar.setError(e.toString())
+            snackbar.setError(e)
             console.error(e);
           }
           this.txSubmitLoading = false
@@ -454,20 +437,19 @@
         } else if (appWallet?.type === WalletType.Keystone) {
           if (this.qrCode) {
             this.qrCode = null; // Clear the QRCode instance
-            if (this.$refs['qrCode']) {
-              (this.$refs['qrCode'] as HTMLElement).innerHTML = '';
-            }
+            if (this.$refs.qrCode)
+              this.$refs.qrCode.innerHTML = '';
           }
-
-          const ur = createKeystoneSignRequest(this.txData, this.loggedWallet, this.utxos, this.addresses);
-          this.type = ur.type;
+  
+          const ur = createKeystoneSignRequest(this.txData, this.loggedWallet, this.utxos, this.addresses)
+          this.type = ur.type
           this.cbor = Buffer.from(ur.cbor).toString('hex')
           qrCodeOptions(UREncoder.encodeSinglePart(ur), 430)
           console.log('')
           this.overlay = true
           this.qrCode = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
           Vue.nextTick(() => {
-            this.qrCode.append(this.$refs['qrCode']);
+            this.qrCode.append(this.$refs.qrCode);
           });
           console.log('qrCode')
         } else {
@@ -475,10 +457,13 @@
         }
       },
       buildTx(sendTokens) {
+        if (!this.sendData.recipientAddress || !isPaymentAddress(this.sendData.recipientAddress)) {
+          return
+        }
         const recipientAddress = this.sendData.recipientAddress;
         const tokens = [];
         if (sendTokens.length > 0) {
-          sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals).forEach(token => {
+          sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
             if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
               tokens.push({
                 unit: 'lovelace',
@@ -520,9 +505,7 @@
           if (this.currentStep === 1) {
             this.currentStep++;
           } else if (this.currentStep === 2) {
-            if (this.$refs['summary'] && typeof (this.$refs['summary'] as any).scanTx === 'function') {
-              (this.$refs['summary'] as any).scanTx(this.txData);
-            }
+            this.$refs.summary.scanTx(this.txData);
             this.currentStep++;
           } else if (this.currentStep === 3) {
             this.signAndSubmitTx();
@@ -569,7 +552,7 @@
             const adaMinBalance = match[2]
             const nativeToken = this.sendData.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network))
             if (nativeToken) {
-              nativeToken.quantity = `${Number(filters.toCurrency(Number(adaMinBalance), false, 6, '', '', false, 6).replaceAll(",", ""))}`
+              nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
               this.sendData.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
             }
           } else {
@@ -590,26 +573,20 @@
         const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network)
         const foundAsset = this.tokens.find(token => token.ticker === currencyTicker)
         if (foundAsset) {
-          foundAsset.verified = true;
+          foundAsset.verified = true
         }
         this.sendData = {
-          selectedTokens: foundAsset ? [foundAsset] : [],
+          selectedTokens: [foundAsset],
           selectedCollectibles: [],
-          recipientAddress: this.recipientAddressProp,
-          selectedWallet: this.multiSigWallet,
-          minAda: 0,
-          adaShortage: 0,
-          senderWallet: this.multiSigWallet as any,
-          availableWallets: this.multiSigWallets,
+          recipientAddress: this.multiSigWallet.id,
+          selectedWallet: this.loggedWallet,
+          availableWallets: [this.loggedWallet],
+          isMultisigFunding: true,
         };
-        console.log("resetData sendData::", this.sendData);
+        console.log("this.sendData", this.sendData)
       },
     },
     mounted() {
-      if(this.isMultisig) {
-        this.sendData = { ...this.sendData, recipientAddress: this.recipientAddressProp};
-        this.nextStep();
-      }
       if (this.resolvedAssets) {
         const nativeTicker = networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
         const adaAssetFound = this.resolvedAssets.find(asset => asset.metadata.ticker === nativeTicker);
@@ -617,9 +594,8 @@
           this.sendData.selectedTokens = [adaAssetFound];
         }
       }
-    }
-  
-  });
+    },
+  };
   </script>
   
   <style scoped>
@@ -709,3 +685,4 @@
     padding: 0;
   }
   </style>
+  

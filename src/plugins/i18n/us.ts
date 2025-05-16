@@ -23,6 +23,8 @@ export default {
     createMultisigWallet: 'Create Multisig Wallet',
     newMultisigTransaction: 'New Transaction',
     selectMultisigToManage: 'Select Multisig to manage',
-    noWalletsToManage: 'No multisig wallets to manage'
+    noWalletsToManage: 'No multisig wallets to manage',
+    showWalletDetails: 'Wallet Details',
+    fundWallet: 'Fund Wallet',
   }
 };

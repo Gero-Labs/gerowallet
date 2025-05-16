@@ -4,12 +4,12 @@
       <div class="item-container">
         <v-row>
           <v-col cols="12" class="py-0 px-2">
-            <span>From Multisig Wallet</span>
+            <span>{{ isMultisigFunding ? "From Wallet" : "From Multisig Wallet" }}</span>
             <v-select 
               :disabled="true"
               dense
-              v-model="multisigStore.getMultiSigWallet" 
-              :items="[multisigStore.getMultiSigWallet]" 
+              v-model="senderWallet" 
+              :items="availableWallets" 
               item-text="name" 
               item-value="addressBech32" 
               prepend-inner-icon="mdi-account-multiple-outline"
@@ -276,12 +276,15 @@ export default defineComponent({
       }
     },
     resolveAddress(val) {
-      if (val && val.startsWith('$') && this.loggedWallet.network === Network.MAINNET && this.loggedWallet.chain === Blockchain.CARDANO) {
-        this.resolveAdaHandle(val)
-      } else {
-        this.resolved = undefined
-        this.paymentAddress = val
-        this.$emit('updateRecipientAddress', val)
+      if(val !== ''){
+        if (val && val.startsWith('$') && this.loggedWallet.network === Network.MAINNET && this.loggedWallet.chain === Blockchain.CARDANO) {
+          return this.resolveAdaHandle(val);
+        } else {
+          this.resolved = undefined;
+          this.paymentAddress = val;
+          this.$emit('updateRecipientAddress', val);
+          return '';
+        }
       }
     },
     resolveAdaHandle: debounce(async function (this: any, val: string) {
@@ -317,11 +320,14 @@ export default defineComponent({
     valid: false,
     paymentAddress: '',
     recipientAddress: '',
+    senderWallet: '',
+    availableWallets: [],
     resolved: undefined,
     loading: false,
     rules,
     contactsMenu: false,
     saveContactMenu: false,
+    isMultisigFunding: false,
     asset: undefined,
     contact: {
       name: '',
@@ -336,18 +342,18 @@ export default defineComponent({
     ]
   }),
   mounted() {
-    console.log("mounted send recipient ::", this.sendData);
     this.recipientAddress = this.sendData["recipientAddress"];
+    this.senderWallet = this.sendData["selectedWallet"];
+    this.isMultisigFunding = this.sendData["isMultisigFunding"];
+    this.availableWallets = this.sendData["availableWallets"];
     this.resolveAddress(this.recipientAddress);
-    console.log("multisig wallet selected:::", this.multisigStore.getMultiSigWallet);
   },
   created() {
-    console.log("created send recipient ::", this.sendData);
     this.recipientAddress = this.sendData["recipientAddress"];
+    this.senderWallet = this.sendData["selectedWallet"];
+    this.availableWallets = this.sendData["availableWallets"];
+    this.isMultisigFunding = this.sendData["isMultisigFunding"];
     this.resolveAddress(this.recipientAddress);
-    console.log("multisig wallet selected:::", this.multisigStore.getMultiSigWallet);
-
-    // this.$emit('updateRecipientAddress', this.recipientAddress);
   }
 });
 </script>
