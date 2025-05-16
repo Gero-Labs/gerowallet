@@ -108,14 +108,12 @@ export default defineComponent({
     ...mapState(walletConfigStore, ["utxos", "addresses"]),
     isFormValid() {
       const invalidSigners = this.signers.filter(iSigner => !iSigner.address.trim());
-      console.log("invalidSigners:::::", invalidSigners);
       const isValid =
         this.multisigName.trim() !== "" &&
         this.requiredSigners >= 1 &&
         this.requiredSigners <= this.signers.length &&
         !invalidSigners.length;
 
-      console.log("form is: " + isValid ? "validxx" : "invalid");
       return isValid;
     },
   },
@@ -313,7 +311,6 @@ export default defineComponent({
   mounted() {
     this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
     const loggedInWalletInstance = Wallet.class(this.loggedWallet, this.provider);
-    console.log("instance of thi.log:::", loggedInWalletInstance instanceof Wallet);
 
     if (this.resolvedAssets) {
       this.signers[0] = {

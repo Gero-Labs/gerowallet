@@ -258,7 +258,7 @@ export default {
         {title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(this.loggedWallet?.chain, this.loggedWallet?.network)},
         {title: 'Market', icon: assts.market, link: '/market', enabled: false, soon: true},
         {title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', soon: true},
-        { header: 'Media' },
+        // { header: 'Media' },
         {title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: this.musicPlaylist?.length > 0 },
         // { header: 'Tools' },
         // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
