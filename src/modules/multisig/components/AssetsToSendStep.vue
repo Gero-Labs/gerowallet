@@ -119,7 +119,9 @@
   import { appWallet, useStore } from '@/store';
   import TokenSelector from '@/shared/components/TokenSelector.vue';
   import networks from '@/shared/utils/networks';
-  
+  import { multisigStore } from '@/store/modules/multisig';
+
+
   export default defineComponent({
     components: { TokenSelector },
     props: {
@@ -132,7 +134,8 @@
     },
     name: "AssetsToSendStep",
     computed: {
-      ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'pinnedTokens', 'price']),
+      ...mapState(useStore, ['loggedWallet','pinnedTokens', 'price']),
+      ...mapState(multisigStore, ['multiSigWallets', 'multiSigWallet', 'resolvedAssets', 'resolvedCollections']),
       missingTokens() {
         const existingTokens = this.selectedTokens.map(token => token?.ticker)
         return this.tokens.filter(token => !existingTokens.includes(token.ticker))
@@ -247,7 +250,6 @@
         }
       },
       increaseQuantityToSend(item) {
-        console.log('test')
         if (item.toSendQuantity < item.quantity) {
           item.toSendQuantity++
         }
@@ -277,7 +279,7 @@
     },
     mounted() {
       const currencyTicker = networks.resolveCurrencyTicker(appWallet?.chain, appWallet?.network)
-      console.log(this.tokens)
+      console.log('this.tokens', this.tokens)
       const foundAsset = this.tokens.find(token => token.ticker === currencyTicker)
       if (foundAsset) {
         foundAsset.verified = true
