@@ -81,16 +81,16 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
-import rules from '@/shared/utils/rules';
+import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: 'UnstakeDialog',

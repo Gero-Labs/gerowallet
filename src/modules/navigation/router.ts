@@ -1,6 +1,6 @@
 import VueRouter, {NavigationGuardNext, Route} from 'vue-router';
 
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
@@ -155,8 +155,8 @@ const routes = [
     name: 'transactions',
     component: Transactions,
     meta: {
-       layout: ContentLayout,
-        requiresAuth: true,
+      layout: ContentLayout,
+      requiresAuth: true,
     },
   },
   {

@@ -35,7 +35,7 @@
 <script>
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { mapState } from 'pinia';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';

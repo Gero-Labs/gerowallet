@@ -16,7 +16,7 @@
 </template>
 <script>
 import {mapActions, mapState} from 'pinia';
-import { musicStore } from '@/store/modules/music';
+import { musicStore } from '@/stores/modules/music';
 
 export default {
   name: "volume-bar",

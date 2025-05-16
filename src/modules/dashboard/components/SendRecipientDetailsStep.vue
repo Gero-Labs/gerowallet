@@ -225,13 +225,13 @@
 </template>
 <script>
 import Select from '@/shared/components/Select.vue';
-import rules from "@/shared/utils/rules";
+import rules from "@/utils/rules";
 import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
 import { resolveAsset } from '@/shared/utils/resolver';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import adaHandleApi from '@/api/ada-handle.api';

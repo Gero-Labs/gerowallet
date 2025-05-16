@@ -421,7 +421,7 @@ import { defineComponent } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import { mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { unitToFingerprint } from '@/shared/utils/converter';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';

@@ -3,7 +3,8 @@
     v-model="isDialogOpen"
     :persistent="persistent"
     :width="width"
-    scrollable overlay-color="#1f242f"
+    :scrollable="scrollable"
+    overlay-color="#1f242f"
     overlay-opacity="0.7"
   >
     <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;" :disabled="loading">
@@ -14,7 +15,7 @@
         <div class="rings"></div>
       </div>
       <v-card-title class="pa-0 px-3 pb-0">
-        <v-list-item class="px-0" two-line style="z-index: 1;">
+        <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
           <v-list-item-avatar v-if="img" size="54" tile>
             <v-img :src="img" contain></v-img>
           </v-list-item-avatar>
@@ -22,7 +23,7 @@
             <v-list-item-title style="font-size: 18px; max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
             </v-list-item-title>
-            <v-list-item-subtitle style="white-space: normal;">
+            <v-list-item-subtitle style="white-space: normal; word-break: break-word">
               {{subtitle}}
             </v-list-item-subtitle>
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
@@ -83,12 +84,13 @@ export default {
     persistent: {
       type: Boolean,
       default: true
+    },
+    scrollable: {
+      type: Boolean,
+      default: true
     }
   },
   filters,
-  watch: {
-
-  },
   computed: {
     isDialogOpen: {
       get() {

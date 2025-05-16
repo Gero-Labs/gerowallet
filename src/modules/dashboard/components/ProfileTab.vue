@@ -1,6 +1,6 @@
 <template>
   <v-tab-item>
-    <v-layout class="py-2" column>
+    <v-layout class="py-0" column>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3>Wallet Name</h3>
@@ -112,10 +112,10 @@
           <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
         </v-col>
       </v-row>
-      <v-row no-gutters class="py-2">
+      <v-row no-gutters class="pt-2">
         <v-col cols="7" class="text-left">
           <h3>Welcome Guide</h3>
-          <span class="helper">Display the introductory guide to help you navigate your wallet (temporarily disabled).</span>
+          <span class="helper">Display the introductory guide to help you navigate your wallet</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
           <v-btn
@@ -133,7 +133,7 @@
 </template>
 <script>
 import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 

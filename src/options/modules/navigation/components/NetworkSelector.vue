@@ -22,9 +22,9 @@
   </v-menu>
 </template>
 <script>
-import {mapState} from "pinia";
-import {useStore} from "@/store";
-import networks from "@/shared/utils/networks";
+import { mapState } from "pinia";
+import { useStore } from "@/stores";
+import networks from "@/utils/networks";
 
 export default {
   name: "NetworkSelector",
@@ -46,7 +46,7 @@ export default {
     selectedNetwork: undefined,
     store: useStore()
   }),
-  async mounted() {
+  mounted() {
     if (this.network) {
       this.selectedNetwork = this.network
     } else {

@@ -1,6 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Settings" subtitle="Modify wallet and extension configuration settings" :loading="loading" :min-height="0" >
-    <v-card-title class="pa-0">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Settings"
+    subtitle="Modify wallet and extension configuration settings"
+    :loading="loading"
+    :min-height="0"
+    scrollable
+  >
+    <v-card-title class="px-2 py-0">
       <v-tabs
         v-model="tab"
         color="white"
@@ -13,10 +21,13 @@
           :disabled="tab.disabled"
         >
           {{ tab.label }}
+          <v-icon color="error" x-small class="ml-1" v-if="tab.badge">
+            mdi-circle
+          </v-icon>
         </v-tab>
       </v-tabs>
     </v-card-title>
-    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1; min-height: 0; height: 608px">
+    <v-card-text class="px-3 justify-center text-center pb-0" style="z-index: 1; height: 548px">
 <!--      <v-text-field-->
 <!--        v-model="search"-->
 <!--        placeholder="Search"-->
@@ -28,7 +39,7 @@
 <!--        :disabled="true"-->
 <!--      />-->
 
-      <v-tabs-items v-model="tab" class="transparent">
+      <v-tabs-items v-model="tab" class="transparent" style="overflow: visible">
         <ProfileTab @close="$emit('close')" />
 <!--        <PasswordTab />-->
         <CollateralTab />
@@ -39,46 +50,53 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
-import ContactsTab from '@/modules/dashboard/components/ContactsTab.vue';
-import PasswordTab from '@/modules/dashboard/components/PasswordTab.vue';
-import CollateralTab from '@/modules/dashboard/components/CollateralTab.vue';
-import ProfileTab from '@/modules/dashboard/components/ProfileTab.vue';
-import ConnectedDappsTab from '@/modules/dashboard/components/ConnectedDappsTab.vue';
-import AdvancedSettingsTab from '@/modules/dashboard/components/AdvancedSettingsTab.vue';
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import BaseDialog             from '@/shared/dialogs/BaseDialog.vue'
+import ContactsTab            from '@/modules/dashboard/components/ContactsTab.vue'
+// import PasswordTab           from '@/modules/dashboard/components/PasswordTab.vue'
+import CollateralTab          from '@/modules/dashboard/components/CollateralTab.vue'
+import ProfileTab             from '@/modules/dashboard/components/ProfileTab.vue'
+import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDappsTab.vue'
+import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
+import { walletConfigStore }  from '@/stores/modules/walletConfig'
 
-export default {
-  name: 'SettingsDialog',
-  components: {
-    AdvancedSettingsTab, BaseDialog, ContactsTab,
-    // PasswordTab,
-    CollateralTab, ProfileTab, ConnectedDappsTab },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  methods: {
-    loadingChange(val) {
-      this.loading = val
-    }
-  },
-  data: () => ({
-    search: null,
-    tab: null,
-    loading: false,
-    tabs: [
-      { label: 'Profile', value: 'profile' },
-      // { label: 'Password', value: 'password' },
-      { label: 'Collateral', value: 'collateral', disabled: false },
-      { label: 'Contacts', value: 'contacts', disabled: false },
-      { label: 'Connected Dapps', value: 'connectedDapps', disabled: false },
-      { label: 'Advanced', value: 'advanced', disabled: false }
-    ],
-  }),
-};
+// Props & Emitting
+const props = defineProps<{ isOpen: boolean }>()
+const emit  = defineEmits<{ (e: 'close'): void }>()
+
+// Pinia store
+const walletConfig = walletConfigStore()
+
+// Derive whether we've ever loaded a backup setting
+const hasBackup = computed(() =>
+  !!(walletConfig.config && 'backup' in walletConfig.config)
+)
+
+// Read the actual backup‐enabled flag (defaults to true)
+const getBackup = computed(() => walletConfig.getBackup)
+
+// Show a badge if user *should* back up
+const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
+
+// Local reactive state
+const tab     = ref<string | null>(null)
+const loading = ref(false)
+
+// Build your tabs array, injecting the dynamic badge
+const tabs = computed(() => [
+  { label: 'Profile',        value: 'profile' },
+  // { label: 'Password',     value: 'password' },
+  { label: 'Collateral',     value: 'collateral',     disabled: false },
+  { label: 'Contacts',       value: 'contacts',       disabled: false },
+  { label: 'Connected Dapps',value: 'connectedDapps', disabled: false },
+  { label: 'Advanced',       value: 'advanced',       disabled: false, badge: shouldBackup.value },
+])
+
+// Handle loading events from AdvancedSettingsTab
+function loadingChange(val: boolean) {
+  loading.value = val
+}
 </script>
 <style>
 .v-tabs-border-bottom {

@@ -1,9 +1,11 @@
 import Dexie, {DexieError} from 'dexie';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { useStore } from '@/store';
+import { useStore } from '@/stores';
 import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
+import { encrypt } from '@/shared/utils/crypto';
+import * as bip39 from 'bip39';
 
 const db: Dexie = new Dexie('GeroWalletDatabase');
 const blockChainDBVersion: number = 2;
@@ -14,6 +16,7 @@ db.version(10).stores({
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 })
   .upgrade(async (tx) => {
+    console.log('Upgrading database schema to version 11...', tx);
     try {
       const oldWallets = await tx.table('conceptualWallet').toArray();
       const keys = await tx.table('key').toArray();
@@ -58,6 +61,12 @@ db.version(10).stores({
       console.error('Error migrating data from old schema to new schema:', error);
     }
 });
+
+db.version(11).stores({
+  wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
+  config: '++id, key, value',
+  provider: '++id, [name+chain+network], baseUrl, apiKey',
+})
 
 db.open().catch(err => {
   console.error(`Failed to open database: ${err.stack || err}`);
@@ -116,13 +125,19 @@ export default {
     }
     return null;
   },
-  async createNewWallet(name, icon, theme, mnemonic, password, chain, network) {
+  async createNewWallet(name, icon, theme, mnemonic: string, password, chain, network) {
     let order = await this.getLatestWalletByOrder();
     if (order == null) {
       order = 1;
     } else {
       order++;
     }
+    let isRestore = true;
+    if (!mnemonic) {
+      isRestore = false;
+      mnemonic = bip39.generateMnemonic(256);
+    }
+    const encryptedMnemonic = encrypt(mnemonic, password);
     const rootKey = Wallet.resolvePrivateKey(mnemonic);
     const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, password);
     const accountIndex = 0;
@@ -133,7 +148,36 @@ export default {
       .to_public()
       .to_bech32();
     const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
-      new Date(), chain, network);
+      new Date(), chain, network, null, encryptedMnemonic);
+    const walletId = await db['wallets'].add({
+      name: wallet.name,
+      icon: wallet.icon,
+      type: wallet.type,
+      theme: wallet.theme,
+      order: wallet.order,
+      encryptedPrivateKey: wallet.encryptedPrivateKey,
+      encryptedMnemonic: wallet.encryptedMnemonic,
+      publicKey: wallet.publicKey,
+      passwordLastUpdate: wallet.passwordLastUpdate,
+      chain: wallet.chain,
+      network: wallet.network
+    });
+    await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic, isRestore);
+    await useStore().loadWallets();
+    return walletId;
+  },
+  async createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
+    let order = await this.getLatestWalletByOrder();
+    if (order == null) {
+      order = 1;
+    } else {
+      order++;
+    }
+    const parts = jwt.split(".");
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const userId = payload.email;
+    const wallet = new Wallet(null, name, icon, WalletType.Google, theme, order, null, null,
+      new Date(), chain, network, userId);
     const walletId = await db['wallets'].add({
       name: wallet.name,
       icon: wallet.icon,
@@ -144,11 +188,19 @@ export default {
       publicKey: wallet.publicKey,
       passwordLastUpdate: wallet.passwordLastUpdate,
       chain: wallet.chain,
-      network: wallet.network
+      network: wallet.network,
+      userId: userId,
     });
-    await this.createNewWalletDb(walletId);
+    await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
     await useStore().loadWallets();
     return walletId;
+  },
+  async getGoogleWalletWithEmail(email: string) {
+    const wallets = await db['wallets'].where('userId').equals(email).toArray();
+    if (wallets && wallets.length > 0) {
+      return wallets[0];
+    }
+    return null;
   },
   async createNewHardwareWallet(wallet: any) {
     let order = await this.getLatestWalletByOrder();
@@ -162,11 +214,11 @@ export default {
       order: order,
       passwordLastUpdate: new Date(),
     });
-    await this.createNewWalletDb(walletId);
+    await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
     await useStore().loadWallets();
     return walletId;
   },
-  async createNewWalletDb(walletId: number|string) {
+  async createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
     const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
     const db = new Dexie(walletName);
     this.setWalletDBVersionSchema(db)
@@ -179,6 +231,13 @@ export default {
           { key: 'currency', value: Currency.USD.short },
           { key: 'txAutoSubmit', value: true }
         ];
+        if (hasEncryptedMnemonic) {
+          if (isRestore) {
+            initialData.push({ key: 'backup', value: true })
+          } else {
+            initialData.push({ key: 'backup', value: false })
+          }
+        }
         await db['config'].bulkAdd(initialData).catch(error => {
           console.error('Error adding initial data:', error);
         });
@@ -217,6 +276,7 @@ export default {
       dreps: 'drep_id',
       sync: '++id, time',
       assets: 'asset, fingerprint, asset_name, policy_id',
+      // protocol_params: 'epoch'
     });
   },
   setWalletDBVersionSchema(db: Dexie) {

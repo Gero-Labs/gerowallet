@@ -35,6 +35,16 @@
     }
   }
 
+  .apexButton {
+    text-transform: none;
+    background: linear-gradient(45deg, #F8A282, #FECB82)!important;
+    color: black!important;
+    &:disabled {
+      filter: brightness(0.5);
+      color: black!important;
+    }
+  }
+
   /* Track */
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -101,6 +111,18 @@
   .v-application--is-ltr .v-textarea.v-text-field--enclosed.metadataTextArea .v-text-field__slot textarea {
     margin-top: 0;
     line-height: 1;
+  }
+
+  .gradient-text {
+    background: linear-gradient(to right, #00c7f3, #00fad5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .apex-gradient-text {
+    background: linear-gradient(to right, #F8A282, #FECB82);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 </style>
 </html>

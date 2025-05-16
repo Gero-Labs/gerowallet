@@ -1,5 +1,4 @@
-
-
+import apexBg from '@/assets/apex.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
 import hardwareWalletBg from '@/modules/welcome/assets/hardware_wallet.png'
@@ -23,13 +22,14 @@ import connectKeystoneSvg from '@/assets/svg/connect_keystone.svg'
 import loadingAnimation from '@/assets/webm/loading.webm'
 import errorImage from '@/assets/img/1x1.png'
 import geroDashboard from '@/assets/svg/gero_dashboard.svg'
-import geroLogoApex from '@/assets/svg/gero_dashboard_apex.svg'
+import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import barChart from '@/assets/svg/bar-chart-07.svg'
 import coinsStacked from '@/assets/svg/coins-stacked-02.svg'
 import blog from '@/assets/svg/blog.svg'
 import mediaPlayer from '@/assets/svg/play-square.svg'
 import cashback from '@/assets/svg/cashback.svg'
 import governance from '@/assets/svg/governance.svg'
+import dao from '@/assets/svg/dao.svg'
 import transactions from '@/assets/svg/transaction.svg'
 import market from '@/assets/svg/finance.svg'
 import zkFiat from '@/assets/svg/euro.svg'
@@ -54,7 +54,6 @@ import multisigPending from '@/assets/svg/multisig_pending.svg'
 import multisigDollar from '@/assets/svg/multisig_dollar.svg'
 import multisigExpired from '@/assets/svg/multisig_expired.svg'
 import multisigTotal from '@/assets/svg/multisig_stack.svg'
-
 import cardanoBackground from '@/assets/cardanoBg.png'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
@@ -96,8 +95,25 @@ import riskD from '@/assets/svg/risk/D.svg'
 import buyAda from '@/modules/dashboard/assets/buy-ada.png'
 import sellAda from '@/modules/dashboard/assets/sell-ada.png'
 import { DappRisk, DappScore } from '@/models/cardano-shield-types';
+import google from '@/assets/svg/google.svg';
+import googleSvg from '@/assets/svg/googleWhite.svg'
+import zkFold from '@/assets/svg/zkfold.svg';
+import cashbackBags from '@/assets/img/cashback.png';
+import cardanoBg from '@/assets/cardanoBg.png';
+import cashbackBg from '@/assets/cashbackBg.png';
+import rectangle from '@/assets/img/rectangle.png';
+import rectangle2 from '@/assets/img/rectangle2.png';
+import walletGeroSvg from '@/assets/svg/walletGero.svg';
+import walletGeroApexSvg from '@/assets/svg/walletGeroApex.svg';
+import keySvg from '@/assets/svg/key.svg';
+import keyApexSvg from '@/assets/svg/keyApex.svg';
+import pairSvg from '@/assets/svg/pair.svg';
+import pairApexSvg from '@/assets/svg/pairApex.svg';
+import cardanoSvg from '@/assets/svg/cardano.svg';
+import clarityLogo from '@/assets/img/clarityLogo.png';
 
 export default {
+  apexBg,
   walletCreateBg,
   walletRestoreBg,
   hardwareWalletBg,
@@ -151,7 +167,6 @@ export default {
   multisigDollar,
   multisigExpired,
   multisigTotal,
-  
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
@@ -159,7 +174,7 @@ export default {
   geroText,
   apexBackground,
   cardanoBackground,
-  geroLogoApex,
+  geroDashboardApex,
   guardarian,
   moonpay,
   welcomeVideo,
@@ -167,6 +182,7 @@ export default {
   newDesignSS,
   cashbackSS,
   governanceSS,
+  dao,
   cardanoShieldSS,
   giftSvg,
   pendingSvg,
@@ -175,6 +191,9 @@ export default {
   buyAda,
   sellAda,
   resolveIcon(icon: string): string {
+    if (icon.startsWith('http')) {
+      return icon;
+    }
     if (icon === 'green' || icon === 'teal') {
       return greenSvg
     } else if (icon === 'purple' || icon === 'deep-purple') {
@@ -241,65 +260,21 @@ export default {
       default:
         return riskUnknown;
     }
-  }
-}
-
-export const svgAssets = {
-  walletCreateBg,
-  walletRestoreBg,
-  hardwareWalletBg,
-  walletCreateApexBg,
-  walletRestoreApexBg,
-  hardwareWalletApexBg,
-  greenSvg,
-  purpleSvg,
-  pinkSvg,
-  orangeSvg,
-  blueSvg,
-  greySvg,
-  ledgerSvg,
-  keystoneSvg,
-  ledgerLogoSvg,
-  trezorLogoSvg,
-  keystoneLogoSvg,
-  connectLedgerSvg,
-  connectTrezorSvg,
-  connectKeystoneSvg,
-  loadingAnimation,
-  errorImage,
-  geroDashboard,
-  barChart,
-  coinsStacked,
-  blog,
-  mediaPlayer,
-  cashback,
-  governance,
-  transactions,
-  market,
-  zkFiat,
-  infinity,
-  usersPlus,
-  logout,
-  walletSvg,
-  settingsSvg,
-  arrowRightSvg,
-  trendUpSvg,
-  trendDownSvg,
-  xSvg,
-  discordSvg,
-  telegramSvg,
-  dollarShieldSvg,
-  swapSvg,
-  qrCodeSvg,
-  sendSvg,
-  multisigTree,
-  multisigPaid,
-  multisigPending,
-  multisigDollar,
-  multisigExpired,
-  multisigTotal,
-  giftSvg,
-  pendingSvg,
-  piggyBankSvg,
-  withdrawalSvg,
+  },
+  google,
+  googleSvg,
+  zkFold,
+  cashbackBags,
+  cardanoBg,
+  cashbackBg,
+  rectangle,
+  rectangle2,
+  walletGeroSvg,
+  walletGeroApexSvg,
+  keySvg,
+  keyApexSvg,
+  pairSvg,
+  pairApexSvg,
+  cardanoSvg,
+  clarityLogo
 }

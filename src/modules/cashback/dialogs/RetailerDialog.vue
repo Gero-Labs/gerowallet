@@ -38,12 +38,12 @@
   </BaseDialog>
 </template>
 <script>
-import BaseDialog from '@/shared/components/BaseDialog.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import axios from 'axios';
-import { appWallet, useStore } from '@/store';
+import { useStore } from '@/stores';
 import { mapState } from 'pinia';
-import networks from '@/shared/utils/networks';
+import networks from '@/utils/networks';
 import cashbackApi from '@/api/cashback-api';
 
 export default {

@@ -161,7 +161,7 @@
 <script>
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
-import {useStore} from "@/store";
+import {useStore} from "@/stores";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import {Network} from "@/models/types";
 import {mapState} from "pinia";
@@ -174,8 +174,8 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
-import networks from '@/shared/utils/networks';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import networks from '@/utils/networks';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
 
 export default {
