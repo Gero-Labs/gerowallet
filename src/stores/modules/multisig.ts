@@ -23,31 +23,41 @@ import { tapToolsStore } from './tapTools';
 import { musicStore } from './music';
 import { chunkArray } from 'array-chunk-by-size';
 import _ from 'lodash';
+import loading from '@/plugins/loading';
 
 export let multisigAppWallet: Wallet = undefined;
+
 
 export const multisigStore = defineStore('multisigStore', {
   persist: {
     paths: [
-      'multiSigWallets', 'multiSigWallet', 'assets', 'baseAddress', 'resolvedAssets', 'resolvedCollections', 'stakeAddress', 'pinnedTokens',
+      'multiSigWallets',
+      'multiSigWallet',
+      'assets',
+      'baseAddress',
+      'resolvedAssets',
+      'resolvedCollections',
+      'stakeAddress',
+      'pinnedTokens',
+      'price',
     ]
   },
-  state: () => ({
+  state: (): MultisigWalletState => ({
     multiSigWallets: [],
-    multiSigWallet: undefined,
+    multiSigWallet: {},
     baseAddress: undefined,
-    stakeAddress: undefined,
-    transactions: undefined,
+    stakeAddress: '',
+    transactions: [],
     pendingTxs: undefined,
     provider: undefined,
     loadingTxs: false,
     isSyncing: false,
-    assets: undefined,
+    assets: [],
     pools: [],
     rewards: [],
     connectedDapps: [],
-    resolvedAssets: undefined,
-    resolvedCollections: undefined,
+    resolvedAssets: [],
+    resolvedCollections: [],
     pinnedTokens: [],
     price: undefined,
   }),
@@ -56,15 +66,15 @@ export const multisigStore = defineStore('multisigStore', {
     getMultiSigWallets: state => state.multiSigWallets,
     getWallet: state => {
       if (!multisigAppWallet && state.multiSigWallet) {
-        return multisigAppWallet = Wallet.multisigClass(state.multiSigWallet, 1);
+        multisigAppWallet = Wallet.multisigClass(state.multiSigWallet, 1);
       }
       return multisigAppWallet;
     },
     calculatedTransactions(state) {
       if (state.transactions) {
-        const currentStake = state.multiSigWallet.stakeAddress;
-        let currentBalance: number = 0;
-        return structuredClone(state.transactions)
+        const currentStake = (state.multiSigWallet as MultisigWalletInterface).stakeAddress;
+        let currentBalance = 0;
+        const clonedTransactions = structuredClone(state.transactions)
           .sort((a, b) => a.tx_timestamp - b.tx_timestamp)
           .map((tx) => {
             let sentAmount: number = 0;
@@ -106,6 +116,7 @@ export const multisigStore = defineStore('multisigStore', {
             });
 
             const totalAmount = receivedAmount - sentAmount;
+            currentBalance += totalAmount;
             const assets = { ...sentAssets };
             const refAssets = { ...sentAssets };
             Object.values(receivedAssets).forEach(receivedAsset => {
@@ -126,7 +137,6 @@ export const multisigStore = defineStore('multisigStore', {
                 delete refAssetsCopy[assetName]
               }
             })
-            currentBalance += totalAmount
 
             const statuses = []
             if (tx.certificates?.length > 0) {
@@ -165,9 +175,9 @@ export const multisigStore = defineStore('multisigStore', {
               }
             }
             if (tx.withdrawals?.length > 0 && tx.withdrawals.some(withdrawal => withdrawal.stake_addr === this.stakeAddress)) {
-              statuses.push('Withdrawal')
+              statuses.push('Withdrawal');
             }
-            const network = networks.resolveNetwork(this.multiSigWallet.chain, this.multiSigWallet.network)
+            const network = networks.resolveNetwork((this.multiSigWallet as MultisigWalletInterface).chain, (this.multiSigWallet as MultisigWalletInterface).network);
             const nativeAsset = {
               policy_id: "",
               asset_name: "lovelace",
@@ -187,12 +197,53 @@ export const multisigStore = defineStore('multisigStore', {
               assets: [nativeAsset, ...Object.values(assets)]
             }
           })
+        return {
+          transactions: clonedTransactions,
+          currentBalance,
+          total: 0,
+          paid: 0,
+          pending: 0,
+          expired: 0,
+        };
       }
-      return []
+      return {
+        transactions: [],
+        currentBalance: 0,
+        total: 0,
+        paid: 0,
+        pending: 0,
+        expired: 0,
+      }
     },
     getPools: state => state.pools,
   },
   actions: {
+    async initAll() {
+      multisigAppWallet = Wallet.multisigClass(this.getMultiSigWallet, 1);
+      this.setBaseAddress(this.getMultiSigWallet.id)
+      this.setStakeAddress(this.getMultiSigWallet.stakeAddress)
+      //governanceStore().setDRepId(appWallet.drepId())
+      await multisigAppWallet.startSync();
+      await this.loadAssets()
+      await dexHunterStore().loadBlacklistPolicies()
+      await dexHunterStore().loadTokens()
+      const promises = []
+      await walletConfigStore().loadConfig(multisigAppWallet)
+      promises.push(walletConfigStore().loadAddresses())
+      //promises.push(this.loadSync())
+      promises.push(walletConfigStore().loadAccountInfo())
+      promises.push(this.loadPools())
+      //promises.push(governanceStore().loadDReps())
+      promises.push(this.loadTransactions())
+      promises.push(this.loadRewards())
+      promises.push(this.loadConnectedDapps())
+      promises.push(walletConfigStore().loadContacts())
+      //promises.push(bringStore().loadBringCache())
+      await Promise.all(promises)
+      this.setLoadingTxs(false)
+      loading.setLoading(false);
+      this.subscribeTransactions();
+    },
     setLoadingTxs(value) {
       this.loadingTxs = value
     },
@@ -212,6 +263,7 @@ export const multisigStore = defineStore('multisigStore', {
       if (!this.assets) {
         return new Promise((resolve, reject) => reject())
       }
+
       // Resolve assets
       const assetArray = Object.values(assets);
       const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id'] + asset['asset_name']) in this.assets)).map(asset => (asset['policy_id'] + asset['asset_name']))
@@ -221,7 +273,10 @@ export const multisigStore = defineStore('multisigStore', {
 
       // Add ADA to resolved assets
       if (adaBalance > 0) {
-        const network = networks.resolveNetwork(this.multiSigWallet?.chain, this.multiSigWallet?.network);
+        const network = networks.resolveNetwork(
+          (this.multiSigWallet as MultisigWalletInterface)?.chain,
+          (this.multiSigWallet as MultisigWalletInterface)?.network
+        );
         resolvedAssets.push({
           unit: '',
           name: network?.currencyName,
@@ -376,7 +431,7 @@ export const multisigStore = defineStore('multisigStore', {
       if (!multisigAppWallet) {
         return
       }
-      const stakeAddress: string = multisigAppWallet.stakeAddress().toBech32()
+      const stakeAddress: string = (this.multiSigWallet as MultisigWalletInterface).stakeAddress;
 
       if (transactions && transactions.length > 0) {
         // Collect all outputs and inputs
@@ -536,7 +591,8 @@ export const multisigStore = defineStore('multisigStore', {
       this.multiSigWallet = { ...selectedMultisig, chain: chain, network: network };
       const currentWallet = this.getWallet;
       try {
-        const res = await currentWallet.api.getAccountTransactions(this.multiSigWallet.stakeAddress, 0);
+        const res = await currentWallet.api.getAccountTransactions((this.multiSigWallet as MultisigWalletInterface).stakeAddress, 0);
+        console.log("res:::", res);
         if (res && Array.isArray(res)) {
           const promises = [];
           const txHashes: string[] = res.map(tx => tx.tx_hash);
@@ -544,8 +600,10 @@ export const multisigStore = defineStore('multisigStore', {
           smallerArrays.forEach(smallerArray => {
             promises.push(currentWallet.api.getTransactionsInfo(smallerArray));
           });
-          const txs = (await Promise.all(promises)).flat();
-          console.log("txs:::", txs);
+          if ('id' in this.multiSigWallet) {
+            promises.push(currentWallet.api.multiSig.transactions.getByWallet(this.multiSigWallet.id));
+          }
+          const txs = (await Promise.any(promises)).flat();
           await currentWallet.setAccountTransactions(txs);
           this.setTransactions(txs);
         }
@@ -558,7 +616,7 @@ export const multisigStore = defineStore('multisigStore', {
       this.multiSigWallets = multiSigWallets;
     },
     generateMultisigDBName(parentWalletPubkey: string, multisigName: string) {
-      return `multisig-${parentWalletPubkey.slice(0,21)}-${_.kebabCase(multisigName)}`;
+      return `multisig-${parentWalletPubkey.slice(0, 21)}-${_.kebabCase(multisigName)}`;
     },
     setTransactions(transactions: any[]) {
       this.transactions = transactions;
