@@ -147,13 +147,14 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       const db: Dexie = await appWallet.getDb()
       db.table('contacts').delete(address)
     },
-    async loadConfig() {
-      if (!appWallet) {
+    async loadConfig(mutliSigWallet: any = undefined) {
+      const ctxWallet = mutliSigWallet ? mutliSigWallet : appWallet;
+      if (!ctxWallet) {
         return new Promise((resolve, reject) => {
           reject()
         });
       }
-      const db: Dexie = await appWallet.getDb()
+      const db: Dexie = await ctxWallet.getDb()
       return new Promise((resolve, reject) => {
         subscriptions.set('config', liveQuery(() => db.table('config').toArray()).subscribe({
           next: value => {
