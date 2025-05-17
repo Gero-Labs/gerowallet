@@ -75,25 +75,19 @@ export default {
       // Helper to remove the leading 'v' if present
       return version.startsWith('v') ? version.substring(1) : version;
     },
-    isVersionHigher(newVersion) {
+    compareVersions(versionA, versionB) {
       // Normalize and split the version strings into parts
-      const [newMajor, newMinor, newPatch] = this.normalizeVersion(newVersion)
+      const [majorA, minorA, patchA] = this.normalizeVersion(versionA)
         .split('.')
         .map(num => parseInt(num, 10));
-      const [currMajor, currMinor, currPatch] = this.normalizeVersion(this.currentVersion)
+      const [majorB, minorB, patchB] = this.normalizeVersion(versionB)
         .split('.')
         .map(num => parseInt(num, 10));
 
-      // Compare major versions first
-      if (newMajor > currMajor) return true;
-      if (newMajor < currMajor) return false;
+      if (majorA !== majorB) return majorA - majorB;
+      if (minorA !== minorB) return minorA - minorB;
 
-      // If major versions are equal, compare minor versions
-      if (newMinor > currMinor) return true;
-      if (newMinor < currMinor) return false;
-
-      // If minor versions are equal, compare patch versions
-      return newPatch > currPatch;
+      return patchA - patchB;
     }
   },
   data: () => ({
@@ -108,7 +102,9 @@ export default {
     try {
       const res = await cryptoApi.fetchReleases(0);
       if (res.status === 200) {
-        this.releases = res.data.content.filter(el => !this.isVersionHigher(el.tagName));
+        let list = res.data.content;
+        list.sort((a, b) => this.compareVersions(b.tagName, a.tagName));
+        this.releases = list;
       }
     } catch (e) {
       console.log(e);
