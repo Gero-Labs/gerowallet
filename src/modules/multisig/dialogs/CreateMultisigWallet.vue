@@ -1,50 +1,116 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="emitCloseDialog" :loading="loading" :min-height="0" :title="`New Multisig Wallet`"
-    :subtitle="`A multisig wallet requires multiple parties' signatures to authorize any transaction.`">
-      <v-row no-gutters class="py-2 align-center">
-        <v-col cols="3" class="text-left">
-          <div class="multisig-title">Name</div>
-          <span class="helper my-0">Multisig wallet name</span>
-        </v-col>
-        <v-col cols="9">
-          <v-text-field label="Enter Name" outlined dense v-model="multisigName" hide-details></v-text-field>
-        </v-col>
-      </v-row>
-      <v-row>
-        <v-col cols="12">
-          <span class="helper signers-note">
-            Note: All signers will receive a request to review and sign the transaction
-            from their own wallets. The transaction will be submitted to the blockchain only
-            after all required signatures have been collected.
-          </span>
-        </v-col>
-      </v-row>
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="emitCloseDialog"
+    :loading="loading"
+    :min-height="0"
+    title="New Multisig Wallet"
+    scrollable
+    subtitle="A multisig wallet requires multiple parties signatures to authorize any transaction."
+  >
+    <v-card-title class="px-0">
+      <v-alert
+        border="left"
+        color="primary"
+        type="info"
+        class="text-left"
+        style="word-break: break-word; line-height: 1.3; font-style: italic; font-size: 14px;"
+        prominent
+      >
+        All signers will receive a request to review and sign the transaction
+        from their own wallets.<br>
+        The transaction will be submitted to the blockchain only
+        after all required signatures have been collected.
+      </v-alert>
+    </v-card-title>
+    <v-card-text class="px-0">
       <v-row>
         <v-col cols="6">
-          <div class="multisig-title text-left mb-2">Minimum Signers</div>
-          <v-select dense v-model="requiredSigners" :items="signersArray"
-            prepend-inner-icon="mdi-account-multiple-outline" outlined hide-details>
-          </v-select>
-          <div class="helper signers-note mt-2">The minimum number of signers required to execute a transaction</div>
+          <v-text-field
+            label="Multisig Wallet Name"
+            outlined
+            dense
+            v-model="multisigName"
+            :counter="40"
+            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
+          />
+        </v-col>
+        <v-col cols="6">
+          <v-select
+            label="Min. Required Signers"
+            dense
+            v-model="requiredSigners"
+            :items="signersArray"
+            prepend-inner-icon="mdi-account-multiple-outline"
+            outlined
+            hide-details
+          />
+          <div class="helper signers-note mt-2">The minimum signers required to execute a transaction</div>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-4 mt-4">
         <v-col cols="12" v-for="(signer, index) in signers" :key="index">
           <v-row no-gutters>
-            <v-col cols="12" class="multisig-title text-left pa-0 mb-2" outlined>
+            <v-col cols="12" class="multisig-title text-left pa-0 mb-2">
               Signer {{ index + 1 }}<span v-if="signer.isThisWallet">{{ ': ' + signer.name }}</span>
               <div class="helper signers-note">{{ signer.isThisWallet ? 'Current Wallet' : '' }}</div>
             </v-col>
-            <v-col cols="12" class="text-left pa-0 mb-2 d-flex align-center" outlined>
-              <v-text-field 
-                v-model="signer.address" 
-                outlined 
-                hide-details 
+            <v-col cols="12" class="text-left pa-0 mb-2 d-flex align-center">
+              <v-text-field
+                class="no-margin-append-outer"
+                v-model="signer.address"
+                outlined
+                hide-details
                 dense
-                :readonly="signer.isThisWallet" />
-                <v-btn v-if="!signer.isThisWallet" icon @click="deleteSigner(index)">
-                  <v-icon>mdi-delete</v-icon>
-                </v-btn>
+                :readonly="signer.isThisWallet"
+              >
+                <template #append>
+                  <v-menu  :close-on-content-click="false" nudge-left="226" nudge-top="100" min-width="452"
+                          max-height="400">
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-btn class="mt-1" small v-if="!signer.isThisWallet" icon v-bind="attrs" v-on="on">
+                        <v-icon small color="#00DFF3">
+                          mdi-book-open-variant-outline
+                        </v-icon>
+                      </v-btn>
+                    </template>
+                    <v-card>
+                      <v-card-title>
+                        Contacts
+                        <v-spacer></v-spacer>
+                        <v-btn icon small @click="contactsMenu = false">
+                          <v-icon>
+                            mdi-window-close
+                          </v-icon>
+                        </v-btn>
+                      </v-card-title>
+                      <v-card-text class="pa-0">
+                        <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders"
+                                      :items="contacts ? Object.values(contacts) : []" hide-default-footer disable-pagination
+                                      @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
+                          <template v-slot:[`item.address`]="{ item }">
+                            {{ truncate(item.address) }}
+                            <CopyButton x-small :value="item.address" />
+                          </template>
+                          <template v-slot:[`item.actions`]="{ item }">
+                            <v-btn color="error" icon x-small @click="removeCont(item)">
+                              <v-icon x-small>
+                                mdi-trash-can
+                              </v-icon>
+                            </v-btn>
+                          </template>
+                        </v-data-table>
+                      </v-card-text>
+                    </v-card>
+                  </v-menu>
+                </template>
+                <template #append-outer>
+                  <v-btn v-if="!signer.isThisWallet" icon @click="deleteSigner(index)">
+                    <v-icon>mdi-delete</v-icon>
+                  </v-btn>
+                </template>
+              </v-text-field>
+
             </v-col>
           </v-row>
         </v-col>
@@ -55,32 +121,36 @@
           Add Signer
         </v-btn>
       </v-row>
-      <v-card-actions class="my-2 text-center justify-center" :style="{ flexFlow: 'column' }">
-          <v-btn outlined @click="nextStep" :disabled="loading || !isFormValid" :loading="loading">
-            Create
-            <v-icon small class="ml-1">mdi-arrow-right</v-icon>
-          </v-btn>
-      </v-card-actions>
+    </v-card-text>
+    <v-card-actions class="my-2 text-center justify-center" :style="{ flexFlow: 'column' }">
+        <v-btn outlined @click="nextStep" :disabled="loading || !isFormValid" :loading="loading">
+          Create
+          <v-icon small class="ml-1">mdi-arrow-right</v-icon>
+        </v-btn>
+    </v-card-actions>
   </BaseDialog>
 </template>
-
 <script lang="ts">
-import { WalletType } from "@/models/types";
-import BaseDialog from "@/shared/components/BaseDialog.vue";
-import networks from "@/shared/utils/networks";
-import { appWallet, useStore } from "@/store";
-import { mapState } from "pinia";
-import { multisigJsonToBech32, addressBech32ToKeyHash } from "@/shared/utils/converter";
-import db from "@/db";
-import Dexie from "dexie";
-import { walletConfigStore } from "@/store/modules/walletConfig";
-import { Wallet } from "@/models/wallet";
-import lodash from "lodash";
-import { multisigStore } from "@/store/modules/multisig";
+import { WalletType } from '@/models/types';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import networks from '@/utils/networks';
+import { appWallet, useStore } from '@/stores';
+import { mapState } from 'pinia';
+import { addressBech32ToKeyHash, multisigJsonToBech32 } from '@/shared/utils/converter';
+import db from '@/db';
+import Dexie from 'dexie';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { Wallet } from '@/models/wallet';
+import lodash from 'lodash';
+import { multisigStore } from '@/stores/modules/multisig';
+import rules from '@/utils/rules';
+import CopyButton from '@/shared/components/CopyButton.vue';
+import filters from '@/shared/utils/filters';
 
 export default defineComponent({
   name: "CreateMultisignWalletDialog",
   components: {
+    CopyButton,
     BaseDialog,
   },
 
@@ -91,6 +161,9 @@ export default defineComponent({
     },
   },
   computed: {
+    rules() {
+      return rules
+    },
     WalletType() {
       return WalletType;
     },
@@ -105,16 +178,13 @@ export default defineComponent({
       "pinnedTokens",
     ]),
     ...mapState(multisigStore, ["multiSigWallets"]),
-    ...mapState(walletConfigStore, ["utxos", "addresses"]),
+    ...mapState(walletConfigStore, ["utxos", "addresses", 'contacts']),
     isFormValid() {
       const invalidSigners = this.signers.filter(iSigner => !iSigner.address.trim());
-      const isValid =
-        this.multisigName.trim() !== "" &&
+      return this.multisigName.trim() !== "" &&
         this.requiredSigners >= 1 &&
         this.requiredSigners <= this.signers.length &&
         !invalidSigners.length;
-
-      return isValid;
     },
   },
   watch: {
@@ -134,18 +204,39 @@ export default defineComponent({
     provider: undefined,
     multisigWalletInstance: undefined,
     appWalletInstance: undefined,
+    contactsMenu: false,
+    contactsHeaders: [
+      { text: 'Name', value: 'name' },
+      { text: 'Address', value: 'address' },
+      { text: '', align: 'right', sortable: false, value: 'actions' },
+    ],
+    truncate: filters.truncate,
   }),
   methods: {
+    selectContact(item) {
+      // this.recipientAddress = item.address;
+      // this.$emit('updateRecipientAddress', this.recipientAddress);
+      // this.contactsMenu = false
+    },
+    removeCont(item) {
+      // if (item && item.address) {
+      //   this.removeContact(item.address)
+      //   this.contactsMenu = false
+      // } else {
+      //   this.removeContact(this.contact.address)
+      //   this.saveContactMenu = false
+      // }
+    },
     /**
-     * 
-     * @param multisigScript 
+     *
+     * @param multisigScript
      * const addr = Address.from_bech32(signer.address);
       const pubKey = PublicKey.from_bech32(signer.address);
       const keyHash = Ed25519KeyHash.from_bytes(pubKey.as_bytes());
       const scriptPubKey = NativeScript.new_script_pubkey(keyHash);
- 
+
       multisigScript.add(scriptPubKey);
-    * @param networkId 
+    * @param networkId
     */
     // multisigScriptToBech32Address(multisigScript, networkId) {
     // Create a script hash from the multisig script
@@ -201,7 +292,7 @@ export default defineComponent({
       const multisigDBName = this.generateMultisigDBName(parentWalletPubkey, this.multisigName);
       console.log("dbname:::::", multisigDBName);
       await appWallet.api.multiSig.createWallet({ stakeAddress, bech32Address, scriptCBOR }, this.baseAddress); // creates the wallet on Backend.
-      await db.createNewWalletDb(this.loggedWallet.id); // incase of upgraded wallet schema
+      await db.createNewWalletDb(this.loggedWallet.id, false, false); // incase of upgraded wallet schema
       const dbParent = new Dexie('wallet-' + this.loggedWallet.id); //parent wallet
       await dbParent.open();
       console.log("Whererhereh Before");
@@ -225,16 +316,16 @@ export default defineComponent({
       }
       await dbParent.close();
 
-      await db.createNewWalletDb(multisigDBName).then(value => {
+      await db.createNewWalletDb(multisigDBName, false, false).then(value => {
         console.log("Multisig database created::", multisigDBName);
 
       }).catch(error => {
         console.error("Error creating multisig Database::", multisigDBName);
       });
-      await appWallet.api.multiSig.createWallet({ stakeAddress, bech32Address, scriptCBOR }, appWallet.baseAddress().toBech32()); // creates the wallet on Backend. 
+      await appWallet.api.multiSig.createWallet({ stakeAddress, bech32Address, scriptCBOR }, appWallet.baseAddress().toBech32()); // creates the wallet on Backend.
 
       /*const dbM = new Dexie(multisigDBName);
- 
+
       await dbM.open();
       console.log("Whererhereh 2 Before");
       const keyExists = await dbM.table('config').where('key').equals(multisigWallet.id).count();
@@ -289,7 +380,7 @@ export default defineComponent({
       this.signers = [
         {
           name: this.currentWalletName(), // current signed in wallet
-          address: this.currentWalletAddress(), 
+          address: this.currentWalletAddress(),
           isThisWallet: true,
         },
         {
@@ -310,7 +401,6 @@ export default defineComponent({
   },
   mounted() {
     this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
-    const loggedInWalletInstance = Wallet.class(this.loggedWallet, this.provider);
 
     if (this.resolvedAssets) {
       this.signers[0] = {
@@ -356,13 +446,13 @@ export default defineComponent({
   font-style: italic;
   font-size: 12px !important;
   line-height: 1.5;
-  letter-spacing: 0%;
+  letter-spacing: 0;
 }
-.multisig-title{
+.multisig-title {
   font-size: 18px;
   color: #fff;
 }
-.helper{
+.helper {
   font-size: 12px;
   color: #ccc;
 }

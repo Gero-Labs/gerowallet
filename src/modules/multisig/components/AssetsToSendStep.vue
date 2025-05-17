@@ -64,7 +64,7 @@
                                     @click="toggle"
                                   >
                                     <div style="top: 0; position: absolute; display: flex" v-if="item.isScam">
-  
+
                                       <v-chip x-small color="#F97066" class="px-2">
                                         <v-icon color="white" x-small style="margin-right: 3px">
                                           mdi-alert-decagram
@@ -116,10 +116,10 @@
   </template>
   <script>
   import {mapState} from "pinia";
-  import { appWallet, useStore } from '@/store';
+  import { appWallet, useStore } from '@/stores';
   import TokenSelector from '@/shared/components/TokenSelector.vue';
-  import networks from '@/shared/utils/networks';
-  import { multisigStore } from '@/store/modules/multisig';
+  import networks from '@/utils/networks';
+  import { multisigStore } from '@/stores/modules/multisig';
 
 
   export default defineComponent({
@@ -162,7 +162,7 @@
             return {
               ...collection,
               items: collection.items.filter(item => item.name.toLowerCase().includes(this.search.toLowerCase()))
-  
+
             }
           }).filter(collection => collection.items.length > 0)
         }
@@ -225,7 +225,7 @@
         const selectedTickers = this.tokenModel
           .filter((token, index) => index !== currentIndex && token)
           .map(token => token.ticker);
-  
+
         return this.tokens.filter(token => {
           // Always include the token already selected in the current selector.
           if (currentSelected && token.ticker === currentSelected.ticker) {
@@ -288,34 +288,34 @@
     },
   });
   </script>
-  
+
   <style scoped>
   .continue-button {
     background: linear-gradient(to right, #00c7f3, #00fad5);
     color: black;
-  
+
     &:disabled {
       opacity: 0.5;
       color: black!important;
     }
-  
+
   }
-  
+
   .sections-container {
     display: flex;
     gap: 40px;
     height: 400px;
     margin-bottom: 50px;
   }
-  
+
   .selectors-container {
     display: flex;
     flex-direction: column;
-  
+
     .add-token-button {
       width: fit-content;
       align-self: center;
-  
+
       .plus-icon {
         border: 2px solid #00c7f3;
         border-radius: 5px;
@@ -325,7 +325,7 @@
   }
   .collectibles-collection {
     margin-top: 20px;
-  
+
     .collectible-items {
       display: flex;
       flex-wrap: wrap;
@@ -339,7 +339,7 @@
     align-content: end;
     background-size: cover;
   }
-  
+
   .collectible-text-container {
     text-overflow: ellipsis;
     overflow: hidden;
@@ -359,7 +359,7 @@
     -webkit-appearance: none;
     margin: 0;
   }
-  
+
   /* Firefox */
   input[type=number] {
     -moz-appearance: textfield;
