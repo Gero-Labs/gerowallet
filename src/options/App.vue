@@ -104,4 +104,11 @@ export default {
   font-size: 10px !important;
   opacity: 0.9 !important;
 }
+.v-text-field--outlined.no-margin-append-outer .v-input__append-outer {
+  margin: 0 0 0 4px !important;
+}
+
+.v-text-field--outlined.no-margin-append-outer .v-input__append-inner {
+  margin: 0 !important;
+}
 </style>

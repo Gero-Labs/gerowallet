@@ -9,16 +9,16 @@ import {
   longestCommonStartingSubstring,
   resolveAsset,
 } from '@/shared/utils/resolver';
-import networks from '@/shared/utils/networks';
-import { dexHunterStore } from '@/store/modules/dexhunter';
+import networks from '@/utils/networks';
+import { dexHunterStore } from '@/stores/modules/dexhunter';
 import { unitToFingerprint } from '@/shared/utils/converter';
 import filters from '@/shared/utils/filters';
-import { walletConfigStore } from '@/store/modules/walletConfig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { parseHttpError } from '@/shared/utils/parser';
-import { loadWallets, subscribeWallets } from '@/store/loaders/walletLoader';
-import { loadTransactions, subscribeTransactions } from '@/store/loaders/transactionsLoader';
-import { loadAssets } from '@/store/loaders/assetsLoader';
-import { subscriptions } from '@/store';
+import { loadWallets, subscribeWallets } from '@/stores/loaders/walletLoader';
+import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
+import { loadAssets } from '@/stores/loaders/assetsLoader';
+import { subscriptions } from '@/stores';
 import { tapToolsStore } from './tapTools';
 import { musicStore } from './music';
 import { chunkArray } from 'array-chunk-by-size';

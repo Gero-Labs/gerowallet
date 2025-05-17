@@ -5,13 +5,13 @@
         <v-row>
           <v-col cols="12" class="py-0 px-2">
             <span>{{ isMultisigFunding ? "From Wallet" : "From Multisig Wallet" }}</span>
-            <v-select 
+            <v-select
               :disabled="true"
               dense
-              v-model="senderWallet" 
-              :items="availableWallets" 
-              item-text="name" 
-              item-value="addressBech32" 
+              v-model="senderWallet"
+              :items="availableWallets"
+              item-text="name"
+              item-value="addressBech32"
               prepend-inner-icon="mdi-account-multiple-outline"
               outlined
               hide-details>
@@ -172,14 +172,14 @@
   </v-form>
 </template>
 <script lang="ts">
-import rules from "@/shared/utils/rules";
+import rules from "@/utils/rules";
 import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/store';
+import { appWallet, useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
 import { resolveAsset } from '@/shared/utils/resolver';
-import { walletConfigStore } from '@/store/modules/walletConfig';
-import { multisigStore } from '@/store/modules/multisig';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { multisigStore } from '@/stores/modules/multisig';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 

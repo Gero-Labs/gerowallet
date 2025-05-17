@@ -138,7 +138,7 @@ export class Wallet {
     wal.db.version(walletDBVersion).stores(walletDBSchema);
     wal.db.open().catch(async err => {
       if (err.name === 'NoSuchDatabaseError') {
-        await db.createNewWalletDb(wallet.id);
+        await db.createNewWalletDb(wallet.id, false, false);
       }
       console.log(err);
     });

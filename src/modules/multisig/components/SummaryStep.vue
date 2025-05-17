@@ -48,16 +48,16 @@
   import { Buffer } from 'buffer';
   import { AssetWithQuantity } from '@/shared/models/asset-quantity';
   import { mapState } from 'pinia';
-  import { appWallet, useStore } from '@/store';
-  import networks from '@/shared/utils/networks';
+  import { appWallet, useStore } from '@/stores';
+  import networks from '@/utils/networks';
   import {
     cardanoValueFromRemoteFormat,
     diffAssetsFromIncomingToOutgoing,
     getAssetsFromMultiAsset, getPayAndReceiveTokens,
   } from '@/shared/utils/builder';
-  import { walletConfigStore } from '@/store/modules/walletConfig';
+  import { walletConfigStore } from '@/stores/modules/walletConfig';
   import cardanoShieldApi from '@/api/cardano-shield-api';
-  
+
   export default defineComponent({
     components: { TransactionCard, DappAddress, TransactionRisk, Select },
     name: 'SummaryStep',
@@ -104,10 +104,10 @@
             inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
           }
         }
-  
+
         const inputValueAssets = getAssetsFromMultiAsset(inputValue.multiasset());
         inputValueAssets.push(new AssetWithQuantity('cardano', inputValue.coin().to_str()));
-  
+
         let outputValue = Value.new(BigNum.from_str('0'));
         for (let i = 0; i < txBody.outputs().len(); i++) {
           const output = txBody.outputs().get(i);
@@ -116,10 +116,10 @@
             outputValue = outputValue.checked_add(output.amount());
           }
         }
-  
+
         const outputValueAssets = getAssetsFromMultiAsset(outputValue.multiasset());
         outputValueAssets.push(new AssetWithQuantity('cardano', outputValue.coin().to_str()));
-  
+
         const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
         const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
         const cardanoToken = payTokens.find(token => token.name === 'cardano')
@@ -127,7 +127,7 @@
         const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
           return { amount: token.amount, currency: token.name, id: token.id };
         });
-  
+
         const foundAda = receiveTokens.find(token => token.name === 'cardano');
         const totalReceive = foundAda ? foundAda.amount : 0;
         const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
@@ -183,7 +183,7 @@
     },
   });
   </script>
-  
+
   <style scoped>
   .recipient-box {
     display: flex;
@@ -193,18 +193,18 @@
     font-size: 12px;
     background: linear-gradient(to right, #005d65, #0000003d);
   }
-  
+
   .continue-button {
     background: linear-gradient(to right, #00c7f3, #00fad5);
     color: black!important;
-  
+
     &:disabled {
       opacity: 0.5;
       color: black!important;
     }
-  
+
   }
-  
+
   .v-tooltip__content {
     background: rgba(15, 19, 21, 1);
     border:1px solid #C4C4C4;
