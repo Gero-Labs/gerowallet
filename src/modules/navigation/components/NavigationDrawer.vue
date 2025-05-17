@@ -158,7 +158,7 @@ const version = ref('')
 // Computed properties
 const wallets = computed(() => store.wallets)
 const loggedWallet = computed(() => store.loggedWallet)
-const transactionsCount = computed(() => store.transactions || 0)
+const transactions = computed(() => store.transactions || 0)
 const baseAddress = computed(() => store.baseAddress)
 const musicPlaylist = computed(() => music.musicPlaylist)
 
@@ -191,9 +191,9 @@ const items = computed(() => {
     { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
     { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
     { header: 'Activities & Rewards' },
-    { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactionsCount.value > 0 },
+    { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', enabled: false }
+    { title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true },
     { header: 'Cardano Essentials' },
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },

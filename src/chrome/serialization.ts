@@ -702,9 +702,9 @@ export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
         coins: BigInt(utxo.value),
         assets: tokenMap,
       },
-      datumHash: Hash32ByteBase16.fromHexBlob(HexBlob(utxo.datum_hash)),
-      datum: Serialization.PlutusData.fromCbor(HexBlob(utxo.inline_datum)).toCore(),
-      scriptReference: Serialization.Script.fromCbor(HexBlob(utxo.reference_script)).toCore()
+      datumHash: utxo.datum_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(utxo.datum_hash)) : null,
+      datum: utxo.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(utxo.inline_datum)).toCore() : null,
+      scriptReference: utxo.reference_script ? Serialization.Script.fromCbor(HexBlob(utxo.reference_script)).toCore() : null
     }
   ]);
 }

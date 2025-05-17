@@ -107,7 +107,7 @@
               </div>
             </v-card-text>
           </v-card>
-  
+
           <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
           <div id="qr-code" ref="qrCode" class="text-center" v-show="!keystoneScan"> </div>
           <div class="text-center pt-2">
@@ -190,16 +190,16 @@
     </BaseDialog>
   </template>
   <script lang="ts">
-  import BaseDialog from '@/shared/components/BaseDialog.vue';
+  import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
   import CustomStepper from '@/shared/components/CustomStepper.vue';
   import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
   import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
   import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
-  import { appWallet, useStore } from '@/store';
+  import { appWallet, useStore } from '@/stores';
   import { mapState } from 'pinia';
   import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
   import { buildTx } from '@/shared/utils/builder';
-  import rules from '@/shared/utils/rules';
+  import rules from '@/utils/rules';
   import { Network, WalletType } from '@/models/types';
   import {
     Transaction,
@@ -207,7 +207,7 @@
     TransactionOutputs,
     TransactionUnspentOutputs, TransactionWitnessSet,
   } from '@emurgo/cardano-serialization-lib-browser';
-  import networks from '@/shared/utils/networks';
+  import networks from '@/utils/networks';
   import filters from '@/shared/utils/filters';
   import snackbar from '@/plugins/snackbar';
   import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
@@ -217,8 +217,8 @@
   import { QrcodeStream } from "vue-qrcode-reader";
   // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
   import { UREncoder } from '@keystonehq/keystone-sdk';
-  import { walletConfigStore } from '@/store/modules/walletConfig';
-  import { multisigStore } from '@/store/modules/multisig';
+  import { walletConfigStore } from '@/stores/modules/walletConfig';
+  import { multisigStore } from '@/stores/modules/multisig';
 
   export default defineComponent({
     name: 'MultisigTransactionDialog',
@@ -239,14 +239,14 @@
     },
     computed: {
       ...mapState(useStore, [
-        'loggedWallet', 
-        'baseAddress', 
-        'latestTip', 
+        'loggedWallet',
+        'baseAddress',
+        'latestTip',
         'pinnedTokens',
       ]),
       ...mapState(multisigStore, ['multiSigWallet', 'multiSigWallets', 'resolvedAssets']),
       ...mapState(walletConfigStore, [
-        'utxos', 
+        'utxos',
         'addresses'
       ]),
       WalletType() {
@@ -547,7 +547,7 @@
       setMax(index) {
         const sendTokensCopy = JSON.parse(JSON.stringify(this.sendData.selectedTokens));
         const selectedToken = sendTokensCopy[index];
-  
+
         if (selectedToken.decimals) {
           selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
         } else {
@@ -618,10 +618,10 @@
         }
       }
     }
-  
+
   });
   </script>
-  
+
   <style scoped>
   .titles {
     align-items: center;
@@ -629,31 +629,31 @@
     display: flex;
     flex-direction: column;
   }
-  
+
   .arrow-left {
     cursor: pointer;
     position: absolute;
     top: 10px;
     left: 10px;
   }
-  
+
   .continue-button {
     background: linear-gradient(to right, #00c7f3, #00fad5);
     color: black;
-  
+
     &:disabled {
       opacity: 0.5;
       color: black !important;
     }
-  
+
   }
   .stepper-container {
     background-color: transparent;
-  
+
     & .v-stepper__header {
       box-shadow: none;
     }
-  
+
     .custom-step {
       display: flex;
       flex-direction: column;
@@ -661,15 +661,15 @@
       position: relative;
       padding: 5px;
       width: 150px;
-  
+
       &.active .icon-container {
         box-shadow: 0 0 0 5px #00dff327;
       }
-  
+
       &.next .icon-container {
         background-color: #292929;
       }
-  
+
       .icon-container {
         background-color: #00dff3;
         border-radius: 50%;
@@ -681,7 +681,7 @@
         padding-left: 1px;
       }
     }
-  
+
     .step-label {
       margin-top: 10px;
       font-size: 14px;
@@ -690,7 +690,7 @@
       font-weight: 600;
       color: #CECFD2;
     }
-  
+
     .divider {
       flex: 1;
       height: 2px;
@@ -699,7 +699,7 @@
       margin-right: -75px;
       margin-top: 16px;
       background-color: #292929;
-  
+
       &.active-divider {
         background-color: #00dff3;
       }
