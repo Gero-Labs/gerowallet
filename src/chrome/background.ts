@@ -48,11 +48,11 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
     cashbackPagePath: '/index.html#/cashback'
   })
 })();
+const currentVersion = chrome.runtime.getManifest().version;
 
-if (!isBeta) {
+if (!isBeta && currentVersion !== '2.5.3') {
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'update') {
-      const currentVersion = chrome.runtime.getManifest().version;
       chrome.notifications.create('updateNotification', {
         type: 'image',
         title: 'Extension Updated',
