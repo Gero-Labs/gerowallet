@@ -5,6 +5,7 @@ import { dexHunterStore } from '@/stores/modules/dexhunter';
 import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
 import { isNotNil } from '@cardano-sdk/util';
 import { TextDecoder } from 'web-encoding';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -205,8 +206,6 @@ export const fromPlutusData = (
     imageAsUri = tryCoerce(image, Asset.Uri);
   }
 
-
-
   return {
     description: asString(description),
     files: mapFiles(files),
@@ -370,5 +369,24 @@ export function longestCommonStartingSubstring(array) {
   } catch (e) {
     console.log(e)
     return
+  }
+}
+
+export function resolvePaymentKeyHash(bech32: string): Hash28ByteBase16 {
+  try {
+    const paymentKeyHash = [
+      Cardano.BaseAddress.fromAddress(Cardano.Address.fromBech32(bech32))?.getPaymentCredential().hash,
+      Cardano.EnterpriseAddress.fromAddress(Cardano.Address.fromBech32(bech32))?.getPaymentCredential().hash,
+    ].find((kh) => kh !== undefined);
+
+    if (paymentKeyHash !== undefined) return paymentKeyHash;
+
+    throw new Error(
+      `Couldn't resolve payment key hash from address: ${bech32}`,
+    );
+  } catch (error) {
+    throw new Error(
+      `An error occurred during resolvePaymentKeyHash: ${error}.`,
+    );
   }
 }

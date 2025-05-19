@@ -32,9 +32,7 @@
           </v-list-item-content>
         </v-list-item>
       </v-card-title>
-      <v-container style="z-index: 10;">
-        <slot></slot>
-      </v-container>
+      <slot></slot>
       <v-btn icon @click="$emit('close')" class="close-button" :disabled="loading">
         <v-icon color="#cecfd2">mdi-window-close</v-icon>
       </v-btn>

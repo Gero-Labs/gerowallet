@@ -50,7 +50,7 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 })();
 const currentVersion = chrome.runtime.getManifest().version;
 
-if (!isBeta && currentVersion !== '2.5.3') {
+if (!isBeta) {
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'update') {
       chrome.notifications.create('updateNotification', {
