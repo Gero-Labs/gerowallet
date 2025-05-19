@@ -20,7 +20,6 @@ import {
   MetadataList,
   MultiAsset,
   NativeScript,
-  NativeScriptKind,
   NativeScripts,
   PlutusData,
   PlutusDatumSchema,
@@ -61,8 +60,6 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
 import cbor from 'cbor';
-import { Cardano } from '@cardano-sdk/core';
-import { toStakeCredential } from '@/chrome/serialization';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -917,96 +914,3 @@ export const jsonToNativeScript = (json) => {
     throw new Error("Unknown script type: " + json.type);
   }
 };
-
-export const addressBech32ToKeyHash = (bech32Address) =>{
-  const address = Address.from_bech32(bech32Address);
-  const paymentCred = address.to_bytes().slice(0, 29);
-  const keyHash = paymentCred.slice(1, 29);
-  return Array.from(keyHash)
-  .map(b => b.toString(16).padStart(2, '0'))
-  .join('');
-};
-
-export const multisigJsonToBech32 = (multisigJson, networkId = 1) => { //networkId: 1-mainnet, 0-testnet
-  try {
-    // Convert the JSON multisig script to NativeScript
-    const nativeScript = jsonToNativeScript(multisigJson);
-    
-    // Create script hash
-    const scriptHash = nativeScript.hash();
-    
-    // Create stake credential from script hash
-    const stakeCredential = Credential.from_scripthash(scriptHash);
-
-    const multisigBaseAddress = BaseAddress.new(
-      networkId, // 0 for testnet, 1 for mainnet
-      stakeCredential,
-      stakeCredential
-    );
-
-    const stakeCred: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(multisigBaseAddress.to_address().to_bech32()));
-    const stakeAddress = Cardano.RewardAddress.fromCredentials(networkId, stakeCred).toAddress().toBech32();
-    
-    const output = {
-      stakeAddress: stakeAddress,
-      bech32Address: multisigBaseAddress.to_address().to_bech32(),
-      scriptCBOR: Buffer.from(nativeScript.to_bytes()).toString('hex') //CBOR
-    };
-
-    console.log("output:::", output);
-
-    // Convert to bech32
-    return output;
-
-  } catch (error) {
-    console.error("Error converting multisig to address:", error);
-    throw error;
-  }
-};
-
-export const generateShortAddressId = async (address) => {
-  // Encode the address to a Uint8Array
-  const encoder = new TextEncoder();
-  const data = encoder.encode(address);
-
-  // Generate SHA-256 hash
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  
-  // Convert to hex
-  const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-
-  // Generate the short ID without "..."
-  return `${address.slice(0, 6)}${address.slice(-6)}${hashHex.slice(0, 8)}`;
-}
-
-// extract signers from NativeScript
-export const extractSigners = (nativeScript:NativeScript) => {
-  if (nativeScript.kind() === NativeScriptKind.ScriptPubkey) {
-      // Single key hash script
-      return { requiredSigners: 1, totalSigners: 1 };
-  } else if (nativeScript.kind() === NativeScriptKind.ScriptAll) {
-      // AND condition - All keys must sign
-      const scripts = nativeScript.as_script_all().native_scripts();
-      let totalSigners = 0;
-      for (let index = 0; index < scripts.len(); index++) {
-        const counts = extractSigners(scripts.get(index));
-        totalSigners += counts.totalSigners;
-      }
-
-      return { requiredSigners: totalSigners, totalSigners };
-  } else if (nativeScript.kind() === NativeScriptKind.ScriptAny) {
-      // OR condition - At least one signer required
-      const scripts = nativeScript.as_script_any().native_scripts();
-      return { requiredSigners: 1, totalSigners: scripts.len() };
-  } else if (nativeScript.kind() === NativeScriptKind.ScriptNOfK) {
-      // M-of-N multisig script
-      const script = nativeScript.as_script_n_of_k();
-      return {
-          requiredSigners: script.n(),
-          totalSigners: script.native_scripts().len(),
-      };
-  } else {
-      throw new Error("Unsupported script type");
-  }
-}
