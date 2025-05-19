@@ -3,7 +3,7 @@
     <v-main>
       <v-container class="pa-0">
         <v-layout :align-start="true">
-          <NavigationDrawer v-model:drawer="drawer" />
+          <NavigationDrawer v-model="drawer" />
           <v-sheet
             style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent"
           >
@@ -141,22 +141,54 @@
                 <QuickActionsBox />
 
                 <v-btn
+                  class="ml-2"
+                  small
                   icon
                   text
                   :plain="!context.shown"
                   v-if="musicPlaylist?.length > 0"
                   @click="setMediaPlayerShown(!context.shown)"
                 >
-                  <v-avatar size="20">
-                    <img
-                      :src="assets.mediaPlayer"
-                      alt="Media Player"
-                      style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
-                    />
-                  </v-avatar>
+                  <v-icon>
+                    mdi-play-box-outline
+                  </v-icon>
                 </v-btn>
+                <v-menu offset-y :close-on-content-click="false">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-btn class="ml-2" small icon v-bind="attrs" v-on="on">
+                      <v-icon>mdi-bell-outline</v-icon>
+                    </v-btn>
+                  </template>
+                  <v-card outlined rounded min-width="250">
+                    <v-card-title class="pa-2">
+                      Notifications
+                      <v-spacer></v-spacer>
+                      <v-btn small icon>
+                        <v-icon>
+                          mdi-dots-horizontal
+                        </v-icon>
+                      </v-btn>
+                    </v-card-title>
+                    <v-card-text class="pa-0">
+                      <v-list class="transparent">
+                        <v-list-item>
+                          <v-list-item-content>
+                            <v-list-item-title class="text-center" style="color: #CCC;">
+                              <v-avatar size="30" color="#333" class="mr-2">
+                                <v-icon small color="#CCC">
+                                  mdi-message-text-outline
+                                </v-icon>
+                              </v-avatar>
+                              Nothing new
+                            </v-list-item-title>
+                          </v-list-item-content>
+                        </v-list-item>
+                      </v-list>
+                    </v-card-text>
+                  </v-card>
+                </v-menu>
 
-                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="ml-1">
+                <v-btn small class="ml-2" @click="currentDialog = dialogs.SETTINGS" icon>
                   <v-badge bordered color="error" dot v-if="shouldBackup">
                     <v-avatar size="20">
                       <img :src="assets.settingsSvg" alt="Settings" />
@@ -253,7 +285,6 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
-import networks from '@/utils/networks'
 import assets from '@/utils/assets'
 import loadingPlugin from '@/plugins/loading'
 import changeLogPlugin from '@/plugins/changeLog'
@@ -281,10 +312,7 @@ const dialogs           = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
 
 // Aliases for imported utilities
-const filtersRef = filters
-const networksRef = networks
-const assetsRef  = assets
-const time       = timePlugin
+const time = timePlugin
 const changeLog  = changeLogPlugin
 
 // Derived reactive state
