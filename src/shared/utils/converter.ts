@@ -6,7 +6,6 @@ import {
   AuxiliaryDataHash,
   BaseAddress,
   BigNum,
-  Bip32PrivateKey,
   Bip32PublicKey,
   ByronAddress,
   Credential,
@@ -21,7 +20,7 @@ import {
   MultiAsset,
   PlutusData,
   PlutusDatumSchema,
-  PointerAddress,
+  PointerAddress, PrivateKey,
   PublicKey,
   RewardAddress,
   ScriptHash, TransactionHash,
@@ -56,14 +55,13 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
 import cbor from 'cbor';
+import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
   _inMemoryCacheAddressCredentials.set(addrHexOrBech32, addressCredentials);
   return addressCredentials;
 };
-
-export const toAddress = bech32 => Address.from_bech32(bech32);
 
 export function toUTxO(utxo): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
@@ -842,14 +840,8 @@ export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: B
   const cslVkeysOwned = Vkeywitnesses.new();
   credList.forEach(cred => {
     const hdArray = hdPathToArray(cred.path)
-    const prvKeyRaw = prvRootKeyBech32
-      .derive(hdArray[0])
-      .derive(hdArray[1])
-      .derive(hdArray[2])
-      .derive(hdArray[3])
-      .derive(hdArray[4])
-      .to_raw_key();
-    const vkeyWitness = make_vkey_witness(cslTxHash, prvKeyRaw);
+    const prvKeyRaw = prvRootKeyBech32.derive([hdArray[0], hdArray[1], hdArray[2], hdArray[3], hdArray[4]]).toRawKey()
+    const vkeyWitness = make_vkey_witness(cslTxHash, PrivateKey.from_hex(prvKeyRaw.hex()));
     const vkeyWitnessSig = vkeyWitness.signature();
     const vkeyWitnessSig32 = vkeyWitnessSig.to_bech32();
     let keyIncluded = false;

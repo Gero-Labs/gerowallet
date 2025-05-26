@@ -21,7 +21,6 @@ import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
-import DAO from '@/modules/dao/DAO.vue';
 
 const routes = [
   {
@@ -184,7 +183,6 @@ const router = new VueRouter({
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   loading.setLoading(true);
   const store = useStore();
-  await store.subscribeWallets();
   const wallets: any[] = store.wallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
@@ -194,14 +192,13 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // this route requires auth, check if logged in
     // if not, redirect to login page.
     if (!isLoggedIn) {
-      console.log('to', to)
       const redirect = to.path != '/' ? to.path : null;
       let path = '/welcome'
       if (redirect) {
         path += `?redirect=${to.fullPath}`
       }
       if (to.query && Object.keys(to?.query).length !== 0) {
-        path += `?${(new URLSearchParams(to.query)).toString()}`;
+        path += `?${(new URLSearchParams(to.query.toString())).toString()}`;
       }
       next({
         path: path,
