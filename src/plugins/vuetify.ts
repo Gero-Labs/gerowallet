@@ -1,10 +1,14 @@
 import Vue from 'vue';
 import Vuetify from 'vuetify/lib';
+import { ClickOutside } from 'vuetify/lib/directives';
 import i18n from '@/plugins/i18n';
 
 Vue.use(Vuetify);
 
 export default new Vuetify({
+  directives: {
+    ClickOutside
+  },
   lang: {
     t: (key: string, ...params: (string | number)[]): string => i18n.t(key, params) as string,
   },

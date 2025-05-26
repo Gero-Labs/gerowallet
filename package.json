@@ -1,7 +1,7 @@
 {
   "name": "gero-wallet",
   "displayName": "Gero Dashboard",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "private": true,
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
@@ -47,6 +47,7 @@
     "@mdi/font": "^7.4.47",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
+    "ably": "^2.9.0",
     "archiver": "^7.0.1",
     "array-chunk-by-size": "^2.1.1",
     "axios": "^1.7.9",
@@ -70,7 +71,7 @@
     "net": "^1.0.2",
     "node-stdlib-browser": "^1.2.1",
     "pinia": "^2.1.7",
-    "pinia-plugin-persistedstate": "^3.2.1",
+    "pinia-plugin-persistedstate": "^3.2.3",
     "process": "^0.11.10",
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",

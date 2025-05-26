@@ -1,6 +1,7 @@
 import { METHOD } from '@/chrome/config';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignature, Paginate } from '@/models/types';
+import { Cardano as CardanoCore } from '@cardano-sdk/core';
 
 export const getBalance = async (): Promise<string> => {
   const result = await Messaging.sendToContent({
@@ -38,7 +39,7 @@ export const promptLogin = async (): Promise<void> => {
   return result['data'];
 };
 
-export const signData = async (address: string, payload: string): Promise<DataSignature> => {
+export const signData = async (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string): Promise<DataSignature> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signData,
     data: { address, payload },
@@ -156,6 +157,14 @@ export const getUnregisteredPubStakeKeys = async () => {
 export const getAccountPub = async () => {
   const result = await Messaging.sendToContent({
     method: METHOD.getAccountPub,
+    data: {},
+  });
+  return result['data'];
+};
+
+export const getNetworkMagic = async () => {
+  const result = await Messaging.sendToContent({
+    method: METHOD.getNetworkMagic,
     data: {},
   });
   return result['data'];
