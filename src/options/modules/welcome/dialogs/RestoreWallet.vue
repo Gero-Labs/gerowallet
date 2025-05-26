@@ -181,7 +181,7 @@
                       filled
                       label="Confirm Password"
                       :type="show2 ? 'text' : 'password'"
-                      :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
+                      :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
                   >
                     <template v-slot:append>
                       <v-icon @click="show2 = !show2" tabindex="-1">

@@ -30,6 +30,8 @@ import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
+import { login, WalletBg } from '@/chrome/walletBg';
+import { convertToTxSchema } from '@/chrome/helper';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -37,6 +39,8 @@ if (import.meta.hot) {
   // load latest content script
   import('./contentScriptHMR')
 }
+
+let wallet: WalletBg | null = null;
 
 //@ts-ignore
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
@@ -50,7 +54,7 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 })();
 const currentVersion = chrome.runtime.getManifest().version;
 
-if (!isBeta && currentVersion !== '2.5.3') {
+if (!isBeta) {
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'update') {
       chrome.notifications.create('updateNotification', {
@@ -58,7 +62,7 @@ if (!isBeta && currentVersion !== '2.5.3') {
         title: 'Extension Updated',
         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
         iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/2.5.2.png'),
+        imageUrl: chrome.runtime.getURL('public/2.5.4.png'),
       });
     }
   });
@@ -260,7 +264,6 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
-  console.log('getAddress', request)
   const loggedWallet = await getStorage(STORAGE.loggedWallet);
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -610,11 +613,15 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
             throw APIError.InvalidRequest;
         }
       }
-      // const utxos = await getStorage(STORAGE.utxos);
-      // const txCbor = request.data.tx
+      const utxos = await getStorage(STORAGE.utxos);
+      const txCbor = request.data.tx
       const txId = await response.text();
-      // const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
-      // await setAccountTransactions(loggedWallet.id, [tx])
+      if (txId) {
+        // const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
+        // if (wallet) {
+        //   await wallet.setAccountTransactions(loggedWallet.id, [tx])
+        // }
+      }
       sendResponse({
         id: request.id,
         data: txId,
@@ -788,6 +795,26 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
   }
 });
 
+app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  try {
+    sendResponse({
+      id: request.id,
+      data: networks.resolveNetworkMagic(loggedWallet['chain'], loggedWallet['network']),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error("Error deserializing public key:", error);
+    sendResponse({
+      id: request.id,
+      error: APIError.InternalError,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 const getStorage = (key) =>
   new Promise<any>((res, rej) =>
     chrome.storage.local.get(key, (result) => {
@@ -880,8 +907,89 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
       error: err,
     })
   }
+});
 
+app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
+  try {
+    const walletBg = await login(request.data.wallet);
+    if (walletBg) {
+      wallet = walletBg;
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
+});
 
+app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
+  try {
+    wallet.logout();
+    wallet = null;
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.log('logout error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
+});
+
+app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
+  try {
+    if (wallet) {
+      await wallet.resync();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
 });
 
 const openUI = async () => {

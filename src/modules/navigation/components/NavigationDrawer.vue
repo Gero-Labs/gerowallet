@@ -158,7 +158,7 @@ const version = ref('')
 // Computed properties
 const wallets = computed(() => store.wallets)
 const loggedWallet = computed(() => store.loggedWallet)
-const transactionsCount = computed(() => store.transactions || 0)
+const transactionsCount = computed(() => store.transactions?.length || 0)
 const baseAddress = computed(() => store.baseAddress)
 const musicPlaylist = computed(() => music.musicPlaylist)
 
@@ -237,6 +237,7 @@ async function submitLogout() {
 
 // Lifecycle
 onMounted(() => {
+  // @ts-ignore
   version.value = APP_VERSION
 })
 </script>

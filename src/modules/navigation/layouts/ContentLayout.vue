@@ -3,7 +3,7 @@
     <v-main>
       <v-container class="pa-0">
         <v-layout :align-start="true">
-          <NavigationDrawer v-model:drawer="drawer" />
+          <NavigationDrawer v-model="drawer" />
           <v-sheet
             style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent"
           >
@@ -83,7 +83,7 @@
                   <v-list-item-content class="my-0" style="padding:0 !important; display: flow;">
                     <v-list-item-title class="ma-0" style="font-size: 12px;">
                       {{ loggedWallet?.network }}
-                      <v-btn x-small icon class="mx-0" :loading="loadingPlugin.isSyncing" disabled>
+                      <v-btn x-small icon class="mx-0" :loading="isSyncing" disabled>
                         <v-avatar size="20">
                           <v-icon x-small>mdi-sync</v-icon>
                         </v-avatar>
@@ -240,7 +240,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, toRefs } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
@@ -253,9 +253,9 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
-import networks from '@/utils/networks'
 import assets from '@/utils/assets'
-import loadingPlugin from '@/plugins/loading'
+import { loadingState } from '@/plugins/loading'
+import Loading from '@/plugins/loading';
 import changeLogPlugin from '@/plugins/changeLog'
 import timePlugin from '@/plugins/time'
 
@@ -263,11 +263,14 @@ import { useStore } from '@/stores'
 import { musicStore } from '@/stores/modules/music'
 import { walletConfigStore } from '@/stores/modules/walletConfig'
 
+
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentPage = computed(() => vmProxy.$route)
+
+const { isSyncing } = toRefs(loadingState);
 
 // Pinia stores
 const store = useStore()
@@ -275,15 +278,12 @@ const music = musicStore()
 const walletConfig = walletConfigStore()
 
 // Reactive UI state
-const drawer = ref(false)
+const drawer = ref<boolean>(false)
 const currentDialog     = ref<string|null>(null)
 const dialogs           = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
 
 // Aliases for imported utilities
-const filtersRef = filters
-const networksRef = networks
-const assetsRef  = assets
 const time       = timePlugin
 const changeLog  = changeLogPlugin
 
@@ -334,7 +334,7 @@ onMounted(async () => {
       console.error(err)
     }
   }
-  loadingPlugin.setLoading(false)
+  Loading.setLoading(false)
 })
 </script>
 

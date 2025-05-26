@@ -13,7 +13,7 @@
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">Tx Auto Submit</h3>
-          <span class="helper my-0">Automatically submit transactions after signing.</span>
+          <span class="helper my-0">Automatically submit transactions after signing</span>
         </v-col>
         <v-col cols="3" style="align-content: center;">
           <v-switch dense inset v-model="txAutoSubmit" hide-details style="margin: auto"></v-switch>
@@ -22,7 +22,7 @@
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">Re-Sync Wallet</h3>
-          <span class="helper my-0">Replacing wallet data from the blockchain. (Might take a while).</span>
+          <span class="helper my-0">Replacing wallet data from the blockchain. (Might take a while)</span>
         </v-col>
         <v-col cols="3" style="align-content: center;">
           <v-btn
@@ -49,76 +49,13 @@
           </v-btn>
         </v-col>
       </v-row>
-      <v-row no-gutters class="py-2" v-if="hasBackup">
-        <v-col cols="9" class="text-left">
-          <h3 style="color: white">Recovery Phrase
-            <v-tooltip top v-if="backup">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon
-                  color="primary"
-                  small
-                  v-bind="attrs"
-                  v-on="on"
-                >
-                  mdi-shield-check-outline
-                </v-icon>
-              </template>
-              <span>Your wallet was backed up</span>
-            </v-tooltip>
-          </h3>
-          <span class="helper my-0">{{ backup ? "Your 24-word master key - keep it offline and private." : "Wallet Backup is Required."}}</span>
-        </v-col>
-        <v-col cols="3" style="align-content: center;">
-          <v-badge
-            v-if="!backup"
-            bordered
-            color="error"
-            overlap
-            style="width: 100%"
-          >
-            <v-btn
-              block
-              outlined
-              color="error"
-              @click="backupWalletDialog = true"
-              :disabled="reSyncLoading"
-            >
-              <v-icon
-                left
-                dark
-                class="mr-1"
-              >
-                mdi-key
-              </v-icon>
-              <span class="capitalize">Backup</span>
-            </v-btn>
-          </v-badge>
-          <v-btn
-            v-else
-            block
-            outlined
-            color="white"
-            @click="backupWalletDialog = true"
-            :loading="reSyncLoading"
-          >
-            <v-icon
-              left
-              dark
-              class="mr-1"
-            >
-              mdi-key
-            </v-icon>
-            <span class="capitalize">Show</span>
-          </v-btn>
-        </v-col>
-      </v-row>
       <h2 class="text-left pb-2" style="color: #ff6464">Danger Zone</h2>
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
           <v-row no-gutters class="py-2">
             <v-col cols="9" class="text-left pr-1">
               <h3 class="white--text">Delete Wallet</h3>
-              <span class="helper my-0">Deleting this wallet removes it from Gero Dashboard, and any remaining funds will be inaccessible. To regain access, restore using your recovery phrase.</span>
+              <span class="helper my-0">Deleting this wallet removes it from Gero Dashboard, and any remaining funds will be inaccessible. To regain access, restore using your recovery phrase</span>
             </v-col>
             <v-col cols="3" style="align-content: end;">
               <v-btn
@@ -142,7 +79,7 @@
         <v-card>
           <v-card-title>Are you sure you want to delete this wallet?</v-card-title>
           <v-card-text>
-            Please note that this operation will log you out from the Dashboard.
+            Please note that this operation will log you out from the Dashboard
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
@@ -153,7 +90,6 @@
         </v-card>
       </v-dialog>
     </v-layout>
-    <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
   </v-tab-item>
 </template>
 <script>
@@ -165,6 +101,8 @@ import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
 import networks from '@/utils/networks';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 export default {
   name: 'AdvancedSettingsTab',
@@ -181,18 +119,13 @@ export default {
       return networks
     },
     ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup', 'getBackup', 'hasBackup']),
+    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup']),
     txAutoSubmit: {
       get() {
         return this.getTxAutoSubmit
       },
       async set(val) {
         await this.setTxAutoSubmit(val)
-      }
-    },
-    backup: {
-      get() {
-        return this.getBackup
       }
     },
     cashbackPopups: {
@@ -217,7 +150,10 @@ export default {
     async reSync() {
       this.reSyncLoading = true
       this.$emit('loading', true)
-      await appWallet.resync()
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.RESYNC,
+        data: { },
+      });
       this.reSyncLoading = false
       this.$emit('loading', false)
     },
@@ -238,7 +174,6 @@ export default {
     deleteWalletDialog: false,
     deleteWalletLoading: false,
     cashbackPopupsDisabled: false,
-    backupWalletDialog: false,
   }),
   created() {
     this.loadCashbackPopups();
