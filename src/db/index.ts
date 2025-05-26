@@ -282,5 +282,8 @@ export default {
   setWalletDBVersionSchema(db: Dexie) {
     console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
+  },
+  async checkIfDbExists(dbName: string) {
+    return await Dexie.exists(dbName);
   }
 };

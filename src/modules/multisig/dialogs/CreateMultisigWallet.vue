@@ -255,6 +255,13 @@ async function createMultisigWallet() {
     .fromCredentials(netId, paymentCredential, stakeCredential)
     .toAddress()
     .toBech32();
+  
+  const multisigDBName = `multisig-${scriptBaseAddr.slice(0,21)}-${lodash.kebabCase(multisigName.value)}`;
+  const existingDb = await db.checkIfDbExists(multisigDBName);
+  if (existingDb) {
+    throw new Error('A multisig wallet with this name already exists');
+  }
+
   const scriptRewardAddress = Cardano.RewardAddress
     .fromCredentials(netId, stakeCredential)
     .toAddress()
@@ -268,8 +275,8 @@ async function createMultisigWallet() {
     requiredSigners: requiredSigners.value,
     createdAt: new Date().toISOString()
   };
-  const multisigDBName = `multisig-${scriptBaseAddr.slice(0,21)}-${lodash.kebabCase(multisigName.value)}`;
-  appWallet.db.table('multisig').add(multisigWallet).catch(e => console.error(e));
+  const multisigTable = await appWallet.db.table('multisig');
+  await multisigTable.add(multisigWallet).catch(e => console.error(e));
   await db.createNewWalletDb(multisigDBName, false, false).catch(e => console.error(e));
   await appWallet.api.multiSig.createWallet(
     { stakeAddress: multisigWallet.stakeAddress, bech32Address: multisigWallet.paymentAddress, scriptCBOR: multisigWallet.cbor },

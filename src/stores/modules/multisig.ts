@@ -65,7 +65,7 @@ export const multisigStore = defineStore('multisigStore', {
     getMultiSigWallet: state => state.multiSigWallet,
     getMultiSigWallets: state => state.multiSigWallets,
     getWallet: state => {
-      if (!multisigAppWallet && state.multiSigWallet) {
+      if (!multisigAppWallet && state.multiSigWallet.id) {
         multisigAppWallet = Wallet.multisigClass(state.multiSigWallet, 1);
       }
       return multisigAppWallet;

@@ -190,7 +190,7 @@
   </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, defineEmits, defineProps } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
