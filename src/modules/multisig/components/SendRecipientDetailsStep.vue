@@ -52,7 +52,7 @@
                 <v-card-text class="py-0">
                   <v-list-item dense class="px-0">
                     <v-list-item-avatar size="100" v-if="contact?.img" rounded>
-                      <v-img :src="contact?.img" contain :alt="`${asset.name} Logo`">
+                      <v-img :src="contact?.img" contain :alt="`${asset?.name} Logo`">
                         <template v-slot:placeholder>
                           <v-row class="fill-height ma-0" align="center" justify="center">
                             <v-progress-circular indeterminate color="grey lighten-5"></v-progress-circular>
@@ -171,191 +171,206 @@
     </div>
   </v-form>
 </template>
-<script lang="ts">
-import rules from "@/utils/rules";
-import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
-import { Blockchain, Network } from '@/models/types';
-import debounce from 'lodash/debounce';
-import { resolveAsset } from '@/shared/utils/resolver';
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onBeforeMount } from 'vue';
+import { useStore } from '@/stores';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { multisigStore } from '@/stores/modules/multisig';
+import { Blockchain, Network } from '@/models/types';
+import rules from "@/utils/rules";
+import debounce from 'lodash/debounce';
+import { resolveAsset } from '@/shared/utils/resolver';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
+import { appWallet } from '@/stores';
+import type { Asset, Contact } from '@/modules/multisig/types/MultiSigTypes';
 
-export default defineComponent({
-  components: { CopyButton },
-  name: 'SendRecipientDetailsStepMultisig',
-  props: {
-    sendData: {
-      type: Object,
-      required: true,
-    },
-  },
-  watch: {
-    contact: {
-      async handler(val) {
-        await this.addOrUpdateContact(val)
-      },
-      deep: true,
-    },
-    sendData: {
-      handler(val) {
-        if (val && !val.recipientAddress) {
-          this.recipientAddress = ''
-        }
-      },
-      deep: true,
+// Props
+const props = defineProps<{
+  sendData: {
+    recipientAddress?: string;
+    selectedWallet?: string;
+    isMultisigFunding?: boolean;
+    availableWallets?: any[];
+  };
+}>();
+
+// Emits
+const emit = defineEmits<{
+  (e: 'updateRecipientAddress', address: string): void;
+}>();
+
+// Store setup
+const store = useStore();
+const walletConfig = walletConfigStore();
+const multisig = multisigStore();
+
+// Refs
+const form = ref<HTMLFormElement | null>(null);
+const valid = ref(false);
+const paymentAddress = ref('');
+const recipientAddress = ref('');
+const senderWallet = ref('');
+const availableWallets = ref<any[]>([]);
+const resolved = ref<boolean | undefined>(undefined);
+const loading = ref(false);
+const contactsMenu = ref(false);
+const saveContactMenu = ref(false);
+const isMultisigFunding = ref(false);
+const asset = ref<Asset | undefined>(undefined);
+const contact = ref<Contact>({
+  name: '',
+  address: '',
+  img: undefined
+});
+
+// Computed
+const loggedWallet = computed(() => store.loggedWallet);
+const multiSigWallet = computed(() => multisig.multiSigWallet);
+const multiSigWallets = computed(() => multisig.multiSigWallets);
+const contacts = computed(() => walletConfig.contacts);
+
+const recipientRules = computed(() => {
+  if (loggedWallet.value?.network === Network.MAINNET) {
+    if (loggedWallet.value?.chain === Blockchain.CARDANO) {
+      if (recipientAddress.value?.startsWith('$')) {
+        return [rules.required, rules.paymentAddressOrAdaHandle(), !!resolved.value];
+      } else {
+        return [rules.required, rules.paymentAddressOrAdaHandle()];
+      }
+    } else {
+      return [rules.required, rules.paymentAddress(false)];
     }
-  },
-  filters,
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(multisigStore, ['multiSigWallet', 'multiSigWallets']),
-    ...mapState(walletConfigStore, ['contacts']),
-    recipientRules() {
-      if (this.loggedWallet.network === Network.MAINNET) {
-        if (this.loggedWallet.chain === Blockchain.CARDANO) {
-          if (this.recipientAddress?.startsWith('$')) {
-            return [rules.required, rules.paymentAddressOrAdaHandle(), !!this.resolved]
-          } else {
-            return [rules.required, rules.paymentAddressOrAdaHandle()]
-          }
-        } else {
-          return [rules.required, rules.paymentAddress(false)]
-        }
-      } else {
-        return [rules.required, rules.paymentAddress(true)]
-      }
-    },
-    Blockchain() {
-      return Blockchain
-    },
-    Network() {
-      return Network
-    },
-  },
-  methods: {
-    ...mapActions(walletConfigStore, ['addOrUpdateContact', 'removeContact']),
-    getMultiSigWallet() {
-      return this.multiSigWallet;
-    },
-    selectContact(item) {
-      this.recipientAddress = item.address;
-      this.$emit('updateRecipientAddress', this.recipientAddress);
-      this.contactsMenu = false
-    },
-    saveContact() {
-      this.asset = undefined;
-      this.contact = {
-        name: '',
-        address: '',
-        img: undefined
-      };
-      let name
-      const address = this.paymentAddress
-      const img = this.asset ? this.asset.img : null
-      if (this.contacts[this.paymentAddress] == null) {
-        name = ''
-      } else {
-        name = this.contacts[this.paymentAddress].name
-      }
-      this.contact = {
-        img,
-        name,
-        address
-      }
-    },
-    removeCont(item) {
-      if (item && item.address) {
-        this.removeContact(item.address)
-        this.contactsMenu = false
-      } else {
-        this.removeContact(this.contact.address)
-        this.saveContactMenu = false
-      }
-    },
-    resolveAddress(val) {
-      if(val !== ''){
-        if (val && val.startsWith('$') && this.loggedWallet.network === Network.MAINNET && this.loggedWallet.chain === Blockchain.CARDANO) {
-          return this.resolveAdaHandle(val);
-        } else {
-          this.resolved = undefined;
-          this.paymentAddress = val;
-          this.$emit('updateRecipientAddress', val);
-          return '';
-        }
-      }
-    },
-    resolveAdaHandle: debounce(async function (this: any, val: string) {
-      if (val.length === 1) {
-        this.resolved = false
-        return
-      }
-      this.loading = true
-      appWallet.api.getAssetNFTAddress('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$', '')).toString('hex'))
-        .then(async address => {
-          console.log(address)
-          this.paymentAddress = address.payment_address
-          const res = await appWallet.api.getDetailedAssetsInfo('f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a', Buffer.from(val.replace('$', '')).toString('hex'))
-          if (res.status === 200) {
-            this.asset = await resolveAsset(res.data, res.data)
-            this.$emit('updateRecipientAddress', address.payment_address)
-            this.resolved = true
-          } else {
-            this.resolved = false
-          }
-        })
-        .catch(() => {
-          this.$emit('updateRecipientAddress', '')
-          this.resolved = false
-        })
-        .finally(() => {
-          this.loading = false
-        })
-    }, 1000),
-  },
-  data: () => ({
-    multisigStore: multisigStore(),
-    valid: false,
-    paymentAddress: '',
-    recipientAddress: '',
-    senderWallet: '',
-    availableWallets: [],
-    resolved: undefined,
-    loading: false,
-    rules,
-    contactsMenu: false,
-    saveContactMenu: false,
-    isMultisigFunding: false,
-    asset: undefined,
-    contact: {
-      name: '',
-      address: '',
-      img: undefined
-    },
-    truncate: filters.truncate,
-    contactsHeaders: [
-      { text: 'Name', value: 'name' },
-      { text: 'Address', value: 'address' },
-      { text: '', align: 'right', sortable: false, value: 'actions' },
-    ]
-  }),
-  mounted() {
-    this.recipientAddress = this.sendData["recipientAddress"];
-    this.senderWallet = this.sendData["selectedWallet"];
-    this.isMultisigFunding = this.sendData["isMultisigFunding"];
-    this.availableWallets = this.sendData["availableWallets"];
-    this.resolveAddress(this.recipientAddress);
-  },
-  created() {
-    this.recipientAddress = this.sendData["recipientAddress"];
-    this.senderWallet = this.sendData["selectedWallet"];
-    this.availableWallets = this.sendData["availableWallets"];
-    this.isMultisigFunding = this.sendData["isMultisigFunding"];
-    this.resolveAddress(this.recipientAddress);
+  } else {
+    return [rules.required, rules.paymentAddress(true)];
   }
 });
+
+// Methods
+const getMultiSigWallet = () => {
+  return multiSigWallet.value;
+};
+
+const selectContact = (item: Contact) => {
+  recipientAddress.value = item.address;
+  emit('updateRecipientAddress', item.address);
+  contactsMenu.value = false;
+};
+
+const saveContact = () => {
+  asset.value = undefined;
+  contact.value = {
+    name: '',
+    address: '',
+    img: undefined
+  };
+  
+  const address = paymentAddress.value;
+  const img = asset.value ? asset.value.img : null;
+  const name = contacts.value?.[paymentAddress.value]?.name ?? '';
+  
+  contact.value = {
+    img,
+    name,
+    address
+  };
+};
+
+const removeCont = (item?: Contact) => {
+  if (item?.address) {
+    walletConfig.removeContact(item.address);
+    contactsMenu.value = false;
+  } else {
+    walletConfig.removeContact(contact.value.address);
+    saveContactMenu.value = false;
+  }
+};
+
+const resolveAddress = (val: string) => {
+  if (val !== '') {
+    if (val?.startsWith('$') && loggedWallet.value?.network === Network.MAINNET && loggedWallet.value?.chain === Blockchain.CARDANO) {
+      return resolveAdaHandle(val);
+    } else {
+      resolved.value = undefined;
+      paymentAddress.value = val;
+      emit('updateRecipientAddress', val);
+      return '';
+    }
+  }
+};
+
+const resolveAdaHandle = debounce(async (val: string) => {
+  if (val.length === 1) {
+    resolved.value = false;
+    return;
+  }
+  
+  loading.value = true;
+  
+  try {
+    const address = await appWallet.api.getAssetNFTAddress(
+      'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a',
+      Buffer.from(val.replace('$', '')).toString('hex')
+    );
+    
+    paymentAddress.value = address.payment_address;
+    const res = await appWallet.api.getDetailedAssetsInfo(
+      'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a',
+      Buffer.from(val.replace('$', '')).toString('hex')
+    );
+    
+    if (res.status === 200) {
+      asset.value = await resolveAsset(res.data, res.data);
+      emit('updateRecipientAddress', address.payment_address);
+      resolved.value = true;
+    } else {
+      resolved.value = false;
+    }
+  } catch (error) {
+    emit('updateRecipientAddress', '');
+    resolved.value = false;
+  } finally {
+    loading.value = false;
+  }
+}, 1000);
+
+// Watchers
+watch(contact, async (val) => {
+  await walletConfig.addOrUpdateContact(val);
+}, { deep: true });
+
+watch(() => props.sendData, (val) => {
+  if (val && !val.recipientAddress) {
+    recipientAddress.value = '';
+  }
+}, { deep: true });
+
+// Lifecycle hooks
+onBeforeMount(() => {
+  recipientAddress.value = props.sendData.recipientAddress ?? '';
+  senderWallet.value = props.sendData.selectedWallet ?? '';
+  availableWallets.value = props.sendData.availableWallets ?? [];
+  isMultisigFunding.value = props.sendData.isMultisigFunding ?? false;
+  resolveAddress(recipientAddress.value);
+});
+
+onMounted(() => {
+  recipientAddress.value = props.sendData.recipientAddress ?? '';
+  senderWallet.value = props.sendData.selectedWallet ?? '';
+  availableWallets.value = props.sendData.availableWallets ?? [];
+  isMultisigFunding.value = props.sendData.isMultisigFunding ?? false;
+  resolveAddress(recipientAddress.value);
+});
+
+// Constants
+const contactsHeaders = [
+  { text: 'Name', value: 'name' },
+  { text: 'Address', value: 'address' },
+  { text: '', align: 'right', sortable: false, value: 'actions' },
+];
+
+const truncate = filters.truncate;
 </script>
 
 <style>
@@ -380,6 +395,5 @@ export default defineComponent({
       resize: none;
     }
   }
-
 }
 </style>
