@@ -108,7 +108,6 @@
             </v-card-text>
           </v-card>
 
-          <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
           <div id="qr-code" ref="qrCode" class="text-center" v-show="!keystoneScan"> </div>
           <div class="text-center pt-2">
             <v-btn
@@ -189,523 +188,525 @@
       </v-card-actions>
     </BaseDialog>
   </template>
-  <script lang="ts">
-  import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-  import CustomStepper from '@/shared/components/CustomStepper.vue';
-  import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
-  import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
-  import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
-  import { appWallet, useStore } from '@/stores';
-  import { mapState } from 'pinia';
-  import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
-  import { buildTx } from '@/shared/utils/builder';
-  import rules from '@/utils/rules';
-  import { Network, WalletType } from '@/models/types';
-  import {
-    Transaction,
-    TransactionOutput,
-    TransactionOutputs,
-    TransactionUnspentOutputs, TransactionWitnessSet,
-  } from '@emurgo/cardano-serialization-lib-browser';
-  import networks from '@/utils/networks';
-  import filters from '@/shared/utils/filters';
-  import snackbar from '@/plugins/snackbar';
-  import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
-  import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-  import Vue from 'vue';
-  import QRCodeStyling from 'qr-code-styling';
-  import { QrcodeStream } from "vue-qrcode-reader";
-  // import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
-  import { UREncoder } from '@keystonehq/keystone-sdk';
-  import { walletConfigStore } from '@/stores/modules/walletConfig';
-  import { multisigStore } from '@/stores/modules/multisig';
 
-  export default defineComponent({
-    name: 'MultisigTransactionDialog',
-    components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStepMultisig, AssetsToSendStep, SummaryStep },
-    props: {
-      isOpen: {
-        type: Boolean,
-        default: false,
-      },
-      recipientAddressProp: {
-        type: String,
-        default: ''
-      },
-      isMultisig: {
-        type: Boolean,
-        default: false,
-      }
-    },
-    computed: {
-      ...mapState(useStore, [
-        'loggedWallet',
-        'baseAddress',
-        'latestTip',
-        'pinnedTokens',
-      ]),
-      ...mapState(multisigStore, ['multiSigWallet', 'multiSigWallets', 'resolvedAssets']),
-      ...mapState(walletConfigStore, [
-        'utxos',
-        'addresses'
-      ]),
-      WalletType() {
-        return WalletType
-      },
-      networks() {
-        return networks
-      },
-      tokens() {
-        console.log('this.resolvedAssets', this.resolvedAssets)
-        if (this.resolvedAssets) {
-          const tokens = this.resolvedAssets.map(token => {
-            return {
-              ...token,
-              name: token.metadata.name,
-              ticker: token.metadata.ticker,
-              img: token.img,
-              quantity: "0",
-              balance: token.quantity,
-              decimals: token.metadata.decimals,
-              unit: token.unit
-            }
-          })
-          tokens.sort((a,b) => {
-            if (a.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)) {
-              return -1
-            }
-            return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker)
-          })
-          return tokens
-        }
-        return []
-      },
-      isValid() {
-        if (this.currentStep === 1) {
-          return rules.paymentAddress(this.loggedWallet?.network !== Network.MAINNET)(this.sendData.recipientAddress)
-        }
-        if (this.currentStep === 2) {
-          if (!this.txValid) {
-            return false;
-          }
-          const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
-          return !(hasZeroQuantity(this.sendData.selectedTokens) || hasZeroQuantity(this.sendData.selectedCollectibles));
-        }
-        if (this.currentStep === 3) {
-          if (this.loggedWallet?.type === WalletType.Normal) {
-            return Boolean(this.spendingPassword);
-          } else {
-            return true
-          }
-        }
-        return false;
-      },
-    },
-    watch: {
-      isOpen(val) {
-        if (val) {
-          this.resetData();
-        }
-      },
-      sendData: {
-        handler(val, oldVal) {
-          try {
-            if (!val.recipientAddress) {
-              return;
-            }
-            this.buildTx(this.sendData.selectedTokens)
-            this.txValid = true
-          } catch(e) {
-            console.error(e)
-            if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-              const match = e.match(/minimum UTXO value (\d+)/);
-              const number = match ? parseInt(match[1], 10) : null;
-              this.sendData.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-            } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-              const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-              const number = parseInt(match[2], 10) - parseInt(match[1], 10)
-              this.sendData.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-            }
-            this.txValid = false
-          }
-        },
-        deep: true,
-      }
-    },
-    data: () => ({
-      steps: [
-        {
-          name: 'recipientDetails',
-          label: 'Recipient Details',
-        },
-        {
-          name: 'assetsToSend',
-          label: 'Assets to Send',
-        },
-        {
-          name: 'summary',
-          label: 'Summary',
-        },
-      ],
-      currentStep: 1,
-      tooltip: {
-        enabled: false,
-        text: 'Wrong Spending Password!',
-      },
-      txBody: undefined,
-      txData: undefined,
-      txSubmitLoading: false,
-      spendingPassword: '',
-      show1: false,
-      rules,
-      sendData: {
-        selectedTokens: [],
-        selectedCollectibles: [],
-        recipientAddress: '', // this.recipientAddressProp || '',
-        selectedWallet: {},
-        minAda: 0,
-        adaShortage: 0,
-        senderWallet: '',
-        availableWallets: [],
-      },
-      txValid: false,
-      isBT: false,
-      overlay: false,
-      type: undefined,
-      cbor: undefined,
-      keystoneScan: false,
-      isInit: false,
-      qrCode: null,
-    }),
-    methods: {
-      backScan() {
-        if (this.keystoneScan) {
-          this.keystoneScan = false
-          this.isInit = false
-        } else {
-          this.overlay = false
-        }
-      },
-      async onDecode(result) {
-        console.log(result)
-        const signature = parseSignature(result);
-        const signedTx = Transaction.new(
-          this.txBody,
-          TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
-          undefined // TODO Transaction metadata
-        );
-        console.log(signedTx.to_json())
-        const txId = await appWallet.submitTx(signedTx, this.utxos);
-        console.log(txId)
-        snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-        this.$emit('close')
-      },
-      onInit(promise) {
-        promise.then(() => {
-          this.isInit = true
-          console.log("Camera initialized successfully");
-        }).catch((error) => {
-          console.error("Camera initialization failed:", error);
-        });
-      },
-      enableToolTip() {
-        this.tooltip.enabled = true;
-        setTimeout(() => {
-          this.tooltip.enabled = false;
-        }, 3000);
-      },
-      async signAndSubmitTx() {
-        const signAndReturnTx = async () => {
-          this.txSubmitLoading = true
-          try {
-            const txCbor = this.txData.to_hex()
-            const partialSign = false
-            const response = await appWallet.signTx(
-              txCbor,
-              partialSign,
-              this.spendingPassword,
-              0,
-              this.utxos,
-              this.addresses,
-              !this.isBT
-            );
-            const signedTx = Transaction.new(
-              this.txBody,
-              TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-              undefined // TODO Transaction metadata
-            );
-            console.log(signedTx.to_json())
-            const txId = await appWallet.submitTx(signedTx, this.utxos);
-            console.log(txId)
-            snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-            this.$emit('close')
-          } catch (e) {
-            snackbar.setError(e.toString())
-            console.error(e);
-          }
-          this.txSubmitLoading = false
-        };
-        if (appWallet?.type === WalletType.Normal) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
-        } else if (appWallet?.type === WalletType.Keystone) {
-          if (this.qrCode) {
-            this.qrCode = null; // Clear the QRCode instance
-            if (this.$refs['qrCode']) {
-              (this.$refs['qrCode'] as HTMLElement).innerHTML = '';
-            }
-          }
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, defineEmits, defineProps } from 'vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import CustomStepper from '@/shared/components/CustomStepper.vue';
+import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
+import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
+import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
+import { appWallet, useStore } from '@/stores';
+import { storeToRefs } from 'pinia';
+import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
+import { buildTx as buildTransaction } from '@/shared/utils/builder';
+import rules from '@/utils/rules';
+import { Network, WalletType } from '@/models/types';
+import {
+  Transaction,
+  TransactionOutput,
+  TransactionOutputs,
+  TransactionUnspentOutputs,
+  TransactionWitnessSet,
+} from '@emurgo/cardano-serialization-lib-browser';
+import networks from '@/utils/networks';
+import filters from '@/shared/utils/filters';
+import snackbar from '@/plugins/snackbar';
+import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
+import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
+import Vue from 'vue';
+import QRCodeStyling from 'qr-code-styling';
+import { QrcodeStream } from "vue-qrcode-reader";
+import { UREncoder } from '@keystonehq/keystone-sdk';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { multisigStore } from '@/stores/modules/multisig';
+import { Step, Token, SendData, Tooltip } from '@/modules/multisig/types/MultiSigTypes';
 
-          const ur = createKeystoneSignRequest(this.txData, this.loggedWallet, this.utxos, this.addresses);
-          this.type = ur.type;
-          this.cbor = Buffer.from(ur.cbor).toString('hex')
-          qrCodeOptions(UREncoder.encodeSinglePart(ur), 430)
-          console.log('')
-          this.overlay = true
-          this.qrCode = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-          Vue.nextTick(() => {
-            this.qrCode.append(this.$refs['qrCode']);
-          });
-          console.log('qrCode')
-        } else {
-          await signAndReturnTx();
-        }
-      },
-      buildTx(sendTokens) {
-        const recipientAddress = this.sendData.recipientAddress;
-        const tokens = [];
-        if (sendTokens.length > 0) {
-          sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals).forEach(token => {
-            if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
-              tokens.push({
-                unit: 'lovelace',
-                quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-              });
-            } else {
-              tokens.push({
-                unit: token.unit,
-                quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-              });
-            }
-          });
-        }
-        if (this.sendData.selectedCollectibles.length > 0) {
-          this.sendData.selectedCollectibles.forEach(collectible => {
-            tokens.push({
-              unit: collectible.unit,
-              quantity: collectible.toSendQuantity.toString(),
-            });
-          });
-        }
-        const outputs = TransactionOutputs.new();
-        outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
-        const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-        this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-        try {
-          this.txBody = buildTx(this.sendData.selectedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], []);
-          this.sendData.minAda = 0
-          this.sendData.adaShortage = 0
-          this.txValid = true
-          this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
-        } catch (e) {
-          console.log(e)
-          throw e
-        }
-      },
-      nextStep() {
-        if (this.currentStep <= this.steps.length) {
-          if (this.currentStep === 1) {
-            this.currentStep++;
-          } else if (this.currentStep === 2) {
-            if (this.$refs['summary'] && typeof (this.$refs['summary'] as any).scanTx === 'function') {
-              (this.$refs['summary'] as any).scanTx(this.txData);
-            }
-            this.currentStep++;
-          } else if (this.currentStep === 3) {
-            this.signAndSubmitTx();
-          }
-        }
-      },
-      prevStep() {
-        if (this.currentStep > 1) {
-          this.currentStep--;
-        }
-      },
-      updateRecipientAddress(address) {
-        this.sendData.recipientAddress = address;
-      },
-      selectCollectible(collectible) {
-        if (this.sendData.selectedCollectibles[collectible.name]) {
-          this.$delete(this.sendData.selectedCollectibles, collectible.name);
-        } else {
-          this.$set(this.sendData.selectedCollectibles, collectible.name, collectible);
-        }
-      },
-      setMax(index) {
-        const sendTokensCopy = JSON.parse(JSON.stringify(this.sendData.selectedTokens));
-        const selectedToken = sendTokensCopy[index];
+const props = defineProps<{
+  isOpen: boolean;
+  recipientAddressProp: string;
+  isMultisig: boolean;
+}>();
 
-        if (selectedToken.decimals) {
-          selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
-        } else {
-          selectedToken.quantity = Number(selectedToken.balance);
-        }
-        this.tryBuildMaxTx(sendTokensCopy, index);
-      },
-      tryBuildMaxTx(tokens, index) {
-        try {
-          this.buildTx(tokens)
-        } catch (e) {
-          if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-            const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-            const maxBalance = Number(match[2]) - Number(match[3])
-            this.sendData.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-          } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-            const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
-            console.log(match)
-            const adaMinBalance = match[2]
-            const nativeToken = this.sendData.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network))
-            if (nativeToken) {
-              nativeToken.quantity = `${Number(filters.toCurrency(Number(adaMinBalance), false, 6, '', '', false, 6).replaceAll(",", ""))}`
-              this.sendData.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
-            }
-          } else {
-            console.log(e)
-          }
-        }
-      },
-      resetData() {
-        this.show1 = false
-        this.keystoneScan = false
-        this.isInit = false
-        this.overlay = false
-        this.spendingPassword = ''
-        this.currentStep = 1;
-        this.txSubmitLoading = false
-        this.txBody = undefined
-        this.txData = undefined
-        const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network)
-        const foundAsset = this.tokens.find(token => token.ticker === currencyTicker)
-        if (foundAsset) {
-          foundAsset.verified = true;
-        }
-        this.sendData = {
-          selectedTokens: foundAsset ? [foundAsset] : [],
-          selectedCollectibles: [],
-          recipientAddress: this.recipientAddressProp,
-          selectedWallet: this.multiSigWallet,
-          minAda: 0,
-          adaShortage: 0,
-          senderWallet: this.multiSigWallet as any,
-          availableWallets: this.multiSigWallets,
-        };
-        console.log("resetData sendData::", this.sendData);
-      },
-    },
-    mounted() {
-      if(this.isMultisig) {
-        this.sendData = { ...this.sendData, recipientAddress: this.recipientAddressProp};
-        this.nextStep();
+const emit = defineEmits<{
+  (e: 'close'): void;
+}>();
+
+const store = useStore();
+const { loggedWallet, baseAddress, latestTip, pinnedTokens } = storeToRefs(store);
+const multiSigStore = multisigStore();
+const walletConfig = walletConfigStore();
+
+const multiSigWallet = computed(() => multiSigStore.multiSigWallet);
+const multiSigWallets = computed(() => multiSigStore.multiSigWallets);
+const resolvedAssets = computed(() => multiSigStore.resolvedAssets);
+const utxos = computed(() => walletConfig.utxos);
+const addresses = computed(() => walletConfig.addresses);
+
+const currentStep = ref(1);
+const tooltip = ref<Tooltip>({
+  enabled: false,
+  text: 'Wrong Spending Password!',
+});
+const txBody = ref<any>(undefined);
+const txData = ref<any>(undefined);
+const txSubmitLoading = ref(false);
+const spendingPassword = ref('');
+const show1 = ref(false);
+const txValid = ref(false);
+const isBT = ref(false);
+const overlay = ref(false);
+const type = ref<any>(undefined);
+const cbor = ref<any>(undefined);
+const keystoneScan = ref(false);
+const isInit = ref(false);
+const qrCode = ref<any>(null);
+
+const steps: Step[] = [
+  {
+    name: 'recipientDetails',
+    label: 'Recipient Details',
+  },
+  {
+    name: 'assetsToSend',
+    label: 'Assets to Send',
+  },
+  {
+    name: 'summary',
+    label: 'Summary',
+  },
+];
+
+const sendData = ref<SendData>({
+  selectedTokens: [],
+  selectedCollectibles: [],
+  recipientAddress: '',
+  selectedWallet: {},
+  minAda: 0,
+  adaShortage: 0,
+  senderWallet: '',
+  availableWallets: [],
+  isMultisigFunding: false,
+});
+
+const tokens = computed(() => {
+  if (resolvedAssets.value) {
+    const tokens = resolvedAssets.value.map(token => ({
+      ...token,
+      name: token.metadata.name,
+      ticker: token.metadata.ticker,
+      img: token.img,
+      quantity: "0",
+      balance: token.quantity,
+      decimals: token.metadata.decimals,
+      unit: token.unit
+    }));
+    
+    tokens.sort((a, b) => {
+      if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+        return -1;
       }
-      if (this.resolvedAssets) {
-        const nativeTicker = networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
-        const adaAssetFound = this.resolvedAssets.find(asset => asset.metadata.ticker === nativeTicker);
-        if (adaAssetFound) {
-          this.sendData.selectedTokens = [adaAssetFound];
-        }
+      return (pinnedTokens.value.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker);
+    });
+    
+    return tokens;
+  }
+  return [];
+});
+
+const isValid = computed(() => {
+  if (currentStep.value === 1) {
+    return rules.paymentAddress(loggedWallet.value?.network !== Network.MAINNET)(sendData.value.recipientAddress);
+  }
+  if (currentStep.value === 2) {
+    if (!txValid.value) {
+      return false;
+    }
+    const hasZeroQuantity = (items: any[]) => {
+      if (!Array.isArray(items)) return false;
+      return items.some(item => Number(item.quantity) === 0);
+    };
+    return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles as any[]));
+  }
+  if (currentStep.value === 3) {
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      return Boolean(spendingPassword.value);
+    }
+    return true;
+  }
+  return false;
+});
+
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    resetData();
+  }
+});
+
+watch(sendData, (val, oldVal) => {
+  try {
+    if (!val.recipientAddress) {
+      return;
+    }
+    buildTx(sendData.value.selectedTokens);
+    txValid.value = true;
+  } catch(e) {
+    console.error(e);
+    if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
+      const match = e.match(/minimum UTXO value (\d+)/);
+      const number = match ? parseInt(match[1], 10) : null;
+      sendData.value.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
+    } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      const number = parseInt(match[2], 10) - parseInt(match[1], 10);
+      sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
+    }
+    txValid.value = false;
+  }
+}, { deep: true });
+
+const backScan = () => {
+  if (keystoneScan.value) {
+    keystoneScan.value = false;
+    isInit.value = false;
+  } else {
+    overlay.value = false;
+  }
+};
+
+const onDecode = async (result: string) => {
+  console.log(result);
+  const signature = parseSignature(result);
+  const signedTx = Transaction.new(
+    txBody.value,
+    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+    undefined
+  );
+  console.log(signedTx.to_json());
+  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  console.log(txId);
+  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+  emit('close');
+};
+
+const onInit = (promise: Promise<void>) => {
+  promise.then(() => {
+    isInit.value = true;
+    console.log("Camera initialized successfully");
+  }).catch((error) => {
+    console.error("Camera initialization failed:", error);
+  });
+};
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+};
+
+const signAndSubmitTx = async () => {
+  const signAndReturnTx = async () => {
+    txSubmitLoading.value = true;
+    try {
+      const txCbor = txData.value.to_hex();
+      const partialSign = false;
+      const response = await appWallet.signTx(
+        txCbor,
+        partialSign,
+        spendingPassword.value,
+        0,
+        utxos.value,
+        addresses.value,
+        !isBT.value
+      );
+      const signedTx = Transaction.new(
+        txBody.value,
+        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
+        undefined
+      );
+      console.log(signedTx.to_json());
+      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      console.log(txId);
+      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+      emit('close');
+    } catch (e) {
+      snackbar.setError(e.toString());
+      console.error(e);
+    }
+    txSubmitLoading.value = false;
+  };
+
+  if (appWallet?.type === WalletType.Normal) {
+    if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+      await signAndReturnTx();
+    } else {
+      enableToolTip();
+    }
+  } else if (appWallet?.type === WalletType.Keystone) {
+    if (qrCode.value) {
+      qrCode.value = null;
+      if (document.getElementById('qrCode')) {
+        document.getElementById('qrCode')!.innerHTML = '';
       }
     }
 
-  });
-  </script>
+    const ur = createKeystoneSignRequest(txData.value, loggedWallet.value, utxos.value, addresses.value);
+    type.value = ur.type;
+    cbor.value = Buffer.from(ur.cbor).toString('hex');
+    qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
+    console.log('');
+    overlay.value = true;
+    qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
+    Vue.nextTick(() => {
+      qrCode.value.append(document.getElementById('qrCode'));
+    });
+    console.log('qrCode');
+  } else {
+    await signAndReturnTx();
+  }
+};
 
-  <style scoped>
-  .titles {
-    align-items: center;
-    text-align: center;
+const buildTx = (sendTokens: Token[]) => {
+  const recipientAddress = sendData.value.recipientAddress;
+  const tokens = [];
+  if (sendTokens.length > 0) {
+    sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals).forEach(token => {
+      if (token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)) {
+        tokens.push({
+          unit: 'lovelace',
+          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+        });
+      } else {
+        tokens.push({
+          unit: token.unit,
+          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+        });
+      }
+    });
+  }
+  if (sendData.value.selectedCollectibles.length > 0) {
+    sendData.value.selectedCollectibles.forEach(collectible => {
+      tokens.push({
+        unit: collectible.unit,
+        quantity: collectible.toSendQuantity.toString(),
+      });
+    });
+  }
+  const outputs = TransactionOutputs.new();
+  outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
+  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+  try {
+    txBody.value = buildTransaction(sendData.value.selectedWallet, outputs, transactionUnspentOutputs, latestTip.value.slot, baseAddress.value, [], []);
+    sendData.value.minAda = 0;
+    sendData.value.adaShortage = 0;
+    txValid.value = true;
+    txData.value = Transaction.new(txBody.value, TransactionWitnessSet.new());
+  } catch (e) {
+    console.log(e);
+    throw e;
+  }
+};
+
+const nextStep = () => {
+  if (currentStep.value <= steps.length) {
+    if (currentStep.value === 1) {
+      currentStep.value++;
+    } else if (currentStep.value === 2) {
+      const summaryRef = document.querySelector('#summary') as any;
+      if (summaryRef && typeof summaryRef.scanTx === 'function') {
+        summaryRef.scanTx(txData.value);
+      }
+      currentStep.value++;
+    } else if (currentStep.value === 3) {
+      signAndSubmitTx();
+    }
+  }
+};
+
+const prevStep = () => {
+  if (currentStep.value > 1) {
+    currentStep.value--;
+  }
+};
+
+const updateRecipientAddress = (address: string) => {
+  sendData.value.recipientAddress = address;
+};
+
+const selectCollectible = (collectible: any) => {
+  if (sendData.value.selectedCollectibles[collectible.name]) {
+    delete sendData.value.selectedCollectibles[collectible.name];
+  } else {
+    sendData.value.selectedCollectibles[collectible.name] = collectible;
+  }
+};
+
+const setMax = (index: number) => {
+  const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
+  const selectedToken = sendTokensCopy[index];
+
+  if (selectedToken.decimals) {
+    selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
+  } else {
+    selectedToken.quantity = Number(selectedToken.balance);
+  }
+  tryBuildMaxTx(sendTokensCopy, index);
+};
+
+const tryBuildMaxTx = (tokens: Token[], index: number) => {
+  try {
+    buildTx(tokens);
+  } catch (e) {
+    if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      const maxBalance = Number(match[2]) - Number(match[3]);
+      sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`;
+    } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
+      const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
+      console.log(match);
+      const adaMinBalance = match[2];
+      const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network));
+      if (nativeToken) {
+        nativeToken.quantity = `${Number(filters.toCurrency(Number(adaMinBalance), false, 6, '', '', false, 6).replaceAll(",", ""))}`;
+        sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`;
+      }
+    } else {
+      console.log(e);
+    }
+  }
+};
+
+const resetData = () => {
+  show1.value = false;
+  keystoneScan.value = false;
+  isInit.value = false;
+  overlay.value = false;
+  spendingPassword.value = '';
+  currentStep.value = 1;
+  txSubmitLoading.value = false;
+  txBody.value = undefined;
+  txData.value = undefined;
+  const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
+  const foundAsset = tokens.value.find(token => token.ticker === currencyTicker);
+  if (foundAsset) {
+    foundAsset.verified = true;
+  }
+  sendData.value = {
+    isMultisigFunding: false,
+    selectedTokens: foundAsset ? [foundAsset] : [],
+    selectedCollectibles: [],
+    recipientAddress: props.recipientAddressProp,
+    selectedWallet: multiSigWallet.value,
+    minAda: 0,
+    adaShortage: 0,
+    senderWallet: multiSigWallet.value as any,
+    availableWallets: multiSigWallets.value,
+  };
+  console.log("resetData sendData::", sendData.value);
+};
+
+onMounted(() => {
+  if(props.isMultisig) {
+    sendData.value = { ...sendData.value, recipientAddress: props.recipientAddressProp};
+    nextStep();
+  }
+  if (resolvedAssets.value) {
+    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
+    const adaAssetFound = resolvedAssets.value.find(asset => asset.metadata.ticker === nativeTicker);
+    if (adaAssetFound) {
+      sendData.value.selectedTokens = [adaAssetFound];
+    }
+  }
+});
+</script>
+
+<style scoped>
+.titles {
+  align-items: center;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.arrow-left {
+  cursor: pointer;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+
+.continue-button {
+  background: linear-gradient(to right, #00c7f3, #00fad5);
+  color: black;
+
+  &:disabled {
+    opacity: 0.5;
+    color: black !important;
+  }
+}
+
+.stepper-container {
+  background-color: transparent;
+
+  & .v-stepper__header {
+    box-shadow: none;
+  }
+
+  .custom-step {
     display: flex;
     flex-direction: column;
-  }
+    align-items: center;
+    position: relative;
+    padding: 5px;
+    width: 150px;
 
-  .arrow-left {
-    cursor: pointer;
-    position: absolute;
-    top: 10px;
-    left: 10px;
-  }
-
-  .continue-button {
-    background: linear-gradient(to right, #00c7f3, #00fad5);
-    color: black;
-
-    &:disabled {
-      opacity: 0.5;
-      color: black !important;
+    &.active .icon-container {
+      box-shadow: 0 0 0 5px #00dff327;
     }
 
-  }
-  .stepper-container {
-    background-color: transparent;
-
-    & .v-stepper__header {
-      box-shadow: none;
-    }
-
-    .custom-step {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      position: relative;
-      padding: 5px;
-      width: 150px;
-
-      &.active .icon-container {
-        box-shadow: 0 0 0 5px #00dff327;
-      }
-
-      &.next .icon-container {
-        background-color: #292929;
-      }
-
-      .icon-container {
-        background-color: #00dff3;
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 24px;
-        width: 24px;
-        padding-left: 1px;
-      }
-    }
-
-    .step-label {
-      margin-top: 10px;
-      font-size: 14px;
-      line-height: 20px;
-      text-align: center;
-      font-weight: 600;
-      color: #CECFD2;
-    }
-
-    .divider {
-      flex: 1;
-      height: 2px;
-      width: 100%;
-      margin-left: -75px;
-      margin-right: -75px;
-      margin-top: 16px;
+    &.next .icon-container {
       background-color: #292929;
+    }
 
-      &.active-divider {
-        background-color: #00dff3;
-      }
+    .icon-container {
+      background-color: #00dff3;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 24px;
+      width: 24px;
+      padding-left: 1px;
     }
   }
-  .v-stepper__content {
-    padding: 0;
+
+  .step-label {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    font-weight: 600;
+    color: #CECFD2;
   }
-  </style>
+
+  .divider {
+    flex: 1;
+    height: 2px;
+    width: 100%;
+    margin-left: -75px;
+    margin-right: -75px;
+    margin-top: 16px;
+    background-color: #292929;
+
+    &.active-divider {
+      background-color: #00dff3;
+    }
+  }
+}
+
+.v-stepper__content {
+  padding: 0;
+}
+</style>
