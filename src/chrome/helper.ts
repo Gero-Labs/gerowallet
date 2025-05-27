@@ -1,9 +1,12 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
-import { toPaymentCredential, toStakeCredential } from '@/chrome/serialization';
+import {
+  toPaymentCredential,
+  toStakeCredential
+} from '@/chrome/serialization';
 
 export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], networkId: number): any {
-  const tx: Cardano.Tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor)).toCore();
+  const tx: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
   const inputs: any[] = [];
   tx.body.inputs.forEach((input: Cardano.TxIn) => {
     const utxo = utxos.find(utxo => utxo.tx_hash === input.txId && utxo.tx_index === input.index)

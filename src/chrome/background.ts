@@ -617,10 +617,10 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       const txCbor = request.data.tx
       const txId = await response.text();
       if (txId) {
-        // const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
-        // if (wallet) {
-        //   await wallet.setAccountTransactions(loggedWallet.id, [tx])
-        // }
+        const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
+        if (wallet) {
+          await wallet.setAccountTransactions([tx])
+        }
       }
       sendResponse({
         id: request.id,
