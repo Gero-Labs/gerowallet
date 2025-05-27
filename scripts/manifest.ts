@@ -67,6 +67,7 @@ async function getManifest() {
       }
       : {
         service_worker: './background/_virtual_index.js',
+        type: 'module'
       },
     permissions: [
       'tabs',
