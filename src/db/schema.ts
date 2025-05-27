@@ -11,3 +11,13 @@ export const walletDBSchema = {
   connected_dapps: '++id, domain, time',
   multisig: 'id',
 }
+
+export const blockChainDBVersion: number = 2;
+
+export const blockChainDBSchema = {
+  pools: 'pool_id_bech32',
+  dreps: 'drep_id',
+  sync: '++id, time',
+  assets: 'asset, fingerprint, asset_name, policy_id',
+  // protocol_params: 'epoch'
+}

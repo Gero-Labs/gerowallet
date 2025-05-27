@@ -45,7 +45,13 @@
           ></StackedTokens>
         </template>
         <template v-slot:[`item.amount`]="{ item }">
-          <span :style="{ color: getColor(item) }" v-if="loggedWallet">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}</span>
+          <v-list-item class="px-0" v-if="loggedWallet">
+            <v-list-item-content>
+              <v-list-item-title :style="{ color: getColor(item) }">{{ item.ada | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}</v-list-item-title>
+              <v-list-item-subtitle>{{ item.ada * price.lastPrice | toCurrency(true, 0, '$', '', false, 6) }}</v-list-item-subtitle>
+            </v-list-item-content>
+          </v-list-item>
+          <span :style="{ color: getColor(item) }" v-if="loggedWallet"></span>
         </template>
       </v-data-table>
     </v-card-text>
@@ -75,7 +81,7 @@ export default defineComponent({
     networks() {
       return networks
     },
-    ...mapState(useStore, ['calculatedTransactions','loadingTxs', 'pools', 'loggedWallet']),
+    ...mapState(useStore, ['calculatedTransactions','loadingTxs', 'pools', 'loggedWallet', 'price']),
     lastTenTransactions() {
       if (this.calculatedTransactions) {
         return this.calculatedTransactions//.slice(this.calculatedTransactions.length-10,this.calculatedTransactions.length)

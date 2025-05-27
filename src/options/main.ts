@@ -11,8 +11,10 @@ import vuetify from '../plugins/vuetify';
 import VueQrcodeReader from 'vue-qrcode-reader'
 import router from '../modules/navigation/router';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
+import { ClickOutside } from 'vuetify/lib/directives';
 
 import App from './App.vue';
+import { useStore } from '@/stores';
 
 Vue.config.productionTip = false;
 Vue.use(FlagIcon);
@@ -30,6 +32,7 @@ const pinia: Pinia = createPinia();
 pinia.use(piniaPluginPersistedstate);
 
 Vue.use(VueRouter);
+Vue.directive('click-outside', ClickOutside);
 
 new Vue({
   vuetify,
@@ -37,4 +40,13 @@ new Vue({
   pinia,
   router,
   render: h => h(App),
+  async created() {
+    const store = useStore();
+    // 1) make sure Dexie has opened
+    //    (db.open() is already called in your db module)
+    // 2) do an initial load
+    await store.loadWallets();
+    // 3) then start the liveQuery
+    await store.subscribeWallets();
+  },
 }).$mount('#app');

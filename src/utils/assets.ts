@@ -195,23 +195,33 @@ export default {
   buyAda,
   sellAda,
   resolveIcon(icon: string): string {
-    if (icon.startsWith('http')) {
+    if (!icon) {
+      return errorImage;
+    }
+
+    if (icon.startsWith('http') || icon.startsWith('data:')) {
       return icon;
     }
-    if (icon === 'green' || icon === 'teal') {
-      return greenSvg
-    } else if (icon === 'purple' || icon === 'deep-purple') {
-      return purpleSvg
-    } else if (icon === 'pink') {
-      return pinkSvg
-    } else if (icon === 'orange' || icon === 'chocolate') {
-      return orangeSvg
-    } else if (icon === 'blue' || icon === 'cyan') {
-      return blueSvg
-    } else if (icon === 'grey') {
-      return greySvg
-    } else {
-      return errorImage
+
+    switch (icon) {
+      case 'green':
+      case 'teal':
+        return greenSvg;
+      case 'purple':
+      case 'deep-purple':
+        return purpleSvg;
+      case 'pink':
+        return pinkSvg;
+      case 'orange':
+      case 'chocolate':
+        return orangeSvg;
+      case 'blue':
+      case 'cyan':
+        return blueSvg;
+      case 'grey':
+        return greySvg;
+      default:
+        return errorImage;
     }
   },
   resolveRisk(risk: string): string {

@@ -62,7 +62,7 @@
             dense
             color="primary"
             v-model="newWallet.confirmPassword"
-            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Password must match']"
+            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
             :type="show2 ? 'text' : 'password'"
             label="Confirm Password"
             required
@@ -115,11 +115,10 @@ import { Theme, WalletType } from '@/models/types';
 import { useStore } from '@/stores';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import { storeToRefs } from 'pinia';
 import db from '@/db';
 
 const store = useStore();
-const { network } = storeToRefs(store);
+console.log(store);
 
 interface NewWallet {
   name: string;
