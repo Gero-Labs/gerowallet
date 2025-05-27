@@ -10,6 +10,7 @@
   >
     <v-card-title class="px-2 py-0">
       <v-tabs
+        fixed-tabs
         v-model="tab"
         color="white"
         class="v-tabs-border-bottom mb-0"
@@ -45,6 +46,7 @@
         <CollateralTab />
         <ContactsTab />
         <ConnectedDappsTab />
+        <SecurityTab />
         <AdvancedSettingsTab @loading="loadingChange" />
       </v-tabs-items>
     </v-card-text>
@@ -54,12 +56,12 @@
 import { ref, computed } from 'vue'
 import BaseDialog             from '@/shared/dialogs/BaseDialog.vue'
 import ContactsTab            from '@/modules/dashboard/components/ContactsTab.vue'
-// import PasswordTab           from '@/modules/dashboard/components/PasswordTab.vue'
 import CollateralTab          from '@/modules/dashboard/components/CollateralTab.vue'
 import ProfileTab             from '@/modules/dashboard/components/ProfileTab.vue'
 import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDappsTab.vue'
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
 import { walletConfigStore }  from '@/stores/modules/walletConfig'
+import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
 
 // Props & Emitting
 const props = defineProps<{ isOpen: boolean }>()
@@ -85,12 +87,13 @@ const loading = ref(false)
 
 // Build your tabs array, injecting the dynamic badge
 const tabs = computed(() => [
-  { label: 'Profile',        value: 'profile' },
-  // { label: 'Password',     value: 'password' },
-  { label: 'Collateral',     value: 'collateral',     disabled: false },
-  { label: 'Contacts',       value: 'contacts',       disabled: false },
-  { label: 'Connected Dapps',value: 'connectedDapps', disabled: false },
-  { label: 'Advanced',       value: 'advanced',       disabled: false, badge: shouldBackup.value },
+  { label: 'Profile', value: 'profile' },
+  // { label: 'Password', value: 'password' },
+  { label: 'Collateral', value: 'collateral', disabled: false },
+  { label: 'Contacts', value: 'contacts', disabled: false },
+  { label: 'Dapps', value: 'connectedDapps', disabled: false },
+  { label: 'Security', value: 'security', disabled: false, badge: shouldBackup.value },
+  { label: 'Advanced', value: 'advanced', disabled: false },
 ])
 
 // Handle loading events from AdvancedSettingsTab

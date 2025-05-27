@@ -395,6 +395,7 @@ const decryptMnemonic = async (): Promise<void> => {
       [seedPhraseToConfirm.value, seedPhraseReplaced.value] = randomReplace(seedPhrase.value, 4);
       overlay.value = false
     } catch (e) {
+      snackbar.setError("Wrong Password")
       console.log(e) //TODO
     }
   }

@@ -444,7 +444,6 @@ export default {
   computed: {
     totalAllocation() {
       let totalAllocation = 0
-      console.log(this.resolvedAssets)
       if (this.resolvedAssets) {
         if (this.resolvedAssets.length === 1) {
           const token = this.resolvedAssets[0]

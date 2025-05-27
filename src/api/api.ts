@@ -22,6 +22,10 @@ export class Api {
     });
   }
 
+  async ablyToken(baseAddress: string) {
+    return await this.axiosInstance.get(`/api/ably/token?chain=${this.chain}&network=${this.network}&baseAddress=${baseAddress}`);
+  }
+
   async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.post(
@@ -348,6 +352,9 @@ export class Api {
   }
 
   async assetRisk(fingerprint: string): Promise<any> {
+    if (fingerprint === 'asset12ffdj8kk2w485sr7a5ekmjjdyecz8ps2cm5zed') {
+      throw new Error('Asset not found')
+    }
     const { data, status } = await this.axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
     if (status === 200) return data;
     return parseHttpError(data);
