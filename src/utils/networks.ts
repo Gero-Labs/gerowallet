@@ -75,26 +75,9 @@ export default {
       buySupport: false,
       zkFoldSupport: false,
       networkParams: {
-
+        networkMagic: 1
       }
     },
-    // {
-    //   icon: require('@/assets/svg/cardano.svg'),
-    //   title: 'Cardano Preview',
-    //   blockchain: Blockchain.CARDANO,
-    //   network: Network.PREVIEW,
-    //   supportedHardware: false,
-    //   networkId: 0,
-    //   currencySymbol: 't₳',
-    //   currencyTicker: 'tADA',
-    //   currencyName: 'Cardano',
-    //   currencyDescription: 'Cardano Native Token',
-    //   currencyImage: cardanoLogo,
-    //   defaultProvider: Provider.KOIOS,
-    //   cashbackSupport: false,
-    //   swapSupport: false,
-    //   buySupport: false,
-    // },
     {
       icon: apexIcon,
       title: 'Apex Prime Mainnet',
@@ -128,6 +111,9 @@ export default {
       swapSupport: false,
       buySupport: false,
       zkFoldSupport: false,
+      networkParams: {
+        networkMagic: 764824073
+      }
     },
     {
       icon: apexIcon,
@@ -149,6 +135,9 @@ export default {
       swapSupport: false,
       buySupport: false,
       zkFoldSupport: false,
+      networkParams: {
+        networkMagic: 1
+      }
     },
   ],
   resolveNetwork(chain: string, network: string) {
@@ -226,4 +215,7 @@ export default {
     }
     return this.resolveNetwork(chain, network)?.buySupport
   },
+  resolveNetworkMagic(chain: string, network: string): number {
+    return this.resolveNetwork(chain, network)?.networkParams?.networkMagic || 0;
+  }
 };

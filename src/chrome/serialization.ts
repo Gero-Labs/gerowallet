@@ -1,5 +1,5 @@
-import { Blockchain, ChainDerivations, Network, Paginate, UTxO } from '@/models/types';
-import { APIError, POPUP_WINDOW } from './config';
+import { Asset as AssetType, Blockchain, ChainDerivations, Network, Paginate, UTxO } from '@/models/types';
+import { APIError, DataSignError, POPUP_WINDOW, STORAGE } from './config';
 import networks from '@/utils/networks';
 import {
   Bip32PrivateKey,
@@ -9,13 +9,12 @@ import {
   Ed25519PrivateKey,
   Ed25519PublicKey,
   Hash28ByteBase16,
+  Hash32ByteBase16,
 } from '@cardano-sdk/crypto';
-import { Asset, Cardano, Serialization } from '@cardano-sdk/core';
-import { BigIntMath, HexBlob } from '@cardano-sdk/util';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { bech32 } from 'bech32';
 import { Buffer } from 'buffer';
-import { Asset as AssetType } from '@/models/types'
-import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -253,12 +252,34 @@ export function toStakeCredential(address: Cardano.Address): Cardano.Credential 
 }
 
 export function toPaymentCredential(address: Cardano.Address): Cardano.Credential {
-  const baseAddress = Cardano.BaseAddress.fromAddress(address)
-  if (baseAddress)
-    return baseAddress.getPaymentCredential();
-  const enterpriseAddress = Cardano.EnterpriseAddress.fromAddress(address)
-  if (enterpriseAddress)
-    return enterpriseAddress.getPaymentCredential();
+  try {
+    const baseAddress: Cardano.BaseAddress = Cardano.BaseAddress.fromAddress(address)
+    if (baseAddress)
+      return baseAddress.getPaymentCredential();
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const enterpriseAddress: Cardano.EnterpriseAddress = Cardano.EnterpriseAddress.fromAddress(address)
+    if (enterpriseAddress)
+      return enterpriseAddress.getPaymentCredential();
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const pointerAddress: Cardano.PointerAddress = Cardano.PointerAddress.fromAddress(address)
+    if (pointerAddress)
+      return pointerAddress.getPaymentCredential();
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const rewardAddress: Cardano.RewardAddress = Cardano.RewardAddress.fromAddress(address)
+    if (rewardAddress)
+      return rewardAddress.getPaymentCredential();
+  } catch (e) {
+    // ignore
+  }
   return undefined;
 }
 
@@ -445,7 +466,17 @@ export function getBalance(utxos: any[], collateral: any): Serialization.Value {
 }
 
 export function coalesceValueQuantities(quantities: Serialization.Value[]): Serialization.Value {
-  return new Serialization.Value(BigIntMath.sum(quantities.map(({ coin }) => coin())), Asset.util.coalesceTokenMaps(quantities.map(({ multiasset }) => multiasset())));
+  const value: Serialization.Value = new Serialization.Value(BigInt(0), new Map<Cardano.AssetId, bigint>());
+  quantities.forEach((val: Serialization.Value) => {
+    value.setCoin(value.coin() + val.coin());
+    const tokenMap = value.multiasset();
+    val.multiasset()?.forEach((quantity, assetId) => {
+      const current = tokenMap.get(assetId) ?? BigInt(0);
+      tokenMap.set(assetId, current + quantity);
+    })
+    value.setMultiasset(tokenMap);
+  })
+  return value;
 }
 
 export function getRewardAddress(xpub: string, chain: string, network: string): Cardano.Address {
@@ -708,3 +739,41 @@ export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
     }
   ]);
 }
+
+/**
+ * Detect a type of hex encoded addr and convert to PaymentAddress or RewardAddress.
+ *
+ * @param addr when hex encoded, it can be a PaymentAddress, RewardAddress or DRepKeyHash
+ * @returns PaymentAddress | RewardAddress DRepKeyHash is converted to a type 6 address
+ */
+export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAccount | string): Cardano.PaymentAddress | Cardano.RewardAccount {
+  try {
+    return Cardano.isRewardAccount(addr) ? Cardano.RewardAccount(addr) : Cardano.PaymentAddress(addr);
+  } catch {
+    // Try to parse as drep key hash
+    const drepKeyHash = Ed25519KeyHashHex(addr);
+    const drepId = Cardano.DRepID.cip129FromCredential({
+      hash: Hash28ByteBase16.fromEd25519KeyHashHex(drepKeyHash),
+      type: Cardano.CredentialType.KeyHash
+    });
+    const drepAddr: Cardano.Address = Cardano.DRepID.toAddress(drepId)?.toAddress();
+    if (!drepAddr) {
+      throw DataSignError.AddressNotPK;
+    }
+    return drepAddr.toBech32();
+  }
+}
+
+export const getStorage = (key) =>
+  new Promise<any>((res, rej) =>
+    chrome.storage.local.get(key, (result) => {
+      if (chrome.runtime.lastError) rej(undefined);
+      res(key ? result[key] : result);
+    }),
+  );
+
+export const getNetwork = async (): Promise<any> => {
+  const loggedWallet = await getStorage(STORAGE.loggedWallet)
+  return loggedWallet['network'].toLowerCase();
+};
+

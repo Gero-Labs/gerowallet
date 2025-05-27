@@ -6,6 +6,8 @@ import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/typ
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
 import { encrypt } from '@/shared/utils/crypto';
 import * as bip39 from 'bip39';
+import * as Crypto from '@cardano-sdk/crypto'
+import { bech32 } from 'bech32';
 
 const db: Dexie = new Dexie('GeroWalletDatabase');
 const blockChainDBVersion: number = 2;
@@ -141,12 +143,10 @@ export default {
     const rootKey = Wallet.resolvePrivateKey(mnemonic);
     const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, password);
     const accountIndex = 0;
-    const publicKey = rootKey
-      .derive(WalletTypePurpose.CIP1852)
-      .derive(CoinTypes.CARDANO)
-      .derive(HARDENED + accountIndex)
-      .to_public()
-      .to_bech32();
+    const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
+    const xpubHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
+    const words = bech32.toWords(Buffer.from(xpubHex, 'hex'));
+    const publicKey = bech32.encode('xpub', words);
     const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
       new Date(), chain, network, null, encryptedMnemonic);
     const walletId = await db['wallets'].add({
@@ -282,5 +282,20 @@ export default {
   setWalletDBVersionSchema(db: Dexie) {
     console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
+  },
+  setWalletName(walletId: number, name: string) {
+    db['wallets'].update(walletId, { name: name });
+  },
+  setWalletIcon(walletId: number, icon: string) {
+    db['wallets'].update(walletId, { icon: icon });
+  },
+  updatePrivateKeyAndMnemonic(walletId: number, encryptedPrivateKey: string, encryptedMnemonic: string) {
+    if (encryptedPrivateKey && encryptedMnemonic) {
+      db['wallets'].update(walletId, { encryptedPrivateKey: encryptedPrivateKey, encryptedMnemonic: encryptedMnemonic });
+    } else if (encryptedPrivateKey) {
+      db['wallets'].update(walletId, { encryptedPrivateKey: encryptedPrivateKey });
+    } else if (encryptedMnemonic) {
+      db['wallets'].update(walletId, { encryptedMnemonic: encryptedMnemonic });
+    }
   }
 };

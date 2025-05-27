@@ -139,6 +139,7 @@ export default {
       }
     },
     async init() {
+      console.log('init')
       const request = await this.controller.requestData();
       if (request?.data?.payload) {
         this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')

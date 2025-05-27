@@ -83,7 +83,7 @@
                   <v-list-item-content class="my-0" style="padding:0 !important; display: flow;">
                     <v-list-item-title class="ma-0" style="font-size: 12px;">
                       {{ loggedWallet?.network }}
-                      <v-btn x-small icon class="mx-0" :loading="loadingPlugin.isSyncing" disabled>
+                      <v-btn x-small icon class="mx-0" :loading="isSyncing" disabled>
                         <v-avatar size="20">
                           <v-icon x-small>mdi-sync</v-icon>
                         </v-avatar>
@@ -272,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, toRefs } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
@@ -286,7 +286,8 @@ import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
-import loadingPlugin from '@/plugins/loading'
+import { loadingState } from '@/plugins/loading'
+import Loading from '@/plugins/loading';
 import changeLogPlugin from '@/plugins/changeLog'
 import timePlugin from '@/plugins/time'
 
@@ -300,13 +301,15 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentPage = computed(() => vmProxy.$route)
 
+const { isSyncing } = toRefs(loadingState);
+
 // Pinia stores
 const store = useStore()
 const music = musicStore()
 const walletConfig = walletConfigStore()
 
 // Reactive UI state
-const drawer = ref(false)
+const drawer = ref<boolean>(false)
 const currentDialog     = ref<string|null>(null)
 const dialogs           = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
@@ -362,7 +365,7 @@ onMounted(async () => {
       console.error(err)
     }
   }
-  loadingPlugin.setLoading(false)
+  Loading.setLoading(false)
 })
 </script>
 

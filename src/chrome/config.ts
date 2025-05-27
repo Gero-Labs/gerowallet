@@ -33,7 +33,9 @@ export const METHOD = {
   getRegisteredPubStakeKeys: 'getRegisteredPubStakeKeys',
   getUnregisteredPubStakeKeys: 'getUnregisteredPubStakeKeys',
   // cip 104
-  getAccountPub: 'getAccountPub'
+  getAccountPub: 'getAccountPub',
+  // cip 142
+  getNetworkMagic: 'getNetworkMagic'
 };
 
 export const APIError = {

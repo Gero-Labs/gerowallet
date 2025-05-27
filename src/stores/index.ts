@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import loading from '@/plugins/loading';
 import db from '@/db';
-import { WalletType } from '@/models/types';
+import { ERROR, WalletType } from '@/models/types';
 import { Wallet } from '@/models/wallet';
 import Dexie, { liveQuery, Subscription } from 'dexie';
 import { STORAGE } from '@/chrome/config';
@@ -27,6 +27,12 @@ import { loadSync, subscribeSync } from '@/stores/loaders/syncLoader';
 import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
 import { loadAssets } from '@/stores/loaders/assetsLoader';
 import { loadConfig, subscribeConfig } from '@/stores/loaders/geroConfigLoader';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import * as CryptoTS from 'crypto-ts';
+import { Buffer } from 'buffer';
+import { Bip32PrivateKey } from '@emurgo/cardano-serialization-lib-browser';
+import { decrypt, encrypt } from '@/shared/utils/crypto';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
@@ -65,7 +71,6 @@ export const useStore = defineStore('store', {
     geroConfig: undefined,
     connected: false,
     intervals: {
-      syncIntervalId: null,
       fiatRatesIntervalId: null,
       tickerStatisticsIntervalId: null
     },
@@ -228,6 +233,68 @@ export const useStore = defineStore('store', {
     getPools: state => state.pools,
   },
   actions: {
+    async setWalletName(walletId: number, name: string) {
+      // 1) Persist the change in Dexie
+      await db.setWalletName(walletId, name);
+      // 2) immediately reload Pinia state
+      this.wallets = await db.getAllWallets();
+      // 3) keep loggedWallet in sync
+      if (this.loggedWallet?.id === walletId) {
+        const wallet = this.wallets.find(w => w.id === walletId)!;
+        if (!wallet) {
+          return
+        }
+        await this.setLoggedWallet(wallet)
+        appWallet.name = name;
+      }
+    },
+    async setWalletIcon(walletId: number, icon: string) {
+      // 1) Persist the change in Dexie
+      await db.setWalletIcon(walletId, icon);
+      // 2) immediately reload Pinia state
+      this.wallets = await db.getAllWallets();
+      // 3) keep loggedWallet in sync
+      if (this.loggedWallet?.id === walletId) {
+        const wallet = this.wallets.find(w => w.id === walletId)!;
+        if (!wallet) {
+          return
+        }
+        await this.setLoggedWallet(wallet)
+        appWallet.icon = icon;
+      }
+    },
+    async updateSpendingPassword(walletId: number, currentPassword: string, newPassword: string, _lockType: string) {
+      if (appWallet.type === WalletType.Normal && appWallet.id === walletId) {
+        try {
+          const bytes = CryptoTS.AES.decrypt(appWallet.encryptedPrivateKey, currentPassword);
+          const buffer: Buffer = appWallet.decryptWithPassword(currentPassword, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+          const rootKey = Bip32PrivateKey.from_bytes(buffer);
+          const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, newPassword);
+          let encryptedMnemonic = null;
+          if (appWallet.encryptedMnemonic) {
+            const decryptedMnemonic = decrypt(appWallet.encryptedMnemonic, currentPassword)
+            encryptedMnemonic = encrypt(decryptedMnemonic, newPassword)
+          }
+          await db.updatePrivateKeyAndMnemonic(walletId, encryptedPrivateKey, encryptedMnemonic);
+          // 2) immediately reload Pinia state
+          this.wallets = await db.getAllWallets();
+          // 3) keep loggedWallet in sync
+          if (this.loggedWallet?.id === walletId) {
+            const wallet = this.wallets.find(w => w.id === walletId)!;
+            if (!wallet) {
+              return
+            }
+            await this.setLoggedWallet(wallet)
+            appWallet.encryptedPrivateKey = encryptedPrivateKey;
+            if (encryptedMnemonic) {
+              appWallet.encryptedMnemonic = encryptedMnemonic;
+            }
+          }
+        } catch (e) {
+          throw ERROR.wrongPassword;
+        }
+      }
+    },
     async setLogin(walletId: number) {
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
@@ -255,9 +322,6 @@ export const useStore = defineStore('store', {
           });
         });
       });
-    },
-    setConnected(connected: boolean) {
-      this.connected = connected
     },
     setLoadingTxs(value) {
       this.loadingTxs = value
@@ -289,7 +353,6 @@ export const useStore = defineStore('store', {
         return new Promise((resolve, reject) => reject())
       }
       // Resolve assets
-      console.log('assets:', assets)
       const assetArray = Object.values(assets);
       const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id']+asset['asset_name']) in this.assets)).map(asset => (asset['policy_id']+asset['asset_name']))
       await appWallet.syncAssets(unresolvedAssets, true)
@@ -313,7 +376,6 @@ export const useStore = defineStore('store', {
           verified: true,
           onchain_metadata: null,
         });
-        console.log('ADA balance:', resolvedAssets)
       }
 
       // Filter and enrich assets with additional information
@@ -548,8 +610,8 @@ export const useStore = defineStore('store', {
     async login(walletId: number): Promise<void> {
       console.log('login')
       loading.setLoading(true);
-      this.setLoadingTxs(true)
-      this.unsubscribeAll()
+      this.setLoadingTxs(true);
+      this.unsubscribeAll();
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
         await this.logout();
@@ -558,6 +620,10 @@ export const useStore = defineStore('store', {
         await router.push("/welcome");
         return;
       }
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      });
       await this.setLoggedWallet(wallet);
       try {
         this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
@@ -598,7 +664,6 @@ export const useStore = defineStore('store', {
     clearSyncIntervals() {
       appWallet.endSync();
       this.intervals = {
-        syncIntervalId: null,
         fiatRatesIntervalId: null,
         tickerStatisticsIntervalId: null,
       }
@@ -609,6 +674,10 @@ export const useStore = defineStore('store', {
       loading.setLoading(true);
       this.clearSyncIntervals();
       this.unsubscribeAll()
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGOUT,
+        data: { },
+      });
       await this.setLoggedWallet(undefined)
       if (chrome?.storage) {
         await chrome.storage.local.remove(STORAGE.whitelisted);
@@ -638,11 +707,6 @@ export const useStore = defineStore('store', {
       this.stakeAddress = undefined
       appWallet = undefined
       loading.setLoading(false);
-    },
-    async sync() {
-      if (!appWallet) {
-        await appWallet.sync()
-      }
     },
     setLocale(locale) {
       this.locale = locale;

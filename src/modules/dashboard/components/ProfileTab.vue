@@ -3,16 +3,23 @@
     <v-layout class="py-0" column>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3>Wallet Name</h3>
+          <h3 style="color: white">Wallet Name</h3>
           <span class="helper  my-0">Edit your wallet name</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
-          <v-text-field disabled outlined dense v-model="walletName" hide-details></v-text-field>
+          <EditableTextField
+            placeholder="e.g. My New Wallet"
+            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40), invalidWalletNames(), existedWalletName()]"
+            outlined
+            dense
+            v-model="walletName"
+            @onSave="setLoggedWalletName"
+          ></EditableTextField>
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3>Wallet Profile Picture</h3>
+          <h3 style="color: white">Wallet Profile Picture</h3>
           <span class="helper">Choose a profile picture for your wallet</span>
         </v-col>
         <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap;">
@@ -28,15 +35,22 @@
                 outlined
                 color="grey"
                 autocapitalize="on"
-                disabled
+                @click="uploadPicture"
               >
-                <span class="capitalize">Upload Picture</span>
+                <span>Upload Picture</span>
                 <v-icon
                   right
                   dark
                 > mdi-cloud-upload-outline
                 </v-icon>
               </v-btn>
+              <input
+                ref="fileInput"
+                type="file"
+                accept="image/*"
+                style="display: none"
+                @change="onFileChange"
+              />
             </v-col>
             <v-col cols="12" class="py-2">
               <v-btn
@@ -45,7 +59,7 @@
                 color="grey"
                 disabled
               >
-                <span class="capitalize">Choose NFT</span>
+                <span>Choose NFT</span>
                 <v-icon
                   right
                   dark
@@ -59,7 +73,7 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3>Currency Preference</h3>
+          <h3 style="color: white">Currency Preference</h3>
           <span class="helper">Choose your preferred currency</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
@@ -76,7 +90,7 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3>Display Language</h3>
+          <h3 style="color: white">Display Language</h3>
           <span class="helper">Set the language for Gero Dashboard</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
@@ -105,7 +119,7 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3>Region</h3>
+          <h3 style="color: white">Region</h3>
           <span class="helper">Choose region, affects dates & time</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
@@ -114,7 +128,7 @@
       </v-row>
       <v-row no-gutters class="pt-2">
         <v-col cols="7" class="text-left">
-          <h3>Welcome Guide</h3>
+          <h3 style="color: white">Welcome Guide</h3>
           <span class="helper">Display the introductory guide to help you navigate your wallet</span>
         </v-col>
         <v-col cols="5" style="align-content: center;">
@@ -124,7 +138,7 @@
             color="grey"
             @click="showGuide"
           >
-            <span class="capitalize">Show Guide</span>
+            <span>Show Guide</span>
           </v-btn>
         </v-col>
       </v-row>
@@ -136,11 +150,20 @@ import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/stores';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
+import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
+import rules from '@/utils/rules';
 
 export default {
   name: 'ProfileTab',
+  components: { EditableTextField },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'locale']),
+    rules() {
+      return rules
+    },
+    ...mapState(useStore, ['loggedWallet', 'locale', 'wallets']),
+    otherWalletNames() {
+      return this.wallets.filter(wallet => wallet.name !== this.loggedWallet.name).map(wallet => wallet.name)
+    },
     avatar() {
       if (this.loggedWallet.icon.includes('http')) {
         return this.loggedWallet.icon;
@@ -159,22 +182,45 @@ export default {
     },
   },
   methods: {
-    ...mapActions(useStore, ['setLocale', 'setWelcomeDone']),
+    ...mapActions(useStore, ['setLocale', 'setWelcomeDone', 'setWalletName', 'setWalletIcon']),
+    invalidWalletNames() {
+      return (value) => !this.otherWalletNames.includes(value) || 'Wallet name already taken.';
+    },
+    existedWalletName() {
+      return (value) => value !== this.loggedWallet.name || '';
+    },
     showGuide() {
       this.$emit('close');
       this.setWelcomeDone(false);
-    }
+    },
+    setLoggedWalletName(walletName) {
+      this.setWalletName(this.loggedWallet.id, walletName);
+    },
+    uploadPicture() {
+      this.$refs.fileInput.click();
+    },
+    onFileChange(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        const picBase64 = e.target.result;
+        this.setWalletIcon(this.loggedWallet.id, picBase64);
+      };
+      reader.readAsDataURL(file);
+    },
   },
   data: () => ({
     languages,
     currencies: ['USD', 'AUD', 'CAD', 'EUR', 'GBP'],
     selectedCurrency: 'USD',
-    walletName: 'MyWalletName',
+    walletName: '',
     loc: undefined,
     assets,
   }),
   created() {
-    console.log(this.loggedWallet);
+    console.log(this.loggedWallet.name)
     this.walletName = this.loggedWallet.name;
     this.loc = this.languages[this.locale].name;
   }
@@ -199,9 +245,4 @@ h2 {
 .col-6 {
   padding: 0 !important;
 }
-
-.capitalize {
-  text-transform: capitalize !important;
-}
-
 </style>
