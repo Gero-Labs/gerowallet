@@ -4,6 +4,7 @@ import { isDev, r } from './scripts/utils';
 import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
+import wasm from 'vite-plugin-wasm';
 
 export default defineConfig({
   ...sharedConfig,
@@ -36,6 +37,7 @@ export default defineConfig({
         extend: true,
       },
       plugins: [
+        wasm(),
         rollupTla(),
         commonjs()
       ]

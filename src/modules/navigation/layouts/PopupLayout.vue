@@ -8,7 +8,7 @@
 <script>
 import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/stores';
-import loading from '@/plugins/loading';
+import LoadingState from '@/plugins/loading';
 
 export default {
   name: 'PopupLayout',
@@ -22,7 +22,7 @@ export default {
     if (this.loggedWallet?.id) {
       await this.simpleLogin(this.loggedWallet.id)
     }
-    loading.setLoading(false)
+    LoadingState.setLoading(false)
   }
 }
 </script>

@@ -12,13 +12,16 @@ export async function loadWallets(
 }
 
 export async function subscribeWallets(
-  store: { wallets: any[] },
+  store: { wallets: any[], loggedWallet: any },
   subscriptions: Map<string, Subscription>
 ) {
   if (!subscriptions.has('wallets')) {
     const sub: Subscription = liveQuery(() => db.getAllWallets()).subscribe({
       next: (wallets: any[]) => {
         store.wallets = wallets;
+        if (store.loggedWallet) {
+          store.loggedWallet = wallets.find(w => w.id === store.loggedWallet.id);
+        }
       },
       error: (error: any) => {
         console.error('Failed to get all Wallets:', error);

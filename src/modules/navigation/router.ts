@@ -193,7 +193,6 @@ const router = new VueRouter({
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   loading.setLoading(true);
   const store = useStore();
-  await store.subscribeWallets();
   const wallets: any[] = store.wallets;
   if (Array.isArray(wallets) && !wallets.length) {
     await store.loadWallets();
@@ -203,7 +202,6 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // this route requires auth, check if logged in
     // if not, redirect to login page.
     if (!isLoggedIn) {
-      console.log('to', to)
       const redirect = to.path != '/' ? to.path : null;
       let path = '/welcome'
       if (redirect) {

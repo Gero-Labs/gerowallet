@@ -18,6 +18,9 @@ export const sharedConfig: UserConfig = {
     alias: {
       '@/': `${r('src')}/`,
       buffer: 'buffer',
+      '@emurgo/cardano-serialization-lib-nodejs':
+        '@emurgo/cardano-serialization-lib-browser',
+      'lodash': 'lodash-es'
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
