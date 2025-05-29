@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :isOpen="isOpen" @close="closeDialog" :loading="loading" :min-height="0" title="New Multisig Wallet"
     scrollable subtitle="A multisig wallet requires multiple parties signatures to authorize any transaction.">
-    <v-fade-transition style="height: 40px;">
+    <v-fade-transition>
       <v-alert v-show="contactStatus.message" :type="contactStatus.type" class="text-left" dense prominient>
         {{ contactStatus.message }}
       </v-alert>
