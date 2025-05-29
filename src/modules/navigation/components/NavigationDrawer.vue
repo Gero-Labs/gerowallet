@@ -242,6 +242,7 @@ async function submitLogout() {
 
 // Lifecycle
 onMounted(() => {
+  // @ts-ignore
   version.value = APP_VERSION
 })
 </script>
