@@ -65,7 +65,7 @@ export const multisigStore = defineStore('multisigStore', {
     getMultiSigWallet: state => state.multiSigWallet,
     getMultiSigWallets: state => state.multiSigWallets,
     getWallet: state => {
-      if (!multisigAppWallet && state.multiSigWallet) {
+      if (!multisigAppWallet && state.multiSigWallet.id) {
         multisigAppWallet = Wallet.multisigClass(state.multiSigWallet, 1);
       }
       return multisigAppWallet;
@@ -220,7 +220,7 @@ export const multisigStore = defineStore('multisigStore', {
   actions: {
     async initAll() {
       multisigAppWallet = Wallet.multisigClass(this.getMultiSigWallet, 1);
-      this.setBaseAddress(this.getMultiSigWallet.id)
+      this.setBaseAddress(this.getMultiSigWallet.paymentAddress)
       this.setStakeAddress(this.getMultiSigWallet.stakeAddress)
       //governanceStore().setDRepId(appWallet.drepId())
       await multisigAppWallet.startSync();
