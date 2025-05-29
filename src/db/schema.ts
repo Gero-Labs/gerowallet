@@ -1,4 +1,4 @@
-export const walletDBVersion: number = 4;
+export const walletDBVersion: number = 5;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -9,7 +9,7 @@ export const walletDBSchema = {
   rewards: 'epoch, amount, pool_id, type',
   transactions: 'id',
   connected_dapps: '++id, domain, time',
-  multisig: 'id',
+  multisig: '++id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
 }
 
 export const blockChainDBVersion: number = 2;

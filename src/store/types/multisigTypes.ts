@@ -14,6 +14,7 @@ interface MultisigWalletInterface {
     requiredSigners?: number;
     signers?: Signer[];
     stakeAddress?: string;
+    paymentAddress?: string;
 }
 
 interface MultisigWalletState {
