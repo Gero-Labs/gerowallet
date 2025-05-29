@@ -1,4 +1,4 @@
-export const walletDBVersion: number = 41;
+export const walletDBVersion: number = 5;
 
 export const walletDBSchema = {
   config: 'key, value',
