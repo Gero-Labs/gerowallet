@@ -47,8 +47,8 @@ const filters = {
     }
     return src
   },
-  shortenStringWithEllipsis(str, maxLength) {
-    if (!str) {
+  shortenStringWithEllipsis(str: string, maxLength: number) {
+    if (!str || typeof str !== 'string') {
       return str
     }
     // Check if the string length is less than or equal to the maximum length

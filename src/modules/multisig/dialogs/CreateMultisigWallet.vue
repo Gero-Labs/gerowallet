@@ -31,8 +31,11 @@
             outlined
             dense
             v-model="multisigName"
+            :error="!!multisigError"
+            :error-messages="multisigError"
             :counter="40"
             :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
+            @keyup="checkMultisigName"
           />
         </v-col>
         <v-col cols="6">
@@ -173,6 +176,8 @@ const contactsHeaders = ref([
   { text: '', align: 'right', sortable: false, value: 'actions' }
 ]);
 
+const multisigError = ref('');
+
 const truncate = filters.truncate;
 
 const signersArray = computed(() => [2,3,4,5,6,7].filter(n => n <= signers.value.length));
@@ -203,6 +208,7 @@ function resetForm() {
 }
 
 function closeDialog() {
+  multisigError.value = '';
   emit('close');
   resetForm();
 }
@@ -230,6 +236,13 @@ function removeCont(item: any, signer: any) {
     walletConfig.removeContact(item.address);
     signer.menuOpen = false;
   }
+}
+
+const checkMultisigName = async () => {
+  multisigError.value = '';
+  const multisigTable = await appWallet.db.table('multisig');
+  const multisig = await multisigTable.get({ name: multisigName.value });
+  return multisig ? multisigError.value = 'A multisig wallet with this name already exists' : '';
 }
 
 async function createMultisigWallet() {
@@ -285,7 +298,13 @@ async function createMultisigWallet() {
 }
 
 function nextStep() {
-  createMultisigWallet().finally(() => closeDialog());
+  createMultisigWallet()
+  .catch(e => multisigError.value = e.message)
+  .then(() => {
+    if(multisigError.value === '') {
+      closeDialog();
+    }
+  });
 }
 </script>
 
