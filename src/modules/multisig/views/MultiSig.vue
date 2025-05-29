@@ -31,7 +31,7 @@
                       :label="!showMultisigWallets ? $t('multisig.noWalletsToManage') : (getMultiSigWallet ? '' : $t('multisig.selectMultisigToManage'))"
                       :disabled="!showMultisigWallets" v-model="getMultiSigWallet"
                       prepend-inner-icon="mdi-account-multiple-outline" :items="getMultiSigWallets" item-text="name"
-                      item-value="addressBech32" outlined hide-details @change="onSelectedWallet"></v-select>
+                      item-value="paymentAddress" outlined hide-details @change="onSelectedWallet"></v-select>
                   </v-col>
                   <v-col cols="auto">
                     <!-- <v-btn v-show="getMultiSigWallet" color="#CCC" outlined class="text-caption text-capitalize"
@@ -56,8 +56,8 @@
                 <v-row>
                   <v-col cols="12">
                     {{ 'Wallet Address: ' }}
-                    {{ filters.shortenStringWithEllipsis(getMultiSigWallet.id, 14) }}
-                    <CopyButton ref="copyAddress" x-small :value="getMultiSigWallet.id" v-if="getMultiSigWallet.id">
+                    {{ filters.shortenStringWithEllipsis(getMultiSigWallet.paymentAddress, 14) }}
+                    <CopyButton ref="copyAddress" x-small :value="getMultiSigWallet.paymentAddress" v-if="getMultiSigWallet.paymentAddress">
                     </CopyButton>
                   </v-col>
                 </v-row>
@@ -258,7 +258,7 @@ const initialLoad = async (): Promise<void> => {
         rootStore.loggedWallet.chain,
         rootStore.loggedWallet.network
       );
-      setSelectedAddress(multisigs[0].addressBech32 || '');
+      setSelectedAddress(multisigs[0].paymentAddress || '');
       await multisigStoreInstance.initAll();
     }
   } catch (error) {
@@ -280,11 +280,11 @@ const parseMultisigWallets = (multisigs: any[]): MultisigWalletInterface[] => {
   multisigs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return multisigs.map((row, index) => ({
     index,
-    addressBech32: row.id || '',
+    addressBech32: row.paymentAddress || '',
     name: row.name,
     requiredSigners: row.requiredSigners || 1,
-    totalSigners: NativeScript.from_hex(row.multisigScriptCBOR).get_required_signers().len(),
-    multisigScriptCBOR: row.multisigScriptCBOR,
+    totalSigners: NativeScript.from_hex(row.cbor).get_required_signers().len(),
+    multisigScriptCBOR: row.cbor,
     stakeAddress: row.stakeAddress,
     id: row.id,
     chain: row.chain,

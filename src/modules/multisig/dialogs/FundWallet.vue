@@ -534,7 +534,7 @@ const resetData = () => {
   sendData.value = {
     selectedTokens: foundAsset ? [foundAsset] : [],
     selectedCollectibles: [],
-    recipientAddress: multiSigWallet.value.id,
+    recipientAddress: multiSigWallet.value.paymentAddress,
     selectedWallet: loggedWallet.value,
     availableWallets: [loggedWallet.value],
     isMultisigFunding: true,
