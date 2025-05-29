@@ -280,7 +280,7 @@ const parseMultisigWallets = (multisigs: any[]): MultisigWalletInterface[] => {
   multisigs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return multisigs.map((row, index) => ({
     index,
-    addressBech32: row.id || '',
+    addressBech32: row.paymentAddress || '',
     name: row.name,
     requiredSigners: row.requiredSigners || 1,
     totalSigners: NativeScript.from_hex(row.cbor).get_required_signers().len(),
