@@ -5,13 +5,16 @@
         <v-card outlined>
           <v-card-title class="multisig-title">{{ $t('multisig.title') }}
             <v-spacer></v-spacer>
-            <v-btn color="white" outlined class="mx-2 text-caption text-capitalize"
+            <v-btn v-if="!multiSigAmountReached" color="white" outlined class="mx-2 text-caption text-capitalize"
               @click="showCreateMultisigDialog = true">
               <v-icon small left>
                 mdi-plus-circle
               </v-icon>
               {{ $t('multisig.createMultisigWallet') }}
             </v-btn>
+            <v-card-subtitle v-else class="multisig-description">
+              {{ `You're reached your limit(${MAX_MULTISIG_WALLETS_PER_USER}) of multisig wallets` }}
+            </v-card-subtitle>
             <v-btn v-show="Object.keys(getMultiSigWallet).length != 0" color="#CCC" outlined
               class="mx-2 text-caption text-capitalize" @click="showNewMultisigTransaction = true">
               <v-icon small left>
@@ -132,7 +135,7 @@
         </v-row>
       </v-container>
     </div>
-    <CreateMultisigWalletDialog :isOpen="showCreateMultisigDialog" @close="catchCloseDialog" />
+    <CreateMultisigWalletDialog v-if="!multiSigAmountReached" :isOpen="showCreateMultisigDialog" @close="catchCloseDialog" />
     <FundWallet 
       :isOpen="showFundWallet" 
       @close="catchCloseDialog" 
@@ -161,6 +164,8 @@ import FundWallet from '@/modules/multisig/dialogs/FundWallet.vue';
 import MultisigTransaction from '@/modules/multisig/dialogs/MultisigTransaction.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { Transaction, WalletInfo, MultisigWalletInterface } from '@/modules/multisig/types/MultiSigTypes';
+
+const MAX_MULTISIG_WALLETS_PER_USER = 3;
 
 // State
 const loading = ref(false);
@@ -243,6 +248,20 @@ const walletInfo = computed<WalletInfo[]>(() => {
   ];
 });
 
+const multiSigAmountReached = ref(false);
+
+const checkMultiSigAmount = async () => {
+  const multisigTable = await rootStore.getWallet.db.table('multisig');
+  const multisigAmount = await multisigTable.count();
+  multiSigAmountReached.value = multisigAmount >= MAX_MULTISIG_WALLETS_PER_USER;
+};
+
+onMounted(async () => {
+  await checkMultiSigAmount();
+});
+
+
+
 // Methods
 const initialLoad = async (): Promise<void> => {
   loading.value = true;
@@ -266,10 +285,6 @@ const initialLoad = async (): Promise<void> => {
   } finally {
     loading.value = false;
   }
-};
-
-const setMultisigWalletTransactions = (): void => {
-  multisigWalletTransactions.value = multisigStoreInstance.calculatedTransactions.transactions;
 };
 
 const setSelectedAddress = (address: string): void => {
