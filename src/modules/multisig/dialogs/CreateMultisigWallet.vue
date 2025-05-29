@@ -133,7 +133,7 @@
     </v-card-text>
     <v-card-actions class="my-2 text-center justify-center" :style="{ flexFlow: 'column' }">
       <v-btn class="geroButton" style="color: black!important;" outlined @click="nextStep"
-        :disabled="loading || !isFormValid" :loading="loading">
+        :disabled="loading || !isFormValid || multisigError" :loading="loading">
         CREATE MULTISIG WALLET
       </v-btn>
     </v-card-actions>
