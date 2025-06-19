@@ -248,8 +248,8 @@ export default {
     }
     return errorImage
   },
-  resolveDappRisk(risk: string): string {
-    switch (DappRisk[risk]) {
+  resolveDappRisk(risk: number): string {
+    switch (risk) {
       case DappRisk.whitelist:
         return dappRiskSafe;
       case DappRisk.blacklist:
