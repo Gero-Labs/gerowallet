@@ -13,7 +13,7 @@ import {
 } from '@cardano-sdk/crypto';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { bech32 } from 'bech32';
+import { bech32m } from 'bech32';
 import { Buffer } from 'buffer';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
@@ -663,8 +663,8 @@ export const urlScan = async url => {
 };
 
 export function getPublicKey(xpub: string): Bip32PublicKey {
-  const { words } = bech32.decode(xpub, 200);
-  const byteArray = Uint8Array.from(bech32.fromWords(words));
+  const { words } = bech32m.decode(xpub, 120);
+  const byteArray = Uint8Array.from(bech32m.fromWords(words));
   return Bip32PublicKey.fromBytes(byteArray);
 }
 

@@ -20,10 +20,12 @@ import {
 import { Api } from '@/api/api';
 import networks from '@/utils/networks';
 import {
+  Blockchain,
   ChainDerivations,
   CoinTypes,
   ERROR,
   purpose,
+  Tip,
   WalletType,
   WalletTypePurpose,
 } from '@/models/types';
@@ -33,6 +35,7 @@ import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/ch
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 // import trezor from '@/shared/utils/trezor';
+import loading from '@/plugins/loading';
 import { appWallet, useStore } from '@/stores';
 import {
   addVkeys,
@@ -62,7 +65,8 @@ import { HexBlob } from '@cardano-sdk/util';
 
 export class Wallet {
   db: Dexie;
-  api: Api;// Lock for the sync function
+  api: Api;
+  private syncLock: Promise<void> | null = null; // Lock for the sync function
 
   id: any;
   name: any;
@@ -128,8 +132,8 @@ export class Wallet {
     return Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39entropy, 'hex'), '');
   }
 
-  static encryptPrivateKey(rootKey, password): string {
-    const privateKey = this.encryptWithPassword(password, rootKey.as_bytes());
+  static encryptPrivateKey(rootKey: Bip32PrivateKey, password): string {
+    const privateKey = this.encryptWithPassword(password, rootKey.bytes());
     return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
   }
 
@@ -545,9 +549,95 @@ export class Wallet {
     }
   }
 
+  async getLastSyncInfo() {
+    return this.db
+      .open()
+      .then(async db => {
+        const syncTable = db.table('sync');
+        if (!syncTable) throw new Error('No Sync table.');
+        const rows = await syncTable.toArray();
+        if (rows.length > 0) {
+          return rows[0];
+        } else {
+          return null;
+        }
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async getAccountInfo(): Promise<any> {
+    return this.db
+      .open()
+      .then(async db => {
+        const accountTable = db.table('account');
+        if (!accountTable) throw new Error('No Account table.');
+        return accountTable.where({ walletId: this.id }).first();
+      })
+      .catch(err => {
+        console.debug(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async setLastSyncInfo(tip: Tip): Promise<void> {
+    await this.db
+      .open()
+      .then(db => {
+        const syncTable = db.table('sync');
+        if (!syncTable) throw new Error('No Sync table.');
+        return syncTable.put({ id: 1, ...tip });
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async setAccountInfo(accountInfo): Promise<any> {
+    const resAccount = await this.getAccountInfo();
+    const acc = {
+      walletId: this.id,
+      ...accountInfo,
+    };
+    const accountInfoId = await this.db
+      .open()
+      .then(db => {
+        const accountTable = db.table('account');
+        if (accountTable) {
+          if (resAccount) {
+            acc.id = resAccount.id;
+          }
+          return accountTable.put(acc);
+        }
+        return null;
+      })
+      .catch(err => {
+        console.error(`${err.stack || err}`);
+      });
+    return {
+      id: accountInfoId,
+      ...acc,
+    };
+  }
+
   async startSync() {
     console.log('startSync');
     useStore().clearSyncIntervals()
+    // Chain Tip
+    try {
+      await appWallet.sync()
+    } catch (err) {
+      console.log(err)
+    }
+    if (!useStore().intervals.syncIntervalId) {
+      useStore().intervals.syncIntervalId = setInterval(async () => {
+        try {
+          await appWallet.sync()
+        } catch (err) {
+          console.log(err)
+        }
+      }, 20000)
+    }
 
     // Ticker Price
     try {
@@ -583,8 +673,161 @@ export class Wallet {
   }
 
   endSync() {
+    clearInterval(useStore().intervals.syncIntervalId)
     clearInterval(useStore().intervals.fiatRatesIntervalId)
     clearInterval(useStore().intervals.tickerStatisticsIntervalId)
+  }
+
+  async sync(): Promise<void> {
+    if (this.syncLock) {
+      // If sync is already running, wait for it to complete
+      await this.syncLock;
+      return;
+    }
+    this.syncLock = (async () => {
+      try {
+        loading.setSyncing(true);
+        console.log('sync');
+        let tip: Tip = await this.fetchTip();
+        const lastSyncInfo = await this.getLastSyncInfo();
+        if (!lastSyncInfo) {
+          // loading.setText('Restoring Wallet Data. Please Wait ...')
+          loading.setRestoring(true);
+          await this.restore(tip);
+          loading.setRestoring(false);
+        } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
+          const promises = [];
+          if (!this.isEnterpriseAddress()) {
+            promises.push(this.syncTable(1)); // Sync Staking Pools
+            promises.push(this.syncTable(2)); // Sync DReps
+          }
+          // promises.push(this.syncProtocolParams(tip.epoch));
+          const prevAccountInfo = await this.getAccountInfo();
+          const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
+          const baseAddress: Cardano.Address = this.baseAddress()
+          const isEnterpriseAddress: boolean = baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
+          let address: string;
+          if (isEnterpriseAddress) {
+            address = baseAddress.toBech32();
+          } else {
+            address = this.stakeAddress().toBech32();
+          }
+          const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
+          const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
+          const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
+          await this.setSync(await this.api.sync(from, tip, address, rewards_sum, controlled_amount, withdrawable_amount));
+        }
+      } catch (err) {
+        console.log(err);
+      } finally {
+        // Release the lock after execution
+        this.syncLock = null;
+        loading.setSyncing(false); // Ensure to reset syncing state after execution
+      }
+    })();
+    // Wait for the locked sync operation to complete
+    await this.syncLock;
+  }
+
+  async restore(tip: Tip): Promise<void> {
+    const prevAccountInfo = await this.getAccountInfo();
+
+    // Create an array to hold the promises that need to be awaited
+    const promises = [];
+    if (!this.isEnterpriseAddress()) {
+      // Sync staking pools
+      promises.push(this.syncTable(1));
+
+      // Sync DReps
+      promises.push(this.syncTable(2));
+    }
+
+    // Sync account info and handle rewards and transactions
+    promises.push(this.syncAccountInfo().then(async accountInfo => {
+      if (accountInfo) {
+        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
+          await this.syncAccountRewards();
+        }
+        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
+          const txs = await this.syncAccountTransactions(0);
+          if (txs) {
+            const units: Set<string> = new Set();
+            txs.forEach(tx => {
+              tx.inputs.forEach(input => {
+                if (input.asset_list) {
+                  input.asset_list.forEach(asset => {
+                    units.add(asset.policy_id + asset.asset_name);
+                  });
+                }
+              });
+              tx.outputs.forEach(output => {
+                if (output.asset_list) {
+                  output.asset_list.forEach(asset => {
+                    units.add(asset.policy_id + asset.asset_name);
+                  });
+                }
+              });
+            });
+            await this.syncAssets(Array.from(units), false);
+          }
+        }
+      }
+      return [];
+    }));
+
+    // Wait for all promises to complete
+    await Promise.all(promises);
+
+    // Set the last sync info once everything is done
+    await this.setLastSyncInfo(tip);
+  }
+
+  async resync() {
+    await this.db
+      .open()
+      .then(db => {
+        const syncTable = db.table('sync');
+        syncTable.clear();
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+    await this.db
+      .open()
+      .then(db => {
+        const syncTable = db.table('account');
+        syncTable.clear();
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+    await appWallet.sync();
+  }
+
+  async setSync(syncObject) {
+    console.log('setSync', syncObject);
+    if (syncObject && syncObject.success) {
+      const promises = [];
+      if (syncObject.account) {
+        promises.push(this.setAccountInfo(syncObject.account));
+      }
+      if (syncObject.assets) {
+        promises.push(this.setAssets2(syncObject.assets));
+      }
+      if (syncObject.rewards) {
+        promises.push(this.setAccountRewards(syncObject.rewards));
+      }
+      if (syncObject.transactions) {
+        promises.push(this.setAccountTransactions(syncObject.transactions));
+      }
+      if (syncObject.block) {
+        promises.push(this.setLastSyncInfo(syncObject.block));
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
+    }
+    loading.setSyncing(false);
   }
 
   async syncAssets(units: string[], _force?: boolean): Promise<void> {
@@ -594,11 +837,20 @@ export class Wallet {
 
   async setAssets(units: string[], blockchainDB: Dexie) {
     const promises: any[] = [];
-    const smallerArrays = chunkArray({ input: units, bytesSize: 5 * 1024 });
+    const smallerArrays = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach(smallerArray => {
       promises.push(this.getAssetsInfo(smallerArray, blockchainDB));
     });
     (await Promise.all(promises)).flat();
+  }
+
+  async setAssets2(assets): Promise<void> {
+    console.log('setAssets');
+    const blockchainDB: Dexie = await this.getBlockchainDb();
+    const assetsTable = blockchainDB.table('assets');
+    if (assetsTable) {
+      assetsTable.bulkPut(assets);
+    }
   }
 
   private async getAssetsInfo(units: string[], blockchainDB: Dexie) {
@@ -634,12 +886,94 @@ export class Wallet {
     return null;
   }
 
+  private async getStakingPools() {
+    try {
+      const res = await this.api.getAllPools();
+      if (res) {
+        return res;
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
+  private async getDReps() {
+    try {
+      const res = await this.api.getAllDReps();
+      if (res) {
+        return res;
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
+  async syncTable(tableId): Promise<void> { //pools - 1, dreps - 2
+    if (this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME) {
+      const blockchainDB: Dexie = await this.getBlockchainDb();
+      const syncTable = blockchainDB.table('sync');
+      const lastSyncArray = await syncTable.toArray();
+      const currentTime = new Date();
+      const sync = lastSyncArray?.find(element => element.id == tableId)
+      if (!sync) {
+        await this.setSyncTable(blockchainDB, syncTable, tableId);
+      } else {
+        const lastSyncTime = new Date(sync.time);
+        const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceLastSync >= 4) {
+          await this.setSyncTable(blockchainDB, syncTable, tableId);
+        }
+      }
+    }
+  }
+
+  async setSyncTable(blockchainDB: Dexie, syncTable, tableId: number) {
+    let res
+    let table
+    if (tableId == 1) {
+      res = await this.getStakingPools();
+      table = 'pools'
+    } else if (tableId == 2) {
+      res = await this.getDReps();
+      table = 'dreps'
+    }
+    blockchainDB.table(table).bulkPut(res);
+    syncTable.put({ id: tableId, time: new Date().getTime() });
+  }
+
+  async fetchTip(): Promise<Tip> {
+    try {
+      const tip = await this.api.getTip();
+      useStore().setConnected(true)
+      return tip
+    } catch (e) {
+      useStore().setConnected(false)
+      throw e
+    }
+  }
+
   async fetchTickerStatistics(): Promise<any> {
     return await this.api.fetchTickerStatistics();
   }
 
   async fetchFiatRates(): Promise<any> {
     return await this.api.fetchFiatRates();
+  }
+
+  async syncAccountInfo(): Promise<any> {
+    try {
+      let res;
+      if (this.isEnterpriseAddress()) {
+        res = await this.api.getAccountInfo(this.baseAddress().toBech32());
+      } else {
+        res = await this.api.getAccountInfo(this.stakeAddress().toBech32());
+      }
+      if (res) {
+        return await this.setAccountInfo(res);
+      }
+    } catch (e) {
+      // console.log(e);
+    }
   }
 
   async syncAddresses(knownAddresses: string[]): Promise<Set<string>> {
@@ -700,7 +1034,7 @@ export class Wallet {
       if (!found) {
         consecutiveUnused++;  // Increment unused address counter if no match is found
       }
-      // If we've resolved all missing addresses, we can break earlyCardano.
+      // If we've resolved all missing addresses, we can break early
       if (usedAddresses.length === resolvedAddresses.length) {
         break;
       }
@@ -725,6 +1059,64 @@ export class Wallet {
         hash: Hash28ByteBase16.fromEd25519KeyHashHex(this.stakeKey().hash().hex())
       }
     );
+  }
+
+  async syncAccountRewards(): Promise<void> {
+    try {
+      if (this.isEnterpriseAddress()) {
+        return;
+      }
+      const res = await this.api.getAccountRewards(this.stakeAddress().toBech32());
+      if (res) {
+        await this.setAccountRewards(res);
+      }
+    } catch (e) {
+      // console.log(e);
+    }
+  }
+
+  async setAccountRewards(res): Promise<any[] | void> {
+    return this.db
+      .open()
+      .then(db => {
+        const rew = [];
+        const rewardsTable = db.table('rewards');
+
+        if (!rewardsTable) throw new Error('No Rewards table.');
+
+        res.forEach(reward => {
+          rew.push(rewardsTable.put(reward));
+        });
+
+        return rew;
+      })
+      .catch(err => {
+        console.error(`Failed to open database: ${err.stack || err}`);
+      });
+  }
+
+  async syncAccountTransactions(height: number): Promise<any> {
+    try {
+      let res
+      if (this.isEnterpriseAddress()) {
+        res = await this.api.getAccountTransactions(this.baseAddress().toBech32(), height);
+      } else {
+        res = await this.api.getAccountTransactions(this.stakeAddress().toBech32(), height);
+      }
+      if (res && Array.isArray(res)) {
+        const promises = [];
+        const txHashes: string[] = res.map(tx => tx.tx_hash);
+        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 4000 });
+        smallerArrays.forEach(smallerArray => {
+          promises.push(this.api.getTransactionsInfo(smallerArray));
+        });
+        const txs = (await Promise.all(promises)).flat();
+        await this.setAccountTransactions(txs);
+        return txs;
+      }
+    } catch (e) {
+      console.log(e);
+    }
   }
 
   async setAccountTransactions(txs): Promise<any> {

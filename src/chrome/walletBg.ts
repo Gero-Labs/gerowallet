@@ -3,7 +3,7 @@ import { Api } from '@/api/api';
 import { Cardano } from '@cardano-sdk/core';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
-import { Blockchain, Network, Tip, WalletType } from '@/models/types';
+import { Blockchain, Network, Provider, Tip, WalletType } from '@/models/types';
 import zkFoldApi from '@/api/zk-fold.api';
 import { getAddress, getRewardAddress } from '@/chrome/serialization';
 import * as Ably from 'ably';
@@ -17,12 +17,12 @@ const backendUrl: string = import.meta.env.VITE_BACKEND_URL;
 let authParams: {
   chain: string;
   network: string;
-  baseAddress: string;
+  address: string;
 } | null = null;
 
-const subscribedChannels = new Set<string>();
+const subscribedChannels: Map<string, Ably.RealtimeChannel> = new Map<string, Ably.RealtimeChannel>();
 
-export const ably = new Ably.Realtime({
+export const ably: Ably.Realtime = new Ably.Realtime({
   autoConnect: false,
   closeOnUnload: true,         // still clean up on unload
   authCallback: (tokenParams, callback) => {
@@ -32,7 +32,7 @@ export const ably = new Ably.Realtime({
     }
 
     // fetch a fresh TokenRequest JSON from your backend
-    axios.get(`${backendUrl}/api/ably/token?chain=${authParams.chain}&network=${authParams.network}&baseAddress=${authParams.baseAddress}`)
+    axios.get(`${backendUrl}/api/ably/token?chain=${authParams.chain}&network=${authParams.network}&address=${authParams.address}`)
       .then(res => {
         // `res.data` must be the raw TokenRequest object:
         // { keyName, capability, clientId, timestamp, mac }
@@ -66,6 +66,7 @@ export class WalletBg {
   chain: any;
   network: any;
   publicKey: string;
+  provider: Provider;
 
   encryptedPrivateKey: any;
   passwordLastUpdate: Date;
@@ -116,21 +117,26 @@ export class WalletBg {
     this.sync();
     const chain = Object.keys(Blockchain).find(key => Blockchain[key] === this.chain);
     const network = Object.keys(Network).find(key => Network[key] === this.network);
-    const baseAddress = this.baseAddress.toBech32();
-    authParams = { chain, network, baseAddress };
-    const privateChan = baseAddress;
+    let address
+    if (this.isEnterpriseAddress()) {
+      address = this.baseAddress.toBech32();
+    } else {
+      address = this.stakeAddress().toBech32();
+    }
+    authParams = { chain, network, address };
+    const privateChan = address;
     if (!subscribedChannels.has(privateChan)) {
-      promises.push(ably.channels
-        .get(privateChan)
+      const channel = ably.channels.get(privateChan);
+      promises.push(channel
         .subscribe((msg: Ably.InboundMessage) => console.log('▶ Personal:', msg.data)));
-      subscribedChannels.add(privateChan);
+      subscribedChannels.set(privateChan, channel);
       console.log("Subscribed to private channel: ", privateChan)
     }
 
     const groupChan = `${chain}.${network}`;
     if (!subscribedChannels.has(groupChan)) {
-      promises.push(ably.channels
-        .get(groupChan)
+      const channel = ably.channels.get(groupChan);
+      promises.push(channel
         .subscribe(async (msg: Ably.InboundMessage) => {
           switch (msg.name) {
             case 'TIP':
@@ -140,7 +146,7 @@ export class WalletBg {
               console.log('▶ Group:', msg.data)
           }
         }));
-      subscribedChannels.add(groupChan);
+      subscribedChannels.set(groupChan, channel);
       console.log("Subscribed to group channel: ", groupChan)
     }
     await Promise.all(promises)
@@ -148,12 +154,16 @@ export class WalletBg {
 
   logout() {
     console.log('logout')
-    subscribedChannels.forEach(chan => {
-      ably.channels.get(chan).unsubscribe();
-    })
+    subscribedChannels.values().forEach((channel: Ably.RealtimeChannel) => {
+      channel.unsubscribe();
+    });
     subscribedChannels.clear();
-    ably.connection.close();
-    ably.close();
+    try {
+      ably.connection?.close();
+      ably.close();
+    } catch (e) {
+      console.log(e)
+    }
   }
 
   stakeAddress(): Cardano.Address {
@@ -527,7 +537,7 @@ export class WalletBg {
       if (res && Array.isArray(res)) {
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);
-        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 5 * 1024 });
+        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 4000 });
         smallerArrays.forEach(smallerArray => {
           promises.push(this.api.getTransactionsInfo(smallerArray));
         });
@@ -547,7 +557,7 @@ export class WalletBg {
 
   async setAssets(units: string[], blockchainDB: Dexie) {
     const promises: any[] = [];
-    const smallerArrays = chunkArray({ input: units, bytesSize: 5 * 1024 });
+    const smallerArrays = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach(smallerArray => {
       promises.push(this.getAssetsInfo(smallerArray, blockchainDB));
     });
