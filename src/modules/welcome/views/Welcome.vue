@@ -193,7 +193,7 @@ interface Wallet {
 const version = ref<string>(APP_VERSION);
 
 const availableWallets = computed<Wallet[]>(() => {
-  return wallets.value.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network));
+  return wallets.value.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google);
 });
 
 const geroLogoApex = assets.geroDashboardApex;

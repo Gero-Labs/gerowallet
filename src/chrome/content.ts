@@ -186,7 +186,7 @@ function appendOverlay(url: string) {
     overlay.style.zIndex = '10000000000';
     overlay.style.fontFamily = 'system-ui, sans-serif';
 
-    const imageUrl = chrome.runtime.getURL('assets/logo.png');
+    const imageUrl = chrome.runtime.getURL('public/logo.png');
     overlay.innerHTML = `
     <div>
       <div style="font-size: 1.5rem;padding:2rem;font-weight: 500;display: flex;align-items: center; justify-content: space-between;">
