@@ -42,7 +42,7 @@ export default {
       return DappRisk
     },
     riskIcon() {
-      return assets.resolveDappRisk(this.risk)
+      return assets.resolveDappRisk(DappRisk[this.risk])
     },
   },
   data: () => ({

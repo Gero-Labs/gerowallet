@@ -1,6 +1,6 @@
 <template>
   <div>
-    <component :is="layout">
+    <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
     <v-overlay v-show="loading || isRestoring || loadingTxs" opacity="0.9" style="text-align: center;">
@@ -39,10 +39,6 @@ import networks from '@/utils/networks';
 import { loadingState } from '@/plugins/loading';
 
 const { loading, isRestoring, text } = toRefs(loadingState);
-
-const vmProxy = getCurrentInstance()!.proxy as any
-const route = vmProxy.$route;
-const layout = computed(() => route.meta.layout || 'div');
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);

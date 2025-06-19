@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     title="Google Wallet Set Up"
-    :subtitle="network.title"
+    :subtitle="network?.title"
     :is-open="props.isOpen"
     @close="$emit('close')"
     content-class="rounded-xxl dialogStyle"
@@ -116,9 +116,10 @@ import { useStore } from '@/stores';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import db from '@/db';
+import { storeToRefs } from 'pinia';
 
 const store = useStore();
-console.log(store);
+const { network } = storeToRefs(store);
 
 interface NewWallet {
   name: string;

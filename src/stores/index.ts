@@ -27,8 +27,6 @@ import { loadSync, subscribeSync } from '@/stores/loaders/syncLoader';
 import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
 import { loadAssets } from '@/stores/loaders/assetsLoader';
 import { loadConfig, subscribeConfig } from '@/stores/loaders/geroConfigLoader';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@emurgo/cardano-serialization-lib-browser';
@@ -71,6 +69,7 @@ export const useStore = defineStore('store', {
     geroConfig: undefined,
     connected: false,
     intervals: {
+      syncIntervalId: null,
       fiatRatesIntervalId: null,
       tickerStatisticsIntervalId: null
     },
@@ -322,6 +321,9 @@ export const useStore = defineStore('store', {
           });
         });
       });
+    },
+    setConnected(connected: boolean) {
+      this.connected = connected
     },
     setLoadingTxs(value) {
       this.loadingTxs = value
@@ -620,10 +622,6 @@ export const useStore = defineStore('store', {
         await router.push("/welcome");
         return;
       }
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.LOGIN,
-        data: { wallet },
-      });
       await this.setLoggedWallet(wallet);
       try {
         this.provider = networks.resolveDefaultProvider(this.loggedWallet?.chain, this.loggedWallet?.network);
@@ -664,6 +662,7 @@ export const useStore = defineStore('store', {
     clearSyncIntervals() {
       appWallet.endSync();
       this.intervals = {
+        syncIntervalId: null,
         fiatRatesIntervalId: null,
         tickerStatisticsIntervalId: null,
       }
@@ -674,10 +673,6 @@ export const useStore = defineStore('store', {
       loading.setLoading(true);
       this.clearSyncIntervals();
       this.unsubscribeAll()
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.LOGOUT,
-        data: { },
-      });
       await this.setLoggedWallet(undefined)
       if (chrome?.storage) {
         await chrome.storage.local.remove(STORAGE.whitelisted);
@@ -707,6 +702,11 @@ export const useStore = defineStore('store', {
       this.stakeAddress = undefined
       appWallet = undefined
       loading.setLoading(false);
+    },
+    async sync() {
+      if (!appWallet) {
+        await appWallet.sync()
+      }
     },
     setLocale(locale) {
       this.locale = locale;
