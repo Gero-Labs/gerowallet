@@ -7,7 +7,7 @@ import { walletDBSchema, walletDBVersion } from '@/db/schema';
 import { encrypt } from '@/shared/utils/crypto';
 import * as bip39 from 'bip39';
 import * as Crypto from '@cardano-sdk/crypto'
-import { bech32m } from 'bech32';
+import { bech32, bech32m } from 'bech32';
 
 const db: Dexie = new Dexie('GeroWalletDatabase');
 const blockChainDBVersion: number = 2;
@@ -145,8 +145,8 @@ export default {
     const accountIndex = 0;
     const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
     const xpubHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
-    const words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
-    const publicKey = bech32m.encode('xpub', words, 120);
+    const words = bech32.toWords(Buffer.from(xpubHex, 'hex')) ?? bech32m.toWords(Buffer.from(xpubHex, 'hex'));
+    const publicKey = bech32.encode('xpub', words, 120);
     const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
       new Date(), chain, network, null, encryptedMnemonic);
     const walletId = await db['wallets'].add({
