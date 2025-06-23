@@ -271,8 +271,8 @@ export const useStore = defineStore('store', {
           const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, newPassword);
           let encryptedMnemonic = null;
           if (appWallet.encryptedMnemonic) {
-            const decryptedMnemonic = decrypt(appWallet.encryptedMnemonic, currentPassword)
-            encryptedMnemonic = encrypt(decryptedMnemonic, newPassword)
+            const decryptedMnemonic = decrypt(appWallet.encryptedMnemonic, currentPassword);
+            encryptedMnemonic = encrypt(decryptedMnemonic, newPassword);
           }
           await db.updatePrivateKeyAndMnemonic(walletId, encryptedPrivateKey, encryptedMnemonic);
           // 2) immediately reload Pinia state

@@ -24,7 +24,7 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       return true
     },
     hasBackup(state) {
-      return 'backup' in state.config;
+      return state?.config && 'backup' in state.config;
     },
     getBackup(state) {
       if (state?.config && this.hasBackup) {
