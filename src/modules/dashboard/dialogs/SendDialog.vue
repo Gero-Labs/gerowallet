@@ -218,6 +218,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { isPaymentAddress, isPaymentAddressOrHandle } from '@/chrome/serialization';
+import { calculateTokenShortage } from '@/shared/utils/tokens';
 
 export default {
   name: 'SendDialog',
@@ -268,6 +269,17 @@ export default {
       }
       if (this.currentStep === 2) {
         if (!this.txValid) {
+          return false;
+        }
+        // calculate the total shortage of the selected tokens
+        const totalShortage = this.sendData.selectedTokens
+                                          .map(
+                                            token => {
+                                              return calculateTokenShortage(token)
+                                            }
+                                          )
+                                          .reduce((acc, quantity) => acc + quantity, 0);
+        if (Math.abs(totalShortage) > 0) {
           return false;
         }
         const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
