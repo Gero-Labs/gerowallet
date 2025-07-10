@@ -1,5 +1,7 @@
+const SLOTS_PER_EPOCH = 432000;
+
 export function getTransactionEpoch(txInfo: any) {
-    const epochLengthInSlots = 432000;
+    const epochLengthInSlots = SLOTS_PER_EPOCH;
     const epochLengthInBlocks = 21600;
 
     // Method 1: Direct epoch field (if available)
