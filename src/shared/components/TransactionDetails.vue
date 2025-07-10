@@ -35,7 +35,7 @@
           </span>
           </div>
           <div>
-            Epoch: <span class="value-text">{{ getTransactionEpoch(transactionInfo) }}</span>
+            Epoch: <span class="value-text">{{ getTransactionEpoch(transactionInfo) ?? 'N/A' }}</span>
           </div>
           <div style="display: flex; width: 100%; align-items: baseline;">
             <div v-if="txAssets?.length > 0">
