@@ -33,8 +33,6 @@ import { TransactionInfo } from '@/shared/components/TransactionDetails.vue';
 const isReportDialogOpen = ref<boolean>(false);
 const transactionInfo = ref<TransactionInfo | null>(null);
 const reportSite = ref<string>('');
-const transactionsCard = ref<InstanceType<typeof TransactionsCard> | null>(null);
-
 // Get Vue instance for router access
 const vm = getCurrentInstance()!;
 
