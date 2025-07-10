@@ -16,4 +16,5 @@ export function getTransactionEpoch(txInfo: any) {
     if (txInfo.block_height) {
       return Math.floor(txInfo.block_height / epochLengthInBlocks);
     }
+    return null; // Return null if no epoch-related data is available
   }
