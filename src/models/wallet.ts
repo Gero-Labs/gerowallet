@@ -535,16 +535,18 @@ export class Wallet {
       return txId;
     } catch (error) {
       console.log(error)
-      if (error['response'].status === 400) {
+      if (error['response'] && error['response'].status === 400) {
         throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
-      } else if (error['response'].status === 500) {
+      } else if (error['response'] && error['response'].status === 500) {
         throw new Error(APIError.InternalError.info);
-      } else if (error['response'].status === 429) {
+      } else if (error['response'] && error['response'].status === 429) {
         throw new Error(TxSendError.Refused.info);
-      } else if (error['response'].status === 425) {
+      } else if (error['response'] && error['response'].status === 425) {
         throw new Error(ERROR.fullMempool);
-      } else {
+      } else if (error['response']) {
         throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      } else {
+        throw new Error('Transaction submission failed: ' + (error.message || error));
       }
     }
   }

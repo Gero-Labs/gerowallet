@@ -76,7 +76,7 @@
       </v-card>
     </v-card-text>
     <v-card-actions class="mx-2 pt-0 mb-2">
-      <v-btn color="primary" large block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ isInsufficientBalance ? 'Insufficient Balance' : 'Swap' }}</v-btn>
+      <v-btn color="primary" large block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ swapButtonText }}</v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
@@ -107,13 +107,24 @@ export default {
     isSwapDisabled() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const quantityB = this.selectedTokenB.quantity.replaceAll(',', '')
-      return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || this.isInsufficientBalance
+      const hasUtxos = this.utxos && Array.isArray(this.utxos) && this.utxos.length > 0
+      return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || this.isInsufficientBalance || !hasUtxos
     },
     isInsufficientBalance() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const b = filters.toCurrency(this.selectedTokenA.balance, false, this.selectedTokenA.decimals, '', '', false, this.selectedTokenA.decimals).replaceAll(',', '')
       const balanceA = Number(b)
       return Number(quantityA) > balanceA
+    },
+    swapButtonText() {
+      const hasUtxos = this.utxos && Array.isArray(this.utxos) && this.utxos.length > 0
+      if (!hasUtxos) {
+        return 'Wallet Loading...'
+      }
+      if (this.isInsufficientBalance) {
+        return 'Insufficient Balance'
+      }
+      return 'Swap'
     },
     tokens() {
       return (
@@ -434,6 +445,11 @@ export default {
       this.loading = false
     },
     async submit(cborHex) {
+      if (!this.utxos || !Array.isArray(this.utxos) || this.utxos.length === 0) {
+        snackbar.setError('Unable to complete swap: Wallet UTxOs not loaded. Please try again.')
+        return;
+      }
+      
       const txId = await appWallet.submitTx(Transaction.from_hex(cborHex), this.utxos);
       snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
       this.$emit('onSwap')
