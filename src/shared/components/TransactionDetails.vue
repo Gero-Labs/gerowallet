@@ -4,35 +4,38 @@
       <v-col cols="7">
         <div class="transaction-info text-left pb-4">
           <div>
-            Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['tx_hash']}`" target="_blank">{{ transactionInfo['tx_hash'] | truncate }}</a>
+            Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['tx_hash']}`" target="_blank">{{ truncate(transactionInfo['tx_hash']) }}</a>
             <CopyButton x-small :value="transactionInfo['tx_hash']" class="ml-1"></CopyButton>
           </div>
           <div>
             Time: <span class="value-text">{{new Date(transactionInfo['tx_timestamp'] * 1000).toLocaleString()}}</span>
           </div>
           <div>
-            Tx Size: <span class="value-text">{{ transactionInfo['tx_size'] | humanFileSize }}</span>
+            Tx Size: <span class="value-text">{{ humanFileSize(transactionInfo['tx_size']) }}</span>
           </div>
           <div>
-            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ transactionInfo['block_hash'] | truncate }}</a>
+            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ truncate(transactionInfo['block_hash']) }}</a>
             <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
           </div>
           <div>
             Block Height: <span class="value-text">{{ transactionInfo['block_height'].toLocaleString('en-US') }}</span>
           </div>
           <div>
-            Network Fee: <span style="color: #FF8E8E">{{ transactionInfo['fee'] | toCurrency }}</span>
+            Network Fee: <span style="color: #FF8E8E">{{ toCurrency(transactionInfo['fee']) }}</span>
           </div>
           <div style="align-items: center">
             {{ (Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ') }}
             <span :style="Number(transactionInfo['ada']) > 0 ? { color: '#00DFF3' } : { color: '#FF8E8E' }">
-            {{Number(transactionInfo['ada']) | toCurrency}}
+            {{toCurrency(Number(transactionInfo['ada']))}}
             <template v-for="(asset, index) in txAssets">
-              <v-chip class="mr-1" outlined  :key="`asset_${index}`" x-small :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'">
-                {{ asset.quantity | toCurrency(false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
+              <v-chip :key="`asset_${index}`" class="mr-1" outlined x-small :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'">
+                {{ toCurrency(asset.quantity, false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
               </v-chip>
             </template>
           </span>
+          </div>
+          <div>
+            Epoch: <span class="value-text">{{ getTransactionEpoch(transactionInfo) ?? 'N/A' }}</span>
           </div>
           <div style="display: flex; width: 100%; align-items: baseline;">
             <div v-if="txAssets?.length > 0">
@@ -93,17 +96,17 @@
                 <tr v-for="(input, index) in transactionInfo['inputs']" :key="`input_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{ `${input.tx_hash}#${input.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
+                      {{ truncate(`${input.tx_hash}#${input.tx_index}`) }}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{input.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
+                      {{truncate(input.payment_addr.bech32)}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
                   <td class="text-right">
                     <div>
-                      {{input.value | toCurrency}}
+                      {{toCurrency(input.value)}}
                     </div>
                     <div>
                       <template v-for="(asset, assetIndex) in input.asset_list">
@@ -129,17 +132,17 @@
                 <tr v-for="(output, index) in transactionInfo['outputs']" :key="`output_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{ `${output.tx_hash}#${output.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
+                      {{ truncate(`${output.tx_hash}#${output.tx_index}`) }}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{output.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
+                      {{truncate(output.payment_addr.bech32)}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
                     </div>
                   </td>
                   <td class="text-right">
                     <div>
-                      {{output.value | toCurrency}}
+                      {{toCurrency(output.value)}}
                     </div>
                     <div>
                       <v-chip v-for="(asset, assetIndex) in output.asset_list" :key="`output_${index}_asset_${assetIndex}`" x-small class="my-1">{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
@@ -151,7 +154,7 @@
                   <tr>
                     <td class="text-left">Total Output</td>
                     <td></td>
-                    <td class="text-right">{{transactionInfo['total_output'] | toCurrency}}</td>
+                    <td class="text-right">{{toCurrency(transactionInfo['total_output'])}}</td>
                   </tr>
                 </tfoot>
               </v-simple-table>
@@ -179,7 +182,7 @@
                     DRep Id
                   </td>
                   <td class="text-left">
-                    {{certificate.info.drep_id | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_id"></CopyButton>
+                    {{truncate(certificate.info.drep_id)}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_id"></CopyButton>
                   </td>
                 </tr>
                 <tr v-if="certificate.info.drep_hex">
@@ -187,7 +190,7 @@
                     DRep Hex
                   </td>
                   <td class="text-left">
-                    {{certificate.info.drep_hex | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_hex"></CopyButton>
+                    {{truncate(certificate.info.drep_hex)}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_hex"></CopyButton>
                   </td>
                 </tr>
                 <tr v-if="certificate.info.deposit">
@@ -195,7 +198,7 @@
                     Deposit
                   </td>
                   <td class="text-left">
-                    {{ Number(certificate.info.deposit) | toCurrency }}
+                    {{ toCurrency(Number(certificate.info.deposit)) }}
                   </td>
                 </tr>
                 <tr v-if="certificate.info.stake_address">
@@ -203,7 +206,7 @@
                     Stake Address
                   </td>
                   <td class="text-left">
-                    {{certificate.info.stake_address | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.stake_address"></CopyButton>
+                    {{truncate(certificate.info.stake_address)}}<CopyButton x-small class="ml-1" :value="certificate.info.stake_address"></CopyButton>
                   </td>
                 </tr>
                 <tr v-if="certificate.info.pool_id_hex">
@@ -211,7 +214,7 @@
                     Pool Id (Hex)
                   </td>
                   <td class="text-left">
-                    {{certificate.info.pool_id_hex | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_hex"></CopyButton>
+                    {{truncate(certificate.info.pool_id_hex)}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_hex"></CopyButton>
                   </td>
                 </tr>
                 <tr v-if="certificate.info.pool_id_bech32">
@@ -219,7 +222,7 @@
                     Pool Id (Bech32)
                   </td>
                   <td class="text-left">
-                    {{certificate.info.pool_id_bech32 | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_bech32"></CopyButton>
+                    {{truncate(certificate.info.pool_id_bech32)}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_bech32"></CopyButton>
                   </td>
                 </tr>
                 </tbody>
@@ -274,7 +277,7 @@
                 <tbody>
                 <tr v-for="(asset_minted, index) in transactionInfo['assets_minted']" :key="`asset_minted_${index}`">
                   <td class="text-left">
-                    {{asset_minted.policy_id | truncate}}<CopyButton x-small class="ml-1" :value="asset_minted.policy_id"></CopyButton>
+                    {{truncate(asset_minted.policy_id)}}<CopyButton x-small class="ml-1" :value="asset_minted.policy_id"></CopyButton>
                   </td>
                   <td class="text-left">
                     {{getAssetName(asset_minted, false)}}
@@ -312,7 +315,7 @@
                     Stake Address
                   </td>
                   <td class="text-left">
-                    {{withdrawal.stake_addr | truncate}}<CopyButton x-small class="ml-1" :value="withdrawal.stake_addr"></CopyButton>
+                    {{truncate(withdrawal.stake_addr)}}<CopyButton x-small class="ml-1" :value="withdrawal.stake_addr"></CopyButton>
                   </td>
                 </tr>
                 <tr>
@@ -320,7 +323,7 @@
                     Amount
                   </td>
                   <td class="text-left">
-                    {{withdrawal.amount | toCurrency}}
+                    {{toCurrency(withdrawal.amount)}}
                   </td>
                 </tr>
                 </tbody>
@@ -341,7 +344,7 @@
         <v-expansion-panel-content class="content-container">
           <v-card flat v-for="(contract, index) in transactionInfo['plutus_contracts']" :key="`contracts_${index}`" class="mb-2 transparent">
             <v-card-title>Contract</v-card-title>
-            <v-card-subtitle class="text-left">{{contract.address | truncate}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
+            <v-card-subtitle class="text-left">{{truncate(contract.address)}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
             <v-card-title v-if="contract?.input?.redeemer">Redeemer</v-card-title>
             <v-card-text v-if="contract?.input?.redeemer">
               <v-simple-table dense style="background-color: transparent">
@@ -382,7 +385,7 @@
                     Datum Hash
                   </td>
                   <td class="text-left" style="overflow-wrap: anywhere;">
-                    {{ contract.input.datum.hash | truncate }}<CopyButton x-small class="ml-1" :value="contract.input.datum.hash"></CopyButton>
+                    {{ truncate(contract.input.datum.hash) }}<CopyButton x-small class="ml-1" :value="contract.input.datum.hash"></CopyButton>
                   </td>
                 </tr>
                 <tr>
@@ -390,7 +393,7 @@
                     Contract Bytecode
                   </td>
                   <td class="text-left" style="overflow-wrap: anywhere;">
-                    {{ contract.bytecode | truncate }}<CopyButton x-small class="ml-1" :value="contract.bytecode"></CopyButton>
+                    {{ truncate(contract.bytecode) }}<CopyButton x-small class="ml-1" :value="contract.bytecode"></CopyButton>
                   </td>
                 </tr>
                 </tbody>
@@ -413,109 +416,200 @@
         </v-expansion-panel-content>
       </v-expansion-panel>
     </v-expansion-panels>
-    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="transactionInfo.tx_hash" />
+    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="transactionInfo['tx_hash']" />
   </v-card-text>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue';
+import { useStore } from '@/stores';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
 import { resolveAsset } from '@/shared/utils/resolver';
 import { unitToFingerprint } from '@/shared/utils/converter';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
+import { getTransactionEpoch } from '@/shared/utils/transaction';
 
-export default defineComponent({
-  name: 'TransactionDetails',
-  components: { ReportDialog, CopyButton },
-  props: {
-    transactionInfo: {
-      type: Object,
-      default: null,
-    },
-  },
-  watch: {
-    transactionInfo: {
-      handler(val) {
-        if (val) {
-          this.updateTokens(val['assets'].filter(asset => asset.policy_id !== ''))
-        }
-      },
-      deep: true,
-    }
-  },
-  filters,
-  computed: {
-    ...mapState(useStore, ['network', 'assets', 'resolvedAssets']),
-  },
-  methods: {
-    expand() {
-      this.txAssets.push(...this.residue)
-      this.isExpanded = true
-    },
-    async updateTokens(tokens) {
-      const assets = await Promise.all(tokens.map(token => {
-        const asset = this.assets[token['policy_id']+token['asset_name']]
-        return resolveAsset(asset, token)
-      }));
-      this.txAssets = assets.slice(0, 4)
-      if (assets?.length > 4) {
-        this.residue = assets.slice(4)
-      } else {
-        this.residue = []
-      }
-    },
-    getAssetName(asset, checkAscii) {
-      const ascii = /^[ -~\t\n\r]+$/;
-      const assetName = Buffer.from(asset.asset_name, 'hex').toString('ascii');
-      if (checkAscii && !ascii.test( assetName ) ) {
-        return filters.truncate(unitToFingerprint(asset.policy_id+asset.asset_name))
-      }
-      return assetName
-    },
-    getFingerprint(asset) {
-      return filters.truncate(unitToFingerprint(asset.policy_id+asset.asset_name))
-    },
-    getCertificateType(type) {
-      switch (type) {
-        case "drep_retire": {
-          return "DRep De-Registration"
-        }
-        case "drep_registration": {
-          return 'DRep Registrations'
-        }
-        case "vote_delegation": {
-          return 'Vote Delegation'
-        }
-        case "stake_registration": {
-          return 'Stake Registration'
-        }
-        case "pool_delegation": {
-          return 'Pool Delegation'
-        }
-        case "pool_update": {
-          return 'Pool Update'
-        }
-        case "stake_deregistration": {
-          return "Stake De-Registration"
-        }
-      }
-      return 'N/A'
-    },
-  },
-  data: () => ({
-    txAssets: [],
-    residue: [],
-    panels: [],
-    isExpanded: false,
-    isReportDialogOpen: false,
-  }),
-  async mounted() {
-    await this.updateTokens(this.transactionInfo['assets'].filter(asset => asset.policy_id !== ''))
+// Types
+interface Asset {
+  policy_id: string;
+  asset_name: string;
+  quantity: string;
+  decimals?: number;
+  metadata?: {
+    decimals: number;
+  };
+  img?: string;
+  name?: string;
+}
+
+export interface TransactionInfo {
+  tx_hash: string;
+  tx_timestamp: number;
+  tx_size: number;
+  block_hash: string;
+  block_height: number;
+  fee: string;
+  ada: string;
+  total_output: string;
+  inputs: Array<{
+    tx_hash: string;
+    tx_index: number;
+    payment_addr: {
+      bech32: string;
+    };
+    value: string;
+    asset_list: Asset[];
+  }>;
+  outputs: Array<{
+    tx_hash: string;
+    tx_index: number;
+    payment_addr: {
+      bech32: string;
+    };
+    value: string;
+    asset_list: Asset[];
+  }>;
+  certificates: Array<{
+    type: string;
+    info: {
+      drep_id?: string;
+      drep_hex?: string;
+      deposit?: string;
+      stake_address?: string;
+      pool_id_hex?: string;
+      pool_id_bech32?: string;
+    };
+  }>;
+  metadata?: any;
+  assets_minted?: Asset[];
+  withdrawals?: Array<{
+    stake_addr: string;
+    amount: string;
+  }>;
+  plutus_contracts?: Array<{
+    address: string;
+    bytecode: string;
+    input?: {
+      redeemer?: {
+        purpose: string;
+        unit: {
+          steps: number;
+          mem: number;
+        };
+      };
+      datum?: {
+        hash: string;
+      };
+    };
+  }>;
+  assets: Asset[];
+}
+
+// Props
+interface Props {
+  transactionInfo: TransactionInfo;
+}
+
+const props = defineProps<Props>();
+
+// Store
+const store = useStore();
+const assets = computed(() => store.assets);
+
+// Reactive data
+const txAssets = ref<Asset[]>([]);
+const residue = ref<Asset[]>([]);
+const panels = ref<number[]>([]);
+const isExpanded = ref<boolean>(false);
+const isReportDialogOpen = ref<boolean>(false);
+
+// Methods
+const expand = (): void => {
+  txAssets.value.push(...residue.value);
+  isExpanded.value = true;
+};
+
+const updateTokens = async (tokens: Asset[]): Promise<void> => {
+  const resolvedAssets = await Promise.all(tokens.map(token => {
+    const asset = assets.value[token.policy_id + token.asset_name];
+    return resolveAsset(asset, token);
+  }));
+  
+  txAssets.value = resolvedAssets.slice(0, 4);
+  if (resolvedAssets?.length > 4) {
+    residue.value = resolvedAssets.slice(4);
+  } else {
+    residue.value = [];
   }
+};
+
+const getAssetName = (asset: Asset, checkAscii: boolean): string => {
+  const ascii = /^[ -~\t\n\r]+$/;
+  const assetName = Buffer.from(asset.asset_name, 'hex').toString('ascii');
+  if (checkAscii && !ascii.test(assetName)) {
+    return filters.truncate(unitToFingerprint(asset.policy_id + asset.asset_name));
+  }
+  return assetName;
+};
+
+const getFingerprint = (asset: Asset): string => {
+  return filters.truncate(unitToFingerprint(asset.policy_id + asset.asset_name));
+};
+
+const getCertificateType = (type: string): string => {
+  switch (type) {
+    case "drep_retire": {
+      return "DRep De-Registration";
+    }
+    case "drep_registration": {
+      return 'DRep Registrations';
+    }
+    case "vote_delegation": {
+      return 'Vote Delegation';
+    }
+    case "stake_registration": {
+      return 'Stake Registration';
+    }
+    case "pool_delegation": {
+      return 'Pool Delegation';
+    }
+    case "pool_update": {
+      return 'Pool Update';
+    }
+    case "stake_deregistration": {
+      return "Stake De-Registration";
+    }
+  }
+  return 'N/A';
+};
+
+// Filter functions
+const truncate = (value: string): string => {
+  return filters.truncate(value);
+};
+
+const toCurrency = (value: number | string, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number): string => {
+  return filters.toCurrency(Number(value), signs, decimalPlaces, symbolPrefix, symbolSuffix, human, decimals);
+};
+
+const humanFileSize = (bytes: number, si: boolean = true, dp: number = 1): string => {
+  return filters.humanFileSize(bytes, si, dp);
+};
+
+// Watchers
+watch(() => props.transactionInfo, (val) => {
+  if (val) {
+    updateTokens(val.assets.filter(asset => asset.policy_id !== ''));
+  }
+}, { deep: true });
+
+// Lifecycle
+onMounted(async () => {
+  await updateTokens(props.transactionInfo.assets.filter(asset => asset.policy_id !== ''));
 });
 </script>
+
 <style scoped>
 .transaction-info{
 
