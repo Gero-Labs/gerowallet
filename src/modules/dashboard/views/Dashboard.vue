@@ -36,8 +36,15 @@
           }"
         >
           <div class="midnight-overlay" @click="openClaimDialog">
-            <v-card-subtitle class="pb-0 white--text">{{ `Midnight Glacier Drop`}}</v-card-subtitle>
-            <v-card-title class="pt-0 white--text">{{ `Claim $NIGHT token`}}</v-card-title>
+            <img 
+              :src="require('@/assets/logo-stacked-light.svg')" 
+              alt="NIGHT Logo" 
+              class="night-logo-card mr-3"
+            />
+            <div class="claim-text-content">
+              <v-card-subtitle class="pb-0 white--text">{{ `Midnight Glacier Drop`}}</v-card-subtitle>
+              <v-card-title class="pt-0 white--text">{{ `Claim $NIGHT token`}}</v-card-title>
+            </div>
           </div>
         </v-card>
       </v-col>
@@ -198,6 +205,37 @@ export default {
   justify-content: center;
 }
 
+.night-logo-card {
+  height: 60px;
+  width: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.claim-text-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.claim-text-content .v-card__subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1rem !important;
+  line-height: 1.2 !important;
+}
+
+.claim-text-content .v-card__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.2rem !important;
+  line-height: 1.2 !important;
+}
+
 .midnight-claim-card {
   height: 100%;
   transition: all 0.3s ease-in-out;
@@ -239,8 +277,8 @@ export default {
   border-radius: 4px;
   height: 100%;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  flex-direction: row;
+  align-items: center;
   position: relative;
   z-index: 2;
   transition: all 0.3s ease-in-out;
