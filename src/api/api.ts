@@ -406,4 +406,50 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  // Midnight Glacier Drop Claim API methods
+  async checkClaimAllocation(chain: string, address: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/claim/check/${chain}/${address}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async checkAddressFreshness(destAddress: string): Promise<boolean> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/claim/is-fresh/${destAddress}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async submitClaim(chain: string, claimData: any): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.post(`/api/claim/${chain}`, claimData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-gd-claim': 'gero-wallet-v2.5.4'
+        }
+      });
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  async getClaimStatus(chain: string, address: string): Promise<any> {
+    try {
+      const { data, status } = await this.axiosInstance.get(`/api/claim/status/${chain}?address=${address}`);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
 }

@@ -2,31 +2,43 @@
   <v-layout column>
     <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
-        <v-card outlined>
+        <v-card outlined class="dashboard-card">
           <v-card-subtitle class="pb-0">{{ `Portfolio`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{ computedValues.totalValue | toCurrency(false, 2, '₳', "", true, 0)}}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.totalValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
-        <v-card outlined>
+        <v-card outlined class="dashboard-card">
           <v-card-subtitle class="pb-0">{{ `Assets`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{computedValues.assetsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.assetsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
-        <v-card outlined>
+        <v-card outlined class="dashboard-card">
           <v-card-subtitle class="pb-0">{{ `Collectibles`}}</v-card-subtitle>
           <v-card-title class="pt-0">{{computedValues.collectibles | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
           <v-card-subtitle>{{ Number(computedValues.collectibles) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
         </v-card>
       </v-col>
       <v-col cols="12" xl="3" md="3" sm="3" xs="6" class="pa-2">
-        <v-card outlined>
-          <v-card-subtitle class="pb-0">{{ `Liquidity`}}</v-card-subtitle>
-          <v-card-title class="pt-0">{{computedValues.lpsValue | toCurrency(false, 2, '₳', "", true, 0) }}</v-card-title>
-          <v-card-subtitle>{{ Number(computedValues.lpsValue) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0)  }}</v-card-subtitle>
+        <v-card 
+          outlined 
+          class="midnight-claim-card dashboard-card" 
+          @click="openClaimDialog"
+          :style="{ 
+            backgroundImage: 'url(' + require('@/assets/Midnight.png') + ')',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            cursor: 'pointer',
+            position: 'relative'
+          }"
+        >
+          <div class="midnight-overlay" @click="openClaimDialog">
+            <v-card-subtitle class="pb-0 white--text">{{ `Midnight Glacier Drop`}}</v-card-subtitle>
+            <v-card-title class="pt-0 white--text">{{ `Claim $NIGHT token`}}</v-card-title>
+          </div>
         </v-card>
       </v-col>
     </v-row>
@@ -55,6 +67,12 @@
         <TransactionsCard></TransactionsCard>
       </v-col>
     </v-row>
+    
+    <!-- Claim Dialog -->
+    <ClaimDialog
+      :show="showClaimDialog"
+      @close="showClaimDialog = false"
+    />
   </v-layout>
 </template>
 <script>
@@ -68,6 +86,7 @@ import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
+import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import networks from '@/utils/networks';
 import { tapToolsStore } from '@/stores/modules/tapTools';
@@ -78,7 +97,7 @@ export default {
   components: {
     AssetsPieChart,
     TransactionsCard, StakingCard2, TokenAllocationTable,
-    PortfolioChart, NoTokensCard },
+    PortfolioChart, NoTokensCard, ClaimDialog },
   computed: {
     isStakingEnabled() {
       if (this.baseAddress) {
@@ -145,8 +164,16 @@ export default {
     loadingChart: true,
     transactions: undefined,
     txIos: undefined,
-    blockchainDB: undefined
-  })
+    blockchainDB: undefined,
+    showClaimDialog: false
+  }),
+  methods: {
+    openClaimDialog() {
+      console.log('Opening claim dialog...');
+      this.showClaimDialog = true;
+      console.log('showClaimDialog set to:', this.showClaimDialog);
+    }
+  }
 }
 </script>
 <style>
@@ -162,5 +189,77 @@ export default {
 
 .v-data-table-header {
   background-color: rgb(22, 27, 38);
+}
+
+.dashboard-card {
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.midnight-claim-card {
+  height: 100%;
+  transition: all 0.3s ease-in-out;
+  overflow: hidden;
+  position: relative;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.midnight-claim-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  transition: left 0.5s ease-in-out;
+  z-index: 1;
+}
+
+.midnight-claim-card:hover::before {
+  left: 100%;
+}
+
+.midnight-claim-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 20px rgba(0, 199, 243, 0.2);
+}
+
+.midnight-overlay {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  border-radius: 4px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  transition: all 0.3s ease-in-out;
+}
+
+.midnight-claim-card:hover .midnight-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.midnight-claim-card .white--text {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  transition: all 0.3s ease-in-out;
+}
+
+.midnight-claim-card:hover .white--text {
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.midnight-claim-card:active {
+  transform: translateY(-2px) scale(1.01);
 }
 </style>
