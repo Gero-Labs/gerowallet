@@ -4,6 +4,8 @@ export interface Token {
     ticker: string;
     quantity: number;
     last_price?: number;
+    name?: string;
+    img?: string;
     verified?: boolean;
     balance?: number;
 }
