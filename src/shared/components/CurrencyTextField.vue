@@ -20,7 +20,7 @@ export default {
   name: 'CurrencyTextField',
   props: {
     value: {
-      type: String,
+      type: [String, Number],
       default: '0'
     },
     maximum: {
