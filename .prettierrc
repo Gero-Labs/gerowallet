@@ -1,16 +1,18 @@
-semi: true
-tabWidth: 2
-useTabs: false
-printWidth: 120
-singleQuote: true
-trailingComma: es5
-arrowParens: avoid
-proseWrap: preserve
-requirePragma: false
-bracketSpacing: true
-quoteProps: consistent
-bracketSameLine: false
-experimentalTernaries: false
-singleAttributePerLine: false
-htmlWhitespaceSensitivity: css
-embeddedLanguageFormatting: auto
+{
+  "semi": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "printWidth": 120,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "arrowParens": "avoid",
+  "proseWrap": "preserve",
+  "requirePragma": false,
+  "bracketSpacing": true,
+  "quoteProps": "consistent",
+  "bracketSameLine": false,
+  "experimentalTernaries": false,
+  "singleAttributePerLine": false,
+  "htmlWhitespaceSensitivity": "css",
+  "embeddedLanguageFormatting": "auto"
+}
