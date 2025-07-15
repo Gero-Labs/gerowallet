@@ -86,7 +86,7 @@
         <v-tab-item>
           <v-data-table
             dense
-            class="transparent"
+            class="transparent clickable-rows"
             :headers="assetsHeaders"
             :items="assets"
             :sort-by.sync="assetsSort.by"
@@ -94,7 +94,7 @@
             :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :custom-sort="customSort"
-            @click:row="handleTokenRowClick"
+            @click:row="handleRowClick"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -230,14 +230,6 @@
                     <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
                   </template>
                 </v-progress-linear>
-                <button
-                  class="ai-analysis-btn"
-                  @click.stop="openTechnicalAnalysis(item)"
-                  :disabled="!item.last_price"
-                  title="AI Technical Analysis"
-                >
-                  <span class="ai-text">AI</span>
-                </button>
               </div>
             </template>
             <template v-slot:[`item.last_7_days`]="{ item }">
@@ -353,8 +345,35 @@
     <v-dialog v-model="showTechnicalAnalysis" :max-width="swapPanelOpen ? 1600 : 1200" scrollable>
       <v-card style="background-color: #141414; font-family: 'Inter', sans-serif;">
         <v-card-title class="pa-4" style="background-color: #141414; color: white; font-family: 'Inter', sans-serif;">
-          <v-icon left color="white">mdi-chart-line-variant</v-icon>
-          Technical Analysis - {{ selectedToken?.name || selectedToken?.ticker }}
+          <v-badge
+            overlap
+            avatar
+            color="transparent"
+            :offset-y="36"
+            :offset-x="24"
+            v-if="selectedToken?.verified"
+          >
+            <template v-slot:badge>
+              <v-avatar color="transparent" tile size="20">
+                <v-icon small color="primary">
+                  mdi-check-decagram
+                </v-icon>
+              </v-avatar>
+            </template>
+            <v-avatar size="32" class="mr-3">
+              <img v-if="selectedToken?.img"
+                :src="selectedToken?.img"
+                :alt="`${selectedToken?.ticker} Logo`"
+              />
+            </v-avatar>
+          </v-badge>
+          <v-avatar size="32" class="mr-3" v-else>
+            <img v-if="selectedToken?.img"
+              :src="selectedToken?.img"
+              :alt="`${selectedToken?.ticker} Logo`"
+            />
+          </v-avatar>
+          {{ selectedToken?.name || selectedToken?.ticker }}
           <v-spacer></v-spacer>
           <v-btn 
             outlined 
@@ -372,8 +391,8 @@
           </v-btn>
         </v-card-title>
 
-        <v-card-text class="pa-0" style="height: 700px; background-color: #141414; font-family: 'Inter', sans-serif;">
-          <div v-if="analysisLoading" class="text-center py-8 d-flex align-center justify-center" style="height: 700px;">
+        <v-card-text class="pa-0" style="height: 600px; background-color: #141414; font-family: 'Inter', sans-serif;">
+          <div v-if="analysisLoading" class="text-center py-8 d-flex align-center justify-center" style="height: 600px;">
             <div>
               <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
               <div class="text-h6 mt-4">Analyzing {{ selectedToken?.name || selectedToken?.ticker }}...</div>
@@ -382,28 +401,102 @@
           
           <div v-else-if="analysisData" style="height: 100%; position: relative;">
             <div class="pa-4" style="height: 100%; background-color: #141414 !important;">
-              <v-row style="height: 100%;" no-gutters>
-                <!-- Chart Column -->
-                <v-col :cols="swapPanelOpen ? 5 : 8" class="pr-2" style="height: 100%; transition: all 0.3s ease;">
-                  <div class="chart-container" style="height: 100%;">
+              <!-- Chart and Analysis Row -->
+              <v-row no-gutters style="height: 100%;">
+                <!-- Chart Column with Token Overview -->
+                <v-col :cols="swapPanelOpen ? 6 : 8" class="pr-2" style="height: 100%; transition: all 0.3s ease;">
+                  <!-- Token Overview Row -->
+                  <v-card outlined class="mb-3 token-overview-card-compact" style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
+                    <v-card-text class="pa-2">
+                      <!-- Table-like Headers -->
+                      <div class="overview-headers mb-1">
+                        <div class="overview-header">Risk</div>
+                        <div class="overview-header">Quantity</div>
+                        <div class="overview-header">Last Price</div>
+                        <div class="overview-header">Change</div>
+                        <div class="overview-header">Value</div>
+                        <div class="overview-header">Market Cap</div>
+                        <div class="overview-header">Allocation</div>
+                      </div>
+                      
+                      <!-- Table-like Values -->
+                      <div class="overview-values">
+                        <div class="overview-value-item">
+                          <div class="d-flex align-center justify-center" style="gap: 4px;">
+                            <v-img 
+                              v-if="selectedToken?.risk && selectedToken?.risk !== 'N/A'" 
+                              width="16" 
+                              height="16" 
+                              :src="assts.resolveRisk(selectedToken.risk)" 
+                              :alt="selectedToken.risk"
+                            />
+                            <span class="overview-value-text">{{ selectedToken?.risk || 'N/A' }}</span>
+                          </div>
+                        </div>
+                        <div class="overview-value-item">
+                          <span class="overview-value-text">{{ selectedToken?.quantity?.toLocaleString() || 'N/A' }}</span>
+                        </div>
+                        <div class="overview-value-item">
+                          <span class="overview-value-text">${{ selectedToken?.last_price?.toFixed(6) || 'N/A' }}</span>
+                        </div>
+                        <div class="overview-value-item">
+                          <div class="d-flex align-center justify-center" style="gap: 4px;">
+                            <v-avatar tile size="12">
+                              <v-img
+                                :src="
+                                  selectedToken?.change === 0
+                                    ? assts.arrowRightSvg
+                                    : selectedToken?.change > 0
+                                    ? assts.trendUpSvg
+                                    : assts.trendDownSvg
+                                "
+                                alt="trend"
+                              ></v-img>
+                            </v-avatar>
+                            <span class="overview-value-text" :style="selectedToken?.change === 0 ? {color: '#A3A3A3' } : selectedToken?.change > 0 ? { color: '#47CD89' } : { color: '#F97066' }">
+                              {{ selectedToken?.change ? Math.abs(selectedToken.change).toFixed(2) + '%' : 'N/A' }}
+                            </span>
+                          </div>
+                        </div>
+                        <div class="overview-value-item">
+                          <span class="overview-value-text">${{ selectedToken?.value?.toLocaleString() || 'N/A' }}</span>
+                        </div>
+                        <div class="overview-value-item">
+                          <span class="overview-value-text">${{ selectedToken?.mcap ? (Number(selectedToken.mcap) * price?.lastPrice).toLocaleString() : 'N/A' }}</span>
+                        </div>
+                        <div class="overview-value-item">
+                          <div class="d-flex align-center justify-center" style="gap: 4px;">
+                            <v-progress-linear
+                              :value="selectedToken?.total_allocation || 0"
+                              color="#00dff3"
+                              height="4"
+                              rounded
+                              style="width: 40px;"
+                            ></v-progress-linear>
+                            <span class="overview-value-text">{{ selectedToken?.total_allocation?.toFixed(1) || '0.0' }}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                  
+                  <!-- Chart Container -->
+                  <div class="chart-container" style="height: 70%;">
                     <div ref="technicalChart" style="width: 100%; height: 100%;"></div>
                   </div>
                 </v-col>
                 
-                <!-- Overview Column -->
+                <!-- Analysis Column -->
                 <v-col :cols="swapPanelOpen ? 3 : 4" class="pl-2 pr-2" style="height: 100%; overflow-y: auto; transition: all 0.3s ease;">
-                  <!-- Price Overview -->
+
+                  <!-- Technical Analysis Overview -->
                   <v-card outlined class="mb-3" style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
                     <v-card-title class="pb-2 text-subtitle-1" style="color: white; font-family: 'Inter', sans-serif;">
                       <v-icon left small color="white">mdi-chart-line</v-icon>
-                      Price Overview
+                      Technical Analysis
                     </v-card-title>
                     <v-card-text class="pt-0 pb-2">
-                      <div class="mb-1">
-                        <div class="text-caption" style="color: #888888;">Current Price</div>
-                        <div class="text-h6 font-weight-bold">${{ selectedToken?.last_price?.toFixed(6) || 'N/A' }}</div>
-                      </div>
-                      <div class="mb-1">
+                      <div class="mb-2">
                         <div class="text-caption mb-1" style="color: #888888;">Trend</div>
                         <div class="d-flex align-center" style="gap: 8px;">
                           <v-chip 
@@ -524,28 +617,25 @@
                       </div>
                     </v-card-text>
                   </v-card>
-                </v-col>
+                  </v-col>
 
-                <!-- Swap Panel -->
-                <v-col 
-                  v-if="swapPanelOpen" 
-                  cols="4" 
-                  class="swap-panel pl-2" 
-                  style="height: 100%; border-left: 1px solid #404040; background-color: #141414;"
-                >
-                  <div class="pa-4" style="height: 100%; overflow-y: auto;">
-                    <div class="d-flex align-center mb-4">
-                      <v-icon color="white" class="mr-2">mdi-swap-horizontal</v-icon>
-                      <span class="text-h6" style="color: white; font-family: 'Inter', sans-serif;">Swap</span>
-                      <v-spacer></v-spacer>
-                      <v-btn icon small @click="toggleSwapPanel">
-                        <v-icon color="white" small>mdi-close</v-icon>
-                      </v-btn>
+                  <!-- Swap Panel -->
+                  <v-col 
+                    v-if="swapPanelOpen" 
+                    cols="3" 
+                    class="swap-panel pl-2" 
+                    style="height: 100%; background-color: #141414;"
+                  >
+                    <div class="pa-3" style="height: 100%; overflow-y: auto;">
+                      <div class="d-flex align-center mb-3">
+                        <v-icon color="white" class="mr-2" small>mdi-swap-horizontal</v-icon>
+                        <span class="text-subtitle-1 font-weight-medium" style="color: white; font-family: 'Inter', sans-serif;">Swap</span>
+                        <v-spacer></v-spacer>
+                      </div>
+                      <SwapWidget @onSwap="handleSwapComplete" :compact="true"></SwapWidget>
                     </div>
-                    <SwapWidget @onSwap="handleSwapComplete"></SwapWidget>
-                  </div>
-                </v-col>
-              </v-row>
+                  </v-col>
+                </v-row>
             </div>
           </div>
           
@@ -616,7 +706,33 @@ export default {
       this.dialogData = row;
     },
     handleTokenRowClick(row) {
-      console.log(row)
+      this.openTechnicalAnalysis(row);
+    },
+    handleRowClick(row, event) {
+      // Add click effect
+      if (event && event.target) {
+        const rowElement = event.target.closest('tr');
+        if (rowElement) {
+          rowElement.classList.add('row-clicked');
+          setTimeout(() => {
+            if (rowElement) {
+              rowElement.classList.remove('row-clicked');
+            }
+          }, 600);
+        }
+      } else {
+        // Fallback: try to find the row element through other means
+        const tableRows = document.querySelectorAll('.clickable-rows tbody tr');
+        tableRows.forEach(tr => {
+          if (tr.querySelector('td')?.textContent?.includes(row.name)) {
+            tr.classList.add('row-clicked');
+            setTimeout(() => {
+              tr.classList.remove('row-clicked');
+            }, 600);
+          }
+        });
+      }
+      this.openTechnicalAnalysis(row);
     },
     openTechnicalAnalysis(token) {
       console.log('Opening technical analysis for:', token.name, 'Token structure:', token);
@@ -1303,6 +1419,173 @@ export default {
   50% { 
     opacity: 0.8;
     transform: scale(1.1);
+  }
+}
+
+/* Clickable rows styling */
+.clickable-rows ::v-deep tbody tr {
+  cursor: pointer !important;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.clickable-rows ::v-deep tbody tr td {
+  cursor: pointer !important;
+}
+
+.clickable-rows ::v-deep tbody tr:hover {
+  background-color: rgba(0, 223, 243, 0.1) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 223, 243, 0.2);
+}
+
+.clickable-rows ::v-deep tbody tr:hover td {
+  background-color: rgba(0, 223, 243, 0.1) !important;
+}
+
+/* AI-inspired click effect */
+.clickable-rows ::v-deep tbody tr.row-clicked {
+  animation: aiClickEffect 0.6s ease-out;
+}
+
+@keyframes aiClickEffect {
+  0% {
+    background: linear-gradient(90deg, transparent, rgba(0, 223, 243, 0.3), transparent) !important;
+    box-shadow: 0 0 0 0 rgba(0, 223, 243, 0.7);
+  }
+  50% {
+    background: linear-gradient(90deg, rgba(0, 223, 243, 0.2), rgba(0, 223, 243, 0.5), rgba(0, 223, 243, 0.2)) !important;
+    box-shadow: 0 0 0 4px rgba(0, 223, 243, 0.4);
+  }
+  100% {
+    background: linear-gradient(90deg, transparent, rgba(0, 223, 243, 0.1), transparent) !important;
+    box-shadow: 0 0 0 0 rgba(0, 223, 243, 0);
+  }
+}
+
+/* Token overview styling */
+.token-overview-card {
+  border: 1px solid #404040;
+  border-radius: 8px;
+}
+
+.token-overview-card-compact {
+  border: 1px solid #404040;
+  border-radius: 6px;
+  min-height: auto;
+}
+
+.overview-item {
+  min-height: 32px;
+}
+
+.overview-item-compact {
+  min-height: 24px;
+}
+
+.overview-label {
+  color: #888888 !important;
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.overview-label-compact {
+  color: #888888 !important;
+  font-size: 9px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 1px;
+  line-height: 1.2;
+}
+
+.overview-value {
+  color: white !important;
+  font-size: 12px !important;
+  line-height: 1.2;
+}
+
+.overview-value-compact {
+  color: white !important;
+  font-size: 11px !important;
+  line-height: 1.3;
+}
+
+.compact-overview {
+  gap: 4px;
+}
+
+/* Table-like overview styling */
+.overview-headers {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #404040;
+  padding-bottom: 4px;
+}
+
+.overview-header {
+  flex: 1;
+  text-align: center;
+  color: #888888 !important;
+  font-size: 9px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 600;
+}
+
+.overview-values {
+  display: flex;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.overview-value-item {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.overview-value-text {
+  color: white !important;
+  font-size: 10px !important;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Force cursor pointer on table rows */
+.v-data-table.clickable-rows tbody tr {
+  cursor: pointer !important;
+}
+
+.v-data-table.clickable-rows tbody tr td {
+  cursor: pointer !important;
+}
+
+.v-data-table.clickable-rows tbody tr:hover {
+  background-color: rgba(0, 223, 243, 0.1) !important;
+}
+
+.v-data-table.clickable-rows tbody tr.row-clicked {
+  background-color: rgba(0, 223, 243, 0.3) !important;
+  animation: clickPulse 0.6s ease-out;
+}
+
+@keyframes clickPulse {
+  0% {
+    background-color: rgba(0, 223, 243, 0.5) !important;
+    transform: scale(1);
+  }
+  50% {
+    background-color: rgba(0, 223, 243, 0.3) !important;
+    transform: scale(1.01);
+  }
+  100% {
+    background-color: rgba(0, 223, 243, 0.1) !important;
+    transform: scale(1);
   }
 }
 </style>
