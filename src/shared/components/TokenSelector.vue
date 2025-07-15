@@ -105,12 +105,12 @@
                     @change="quantityChange"
                   ></CurrencyTextField>
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text" v-if="adaShortage !== 0" style="color: #f97066 !important">
+                <v-list-item-subtitle class="light-text error-text" v-if="adaShortage !== 0">
                   Insufficient Funds
                 </v-list-item-subtitle>
                 <v-list-item-subtitle
                   class="light-text"
-                  :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}"
+                  :style="priceImpact > 3 ? 'color: #FEC84B !important' : ''"
                   v-else-if="!isNaN(+price.replaceAll(',', ''))"
                 >
                   {{ '~$' + price
@@ -191,7 +191,7 @@ const balance = computed(() => {
   if (props.value?.decimals) {
     return filters.toCurrency(props.value.balance, false, props.value.decimals, '', '', false, props.value.decimals);
   }
-  return props.value?.balance + '' || '';
+  return props.value?.balance ? String(props.value.balance) : '';
 });
 
 const selectedToken = computed({
@@ -258,6 +258,10 @@ watch(
 .light-text {
   color: #61646c !important;
   height: 21px;
+}
+
+.error-text {
+  color: #f97066 !important;
 }
 
 .v-text-field.v-text-field--solo:not(.v-text-field--solo-flat) > .v-input__control > .v-input__slot {
