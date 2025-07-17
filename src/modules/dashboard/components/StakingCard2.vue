@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined :loading="loadingTxs">
+  <v-card flat outlined class="dashboard-card-radius" :loading="loadingTxs">
     <v-card-title>Staking</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
@@ -359,5 +359,9 @@ export default {
 
 .v-data-table-header {
   background-color: rgb(22, 27, 38);
+}
+
+.dashboard-card-radius {
+  border-radius: 8px !important;
 }
 </style>

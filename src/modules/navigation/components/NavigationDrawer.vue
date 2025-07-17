@@ -244,7 +244,28 @@ onMounted(() => {
 
 <style scoped>
 .menuItem {
-  border: 1px solid transparent;
+  border: none !important;
+}
+
+.menuItem.activePage {
+  border: none !important;
+  border-right: 1px solid #00c7f3 !important;
+}
+
+.menuItem.activePageDark {
+  border: none !important;
+  border-right: 1px solid #00D1FF !important;
+}
+
+/* More specific targeting for active menu items */
+.v-list-item.menuItem.activePage,
+.v-list-item--active.menuItem.activePage {
+  border-right: 1px solid #00c7f3 !important;
+}
+
+.v-list-item.menuItem.activePageDark,
+.v-list-item--active.menuItem.activePageDark {
+  border-right: 1px solid #00D1FF !important;
 }
 
 .activePage {
@@ -254,7 +275,7 @@ onMounted(() => {
 .activePageDark {
   color: #FFFFFF;
   background: #0C0E12;
-  border: 1px solid transparent;
+  border: none !important;
   border-radius: 6px;
   background:
     linear-gradient(to right, #0C0E12, #0C0E12),
@@ -273,12 +294,12 @@ onMounted(() => {
 
 .menuItem.v-list-item--link:before {
   background: #0C0E12;
-  border: 1px solid transparent;
+  border: none !important;
 }
 
 .menuItem.v-list-item--link:not(.activePageDark):hover {
   background: #0C0E12;
-  border: 1px solid transparent;
+  border: none !important;
 }
 
 .theme--dark.v-list-item:focus::before,
@@ -286,5 +307,26 @@ onMounted(() => {
 .theme--dark.v-list-item--active:hover::before,
 .theme--dark.v-list-item--active::before {
   opacity: 0 !important;
+}
+
+/* Remove top and bottom borders from v-list, keep only right border */
+.v-list {
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* Remove borders from menu items, they should not have full borders */
+.menuItem {
+  border: none !important;
+}
+
+.menuItem.v-list-item--link:before {
+  background: #0C0E12;
+  border: none !important;
+}
+
+.menuItem.v-list-item--link:not(.activePageDark):hover {
+  background: #0C0E12;
+  border: none !important;
 }
 </style>

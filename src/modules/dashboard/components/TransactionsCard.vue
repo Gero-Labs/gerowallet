@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="fill-height" :loading="loadingTxs">
+  <v-card outlined class="fill-height dashboard-card-radius" :loading="loadingTxs">
     <v-card-title>Transactions</v-card-title>
     <v-card-text class="pa-0 text-center">
       <v-data-table
@@ -131,5 +131,9 @@ export default defineComponent({
 }
 .no-padding {
   padding: 0!important;
+}
+
+.dashboard-card-radius {
+  border-radius: 8px !important;
 }
 </style>

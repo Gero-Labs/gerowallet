@@ -15,6 +15,7 @@ import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 import loading from '@/plugins/loading';
 import Swap from '@/modules/swap/Swap.vue';
+import Market from '@/modules/market/Market.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
 import Governance from '@/modules/governance/Governance.vue';
@@ -43,7 +44,7 @@ const routes = [
   {
     path: '/market',
     name: 'market',
-    component: Swap,
+    component: Market,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

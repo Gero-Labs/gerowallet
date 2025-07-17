@@ -33,12 +33,6 @@
                 <p class="text-body-2 mb-3">
                   We're excited to announce the upcoming free, multi-phase distribution of NIGHT tokens designed to empower a vibrant and diverse community in building the future of the Midnight network together.
                 </p>
-                <div class="mb-3">
-                  <v-chip color="primary" outlined small>
-                    <v-icon left x-small>mdi-clock-outline</v-icon>
-                    Coming Soon
-                  </v-chip>
-                </div>
                 <a href="https://www.midnight.gd/" target="_blank" class="primary--text text-decoration-none">
                   <v-icon small color="primary">mdi-open-in-new</v-icon>
                   Read more about Midnight and the Glacier Drop
@@ -47,7 +41,7 @@
 
               <v-divider class="mb-4"></v-divider>
 
-              <div class="mb-3 text-body-1 d-flex align-center">
+              <div class="mb-3 text-body-1 d-flex align-center" style="opacity: 0.5; color: #888888;">
                 <div>
                   <strong>Verify Claim Eligibility</strong><br>
                   We'll check your allocation and verify your address.
@@ -69,7 +63,7 @@
               </div>
               
               <!-- Single Address Mode -->
-              <div v-if="useSameAddress">
+              <div v-if="useSameAddress" style="opacity: 0.5;">
                 <v-text-field
                   :value="truncateAddress(sourceAddress)"
                   label="Cardano address"
@@ -77,30 +71,14 @@
                   persistent-hint
                   outlined
                   readonly
+                  disabled
                   class="mb-3"
                 >
-                  <template v-slot:append-outer>
-                    <v-tooltip bottom>
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-btn 
-                          v-bind="attrs" 
-                          v-on="on" 
-                          icon 
-                          small 
-                          @click="useSameAddress = false"
-                          class="mt-1"
-                        >
-                          <v-icon small color="primary">mdi-wallet-plus</v-icon>
-                        </v-btn>
-                      </template>
-                      <span>Use a different destination address</span>
-                    </v-tooltip>
-                  </template>
                 </v-text-field>
               </div>
 
               <!-- Separate Address Mode -->
-              <div v-else>
+              <div v-else style="opacity: 0.5;">
                 <div class="d-flex align-center mb-2">
                   <span class="text-body-2">Using separate addresses</span>
                   <v-btn 
@@ -109,6 +87,7 @@
                     color="primary" 
                     @click="useSameAddressForBoth" 
                     class="ml-2"
+                    disabled
                   >
                     Use same address
                   </v-btn>
@@ -121,6 +100,7 @@
                   persistent-hint
                   outlined
                   readonly
+                  disabled
                   class="mb-3"
                 ></v-text-field>
 
@@ -131,6 +111,7 @@
                   hint="Address to receive your NIGHT tokens"
                   persistent-hint
                   outlined
+                  disabled
                   @input="resetVerification"
                 ></v-text-field>
               </div>
@@ -144,17 +125,29 @@
                 {{ verificationError }}
               </v-alert>
 
+              <v-alert
+                type="warning"
+                dense
+                outlined
+                class="mb-3"
+              >
+                <div>
+                  <strong>Claim functionality coming soon!</strong><br>
+                  <span class="text-body-2">The claim process is currently under development. Check back later for updates.</span>
+                </div>
+              </v-alert>
+
             </div>
 
             <v-card-actions>
               <v-spacer></v-spacer>
               <v-btn
-                :disabled="!sourceAddress || (useSameAddress ? false : !destAddress) || verifyingClaim"
-                :loading="verifyingClaim"
+                disabled
                 color="primary"
-                @click="verifyClaim"
+                style="opacity: 0.5;"
               >
-                Verify Claim
+                <v-icon left small>mdi-clock-outline</v-icon>
+                Coming Soon
               </v-btn>
             </v-card-actions>
           </v-stepper-content>

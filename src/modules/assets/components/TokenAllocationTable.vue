@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="no-gutters fill-height" :loading="loadingTxs">
+  <v-card outlined class="no-gutters fill-height dashboard-card-radius" :loading="loadingTxs">
     <v-card-title>
       Token Allocation ({{assets?.length + collectibles?.length}})
       <v-spacer></v-spacer>
@@ -95,6 +95,7 @@
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :custom-sort="customSort"
             @click:row="handleRowClick"
+            :item-class="getRowClass"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -375,31 +376,34 @@
           </v-avatar>
           {{ selectedToken?.name || selectedToken?.ticker }}
           <v-spacer></v-spacer>
-          <v-btn 
-            outlined 
-            small 
-            color="green" 
-            class="mr-3"
-            @click="toggleSwapPanel"
-            :disabled="isSwapDisabled"
-          >
-            <v-icon left small>mdi-swap-horizontal</v-icon>
-            {{ swapPanelOpen ? 'Close' : 'Buy' }}
-          </v-btn>
           <v-btn icon @click="showTechnicalAnalysis = false">
             <v-icon color="white">mdi-close</v-icon>
           </v-btn>
         </v-card-title>
 
-        <v-card-text class="pa-0" style="height: 600px; background-color: #141414; font-family: 'Inter', sans-serif;">
-          <div v-if="analysisLoading" class="text-center py-8 d-flex align-center justify-center" style="height: 600px;">
-            <div>
-              <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-              <div class="text-h6 mt-4">Analyzing {{ selectedToken?.name || selectedToken?.ticker }}...</div>
+        <v-card-text class="pa-0" style="height: 600px; background-color: #141414; font-family: 'Inter', sans-serif; position: relative;">
+          <!-- Coming Soon Overlay -->
+          <div class="technical-analysis-overlay">
+            <div class="coming-soon-message">
+              <v-icon size="64" color="primary" class="mb-4">mdi-chart-line-variant</v-icon>
+              <h2 class="text-h4 mb-2" style="color: white; font-family: 'Inter', sans-serif;">Technical Analysis</h2>
+              <h3 class="text-h6 mb-4" style="color: #888888; font-family: 'Inter', sans-serif;">Coming Soon</h3>
+              <p class="text-body-1" style="color: #CCCCCC; font-family: 'Inter', sans-serif; max-width: 400px; text-align: center;">
+                Advanced technical analysis with real-time indicators, chart patterns, and AI-powered insights will be available soon.
+              </p>
             </div>
           </div>
           
-          <div v-else-if="analysisData" style="height: 100%; position: relative;">
+          <!-- Blurred Background Content -->
+          <div class="technical-analysis-content">
+            <div v-if="analysisLoading" class="text-center py-8 d-flex align-center justify-center" style="height: 600px;">
+              <div>
+                <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+                <div class="text-h6 mt-4">Analyzing {{ selectedToken?.name || selectedToken?.ticker }}...</div>
+              </div>
+            </div>
+            
+            <div v-else-if="analysisData" style="height: 100%; position: relative;">
             <div class="pa-4" style="height: 100%; background-color: #141414 !important;">
               <!-- Chart and Analysis Row -->
               <v-row no-gutters style="height: 100%;">
@@ -633,16 +637,32 @@
                         <v-spacer></v-spacer>
                       </div>
                       <SwapWidget @onSwap="handleSwapComplete" :compact="true"></SwapWidget>
+                      
+                      <!-- Buy Button (behind blur effect) -->
+                      <div class="mt-3">
+                        <v-btn 
+                          color="success" 
+                          block 
+                          large 
+                          rounded 
+                          disabled
+                          style="opacity: 0.7; pointer-events: none;"
+                        >
+                          <v-icon left>mdi-shopping</v-icon>
+                          Buy {{ selectedToken?.ticker || 'Token' }}
+                        </v-btn>
+                      </div>
                     </div>
                   </v-col>
                 </v-row>
             </div>
           </div>
           
-          <div v-else class="text-center py-8 d-flex align-center justify-center" style="height: 700px;">
-            <div>
-              <v-icon large color="grey">mdi-chart-bell-curve</v-icon>
-              <div class="text-h6 grey--text mt-2">No Analysis Available</div>
+            <div v-else class="text-center py-8 d-flex align-center justify-center" style="height: 700px;">
+              <div>
+                <v-icon large color="grey">mdi-chart-bell-curve</v-icon>
+                <div class="text-h6 grey--text mt-2">No Analysis Available</div>
+              </div>
             </div>
           </div>
         </v-card-text>
@@ -696,6 +716,13 @@ export default {
   },
   methods: {
     ...mapActions(walletConfigStore, ['setHideScamTokens', 'setHideUnverifiedTokens', 'setHideUnratedTokens', 'setTokenAllocationTableSort']),
+    getRowClass(item) {
+      // Add gradient class to Cardano token row
+      if (item.name === this.networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network)) {
+        return 'cardano-token-row'
+      }
+      return ''
+    },
     handleSwitchTab(tab) {
       this.currentTab = tab;
     },
@@ -737,17 +764,14 @@ export default {
     openTechnicalAnalysis(token) {
       console.log('Opening technical analysis for:', token.name, 'Token structure:', token);
       this.selectedToken = token;
-      this.analysisData = null;
       this.analysisLoading = false;
       this.showTechnicalAnalysis = true;
       this.generateMockAnalysis(token);
     },
     generateMockAnalysis(token) {
-      this.analysisLoading = true;
-      this.analysisData = null;
+      this.analysisLoading = false;
       
-      // Simulate API call delay
-      setTimeout(() => {
+      // Generate mock data immediately
         this.analysisData = {
           asset: token.ticker || token.name,
           priceHistory: this.generateMockPriceData(token.last_price || 1),
@@ -804,7 +828,6 @@ export default {
         this.$nextTick(() => {
           this.createTechnicalChart();
         });
-      }, 1500);
     },
     createTechnicalChart() {
       if (!this.$refs.technicalChart || !this.analysisData) return;
@@ -1124,7 +1147,13 @@ export default {
     customSort(items, sortBy, sortDesc) {
       if (!sortBy.length) return items;
 
+      const cardanoCurrencyName = networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network);
+      
       return items.sort((a, b) => {
+        // Always prioritize Cardano token first
+        if (a.name === cardanoCurrencyName) return -1;
+        if (b.name === cardanoCurrencyName) return 1;
+        
         const sortKey = sortBy[0];
         const compareA = a[sortKey];
         const compareB = b[sortKey];
@@ -1266,6 +1295,14 @@ export default {
             return token.risk && token.risk !== 'N/A'
           })
         }
+        
+        // Always put Cardano token first
+        const cardanoToken = res.find(token => token.name === networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network))
+        if (cardanoToken) {
+          res = res.filter(token => token.name !== networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network))
+          res.unshift(cardanoToken)
+        }
+        
         return res
       }
       return resolvedAssets
@@ -1340,6 +1377,20 @@ export default {
   background-color: #333741;
   display: inline-block;
   margin-right: 10px;
+}
+
+.dashboard-card-radius {
+  border-radius: 8px !important;
+}
+
+.cardano-token-row {
+  background: linear-gradient(90deg, rgba(0, 123, 255, 0.08), rgba(0, 150, 255, 0.05)) !important;
+  border-left: 3px solid #007bff !important;
+  position: relative;
+}
+
+.cardano-token-row:hover {
+  background: linear-gradient(90deg, rgba(0, 123, 255, 0.12), rgba(0, 150, 255, 0.08)) !important;
 }
 .badge .v-badge__wrapper {
   margin: 0
@@ -1587,5 +1638,37 @@ export default {
     background-color: rgba(0, 223, 243, 0.1) !important;
     transform: scale(1);
   }
+}
+
+/* Technical Analysis Coming Soon Overlay */
+.technical-analysis-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(20, 20, 20, 0.75);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.coming-soon-message {
+  text-align: center;
+  padding: 2rem;
+  border-radius: 12px;
+  background: rgba(15, 15, 15, 0.9);
+  border: 1px solid rgba(0, 199, 243, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.technical-analysis-content {
+  position: relative;
+  height: 100%;
+  filter: blur(4px);
+  opacity: 0.6;
+  pointer-events: none;
 }
 </style>
