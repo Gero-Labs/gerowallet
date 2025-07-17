@@ -104,15 +104,50 @@ class Charli3API {
   }
 
   async getTokenLogo(token: string): Promise<string | null> {
+    const cacheKey = `charli3_token_logo_${token}`
+    
+    // Clear old cached entries that might be broken (data URLs from old implementation)
+    const cached = this.getCachedTokenLogo(cacheKey)
+    
+    if (cached && cached.startsWith('data:')) {
+      // Remove old base64 data URLs from cache
+      localStorage.removeItem(cacheKey)
+    } else if (cached && cached.startsWith('blob:')) {
+      // Check if blob URL is still valid by trying to fetch it
+      try {
+        const testResponse = await fetch(cached, { method: 'HEAD' })
+        if (testResponse.ok) {
+          return cached
+        } else {
+          // Blob URL is invalid, remove from cache
+          localStorage.removeItem(cacheKey)
+        }
+      } catch (error) {
+        // Blob URL is invalid, remove from cache
+        localStorage.removeItem(cacheKey)
+      }
+    } else if (cached) {
+      return cached
+    }
+    
+    
     try {
       const response = await axios.get(`${this.baseURL}/tokens/logo/${token}`, {
         timeout: 3000, // 3 second timeout for better performance
+        responseType: 'blob', // Handle as blob to get proper image data
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Accept': 'image/png, image/jpeg, image/gif, image/webp, */*'
         }
       })
-      return response.data
+      
+      // Create object URL from blob
+      const blob = response.data
+      const objectUrl = URL.createObjectURL(blob)
+      
+      // Cache the object URL for 24 hours
+      this.setCachedTokenLogo(cacheKey, objectUrl)
+      
+      return objectUrl
     } catch (error) {
       if (error.code === 'ECONNABORTED') {
         console.warn(`Token logo request timed out for ${token}`)
@@ -122,6 +157,39 @@ class Charli3API {
         console.warn(`Failed to fetch logo for ${token}:`, error.message)
       }
       return null
+    }
+  }
+
+  private getCachedTokenLogo(cacheKey: string): string | null {
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached)
+        const now = Date.now()
+        const twentyFourHours = 24 * 60 * 60 * 1000
+        
+        if (now - timestamp < twentyFourHours) {
+          return data
+        } else {
+          // Remove expired cache
+          localStorage.removeItem(cacheKey)
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to retrieve cached token logo:', error)
+    }
+    return null
+  }
+
+  private setCachedTokenLogo(cacheKey: string, data: string): void {
+    try {
+      const cacheData = {
+        data,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData))
+    } catch (error) {
+      console.warn('Failed to cache token logo:', error)
     }
   }
 

@@ -58,20 +58,23 @@
                       <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon">Coming soon</v-card-subtitle>
                     </div>
                   </div>
-                  <div v-else-if="item.id === 'ada-cashback'" class="carousel-text-top">
-                    <div class="debit-card-container">
+                  <div v-else-if="item.id === 'ada-cashback'" class="carousel-text-top cashback-card">
+                    <div class="debit-card-container cashback-container">
                       <img 
                         :src="item.cardImage" 
                         alt="ADA Cashback" 
-                        class="debit-card-floating"
+                        class="debit-card-floating cashback-floating"
                       />
                       <div class="debit-card-glow"></div>
                     </div>
-                    <div class="debit-card-text">
+                    <div class="debit-card-text cashback-text">
                       <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title cashback-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
                       <div class="debit-card-description white--text text-center mb-2 cashback-subtitle">
-                        {{ item.subtitle }}
+                        {{ item.subtitle.split('\n')[0] }}
                       </div>
+                      <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon cashback-cta">
+                        {{ item.subtitle.split('\n')[1] }}
+                      </v-card-subtitle>
                     </div>
                   </div>
                   <div v-else class="carousel-content-center">
@@ -248,7 +251,7 @@ export default {
         {
           id: 'ada-cashback',
           title: 'ADA Cashback',
-          subtitle: 'Pay with any credit card online, and receive ADA Cashback!',
+          subtitle: 'Pay with any credit card online, and receive ADA Cashback! \n Click to see deals!',
           logo: logoStackedLight,
           logoAlt: 'Gero Logo',
           backgroundImage: cashbackCarouselImage,
@@ -662,6 +665,31 @@ export default {
   filter: drop-shadow(0 10px 20px rgba(0, 199, 243, 0.3));
   position: relative;
   z-index: 2;
+}
+
+/* Specific adjustments for cashback card */
+.cashback-card {
+  margin-top: -15px;
+}
+
+.cashback-floating {
+  width: 230px;
+}
+
+.cashback-container {
+  margin-bottom: 15px;
+}
+
+.cashback-text {
+  margin-top: -5px;
+}
+
+.cashback-cta {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  opacity: 0.8;
+  font-style: italic;
+  color: #00c7f3 !important;
 }
 
 .debit-card-glow {

@@ -14,6 +14,27 @@
         </div>
         -->
         
+        <!-- Last refresh timestamp badge -->
+        <div v-if="lastRefreshTime" class="refresh-badge">
+          <v-tooltip bottom content-class="refresh-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-icon
+                small
+                color="#00c7f3"
+                v-bind="attrs"
+                v-on="on"
+                class="refresh-icon"
+              >
+                mdi-clock-outline
+              </v-icon>
+            </template>
+            <div class="refresh-tooltip-content">
+              <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
+              <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+            </div>
+          </v-tooltip>
+        </div>
+        
         <v-card-title class="py-1">
           <v-icon left size="16" class="volume-icon">mdi-trending-up</v-icon>
           <span class="text-subtitle-1">Top Volume</span>
@@ -74,6 +95,27 @@
           </div>
         </div>
         -->
+        
+        <!-- Last refresh timestamp badge -->
+        <div v-if="lastRefreshTime" class="refresh-badge">
+          <v-tooltip bottom content-class="refresh-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-icon
+                small
+                color="#00c7f3"
+                v-bind="attrs"
+                v-on="on"
+                class="refresh-icon"
+              >
+                mdi-clock-outline
+              </v-icon>
+            </template>
+            <div class="refresh-tooltip-content">
+              <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
+              <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+            </div>
+          </v-tooltip>
+        </div>
         
         <v-card-title class="py-1">
           <v-icon left size="16" class="gainers-icon">mdi-chart-line</v-icon>
@@ -142,6 +184,27 @@
           </div>
         </div>
         -->
+        
+        <!-- Last refresh timestamp badge -->
+        <div v-if="lastRefreshTime" class="refresh-badge">
+          <v-tooltip bottom content-class="refresh-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-icon
+                small
+                color="#00c7f3"
+                v-bind="attrs"
+                v-on="on"
+                class="refresh-icon"
+              >
+                mdi-clock-outline
+              </v-icon>
+            </template>
+            <div class="refresh-tooltip-content">
+              <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
+              <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+            </div>
+          </v-tooltip>
+        </div>
         
         <v-card-title class="py-1">
           <v-icon left size="16" class="mcap-icon">mdi-finance</v-icon>
@@ -534,6 +597,10 @@ export default {
       loadingMarketData: false,
       marketDataError: null,
       marketDataInterval: null,
+      lastRefreshTime: null,
+      nextRefreshTime: null,
+      isBackgroundRefresh: false,
+      countdownInterval: null,
       // Logo caching
       logoCache: new Map(),
       logoCacheExpiry: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
@@ -544,7 +611,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'price', 'loadingTxs']),
+    ...mapState(() => useStore(), ['loggedWallet', 'resolvedAssets', 'price', 'loadingTxs']),
     
     loadingOwnedTokens() {
       return this.loadingTxs || !this.resolvedAssets
@@ -556,8 +623,11 @@ export default {
   },
   
   methods: {
-    async loadMarketData() {
-      this.loadingMarketData = true
+    async loadMarketData(isBackgroundRefresh = false) {
+      // Only show loading state on initial load, not during background refresh
+      if (!isBackgroundRefresh) {
+        this.loadingMarketData = true
+      }
       this.marketDataError = null
       
       try {
@@ -569,6 +639,10 @@ export default {
           topGainers: await this.processTokenData(data.topGainers, 'topGainers'),
           topTvl: await this.processTokenData(data.topTvl, 'topTvl')
         }
+        
+        // Update last refresh time and calculate next refresh
+        this.lastRefreshTime = new Date()
+        this.nextRefreshTime = new Date(this.lastRefreshTime.getTime() + 5 * 60 * 1000)
       } catch (error) {
         console.error('Failed to load market data:', error)
         this.marketDataError = 'Failed to load market data'
@@ -1160,6 +1234,42 @@ export default {
     getChangeColor(change) {
       if (!change || change === 0) return 'neutral-change'
       return change > 0 ? 'positive-change' : 'negative-change'
+    },
+    
+    formatLastRefreshTime() {
+      if (!this.lastRefreshTime) return ''
+      const now = new Date()
+      const diffMs = now - this.lastRefreshTime
+      const diffMinutes = Math.floor(diffMs / 60000)
+      
+      if (diffMinutes < 1) return 'now'
+      if (diffMinutes === 1) return '1m ago'
+      if (diffMinutes < 60) return `${diffMinutes}m ago`
+      
+      const diffHours = Math.floor(diffMinutes / 60)
+      if (diffHours === 1) return '1h ago'
+      if (diffHours < 24) return `${diffHours}h ago`
+      
+      const diffDays = Math.floor(diffHours / 24)
+      return `${diffDays}d ago`
+    },
+    
+    formatFullRefreshTime() {
+      if (!this.lastRefreshTime) return ''
+      return this.lastRefreshTime.toLocaleTimeString()
+    },
+    
+    formatNextRefreshTime() {
+      if (!this.nextRefreshTime) return ''
+      const now = new Date()
+      const diffMs = this.nextRefreshTime - now
+      const diffSeconds = Math.floor(diffMs / 1000)
+      const diffMinutes = Math.floor(diffMs / 60000)
+      
+      if (diffMs <= 0) return 'Now'
+      if (diffSeconds < 60) return `In ${diffSeconds} seconds`
+      if (diffMinutes === 1) return 'In 1 minute'
+      return `In ${diffMinutes} minutes`
     }
   },
   
@@ -1167,10 +1277,15 @@ export default {
     // Load market data when component mounts
     await this.loadMarketData()
     
-    // Refresh market data every 5 minutes
+    // Refresh market data every 5 minutes (background refresh)
     this.marketDataInterval = setInterval(() => {
-      this.loadMarketData()
+      this.loadMarketData(true) // true indicates background refresh
     }, 5 * 60 * 1000)
+    
+    // Update countdown every 10 seconds for real-time display
+    this.countdownInterval = setInterval(() => {
+      this.$forceUpdate() // Force re-render to update countdown
+    }, 10000)
     
     // Clean expired logos every hour
     this.logoCacheCleanupInterval = setInterval(() => {
@@ -1184,6 +1299,9 @@ export default {
     }
     if (this.logoCacheCleanupInterval) {
       clearInterval(this.logoCacheCleanupInterval)
+    }
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval)
     }
   }
 }
@@ -1199,6 +1317,51 @@ export default {
   border-radius: 8px;
   transition: all 0.2s ease;
   margin-top: 8px;
+}
+
+.refresh-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.refresh-icon {
+  background-color: rgba(20, 20, 20, 0.7);
+  border-radius: 50%;
+  padding: 4px;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+}
+
+.refresh-icon:hover {
+  background-color: rgba(20, 20, 20, 0.9);
+  transform: scale(1.1);
+}
+
+.refresh-tooltip {
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background-color: rgba(20, 20, 20, 0.95) !important;
+  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.refresh-tooltip-content {
+  line-height: 1.3;
+}
+
+.refresh-tooltip-content div {
+  margin-bottom: 2px;
+  color: #ffffff;
+}
+
+.refresh-tooltip-content div:last-child {
+  margin-bottom: 0;
+}
+
+.refresh-tooltip-content strong {
+  color: #00c7f3;
 }
 
 .compact-card:hover {

@@ -20,143 +20,68 @@
               :justify-start="true"
               style="min-height: calc(100vh - 90px); flex-direction: column;"
             >
-              <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;">
+              <v-app-bar 
+                flat 
+                color="transparent" 
+                style="max-height: 55px;"
+              >
                 <v-app-bar-nav-icon
                   v-if="$vuetify.breakpoint.mobile"
                   @click.stop="drawer = !drawer"
                 />
 
-                <PriceTicker />
-
-                <Sparkline v-if="loggedWallet?.chain === Blockchain.CARDANO" />
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                  v-if="loggedWallet?.chain === Blockchain.CARDANO"
-                />
-
-                <v-progress-linear
-                  v-if="epochSlotPercentage"
-                  striped
-                  :value="epochSlotPercentage"
-                  height="22"
-                  rounded
-                  style="width: 100px; min-width: 50px;"
-                  :buffer-value="100"
-                >
-                  <template v-slot:default="{ value }">
-                    <v-list-item two-line>
-                      <v-list-item-content class="py-0 text-center">
-                        <v-list-item-title class="ma-0" style="font-size: 10px">
-                          {{ 'Epoch ' + latestTip.epoch }}
-                        </v-list-item-title>
-                        <v-list-item-subtitle class="ma-0" style="font-size: 8px; color: white">
-                          {{ Math.ceil(value) }}%
-                        </v-list-item-subtitle>
-                      </v-list-item-content>
-                    </v-list-item>
-                  </template>
-                </v-progress-linear>
-
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                />
-
-                <v-list-item
-                  v-if="latestTip"
-                  two-line
-                  class="px-0"
-                  style="min-height: auto; flex: unset"
-                >
-                  <v-list-item-icon class="ma-0" style="align-self: center;">
-                    <v-icon
-                      small
-                      :color="connected ? '#47cd89' : '#ff6464'"
-                    >
-                      {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
-                    </v-icon>
-                  </v-list-item-icon>
-
-                  <v-list-item-content class="my-0" style="padding:0 !important; display: flow;">
-                    <v-list-item-title class="ma-0" style="font-size: 12px;">
-                      {{ loggedWallet?.network }}
-                      <v-btn x-small icon class="mx-0" :loading="isSyncing" disabled>
-                        <v-avatar size="20">
-                          <v-icon x-small>mdi-sync</v-icon>
-                        </v-avatar>
-
-                        <template v-slot:loader>
-                          <span class="custom-loader">
-                            <v-icon x-small>mdi-sync</v-icon>
-                          </span>
-                        </template>
-                      </v-btn>
-                    </v-list-item-title>
-
-                    <v-list-item-subtitle style="font-size: 10px">
-                      <v-tooltip bottom content-class="smallToolTip">
-                        <template v-slot:activator="{ on, attrs }">
-                          <span v-bind="attrs" v-on="on">
-                            {{ time.format(new Date(latestTip.time * 1000)) }}
-                          </span>
-                        </template>
-
-                        <span>
-                          {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(latestTip.time * 1000)) }}
-                        </span>
-                      </v-tooltip>
-                    </v-list-item-subtitle>
-                  </v-list-item-content>
-                </v-list-item>
-
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                />
-
-                <CopyButton
-                  ref="copyAddress"
-                  x-small
-                  :avatar="assets.googleSvg"
-                  :title="loggedWallet?.userId"
-                  :value="loggedWallet?.userId"
-                  v-if="loggedWallet?.userId"
-                />
-
-                <CopyButton
-                  ref="copyAddress"
-                  x-small
-                  :avatar="assets.walletSvg"
-                  :title="filters.shortenStringWithEllipsis(baseAddress, 14)"
-                  :value="baseAddress"
-                  v-else-if="baseAddress"
-                />
+                <!-- GERO Ticker -->
+                <div class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer;" @click="openSwapDialog">
+                  <div class="d-flex flex-column">
+                    <span class="gero-label" style="font-size: 12px; font-weight: 600; color: #00c7f3;">GERO</span>
+                    <span class="gero-price" style="font-size: 10px; color: #fff;">${{ geroPrice }}</span>
+                  </div>
+                </div>
 
                 <v-spacer />
-
+                
                 <QuickActionsBox />
+                
+                <v-spacer />
 
-                <v-btn
-                  icon
-                  text
-                  :plain="!context.shown"
-                  v-if="musicPlaylist?.length > 0"
-                  @click="setMediaPlayerShown(!context.shown)"
-                >
-                  <v-avatar size="20">
-                    <img
-                      :src="assets.mediaPlayer"
-                      alt="Media Player"
-                      style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
-                    />
-                  </v-avatar>
-                </v-btn>
 
-                <v-btn @click="currentDialog = dialogs.SETTINGS" icon class="ml-1">
+                <v-tooltip bottom content-class="network-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <div
+                      style="display: flex; align-items: center; gap: 4px; min-width: 60px;"
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      <v-icon
+                        small
+                        :color="connected ? '#00c7f3' : '#ff6464'"
+                        :class="{ 'sync-animation': isSyncing }"
+                      >
+                        {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
+                      </v-icon>
+
+                      <!-- Small epoch progress bar -->
+                      <v-progress-linear
+                        class="epoch-progress-small"
+                        height="8"
+                        :value="epochSlotPercentage"
+                        color="#00c7f3"
+                        background-color="#333741"
+                        style="width: 50px;"
+                      ></v-progress-linear>
+
+                    </div>
+                  </template>
+                  
+                  <div class="network-tooltip-content">
+                    <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
+                    <div><strong>Last Sync:</strong> {{ latestTip?.time ? time.format(new Date(latestTip.time * 1000)) : 'N/A' }}</div>
+                    <div><strong>Epoch:</strong> {{ latestTip?.epoch || 'N/A' }}</div>
+                    <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                  </div>
+                </v-tooltip>
+
+                <v-btn @click="currentDialog = dialogs.SETTINGS" icon style="margin-left: 4px;">
                   <v-badge bordered color="error" dot v-if="shouldBackup">
                     <v-avatar size="20">
                       <img :src="assets.settingsSvg" alt="Settings" />
@@ -236,21 +161,25 @@
       :isOpen="backupWalletDialog"
       @close="backupWalletDialog = false"
     />
+
+    <SwapDialog
+      :isOpen="isSwapDialogOpen"
+      @close="closeSwapDialog"
+    />
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs } from 'vue';
+import { ref, computed, onMounted, toRefs, watchEffect, getCurrentInstance } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
-import PriceTicker from '@/modules/navigation/components/PriceTicker.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
 import Player from '@/modules/media-player/Player.vue'
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue'
 import CopyButton from '@/shared/components/CopyButton.vue'
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue'
-import Sparkline from '@/modules/navigation/components/Sparkline.vue'
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue'
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
+import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue'
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
@@ -282,6 +211,10 @@ const drawer = ref<boolean>(false)
 const currentDialog     = ref<string|null>(null)
 const dialogs           = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
+const swapDialog = ref(false)
+
+// Computed for proper reactivity with Vue 2 components
+const isSwapDialogOpen = computed(() => swapDialog.value)
 
 // Aliases for imported utilities
 const time       = timePlugin
@@ -301,18 +234,56 @@ const getBackup = computed(() => walletConfig.getBackup)
 const hasBackup = computed(() => walletConfig.hasBackup)
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 const epochSlotPercentage = computed(() => {
-  return latestTip.value
+  return latestTip.value?.epoch_slot
     ? (latestTip.value.epoch_slot / 432000) * 100
     : 0
 })
+
+// GERO ticker data
+const geroToken = computed(() => {
+  return store.resolvedAssets?.find(asset => 
+    asset.name?.toLowerCase().includes('gero') || 
+    asset.metadata?.ticker?.toLowerCase() === 'gero'
+  )
+})
+
+const geroPrice = computed(() => {
+  if (geroToken.value?.last_price) {
+    return geroToken.value.last_price.toFixed(6)
+  }
+  return 'GERO'
+})
+
+const geroChange = computed(() => {
+  return geroToken.value?.change || 0
+})
+
+const geroChangeText = computed(() => {
+  if (geroToken.value?.change !== undefined) {
+    const change = Math.abs(geroToken.value.change)
+    const sign = geroToken.value.change >= 0 ? '+' : '-'
+    return `${sign}${change.toFixed(2)}%`
+  }
+  return '--'
+})
+
 
 // Actions from stores
 const { login, setWelcomeDone } = store
 const { setMediaPlayerShown } = music
 
-// UI handlers
+// UI handlers (removed hover functionality)
+
 function closeWelcomeDialog() {
   setWelcomeDone(true)
+}
+
+function openSwapDialog() {
+  swapDialog.value = true
+}
+
+function closeSwapDialog() {
+  swapDialog.value = false
 }
 
 function closeChangeLogDialog() {
@@ -324,6 +295,7 @@ function closeChangeLogDialog() {
 function closeDialog() {
   currentDialog.value = null
 }
+
 
 // Lifecycle
 onMounted(async () => {
@@ -344,18 +316,64 @@ div.v-toolbar__content {
   padding-left: 8px !important;
 }
 
-.custom-loader {
-  animation: loader 1s infinite;
-  display: flex;
+.sync-animation {
+  animation: sync-pulse 2s ease-in-out infinite;
 }
 
-@keyframes loader {
-  from { transform: rotate(0); }
-  to   { transform: rotate(-360deg); }
+@keyframes sync-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.epoch-progress-small {
+  border-radius: 4px;
+  margin: 2px 0;
+}
+
+.network-tooltip {
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background-color: rgba(20, 20, 20, 0.95) !important;
+  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.network-tooltip-content {
+  line-height: 1.3;
+}
+
+.network-tooltip-content div {
+  margin-bottom: 2px;
+}
+
+.network-tooltip-content div:last-child {
+  margin-bottom: 0;
 }
 
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
+
+.gero-ticker {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.gero-ticker:hover {
+  background-color: rgba(0, 199, 243, 0.1);
+  transform: scale(1.05);
+}
+
+.gero-ticker:active {
+  transform: scale(0.98);
+}
+
 </style>
