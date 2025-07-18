@@ -60,7 +60,7 @@ const chartOptions = computed(() => ({
       'October',
       'November',
       'December',
-      '2025',
+      'January',
       'February',
       'March',
       'April',
