@@ -530,9 +530,14 @@ export default {
 
 .feature-carousel {
   border-radius: 8px !important;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease-in-out;
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(10px) saturate(110%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 
@@ -765,5 +770,6 @@ export default {
   font-weight: 600 !important;
   line-height: 1.2 !important;
 }
+
 
 </style>

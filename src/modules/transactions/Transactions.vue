@@ -1,5 +1,5 @@
 <template>
-  <div id="tsac">
+  <div id="tsac" class="pa-2">
     <TransactionsCard
       ref="transactionsCard"
       @row-click="handleOnTransactionsRowClick"

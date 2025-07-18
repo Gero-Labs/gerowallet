@@ -1,6 +1,7 @@
 <template>
-  <v-card flat outlined style="min-height: calc(100vh - 80px);">
-    <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
+  <div class="pa-2">
+    <v-card flat outlined style="min-height: calc(100vh - 80px);">
+      <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent" v-if="currentTrack">
           <v-card-text style="height: 433px; max-height: 433px;">
@@ -60,6 +61,7 @@
       </v-col>
     </v-row>
   </v-card>
+  </div>
 </template>
 <script lang="ts">
 import { defineComponent } from 'vue';

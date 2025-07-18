@@ -1,11 +1,15 @@
 <template>
-  <v-app>
-    <v-main>
-      <v-container class="pa-0">
+  <div>
+    <v-app style="background: transparent !important;">
+      <v-main style="position: relative; z-index: 1; background: transparent !important;">
+      <v-container class="pa-0" style="position: relative;">
+        <!-- Cardano Background - Confined to dashboard working area -->
+        <div class="cardano-background-dashboard" :style="{ backgroundImage: `url(${assets.cardanoBg})` }"></div>
+        
         <v-layout :align-start="true">
           <NavigationDrawer v-model="drawer" />
           <v-sheet
-            style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent"
+            style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent"
           >
             <v-row no-gutters v-if="isBeta">
               <v-col cols="12">
@@ -18,7 +22,7 @@
               column
               class="no-gutters px-4 transparent"
               :justify-start="true"
-              style="min-height: calc(100vh - 90px); flex-direction: column;"
+              style="min-height: calc(100vh - 90px); flex-direction: column; background-color: transparent;"
             >
               <v-app-bar 
                 flat 
@@ -62,11 +66,11 @@
 
                       <!-- Small epoch progress bar -->
                       <v-progress-linear
-                        class="epoch-progress-small"
+                        class="epoch-progress-liquid-glass"
                         height="8"
                         :value="epochSlotPercentage"
                         color="#00c7f3"
-                        background-color="#333741"
+                        background-color="transparent"
                         style="width: 50px;"
                       ></v-progress-linear>
 
@@ -166,7 +170,8 @@
       :isOpen="isSwapDialogOpen"
       @close="closeSwapDialog"
     />
-  </v-app>
+    </v-app>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -310,7 +315,51 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style>
+/* Cardano Background - Confined to dashboard working area */
+.cardano-background-dashboard {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* Behind dashboard content */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
+  pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.4);
+}
+
+/* Ensure v-app has pure black background outside working area */
+.v-application {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Override any Vuetify theme variables */
+body {
+  background-color: #000000 !important;
+  background: #000000 !important;
+}
+
+html {
+  background-color: #000000 !important;
+  background: #000000 !important;
+}
+
+/* Make content areas transparent to show background */
+.v-container {
+  background-color: transparent !important;
+}
+
+.v-sheet.transparent {
+  background-color: transparent !important;
+}
+
 div.v-toolbar__content {
   padding-right: 8px !important;
   padding-left: 8px !important;
@@ -331,9 +380,32 @@ div.v-toolbar__content {
   }
 }
 
-.epoch-progress-small {
-  border-radius: 4px;
+.epoch-progress-liquid-glass {
+  border-radius: 8px;
   margin: 2px 0;
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 199, 243, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__background {
+  background: transparent !important;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__determinate {
+  background: linear-gradient(90deg, 
+    rgba(0, 199, 243, 0.8) 0%, 
+    rgba(0, 199, 243, 1) 50%, 
+    rgba(0, 199, 243, 0.8) 100%) !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 
+    0 0 20px rgba(0, 199, 243, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .network-tooltip {
