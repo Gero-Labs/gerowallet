@@ -1,32 +1,32 @@
 <template>
-  <v-card flat outlined max-width="400" class="mx-auto" style="background-color: #191919!important;">
-    <v-card-text class="pa-0">
+  <v-card flat class="mx-auto transparent" :style="{ 'border': 'none', 'box-shadow': 'none', 'max-width': compact ? '350px' : '400px' }">
+    <v-card-text :class="compact ? 'pa-0' : 'pa-0'">
       <v-card flat class="transparent">
-        <v-card-title>
+        <v-card-title :class="compact ? 'py-2' : ''">
           <v-btn-toggle mandatory active-class="highlight" v-model="swapType">
-            <v-btn small color="black" :value="0" rounded class="capitalize">
+            <v-btn :small="!compact" :x-small="compact" color="black" :value="0" rounded class="capitalize">
               Swap
             </v-btn>
-            <v-btn small color="black" :value="1" rounded class="capitalize" disabled>
+            <v-btn :small="!compact" :x-small="compact" color="black" :value="1" rounded class="capitalize" disabled>
               Limit
             </v-btn>
-            <v-btn small color="black" :value="2" rounded class="capitalize" disabled>
+            <v-btn :small="!compact" :x-small="compact" color="black" :value="2" rounded class="capitalize" disabled>
               DCA
             </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
-          <v-btn icon small>
-            <v-icon small>mdi-reload</v-icon>
+          <v-btn icon :small="!compact" :x-small="compact">
+            <v-icon :small="!compact" :x-small="compact">mdi-reload</v-icon>
           </v-btn>
           <v-btn-toggle v-model="settingsToggle">
-            <v-btn small rounded :value="true">
-              <v-icon color="red" small v-if="slippage === 'unlimited'">mdi-infinity</v-icon>
+            <v-btn :small="!compact" :x-small="compact" rounded :value="true">
+              <v-icon color="red" :small="!compact" :x-small="compact" v-if="slippage === 'unlimited'">mdi-infinity</v-icon>
               <span v-else>{{ slippageDisplay }}</span>
-              <v-icon small class="ml-1">mdi-cog</v-icon>
+              <v-icon :small="!compact" :x-small="compact" class="ml-1">mdi-cog</v-icon>
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0">
+        <v-card-text :class="compact ? 'pb-0 px-2' : 'pb-0'">
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
@@ -36,9 +36,11 @@
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
           />
-          <v-btn outlined icon color="#00DFF3" class="mt-2 z-index-5" @click="switchPair">
-            <v-icon color="#00DFF3">mdi-chevron-double-down</v-icon>
-          </v-btn>
+          <div class="d-flex justify-center">
+            <v-btn outlined icon color="#00DFF3" :class="compact ? 'mt-1 z-index-5 switch-btn-center' : 'mt-2 z-index-5 switch-btn-center'" :small="compact" @click="switchPair">
+              <v-icon color="#00DFF3" :small="compact">mdi-chevron-double-down</v-icon>
+            </v-btn>
+          </div>
           <TokenSelector
             v-model="selectedTokenB"
             :available="availableTokens"
@@ -47,7 +49,7 @@
             titleColor="#75E0A7"
             background-color="transparent"
             :max-button-enabled="false"
-            class="mt-n4"
+            :class="compact ? 'mt-n3' : 'mt-n4'"
             :price="getPrice(selectedTokenB)"
             :price-impact="calculateWeightedPriceImpact"
             @change="tokenBQuantityChange"
@@ -72,11 +74,11 @@
             <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
           </div>
         </v-card-text>
-        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippage" :estimation="estimation" style="border-radius: 10px" class="ma-2 mb-0" />
+        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippage" :estimation="estimation" style="border-radius: 10px" :class="compact ? 'ma-1 mb-0' : 'ma-2 mb-0'" />
       </v-card>
     </v-card-text>
-    <v-card-actions class="mx-2 pt-0 mb-2">
-      <v-btn color="primary" large block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ isInsufficientBalance ? 'Insufficient Balance' : 'Swap' }}</v-btn>
+    <v-card-actions :class="compact ? 'mx-1 pt-0 mb-1' : 'mx-2 pt-0 mb-2'">
+      <v-btn color="primary" :large="!compact" :small="compact" block rounded class="rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">{{ swapButtonText }}</v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
@@ -100,6 +102,12 @@ import { walletConfigStore } from '@/stores/modules/walletConfig';
 export default {
   name: 'SwapWidget',
   components: { SwapOverviewOverlay, SettingsOverlay, TokenSelector },
+  props: {
+    compact: {
+      type: Boolean,
+      default: false
+    }
+  },
   computed: {
     ...mapState(dexHunterStore, ['dexHunterTokens']),
     ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'pinnedTokens', 'price', 'baseAddress']),
@@ -107,13 +115,24 @@ export default {
     isSwapDisabled() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const quantityB = this.selectedTokenB.quantity.replaceAll(',', '')
-      return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || this.isInsufficientBalance
+      const hasUtxos = this.utxos && Array.isArray(this.utxos) && this.utxos.length > 0
+      return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || this.isInsufficientBalance || !hasUtxos
     },
     isInsufficientBalance() {
       const quantityA = this.selectedTokenA.quantity.replaceAll(',','')
       const b = filters.toCurrency(this.selectedTokenA.balance, false, this.selectedTokenA.decimals, '', '', false, this.selectedTokenA.decimals).replaceAll(',', '')
       const balanceA = Number(b)
       return Number(quantityA) > balanceA
+    },
+    swapButtonText() {
+      const hasUtxos = this.utxos && Array.isArray(this.utxos) && this.utxos.length > 0
+      if (!hasUtxos) {
+        return 'Wallet Loading...'
+      }
+      if (this.isInsufficientBalance) {
+        return 'Insufficient Balance'
+      }
+      return 'Swap'
     },
     tokens() {
       return (
@@ -434,6 +453,11 @@ export default {
       this.loading = false
     },
     async submit(cborHex) {
+      if (!this.utxos || !Array.isArray(this.utxos) || this.utxos.length === 0) {
+        snackbar.setError('Unable to complete swap: Wallet UTxOs not loaded. Please try again.')
+        return;
+      }
+      
       const txId = await appWallet.submitTx(Transaction.from_hex(cborHex), this.utxos);
       snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
       this.$emit('onSwap')
@@ -507,5 +531,15 @@ export default {
 }
 </script>
 <style scoped>
+.switch-btn-center {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
 
+.switch-btn-center .v-btn__content {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
 </style>

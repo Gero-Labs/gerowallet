@@ -145,9 +145,9 @@ export default defineComponent({
       const lowerCaseSearch = this.search.toLowerCase();
       return this.availableTokens.filter(
         token =>
-          token['name'].toLowerCase().includes(lowerCaseSearch) ||
-          token['ticker'].toLowerCase().includes(lowerCaseSearch) ||
-          token['policy_id'].toLowerCase().includes(lowerCaseSearch)
+          (token['name'] && token['name'].toLowerCase().includes(lowerCaseSearch)) ||
+          (token['ticker'] && token['ticker'].toLowerCase().includes(lowerCaseSearch)) ||
+          (token['policy_id'] && token['policy_id'].toLowerCase().includes(lowerCaseSearch))
       );
     },
   },

@@ -21,12 +21,14 @@ const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], networkId: number): any {
   const tx: Cardano.Tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor)).toCore();
   const inputs: any[] = [];
-  tx.body.inputs.forEach((input: Cardano.TxIn) => {
-    const utxo = utxos.find(utxo => utxo.tx_hash === input.txId && utxo.tx_index === input.index)
-    if (utxo) {
-      inputs.push(utxo)
-    }
-  })
+  if (utxos && Array.isArray(utxos)) {
+    tx.body.inputs.forEach((input: Cardano.TxIn) => {
+      const utxo = utxos.find(utxo => utxo.tx_hash === input.txId && utxo.tx_index === input.index)
+      if (utxo) {
+        inputs.push(utxo)
+      }
+    })
+  }
   const outputs: any[] = [];
   let index: number = 0;
   let totalOutput: bigint = BigInt(0);
@@ -152,7 +154,7 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
   const native_scripts: Cardano.Script[] = []
   const plutus_scripts: Cardano.Script[] = []
 
-  tx.auxiliaryData?.scripts.forEach((script: Cardano.Script) => {
+  tx.auxiliaryData?.scripts?.forEach((script: Cardano.Script) => {
     if (script.__type === Cardano.ScriptType.Native) {
       native_scripts.push(script);
     } else if (script.__type == Cardano.ScriptType.Plutus) {

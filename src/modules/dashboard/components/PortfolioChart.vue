@@ -1,5 +1,32 @@
 <template>
-  <div style="align-content: center; height: 212px" class="text-center justify-center">
+  <div style="align-content: center; height: 212px; position: relative; z-index: 1;" class="text-center justify-center">
+    <!-- Portfolio Value Display -->
+    <div v-if="chartData && chartData.length > 0" class="portfolio-value-display" @click="toggleCurrency">
+      <div class="portfolio-label">Portfolio Balance</div>
+      <div class="portfolio-amount">{{ formatPortfolioValue() }}</div>
+    </div>
+    
+    <!-- Date Picker Tabs -->
+    <div v-if="chartData && chartData.length > 0" class="date-picker-tabs">
+      <v-tabs
+        v-model="selectedTabIndex"
+        background-color="transparent"
+        height="28"
+        active-class="white--text"
+        slider-color="white"
+        show-arrows
+      >
+        <v-tab
+          v-for="tab in Object.values(tabs)"
+          :key="tab.value"
+          style="font-size: 11px; letter-spacing: normal; min-width: 40px; font-weight: 500;"
+          @click="handleTabClick(tab)"
+          :disabled="isDisabled(tab)"
+          >{{ tab.label }}
+        </v-tab>
+      </v-tabs>
+    </div>
+    
     <div id="highstock-chart" v-show="chartData && chartData.length > 0"></div>
     <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
       <v-avatar size="24" v-if="!loadingTxs">
@@ -12,23 +39,6 @@
       <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
       <span v-else>There seems to be no data in this wallet</span>
     </v-card-text>
-    <v-tabs
-      v-if="chartData && chartData.length > 0"
-      background-color="transparent"
-      style="width: fit-content"
-      height="28"
-      active-class="white--text"
-      slider-color="white"
-    >
-      <v-tab
-        v-for="tab in Object.values(tabs)"
-        :key="tab.value"
-        style="font-size: 10px; letter-spacing: normal; min-width: 50px"
-        @click="handleTabClick(tab)"
-        :disabled="isDisabled(tab)"
-        >{{ tab.label }}
-      </v-tab>
-    </v-tabs>
   </div>
 </template>
 <script>
@@ -44,6 +54,14 @@ export default {
     chartData: {
       type: Array,
       default: () => [],
+    },
+    portfolioValueAda: {
+      type: Number,
+      default: 0,
+    },
+    portfolioValueUsd: {
+      type: Number,
+      default: 0,
     },
   },
   filters,
@@ -219,6 +237,10 @@ export default {
     },
     handleTabClick(tab) {
       this.tab = tab
+      // Update selected tab index for visual feedback
+      const tabValues = Object.values(this.tabs)
+      this.selectedTabIndex = tabValues.findIndex(t => t.value === tab.value)
+      
       let start = new Date();
       const end = new Date();
       if (tab.value === this.tabs.YEAR.value) {
@@ -258,19 +280,38 @@ export default {
     generateTitleText() {
       return ''
     },
+    formatPortfolioValue() {
+      if (this.showUsd) {
+        // Show USD value
+        const usdValue = this.portfolioValueUsd
+        if (!usdValue) return '$0.00'
+        return filters.toCurrency(usdValue, false, 2, '$', '', true, 0)
+      } else {
+        // Show ADA value
+        const adaValue = this.portfolioValueAda
+        if (!adaValue) return '₳0.00'
+        const currency = networks.resolveCurrencySymbol(this.loggedWallet?.chain, this.loggedWallet?.network)
+        return filters.toCurrency(adaValue, false, 2, currency, '', true, 0)
+      }
+    },
+    toggleCurrency() {
+      this.showUsd = !this.showUsd
+    },
   },
   data() {
     return {
-      tab: { value: "ALL", label: "All", vsLabel: "vs all time" },
+      tab: { value: "MONTH", label: "30D", vsLabel: "vs last month" },
       lastPrice: 1,
       chartInstance: null,
+      selectedTabIndex: 3, // Index of MONTH tab (30D)
+      showUsd: true, // Default to USD
       tabs: {
-        ALL: { value: "ALL", label: "All", vsLabel: "vs all time" },
-        YEAR: { value: "YEAR", label: "12 Months", vsLabel: "vs last year" },
-        QUARTER: { value: "QUARTER", label: "3 Months", vsLabel: "vs last quarter" },
-        MONTH: { value: "MONTH", label: "30 Days", vsLabel: "vs last month" },
-        WEEK: { value: "WEEK", label: "7 Days", vsLabel: "vs last week" },
-        DAY: { value: "DAY", label: "24 Hours", vsLabel: "vs last day" },
+        ALL: { value: "ALL", label: "ALL", vsLabel: "vs all time" },
+        YEAR: { value: "YEAR", label: "12M", vsLabel: "vs last year" },
+        QUARTER: { value: "QUARTER", label: "3M", vsLabel: "vs last quarter" },
+        MONTH: { value: "MONTH", label: "30D", vsLabel: "vs last month" },
+        WEEK: { value: "WEEK", label: "7D", vsLabel: "vs last week" },
+        DAY: { value: "DAY", label: "1D", vsLabel: "vs last day" },
       },
       assets,
     };
@@ -303,11 +344,55 @@ export default {
   },
   mounted() {
     this.loadChart(this.chartData)
+    // Set default time range to 30D after chart loads
+    this.$nextTick(() => {
+      if (this.chartData && this.chartData.length > 0) {
+        this.handleTabClick(this.tabs.MONTH)
+      }
+    })
   }
 };
 </script>
 <style scoped>
 #highstock-chart {
   min-height: 184px;
+  margin-top: 40px;
+}
+
+.portfolio-value-display {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  z-index: 10;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.portfolio-value-display:hover {
+  opacity: 0.8;
+}
+
+.portfolio-label {
+  font-size: 12px;
+  color: #888888;
+  font-weight: 500;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.portfolio-amount {
+  font-size: 24px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1;
+}
+
+.date-picker-tabs {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  z-index: 10;
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="card-container justify-center">
+  <v-card outlined class="card-container justify-center dashboard-card-radius">
     <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
@@ -108,6 +108,10 @@ export default {
 };
 </script>
 <style scoped>
+.dashboard-card-radius {
+  border-radius: 8px !important;
+}
+
 .card-container {
   display: flex;
   align-items: center;
