@@ -71,10 +71,18 @@ class Charli3API {
   }
 
   async getSymbolInfo(group: string): Promise<Charli3SymbolInfo> {
-    const response = await axios.get(`${this.baseURL}/symbol_info`, {
-      params: { group }
-    })
-    return response.data
+    try {
+      console.log('🌐 Charli3 symbol_info call:', `${this.baseURL}/symbol_info`, { group });
+      const response = await axios.get(`${this.baseURL}/symbol_info`, {
+        params: { group }
+      })
+      console.log('✅ Charli3 symbol_info response:', response.status, response.statusText);
+      return response.data
+    } catch (error) {
+      console.error('❌ Charli3 symbol_info error:', error.message, error.response?.status, error.response?.statusText);
+      console.error('📡 Error details:', error.response?.data);
+      throw error;
+    }
   }
 
   async getHistory(
@@ -84,10 +92,18 @@ class Charli3API {
     to: number,
     includeTvl: boolean = false
   ): Promise<Charli3HistoryData> {
-    const response = await axios.get(`${this.baseURL}/history`, {
-      params: { symbol, resolution, from, to, includeTvl }
-    })
-    return response.data
+    try {
+      console.log('🌐 Charli3 API call:', `${this.baseURL}/history`, { symbol: symbol.substring(0, 20) + '...', resolution, from, to, includeTvl });
+      const response = await axios.get(`${this.baseURL}/history`, {
+        params: { symbol, resolution, from, to, includeTvl }
+      })
+      console.log('✅ Charli3 API response:', response.status, response.statusText);
+      return response.data
+    } catch (error) {
+      console.error('❌ Charli3 API error:', error.message, error.response?.status, error.response?.statusText);
+      console.error('📡 Error details:', error.response?.data);
+      throw error;
+    }
   }
 
   async getCurrentTokenPrice(policy?: string, pool?: string): Promise<Charli3CurrentStats> {

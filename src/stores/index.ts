@@ -31,6 +31,7 @@ import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@emurgo/cardano-serialization-lib-browser';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
+import Charli3API from '@/api/charli3-api';
 
 export let appWallet: Wallet = undefined;
 export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
@@ -389,11 +390,14 @@ export const useStore = defineStore('store', {
             token.verified = dexHunterStore().dexHunterTokens[token.unit].verified;
             token['isScam'] = dexHunterStore().blacklistPolicies.includes(token.policy_id)
             const promises = []
-            promises.push(appWallet.api.mcap(token.unit).then(res => {
-              if (res?.status === 200) {
-                const stats = res.data;
-                token['mcap'] = stats.mcap;
-                token['last_price'] = stats.price;
+            
+            // Try to get market data from Charli3 first
+            promises.push(this.getCharli3MarketData(token).then(charli3Data => {
+              if (charli3Data) {
+                // Successfully got data from Charli3
+                token['mcap'] = charli3Data.mcap;
+                token['last_price'] = charli3Data.last_price;
+                token['change'] = charli3Data.change;
                 token['value'] = Number(filters.toCurrency(
                   token['last_price'] * Number(token.quantity),
                   false,
@@ -404,17 +408,14 @@ export const useStore = defineStore('store', {
                   token.metadata?.decimals
                 ).replaceAll(",", ""));
               } else {
-                console.log(parseHttpError(res))
+                // Fallback to original API if Charli3 doesn't have the token
+                return this.getFallbackMarketData(token);
               }
             }).catch(err => {
-              console.error(`Error fetching mcap for ${token.unit}:`, err);
-            }))
-           promises.push(appWallet.api.dailyPriceChange(token.unit)
-             .then(changeStats => {
-               token['change'] = changeStats['24h'] * 100;
-             }).catch(err => {
-               console.error(`Error fetching daily price change for ${token.unit}:`, err);
-             }));
+              console.warn(`Error fetching Charli3 data for ${token.unit}:`, err);
+              // Fallback to original API on error
+              return this.getFallbackMarketData(token);
+            }));
             appWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
               token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
             }).catch(err => {
@@ -844,6 +845,147 @@ export const useStore = defineStore('store', {
       }
       const db = await appWallet.getDb()
       db.table('connected_dapps').delete(id)
+    },
+    
+    // Helper method to get market data from Charli3
+    async getCharli3MarketData(token) {
+      try {
+        // First, try to find the token in Charli3 using its currency/unit
+        const symbolInfo = await Charli3API.getSymbolInfo('Aggregate');
+        
+        // Build possible token identifiers for matching
+        const tokenIdentifiers = [];
+        if (token.metadata?.ticker) tokenIdentifiers.push(token.metadata.ticker.toUpperCase());
+        if (token.metadata?.name) tokenIdentifiers.push(token.metadata.name.toUpperCase());
+        if (token.name) tokenIdentifiers.push(token.name.toUpperCase());
+        
+        // Find the token in the symbol info 
+        let tokenIndex = -1;
+        let matchedTicker = null;
+        
+        // First, try exact ticker match
+        for (let i = 0; i < symbolInfo.ticker.length; i++) {
+          const ticker = symbolInfo.ticker[i];
+          for (const identifier of tokenIdentifiers) {
+            if (ticker === identifier) {
+              tokenIndex = i;
+              matchedTicker = ticker;
+              break;
+            }
+          }
+          if (tokenIndex !== -1) break;
+        }
+        
+        // If no exact match, try partial matches
+        if (tokenIndex === -1) {
+          for (let i = 0; i < symbolInfo.symbol.length; i++) {
+            const symbol = symbolInfo.symbol[i];
+            const ticker = symbolInfo.ticker[i];
+            
+            // Check if any of our token identifiers match the symbol or ticker
+            for (const identifier of tokenIdentifiers) {
+              if (symbol.includes(identifier) || ticker.includes(identifier)) {
+                tokenIndex = i;
+                matchedTicker = ticker;
+                break;
+              }
+            }
+            
+            if (tokenIndex !== -1) break;
+          }
+        }
+        
+        // Special case for well-known tokens
+        if (tokenIndex === -1) {
+          const knownTokens = {
+            'GERO': 'GERO',
+            'MIN': 'MIN',
+            'HOSKY': 'HOSKY',
+            'SUNDAE': 'SUNDAE',
+            'LQ': 'LQ',
+            'VYFI': 'VYFI',
+            'MILK': 'MILK',
+            'DRIP': 'DRIP'
+          };
+          
+          for (const identifier of tokenIdentifiers) {
+            if (knownTokens[identifier]) {
+              // Look for this known token in the symbol info
+              for (let i = 0; i < symbolInfo.symbol.length; i++) {
+                const symbol = symbolInfo.symbol[i];
+                const ticker = symbolInfo.ticker[i];
+                if (symbol.includes(knownTokens[identifier]) || ticker.includes(knownTokens[identifier])) {
+                  tokenIndex = i;
+                  matchedTicker = ticker;
+                  break;
+                }
+              }
+              if (tokenIndex !== -1) break;
+            }
+          }
+        }
+        
+        if (tokenIndex === -1 || !matchedTicker) {
+          // Token not found in Charli3
+          return null;
+        }
+        
+        // Get current price data
+        const currentData = await Charli3API.getCurrentTokenPrice(undefined, matchedTicker);
+        
+        // Calculate market cap if we have TVL data (using TVL as proxy for market cap)
+        const mcap = currentData.current_tvl || 0;
+        
+        return {
+          mcap,
+          last_price: currentData.current_price,
+          change: currentData.daily_price_change // Already in percentage
+        };
+      } catch (error) {
+        console.warn('Error getting Charli3 market data:', error);
+        return null;
+      }
+    },
+    
+    // Fallback method using original API
+    async getFallbackMarketData(token) {
+      try {
+        const promises = [];
+        
+        // Original mcap API call
+        promises.push(appWallet.api.mcap(token.unit).then(res => {
+          if (res?.status === 200) {
+            const stats = res.data;
+            token['mcap'] = stats.mcap;
+            token['last_price'] = stats.price;
+            token['value'] = Number(filters.toCurrency(
+              token['last_price'] * Number(token.quantity),
+              false,
+              token.metadata?.decimals,
+              '',
+              '',
+              false,
+              token.metadata?.decimals
+            ).replaceAll(",", ""));
+          } else {
+            console.log(parseHttpError(res))
+          }
+        }).catch(err => {
+          console.error(`Error fetching mcap for ${token.unit}:`, err);
+        }));
+        
+        // Original daily price change API call
+        promises.push(appWallet.api.dailyPriceChange(token.unit)
+          .then(changeStats => {
+            token['change'] = changeStats['24h'] * 100;
+          }).catch(err => {
+            console.error(`Error fetching daily price change for ${token.unit}:`, err);
+          }));
+        
+        await Promise.all(promises);
+      } catch (error) {
+        console.error('Error in fallback market data:', error);
+      }
     }
   },
 });

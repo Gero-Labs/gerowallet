@@ -1323,7 +1323,7 @@ export default {
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 10;
+  z-index: 1;
 }
 
 .refresh-icon {

@@ -1,9 +1,25 @@
 <template>
   <div style="align-content: center; height: 212px; position: relative; z-index: 1;" class="text-center justify-center">
     <!-- Portfolio Value Display -->
-    <div v-if="chartData && chartData.length > 0" class="portfolio-value-display" @click="toggleCurrency">
-      <div class="portfolio-label">Portfolio Balance</div>
-      <div class="portfolio-amount">{{ formatPortfolioValue() }}</div>
+    <div v-if="chartData && chartData.length > 0" class="portfolio-value-display">
+      <div class="portfolio-header">
+        <div class="portfolio-balance-section" @click="toggleCurrency">
+          <div class="portfolio-label">Portfolio Balance</div>
+          <div class="portfolio-amount-row">
+            <div class="portfolio-amount">{{ formatPortfolioValue() }}</div>
+            <div class="address-section">
+              <CopyButton
+                ref="copyAddress"
+                x-small
+                :avatar="loggedWallet?.userId ? assets.googleSvg : assets.walletSvg"
+                :title="loggedWallet?.userId ? loggedWallet.userId : shortenAddress"
+                :value="loggedWallet?.userId || baseAddress"
+                v-if="loggedWallet?.userId || baseAddress"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- Date Picker Tabs -->
@@ -48,8 +64,12 @@ import {mapState} from "pinia";
 import {useStore} from "@/stores";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 export default {
+  components: {
+    CopyButton
+  },
   props: {
     chartData: {
       type: Array,
@@ -64,9 +84,16 @@ export default {
       default: 0,
     },
   },
-  filters,
+  data() {
+    return {
+      filters
+    }
+  },
   computed: {
-    ...mapState(useStore, ['loggedWallet', 'price', 'loadingTxs']),
+    ...mapState(useStore, ['loggedWallet', 'price', 'loadingTxs', 'baseAddress']),
+    shortenAddress() {
+      return this.baseAddress ? filters.shortenStringWithEllipsis(this.baseAddress, 14) : ''
+    },
     adaPrice() {
       const price = this.chartData[this.chartData.length - 1][1]
       if (this.lastPrice === -1) {
@@ -79,6 +106,18 @@ export default {
     loadChart(newVal) {
       if (!newVal.length) {
         return;
+      }
+      
+      // Ensure the chart container is visible before rendering
+      const chartContainer = document.getElementById('highstock-chart');
+      if (!chartContainer || chartContainer.style.display === 'none') {
+        return;
+      }
+      
+      // Destroy existing chart instance before creating a new one
+      if (this.chartInstance) {
+        this.chartInstance.destroy();
+        this.chartInstance = null;
       }
       const currency = networks.resolveCurrencySymbol(this.loggedWallet?.chain, this.loggedWallet?.network)
       const data = {
@@ -198,7 +237,13 @@ export default {
         ],
         useUTC: true,
       };
-      this.chartInstance = Highstock.stockChart("highstock-chart", data);
+      this.$nextTick(() => {
+        try {
+          this.chartInstance = Highstock.stockChart("highstock-chart", data);
+        } catch (error) {
+          console.warn('Failed to create Highstock chart:', error);
+        }
+      });
     },
     arraysEqual(a, b) {
       if (a === b) return true;
@@ -237,6 +282,9 @@ export default {
     },
     handleTabClick(tab) {
       this.tab = tab
+      // Save the selected tab
+      this.savePortfolioTabSetting(tab)
+      
       // Update selected tab index for visual feedback
       const tabValues = Object.values(this.tabs)
       this.selectedTabIndex = tabValues.findIndex(t => t.value === tab.value)
@@ -275,6 +323,26 @@ export default {
       if (this.chartInstance?.title && this.chartInstance?.xAxis) {
         this.chartInstance.xAxis[0].setExtremes(startUTC, endUTC);
         this.chartInstance.title.update({ text: this.generateTitleText() });
+      }
+    },
+    loadPortfolioTabSetting() {
+      try {
+        const saved = localStorage.getItem('portfolio_chart_tab')
+        if (saved) {
+          const tabValue = JSON.parse(saved)
+          // Find matching tab
+          return Object.values(this.tabs).find(tab => tab.value === tabValue) || this.tabs.MONTH
+        }
+      } catch (error) {
+        console.warn('Failed to load portfolio tab setting:', error)
+      }
+      return this.tabs.MONTH
+    },
+    savePortfolioTabSetting(tab) {
+      try {
+        localStorage.setItem('portfolio_chart_tab', JSON.stringify(tab.value))
+      } catch (error) {
+        console.warn('Failed to save portfolio tab setting:', error)
       }
     },
     generateTitleText() {
@@ -344,10 +412,11 @@ export default {
   },
   mounted() {
     this.loadChart(this.chartData)
-    // Set default time range to 30D after chart loads
+    // Load saved tab preference or default to 30D
     this.$nextTick(() => {
       if (this.chartData && this.chartData.length > 0) {
-        this.handleTabClick(this.tabs.MONTH)
+        const savedTab = this.loadPortfolioTabSetting()
+        this.handleTabClick(savedTab || this.tabs.MONTH)
       }
     })
   }
@@ -365,12 +434,12 @@ export default {
   left: 0px;
   z-index: 10;
   text-align: left;
-  cursor: pointer;
   transition: opacity 0.2s ease;
+  pointer-events: none;
 }
 
-.portfolio-value-display:hover {
-  opacity: 0.8;
+.portfolio-value-display * {
+  pointer-events: auto;
 }
 
 .portfolio-label {
@@ -387,6 +456,36 @@ export default {
   font-weight: 700;
   color: #FFFFFF;
   line-height: 1;
+}
+
+.portfolio-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.portfolio-balance-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.portfolio-balance-section:hover {
+  opacity: 0.8;
+}
+
+.portfolio-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 1;
+}
+
+.address-section {
+  display: flex;
+  align-items: center;
 }
 
 .date-picker-tabs {

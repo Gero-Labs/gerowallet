@@ -1,5 +1,6 @@
 <template>
   <div>
+    
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
@@ -57,16 +58,26 @@ onMounted(() => {
 </script>
 <style lang="scss">
 .v-application {
-  background-color: var(--v-background-base) !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  background: #000000 !important;
+}
+
+.v-main {
+  background-color: transparent !important;
 }
 .v-navigation-drawer {
-  background-color: var(--v-navigationDrawerBackground-base) !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .v-app-bar.v-toolbar.v-sheet {
   background-color: transparent !important;
 }
 .v-card {
-  background-color: var(--v-cardBackground-base) !important;
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);

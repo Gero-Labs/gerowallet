@@ -242,427 +242,217 @@
           </v-data-table>
         </v-tab-item>
         <v-tab-item>
-          <v-data-table
-            class="token-allocation-table transparent"
-            :headers="collectiblesHeaders"
-            :items="collectibles"
-            @click:row="handleOnRowClick"
-            :items-per-page="10"
-            :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-            :sort-by.sync="collectiblesSortBy"
-            :sort-desc.sync="collectiblesSortDesc"
-          >
-            <template v-slot:[`item.name`]="{ item }">
-              <v-list-item dense>
-                <v-list-item-action class="my-0">
-                  <v-badge
-                    overlap
-                    avatar
-                    color="transparent"
-                    :offset-y="37"
-                    v-if="item['isScam']"
+          <!-- NFT Gallery View -->
+          <div class="nft-gallery-container">
+            <!-- Gallery Controls -->
+            <div class="gallery-controls mb-4">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center gap-3">
+                  <v-text-field
+                    v-model="collectiblesSearch"
+                    dense
+                    outlined
+                    hide-details
+                    placeholder="Search collections..."
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    style="max-width: 280px;"
+                    class="collection-search"
+                  ></v-text-field>
+                </div>
+                
+                <div class="d-flex align-center gap-3">
+                  <v-select
+                    v-model="collectiblesSortBy"
+                    :items="sortOptions"
+                    dense
+                    outlined
+                    hide-details
+                    style="max-width: 160px;"
+                    class="sort-select"
+                  ></v-select>
+                  
+                  <span class="text-caption mr-2">Size:</span>
+                  <v-btn-toggle v-model="cardSizeMode" mandatory dense>
+                    <v-btn value="small" x-small>S</v-btn>
+                    <v-btn value="medium" x-small>M</v-btn>
+                    <v-btn value="large" x-small>L</v-btn>
+                  </v-btn-toggle>
+                </div>
+              </div>
+            </div>
+
+            <!-- Gallery Grid -->
+            <div v-if="collectiblesViewMode === 'grid'" class="gallery-grid" :class="gridSizeClass">
+              <v-card 
+                v-for="collection in paginatedCollectibles" 
+                :key="collection.id || collection.name"
+                class="nft-collection-card"
+                @click="handleOnRowClick(collection)"
+              >
+                <!-- Image Container -->
+                <div class="card-image-container" :style="{ height: cardSize + 'px' }">
+                  <v-img 
+                    :src="collection.img" 
+                    :alt="collection.name"
+                    :aspect-ratio="1"
+                    class="collection-image"
+                    :gradient="collection.isScam ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%' : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'"
                   >
-                    <template v-slot:badge>
-                      <v-avatar color="transparent" tile size="20" >
-                        <v-icon small color="#F97066">
-                          mdi-alert-decagram
-                        </v-icon>
-                      </v-avatar>
-                    </template>
-                    <v-avatar size="32">
-                      <v-img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`" contain />
-                    </v-avatar>
-                  </v-badge>
-                  <v-avatar size="32" v-else>
-                    <img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`"
-                    />
-                  </v-avatar>
-                </v-list-item-action>
-                <v-list-item-content>
-                  <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{item.name}} <v-chip x-small v-if="item.isScam" class="ml-1" color="#F97066">Scam Token</v-chip>
-                  </v-list-item-title>
-                  <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{ Array.isArray(item.description) ? item.description.join('') : item.description }}
-                  </v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </template>
-            <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ Number(item.quantity).toLocaleString('en-US') }}</span>
-            </template>
-            <template v-slot:[`item.floor`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div>-->
-<!--                <span class="table-text">${{ item.floor[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.floor[1].toLocaleString() }}</span>-->
-<!--              </div>-->
-            </template>
-            <template v-slot:[`item.change`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <v-avatar tile size="20">-->
-<!--                <v-img-->
-<!--                  :src="-->
-<!--                    item.change >= 0-->
-<!--                      ? require('@/assets/svg/trend-up-01.svg')-->
-<!--                      : require('@/assets/svg/trend-down-01.svg')-->
-<!--                  "-->
-<!--                  alt="trend"-->
-<!--                ></v-img>-->
-<!--              </v-avatar>-->
-<!--              <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{-->
-<!--                Math.abs(item.change * 100) + "%"-->
-<!--              }}</span>-->
-            </template>
-            <template v-slot:[`item.cost_basis`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.avg_price`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.pnl`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.allocation`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <v-progress-linear-->
-<!--                class="progress-bar"-->
-<!--                height="8"-->
-<!--                :value="item.allocation"-->
-<!--                color="#00dff3"-->
-<!--              ></v-progress-linear>-->
-<!--              <span class="table-text">{{ item.allocation }}%</span>-->
-            </template>
-            <template v-slot:[`item.last_7_days`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <span>{{ item.last_7_days }}</span>-->
-            </template>
-          </v-data-table>
+                    <!-- Overlay badges -->
+                    <div class="card-badges">
+                      <v-chip v-if="collection.isScam" small color="error">
+                        <v-icon left x-small>mdi-alert-decagram</v-icon>
+                        Scam
+                      </v-chip>
+                      <v-chip v-if="collection.verified" small color="primary">
+                        <v-icon left x-small>mdi-check-decagram</v-icon>
+                        Verified
+                      </v-chip>
+                    </div>
+                    
+                    <!-- Quantity badge -->
+                    <div class="quantity-badge">
+                      <v-chip small outlined class="quantity-chip">
+                        {{ Number(collection.quantity || 1).toLocaleString() }} items
+                      </v-chip>
+                    </div>
+                  </v-img>
+                </div>
+
+                <!-- Card Content with Liquid Glass Effect -->
+                <div class="card-content-overlay">
+                  <h3 class="collection-name-glass">{{ collection.name }}</h3>
+                </div>
+              </v-card>
+            </div>
+
+            <!-- Masonry Layout -->
+            <div v-else-if="collectiblesViewMode === 'masonry'" class="gallery-masonry">
+              <v-card 
+                v-for="collection in paginatedCollectibles" 
+                :key="collection.id || collection.name"
+                class="nft-collection-card masonry-item"
+                @click="handleOnRowClick(collection)"
+              >
+                <div class="card-image-container">
+                  <v-img 
+                    :src="collection.img" 
+                    :alt="collection.name"
+                    class="collection-image"
+                    contain
+                  >
+                    <div class="card-badges">
+                      <v-chip v-if="collection.isScam" small color="error">Scam</v-chip>
+                    </div>
+                    <div class="quantity-badge">
+                      <v-chip small outlined class="quantity-chip">{{ Number(collection.quantity || 1).toLocaleString() }} items</v-chip>
+                    </div>
+                  </v-img>
+                </div>
+                <div class="card-content-overlay">
+                  <h3 class="collection-name-glass">{{ collection.name }}</h3>
+                </div>
+              </v-card>
+            </div>
+
+            <!-- List View (fallback to table-like) -->
+            <div v-else class="gallery-list">
+              <v-list class="transparent">
+                <v-list-item 
+                  v-for="collection in paginatedCollectibles"
+                  :key="collection.id || collection.name"
+                  @click="handleOnRowClick(collection)"
+                  class="collection-list-item"
+                >
+                  <v-list-item-avatar size="48">
+                    <v-img :src="collection.img" :alt="collection.name"></v-img>
+                  </v-list-item-avatar>
+                  <v-list-item-content>
+                    <v-list-item-title>
+                      {{ collection.name }}
+                      <v-chip v-if="collection.isScam" x-small color="error" class="ml-1">Scam</v-chip>
+                    </v-list-item-title>
+                    <v-list-item-subtitle>
+                      {{ Number(collection.quantity).toLocaleString() }} items
+                    </v-list-item-subtitle>
+                  </v-list-item-content>
+                  <v-list-item-action>
+                    <v-chip small outlined color="#F97066">Floor: Soon</v-chip>
+                  </v-list-item-action>
+                </v-list-item>
+              </v-list>
+            </div>
+
+            <!-- Pagination -->
+            <div v-if="totalPages > 1" class="gallery-pagination mt-4">
+              <v-pagination
+                v-model="collectiblesPage"
+                :length="totalPages"
+                :total-visible="7"
+                color="primary"
+                circle
+              ></v-pagination>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="!collectibles || collectibles.length === 0" class="empty-state">
+              <v-icon size="64" color="grey">mdi-image-multiple-outline</v-icon>
+              <h3 class="mt-4 grey--text">No Collectibles Found</h3>
+              <p class="grey--text">Your NFT collections will appear here when you have some.</p>
+            </div>
+          </div>
         </v-tab-item>
       </v-tabs-items>
     </v-card-text>
     <TokensDialog @close="closeDialog" :modalData="dialogData"></TokensDialog>
-    <!-- Technical Analysis Modal -->
-    <v-dialog v-model="showTechnicalAnalysis" :max-width="swapPanelOpen ? 1600 : 1200" scrollable>
-      <v-card style="background-color: #141414; font-family: 'Inter', sans-serif;">
-        <v-card-title class="pa-4" style="background-color: #141414; color: white; font-family: 'Inter', sans-serif;">
-          <v-badge
-            overlap
-            avatar
-            color="transparent"
-            :offset-y="36"
-            :offset-x="24"
-            v-if="selectedToken?.verified"
-          >
-            <template v-slot:badge>
-              <v-avatar color="transparent" tile size="20">
-                <v-icon small color="primary">
-                  mdi-check-decagram
-                </v-icon>
-              </v-avatar>
-            </template>
-            <v-avatar size="32" class="mr-3">
-              <img v-if="selectedToken?.img"
-                :src="selectedToken?.img"
-                :alt="`${selectedToken?.ticker} Logo`"
-              />
-            </v-avatar>
-          </v-badge>
-          <v-avatar size="32" class="mr-3" v-else>
-            <img v-if="selectedToken?.img"
-              :src="selectedToken?.img"
-              :alt="`${selectedToken?.ticker} Logo`"
-            />
-          </v-avatar>
-          {{ selectedToken?.name || selectedToken?.ticker }}
+    <!-- Token Analytics Coming Soon Modal -->
+    <v-dialog v-model="showTechnicalAnalysis" max-width="500">
+      <v-card style="background-color: #141414; border-radius: 12px; overflow: hidden;">
+        <v-card-title class="pa-4 pb-2" style="background-color: #141414; color: white; font-family: 'Inter', sans-serif;">
           <v-spacer></v-spacer>
-          <v-btn icon @click="showTechnicalAnalysis = false">
+          <v-btn icon @click="showTechnicalAnalysis = false" style="opacity: 0.7;">
             <v-icon color="white">mdi-close</v-icon>
           </v-btn>
         </v-card-title>
 
-        <v-card-text class="pa-0" style="height: 600px; background-color: #141414; font-family: 'Inter', sans-serif; position: relative;">
-          <!-- Coming Soon Overlay -->
-          <div class="technical-analysis-overlay">
-            <div class="coming-soon-message">
-              <v-icon size="64" color="primary" class="mb-4">mdi-chart-line-variant</v-icon>
-              <h2 class="text-h4 mb-2" style="color: white; font-family: 'Inter', sans-serif;">Technical Analysis</h2>
-              <h3 class="text-h6 mb-4" style="color: #888888; font-family: 'Inter', sans-serif;">Coming Soon</h3>
-              <p class="text-body-1" style="color: #CCCCCC; font-family: 'Inter', sans-serif; max-width: 400px; text-align: center;">
-                Advanced technical analysis with real-time indicators, chart patterns, and AI-powered insights will be available soon.
-              </p>
-            </div>
+        <v-card-text class="pa-6 text-center" style="background-color: #141414; position: relative;">
+          <!-- Blurred background effect -->
+          <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
+                      background: linear-gradient(135deg, rgba(0, 223, 243, 0.1) 0%, rgba(0, 223, 243, 0.05) 100%);
+                      backdrop-filter: blur(10px);
+                      -webkit-backdrop-filter: blur(10px);">
           </div>
           
-          <!-- Blurred Background Content -->
-          <div class="technical-analysis-content">
-            <div v-if="analysisLoading" class="text-center py-8 d-flex align-center justify-center" style="height: 600px;">
-              <div>
-                <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-                <div class="text-h6 mt-4">Analyzing {{ selectedToken?.name || selectedToken?.ticker }}...</div>
-              </div>
+          <!-- Content -->
+          <div style="position: relative; z-index: 1;">
+            <div class="mb-4">
+              <v-icon size="64" color="primary" class="mb-2">mdi-chart-line</v-icon>
             </div>
             
-            <div v-else-if="analysisData" style="height: 100%; position: relative;">
-            <div class="pa-4" style="height: 100%; background-color: #141414 !important;">
-              <!-- Chart and Analysis Row -->
-              <v-row no-gutters style="height: 100%;">
-                <!-- Chart Column with Token Overview -->
-                <v-col :cols="swapPanelOpen ? 6 : 8" class="pr-2" style="height: 100%; transition: all 0.3s ease;">
-                  <!-- Token Overview Row -->
-                  <v-card outlined class="mb-3 token-overview-card-compact" style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
-                    <v-card-text class="pa-2">
-                      <!-- Table-like Headers -->
-                      <div class="overview-headers mb-1">
-                        <div class="overview-header">Risk</div>
-                        <div class="overview-header">Quantity</div>
-                        <div class="overview-header">Last Price</div>
-                        <div class="overview-header">Change</div>
-                        <div class="overview-header">Value</div>
-                        <div class="overview-header">Market Cap</div>
-                        <div class="overview-header">Allocation</div>
-                      </div>
-                      
-                      <!-- Table-like Values -->
-                      <div class="overview-values">
-                        <div class="overview-value-item">
-                          <div class="d-flex align-center justify-center" style="gap: 4px;">
-                            <v-img 
-                              v-if="selectedToken?.risk && selectedToken?.risk !== 'N/A'" 
-                              width="16" 
-                              height="16" 
-                              :src="assts.resolveRisk(selectedToken.risk)" 
-                              :alt="selectedToken.risk"
-                            />
-                            <span class="overview-value-text">{{ selectedToken?.risk || 'N/A' }}</span>
-                          </div>
-                        </div>
-                        <div class="overview-value-item">
-                          <span class="overview-value-text">{{ selectedToken?.quantity?.toLocaleString() || 'N/A' }}</span>
-                        </div>
-                        <div class="overview-value-item">
-                          <span class="overview-value-text">${{ selectedToken?.last_price?.toFixed(6) || 'N/A' }}</span>
-                        </div>
-                        <div class="overview-value-item">
-                          <div class="d-flex align-center justify-center" style="gap: 4px;">
-                            <v-avatar tile size="12">
-                              <v-img
-                                :src="
-                                  selectedToken?.change === 0
-                                    ? assts.arrowRightSvg
-                                    : selectedToken?.change > 0
-                                    ? assts.trendUpSvg
-                                    : assts.trendDownSvg
-                                "
-                                alt="trend"
-                              ></v-img>
-                            </v-avatar>
-                            <span class="overview-value-text" :style="selectedToken?.change === 0 ? {color: '#A3A3A3' } : selectedToken?.change > 0 ? { color: '#47CD89' } : { color: '#F97066' }">
-                              {{ selectedToken?.change ? Math.abs(selectedToken.change).toFixed(2) + '%' : 'N/A' }}
-                            </span>
-                          </div>
-                        </div>
-                        <div class="overview-value-item">
-                          <span class="overview-value-text">${{ selectedToken?.value?.toLocaleString() || 'N/A' }}</span>
-                        </div>
-                        <div class="overview-value-item">
-                          <span class="overview-value-text">${{ selectedToken?.mcap ? (Number(selectedToken.mcap) * price?.lastPrice).toLocaleString() : 'N/A' }}</span>
-                        </div>
-                        <div class="overview-value-item">
-                          <div class="d-flex align-center justify-center" style="gap: 4px;">
-                            <v-progress-linear
-                              :value="selectedToken?.total_allocation || 0"
-                              color="#00dff3"
-                              height="4"
-                              rounded
-                              style="width: 40px;"
-                            ></v-progress-linear>
-                            <span class="overview-value-text">{{ selectedToken?.total_allocation?.toFixed(1) || '0.0' }}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    </v-card-text>
-                  </v-card>
-                  
-                  <!-- Chart Container -->
-                  <div class="chart-container" style="height: 70%;">
-                    <div ref="technicalChart" style="width: 100%; height: 100%;"></div>
-                  </div>
-                </v-col>
-                
-                <!-- Analysis Column -->
-                <v-col :cols="swapPanelOpen ? 3 : 4" class="pl-2 pr-2" style="height: 100%; overflow-y: auto; transition: all 0.3s ease;">
-
-                  <!-- Technical Analysis Overview -->
-                  <v-card outlined class="mb-3" style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
-                    <v-card-title class="pb-2 text-subtitle-1" style="color: white; font-family: 'Inter', sans-serif;">
-                      <v-icon left small color="white">mdi-chart-line</v-icon>
-                      Technical Analysis
-                    </v-card-title>
-                    <v-card-text class="pt-0 pb-2">
-                      <div class="mb-2">
-                        <div class="text-caption mb-1" style="color: #888888;">Trend</div>
-                        <div class="d-flex align-center" style="gap: 8px;">
-                          <v-chip 
-                            small 
-                            :color="getTrendColor(analysisData.trend.direction)" 
-                            outlined
-                          >
-                            <v-icon left x-small>{{ getTrendIcon(analysisData.trend.direction) }}</v-icon>
-                            {{ analysisData.trend.direction.toUpperCase() }}
-                          </v-chip>
-                          <v-chip 
-                            small 
-                            :color="getStrengthColor(analysisData.trend.strength)" 
-                            outlined
-                          >
-                            {{ analysisData.trend.strength.toUpperCase() }}
-                          </v-chip>
-                        </div>
-                      </div>
-                      <div>
-                        <div class="text-caption" style="color: #888888;">Confidence</div>
-                        <v-progress-linear
-                          :value="analysisData.trend.confidence * 100"
-                          :color="analysisData.trend.confidence > 0.7 ? 'green' : analysisData.trend.confidence > 0.4 ? 'orange' : 'red'"
-                          height="8"
-                          rounded
-                          class="mt-1"
-                        ></v-progress-linear>
-                        <div class="text-caption text-center mt-1">
-                          {{ Math.round(analysisData.trend.confidence * 100) }}%
-                        </div>
-                      </div>
-                    </v-card-text>
-                  </v-card>
-
-                  <!-- Key Levels -->
-                  <v-card outlined class="mb-3" style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
-                    <v-card-title class="pb-2 text-subtitle-1" style="color: white; font-family: 'Inter', sans-serif;">
-                      <v-icon left small color="white">mdi-target</v-icon>
-                      Key Levels
-                    </v-card-title>
-                    <v-card-text class="pt-0">
-                      <v-row>
-                        <v-col cols="6" class="pr-1">
-                          <div class="text-caption grey--text mb-1">
-                            <v-icon x-small color="green">mdi-arrow-up-bold</v-icon>
-                            Support
-                          </div>
-                          <div 
-                            v-for="(level, index) in analysisData.indicators.support.slice(0, 2)" 
-                            :key="`support-${index}`"
-                            class="d-flex justify-space-between align-center mb-1"
-                          >
-                            <span class="text-body-2">${{ level.toFixed(4) }}</span>
-                            <v-chip x-small color="green" outlined>S{{ index + 1 }}</v-chip>
-                          </div>
-                        </v-col>
-                        <v-col cols="6" class="pl-1">
-                          <div class="text-caption grey--text mb-1">
-                            <v-icon x-small color="red">mdi-arrow-down-bold</v-icon>
-                            Resistance
-                          </div>
-                          <div 
-                            v-for="(level, index) in analysisData.indicators.resistance.slice(0, 2)" 
-                            :key="`resistance-${index}`"
-                            class="d-flex justify-space-between align-center mb-1"
-                          >
-                            <span class="text-body-2">${{ level.toFixed(4) }}</span>
-                            <v-chip x-small color="red" outlined>R{{ index + 1 }}</v-chip>
-                          </div>
-                        </v-col>
-                      </v-row>
-                    </v-card-text>
-                  </v-card>
-
-                  <!-- Quick Indicators -->
-                  <v-card outlined style="background-color: #0F0F0F !important; border-color: #404040; font-family: 'Inter', sans-serif;">
-                    <v-card-title class="pb-2 text-subtitle-1" style="color: white; font-family: 'Inter', sans-serif;">
-                      <v-icon left small color="white">mdi-speedometer</v-icon>
-                      Quick Indicators
-                    </v-card-title>
-                    <v-card-text class="pt-0">
-                      <div class="mb-2">
-                        <div class="d-flex justify-space-between align-center">
-                          <span class="text-caption grey--text">RSI (14)</span>
-                          <v-chip 
-                            x-small 
-                            :color="getRSISignalColor(analysisData.indicators.rsi.signal)" 
-                            outlined
-                          >
-                            {{ analysisData.indicators.rsi.current.toFixed(1) }}
-                          </v-chip>
-                        </div>
-                      </div>
-                      <div class="mb-2">
-                        <div class="d-flex justify-space-between align-center">
-                          <span class="text-caption grey--text">MACD</span>
-                          <v-chip 
-                            x-small 
-                            :color="getSignalColor(analysisData.indicators.macd.signal)" 
-                            outlined
-                          >
-                            {{ analysisData.indicators.macd.signal.toUpperCase() }}
-                          </v-chip>
-                        </div>
-                      </div>
-                      <div>
-                        <div class="d-flex justify-space-between align-center">
-                          <span class="text-caption grey--text">Bollinger</span>
-                          <v-chip 
-                            x-small 
-                            :color="getBollingerColor(analysisData.indicators.bollinger.signal)" 
-                            outlined
-                          >
-                            {{ analysisData.indicators.bollinger.signal.toUpperCase() }}
-                          </v-chip>
-                        </div>
-                      </div>
-                    </v-card-text>
-                  </v-card>
-                  </v-col>
-
-                  <!-- Swap Panel -->
-                  <v-col 
-                    v-if="swapPanelOpen" 
-                    cols="3" 
-                    class="swap-panel pl-2" 
-                    style="height: 100%; background-color: #141414;"
-                  >
-                    <div class="pa-3" style="height: 100%; overflow-y: auto;">
-                      <div class="d-flex align-center mb-3">
-                        <v-icon color="white" class="mr-2" small>mdi-swap-horizontal</v-icon>
-                        <span class="text-subtitle-1 font-weight-medium" style="color: white; font-family: 'Inter', sans-serif;">Swap</span>
-                        <v-spacer></v-spacer>
-                      </div>
-                      <SwapWidget @onSwap="handleSwapComplete" :compact="true"></SwapWidget>
-                      
-                      <!-- Buy Button (behind blur effect) -->
-                      <div class="mt-3">
-                        <v-btn 
-                          color="success" 
-                          block 
-                          large 
-                          rounded 
-                          disabled
-                          style="opacity: 0.7; pointer-events: none;"
-                        >
-                          <v-icon left>mdi-shopping</v-icon>
-                          Buy {{ selectedToken?.ticker || 'Token' }}
-                        </v-btn>
-                      </div>
-                    </div>
-                  </v-col>
-                </v-row>
-            </div>
-          </div>
-          
-            <div v-else class="text-center py-8 d-flex align-center justify-center" style="height: 700px;">
-              <div>
-                <v-icon large color="grey">mdi-chart-bell-curve</v-icon>
-                <div class="text-h6 grey--text mt-2">No Analysis Available</div>
-              </div>
+            <h2 class="text-h5 font-weight-medium mb-3" style="color: white; font-family: 'Inter', sans-serif;">
+              Token Analytics
+            </h2>
+            
+            <p class="text-body-1 mb-4" style="color: #ccc; font-family: 'Inter', sans-serif; line-height: 1.6;">
+              Advanced technical analysis and real-time market data are coming soon. 
+              This feature will include live price charts, technical indicators, 
+              and comprehensive token metrics.
+            </p>
+            
+            <v-chip 
+              color="primary" 
+              outlined 
+              label 
+              class="mb-4"
+              style="font-family: 'Inter', sans-serif;"
+            >
+              <v-icon left small>mdi-clock-outline</v-icon>
+              Coming Soon
+            </v-chip>
+            
+            <div class="text-caption" style="color: #888; font-family: 'Inter', sans-serif;">
+              Stay tuned for real-time charts, technical indicators, and market insights
             </div>
           </div>
         </v-card-text>
@@ -676,12 +466,12 @@ import { useStore } from '@/stores';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
-import * as Highcharts from 'highcharts';
+import { createChart } from 'lightweight-charts';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Blockchain, Network } from '@/models/types';
-import assts from '@/utils/assets'
+import assts from '@/utils/assets';
 
 export default {
   name: "tokenAllocationTable",
@@ -703,7 +493,15 @@ export default {
       deep: true
     },
     showTechnicalAnalysis(val) {
-      console.log('Technical analysis modal state changed:', val);
+      // Modal state changed
+    },
+    cardSizeMode() {
+      // Reset to first page when card size changes
+      this.collectiblesPage = 1
+    },
+    collectiblesSearch() {
+      // Reset to first page when search changes
+      this.collectiblesPage = 1
     },
     analysisData(val) {
       // Create chart when analysis data is available
@@ -731,6 +529,16 @@ export default {
     },
     handleOnRowClick(row) {
       this.dialogData = row;
+    },
+    // NFT Gallery helper methods
+    truncateDescription(description) {
+      if (!description) return ''
+      const text = Array.isArray(description) ? description.join('') : description
+      return text.length > 80 ? text.substring(0, 80) + '...' : text
+    },
+    formatTotalValue(collection) {
+      // Placeholder since we don't have value calculation yet
+      return 'TBD'
     },
     handleTokenRowClick(row) {
       this.openTechnicalAnalysis(row);
@@ -762,205 +570,435 @@ export default {
       this.openTechnicalAnalysis(row);
     },
     openTechnicalAnalysis(token) {
-      console.log('Opening technical analysis for:', token.name, 'Token structure:', token);
       this.selectedToken = token;
-      this.analysisLoading = false;
+      this.analysisLoading = true;
       this.showTechnicalAnalysis = true;
-      this.generateMockAnalysis(token);
+      this.generateRealAnalysis(token);
     },
-    generateMockAnalysis(token) {
+    async generateRealAnalysis(token, timeRange = null) {
+      this.analysisLoading = true;
+      
+      try {
+        // Use mock data for now - will be replaced with new approach
+        this.generateMockAnalysis(token, timeRange || this.selectedTimeRange);
+        
+      } catch (error) {
+        console.error('Error fetching real analysis data:', error);
+        // Fallback to mock data
+        this.generateMockAnalysis(token, timeRange || this.selectedTimeRange);
+      }
+    },
+
+    getOptimalResolution(timeRange) {
+      // Calculate optimal resolution based on time range for efficient data fetching
+      const ranges = {
+        '1D': { 
+          days: 1, 
+          resolution: '5min',
+          label: '24 hours, 5-minute',
+          maxPoints: 288, // 24 hours * 12 points/hour
+          fallbacks: ['15min', '30min', '1H']
+        },
+        '7D': { 
+          days: 7, 
+          resolution: '30min',
+          label: '7 days, 30-minute',
+          maxPoints: 336, // 7 days * 48 points/day
+          fallbacks: ['1H', '2H', '4H']
+        },
+        '30D': { 
+          days: 30, 
+          resolution: '2H',
+          label: '30 days, 2-hour',
+          maxPoints: 360, // 30 days * 12 points/day
+          fallbacks: ['4H', '6H', '1D']
+        },
+        '90D': { 
+          days: 90, 
+          resolution: '1D',
+          label: '90 days, daily',
+          maxPoints: 90, // 90 days * 1 point/day
+          fallbacks: ['2D', '1W']
+        }
+      };
+      
+      const config = ranges[timeRange] || ranges['1D'];
+      
+      // Log resolution choice reasoning
+      console.log('📊 Resolution selected:', {
+        timeRange,
+        resolution: config.resolution,
+        expectedPoints: config.maxPoints,
+        reasoning: `${config.days} days needs ${config.resolution} resolution for ${config.maxPoints} data points`
+      });
+      
+      return config;
+    },
+    
+
+
+
+
+
+    generateMockAnalysis(token, timeRange = '1D') {
       this.analysisLoading = false;
       
-      // Generate mock data immediately
-        this.analysisData = {
-          asset: token.ticker || token.name,
-          priceHistory: this.generateMockPriceData(token.last_price || 1),
-          indicators: {
-            sma: { period: 20, current: (token.last_price || 1) * 0.98, values: [] },
-            ema: { period: 12, current: (token.last_price || 1) * 0.99, values: [] },
-            rsi: { 
-              period: 14, 
-              current: 45 + Math.random() * 30, 
-              signal: this.getRandomRSISignal(),
-              values: [] 
-            },
-            macd: { 
-              macdLine: Math.random() * 0.001 - 0.0005,
-              signalLine: Math.random() * 0.001 - 0.0005,
-              histogram: Math.random() * 0.001 - 0.0005,
-              signal: this.getRandomMACDSignal()
-            },
-            bollinger: {
-              upper: (token.last_price || 1) * 1.02,
-              middle: (token.last_price || 1),
-              lower: (token.last_price || 1) * 0.98,
-              bandwidth: 4 + Math.random() * 2,
-              signal: this.getRandomBollingerSignal()
-            },
-            stochastic: {
-              k: 20 + Math.random() * 60,
-              d: 20 + Math.random() * 60,
-              signal: this.getRandomStochasticSignal()
-            },
-            support: [
-              (token.last_price || 1) * 0.95,
-              (token.last_price || 1) * 0.90,
-              (token.last_price || 1) * 0.85
-            ],
-            resistance: [
-              (token.last_price || 1) * 1.05,
-              (token.last_price || 1) * 1.10,
-              (token.last_price || 1) * 1.15
-            ]
+      // Generate mock data immediately (fallback)
+      this.analysisData = {
+        asset: token.ticker || token.name,
+        priceHistory: this.generateMockPriceData(token.last_price || 1, timeRange),
+        indicators: {
+          sma: { period: 20, current: (token.last_price || 1) * 0.98, values: [] },
+          ema: { period: 12, current: (token.last_price || 1) * 0.99, values: [] },
+          rsi: { 
+            period: 14, 
+            current: 45 + Math.random() * 30, 
+            signal: this.getRandomRSISignal(),
+            values: [] 
           },
-          trend: {
-            direction: this.getRandomTrendDirection(),
-            strength: this.getRandomTrendStrength(),
-            timeframe: '1d',
-            confidence: 0.6 + Math.random() * 0.3
+          macd: { 
+            macdLine: Math.random() * 0.001 - 0.0005,
+            signalLine: Math.random() * 0.001 - 0.0005,
+            histogram: Math.random() * 0.001 - 0.0005,
+            signal: this.getRandomMACDSignal()
           },
-          signals: this.generateMockSignals(),
-          lastUpdated: Date.now()
-        };
-        this.analysisLoading = false;
-        
-        // Create chart automatically
-        this.$nextTick(() => {
-          this.createTechnicalChart();
-        });
+          bollinger: {
+            upper: (token.last_price || 1) * 1.02,
+            middle: (token.last_price || 1),
+            lower: (token.last_price || 1) * 0.98,
+            bandwidth: 4 + Math.random() * 2,
+            signal: this.getRandomBollingerSignal()
+          },
+          stochastic: {
+            k: 20 + Math.random() * 60,
+            d: 20 + Math.random() * 60,
+            signal: this.getRandomStochasticSignal()
+          },
+          support: [
+            (token.last_price || 1) * 0.95,
+            (token.last_price || 1) * 0.90,
+            (token.last_price || 1) * 0.85
+          ],
+          resistance: [
+            (token.last_price || 1) * 1.05,
+            (token.last_price || 1) * 1.10,
+            (token.last_price || 1) * 1.15
+          ]
+        },
+        trend: {
+          direction: this.getRandomTrendDirection(),
+          strength: this.getRandomTrendStrength(),
+          timeframe: '1d',
+          confidence: 0.6 + Math.random() * 0.3
+        },
+        signals: this.generateMockSignals(),
+        lastUpdated: Date.now(),
+        dataSource: 'MOCK_DATA',
+        dataPoints: 0
+      };
+      this.analysisLoading = false;
+      
+      // Create chart automatically
+      this.$nextTick(() => {
+        this.createTechnicalChart();
+      });
     },
     createTechnicalChart() {
       if (!this.$refs.technicalChart || !this.analysisData) return;
       
-      // Destroy existing chart if it exists
-      if (this.chart) {
-        this.chart.destroy();
+      try {
+        // Destroy existing chart if it exists
+        if (this.chart) {
+          this.chart.remove();
+          this.chart = null;
+        }
+        
+        // Reset volume series reference
+        this.volumeSeries = null;
+        
+        // Disconnect existing resize observer
+        if (this.resizeObserver) {
+          this.resizeObserver.disconnect();
+          this.resizeObserver = null;
+        }
+      
+      // Create TradingView chart
+      this.chart = createChart(this.$refs.technicalChart, {
+        width: this.$refs.technicalChart.clientWidth,
+        height: this.$refs.technicalChart.clientHeight || 400,
+        layout: {
+          background: { color: '#141414' },
+          textColor: '#ffffff'
+        },
+        grid: {
+          vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
+          horzLines: { color: 'rgba(255, 255, 255, 0.1)' }
+        },
+        crosshair: {
+          mode: 0 // Normal crosshair mode for v4
+        },
+        rightPriceScale: {
+          borderColor: 'rgba(255, 255, 255, 0.3)',
+          scaleMargins: {
+            top: 0.02,
+            bottom: this.showVolume ? 0.15 : 0.02, // Price chart dominates the space
+          },
+        },
+        leftPriceScale: {
+          visible: this.showVolume,
+          borderColor: 'rgba(255, 255, 255, 0.1)',
+          textColor: 'rgba(255, 255, 255, 0.6)',
+          scaleMargins: {
+            top: 0.95,
+            bottom: 0,
+          },
+        },
+        timeScale: {
+          borderColor: 'rgba(255, 255, 255, 0.3)',
+          timeVisible: true,
+          secondsVisible: false
+        },
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+        },
+        handleScale: {
+          axisPressedMouseMove: true,
+          mouseWheel: true,
+          pinch: true
+        }
+      });
+
+      console.log('Chart created:', this.chart);
+      console.log('Chart methods:', Object.getOwnPropertyNames(this.chart));
+      console.log('addCandlestickSeries available:', typeof this.chart.addCandlestickSeries);
+      
+      // Check if the chart was created properly
+      if (!this.chart || typeof this.chart.addCandlestickSeries !== 'function') {
+        throw new Error('Chart not properly initialized or addCandlestickSeries method not available');
+      }
+
+      // Prepare price data for TradingView format
+      const priceData = this.analysisData.priceHistory;
+      const candlestickData = priceData.map(p => ({
+        time: Math.floor(p.timestamp / 1000), // TradingView expects seconds
+        open: p.open,
+        high: p.high,
+        low: p.low,
+        close: p.close
+      }));
+
+      // Get color scheme based on user preference
+      const colors = this.getColorScheme();
+      
+      // Add main series based on user's chart style preference
+      let mainSeries;
+      
+      if (this.chartStyle === 'line') {
+        // Line chart mode
+        const lineData = candlestickData.map(d => ({
+          time: d.time,
+          value: d.close
+        }));
+        mainSeries = this.chart.addLineSeries({
+          color: colors.upColor,
+          lineWidth: 2,
+          priceFormat: {
+            type: 'price',
+            precision: 6,
+            minMove: 0.000001,
+          }
+        });
+        mainSeries.setData(lineData);
+        console.log('Line series added successfully');
+      } else {
+        // Candlestick chart mode with customization
+        try {
+          const candlestickOptions = {
+            upColor: this.hollowCandles ? 'transparent' : colors.upColor,
+            downColor: this.hollowCandles ? 'transparent' : colors.downColor,
+            borderDownColor: colors.borderDownColor,
+            borderUpColor: colors.borderUpColor,
+            wickDownColor: this.showWicks ? colors.wickDownColor : 'transparent',
+            wickUpColor: this.showWicks ? colors.wickUpColor : 'transparent',
+            priceFormat: {
+              type: 'price',
+              precision: 6,
+              minMove: 0.000001,
+            }
+          };
+          
+          mainSeries = this.chart.addCandlestickSeries(candlestickOptions);
+          mainSeries.setData(candlestickData);
+          console.log('Candlestick series added successfully');
+        } catch (candleError) {
+          console.warn('Candlestick series failed, falling back to line chart:', candleError);
+          // Fallback to line chart
+          const lineData = candlestickData.map(d => ({
+            time: d.time,
+            value: d.close
+          }));
+          mainSeries = this.chart.addLineSeries({
+            color: colors.upColor,
+            lineWidth: 2,
+            priceFormat: {
+              type: 'price',
+              precision: 6,
+              minMove: 0.000001,
+            }
+          });
+          mainSeries.setData(lineData);
+        }
       }
       
-      // Prepare data
-      const priceData = this.analysisData.priceHistory;
-      const prices = priceData.map(p => p.close);
-      
-      // Calculate moving averages for visualization
-      const sma20 = this.calculateSMA(prices, 20);
-      const ema12 = this.calculateEMA(prices, 12);
-      
-      // Prepare series data for Highcharts
-      const priceSeriesData = priceData.map(p => [p.timestamp, p.close]);
-      const smaSeriesData = priceData.map((p, i) => [p.timestamp, sma20[i]]).filter(d => d[1] !== null);
-      const emaSeriesData = priceData.map((p, i) => [p.timestamp, ema12[i]]);
-      
-      // Chart configuration for Highcharts
-      const config = {
-        chart: {
-          type: 'line',
-          backgroundColor: '#141414',
-          style: {
-            fontFamily: 'Inter, sans-serif'
-          }
-        },
-        title: {
-          text: `${this.selectedToken?.name || this.selectedToken?.ticker} - Technical Analysis Chart`,
-          style: {
-            color: 'white',
-            fontSize: '16px',
-            fontFamily: 'Inter, sans-serif'
-          }
-        },
-        xAxis: {
-          type: 'datetime',
-          gridLineColor: 'rgba(255, 255, 255, 0.1)',
-          lineColor: 'rgba(255, 255, 255, 0.3)',
-          tickColor: 'rgba(255, 255, 255, 0.3)',
-          labels: {
-            style: { 
-              color: 'white',
-              fontFamily: 'Inter, sans-serif'
-            }
-          }
-        },
-        yAxis: {
-          title: {
-            text: 'Price ($)',
-            style: { 
-              color: 'white',
-              fontFamily: 'Inter, sans-serif'
-            }
-          },
-          gridLineColor: 'rgba(255, 255, 255, 0.1)',
-          lineColor: 'rgba(255, 255, 255, 0.3)',
-          tickColor: 'rgba(255, 255, 255, 0.3)',
-          labels: {
-            style: { 
-              color: 'white',
-              fontFamily: 'Inter, sans-serif'
+      // Store reference for tooltip functionality
+      this.candlestickSeries = mainSeries;
+
+      // Add volume series (simplified for v4 compatibility)
+      try {
+        const volumeData = priceData.map(p => ({
+          time: Math.floor(p.timestamp / 1000),
+          value: p.volume
+        }));
+
+        if (this.showVolume) {
+          // Create volume series with very constrained height
+          this.volumeSeries = this.chart.addHistogramSeries({
+            color: 'rgba(38, 166, 154, 0.4)',
+            priceFormat: {
+              type: 'volume',
             },
-            formatter: function() {
-              return '$' + this.value.toFixed(6);
-            }
+            priceScaleId: 'left',
+            scaleMargins: {
+              top: 0.95, // Volume takes up only bottom 5% of chart
+              bottom: 0,
+            },
+            visible: true,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          
+          // Dramatically scale down volume data
+          const maxVolume = Math.max(...volumeData.map(d => d.value));
+          const scaleFactor = 0.1; // Make volume 10% of its original scale
+          
+          const scaledVolumeData = volumeData.map(d => ({
+            ...d,
+            value: (d.value / maxVolume) * scaleFactor * maxVolume
+          }));
+          
+          this.volumeSeries.setData(scaledVolumeData);
+          console.log('Volume series added successfully with scale factor:', scaleFactor);
+        }
+      } catch (volumeError) {
+        console.warn('Volume series failed to add:', volumeError);
+      }
+
+      // Calculate and add moving averages
+      try {
+        const prices = priceData.map(p => p.close);
+        const sma20 = this.calculateSMA(prices, 20);
+        const ema12 = this.calculateEMA(prices, 12);
+
+        // Add SMA line (only if enabled)
+        if (this.showSMA) {
+          const smaData = priceData.map((p, i) => ({
+            time: Math.floor(p.timestamp / 1000),
+            value: sma20[i]
+          })).filter(d => d.value !== null);
+
+          if (smaData.length > 0) {
+            const smaSeries = this.chart.addLineSeries({
+              color: 'rgba(255, 152, 0, 0.7)', // More subtle orange
+              lineWidth: 1,
+              priceLineVisible: false,
+              title: 'SMA(20)'
+            });
+            smaSeries.setData(smaData);
+            console.log('SMA series added successfully');
           }
-        },
-        legend: {
-          itemStyle: { 
-            color: 'white',
-            fontFamily: 'Inter, sans-serif'
-          },
-          itemHoverStyle: { color: '#ccc' }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          style: { 
-            color: 'white',
-            fontFamily: 'Inter, sans-serif'
-          },
-          borderColor: 'rgba(255, 255, 255, 0.3)'
-        },
-        plotOptions: {
-          line: {
-            marker: {
-              enabled: false
-            }
-          }
-        },
-        series: [
-          {
-            name: 'Price',
-            data: priceSeriesData,
-            color: '#2196F3',
-            fillOpacity: 0.3,
-            lineWidth: 2
-          },
-          {
-            name: 'SMA (20)',
-            data: smaSeriesData,
-            color: '#FF9800',
-            lineWidth: 1
-          },
-          {
-            name: 'EMA (12)',
-            data: emaSeriesData,
-            color: '#4CAF50',
-            lineWidth: 1
-          },
-          {
-            name: 'Upper Bollinger',
-            data: priceData.map(p => [p.timestamp, this.analysisData.indicators.bollinger.upper]),
-            color: 'rgba(244, 67, 54, 0.5)',
+        }
+
+        // Add EMA line (only if enabled)
+        if (this.showEMA) {
+          const emaData = priceData.map((p, i) => ({
+            time: Math.floor(p.timestamp / 1000),
+            value: ema12[i]
+          }));
+
+          const emaSeries = this.chart.addLineSeries({
+            color: 'rgba(33, 150, 243, 0.7)', // More subtle blue
             lineWidth: 1,
-            dashStyle: 'Dash'
-          },
-          {
-            name: 'Lower Bollinger',
-            data: priceData.map(p => [p.timestamp, this.analysisData.indicators.bollinger.lower]),
-            color: 'rgba(244, 67, 54, 0.5)',
+            priceLineVisible: false,
+            title: 'EMA(12)'
+          });
+          emaSeries.setData(emaData);
+          console.log('EMA series added successfully');
+        }
+
+        // Add Bollinger Bands (only if enabled)
+        if (this.showBollinger) {
+          const upperBollingerData = priceData.map(p => ({
+            time: Math.floor(p.timestamp / 1000),
+            value: this.analysisData.indicators.bollinger.upper
+          }));
+
+          const lowerBollingerData = priceData.map(p => ({
+            time: Math.floor(p.timestamp / 1000),
+            value: this.analysisData.indicators.bollinger.lower
+          }));
+
+          const upperBollingerSeries = this.chart.addLineSeries({
+            color: 'rgba(244, 67, 54, 0.4)', // Very subtle red
             lineWidth: 1,
-            dashStyle: 'Dash'
-          }
-        ]
-      };
+            lineStyle: 2, // Dashed line
+            priceLineVisible: false,
+            title: 'BB Upper'
+          });
+          upperBollingerSeries.setData(upperBollingerData);
+
+          const lowerBollingerSeries = this.chart.addLineSeries({
+            color: 'rgba(244, 67, 54, 0.4)', // Very subtle red
+            lineWidth: 1,
+            lineStyle: 2, // Dashed line
+            priceLineVisible: false,
+            title: 'BB Lower'
+          });
+          lowerBollingerSeries.setData(lowerBollingerData);
+          console.log('Bollinger Bands added successfully');
+        }
+      } catch (indicatorError) {
+        console.warn('Technical indicators failed to add:', indicatorError);
+      }
+
+      // Setup tooltips if enabled
+      this.setupTooltips();
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(entries => {
+        if (this.chart && entries[0]) {
+          const { width, height } = entries[0].contentRect;
+          this.chart.applyOptions({ width, height: height || 400 });
+        }
+      });
       
-      // Create chart
-      this.chart = Highcharts.chart(this.$refs.technicalChart, config);
+      resizeObserver.observe(this.$refs.technicalChart);
+      this.resizeObserver = resizeObserver;
+      
+      } catch (error) {
+        console.error('Error creating TradingView chart:', error);
+        // Fallback: show error message in chart container
+        if (this.$refs.technicalChart) {
+          this.$refs.technicalChart.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff; font-family: Inter, sans-serif;">
+              <div style="text-align: center;">
+                <div style="font-size: 18px; margin-bottom: 8px;">⚠️ Chart Error</div>
+                <div style="font-size: 14px; opacity: 0.7;">Unable to load TradingView chart</div>
+              </div>
+            </div>
+          `;
+        }
+      }
     },
     calculateSMA(prices, period) {
       const sma = [];
@@ -986,6 +1024,170 @@ export default {
         }
       }
       return ema;
+    },
+    
+    calculateRSI(prices, period = 14) {
+      if (prices.length < period + 1) return [];
+      
+      const rsi = [];
+      const gains = [];
+      const losses = [];
+      
+      // Calculate initial gains and losses
+      for (let i = 1; i < prices.length; i++) {
+        const change = prices[i] - prices[i - 1];
+        gains.push(change > 0 ? change : 0);
+        losses.push(change < 0 ? Math.abs(change) : 0);
+      }
+      
+      // Calculate RSI
+      for (let i = period - 1; i < gains.length; i++) {
+        if (i === period - 1) {
+          // First RSI calculation
+          const avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+          const avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+          const rs = avgGain / (avgLoss || 0.001);
+          rsi.push(100 - (100 / (1 + rs)));
+        } else {
+          // Subsequent RSI calculations using smoothed averages
+          const prevAvgGain = (rsi.length > 0) ? gains.slice(i - period + 1, i).reduce((a, b) => a + b, 0) / period : 0;
+          const prevAvgLoss = (rsi.length > 0) ? losses.slice(i - period + 1, i).reduce((a, b) => a + b, 0) / period : 0;
+          
+          const avgGain = (prevAvgGain * (period - 1) + gains[i]) / period;
+          const avgLoss = (prevAvgLoss * (period - 1) + losses[i]) / period;
+          const rs = avgGain / (avgLoss || 0.001);
+          rsi.push(100 - (100 / (1 + rs)));
+        }
+      }
+      
+      return rsi;
+    },
+    
+    calculateBollingerBands(prices, period = 20, stdDev = 2) {
+      const sma = this.calculateSMA(prices, period);
+      const upper = [];
+      const middle = [];
+      const lower = [];
+      
+      for (let i = period - 1; i < prices.length; i++) {
+        const slice = prices.slice(i - period + 1, i + 1);
+        const mean = slice.reduce((a, b) => a + b, 0) / period;
+        const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+        const standardDeviation = Math.sqrt(variance);
+        
+        middle.push(mean);
+        upper.push(mean + (standardDeviation * stdDev));
+        lower.push(mean - (standardDeviation * stdDev));
+      }
+      
+      return { upper, middle, lower };
+    },
+    
+    calculateMACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+      const emaFast = this.calculateEMA(prices, fastPeriod);
+      const emaSlow = this.calculateEMA(prices, slowPeriod);
+      
+      const macd = [];
+      const startIndex = Math.max(0, slowPeriod - fastPeriod);
+      
+      for (let i = startIndex; i < emaFast.length; i++) {
+        const slowIndex = i - startIndex;
+        if (slowIndex < emaSlow.length) {
+          macd.push(emaFast[i] - emaSlow[slowIndex]);
+        }
+      }
+      
+      const signal = this.calculateEMA(macd, signalPeriod);
+      const histogram = [];
+      
+      for (let i = 0; i < signal.length; i++) {
+        histogram.push(macd[i + macd.length - signal.length] - signal[i]);
+      }
+      
+      return { macd, signal, histogram };
+    },
+    
+    calculateSupportLevels(priceHistory) {
+      // Find local minima as support levels
+      const lows = priceHistory.map(p => p.low);
+      const supports = [];
+      
+      for (let i = 2; i < lows.length - 2; i++) {
+        if (lows[i] < lows[i-1] && lows[i] < lows[i-2] && 
+            lows[i] < lows[i+1] && lows[i] < lows[i+2]) {
+          supports.push(lows[i]);
+        }
+      }
+      
+      // Return top 3 support levels
+      return supports.sort((a, b) => b - a).slice(0, 3);
+    },
+    
+    calculateResistanceLevels(priceHistory) {
+      // Find local maxima as resistance levels
+      const highs = priceHistory.map(p => p.high);
+      const resistances = [];
+      
+      for (let i = 2; i < highs.length - 2; i++) {
+        if (highs[i] > highs[i-1] && highs[i] > highs[i-2] && 
+            highs[i] > highs[i+1] && highs[i] > highs[i+2]) {
+          resistances.push(highs[i]);
+        }
+      }
+      
+      // Return top 3 resistance levels
+      return resistances.sort((a, b) => b - a).slice(0, 3);
+    },
+    
+    calculateSlope(prices) {
+      const n = prices.length;
+      const x = Array.from({length: n}, (_, i) => i);
+      const sumX = x.reduce((a, b) => a + b, 0);
+      const sumY = prices.reduce((a, b) => a + b, 0);
+      const sumXY = x.reduce((sum, xi, i) => sum + xi * prices[i], 0);
+      const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+      
+      return (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    },
+    
+    calculateVolatility(prices) {
+      const mean = prices.reduce((a, b) => a + b, 0) / prices.length;
+      const variance = prices.reduce((sum, price) => sum + Math.pow(price - mean, 2), 0) / prices.length;
+      return Math.sqrt(variance) / mean; // Coefficient of variation
+    },
+    
+    getRSISignal(rsi) {
+      if (rsi > 70) return 'overbought';
+      if (rsi < 30) return 'oversold';
+      return 'neutral';
+    },
+    
+    getMACDSignal(macd) {
+      const lastMacd = macd.macd[macd.macd.length - 1] || 0;
+      const lastSignal = macd.signal[macd.signal.length - 1] || 0;
+      const lastHist = macd.histogram[macd.histogram.length - 1] || 0;
+      
+      if (lastMacd > lastSignal && lastHist > 0) return 'bullish';
+      if (lastMacd < lastSignal && lastHist < 0) return 'bearish';
+      return 'neutral';
+    },
+    
+    getBollingerSignal(currentPrice, bollinger) {
+      const lastUpper = bollinger.upper[bollinger.upper.length - 1] || 0;
+      const lastLower = bollinger.lower[bollinger.lower.length - 1] || 0;
+      const bandwidth = (lastUpper - lastLower) / bollinger.middle[bollinger.middle.length - 1];
+      
+      if (bandwidth < 0.1) return 'squeeze';
+      if (bandwidth > 0.2) return 'expansion';
+      return 'normal';
+    },
+    
+    calculateBollingerBandwidth(bollinger) {
+      const lastUpper = bollinger.upper[bollinger.upper.length - 1] || 0;
+      const lastLower = bollinger.lower[bollinger.lower.length - 1] || 0;
+      const lastMiddle = bollinger.middle[bollinger.middle.length - 1] || 1;
+      
+      return ((lastUpper - lastLower) / lastMiddle) * 100;
     },
     getRandomRSISignal() {
       const signals = ['oversold', 'overbought', 'neutral'];
@@ -1039,41 +1241,197 @@ export default {
       }
       return signals;
     },
-    generateMockPriceData(basePrice) {
+    generateMockPriceData(basePrice, timeRange = '1D') {
       const data = [];
       const now = Date.now();
       let price = basePrice;
       
-      for (let i = 100; i >= 0; i--) {
-        const timestamp = now - (i * 24 * 60 * 60 * 1000) + Math.random() * 1000; // Add random ms to avoid duplicates
-        const volatility = 0.02 + Math.random() * 0.04;
+      // Configure data points and intervals based on time range
+      const timeConfigs = {
+        '1D': { points: 96, interval: 15 * 60 * 1000 }, // 15 minutes
+        '7D': { points: 168, interval: 60 * 60 * 1000 }, // 1 hour
+        '30D': { points: 180, interval: 4 * 60 * 60 * 1000 }, // 4 hours
+        '90D': { points: 90, interval: 24 * 60 * 60 * 1000 } // 1 day
+      };
+      
+      const config = timeConfigs[timeRange] || timeConfigs['1D'];
+      
+      for (let i = config.points; i >= 0; i--) {
+        const timestamp = now - (i * config.interval);
+        const volatility = 0.01 + Math.random() * 0.03; // Reduced volatility for more realistic candlesticks
         const direction = Math.random() > 0.5 ? 1 : -1;
         
-        price = price * (1 + (direction * volatility * 0.5));
-        price = Math.max(price, 0.001);
+        // Calculate open price (close of previous candle or slight variation)
+        const open = price;
+        
+        // Add some price movement during the day
+        const priceChange = direction * volatility * Math.random();
+        const close = price * (1 + priceChange);
+        
+        // Calculate realistic high and low
+        const high = Math.max(open, close) * (1 + Math.random() * 0.02);
+        const low = Math.min(open, close) * (1 - Math.random() * 0.02);
+        
+        // Ensure price stays positive
+        price = Math.max(close, 0.001);
         
         data.push({
           timestamp,
-          open: price * (0.98 + Math.random() * 0.04),
-          high: price * (1.00 + Math.random() * 0.03),
-          low: price * (0.97 + Math.random() * 0.03),
-          close: price,
+          open: Math.max(open, 0.001),
+          high: Math.max(high, 0.001),
+          low: Math.max(low, 0.001),
+          close: Math.max(close, 0.001),
           volume: Math.random() * 100000 + 10000
         });
       }
       
-      return data;
+      return data.sort((a, b) => a.timestamp - b.timestamp); // Ensure chronological order
+    },
+    
+    calculateRealIndicators(prices, priceHistory) {
+      // Calculate technical indicators from real price data
+      const sma20 = this.calculateSMA(prices, 20);
+      const ema12 = this.calculateEMA(prices, 12);
+      const rsi = this.calculateRSI(prices, 14);
+      const bollinger = this.calculateBollingerBands(prices, 20, 2);
+      const macd = this.calculateMACD(prices);
+      
+      // Calculate support and resistance levels
+      const supportLevels = this.calculateSupportLevels(priceHistory);
+      const resistanceLevels = this.calculateResistanceLevels(priceHistory);
+      
+      return {
+        sma: { 
+          period: 20, 
+          current: sma20[sma20.length - 1] || 0, 
+          values: sma20 
+        },
+        ema: { 
+          period: 12, 
+          current: ema12[ema12.length - 1] || 0, 
+          values: ema12 
+        },
+        rsi: { 
+          period: 14, 
+          current: rsi[rsi.length - 1] || 50,
+          signal: this.getRSISignal(rsi[rsi.length - 1] || 50),
+          values: rsi 
+        },
+        macd: {
+          macdLine: macd.macd[macd.macd.length - 1] || 0,
+          signalLine: macd.signal[macd.signal.length - 1] || 0,
+          histogram: macd.histogram[macd.histogram.length - 1] || 0,
+          signal: this.getMACDSignal(macd)
+        },
+        bollinger: {
+          upper: bollinger.upper[bollinger.upper.length - 1] || 0,
+          middle: bollinger.middle[bollinger.middle.length - 1] || 0,
+          lower: bollinger.lower[bollinger.lower.length - 1] || 0,
+          bandwidth: this.calculateBollingerBandwidth(bollinger),
+          signal: this.getBollingerSignal(prices[prices.length - 1], bollinger)
+        },
+        stochastic: {
+          k: 0, // TODO: Implement if needed
+          d: 0,
+          signal: 'neutral'
+        },
+        support: supportLevels,
+        resistance: resistanceLevels
+      };
+    },
+    
+    calculateTrend(prices) {
+      if (prices.length < 10) {
+        return {
+          direction: 'sideways',
+          strength: 'weak',
+          timeframe: '1d',
+          confidence: 0.5
+        };
+      }
+      
+      // Simple trend calculation using linear regression slope
+      const recentPrices = prices.slice(-10); // Last 10 data points
+      const slope = this.calculateSlope(recentPrices);
+      const avgPrice = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+      const volatility = this.calculateVolatility(recentPrices);
+      
+      // Determine trend direction
+      let direction = 'sideways';
+      if (slope > avgPrice * 0.001) direction = 'bullish';
+      else if (slope < -avgPrice * 0.001) direction = 'bearish';
+      
+      // Determine trend strength
+      const slopeStrength = Math.abs(slope) / avgPrice;
+      let strength = 'weak';
+      if (slopeStrength > 0.005) strength = 'strong';
+      else if (slopeStrength > 0.002) strength = 'moderate';
+      
+      // Calculate confidence based on consistency
+      const confidence = Math.min(0.9, 0.3 + (1 - volatility) * 0.6);
+      
+      return {
+        direction,
+        strength,
+        timeframe: '1d',
+        confidence
+      };
+    },
+    
+    generateRealSignals(indicators) {
+      const signals = [];
+      const now = Date.now();
+      
+      // RSI signals
+      if (indicators.rsi.current > 70) {
+        signals.push({
+          type: 'sell',
+          indicator: 'RSI',
+          strength: 0.7,
+          description: 'RSI indicates overbought conditions',
+          timestamp: now
+        });
+      } else if (indicators.rsi.current < 30) {
+        signals.push({
+          type: 'buy',
+          indicator: 'RSI',
+          strength: 0.7,
+          description: 'RSI indicates oversold conditions',
+          timestamp: now
+        });
+      }
+      
+      // MACD signals
+      if (indicators.macd.macdLine > indicators.macd.signalLine && indicators.macd.histogram > 0) {
+        signals.push({
+          type: 'buy',
+          indicator: 'MACD',
+          strength: 0.6,
+          description: 'MACD shows bullish momentum',
+          timestamp: now + 1000
+        });
+      } else if (indicators.macd.macdLine < indicators.macd.signalLine && indicators.macd.histogram < 0) {
+        signals.push({
+          type: 'sell',
+          indicator: 'MACD',
+          strength: 0.6,
+          description: 'MACD shows bearish momentum',
+          timestamp: now + 2000
+        });
+      }
+      
+      return signals;
     },
     requestAnalysis(timeframe) {
       console.log('Requesting analysis for timeframe:', timeframe);
       if (this.selectedToken) {
-        this.generateMockAnalysis(this.selectedToken);
+        this.generateRealAnalysis(this.selectedToken);
       }
     },
     onSettingsChanged(settings) {
       console.log('Settings changed:', settings);
       if (this.selectedToken) {
-        this.generateMockAnalysis(this.selectedToken);
+        this.generateRealAnalysis(this.selectedToken);
       }
     },
     toggleSwapPanel() {
@@ -1082,7 +1440,10 @@ export default {
       // Trigger chart resize after transition
       if (this.chart) {
         setTimeout(() => {
-          this.chart.reflow();
+          this.chart.applyOptions({
+            width: this.$refs.technicalChart?.clientWidth || 600,
+            height: this.$refs.technicalChart?.clientHeight || 400
+          });
         }, 350);
       }
     },
@@ -1093,7 +1454,10 @@ export default {
       // Trigger chart resize
       if (this.chart) {
         setTimeout(() => {
-          this.chart.reflow();
+          this.chart.applyOptions({
+            width: this.$refs.technicalChart?.clientWidth || 600,
+            height: this.$refs.technicalChart?.clientHeight || 400
+          });
         }, 350);
       }
     },
@@ -1137,6 +1501,33 @@ export default {
         case 'squeeze': return 'orange';
         case 'expansion': return 'blue';
         default: return 'grey';
+      }
+    },
+    toggleVolumeVisibility() {
+      this.showVolume = !this.showVolume;
+      
+      if (this.chart) {
+        if (this.showVolume) {
+          // Re-create the chart to add volume
+          this.createTechnicalChart();
+        } else {
+          // Remove volume series and adjust price scale
+          if (this.volumeSeries) {
+            this.chart.removeSeries(this.volumeSeries);
+            this.volumeSeries = null;
+          }
+          
+          // Adjust price scale to take full height
+          this.chart.applyOptions({
+            rightPriceScale: {
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              scaleMargins: {
+                top: 0.05,
+                bottom: 0.05, // Take more space when volume is hidden
+              },
+            }
+          });
+        }
       }
     },
     clearFilters() {
@@ -1197,6 +1588,477 @@ export default {
           return sortDesc[0] ? -result : result;
         }
       });
+    },
+    createSyntheticHistory(currentData, config, endTime) {
+      // Creating synthetic history data
+      
+      // Calculate time intervals based on resolution
+      const resolutionMinutes = this.getResolutionInMinutes(config.resolution);
+      const intervalSeconds = resolutionMinutes * 60;
+      const totalSeconds = config.days * 24 * 60 * 60;
+      const numPoints = Math.floor(totalSeconds / intervalSeconds);
+      
+      console.log('📊 Synthetic data config:', {
+        resolution: config.resolution,
+        resolutionMinutes,
+        intervalSeconds,
+        totalSeconds,
+        numPoints,
+        days: config.days
+      });
+      
+      const timestamps = [];
+      const opens = [];
+      const highs = [];
+      const lows = [];
+      const closes = [];
+      const volumes = [];
+      
+      const basePrice = currentData.current_price;
+      const dailyChange = currentData.daily_price_change || 0;
+      const baseVolume = currentData.daily_volume || 1000;
+      
+      // Create realistic price movement with some volatility
+      for (let i = 0; i < numPoints; i++) {
+        const timeOffset = (numPoints - 1 - i) * intervalSeconds;
+        const timestamp = endTime - timeOffset;
+        
+        // Create price variation based on daily change and some randomness
+        const progressRatio = i / numPoints; // 0 to 1 progression through time
+        const trendEffect = (dailyChange / 100) * progressRatio * basePrice;
+        
+        // Add some realistic volatility (±2% random movement)
+        const volatility = basePrice * 0.02 * (Math.random() - 0.5);
+        const price = basePrice + trendEffect + volatility;
+        
+        // Ensure price stays positive
+        const adjustedPrice = Math.max(price, basePrice * 0.5);
+        
+        // Create OHLC data with some realistic spread
+        const spread = adjustedPrice * 0.01; // 1% spread for OHLC
+        const open = adjustedPrice + (Math.random() - 0.5) * spread;
+        const close = adjustedPrice + (Math.random() - 0.5) * spread;
+        const high = Math.max(open, close) + Math.random() * spread;
+        const low = Math.min(open, close) - Math.random() * spread;
+        
+        // Volume with some variation
+        const volumeVariation = baseVolume * (0.5 + Math.random());
+        
+        timestamps.push(timestamp);
+        opens.push(Math.max(open, 0.000001));
+        highs.push(Math.max(high, 0.000001));
+        lows.push(Math.max(low, 0.000001));
+        closes.push(Math.max(close, 0.000001));
+        volumes.push(Math.max(volumeVariation, 0));
+      }
+      
+      return {
+        s: 'ok',
+        t: timestamps,
+        o: opens,
+        h: highs,
+        l: lows,
+        c: closes,
+        v: volumes
+      };
+    },
+    getResolutionInMinutes(resolution) {
+      const resolutionMap = {
+        '1min': 1,
+        '5min': 5,
+        '15min': 15,
+        '30min': 30,
+        '1H': 60,
+        '4H': 240,
+        '1D': 1440
+      };
+      return resolutionMap[resolution] || 60; // Default to 60 minutes
+    },
+    enhanceHistoryData(realData, config, endTime) {
+      if (!realData || realData.length === 0) return [];
+      
+      console.log('🔧 Enhancing history data with config:', config);
+      console.log('📊 Real data points:', realData.length);
+      
+      // Calculate expected timeline
+      const resolutionMinutes = this.getResolutionInMinutes(config.resolution);
+      const intervalSeconds = resolutionMinutes * 60;
+      const totalSeconds = config.days * 24 * 60 * 60;
+      const numPoints = Math.floor(totalSeconds / intervalSeconds);
+      
+      // Sort real data by timestamp to ensure chronological order
+      const sortedRealData = [...realData].sort((a, b) => a.timestamp - b.timestamp);
+      
+      console.log('📈 Creating', numPoints, 'interpolated points from', sortedRealData.length, 'real points');
+      
+      const enhancedData = [];
+      
+      // Create timeline of expected timestamps
+      for (let i = 0; i < numPoints; i++) {
+        const timeOffset = (numPoints - 1 - i) * intervalSeconds;
+        const timestamp = endTime - timeOffset;
+        const timestampMs = timestamp * 1000;
+        
+        // Find the closest real data points for interpolation
+        const interpolatedPoint = this.interpolateDataPoint(timestampMs, sortedRealData);
+        enhancedData.push(interpolatedPoint);
+      }
+      
+      console.log('✨ Enhanced data timeline:', {
+        originalPoints: sortedRealData.length,
+        enhancedPoints: enhancedData.length,
+        timeSpan: `${config.days} days`,
+        resolution: config.resolution
+      });
+      
+      return enhancedData;
+    },
+    interpolateDataPoint(targetTimestamp, realDataPoints) {
+      // Find the two closest real data points for interpolation
+      let beforePoint = null;
+      let afterPoint = null;
+      
+      for (let i = 0; i < realDataPoints.length; i++) {
+        const point = realDataPoints[i];
+        
+        if (point.timestamp <= targetTimestamp) {
+          beforePoint = point;
+        }
+        
+        if (point.timestamp >= targetTimestamp && !afterPoint) {
+          afterPoint = point;
+          break;
+        }
+      }
+      
+      // If we have both before and after points, interpolate
+      if (beforePoint && afterPoint && beforePoint.timestamp !== afterPoint.timestamp) {
+        const timeDiff = afterPoint.timestamp - beforePoint.timestamp;
+        const targetDiff = targetTimestamp - beforePoint.timestamp;
+        const ratio = targetDiff / timeDiff;
+        
+        return {
+          timestamp: targetTimestamp,
+          open: this.interpolateValue(beforePoint.open, afterPoint.open, ratio),
+          high: this.interpolateValue(beforePoint.high, afterPoint.high, ratio, 0.005), // Add slight volatility
+          low: this.interpolateValue(beforePoint.low, afterPoint.low, ratio, -0.005),
+          close: this.interpolateValue(beforePoint.close, afterPoint.close, ratio),
+          volume: this.interpolateValue(beforePoint.volume, afterPoint.volume, ratio, 0.1) // Volume variation
+        };
+      }
+      
+      // If we only have one reference point, use it with slight variation
+      const referencePoint = beforePoint || afterPoint || realDataPoints[0];
+      const basePrice = referencePoint.close;
+      const volatility = basePrice * 0.01; // 1% volatility
+      
+      return {
+        timestamp: targetTimestamp,
+        open: basePrice + (Math.random() - 0.5) * volatility,
+        high: basePrice + Math.random() * volatility,
+        low: basePrice - Math.random() * volatility,
+        close: basePrice + (Math.random() - 0.5) * volatility,
+        volume: referencePoint.volume * (0.8 + Math.random() * 0.4) // 80-120% of original volume
+      };
+    },
+    interpolateValue(value1, value2, ratio, randomFactor = 0) {
+      const interpolated = value1 + (value2 - value1) * ratio;
+      const randomness = randomFactor * interpolated * (Math.random() - 0.5);
+      return Math.max(interpolated + randomness, 0.000001); // Ensure positive values
+    },
+    async onTimeRangeChange(newRange) {
+      if (!this.selectedToken) return;
+      
+      this.isLoadingTimeRange = newRange;
+      console.log('📅 Time range changed to:', newRange, 'for token:', this.selectedToken.name);
+      this.saveChartSettings();
+      
+      try {
+        // Regenerate analysis with new time range
+        await this.generateRealAnalysis(this.selectedToken, newRange);
+        
+        // Update the chart
+        if (this.analysisData && this.chart) {
+          this.createTechnicalChart();
+        }
+      } catch (error) {
+        console.error('❌ Error changing time range:', error);
+      } finally {
+        this.isLoadingTimeRange = null;
+      }
+    },
+    onChartStyleChange() {
+      console.log('📊 Chart style changed to:', this.chartStyle);
+      this.saveChartSettings();
+      if (this.chart && this.analysisData) {
+        this.createTechnicalChart();
+      }
+    },
+    onColorSchemeChange() {
+      console.log('🎨 Color scheme changed to:', this.colorScheme);
+      this.saveChartSettings();
+      if (this.chart && this.analysisData) {
+        this.createTechnicalChart();
+      }
+    },
+    onCandleStyleChange() {
+      console.log('🕯️ Candle style changed - Hollow:', this.hollowCandles, 'Wicks:', this.showWicks);
+      this.saveChartSettings();
+      if (this.chart && this.analysisData) {
+        this.createTechnicalChart();
+      }
+    },
+    onTooltipToggle() {
+      console.log('💬 Tooltips toggled:', this.showTooltips);
+      this.saveChartSettings();
+      if (this.chart) {
+        this.setupTooltips();
+      }
+    },
+    onIndicatorToggle() {
+      console.log('📊 Indicators toggled - SMA:', this.showSMA, 'EMA:', this.showEMA, 'Bollinger:', this.showBollinger);
+      this.saveChartSettings();
+      if (this.chart && this.analysisData) {
+        this.createTechnicalChart();
+      }
+    },
+    onVolumeToggle() {
+      console.log('📊 Volume toggled:', this.showVolume);
+      this.saveChartSettings();
+      // Just recreate the chart with the new volume setting
+      if (this.chart && this.analysisData) {
+        this.createTechnicalChart();
+      }
+    },
+    setupTooltips() {
+      if (!this.chart || !this.showTooltips) {
+        this.hideTooltip();
+        return;
+      }
+      
+      console.log('🔧 Setting up tooltips for chart');
+      
+      // Subscribe to crosshair move for tooltip functionality
+      this.chart.subscribeCrosshairMove((param) => {
+        if (!param.point || !param.time || !param.seriesData) {
+          this.hideTooltip();
+          return;
+        }
+        
+        console.log('📍 Crosshair moved:', param.time, param.seriesData.size);
+        
+        // Get data for the hovered point from any available series
+        let priceData = null;
+        let volumeData = null;
+        
+        // Try to get data from candlestick series first
+        if (this.candlestickSeries && param.seriesData.has(this.candlestickSeries)) {
+          priceData = param.seriesData.get(this.candlestickSeries);
+        }
+        
+        // If no candlestick data, try any other series (line chart)
+        if (!priceData && param.seriesData.size > 0) {
+          const firstSeries = param.seriesData.values().next().value;
+          priceData = firstSeries;
+        }
+        
+        // Get volume data if available
+        if (this.volumeSeries && param.seriesData.has(this.volumeSeries)) {
+          volumeData = param.seriesData.get(this.volumeSeries);
+          console.log('📊 Volume data found:', volumeData);
+        } else {
+          console.log('📊 Volume data not found. volumeSeries exists:', !!this.volumeSeries, 'has volumeSeries in data:', this.volumeSeries ? param.seriesData.has(this.volumeSeries) : false);
+        }
+        
+        if (priceData) {
+          console.log('📊 Showing tooltip with data:', priceData, 'volume:', volumeData);
+          this.showTooltip(param.point, param.time, priceData, volumeData);
+        } else {
+          this.hideTooltip();
+        }
+      });
+    },
+    showTooltip(point, time, priceData, volumeData) {
+      // Create or update tooltip element
+      let tooltip = document.getElementById('chart-tooltip');
+      if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'chart-tooltip';
+        tooltip.style.cssText = `
+          position: absolute;
+          background: rgba(20, 20, 20, 0.95);
+          border: 1px solid #00c7f3;
+          border-radius: 6px;
+          padding: 10px 14px;
+          color: white;
+          font-size: 12px;
+          font-family: 'Inter', sans-serif;
+          z-index: 1000;
+          pointer-events: none;
+          backdrop-filter: blur(4px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          min-width: 180px;
+        `;
+        document.body.appendChild(tooltip);
+      }
+      
+      // Format the timestamp for crypto trading
+      const date = new Date(time * 1000);
+      const timeStr = date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      // Format price values for ADA pair
+      const formatPrice = (value) => typeof value === 'number' ? value.toFixed(6) + ' ADA' : 'N/A';
+      const formatVolume = (volumeData) => {
+        if (!volumeData) return 'N/A';
+        
+        // Handle different volume data structures
+        let volume = null;
+        if (typeof volumeData === 'number') {
+          volume = volumeData;
+        } else if (volumeData.value !== undefined) {
+          volume = volumeData.value;
+        } else if (volumeData.volume !== undefined) {
+          volume = volumeData.volume;
+        }
+        
+        console.log('📊 Formatting volume:', volumeData, '→', volume);
+        return typeof volume === 'number' ? volume.toLocaleString(undefined, { maximumFractionDigits: 0 }) : 'N/A';
+      };
+      
+      // Handle different data types (candlestick vs line)
+      let contentHTML = '';
+      
+      if (priceData.open !== undefined) {
+        // Candlestick data
+        const currentPrice = priceData.close;
+        contentHTML = `
+          <div style="font-weight: 600; margin-bottom: 8px; color: #00c7f3; font-size: 13px;">${timeStr}</div>
+          <div style="margin-bottom: 6px;">
+            <div style="font-size: 14px; font-weight: 600; color: white;">
+              ${formatPrice(currentPrice)}
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px; align-items: center; font-size: 11px;">
+            <span style="color: #888;">High:</span><span style="color: #4caf50;">${formatPrice(priceData.high)}</span>
+            <span style="color: #888;">Low:</span><span style="color: #f44336;">${formatPrice(priceData.low)}</span>
+            ${volumeData ? `<span style="color: #888;">Volume:</span><span style="color: #ccc;">${formatVolume(volumeData)}</span>` : ''}
+          </div>
+        `;
+      } else if (priceData.value !== undefined) {
+        // Line chart data
+        contentHTML = `
+          <div style="font-weight: 600; margin-bottom: 8px; color: #00c7f3; font-size: 13px;">${timeStr}</div>
+          <div style="margin-bottom: 6px;">
+            <div style="font-size: 14px; font-weight: 600; color: white;">
+              ${formatPrice(priceData.value)}
+            </div>
+          </div>
+          ${volumeData ? `<div style="font-size: 11px; color: #888;">Volume: <span style="color: #ccc;">${formatVolume(volumeData)}</span></div>` : ''}
+        `;
+      } else {
+        // Fallback for unknown data format
+        contentHTML = `
+          <div style="font-weight: 600; margin-bottom: 8px; color: #00c7f3; font-size: 13px;">${timeStr}</div>
+          <div style="color: #888; font-size: 11px;">Price data available</div>
+        `;
+      }
+      
+      tooltip.innerHTML = contentHTML;
+      
+      // Position tooltip
+      const chartElement = this.$refs.technicalChart;
+      if (!chartElement) return;
+      
+      const chartRect = chartElement.getBoundingClientRect();
+      
+      // Smart positioning to avoid edges
+      const tooltipX = Math.min(chartRect.left + point.x + 15, window.innerWidth - 200);
+      const tooltipY = Math.max(chartRect.top + point.y - 80, 10);
+      
+      tooltip.style.left = tooltipX + 'px';
+      tooltip.style.top = tooltipY + 'px';
+      tooltip.style.display = 'block';
+    },
+    hideTooltip() {
+      const tooltip = document.getElementById('chart-tooltip');
+      if (tooltip) {
+        tooltip.style.display = 'none';
+      }
+    },
+    getColorScheme() {
+      const schemes = {
+        default: {
+          upColor: '#00c7f3',
+          downColor: '#f44336',
+          borderUpColor: '#00c7f3',
+          borderDownColor: '#f44336',
+          wickUpColor: '#00c7f3',
+          wickDownColor: '#f44336'
+        },
+        classic: {
+          upColor: '#4caf50',
+          downColor: '#f44336',
+          borderUpColor: '#4caf50',
+          borderDownColor: '#f44336',
+          wickUpColor: '#4caf50',
+          wickDownColor: '#f44336'
+        }
+      };
+      return schemes[this.colorScheme] || schemes.default;
+    },
+    saveChartSettings() {
+      const settings = {
+        chartStyle: this.chartStyle,
+        colorScheme: this.colorScheme,
+        hollowCandles: this.hollowCandles,
+        showWicks: this.showWicks,
+        showTooltips: this.showTooltips,
+        showSMA: this.showSMA,
+        showEMA: this.showEMA,
+        showBollinger: this.showBollinger,
+        showVolume: this.showVolume,
+        selectedTimeRange: this.selectedTimeRange
+      };
+      
+      try {
+        localStorage.setItem('gero_chart_settings', JSON.stringify(settings));
+        console.log('💾 Chart settings saved:', settings);
+      } catch (error) {
+        console.warn('Failed to save chart settings:', error);
+      }
+    },
+    loadChartSettings() {
+      try {
+        const savedSettings = localStorage.getItem('gero_chart_settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          console.log('📂 Loading chart settings:', settings);
+          
+          // Apply saved settings
+          this.chartStyle = settings.chartStyle || 'candlestick';
+          this.colorScheme = settings.colorScheme || 'default';
+          this.hollowCandles = settings.hollowCandles !== undefined ? settings.hollowCandles : false;
+          this.showWicks = settings.showWicks !== undefined ? settings.showWicks : true;
+          this.showTooltips = settings.showTooltips !== undefined ? settings.showTooltips : true;
+          this.showSMA = settings.showSMA !== undefined ? settings.showSMA : false;
+          this.showEMA = settings.showEMA !== undefined ? settings.showEMA : false;
+          this.showBollinger = settings.showBollinger !== undefined ? settings.showBollinger : false;
+          this.showVolume = settings.showVolume !== undefined ? settings.showVolume : true;
+          this.selectedTimeRange = settings.selectedTimeRange || '1D';
+          
+          console.log('✅ Chart settings loaded successfully');
+          return true;
+        }
+      } catch (error) {
+        console.warn('Failed to load chart settings:', error);
+      }
+      return false;
     },
   },
   filters,
@@ -1313,6 +2175,94 @@ export default {
         res = res.filter(collection => !collection.isScam)
       }
       return res
+    },
+    // NFT Gallery computed properties
+    sortOptions() {
+      return [
+        { text: 'Name (A-Z)', value: 'name' },
+        { text: 'Name (Z-A)', value: 'name_desc' },
+        { text: 'Quantity (High-Low)', value: 'quantity_desc' },
+        { text: 'Quantity (Low-High)', value: 'quantity' }
+      ]
+    },
+    cardSize() {
+      switch (this.cardSizeMode) {
+        case 'small': return 140
+        case 'medium': return 200
+        case 'large': return 260
+        default: return 140
+      }
+    },
+    gridSizeClass() {
+      return `grid-${this.cardSizeMode}`
+    },
+    dynamicItemsPerPage() {
+      // Simple calculation based on typical screen sizes and card dimensions
+      switch (this.cardSizeMode) {
+        case 'small': return 30   // 140px cards
+        case 'medium': return 20  // 200px cards  
+        case 'large': return 12   // 260px cards
+        default: return 20
+      }
+    },
+    sortedCollectibles() {
+      if (!this.collectibles) return []
+      
+      let sorted = [...this.collectibles]
+      
+      // Apply search filter first
+      if (this.collectiblesSearch) {
+        const searchTerm = this.collectiblesSearch.toLowerCase()
+        sorted = sorted.filter(collection => {
+          // Search in name
+          if (collection.name && collection.name.toLowerCase().includes(searchTerm)) {
+            return true
+          }
+          
+          // Search in description (handle different data types)
+          if (collection.description) {
+            let descriptionText = ''
+            if (typeof collection.description === 'string') {
+              descriptionText = collection.description
+            } else if (Array.isArray(collection.description)) {
+              descriptionText = collection.description.join(' ')
+            } else {
+              descriptionText = String(collection.description)
+            }
+            
+            if (descriptionText.toLowerCase().includes(searchTerm)) {
+              return true
+            }
+          }
+          
+          return false
+        })
+      }
+      
+      // Then apply sorting
+      switch (this.collectiblesSortBy) {
+        case 'name_desc':
+          sorted.sort((a, b) => b.name.localeCompare(a.name))
+          break
+        case 'quantity':
+          sorted.sort((a, b) => (a.quantity || 0) - (b.quantity || 0))
+          break
+        case 'quantity_desc':
+          sorted.sort((a, b) => (b.quantity || 0) - (a.quantity || 0))
+          break
+        default: // 'name'
+          sorted.sort((a, b) => a.name.localeCompare(b.name))
+      }
+      
+      return sorted
+    },
+    paginatedCollectibles() {
+      const start = (this.collectiblesPage - 1) * this.dynamicItemsPerPage
+      const end = start + this.dynamicItemsPerPage
+      return this.sortedCollectibles.slice(start, end)
+    },
+    totalPages() {
+      return Math.ceil(this.sortedCollectibles.length / this.dynamicItemsPerPage)
     }
   },
   data: () => ({
@@ -1329,6 +2279,12 @@ export default {
     assetsSortDesc: false,
     collectiblesSortBy: 'name',
     collectiblesSortDesc: false,
+    // NFT Gallery properties
+    collectiblesViewMode: 'grid',
+    cardSizeMode: 'small',
+    collectiblesSearch: '',
+    collectiblesPage: 1,
+    collectiblesPerPage: 12,
     currentTab: 0,
     chartData: [],
     assetsHeaders: [
@@ -1361,6 +2317,20 @@ export default {
     analysisLoading: false,
     activeTab: 0,
     chart: null,
+    resizeObserver: null,
+    showVolume: true,
+    volumeSeries: null,
+    selectedTimeRange: '1D',
+    isLoadingTimeRange: null,
+    chartStyle: 'candlestick',
+    colorScheme: 'default',
+    hollowCandles: false,
+    showWicks: true,
+    showTooltips: true,
+    showSMA: false,
+    showEMA: false, 
+    showBollinger: false,
+    candlestickSeries: null,
     assts,
   }),
   mounted() {
@@ -1368,6 +2338,21 @@ export default {
     this.hideScam = walletConfigStore().getHideScamTokens
     this.hideUnrated = walletConfigStore().getHideUnratedTokens
     this.assetsSort = walletConfigStore().getTokenAllocationTableSort
+    
+    // Load chart settings
+    this.loadChartSettings()
+  },
+  beforeDestroy() {
+    // Clean up chart and resize observer
+    if (this.chart) {
+      this.chart.remove();
+      this.chart = null;
+    }
+    this.volumeSeries = null;
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
   }
 };
 </script>
@@ -1579,7 +2564,7 @@ export default {
   flex: 1;
   text-align: center;
   color: #888888 !important;
-  font-size: 9px !important;
+  font-size: 11px !important;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   font-weight: 600;
@@ -1588,7 +2573,7 @@ export default {
 .overview-values {
   display: flex;
   align-items: center;
-  padding-top: 4px;
+  padding-top: 6px;
 }
 
 .overview-value-item {
@@ -1597,12 +2582,12 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
+  min-height: 28px;
 }
 
 .overview-value-text {
   color: white !important;
-  font-size: 10px !important;
+  font-size: 13px !important;
   font-weight: 500;
   line-height: 1.2;
 }
@@ -1640,35 +2625,342 @@ export default {
   }
 }
 
-/* Technical Analysis Coming Soon Overlay */
-.technical-analysis-overlay {
+.technical-analysis-content {
+  position: relative;
+  height: 100%;
+}
+
+/* NFT Gallery Styles */
+.nft-gallery-container {
+  padding: 16px;
+  min-height: 400px;
+}
+
+.gallery-controls {
+  margin-bottom: 20px;
+}
+
+.gallery-controls .gap-3 > * {
+  margin-right: 12px;
+}
+
+.gallery-controls .gap-2 > * {
+  margin-right: 8px;
+}
+
+.sort-select .v-input__control .v-input__slot {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  min-height: 28px !important;
+  height: 28px !important;
+}
+
+.sort-select .v-input__control {
+  min-height: 28px !important;
+  height: 28px !important;
+}
+
+.sort-select .v-select__slot {
+  font-size: 0.75rem !important;
+}
+
+.sort-select .v-input__append-inner {
+  margin-top: 2px !important;
+}
+
+.card-size-slider .v-slider__track-container {
+  height: 4px;
+}
+
+.gallery-grid {
+  display: grid;
+  gap: 20px;
+  transition: all 0.3s ease;
+}
+
+.gallery-grid.grid-small { 
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
+}
+
+.gallery-grid.grid-medium { 
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
+}
+
+.gallery-grid.grid-large { 
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); 
+}
+
+.gallery-masonry {
+  columns: 4;
+  column-gap: 20px;
+}
+
+@media (max-width: 1200px) { 
+  .gallery-masonry { columns: 3; }
+  .gallery-grid.grid-small { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .gallery-grid.grid-medium { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .gallery-grid.grid-large { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 768px) { 
+  .gallery-masonry { columns: 2; }
+  .gallery-grid.grid-small { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .gallery-grid.grid-medium { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .gallery-grid.grid-large { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+
+@media (max-width: 480px) { 
+  .gallery-masonry { columns: 1; }
+  .gallery-grid.grid-small,
+  .gallery-grid.grid-medium,
+  .gallery-grid.grid-large { 
+    grid-template-columns: 1fr; 
+  }
+}
+
+.nft-collection-card {
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(12px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.nft-collection-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.3), 
+    0 0 20px rgba(0, 199, 243, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-color: rgba(0, 199, 243, 0.3) !important;
+}
+
+.nft-collection-card.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 20px;
+}
+
+.card-image-container {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+}
+
+.collection-image {
+  transition: transform 0.3s ease;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.nft-collection-card:hover .collection-image {
+  transform: scale(1.05);
+}
+
+.card-badges {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(20, 20, 20, 0.75);
-  backdrop-filter: blur(2px);
-  z-index: 1000;
+  top: 12px;
+  right: 12px;
   display: flex;
+  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  z-index: 2;
+}
+
+.quantity-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+.quantity-chip {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px) saturate(120%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: white !important;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  font-weight: 600 !important;
+  font-size: 0.75rem !important;
+}
+
+.card-content {
+  padding: 16px !important;
+}
+
+.collection-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1.3;
+  margin-bottom: 8px;
+  color: white !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-description {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7) !important;
+  line-height: 1.4;
+  margin-bottom: 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6) !important;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #00c7f3 !important;
+  font-size: 0.875rem;
+}
+
+.gallery-list .collection-list-item {
+  background: rgba(255, 255, 255, 0.04) !important;
+  margin-bottom: 8px;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  transition: all 0.2s ease;
+}
+
+.gallery-list .collection-list-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(0, 199, 243, 0.3) !important;
+  transform: translateY(-1px);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-.coming-soon-message {
-  text-align: center;
-  padding: 2rem;
-  border-radius: 12px;
-  background: rgba(15, 15, 15, 0.9);
-  border: 1px solid rgba(0, 199, 243, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+.empty-state h3 {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
 }
 
-.technical-analysis-content {
-  position: relative;
-  height: 100%;
-  filter: blur(4px);
-  opacity: 0.6;
-  pointer-events: none;
+.empty-state p {
+  font-size: 1rem;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.gallery-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.gallery-pagination .v-pagination .v-pagination__item {
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: white !important;
+}
+
+.gallery-pagination .v-pagination .v-pagination__item--active {
+  background: rgba(0, 199, 243, 0.2) !important;
+  border-color: rgba(0, 199, 243, 0.4) !important;
+  color: #00c7f3 !important;
+}
+
+.gallery-pagination .v-pagination .v-pagination__item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(0, 199, 243, 0.3) !important;
+}
+
+.card-content-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(15px) saturate(140%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0 0 8px 8px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collection-name-glass {
+  color: white;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  margin: 0;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 1.2em;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.nft-collection-card:hover .card-content-overlay {
+  padding: 16px 12px;
+}
+
+.nft-collection-card:hover .collection-name-glass {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.3;
+  max-height: 4em;
+  transform: scale(1.02);
+}
+
+.collection-search .v-input__control .v-input__slot {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.collection-search .v-input__control .v-input__slot:hover {
+  border-color: rgba(0, 199, 243, 0.3) !important;
+}
+
+.collection-search .v-input--is-focused .v-input__control .v-input__slot {
+  border-color: rgba(0, 199, 243, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(0, 199, 243, 0.2) !important;
 }
 </style>

@@ -59,6 +59,25 @@
               {{ item.title }}
             </v-list-item-title>
           </v-list-item-content>
+
+          <!-- Mini Player Button for Media Player item -->
+          <v-list-item-action v-if="item.title === 'Media Player' && musicPlaylist?.length > 0">
+            <v-tooltip right>
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  x-small
+                  v-bind="attrs"
+                  v-on="on"
+                  @click.stop.prevent="toggleMiniPlayer"
+                  :color="context.shown ? 'primary' : ''"
+                >
+                  <v-icon size="16">mdi-play-box-multiple</v-icon>
+                </v-btn>
+              </template>
+              <span>Mini Player</span>
+            </v-tooltip>
+          </v-list-item-action>
         </v-list-item>
 
         <v-list-item
@@ -161,6 +180,7 @@ const loggedWallet = computed(() => store.loggedWallet)
 const transactionsCount = computed(() => store.transactions?.length || 0)
 const baseAddress = computed(() => store.baseAddress)
 const musicPlaylist = computed(() => music.musicPlaylist)
+const context = computed(() => music.context)
 
 const account = computed(() => {
   return loggedWallet.value
@@ -229,7 +249,14 @@ watch(() => breakpoint.mobile,
   }
 )
 
+// Actions from stores
+const { setMediaPlayerShown } = music
+
 // Methods
+function toggleMiniPlayer() {
+  setMediaPlayerShown(!context.value.shown)
+}
+
 async function submitLogout() {
   await store.logout()
   await router.push('/welcome')
