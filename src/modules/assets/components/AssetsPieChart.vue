@@ -1,7 +1,7 @@
 <template>
   <div class="fill-height">
-    <vue-highcharts v-if="options"
-                    :options="options()"
+    <vue-highcharts v-if="chartOptions"
+                    :options="chartOptions"
                     :highcharts="Highcharts"
     ></vue-highcharts>
     <v-card v-else flat class="transparent fill-height">
@@ -12,7 +12,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, computed } from 'vue'
+import { toRefs, computed, getCurrentInstance } from 'vue'
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
@@ -34,42 +34,53 @@ const collectiblesAmount = computed(() => {
   return amount
 })
 
+const chartData = computed(() => {
+  // Only compute when tokens or collections actually exist and have data
+  if (!tokens.value || !collections.value) {
+    return []
+  }
+  
+  const tokenCount = Object.keys(tokens.value).length
+  const collectibleCount = collectiblesAmount.value
+  const totalTokens = tokenCount + collectibleCount
+  
+  if (totalTokens === 0) {
+    return []
+  }
+  
+  return [
+    ["Assets", (tokenCount / totalTokens) * 100],
+    ["Collectibles", (collectibleCount / totalTokens) * 100],
+  ]
+});
+
+const filteredChartData = computed(() => {
+  return chartData.value.filter(d => d[1] > 0)
+})
+
+const isAllZeroes = computed(() => {
+  return chartData.value.length === 0 || chartData.value.every(data => data[1] === 0)
+})
+
 const computedColors = computed(() => {
   const colors = []
-  chartData.value.forEach(data => {
-    if (data[1] > 0) {
-      if (data[0] === 'Assets') {
-        colors.push('#00c7f3')
-      } else if (data[0] === 'Collectibles') {
-        colors.push('#155B75')
-      }
+  filteredChartData.value.forEach(data => {
+    if (data[0] === 'Assets') {
+      colors.push('#00c7f3')
+    } else if (data[0] === 'Collectibles') {
+      colors.push('#155B75')
     }
   })
   return colors
 })
 
-const chartData = computed(() => {
-  console.log('chartData')
-  if (tokens.value && collections.value) {
-    const totalTokens = (Object.values(tokens.value).length + collectiblesAmount.value) || 1; // Avoid division by zero
-    return [
-      ["Assets", (Object.values(tokens.value).length / totalTokens) * 100],
-      ["Collectibles", (collectiblesAmount.value / totalTokens) * 100],
-    ];
-  }
-  return []
-});
-
-const isAllZeroes = () => {
-  return chartData.value.every(data => data[1] === 0)
-}
-
 const vmProxy = getCurrentInstance()!.proxy as any
 
-const options = () => {
-  if (isAllZeroes()) {
+const chartOptions = computed(() => {
+  if (isAllZeroes.value || filteredChartData.value.length === 0) {
     return null
   }
+  
   return {
     legend: {
       itemStyle: {
@@ -148,7 +159,7 @@ const options = () => {
       {
         // name: 'Percentage',
         colorByPoint: true,
-        data: chartData.value.filter(function(d) {return d[1] > 0}),
+        data: filteredChartData.value,
         dataLabels: {
           color: vmProxy.$vuetify.theme.isDark ? '#FFF' : '#000',
           style: {
@@ -159,5 +170,5 @@ const options = () => {
     ],
     useUTC: true,
   }
-}
+})
 </script>

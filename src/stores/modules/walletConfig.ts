@@ -133,30 +133,6 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
         db.table('config').put({key: 'backup', value: val})
       }
     },
-    async setHideScamTokens(val) {
-      if (appWallet) {
-        const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'hideScamTokens', value: val})
-      }
-    },
-    async setHideUnverifiedTokens(val) {
-      if (appWallet) {
-        const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'hideUnverifiedTokens', value: val})
-      }
-    },
-    async setHideUnratedTokens(val) {
-      if (appWallet) {
-        const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'hideUnratedTokens', value: val})
-      }
-    },
-    async setTokenAllocationTableSort(val) {
-      if (appWallet) {
-        const db: Dexie = await appWallet.getDb()
-        db.table('config').put({key: 'tokenAllocationSort', value: val})
-      }
-    },
     setContacts(contacts) {
       this.contacts = contacts
     },

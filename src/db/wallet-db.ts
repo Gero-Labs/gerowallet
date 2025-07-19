@@ -49,4 +49,36 @@ export async function removeContact(id: number, address: string) {
   db.table('contacts').delete(address)
 }
 
+export async function addConnectedDapp(walletId: number, domain: string) {
+  try {
+    const db: Dexie = await getDb(walletId);
+    const dappsTable = db.table('connected_dapps');
+
+    if (!dappsTable) throw new Error('No Connected Dapps Table.');
+
+    // Check if the domain already exists in the table
+    const existingDapp = await dappsTable.get({ domain: domain });
+
+    if (existingDapp) {
+      console.log(`Domain ${domain} already exists, ignoring.`);
+      return existingDapp;
+    }
+
+    // Insert new domain
+    const domainObject = { domain, time: new Date().getTime() };
+    domainObject['id'] = await dappsTable.put(domainObject);
+    console.log(`Domain ${domain} added successfully.`);
+
+    return domainObject;
+  } catch (err) {
+    console.error(`Failed to add connected dapp: ${err}`);
+    throw err;
+  }
+}
+
+export async function removeDapp(id: number, dappId: string) {
+  const db: Dexie = await getDb(id);
+  db.table('connected_dapps').delete(dappId)
+}
+
 
