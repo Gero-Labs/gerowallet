@@ -15,7 +15,7 @@ import {
   TxOutputDestinationType,
   TxOutputFormat, TxRequiredSignerType, VoteOption, VoterType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { ChainDerivations, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
+import { ChainDerivations, coin_type, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import {
@@ -203,13 +203,13 @@ export default {
       },
       account: {
         pub: wallet.publicKey,
-        path: [purpose.hdwallet, 1815, index]
+        path: [purpose.hdwallet, coin_type.cardano, index]
       },
       keys: {
         payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
         stake: [{
           cred: BaseAddress.from_address(address).stake_cred().to_keyhash().to_hex(),
-          path: `m/${purpose.hdwallet}'/1815'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
         }],
         change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
         script: [],

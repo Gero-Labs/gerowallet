@@ -220,7 +220,6 @@ export default {
     assets,
   }),
   created() {
-    console.log(this.loggedWallet.name)
     this.walletName = this.loggedWallet.name;
     this.loc = this.languages[this.locale].name;
   }

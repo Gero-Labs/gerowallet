@@ -28,7 +28,7 @@
     <!-- Navigation items -->
     <v-list nav dense>
       <template v-for="(item, index) in items" >
-        <v-subheader v-if="item.header" style="font-weight: 800" :key="index">
+        <v-subheader v-if="item.header && item.enabled" style="font-weight: 800" :key="index">
           {{ item.header }}
         </v-subheader>
 
@@ -59,6 +59,16 @@
               {{ item.title }}
             </v-list-item-title>
           </v-list-item-content>
+          <v-list-item-action v-if="item.new">
+            <v-chip
+              v-if="item.new"
+              class="my-2 px-2"
+              color="primary"
+              x-small
+            >
+              NEW
+            </v-chip>
+          </v-list-item-action>
         </v-list-item>
 
         <v-list-item
@@ -128,13 +138,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue'
+import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import { useStore } from '@/stores'
 import networks from '@/utils/networks'
-import { musicStore } from '@/stores/modules/music'
+import { musicStore } from '@/plugins/musicStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
+import { walletStore } from '@/plugins/walletStore';
+import { geroStore } from '@/plugins/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
@@ -150,22 +164,17 @@ const router = vmProxy.$router
 
 // Pinia stores
 const store = useStore()
-const music = musicStore()
 
 // Reactive state
 const version = ref('')
 
-// Computed properties
-const wallets = computed(() => store.wallets)
-const loggedWallet = computed(() => store.loggedWallet)
-const transactions = computed(() => store.transactions || 0)
-const baseAddress = computed(() => store.baseAddress)
-const musicPlaylist = computed(() => music.musicPlaylist)
+const { musicPlaylist } = toRefs(musicStore);
+
+const { loggedWallet, transactions } = toRefs(walletStore);
+const { wallets } = toRefs(geroStore);
 
 const account = computed(() => {
   return loggedWallet.value
-    ? wallets.value.find(w => w.id === loggedWallet.value.id)
-    : null
 })
 
 const avatar = computed(() => {
@@ -180,29 +189,28 @@ function resolveIcon(icon: string) {
 }
 
 const items = computed(() => {
-  let isStakingEnabled = false
-  if (baseAddress.value) {
-    isStakingEnabled =
-      Cardano.Address.fromBech32(baseAddress.value).getType() !==
+  let isStakingEnabled = false;
+  if (loggedWallet.value?.baseAddress) {
+    isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
       Cardano.AddressType.EnterpriseScript
   }
 
   return [
     { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
     { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
-    { header: 'Activities & Rewards' },
+    { header: 'Financial Hub', enabled: true },
     { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
-    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true },
-    { header: 'Cardano Essentials' },
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true},
-    { header: 'Financial Hub' },
+    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true, new: true },
+    { header: 'Activities & Rewards', enabled: true },
+    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
     { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Market', icon: assts.market, link: '/market', enabled: false },
-    { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
-    { header: 'Media' },
+    { title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true },
+    // { header: 'Financial Hub' },
+    // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
+    // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
+    { header: 'Media', enabled: musicPlaylist.value?.length > 0 },
     { title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
     // Uncomment to add more items:
     // { header: 'Tools' },
@@ -234,10 +242,13 @@ watch(() => breakpoint.mobile,
   }
 )
 
-// Methods
 async function submitLogout() {
-  await store.logout()
-  await router.push('/welcome')
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.LOGOUT,
+    data: { },
+  }).then(() => {
+    router.push('/welcome')
+  });
 }
 
 // Lifecycle
@@ -262,7 +273,7 @@ onMounted(() => {
   border-radius: 6px;
   background: {
     image: linear-gradient(to right, #0C0E12, #0C0E12),
-             linear-gradient(to right, #0C0E12 8%, #00D1FF);
+    linear-gradient(to right, #0C0E12 8%, #00D1FF);
     clip: padding-box, border-box;
     origin: padding-box, border-box;
   }

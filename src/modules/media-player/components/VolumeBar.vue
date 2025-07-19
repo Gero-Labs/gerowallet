@@ -14,52 +14,44 @@
     </v-slider>
   </div>
 </template>
-<script>
-import {mapActions, mapState} from 'pinia';
-import { musicStore } from '@/stores/modules/music';
+<script setup lang="ts">
+import { ref, computed, onMounted, toRefs } from 'vue';
+import MusicStore, { musicStore } from '@/plugins/musicStore';
 
-export default {
-  name: "volume-bar",
-  data() {
-    return {
-      volume: 0,
-      tmpVolume: 0,
-      dragStartVolume: 0
-    };
-  },
-  computed: {
-    ...mapState(musicStore, ['context']),
-    volumeIcon() {
-      if (this.volume > 75) {
-        return 'mdi-volume-high'
-      } else if (this.volume > 25) {
-        return 'mdi-volume-medium'
-      } else if (this.volume > 0) {
-        return 'mdi-volume-low'
-      } else {
-        return 'mdi-volume-mute'
-      }
-    },
-  },
-  methods: {
-    ...mapActions(musicStore, ['setVolume']),
-    onButtonClick() {
-      if (this.volume > 0) {
-        this.tmpVolume = this.volume;
-        this.volume = 0;
-      } else {
-        this.volume = this.tmpVolume;
-      }
-      this.setVolume(this.volume);
-    },
-    onDragEnd() {
-      this.setVolume(this.volume);
-    },
-  },
-  mounted() {
-    this.volume = this.context.volume;
+const { context } = toRefs(musicStore);
+
+const volume = ref(0);
+const tmpVolume = ref(0);
+
+const volumeIcon = computed(() => {
+  if (volume.value > 75) {
+    return 'mdi-volume-high'
+  } else if (volume.value > 25) {
+    return 'mdi-volume-medium'
+  } else if (volume.value > 0) {
+    return 'mdi-volume-low'
+  } else {
+    return 'mdi-volume-mute'
   }
+});
+
+const onButtonClick = () => {
+  if (volume.value > 0) {
+    tmpVolume.value = volume.value;
+    volume.value = 0;
+  } else {
+    volume.value = tmpVolume.value;
+  }
+  MusicStore.setVolume(volume.value);
 };
+
+const onDragEnd = () => {
+  MusicStore.setVolume(volume.value);
+};
+
+onMounted(() => {
+  volume.value = context.value.volume;
+});
 </script>
 
 <style >

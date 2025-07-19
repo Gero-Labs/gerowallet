@@ -86,85 +86,50 @@
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { toRefs, computed, ref } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
 import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
-// import { loadMoonPay } from '@/moonpay-js/src';
-// import moonPayApi from '@/api/moonpay-api';
+import { walletStore } from '@/plugins/walletStore';
 
-export default defineComponent({
-  name: 'QuickActionsBox',
-  components: { BuyDialog, SendDialog, SwapDialog, ReceiveDialog },
-  computed: {
-    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
-    isBuyDisabled() {
-      if (this.loggedWallet) {
-        return !networks.resolveBuySupported(this.loggedWallet.chain, this.loggedWallet.network);
-      }
-      return true;
-    },
-    isSwapDisabled() {
-      if (this.loggedWallet) {
-        return !networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network);
-      }
-      return true;
-    },
-    currencyTicker() {
-      if (this.loggedWallet) {
-        return networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network);
-      }
-      return '';
-    },
-  },
-  methods: {
-    closeDialog() {
-      this.currentDialog = null;
-    },
-  },
-  data: () => ({
-    currentDialog: null,
-    dialogs: {
-      SEND: 'SEND',
-      RECEIVE: 'RECEIVE',
-      SWAP: 'SWAP',
-      BUY: 'BUY',
-    },
-    moonPayWidget: undefined,
-    assets,
-  }),
-  async mounted() {
-    // const moonPayUrl = await moonPayApi.moonPaySign(`https://buy.moonpay.com/?apiKey=${process.env["VUE_APP_MOONPAY_API_KEY"]}&theme=dark&currencyCode=ada&walletAddress=${this.baseAddress}&colorCode=${encodeURIComponent('#2f9cac')}&baseCurrencyCode=usd&mpSdk=${encodeURIComponent('{"version":"1.9.4","environment":"production","flow":"buy","variant":"overlay","platform":"web"}')}`);
-    // const uriParams = new URL(moonPayUrl).searchParams
-    // const signature = uriParams.get('signature')
-    // const moonPay = await loadMoonPay();
-    // this.moonPayWidget = moonPay?.({
-    //   flow: "buy",
-    //   environment: "production",
-    //   params: {
-    //     apiKey: process.env["VUE_APP_MOONPAY_API_KEY"],
-    //     theme: 'dark',
-    //     currencyCode: 'ada',
-    //     walletAddress: this.baseAddress,
-    //     colorCode: '#2f9cac',
-    //     baseCurrencyCode: 'usd', //TODO
-    //     signature,
-    //   },
-    //   variant: "overlay",
-    //   handlers: {
-    //     async onTransactionCompleted(props) {
-    //       console.log("onTransactionCompleted", props);
-    //     },
-    //   },
-    // });
-  }
+const { loggedWallet } = toRefs(walletStore);
+
+const currentDialog = ref(null);
+const dialogs = ref<any>({
+  SEND: 'SEND',
+  RECEIVE: 'RECEIVE',
+  SWAP: 'SWAP',
+  BUY: 'BUY',
 });
+
+const isBuyDisabled = computed(() => {
+  if (loggedWallet.value) {
+    return !networks.resolveBuySupported(loggedWallet.value.chain, loggedWallet.value.network);
+  }
+  return true;
+});
+
+const isSwapDisabled = computed(() => {
+  if (loggedWallet.value) {
+    return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+  }
+  return true;
+})
+
+const currencyTicker = computed(() => {
+  if (loggedWallet.value) {
+    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+  }
+  return '';
+})
+
+const closeDialog = () => {
+  currentDialog.value = null;
+}
 </script>
 <style scoped>
 

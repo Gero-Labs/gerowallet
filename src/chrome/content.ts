@@ -38,6 +38,7 @@ function shouldInject() {
 
 async function injectBring() {
   await bringInitContentScript({
+    switchWallet: false,
     text: 'lower',
     getWalletAddress,
     promptLogin,
@@ -135,7 +136,7 @@ async function injectBring() {
       activateTitleBoldFS: '--activate-title-bold-f-s',
       activateTitleBoldFW: '--activate-title-bold-f-w',
       activateTitleBoldFC: '--activate-title-bold-f-c',
-    },
+    }
   });
 }
 

@@ -163,9 +163,9 @@ export default defineComponent({
       } else if (this.unlimitedSlippage === 'on') {
         return 'unlimited'
       } else if (this.slippageTolerance == -1) {
-        return this.customSlippageTolerance
+        return this.customSlippageTolerance.toString()
       }
-      return this.slippageTolerance
+      return this.slippageTolerance.toString()
     },
     customSlippageTolerance: {
       get() {

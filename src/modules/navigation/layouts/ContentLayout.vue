@@ -49,7 +49,7 @@
                     <v-list-item two-line>
                       <v-list-item-content class="py-0 text-center">
                         <v-list-item-title class="ma-0" style="font-size: 10px">
-                          {{ 'Epoch ' + latestTip.epoch }}
+                          {{ 'Epoch ' + tip.epoch }}
                         </v-list-item-title>
                         <v-list-item-subtitle class="ma-0" style="font-size: 8px; color: white">
                           {{ Math.ceil(value) }}%
@@ -66,7 +66,7 @@
                 />
 
                 <v-list-item
-                  v-if="latestTip"
+                  v-if="tip"
                   two-line
                   class="px-0"
                   style="min-height: auto; flex: unset"
@@ -83,7 +83,7 @@
                   <v-list-item-content class="my-0" style="padding:0 !important; display: flow;">
                     <v-list-item-title class="ma-0" style="font-size: 12px;">
                       {{ loggedWallet?.network }}
-                      <v-btn x-small icon class="mx-0" :loading="isSyncing" disabled>
+                      <v-btn x-small icon class="mx-0" :loading="isSyncing && connected" disabled>
                         <v-avatar size="20">
                           <v-icon x-small>mdi-sync</v-icon>
                         </v-avatar>
@@ -100,12 +100,12 @@
                       <v-tooltip bottom content-class="smallToolTip">
                         <template v-slot:activator="{ on, attrs }">
                           <span v-bind="attrs" v-on="on">
-                            {{ time.format(new Date(latestTip.time * 1000)) }}
+                            {{ time.format(new Date(tip.time)) }}
                           </span>
                         </template>
 
                         <span>
-                          {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(latestTip.time * 1000)) }}
+                          {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(tip.time)) }}
                         </span>
                       </v-tooltip>
                     </v-list-item-subtitle>
@@ -131,9 +131,9 @@
                   ref="copyAddress"
                   x-small
                   :avatar="assets.walletSvg"
-                  :title="filters.shortenStringWithEllipsis(baseAddress, 14)"
-                  :value="baseAddress"
-                  v-else-if="baseAddress"
+                  :title="filters.shortenStringWithEllipsis(loggedWallet?.baseAddress, 14)"
+                  :value="loggedWallet?.baseAddress"
+                  v-else-if="loggedWallet?.baseAddress"
                 />
 
                 <v-spacer />
@@ -147,7 +147,7 @@
                   text
                   :plain="!context.shown"
                   v-if="musicPlaylist?.length > 0"
-                  @click="setMediaPlayerShown(!context.shown)"
+                  @click="handleMusicPlayerToggle"
                 >
                   <v-icon>
                     mdi-play-box-outline
@@ -179,7 +179,7 @@
                                   mdi-message-text-outline
                                 </v-icon>
                               </v-avatar>
-                              Nothing new
+                              Nothing New
                             </v-list-item-title>
                           </v-list-item-content>
                         </v-list-item>
@@ -187,7 +187,6 @@
                     </v-card-text>
                   </v-card>
                 </v-menu>
-
                 <v-btn small class="ml-2" @click="currentDialog = dialogs.SETTINGS" icon>
                   <v-badge bordered color="error" dot v-if="shouldBackup">
                     <v-avatar size="20">
@@ -199,7 +198,6 @@
                   </v-avatar>
                 </v-btn>
               </v-app-bar>
-
               <v-row no-gutters v-if="shouldBackup">
                 <v-col cols="12">
                   <v-alert
@@ -221,7 +219,6 @@
                           Safeguard your assets: store your recovery phrase securely. <b>If you lose it, you’ll lose access to all your funds.</b>
                         </v-list-item-subtitle>
                       </v-list-item-content>
-
                       <v-list-item-action>
                         <v-btn depressed color="error" @click="backupWalletDialog = true">
                           Export
@@ -231,19 +228,16 @@
                   </v-alert>
                 </v-col>
               </v-row>
-
               <SettingsDialog
                 :isOpen="currentDialog === dialogs.SETTINGS"
                 @close="closeDialog"
               />
-
               <v-sheet class="transparent">
                 <keep-alive>
                   <router-view />
                 </keep-alive>
               </v-sheet>
             </v-layout>
-
             <Player
               v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown"
               style="position: sticky; bottom: 0;"
@@ -254,7 +248,7 @@
     </v-main>
 
     <WelcomeDialog
-      :isOpen="!getWelcomeDone"
+      :isOpen="!isWelcomeDone"
       @close="closeWelcomeDialog"
     />
 
@@ -272,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs } from 'vue';
+import { ref, computed, toRefs, getCurrentInstance } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
@@ -287,63 +281,56 @@ import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
 import { loadingState } from '@/plugins/loading'
-import Loading from '@/plugins/loading';
 import changeLogPlugin from '@/plugins/changeLog'
 import timePlugin from '@/plugins/time'
-
-import { useStore } from '@/stores'
-import { musicStore } from '@/stores/modules/music'
-import { walletConfigStore } from '@/stores/modules/walletConfig'
+import WalletStore, { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
+import { setConfiguration } from '@/db/gero-db';
+import { geroStore } from '@/plugins/geroStore';
+import MusicStore, { musicStore } from '@/plugins/musicStore';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
-
 const vmProxy = getCurrentInstance()!.proxy as any
-
 const currentPage = computed(() => vmProxy.$route)
+const { isSyncing, connected } = toRefs(loadingState);
+const { loggedWallet, config } = toRefs(walletStore);
+const { config: geroConfig } = toRefs(geroStore);
+const { tip } = toRefs(networkStore);
+const { musicPlaylist, context } = toRefs(musicStore)
 
-const { isSyncing } = toRefs(loadingState);
-
-// Pinia stores
-const store = useStore()
-const music = musicStore()
-const walletConfig = walletConfigStore()
-
-// Reactive UI state
 const drawer = ref<boolean>(false)
-const currentDialog     = ref<string|null>(null)
-const dialogs           = { SETTINGS: 'SETTINGS' }
+const currentDialog  = ref<string|null>(null)
+const dialogs = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
 
-// Aliases for imported utilities
+const handleMusicPlayerToggle = () => {
+  // Check if we're currently on the music/media player page
+  if (currentPage.value?.name === 'MediaPlayer' || currentPage.value?.path === '/media-player') {
+    // Do nothing if already on music page
+    return;
+  }
+  
+  // Otherwise toggle the media player visibility
+  MusicStore.setMediaPlayerShown(!context.value.shown);
+}
 const time = timePlugin
 const changeLog  = changeLogPlugin
-
-// Derived reactive state
-const loggedWallet     = computed(() => store.loggedWallet)
-const latestTip        = computed(() => store.latestTip)
-const connected        = computed(() => store.connected)
-const baseAddress      = computed(() => store.baseAddress)
-const getWelcomeDone   = computed(() => store.getWelcomeDone)
-
-const musicPlaylist    = computed(() => music.musicPlaylist)
-const context          = computed(() => music.context)
-
-const getBackup = computed(() => walletConfig.getBackup)
-const hasBackup = computed(() => walletConfig.hasBackup)
-const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
+const shouldBackup = computed(() => WalletStore.hasBackup() && !WalletStore.getBackup())
 const epochSlotPercentage = computed(() => {
-  return latestTip.value
-    ? (latestTip.value.epoch_slot / 432000) * 100
-    : 0
+  return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0
 })
 
-// Actions from stores
-const { login, setWelcomeDone } = store
-const { setMediaPlayerShown } = music
+const isWelcomeDone = computed({
+  get() {
+    return !!geroConfig.value?.welcomeDone
+  },
+  set(val) {
+    setConfiguration('welcomeDone', val)
+  }
+})
 
-// UI handlers
 function closeWelcomeDialog() {
-  setWelcomeDone(true)
+  isWelcomeDone.value = true
 }
 
 function closeChangeLogDialog() {
@@ -355,18 +342,6 @@ function closeChangeLogDialog() {
 function closeDialog() {
   currentDialog.value = null
 }
-
-// Lifecycle
-onMounted(async () => {
-  if (store.loggedWallet?.id) {
-    try {
-      await login(store.loggedWallet.id)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-  Loading.setLoading(false)
-})
 </script>
 
 <style scoped>

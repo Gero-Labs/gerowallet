@@ -61,7 +61,7 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
     outputs.push(outputRes);
   })
   const assets_minted: any[] = []
-  if (tx.body.mint) {
+  if (tx.body.mint && tx.body.mint.size > 0) {
     tx.body.mint.entries().forEach(([assetId, quantity]) => {
       const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(assetId);
       const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(assetId);
@@ -78,18 +78,7 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
   if (tx.body.certificates?.length > 0) {
     let index: number = 0;
     tx.body.certificates.forEach((cert: Cardano.Certificate) => {
-      if (cert.__typename === Cardano.CertificateType.StakeDeregistration) {
-        certificates.push({
-          index: index++,
-          info: {
-            stake_address: Cardano.RewardAddress.fromCredentials(networkId, {
-              type: cert.stakeCredential.type,
-              hash: cert.stakeCredential.hash
-            }).toAddress().toBech32()
-          },
-          type: 'stake_deregistration'
-        })
-      } else if (cert.__typename === Cardano.CertificateType.StakeRegistration) {
+      if (cert.__typename === Cardano.CertificateType.StakeRegistration) {
         certificates.push({
           index: index++,
           info: {
@@ -100,6 +89,18 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
             }).toAddress().toBech32()
           },
           type: 'stake_registration'
+        })
+      } else if (cert.__typename === Cardano.CertificateType.StakeDeregistration) {
+        certificates.push({
+          index: index++,
+          info: {
+            stake_address: Cardano.RewardAddress.fromCredentials(networkId, {
+              type: cert.stakeCredential.type,
+              hash: cert.stakeCredential.hash
+            }).toAddress().toBech32(),
+            hash: cert.stakeCredential.hash
+          },
+          type: 'stake_deregistration'
         })
       } else if (cert.__typename === Cardano.CertificateType.StakeDelegation) {
         certificates.push({
@@ -113,6 +114,14 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
             }).toAddress().toBech32()
           },
           type: 'pool_delegation'
+        })
+      } else if (cert.__typename === Cardano.CertificateType.PoolRegistration) {
+        certificates.push({
+          index: index++,
+          info: {
+            poolParameters: cert.poolParameters,
+          },
+          type: 'pool_registration'
         })
       } else if (cert.__typename === Cardano.CertificateType.VoteDelegation && Cardano.isDRepCredential(cert.dRep)) {
         const credential: Cardano.Credential = cert.dRep
@@ -138,14 +147,15 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
   }
   const native_scripts: Cardano.Script[] = []
   const plutus_scripts: Cardano.Script[] = []
-
-  tx.auxiliaryData?.scripts.forEach((script: Cardano.Script) => {
-    if (script.__type === Cardano.ScriptType.Native) {
-      native_scripts.push(script);
-    } else if (script.__type == Cardano.ScriptType.Plutus) {
-      plutus_scripts.push(script)
-    }
-  })
+  if (tx.auxiliaryData?.scripts?.length > 0) {
+    tx.auxiliaryData?.scripts.forEach((script: Cardano.Script) => {
+      if (script.__type === Cardano.ScriptType.Native) {
+        native_scripts.push(script);
+      } else if (script.__type == Cardano.ScriptType.Plutus) {
+        plutus_scripts.push(script)
+      }
+    })
+  }
   const reference_inputs: Cardano.TxIn[] = tx.body.referenceInputs ? tx.body.referenceInputs : []
   const withdrawals: Cardano.Withdrawal[] = tx.body.withdrawals ? tx.body.withdrawals : []
   return {

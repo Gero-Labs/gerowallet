@@ -31,7 +31,7 @@
               Net Price
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['net_price'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['net_price'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -39,7 +39,7 @@
               Min. Receive
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['total_output'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['total_output'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
 <!--          <v-col cols="12" xl="4" lg="4" md="4">-->
@@ -69,7 +69,7 @@
         </v-row>
         <v-divider class="mt-1"></v-divider>
       </v-card-title>
-      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 125px)">
+      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 200px)">
         <v-row no-gutters>
           <v-col cols="6" v-for="(dex,index) in dexes" :key="index" style="height: 38px">
             <v-list-item class="px-2" dense>
@@ -89,7 +89,7 @@
               </v-list-item-action>
               <v-list-item-content>
                 <v-list-item-title class="text-left" style="font-size: 10px;" :style="dex.amount === 0 ? { color: 'grey'} : dex['priceImpact'] > 3 ? { color: '#FEC84B' } : {}">
-                  {{ dex.amount | toCurrency(false, 2, '', ` ${tokenA['ticker']}`, true, 0)}}
+                  {{ filters.toCurrency(dex.amount, false, 2, '', ` ${tokenA['ticker']}`, true, 0)}}
                 </v-list-item-title>
                 <v-list-item-subtitle>
                   <v-progress-linear height="8" color="#88919e" :value="dex.percentage"></v-progress-linear>
@@ -129,6 +129,9 @@ export default defineComponent({
     }
   },
   computed: {
+    filters() {
+      return filters
+    },
     ...mapState(useStore, ['loggedWallet', 'baseAddress']),
     ...mapState(walletConfigStore, ['utxos']),
     dexes() {

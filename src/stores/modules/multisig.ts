@@ -15,12 +15,9 @@ import { unitToFingerprint } from '@/shared/utils/converter';
 import filters from '@/shared/utils/filters';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { parseHttpError } from '@/shared/utils/parser';
-import { loadWallets, subscribeWallets } from '@/stores/loaders/walletLoader';
 import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
 import { loadAssets } from '@/stores/loaders/assetsLoader';
 import { subscriptions } from '@/stores';
-import { tapToolsStore } from './tapTools';
-import { musicStore } from './music';
 import { chunkArray } from 'array-chunk-by-size';
 import _ from 'lodash';
 import loading from '@/plugins/loading';
@@ -223,9 +220,9 @@ export const multisigStore = defineStore('multisigStore', {
       this.setBaseAddress(this.getMultiSigWallet.paymentAddress)
       this.setStakeAddress(this.getMultiSigWallet.stakeAddress)
       //governanceStore().setDRepId(appWallet.drepId())
-      await multisigAppWallet.startSync();
+      // await multisigAppWallet.startSync();
       await this.loadAssets()
-      await dexHunterStore().loadBlacklistPolicies()
+      // await dexHunterStore().loadBlacklistPolicies()
       await dexHunterStore().loadTokens()
       const promises = []
       await walletConfigStore().loadConfig(multisigAppWallet)
@@ -267,7 +264,7 @@ export const multisigStore = defineStore('multisigStore', {
       // Resolve assets
       const assetArray = Object.values(assets);
       const unresolvedAssets = assetArray.filter(asset => !((asset['policy_id'] + asset['asset_name']) in this.assets)).map(asset => (asset['policy_id'] + asset['asset_name']))
-      await multisigAppWallet.syncAssets(unresolvedAssets, true)
+      // await multisigAppWallet.syncAssets(unresolvedAssets, true)
       const resAssets = assetArray.filter(asset => (asset['policy_id'] + asset['asset_name']) in this.assets)
       const resolvedAssets = await Promise.all(resAssets.map(asset => resolveAsset(this.assets[asset['policy_id'] + asset['asset_name']], asset)));
 
@@ -322,18 +319,6 @@ export const multisigStore = defineStore('multisigStore', {
               }
             }).catch(err => {
               console.error(`Error fetching mcap for ${token.unit}:`, err);
-            }))
-            promises.push(multisigAppWallet.api.dailyPriceChange(token.unit)
-              .then(changeStats => {
-                token['change'] = changeStats['24h'] * 100;
-              }).catch(err => {
-                console.error(`Error fetching daily price change for ${token.unit}:`, err);
-              }));
-            promises.push(multisigAppWallet.api.assetRisk(unitToFingerprint(token.unit)).then(riskStats => {
-              token['risk'] = riskStats.status === 'success' ? riskStats.data.risk_category : 'N/A';
-            }).catch(err => {
-              console.error(`Error fetching risk for ${token.unit}:`, err);
-              token['risk'] = 'N/A';
             }))
             try {
               await Promise.all(promises)
@@ -395,7 +380,7 @@ export const multisigStore = defineStore('multisigStore', {
         }
       })
       if (unresolvedUnits.length > 0) {
-        await multisigAppWallet.syncAssets(unresolvedUnits, true)
+        // await multisigAppWallet.syncAssets(unresolvedUnits, true)
       }
       Object.values(collections).forEach(collection => {
         const items = collection['items']
@@ -459,19 +444,16 @@ export const multisigStore = defineStore('multisigStore', {
           }
         });
       }
-      if (Array.isArray(transactions) && transactions.length > 0) {
-        await Promise.all([tapToolsStore().loadPortfolio(), tapToolsStore().loadPortfolioTrendedValue()]);
-      }
-      await multisigAppWallet.syncAddresses(Array.from(addresses))
-        .then((resolvedAddresses: Set<string>) => {
-          const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
-          walletConfigStore().setUtxos(filteredKnownUtxos)
-        })
-        .then(() => this.loadResolvedAssets())
-        .then(assets => this.resolveCollections(assets))
-        .then((resolvedCollections) => {
-          musicStore().resolveMusicPlaylist(resolvedCollections)
-        });
+      // await multisigAppWallet.syncAddresses(Array.from(addresses))
+      //   .then((resolvedAddresses: Set<string>) => {
+      //     const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
+      //     walletConfigStore().setUtxos(filteredKnownUtxos)
+      //   })
+      //   .then(() => this.loadResolvedAssets())
+      //   .then(assets => this.resolveCollections(assets))
+      //   .then((resolvedCollections) => {
+      //     musicStore().resolveMusicPlaylist(resolvedCollections)
+      //   });
 
     },
     setBaseAddress(baseAddress) {
@@ -498,11 +480,8 @@ export const multisigStore = defineStore('multisigStore', {
         this.pinnedTokens.splice(index, 1);
       }
     },
-    async loadWallets() {
-      await loadWallets({ wallets: this.multiSigWallets });
-    },
     async subscribeWallets() {
-      await subscribeWallets({ wallets: this.multiSigWallets }, subscriptions);
+      // await subscribeWallets({ wallets: this.multiSigWallets }, subscriptions);
     },
     async loadTransactions() {
       return await loadTransactions(this, multisigAppWallet);
