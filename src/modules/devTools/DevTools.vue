@@ -158,78 +158,76 @@
     </v-row>
   </v-layout>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
-import {
-  Address,
-  Transaction,
-  TransactionUnspentOutput,
-  TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { stringToHex, toValue } from '@/shared/utils/converter';
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
+import { Cardano, Serialization, util } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 
-export default defineComponent({
-  name: 'DevTools',
-  computed: {
-    txJson() {
-      let res = ''
-      if (this.tx) {
-        return this.tx.to_json()
-      }
-      return res
-    },
-    witnessSetJson() {
-      let res = ''
-      if (this.witnesses) {
-        return this.witnesses.to_json()
-      }
-      return res
-    },
-  },
-  watch: {
-    txCborHex(val) {
-      this.tx = Transaction.from_hex(val)
-    },
-    witnessSetCborHex(val) {
-      this.witnesses = TransactionWitnessSet.from_hex(val)
-    },
-    addressHex(val) {
-      this.address = Address.from_hex(val).to_bech32()
-    },
-    addressBech32(val) {
-      this.addressInHex = Address.from_bech32(val).to_hex()
-    },
-    messageDataText(val) {
-      this.messageDataHex = stringToHex(val)
-    },
-    utxoCbor(val) {
-      this.utxoJson = TransactionUnspentOutput.from_hex(val).to_json()
-    },
-    lovelace(val) {
-      this.value = toValue([], val).to_hex()
-    }
-  },
-  data() {
-    return {
-      txCborHex: '',
-      tx: null,
-      witnessSetCborHex: '',
-      witnesses: null,
-      addressHex: '',
-      address: null,
-      addressBech32: '',
-      addressInHex: null,
-      messageDataText: '',
-      messageDataHex: null,
-      utxoCbor: '',
-      utxoJson: '',
-      lovelace: '',
-      value: '',
-    };
+const txCborHex = ref<string>('')
+const tx = ref<Serialization.Transaction>(null)
+const witnessSetCborHex = ref<string>('')
+const witnesses = ref<Serialization.TransactionWitnessSet>(null)
+const addressHex = ref<string>('')
+const address = ref<string>('')
+const addressBech32 = ref<string>('')
+const addressInHex = ref(null)
+const messageDataText = ref<string>('')
+const messageDataHex = ref(null)
+const utxoCbor = ref<string>('')
+const utxoJson = ref<[Cardano.TxIn, Cardano.TxOut]>()
+const lovelace = ref<string>('')
+const value = ref<string>('')
+
+const txJson = computed(() => {
+  let res = ''
+  if (tx.value) {
+    return tx.value.toCore()
   }
-});
-</script>
+  return res
+})
 
+const witnessSetJson = computed(() => {
+  let res = ''
+  if (witnesses.value) {
+    return witnesses.value.toCore();
+  }
+  return res
+})
+
+watch(txCborHex, (val: string) => {
+  tx.value = Serialization.Transaction.fromCbor(Serialization.TxCBOR(val))
+})
+
+watch(witnessSetCborHex, (val: string) => {
+  witnesses.value = Serialization.TransactionWitnessSet.fromCbor(HexBlob(val))
+})
+
+watch(addressHex, (val: string) => {
+  address.value = Cardano.Address.fromBytes(HexBlob(val)).toBech32()
+})
+
+watch(addressBech32, (val: string) => {
+  addressInHex.value = Cardano.Address.fromBech32(val).toBytes().toString()
+})
+
+watch(messageDataText, (val: string) => {
+  messageDataHex.value = util.utf8ToHex(val).toString()
+})
+
+watch(utxoCbor, (val: string) => {
+  utxoJson.value = Serialization.TransactionUnspentOutput.fromCbor(HexBlob(val)).toCore()
+})
+
+watch(lovelace, (val: string) => {
+  if (val === '') {
+    value.value = ''
+    return
+  }
+  value.value = Serialization.Value.fromCore({
+    coins: BigInt(val),
+  }).toCbor().toString()
+})
+</script>
 <style scoped>
 
 </style>

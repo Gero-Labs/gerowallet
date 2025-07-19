@@ -116,6 +116,9 @@ export default {
 }
 
 .tx-details {
+  background-color: #0F0F0F !important;
+  border: 1px solid #272930 !important;
+  border-radius: 10px;
   padding: 8px;
   display: grid;
   grid-template-columns: 1fr 6fr;

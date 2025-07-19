@@ -48,7 +48,7 @@
       </v-icon>
       Back
     </v-btn>
-    <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false"></CreateWallet>
+    <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false" :network="props.network"></CreateWallet>
     <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange"></RestoreWallet>
     <PairHardwareWallet :dialog="pairHardwareWalletDialog" @dialogChange="pairHardwareWalletDialogChange"></PairHardwareWallet>
   </v-card>
@@ -59,11 +59,14 @@ import CreateWallet from '@/options/modules/welcome/dialogs/CreateWallet.vue';
 import PairHardwareWallet from '@/options/modules/welcome/dialogs/PairHardwareWallet.vue';
 import RestoreWallet from '@/options/modules/welcome/dialogs/RestoreWallet.vue';
 import { computed, ref } from 'vue';
-import { storeToRefs } from 'pinia';
-import { useStore } from '@/stores';
-const emit = defineEmits(['back'])
-const store = useStore();
-const { network } = storeToRefs(store);
+import { Network } from '@/models/types';
+
+interface Props {
+  network: Network;
+}
+
+const props = defineProps<Props>();
+const emit = defineEmits(['back']);
 
 const createWalletDialog = ref<boolean>(false);
 const restoreWalletDialog = ref<boolean>(false);
@@ -82,27 +85,27 @@ const pairHardwareWalletDialogChange = (val: boolean): void => {
 };
 const hue = ref(0);
 const walletSvg = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (props.network?.blockchain?.includes('Apex')) {
     return assets.walletGeroApexSvg
   }
   return assets.walletGeroSvg
 })
 const keySvg = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (props.network?.blockchain?.includes('Apex')) {
     return assets.keyApexSvg
   }
   return assets.keySvg
 })
 
 const pairSvg = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (props.network?.blockchain?.includes('Apex')) {
     return assets.pairApexSvg
   }
   return assets.pairSvg
 })
 
 computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (props.network?.blockchain?.includes('Apex')) {
     hue.value = 200;
   }
   hue.value = 0;

@@ -106,13 +106,14 @@
 
     const txBody = tx.value.body();
     let inputValue = Value.new(BigNum.from_str('0'));
-    
+
     for (let i = 0; i < txBody.inputs().len(); i++) {
       const input = txBody.inputs().get(i);
       const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
       const inputTxIndex = input.index();
       const utxo = utxos.value.find(utxo => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
       if (utxo) {
+        console.log(utxo);
         inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
       }
     }

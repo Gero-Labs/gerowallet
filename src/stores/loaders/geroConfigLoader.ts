@@ -1,9 +1,7 @@
 import { liveQuery, Subscription } from 'dexie';
 import db from '@/db';
 
-export async function loadConfig(
-  store: { geroConfig: any }
-): Promise<void> {
+export async function loadConfig(store: { geroConfig: any }): Promise<void> {
   try {
     store.geroConfig = await db.getGeroConfig();
   } catch (error) {

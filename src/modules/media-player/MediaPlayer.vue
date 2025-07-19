@@ -4,7 +4,7 @@
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent" v-if="currentTrack">
           <v-card-text style="height: 433px; max-height: 433px;">
-            <video ref="videoPlayer" :loop="this.context.isRepeat" playsinline :controls="currentTrack.mediaType.includes('video')" :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.mediaType.includes('video') ? '' : currentTrack.img"  />
+            <video ref="videoPlayer" :loop="context?.isRepeat" playsinline :controls="currentTrack.mediaType.includes('video')" :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.mediaType.includes('video') ? '' : currentTrack.img"  />
           </v-card-text>
           <v-card-title class="justify-center" style="word-break: break-word">
             {{`${currentTrack.artist} - ${currentTrack.title}` }}
@@ -36,13 +36,17 @@
           </v-card-title>
           <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
             <v-list nav dense style="width: 100%" class="transparent py-0">
-              <v-list-item-group v-model="currentSong">
-                <!-- Iterate over grouped playlist -->
-                <template v-for="(group, category) in groupedPlaylist">
-                  <!-- Sticky header for each category -->
-                  <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
-                  <!-- Iterate over tracks in each category -->
-                  <v-list-item v-for="(track, index) in group" :key="`${category}-${index}`" :value="track">
+              <!-- Iterate over grouped playlist -->
+              <template v-for="(group, category) in groupedPlaylist">
+                <!-- Sticky header for each category -->
+                <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
+                <!-- Iterate over tracks in each category -->
+                <v-list-item
+                  v-for="(track, index) in group"
+                  :key="`${category}-${index}`"
+                  @click="selectTrack(track)"
+                  :class="{ 'current-playing': isCurrentTrack(track) }"
+                >
                     <v-list-item-avatar>
                       <v-img :src="track.img" contain></v-img>
                     </v-list-item-avatar>
@@ -51,9 +55,11 @@
                       <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
                     </v-list-item-content>
                     <v-spacer></v-spacer>
+                    <v-icon v-if="isCurrentTrack(track)" color="primary" small>
+                      {{ context?.isPlaying ? 'mdi-volume-high' : 'mdi-pause' }}
+                    </v-icon>
                   </v-list-item>
                 </template>
-              </v-list-item-group>
             </v-list>
           </v-card-text>
         </v-card>
@@ -61,98 +67,99 @@
     </v-row>
   </v-card>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
-import { mapActions, mapState } from 'pinia';
+<script setup lang="ts">
+import { ref, computed, watch, toRefs } from 'vue';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
-import { musicStore } from '@/stores/modules/music';
+import MusicStore, { musicStore } from '@/plugins/musicStore';
 
-export default defineComponent({
-  name: "MediaPlayer",
-  components: {PlayerControls, PlayerPlayback},
-  filters: {
-    fancyTimeFormat(s) {
-      return (s - (s %= 60)) / 60 + (9 < s ? ":" : ":0") + s.toFixed(0);
-    },
-    numbers(value: number): string {
-      const number = value + 1
-      if (number < 10) {
-        return "0" + number + "."
-      }
-      return number + "."
-    },
-  },
-  watch: {
-    currentSong(val) {
-      if (val) {
-        const index = this.musicPlaylist.indexOf(val)
-        this.setTrack(index)
-      }
+const { musicPlaylist, context } = toRefs(musicStore);
+
+const search = ref('');
+const trackDuration = ref(0);
+const currentlyPlaying = ref(false);
+const currentlyStopped = ref(false);
+const currentTime = ref(0);
+const currentProgressBar = ref(0);
+const checkingCurrentPositionInTrack = ref(null);
+const imageFile = ref("");
+const track = ref(null);
+
+const fancyTimeFormat = (s: number) => {
+  return (s - (s %= 60)) / 60 + (9 < s ? ":" : ":0") + s.toFixed(0);
+};
+
+const numbersFilter = (value: number): string => {
+  const number = value + 1;
+  if (number < 10) {
+    return "0" + number + ".";
+  }
+  return number + ".";
+};
+
+const currentTrack = computed(() => {
+  if (musicPlaylist.value && context.value) {
+    return musicPlaylist.value[context.value.currentIndex];
+  }
+  return undefined;
+});
+
+const playlist = computed(() => {
+  if (!musicPlaylist.value) return [];
+  if (search.value) {
+    return musicPlaylist.value.filter(track =>
+      track.artist.toLowerCase().includes(search.value.toLowerCase()) ||
+      track.title.toLowerCase().includes(search.value.toLowerCase())
+    );
+  }
+  return musicPlaylist.value;
+});
+
+const groupedPlaylist = computed(() => {
+  // Group tracks by category
+  const grouped = playlist.value.reduce((acc, track) => {
+    if (!acc[track.category]) {
+      acc[track.category] = [];
     }
-  },
-  computed: {
-    ...mapState(musicStore, ['musicPlaylist', 'context']),
-    currentTrack() {
-      if (this.musicPlaylist) {
-        return this.musicPlaylist[this.context.currentIndex]
-      }
-      return undefined
-    },
-    groupedPlaylist() {
-      // Group tracks by category
-      const grouped = this.playlist.reduce((acc, track) => {
-        if (!acc[track.category]) {
-          acc[track.category] = [];
-        }
-        acc[track.category].push(track);
-        return acc;
-      }, {});
-      return grouped;
-    },
-    playlist() {
-      if (this.search) {
-        return this.musicPlaylist.filter(track => track.artist.toLowerCase().includes(this.search.toLowerCase()) || track.title.toLowerCase().includes(this.search.toLowerCase()))
-      }
-      return this.musicPlaylist
-    },
-    currentSong: {
-      get() {
-        return this.selected
-      },
-      set(val) {
-        if (val) {
-          this.selected = val
-          const index = this.musicPlaylist.indexOf(val)
-          this.setTrack(index)
-        }
-      }
-    },
-  },
-  methods: {
-    ...mapActions(musicStore, ['playTrack', 'setTrack', 'nextTrack']),
-    calculateIndex(index, category) {
-      // Calculate global index based on the category and track index
-      const categoryStartIndex = Object.keys(this.groupedPlaylist).reduce((acc, key) => {
-        if (key === category) return acc;
-        return acc + this.groupedPlaylist[key].length;
-      }, 0);
-      return this.$options.filters['numbers'](categoryStartIndex + index);
-    },
-  },
-  data: () => ({
-    search: '',
-    selected: null,
-    trackDuration: 0,
-    currentlyPlaying: false,
-    currentlyStopped: false,
-    currentTime: 0,
-    currentProgressBar: 0,
-    checkingCurrentPositionInTrack: null,
-    imageFile: "",
-    track: null
-  })
-})
+    acc[track.category].push(track);
+    return acc;
+  }, {});
+  return grouped;
+});
+
+const selectTrack = (track: any) => {
+  if (track && musicPlaylist.value) {
+    const index = musicPlaylist.value.indexOf(track);
+    // Store the current playing state
+    const wasPlaying = context.value?.isPlaying;
+    MusicStore.setTrack(index);
+    // If music was playing, explicitly start the new track
+    if (wasPlaying) {
+      setTimeout(() => MusicStore.playTrack(), 50); // Small delay to ensure audio is initialized
+    }
+  }
+};
+
+const calculateIndex = (index: number, category: string) => {
+  // Calculate global index based on the category and track index
+  const categoryStartIndex = Object.keys(groupedPlaylist.value).reduce((acc, key) => {
+    if (key === category) return acc;
+    return acc + groupedPlaylist.value[key].length;
+  }, 0);
+  return numbersFilter(categoryStartIndex + index);
+};
+
+const isCurrentTrack = (track: any) => {
+  if (!currentTrack.value || !musicPlaylist.value) return false;
+  
+  // Find the index of this track in the full playlist
+  const trackIndex = musicPlaylist.value.findIndex(t => 
+    t.url === track.url && t.title === track.title && t.artist === track.artist
+  );
+  
+  return trackIndex === context.value.currentIndex;
+};
+
 </script>
 <style lang="scss" scoped>
 .video-container {
@@ -405,5 +412,15 @@ video {
   padding-bottom: 8px;
   border-top-right-radius: 8px;
   border-top-left-radius: 8px;
+}
+
+.current-playing {
+  background-color: rgba(0, 199, 243, 0.1) !important;
+  border-left: 3px solid #00c7f3 !important;
+}
+
+.current-playing .v-list-item__title {
+  color: #00c7f3 !important;
+  font-weight: 600 !important;
 }
 </style>

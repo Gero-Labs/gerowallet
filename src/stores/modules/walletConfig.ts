@@ -23,10 +23,16 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
       }
       return true
     },
-    hasBackup(state) {
+    getUseSidePanel(state) {
+      if (state?.config && 'useSidePanel' in state.config) {
+        return state.config.useSidePanel
+      }
+      return false
+    },
+    hasBackup(state): boolean {
       return 'backup' in state.config;
     },
-    getBackup(state) {
+    getBackup(state): boolean {
       if (state?.config && this.hasBackup) {
         return state.config.backup
       }
@@ -115,6 +121,12 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
         db.table('config').put({key: 'txAutoSubmit', value: val})
       }
     },
+    async setUseSidePanel(val) {
+      if (appWallet) {
+        const db: Dexie = await appWallet.getDb()
+        db.table('config').put({key: 'useSidePanel', value: val})
+      }
+    },
     async setBackup(val) {
       if (appWallet) {
         const db: Dexie = await appWallet.getDb()
@@ -147,20 +159,6 @@ export const walletConfigStore = defineStore( 'walletConfigStore', {
     },
     setContacts(contacts) {
       this.contacts = contacts
-    },
-    async addOrUpdateContact(contact, address?: string) {
-      if (this.contacts[contact.address] == null || this.contacts[contact.address].name != contact.name) {
-        const db: Dexie = await appWallet.getDb()
-        if (address) {
-          db.table('contacts').update(address, {address: contact.address, name: contact.name})
-        } else {
-          db.table('contacts').put({address: contact.address, name: contact.name})
-        }
-      }
-    },
-    async removeContact(address) {
-      const db: Dexie = await appWallet.getDb()
-      db.table('contacts').delete(address)
     },
     async loadConfig(mutliSigWallet: any = undefined) {
       const ctxWallet = mutliSigWallet ? mutliSigWallet : appWallet;

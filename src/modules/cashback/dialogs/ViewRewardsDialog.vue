@@ -17,10 +17,10 @@
                 </div>
                 <div class="amount-section">
                   <div class="amount">
-                    <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
+                    <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
                   </div>
                   <div class="usd-amount" v-if="eligible">
-                    <div class="usd-text">{{ eligible?.totalEstimatedUsd | toCurrency(false, 2, '$', '', false, 0) }}</div>
+                    <div class="usd-text">{{ filters.toCurrency(eligible?.totalEstimatedUsd, false, 2, '$', '', false, 0) }}</div>
                   </div>
                 </div>
               </div>
@@ -32,10 +32,10 @@
           <div>
             <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">Pending Rewards</div>
             <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">
-              {{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
+              {{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
             </div>
             <div style="align-self: stretch; text-align: center; color: #737373; font-size: 16px; font-weight: 600; line-height: 38px; word-wrap: break-word">
-              {{ pending ? pending?.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}
+              {{ filters.toCurrency(pending ? pending?.totalEstimatedUsd : 0, false, 2, '$', '', false, 0) }}
             </div>
           </div>
         </v-col>
@@ -83,8 +83,8 @@
                 <span v-else>N/A</span>
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
-                <div>{{item.tokenAmount | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
-                <div style="color: #475467" v-if="item.totalEstimatedUsd">{{item.totalEstimatedUsd | toCurrency(false, 2, '$', '', true, 0)}}</div>
+                <div>{{ filters.toCurrency(item.tokenAmount, false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
+                <div style="color: #475467" v-if="item.totalEstimatedUsd">{{ filters.toCurrency(item.totalEstimatedUsd, false, 2, '$', '', true, 0) }}</div>
               </template>
               <template v-slot:expanded-item="{ headers, item }">
                 <td :colspan="headers.length">
@@ -130,7 +130,7 @@
                 {{new Date(item.date).toLocaleString()}}
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
-                <div>{{ (item.tokenAmount+"") | toCurrency(false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
+                <div>{{ filters.toCurrency(item.tokenAmount+"", false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
               </template>
             </v-data-table>
           </v-card>
@@ -139,133 +139,139 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { computed, ref, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import Countdown from "@/shared/components/Countdown.vue";
-import { bringStore } from '@/stores/modules/bring';
+import bringStoreModule from '@/plugins/bringStore';
+import { bringStore } from '@/plugins/bringStore';
+import { walletStore } from '@/plugins/walletStore';
 import networks from '@/utils/networks';
 import { stringToHex } from '@/shared/utils/converter';
-import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
 import cashbackApi from '@/api/cashback-api';
 import { Messaging } from '@/chrome/messaging';
 
-export default {
-  name: 'ViewRewardsDialog',
-  components: {Countdown, BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  filters,
-  computed: {
-    ...mapState(bringStore, ['bringCache']),
-    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
-    amountToClaim() {
-      if (this.eligible) {
-        return this.eligible.tokenAmount
+interface Props {
+  isOpen: boolean;
+}
+
+defineProps<Props>();
+defineEmits<{
+  close: [];
+}>();
+
+const { bringCache } = toRefs(bringStore);
+const { loggedWallet } = toRefs(walletStore);
+
+const currentTab = ref(0);
+const expanded = ref([]);
+const messageToSign = ref(undefined);
+const signature = ref(undefined);
+const loading = ref(false);
+
+const dealsHeaders = ref([
+  { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
+  { text: "Available In", align: "center", sortable: true, value: "eligibleDate"},
+  { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+  { text: '', value: 'data-table-expand' },
+]);
+
+const claimHeaders = ref([
+  { text: "Time", align: "start", sortable: true, value: "date"},
+  { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+]);
+
+const baseAddress = computed(() => {
+  return loggedWallet.value?.baseAddress;
+});
+
+const amountToClaim = computed(() => {
+  if (eligible.value) {
+    return eligible.value.tokenAmount;
+  }
+  return 0;
+});
+
+const eligible = computed(() => {
+  if (bringCache.value && bringCache.value?.data?.eligible?.length > 0) {
+    return bringCache.value.data.eligible[0];
+  }
+  return undefined;
+});
+
+const pending = computed(() => {
+  if (bringCache.value && bringCache.value?.data?.totalPendings?.length > 0) {
+    return bringCache.value.data.totalPendings[0];
+  }
+  return undefined;
+});
+
+const claims = computed(() => {
+  if (bringCache.value) {
+    return bringCache.value.data.movements.claims;
+  }
+  return [];
+});
+
+const deals = computed(() => {
+  if (bringCache.value) {
+    return bringCache.value.data.movements.deals;
+  }
+  return [];
+});
+
+const handleSwitchTab = (tab: number) => {
+  currentTab.value = tab;
+};
+
+const getColor = (action: string) => {
+  if (action === 'PURCHASE_POSTED') {
+    return 'red';
+  } else if (action === 'PURCHASE_APPROVED') {
+    return 'green';
+  } else { //PURCHASE_CORRECTED
+    return 'blue';
+  }
+};
+
+const getActionTitle = (action: string) => {
+  if (action === 'PURCHASE_POSTED') {
+    return 'Purchase Made';
+  } else if (action === 'PURCHASE_APPROVED') {
+    return 'Cashback Eligible';
+  } else { //PURCHASE_CORRECTED
+    return 'Purchase Updated';
+  }
+};
+
+const claim = async () => {
+  loading.value = true;
+  try {
+    const res = await cashbackApi.claimInit(baseAddress.value, baseAddress.value, networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network), amountToClaim.value);
+    const messageToSignValue = res.messageToSign;
+    const request = {
+      method: METHOD.signData,
+      data: { address: Address.from_bech32(baseAddress.value).to_hex(), payload: stringToHex(messageToSignValue) },
+    };
+    const signatureResult = await Messaging.sendToBackground(request);
+    if (signatureResult.error) {
+      snackbar.setError(signatureResult.error.info);
+    } else {
+      const status = await cashbackApi.claimSubmit(baseAddress.value, baseAddress.value, networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network), amountToClaim.value, messageToSignValue, signatureResult.data?.signature, signatureResult.data?.key);
+      if (status === 202) {
+        snackbar.fireSuccess(`Successfully Claimed ${amountToClaim.value} ADA Cashback!`);
+        await bringStoreModule.loadBringCache(baseAddress.value);
       }
-      return 0
-    },
-    eligible() {
-      if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
-        return this.bringCache.data.eligible[0]
-      }
-      return undefined
-    },
-    pending() {
-      if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
-        return this.bringCache.data.totalPendings[0]
-      }
-      return undefined
-    },
-    claims() {
-      if (this.bringCache) {
-        return this.bringCache.data.movements.claims
-      }
-      return []
-    },
-    deals() {
-      if (this.bringCache) {
-        return this.bringCache.data.movements.deals
-      }
-      return []
     }
-  },
-  methods: {
-    ...mapActions(bringStore, ['loadBringCache']),
-    handleSwitchTab(tab) {
-      this.currentTab = tab;
-    },
-    getColor(action) {
-      if (action === 'PURCHASE_POSTED') {
-        return 'red'
-      } else if (action === 'PURCHASE_APPROVED') {
-        return 'green'
-      } else { //PURCHASE_CORRECTED
-        return 'blue'
-      }
-    },
-    getActionTitle(action) {
-      if (action === 'PURCHASE_POSTED') {
-        return 'Purchase Made'
-      } else if (action === 'PURCHASE_APPROVED') {
-        return 'Cashback Eligible'
-      } else { //PURCHASE_CORRECTED
-        return 'Purchase Updated'
-      }
-    },
-    async claim() {
-      this.loading = true
-      try {
-        const res = await cashbackApi.claimInit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), this.amountToClaim)
-        const messageToSign = res.messageToSign
-        const request = {
-          method: METHOD.signData,
-          data: { address: Address.from_bech32(this.baseAddress).to_hex(), payload: stringToHex(messageToSign) },
-        }
-        const signature = await Messaging.sendToBackground(request);
-        if (signature.error) {
-          snackbar.setError(signature.error.info)
-        } else {
-          const status = await cashbackApi.claimSubmit(this.baseAddress, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network), this.amountToClaim, messageToSign, signature.data?.signature, signature.data?.key)
-          if (status === 202) {
-            snackbar.fireSuccess(`Successfully Claimed ${this.amountToClaim} ADA Cashback!`)
-            await this.loadBringCache()
-          }
-        }
-      } catch (e) {
-        snackbar.setError(e)
-        console.log(e)
-      }
-      this.loading = false
-    },
-  },
-  data: () => ({
-    currentTab: 0,
-    dealsHeaders: [
-      { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
-      { text: "Available In", align: "center", sortable: true, value: "eligibleDate"},
-      { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
-      { text: '', value: 'data-table-expand' },
-    ],
-    expanded: [],
-    claimHeaders: [
-      { text: "Time", align: "start", sortable: true, value: "date"},
-      { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
-    ],
-    messageToSign: undefined,
-    signature: undefined,
-    rules,
-    loading: false,
-  }),
+  } catch (e) {
+    snackbar.setError(e);
+    console.log(e);
+  }
+  loading.value = false;
 };
 </script>
 <style scoped>

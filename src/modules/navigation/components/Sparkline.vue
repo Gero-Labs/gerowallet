@@ -13,57 +13,48 @@
     </v-sparkline>
   </div>
 </template>
-<script>
-import { useStore } from '@/stores';
-import { mapState } from 'pinia';
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
+import { networkStore } from '@/plugins/networkStore';
 
-export default {
-  name: 'Sparkline',
-  props: {
-    width: {
-      type: Number,
-      default: 2
-    }
-  },
-  computed: {
-    ...mapState(useStore, ['price']),
-    priceChange() {
-      if (this.price?.priceChange) {
-        return Number(this.price.priceChange)
-      }
-      return 0
-    }
-  },
-  methods: {
-    async fetch() {
-      try {
-        this.chart = await cryptoApi.fetchHistory()
-      } catch (error) {
-        console.error(error)
-      }
-    }
-  },
-  data: () => ({
-    radius: 0,
-    padding: 0,
-    lineCap: 'round',
-    gradient: ['#fff'],
-    type: 'trend',
-    autoLineWidth: false,
-    chart: [],
-    intervalId: undefined
-  }),
-  async mounted() {
-    await this.fetch()
-    this.intervalId = setInterval(async () => {
-      await this.fetch()
-    },60000);
-  },
-  beforeDestroy() {
-    clearInterval(this.intervalId);
+const width = ref<number>(2);
+const radius = ref<number>(0);
+const padding = ref<number>(0);
+const lineCap = ref<string>('round');
+const gradient = ref<string[]>(['#fff']);
+const type = ref<string>('trend');
+const autoLineWidth = ref<boolean>(false);
+const chart = ref<number[]>([]);
+const intervalId = ref<number>(null);
+
+const { price } = toRefs(networkStore)
+
+const priceChange = computed(() => {
+  if (price.value?.priceChange) {
+    return Number(price.value.priceChange)
+  }
+  return 0
+})
+
+const fetch = async () => {
+  try {
+    chart.value = await cryptoApi.fetchHistory()
+  } catch (error) {
+    console.error(error)
   }
 }
+
+onMounted(async () => {
+  await fetch()
+  intervalId.value = setInterval(async () => {
+    await fetch()
+  },60000);
+})
+
+onUnmounted(() => {
+  clearInterval(intervalId.value);
+})
 </script>
 
 <style scoped>

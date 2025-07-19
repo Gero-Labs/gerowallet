@@ -53,9 +53,10 @@ export default {
 </script>
 <style scoped>
 #dapp-receiver-wrap {
+  background-color: #0F0F0F !important;
+  border: 1px solid #272930 !important;
+  border-radius: 10px;
   padding: 8px 10px;
-  background-color: #0F0F0F;
-  border-radius: 4px;
 }
 #dapp-receiver-header {
   display: flex;

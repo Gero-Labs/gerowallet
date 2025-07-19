@@ -129,7 +129,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <USBBluetoothSwitch v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -169,11 +169,11 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { QrcodeStream } from "vue-qrcode-reader";
 import QRCodeStyling from 'qr-code-styling';
 import type { TransactionBody } from '@emurgo/cardano-serialization-lib-browser';
 import type { Step, Token, SendData, Collectible } from '@/modules/multisig/types/MultiSigTypes';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 const props = defineProps<{
   isOpen: boolean;

@@ -70,7 +70,7 @@
             </v-tooltip>
             <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
@@ -91,12 +91,12 @@ import { Transaction, TransactionWitnessSet } from '@emurgo/cardano-serializatio
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 export default {
   name: 'WithdrawalDialog',
-  components: { USBBluetoothSwitch, BaseDialog },
+  components: { ToggleSwitch, BaseDialog },
   props: {
     isOpen: {
       type: Boolean,

@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet." :min-height="300" :width="500">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Swap" subtitle="Effortlessly exchange tokens directly from your wallet." :min-height="300" :width="550">
     <v-card-text class="text-center justify-center">
       <SwapWidget @onSwap="$emit('close')"></SwapWidget>
     </v-card-text>
@@ -8,8 +8,9 @@
 <script>
 import filters from "@/shared/utils/filters";
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
-import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+import { mapActions } from 'pinia';
+import { dexHunterStore } from '@/stores/modules/dexhunter';
 
 export default {
   name: "SwapDialog",
@@ -24,13 +25,15 @@ export default {
   data: () => ({
     quantity: 1,
   }),
-  computed: {
-
+  watch: {
+    isOpen(val) {
+      if (val) {
+        this.loadTokens(true)
+      }
+    }
   },
   methods: {
-    updateQuantity(value) {
-      this.quantity = value;
-    },
+    ...mapActions(dexHunterStore, ['loadTokens']),
   },
 };
 </script>

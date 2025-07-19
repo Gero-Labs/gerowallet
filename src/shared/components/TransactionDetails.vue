@@ -1,72 +1,93 @@
 <template>
   <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-    <v-row no-gutters>
-      <v-col cols="7">
-        <div class="transaction-info text-left pb-4">
-          <div>
-            Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['tx_hash']}`" target="_blank">{{ transactionInfo['tx_hash'] | truncate }}</a>
-            <CopyButton x-small :value="transactionInfo['tx_hash']" class="ml-1"></CopyButton>
-          </div>
-          <div>
-            Time: <span class="value-text">{{new Date(transactionInfo['tx_timestamp'] * 1000).toLocaleString()}}</span>
-          </div>
-          <div>
-            Tx Size: <span class="value-text">{{ transactionInfo['tx_size'] | humanFileSize }}</span>
-          </div>
-          <div>
-            Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">{{ transactionInfo['block_hash'] | truncate }}</a>
-            <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
-          </div>
-          <div>
-            Block Height: <span class="value-text">{{ transactionInfo['block_height'].toLocaleString('en-US') }}</span>
-          </div>
-          <div>
-            Network Fee: <span style="color: #FF8E8E">{{ transactionInfo['fee'] | toCurrency }}</span>
-          </div>
-          <div style="align-items: center">
-            {{ (Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ') }}
-            <span :style="Number(transactionInfo['ada']) > 0 ? { color: '#00DFF3' } : { color: '#FF8E8E' }">
-            {{Number(transactionInfo['ada']) | toCurrency}}
-            <template v-for="(asset, index) in txAssets">
-              <v-chip class="mr-1" outlined  :key="`asset_${index}`" x-small :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'">
-                {{ asset.quantity | toCurrency(false, 2, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0)}}
-              </v-chip>
-            </template>
+    <div style="text-align: right; position: absolute; right: 78px; top: 38px;">
+      <v-btn color="error" small outlined @click="isReportDialogOpen = true">
+        Report Transaction
+      </v-btn>
+    </div>
+    <div class="transaction-info text-left pb-4">
+      <div>
+        Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['id']}`" target="_blank">
+        {{ filters.truncate(transactionInfo['id']) }}</a>
+        <CopyButton x-small :value="transactionInfo['id']" class="ml-1" />
+      </div>
+      <div>
+        Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>
+      </div>
+      <div>
+        Epoch: <span class="value-text">{{ transactionInfo.epoch_no }}</span>
+      </div>
+      <div>
+        Tx Size: <span class="value-text">{{ filters.humanFileSize(transactionInfo['tx_size']) }}</span>
+      </div>
+      <div>
+        Block ID: <a style="color: #00DFF3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">
+        {{ filters.truncate(transactionInfo['block_hash']) }}</a>
+        <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
+      </div>
+      <div>
+        Block Height: <span class="value-text">{{ transactionInfo['block_height']?.toLocaleString('en-US') }}</span>
+      </div>
+      <div>
+        Network Fee: <span style="color: #FF8E8E">{{ filters.toCurrency(transactionInfo.body['fee']) }}</span>
+      </div>
+      <div style="align-items: center">
+        {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}
+        <span
+          :style="{
+            color: Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E',
+          }">
+          <span style="margin-right: 4px;">
+            {{ filters.toCurrency(Number(transactionInfo['ada'])) }}
           </span>
-          </div>
-          <div style="display: flex; width: 100%; align-items: baseline;">
-            <div v-if="txAssets?.length > 0">
-              <v-avatar rounded size="50" v-for="(asset, index) in txAssets" :key="index">
-                <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain></v-img>
+        </span>
+      </div>
+      <div class="pt-2" style="display: flex; width: 100%; align-items: baseline;">
+        <div v-if="Object.values(receivedAssets)?.length > 0">
+          <template v-for="(asset, index) in receivedAssets">
+            <v-chip pill outlined style="margin-bottom: 2px;" class="mr-1" :key="`asset_${index}`" :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'">
+              <v-avatar v-if="asset.img" left>
+                <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
+                  <template v-slot:placeholder>
+                    <v-row
+                      class="fill-height ma-0"
+                      align="center"
+                      justify="center"
+                    >
+                      <v-progress-circular
+                        size="14"
+                        width="2"
+                        indeterminate
+                        color="grey lighten-5"
+                      ></v-progress-circular>
+                    </v-row>
+                  </template>
+                </v-img>
               </v-avatar>
-              <v-btn
-                class="px-0"
-                height="50"
-                width="50"
-                style="min-width: 50px!important;"
-                v-if="!isExpanded && residue.length > 0"
-                @click="expand"
-              >
-                <v-avatar
-                  size="50"
-                  color="black"
-                  rounded
-                >
-                  <span class="white--text">{{'+' + residue.length}}</span>
-                </v-avatar>
-              </v-btn>
-            </div>
-          </div>
+              {{ filters.toCurrency(asset.quantity, false, 4, '', ' '+ asset.name, false, asset && asset.metadata && asset.metadata.decimals ? Number(asset.metadata.decimals) : 0) }}
+            </v-chip>
+          </template>
+          <v-chip
+            color="white"
+            class="px-2"
+            outlined
+            v-if="!isExpanded && residue.length > 0"
+            @click="expand"
+          >
+            {{'+' + residue?.length}}
+          </v-chip>
+          <v-chip
+            color="white"
+            class="px-2"
+            outlined
+            v-else-if="isExpanded"
+            @click="shrink"
+          >
+            Show Less
+          </v-chip>
         </div>
-      </v-col>
-      <v-col cols="5">
-        <div style="text-align: right">
-          <v-btn color="error" small outlined @click="isReportDialogOpen = true">
-            Report Transaction
-          </v-btn>
-        </div>
-      </v-col>
-    </v-row>
+      </div>
+    </div>
     <v-expansion-panels v-model="panels" multiple class="accordion-container">
       <v-expansion-panel style="background-color: #1e273ab3">
         <v-expansion-panel-header>
@@ -79,35 +100,74 @@
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
           <v-card flat class="transparent">
-            <v-card-title>Inputs ({{transactionInfo['inputs'].length}})</v-card-title>
-            <v-card-text>
+            <v-card-title class="px-0">Inputs ({{ transactionInfo['utxo']['inputs']?.length }})</v-card-title>
+            <v-card-text class="px-0">
               <v-simple-table dense style="background-color: transparent">
                 <thead class="grey--text">
                 <tr>
                   <td class="text-left">UTxO</td>
-                  <td class="text-left">Address</td>
                   <td class="text-right">Amount</td>
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(input, index) in transactionInfo['inputs']" :key="`input_${index}`">
+                <tr v-for="(input, index) in transactionInfo['utxo']['inputs']" :key="`input_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{ `${input.tx_hash}#${input.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
+                      {{ filters.truncate(`${input.tx_hash}#${input.output_index}`) }}
+                      <CopyButton v-if="input?.tx_hash && input?.output_index" x-small class="ml-1" :value="`${input.tx_hash}#${input.output_index}`" />
                     </div>
-                  </td>
-                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{input.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="input.payment_addr.bech32"></CopyButton>
+                      {{ filters.truncate(input.address) }}
+                      <CopyButton v-if="input?.address" x-small class="ml-1" :value="input.address" />
                     </div>
                   </td>
                   <td class="text-right">
-                    <div>
-                      {{input.value | toCurrency}}
+                    <div style="color: #FF8E8E">
+                      <v-chip pill outlined color="#FF8E8E" style="margin: 2px">
+                        <v-avatar left>
+                          <v-img :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)" contain>
+                            <template v-slot:placeholder>
+                              <v-row
+                                class="fill-height ma-0"
+                                align="center"
+                                justify="center"
+                              >
+                                <v-progress-circular
+                                  size="14"
+                                  width="2"
+                                  indeterminate
+                                  color="grey lighten-5"
+                                ></v-progress-circular>
+                              </v-row>
+                            </template>
+                          </v-img>
+                        </v-avatar>
+                        {{ filters.toCurrency(findLovelace(input.amount), false, 6, '', ' '+networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network), false, 6) }}
+                      </v-chip>
                     </div>
                     <div>
-                      <template v-for="(asset, assetIndex) in input.asset_list">
-                        <v-chip :key="`input_${index}_asset_${assetIndex}`" class="px-1" x-small>{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
+                      <template v-for="(asset, assetIndex) in txIOAssets(input)">
+                        <v-chip pill outlined color="#FF8E8E" :key="`input_${index}_asset_${assetIndex}`" style="margin: 2px;">
+                          <v-avatar v-if="asset.img" left>
+                            <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
+                              <template v-slot:placeholder>
+                                <v-row
+                                  class="fill-height ma-0"
+                                  align="center"
+                                  justify="center"
+                                >
+                                  <v-progress-circular
+                                    size="14"
+                                    width="2"
+                                    indeterminate
+                                    color="grey lighten-5"
+                                  ></v-progress-circular>
+                                </v-row>
+                              </template>
+                            </v-img>
+                          </v-avatar>
+                          {{ getAssetChip(asset) }}
+                        </v-chip>
                       </template>
                     </div>
                   </td>
@@ -115,34 +175,77 @@
                 </tbody>
               </v-simple-table>
             </v-card-text>
-            <v-card-title>Outputs ({{transactionInfo['outputs'].length}})</v-card-title>
-            <v-card-text>
+            <v-card-title class="px-0">
+              Outputs ({{transactionInfo['utxo']['outputs']?.length}})
+            </v-card-title>
+            <v-card-text class="px-0">
               <v-simple-table dense  style="background-color: transparent">
                 <thead class="grey--text">
                 <tr>
                   <td class="text-left">UTxO</td>
-                  <td class="text-left">Address</td>
                   <td class="text-right">Amount</td>
                 </tr>
                 </thead>
                 <tbody>
-                <tr v-for="(output, index) in transactionInfo['outputs']" :key="`output_${index}`">
+                <tr v-for="(output, index) in transactionInfo['utxo']['outputs']" :key="`output_${index}`">
                   <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{ `${output.tx_hash}#${output.tx_index}` | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
+                      {{ filters.truncate(`${transactionInfo['id']}#${output.output_index}`) }}
+                      <CopyButton v-if="output?.output_index" x-small class="ml-1" :value="`${transactionInfo['id']}#${output.output_index}`" />
                     </div>
-                  </td>
-                  <td class="text-left" style="align-content: center;">
                     <div style=" align-items: center; display: flex;">
-                      {{output.payment_addr.bech32 | truncate}}<CopyButton x-small class="ml-1" :value="output.payment_addr.bech32"></CopyButton>
+                      {{ filters.truncate(output.address) }}
+                      <CopyButton v-if="output?.address" x-small class="ml-1" :value="output.address" />
                     </div>
                   </td>
                   <td class="text-right">
-                    <div>
-                      {{output.value | toCurrency}}
+                    <div style="color: #00DFF3">
+                      <v-chip pill outlined color="#00DFF3" style="margin: 2px">
+                        <v-avatar left>
+                          <v-img :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)" contain>
+                            <template v-slot:placeholder>
+                              <v-row
+                                class="fill-height ma-0"
+                                align="center"
+                                justify="center"
+                              >
+                                <v-progress-circular
+                                  size="14"
+                                  width="2"
+                                  indeterminate
+                                  color="grey lighten-5"
+                                ></v-progress-circular>
+                              </v-row>
+                            </template>
+                          </v-img>
+                        </v-avatar>
+                        {{ filters.toCurrency(findLovelace(output.amount), false, 6, '', ' '+networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network), false, 6) }}
+                      </v-chip>
                     </div>
                     <div>
-                      <v-chip v-for="(asset, assetIndex) in output.asset_list" :key="`output_${index}_asset_${assetIndex}`" x-small class="my-1">{{getAssetName(asset, true)+' '}}{{(Number(asset.quantity) / (asset.decimals ? Math.pow(10, asset.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}} </v-chip>
+                      <template v-for="(asset, assetIndex) in txIOAssets(output)">
+                        <v-chip pill outlined color="#00DFF3" :key="`output${index}_asset_${assetIndex}`" style="margin: 2px;">
+                          <v-avatar v-if="asset.img" left>
+                            <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
+                              <template v-slot:placeholder>
+                                <v-row
+                                  class="fill-height ma-0"
+                                  align="center"
+                                  justify="center"
+                                >
+                                  <v-progress-circular
+                                    size="14"
+                                    width="2"
+                                    indeterminate
+                                    color="grey lighten-5"
+                                  ></v-progress-circular>
+                                </v-row>
+                              </template>
+                            </v-img>
+                          </v-avatar>
+                          {{ getAssetChip(asset) }}
+                        </v-chip>
+                      </template>
                     </div>
                   </td>
                 </tr>
@@ -150,8 +253,7 @@
                 <tfoot class="grey--text">
                   <tr>
                     <td class="text-left">Total Output</td>
-                    <td></td>
-                    <td class="text-right">{{transactionInfo['total_output'] | toCurrency}}</td>
+                    <td class="text-right">{{ filters.toCurrency(transactionInfo.receivedAmount - transactionInfo.sentAmount, true) }}</td>
                   </tr>
                 </tfoot>
               </v-simple-table>
@@ -159,76 +261,114 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['certificates'].length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.certificates?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-certificate-outline</v-icon>
             </div>
-            <h3>Certificates ({{transactionInfo['certificates'].length}})</h3>
+            <h3>Certificates ({{ transactionInfo?.body?.certificates?.length }})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat v-for="(certificate, index) in transactionInfo['certificates']" :key="index" class="mb-2 transparent">
-            <v-card-title>{{getCertificateType(certificate.type)}}</v-card-title>
+          <v-card flat v-for="(certificate, index) in transactionInfo?.body?.certificates" :key="index" class="mb-2 transparent">
+            <v-card-title>{{ getCertificateType(certificate) }}</v-card-title>
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
                 <tbody>
-                <tr v-if="certificate.info.drep_id">
-                  <td class="text-left grey--text" >
-                    DRep Id
-                  </td>
-                  <td class="text-left">
-                    {{certificate.info.drep_id | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_id"></CopyButton>
-                  </td>
-                </tr>
-                <tr v-if="certificate.info.drep_hex">
-                  <td class="text-left grey--text">
-                    DRep Hex
-                  </td>
-                  <td class="text-left">
-                    {{certificate.info.drep_hex | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.drep_hex"></CopyButton>
-                  </td>
-                </tr>
-                <tr v-if="certificate.info.deposit">
-                  <td class="text-left grey--text" >
-                    Deposit
-                  </td>
-                  <td class="text-left">
-                    {{ Number(certificate.info.deposit) | toCurrency }}
-                  </td>
-                </tr>
-                <tr v-if="certificate.info.stake_address">
-                  <td class="text-left grey--text">
-                    Stake Address
-                  </td>
-                  <td class="text-left">
-                    {{certificate.info.stake_address | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.stake_address"></CopyButton>
-                  </td>
-                </tr>
-                <tr v-if="certificate.info.pool_id_hex">
-                  <td class="text-left grey--text">
-                    Pool Id (Hex)
-                  </td>
-                  <td class="text-left">
-                    {{certificate.info.pool_id_hex | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_hex"></CopyButton>
-                  </td>
-                </tr>
-                <tr v-if="certificate.info.pool_id_bech32">
-                  <td class="text-left grey--text">
-                    Pool Id (Bech32)
-                  </td>
-                  <td class="text-left">
-                    {{certificate.info.pool_id_bech32 | truncate}}<CopyButton x-small class="ml-1" :value="certificate.info.pool_id_bech32"></CopyButton>
-                  </td>
-                </tr>
+                  <tr v-if="certificate.stakeCredential?.hash">
+                    <td class="text-left grey--text" >
+                      Stake Credential Hash
+                    </td>
+                    <td class="text-left">
+                      {{ filters.truncate(certificate.stakeCredential.hash) }}
+                      <CopyButton v-if="certificate.stakeCredential.hash" x-small class="ml-1" :value="certificate.stakeCredential.hash" />
+                    </td>
+                  </tr>
+                  <tr v-if="getCredentialType(certificate.stakeCredential?.type)">
+                    <td class="text-left grey--text">
+                      Stake Credential Type
+                    </td>
+                    <td class="text-left">
+                      {{ getCredentialType(certificate.stakeCredential.type) }}
+                    </td>
+                  </tr>
+                  <tr v-if="certificate.poolId">
+                    <td class="text-left grey--text" >
+                      Pool
+                    </td>
+                    <td class="text-left">
+                      <v-list-item class="px-0">
+                        <v-list-item-avatar v-if="JSON.parse(pools[certificate.poolId]?.pool_extended_info)?.info?.url_png_icon_64x64">
+                          <v-img :src="JSON.parse(pools[certificate.poolId]?.pool_extended_info).info.url_png_icon_64x64" />
+                        </v-list-item-avatar>
+                        <v-list-item-content>
+                          <v-list-item-title>
+                            {{ pools[certificate.poolId]?.ticker }}
+                          </v-list-item-title>
+                          <v-list-item-subtitle>
+                            {{ filters.truncate(certificate.poolId) }}
+                            <CopyButton v-if="certificate.poolId" x-small class="ml-1" :value="certificate.poolId" />
+                          </v-list-item-subtitle>
+                        </v-list-item-content>
+                      </v-list-item>
+                    </td>
+                  </tr>
+                  <tr v-if="certificate.dRep">
+                    <td class="text-left grey--text">
+                      DRep
+                    </td>
+                    <td class="text-left">
+                      <v-list-item class="px-0">
+                        <v-list-item-avatar v-if="getDRepType(certificate.dRep) === Serialization.DRepKind.KeyHash">
+                          <v-img :src="getDRepAvatar(certificate.dRep)" >
+                            <template v-slot:placeholder>
+                              <v-row
+                                class="fill-height ma-0"
+                                align="center"
+                                justify="center"
+                              >
+                                <v-progress-circular
+                                  size="14"
+                                  width="2"
+                                  indeterminate
+                                  color="grey lighten-5"
+                                ></v-progress-circular>
+                              </v-row>
+                            </template>
+                          </v-img>
+                        </v-list-item-avatar>
+                        <v-list-item-content>
+                          <v-list-item-title>
+                            {{ getDRepTitle(certificate.dRep) }}
+                          </v-list-item-title>
+                          <v-list-item-subtitle
+                            v-if="getDRepType(certificate.dRep) === Serialization.DRepKind.KeyHash ||
+                            getDRepType(certificate.dRep) === Serialization.DRepKind.ScriptHash"
+                          >
+                            <a href="https://cips.cardano.org/cip/CIP-0105" target="_blank">CIP-105</a>:
+                            {{ ` ${filters.truncate(getDRepCip105(certificate.dRep))}` }}
+                            <CopyButton v-if="getDRepCip105(certificate.dRep)" x-small class="ml-1" :value="getDRepCip105(certificate.dRep)" />
+                          </v-list-item-subtitle>
+                          <v-list-item-subtitle
+                            v-if="getDRepType(certificate.dRep) === Serialization.DRepKind.KeyHash ||
+                            getDRepType(certificate.dRep) === Serialization.DRepKind.ScriptHash"
+                          >
+                            <a href="https://cips.cardano.org/cip/CIP-0129" target="_blank">CIP-129</a>:
+                            {{ ` ${filters.truncate(getDRepCip129(certificate.dRep))}` }}
+                            <CopyButton v-if="getDRepCip129(certificate.dRep)" x-small class="ml-1" :value="getDRepCip129(certificate.dRep)" />
+                          </v-list-item-subtitle>
+                        </v-list-item-content>
+                      </v-list-item>
+                    </td>
+                  </tr>
                 </tbody>
               </v-simple-table>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['metadata']">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['auxiliaryData']">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -239,13 +379,11 @@
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
           <v-card outlined>
-            <v-card-title class="pb-0">
-              <v-spacer>
-              </v-spacer>
-              <CopyButton :value="JSON.stringify(transactionInfo['metadata'])" small></CopyButton>
+            <v-card-title class="pb-0" style="position: absolute; right: 0">
+              <CopyButton :value="getMetadata(transactionInfo)" small></CopyButton>
             </v-card-title>
-            <v-card-text class="text-left" style="font-size: 12px;font-family: monospace!important;">
-              {{JSON.stringify(transactionInfo['metadata'], null, 2)}}
+            <v-card-text class="text-left pa-2" style="font-size: 12px;font-family: monospace!important;">
+              <pre>{{ JSON.stringify(transactionInfo['auxiliaryData']['blob'], null, 2)}}</pre>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
@@ -256,7 +394,7 @@
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
-            <h3>Assets Minted ({{transactionInfo['assets_minted'].length}})</h3>
+            <h3>Assets Minted ({{transactionInfo['assets_minted']?.length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -274,7 +412,7 @@
                 <tbody>
                 <tr v-for="(asset_minted, index) in transactionInfo['assets_minted']" :key="`asset_minted_${index}`">
                   <td class="text-left">
-                    {{asset_minted.policy_id | truncate}}<CopyButton x-small class="ml-1" :value="asset_minted.policy_id"></CopyButton>
+                    {{ filters.truncate(asset_minted.policy_id) }}<CopyButton v-if="asset_minted" x-small class="ml-1" :value="asset_minted.policy_id"></CopyButton>
                   </td>
                   <td class="text-left">
                     {{getAssetName(asset_minted, false)}}
@@ -283,7 +421,7 @@
                     {{getFingerprint(asset_minted) }}<CopyButton x-small class="ml-1" :value="getFingerprint(asset_minted)"></CopyButton>
                   </td>
                   <td class="text-center">
-                    {{(Number(asset_minted.quantity) / (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1)).toLocaleString('en-US', {maximumFractionDigits: 6})}}
+                    {{(Number(asset_minted.quantity) / (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1))?.toLocaleString('en-US', {maximumFractionDigits: 6})}}
                   </td>
                 </tr>
                 </tbody>
@@ -292,17 +430,17 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['withdrawals']?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.withdrawals?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-bank-transfer-out</v-icon>
             </div>
-            <h3>Withdrawals ({{transactionInfo['withdrawals'].length}})</h3>
+            <h3>Withdrawals ({{transactionInfo?.body?.withdrawals?.length}})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat class="transparent" v-for="(withdrawal, index) in transactionInfo['withdrawals']" :key="`withdrawal_${index}`">
+          <v-card flat class="transparent" v-for="(withdrawal, index) in transactionInfo?.body?.withdrawals" :key="`withdrawal_${index}`">
             <v-card-title>Withdrawal</v-card-title>
             <v-card-text>
               <v-simple-table dense style="background-color: transparent">
@@ -312,7 +450,8 @@
                     Stake Address
                   </td>
                   <td class="text-left">
-                    {{withdrawal.stake_addr | truncate}}<CopyButton x-small class="ml-1" :value="withdrawal.stake_addr"></CopyButton>
+                    {{ filters.truncate(withdrawal.stakeAddress) }}
+                    <CopyButton v-if="withdrawal" x-small class="ml-1" :value="withdrawal.stakeAddress"></CopyButton>
                   </td>
                 </tr>
                 <tr>
@@ -320,7 +459,7 @@
                     Amount
                   </td>
                   <td class="text-left">
-                    {{withdrawal.amount | toCurrency}}
+                    {{ filters.toCurrency(withdrawal.quantity) }}
                   </td>
                 </tr>
                 </tbody>
@@ -329,29 +468,44 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['plutus_contracts'].length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.witness?.redeemers?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
               <v-icon color="#333741">mdi-file-sign</v-icon>
             </div>
-            <h3>Contracts ({{transactionInfo['plutus_contracts'].length}})</h3>
+            <h3>Contracts ({{ transactionInfo.witness?.redeemers?.length }})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-          <v-card flat v-for="(contract, index) in transactionInfo['plutus_contracts']" :key="`contracts_${index}`" class="mb-2 transparent">
-            <v-card-title>Contract</v-card-title>
-            <v-card-subtitle class="text-left">{{contract.address | truncate}}<CopyButton x-small :value="contract.address" class="ml-1"></CopyButton></v-card-subtitle>
-            <v-card-title v-if="contract?.input?.redeemer">Redeemer</v-card-title>
-            <v-card-text v-if="contract?.input?.redeemer">
+          <v-card flat v-for="(redeemer, index) in getRedeemers(transactionInfo.witness.redeemers)" :key="`contracts_${index}`" class="mb-2 transparent">
+            <v-card-title>{{ `Redeemer #${index+1}` }}</v-card-title>
+            <v-card-text>
               <v-simple-table dense style="background-color: transparent">
                 <tbody>
                 <tr>
                   <td class="text-left grey--text">
-                    Type
+                    Hash
                   </td>
                   <td class="text-left">
-                    {{ contract.input.redeemer.purpose }}
+                    {{ filters.truncate(redeemer.hash()) }}
+                    <CopyButton v-if="redeemer.hash()" x-small class="ml-1" :value="redeemer.hash()"></CopyButton>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">
+                    Purpose
+                  </td>
+                  <td class="text-left">
+                    {{ redeemer.toCore().purpose.toUpperCase() }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">
+                    Memory
+                  </td>
+                  <td class="text-left">
+                    {{ filters.humanFileSize(redeemer.exUnits().mem().toString()) }}
                   </td>
                 </tr>
                 <tr>
@@ -359,38 +513,40 @@
                     Steps
                   </td>
                   <td class="text-left">
-                    {{ contract.input.redeemer.unit.steps }}
+                    {{ Number(redeemer.exUnits().steps().toString()).toLocaleString('en-US') }}
                   </td>
                 </tr>
                 <tr>
                   <td class="text-left grey--text">
-                    Mem
+                    Data CBOR
                   </td>
                   <td class="text-left">
-                    {{ contract.input.redeemer.unit.mem }}
-                  </td>
-                </tr>
-                </tbody>
-              </v-simple-table>
-            </v-card-text>
-            <v-card-title v-if="contract?.input?.datum">Datum</v-card-title>
-            <v-card-text v-if="contract?.input?.datum">
-              <v-simple-table dense style="background-color: transparent">
-                <tbody>
-                <tr>
-                  <td class="text-left grey--text">
-                    Datum Hash
-                  </td>
-                  <td class="text-left" style="overflow-wrap: anywhere;">
-                    {{ contract.input.datum.hash | truncate }}<CopyButton x-small class="ml-1" :value="contract.input.datum.hash"></CopyButton>
+                    {{ filters.truncate(redeemer.data()?.toCbor()) }}
+                    <CopyButton v-if="redeemer.data()?.toCbor()" x-small class="ml-1" :value="redeemer.data()?.toCbor()" />
                   </td>
                 </tr>
                 <tr>
                   <td class="text-left grey--text">
-                    Contract Bytecode
+                    Data Hash
                   </td>
-                  <td class="text-left" style="overflow-wrap: anywhere;">
-                    {{ contract.bytecode | truncate }}<CopyButton x-small class="ml-1" :value="contract.bytecode"></CopyButton>
+                  <td class="text-left">
+                    {{ filters.truncate(redeemer.data().hash()) }}
+                    <CopyButton v-if="redeemer.data().hash()" x-small class="ml-1" :value="redeemer.data().hash()"></CopyButton>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">
+                    Data JSON
+                  </td>
+                  <td class="text-left">
+                    <v-card outlined class="my-1">
+                      <v-card-title class="pb-0" style="position: absolute; right: 0">
+                      <CopyButton :value="getRedeemerDataJson(redeemer.data().toCore())" small></CopyButton>
+                      </v-card-title>
+                      <v-card-text class="text-left pa-2" style="font-size: 12px;font-family: monospace!important;">
+                        <pre>{{ getRedeemerDataJson(redeemer.data().toCore()) }}</pre>
+                      </v-card-text>
+                    </v-card>
                   </td>
                 </tr>
                 </tbody>
@@ -399,7 +555,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="false">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.collaterals">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container">
@@ -409,112 +565,359 @@
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
-
+          <v-card flat v-for="(collateral, index) in transactionInfo.body?.collaterals" :key="`collateral_${index}`" class="mb-2 transparent">
+            <v-card-title>{{ `Collateral #${index+1}` }}</v-card-title>
+            <v-card-text>
+              <v-simple-table dense style="background-color: transparent">
+                <tbody>
+                <tr>
+                  <td class="text-left grey--text">
+                    Tx Id
+                  </td>
+                  <td class="text-left">
+                    {{ filters.truncate(collateral.txId) }}
+                    <CopyButton v-if="collateral.txId" x-small class="ml-1" :value="collateral.txId"></CopyButton>
+                  </td>
+                </tr>
+                </tbody>
+              </v-simple-table>
+            </v-card-text>
+          </v-card>
+          <v-card flat class="transparent" v-if="transactionInfo.body?.collateralReturn">
+            <v-card-title>{{ `Collateral Return` }}</v-card-title>
+            <v-card-text>
+              <v-simple-table dense style="background-color: transparent">
+                <tbody>
+                <tr>
+                  <td class="text-left grey--text">
+                    Address
+                  </td>
+                  <td class="text-left">
+                    {{ filters.truncate(transactionInfo.body.collateralReturn.address) }}
+                    <CopyButton v-if="transactionInfo.body.collateralReturn.address" x-small class="ml-1" :value="transactionInfo.body.collateralReturn.address"></CopyButton>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">
+                    Amount
+                  </td>
+                  <td class="text-left">
+                    {{ filters.toCurrency(transactionInfo.body.collateralReturn.value.coins) }}
+                  </td>
+                </tr>
+                </tbody>
+              </v-simple-table>
+            </v-card-text>
+          </v-card>
+        </v-expansion-panel-content>
+      </v-expansion-panel>
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.referenceInputs">
+        <v-expansion-panel-header>
+          <div class="header-container">
+            <div class="received-arrow-container">
+              <v-icon color="#333741">mdi-clipboard-list-outline</v-icon>
+            </div>
+            <h3>Reference Inputs</h3>
+          </div>
+        </v-expansion-panel-header>
+        <v-expansion-panel-content class="content-container">
+          <v-card flat class="mb-2 transparent">
+            <v-card-text>
+              <v-simple-table dense style="background-color: transparent">
+                <tbody v-for="(referenceInput, index) in transactionInfo.body?.referenceInputs" :key="`reference_inputs_${index}`">
+                <tr>
+                  <td class="text-left grey--text">
+                    Tx Id
+                  </td>
+                  <td class="text-left">
+                    {{ filters.truncate(referenceInput.txId) }}
+                    <CopyButton v-if="referenceInput.txId" x-small class="ml-1" :value="referenceInput.txId"></CopyButton>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">
+                    Index
+                  </td>
+                  <td class="text-left">
+                    {{ referenceInput.index }}
+                  </td>
+                </tr>
+                </tbody>
+              </v-simple-table>
+            </v-card-text>
+          </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
     </v-expansion-panels>
-    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="transactionInfo.tx_hash" />
+    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="transactionInfo['id']" />
   </v-card-text>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { computed, ref, toRefs } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
 import { resolveAsset } from '@/shared/utils/resolver';
-import { unitToFingerprint } from '@/shared/utils/converter';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Buffer } from 'buffer';
+import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
+import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import networks from '@/utils/networks';
 
-export default defineComponent({
-  name: 'TransactionDetails',
-  components: { ReportDialog, CopyButton },
-  props: {
-    transactionInfo: {
-      type: Object,
-      default: null,
-    },
-  },
-  watch: {
-    transactionInfo: {
-      handler(val) {
-        if (val) {
-          this.updateTokens(val['assets'].filter(asset => asset.policy_id !== ''))
-        }
-      },
-      deep: true,
+interface Props {
+  transactionInfo: any;
+}
+
+const props = defineProps<Props>();
+const { loggedWallet } = toRefs(walletStore);
+const { pools, dreps } = toRefs(networkStore);
+
+const residue = ref<any[]>([]);
+const panels = ref<any[]>([]);
+const isExpanded = ref<boolean>(false);
+const isReportDialogOpen = ref<boolean>(false);
+
+function findLovelace(io: { unit: string; quantity: number }[]) {
+  const tok = io.find((t) => t.unit === 'lovelace');
+  return tok ? tok.quantity : 0;
+}
+
+const getRedeemers = (redeemers: Cardano.Redeemer[]) => {
+  return redeemers.map(redeemer => {
+    return Serialization.Redeemer.fromCore(redeemer)
+  })
+}
+
+const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {
+  return JSON.stringify(redeemerData, (_key, value) => {
+    if (value instanceof Map) {
+      return Array.from(value.entries()).reduce((obj, [key, value]) => {
+        obj[key] = value;
+        return obj;
+      }, {});
+    } else if (typeof value === 'bigint') {
+      return value.toString();
+    } else {
+      return value;
     }
-  },
-  filters,
-  computed: {
-    ...mapState(useStore, ['network', 'assets', 'resolvedAssets']),
-  },
-  methods: {
-    expand() {
-      this.txAssets.push(...this.residue)
-      this.isExpanded = true
-    },
-    async updateTokens(tokens) {
-      const assets = await Promise.all(tokens.map(token => {
-        const asset = this.assets[token['policy_id']+token['asset_name']]
-        return resolveAsset(asset, token)
-      }));
-      this.txAssets = assets.slice(0, 4)
-      if (assets?.length > 4) {
-        this.residue = assets.slice(4)
-      } else {
-        this.residue = []
-      }
-    },
-    getAssetName(asset, checkAscii) {
-      const ascii = /^[ -~\t\n\r]+$/;
-      const assetName = Buffer.from(asset.asset_name, 'hex').toString('ascii');
-      if (checkAscii && !ascii.test( assetName ) ) {
-        return filters.truncate(unitToFingerprint(asset.policy_id+asset.asset_name))
-      }
-      return assetName
-    },
-    getFingerprint(asset) {
-      return filters.truncate(unitToFingerprint(asset.policy_id+asset.asset_name))
-    },
-    getCertificateType(type) {
-      switch (type) {
-        case "drep_retire": {
-          return "DRep De-Registration"
-        }
-        case "drep_registration": {
-          return 'DRep Registrations'
-        }
-        case "vote_delegation": {
-          return 'Vote Delegation'
-        }
-        case "stake_registration": {
-          return 'Stake Registration'
-        }
-        case "pool_delegation": {
-          return 'Pool Delegation'
-        }
-        case "pool_update": {
-          return 'Pool Update'
-        }
-        case "stake_deregistration": {
-          return "Stake De-Registration"
-        }
+  }, 2)
+}
+
+const getAssetName = (unit: string, checkAscii: boolean) => {
+  const assetNameHex = Cardano.AssetId.getAssetName(Cardano.AssetId(unit))
+  const policyId = Cardano.AssetId.getPolicyId(Cardano.AssetId(unit))
+  try {
+    return Cardano.AssetName.toUTF8(assetNameHex, true);
+  } catch (e) {
+    const ascii = /^[ -~\t\n\r]+$/;
+    const assetName = Buffer.from(assetNameHex, 'hex').toString('ascii');
+    if (checkAscii && !ascii.test( assetName ) ) {
+      return filters.truncate(Cardano.AssetFingerprint.fromParts(policyId, assetNameHex))
+    }
+    return assetName
+  }
+}
+
+const getCredentialType = (type: Cardano.CredentialType) => {
+  switch (type) {
+    case Cardano.CredentialType.KeyHash:
+      return 'Key Hash'
+    case Cardano.CredentialType.ScriptHash:
+      return 'Script Hash'
+    default:
+      return null;
+  }
+}
+
+const getDRepType = (drep: Cardano.DelegateRepresentative) => {
+  if (drep) {
+    return Serialization.DRep.fromCore(drep).kind()
+  }
+  return null;
+}
+
+const getDRepCip129 = (drep: Cardano.DelegateRepresentative) => {
+  const drepS: Serialization.DRep = Serialization.DRep.fromCore(drep);
+  switch (drepS.kind()) {
+    case Serialization.DRepKind.KeyHash:
+      return Cardano.DRepID.cip129FromCredential(
+        {
+          type: Cardano.CredentialType.KeyHash,
+          hash: Hash28ByteBase16(drepS.toKeyHash())
+        })
+    case Serialization.DRepKind.ScriptHash:
+      return Cardano.DRepID.cip129FromCredential(
+        {
+          type: Cardano.CredentialType.ScriptHash,
+          hash: drepS.toScriptHash()
+        })
+    default:
+      return "N/A"
+  }
+}
+
+const getDRepCip105 = (drep: Cardano.DelegateRepresentative) => {
+  const drepS: Serialization.DRep = Serialization.DRep.fromCore(drep);
+  switch (drepS.kind()) {
+    case Serialization.DRepKind.KeyHash:
+      return Cardano.DRepID.cip105FromCredential(
+        {
+          type: Cardano.CredentialType.KeyHash,
+          hash: Hash28ByteBase16(drepS.toKeyHash())
+        })
+    case Serialization.DRepKind.ScriptHash:
+      return Cardano.DRepID.cip105FromCredential(
+        {
+          type: Cardano.CredentialType.ScriptHash,
+          hash: drepS.toScriptHash()
+        })
+    default:
+      return "N/A"
+  }
+}
+const getDRepAvatar = (drep: Cardano.DelegateRepresentative) => {
+  const resolvedDRep = dreps.value[getDRepCip129(drep)]
+  if (resolvedDRep?.metadata?.meta_json?.body?.image?.contentUrl) {
+    return resolvedDRep.metadata.meta_json.body.image.contentUrl
+  }
+  return 'N/A'
+}
+
+const getDRepTitle = (drep: Cardano.DelegateRepresentative) => {
+  const drepS: Serialization.DRep = Serialization.DRep.fromCore(drep);
+  switch (drepS.kind()) {
+    case Serialization.DRepKind.KeyHash:
+    case Serialization.DRepKind.ScriptHash:
+      const resolvedDRep = dreps.value[getDRepCip129(drep)]
+      if (resolvedDRep?.metadata?.meta_json?.body?.givenName) {
+        return resolvedDRep.metadata.meta_json.body.givenName
       }
       return 'N/A'
-    },
-  },
-  data: () => ({
-    txAssets: [],
-    residue: [],
-    panels: [],
-    isExpanded: false,
-    isReportDialogOpen: false,
-  }),
-  async mounted() {
-    await this.updateTokens(this.transactionInfo['assets'].filter(asset => asset.policy_id !== ''))
+    case Serialization.DRepKind.Abstain:
+      return 'Abstain'
+    case Serialization.DRepKind.NoConfidence:
+      return 'No Confidence'
+    default:
+      return 'N/A'
+  }
+}
+
+const txIOAssets = (io: any) => {
+  return io.amount.filter((token: any) => token.unit !== 'lovelace').map((asset: any) => {
+    let resolvedAsset = txAssets.value[asset.unit]
+    if (!resolvedAsset) {
+      resolvedAsset = resolveAsset(asset)
+    }
+    resolvedAsset.quantity = asset.quantity
+    return resolvedAsset
+  })
+}
+
+const getAssetChip = (asset: any) => {
+  return filters.toCurrency(asset.quantity, false, 6, '', ` ${asset.name}`, false, asset.metadata?.decimals ? asset.metadata.decimals : 0);
+}
+
+const getMetadata = (transactionInfo: any) => {
+  return JSON.stringify(Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData().metadata().toCore(), (_key, value) => {
+    if (value instanceof Map) {
+      return Array.from(value.entries()).reduce((obj, [key, value]) => {
+        obj[key] = value;
+        return obj;
+      }, {});
+    } else if (typeof value === 'bigint') {
+      return value.toString();
+    } else {
+      return value;
+    }
+  }, 2)
+}
+
+const getFingerprint = (asset: any) => {
+  return filters.truncate(Cardano.AssetFingerprint.fromParts(asset.policy_id, asset.asset_name))
+}
+
+const txAssets = computed(() => {
+  if (props.transactionInfo) {
+    return [...props.transactionInfo['receivedAssets'], ...props.transactionInfo['sentAssets']]
+      .filter((asset: any) => asset.policy_id !== '')
+      .reduce((map: Record<string, any>, asset: any) => {
+        map[asset.unit] = resolveAsset(asset);
+        return map;
+      }, {});
+  } else {
+    return {}
   }
 });
+
+const receivedAssets = computed(() => {
+  const assts = props.transactionInfo['assets']
+    .filter((asset: any) => asset.policy_id !== '')
+    .map((asset: any) => {
+      const res = structuredClone(txAssets.value[asset.unit])
+      if (res) {
+        res.quantity = asset.quantity
+      }
+      return res
+    }).filter((asset: any) => asset)
+  const asstsResolved = !isExpanded.value ? assts.slice(0, 2) : assts
+  residue.value = assts.slice(2)
+  return asstsResolved
+});
+
+
+const getCertificateType = (certificate: Cardano.Certificate) => {
+const certificateType: Cardano.CertificateType = certificate.__typename;
+  switch (certificateType) {
+    case Cardano.CertificateType.StakeRegistration:
+      return 'Stake Registration'
+    case Cardano.CertificateType.StakeDeregistration:
+      return 'Stake De-Registration'
+    case Cardano.CertificateType.PoolRegistration:
+      return 'Pool Registration'
+    case Cardano.CertificateType.PoolRetirement:
+      return 'Pool Retirement'
+    case Cardano.CertificateType.StakeDelegation:
+      return 'Stake Delegation'
+    case Cardano.CertificateType.MIR:
+      return 'MIR'
+    case Cardano.CertificateType.GenesisKeyDelegation:
+      return 'Genesis Key Delegation'
+    case Cardano.CertificateType.Registration:
+      return 'Registration'
+    case Cardano.CertificateType.Unregistration:
+      return 'Unregistration'
+    case Cardano.CertificateType.VoteDelegation:
+      return 'Vote Delegation'
+    case Cardano.CertificateType.StakeVoteDelegation:
+      return 'Stake Vote Delegation'
+    case Cardano.CertificateType.StakeRegistrationDelegation:
+      return 'Stake Registration Delegation'
+    case Cardano.CertificateType.VoteRegistrationDelegation:
+      return 'Vote Registration Delegation'
+    case Cardano.CertificateType.StakeVoteRegistrationDelegation:
+      return 'Stake Vote Registration Delegation'
+    case Cardano.CertificateType.AuthorizeCommitteeHot:
+      return 'Authorize Committee Hot'
+    case Cardano.CertificateType.ResignCommitteeCold:
+      return 'Resign Committee Cold'
+    case Cardano.CertificateType.RegisterDelegateRepresentative:
+      return 'Register Delegate Representative'
+    case Cardano.CertificateType.UnregisterDelegateRepresentative:
+      return 'Unregister Delegate Representative'
+    case Cardano.CertificateType.UpdateDelegateRepresentative:
+      return 'Update Delegate Representative'
+    default:
+      return 'N/A'
+  }
+}
+
+const expand = () => {
+  isExpanded.value = true
+}
+const shrink = () => {
+  isExpanded.value = false
+}
 </script>
 <style scoped>
 .transaction-info{
@@ -564,6 +967,13 @@ export default defineComponent({
     &::before {
       content: '- ';
     }
+  }
+}
+</style>
+<style scoped lang="scss">
+tbody {
+  tr:hover {
+    background-color: transparent !important;
   }
 }
 </style>

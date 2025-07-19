@@ -2,7 +2,7 @@
   <v-card flat class="transparent">
     <v-card-text class="pa-0">
       <v-row no-gutters>
-        <v-col :cols="collections?.length > 0 ? 6 : 12" class="selectors-container px-2" :style="collections?.length > 0 ? {} : {alignItems: 'center'}">
+        <v-col :cols="collectiblesCount > 0 ? 6 : 12" class="selectors-container px-2" :style="collectiblesCount > 0 ? {} : {alignItems: 'center'}">
           <v-card flat outlined class="pa-2 fill-height transparent" style="height: 487px; overflow: auto; max-width: 350px;" >
             <TokenSelector
               v-for="(token, index) in tokenModel"
@@ -26,7 +26,7 @@
             </v-card-actions>
           </v-card>
         </v-col>
-        <v-col cols="6" class="collectibles px-2" v-if="collections?.length > 0">
+        <v-col cols="6" class="collectibles px-2" v-if="collectiblesCount> 0">
           <v-card flat outlined>
             <v-card-title class="justify-center">Choose Collectibles</v-card-title>
             <v-card-subtitle class="pb-0">
@@ -114,177 +114,180 @@
     </v-card-text>
   </v-card>
 </template>
-<script>
-import {mapState} from "pinia";
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { toRefs, computed, watch, onMounted } from "vue";
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import networks from '@/utils/networks';
+import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
 
-export default {
-  components: { TokenSelector },
-  props: {
-    value: {
-      type: Object
-    },
-    tokens: {
-      type: Array
-    }
-  },
-  name: "AssetsToSendStep",
-  computed: {
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'pinnedTokens', 'price']),
-    missingTokens() {
-      const existingTokens = this.selectedTokens.map(token => token?.ticker)
-      return this.tokens.filter(token => !existingTokens.includes(token.ticker))
-    },
-    tokenModel: {
-      get() {
-        // Use the parent's value as the source of truth.
-        return this.value?.selectedTokens || [];
-      },
-      set(newTokens) {
-        // Emit an update only if the new tokens differ from the current ones.
-        // (Optionally, you can add a deep comparison check here.)
-        this.$emit('input', {
-          ...this.value,
-          selectedTokens: newTokens,
-          selectedCollectibles: this.selectedCollectibles,
-        });
-      },
-    },
-    collections() {
-      let collections = structuredClone(this.resolvedCollections)
-      if (this.search) {
-        collections = collections.map(collection => {
-          return {
-            ...collection,
-            items: collection.items.filter(item => item.name.toLowerCase().includes(this.search.toLowerCase()))
+interface Props {
+  value: any;
+  tokens: any[];
+}
 
-          }
-        }).filter(collection => collection.items.length > 0)
-      }
-      if (collections) {
-        return collections.map(collection => {
-          collection.items.map(item => {
-            if (item['toSendQuantity'] === undefined) {
-              item['toSendQuantity'] = 1
-            }
-            return item
-          })
-          return collection
-        })
-      }
-      return collections
-    }
+const props = defineProps<Props>();
+const emit = defineEmits(['input', 'setMax']);
+
+const { loggedWallet, collections: resolvedCollections } = toRefs(walletStore)
+const { price } = toRefs(networkStore)
+
+const selectedCollectibles = ref<any[]>([]);
+const search = ref<string>('');
+const selectedTokens = ref<any[]>([]);
+
+const missingTokens = computed(() => {
+  const existingTokens = selectedTokens.value.map(token => token?.ticker)
+  return props.tokens.filter(token => !existingTokens.includes(token.ticker))
+});
+
+const tokenModel = computed({
+  get() {
+    return props.value?.selectedTokens || [];
   },
-  watch: {
-    value: {
-      handler(newVal, oldVal) {
-        if (newVal !== oldVal) {
-          this.selectedTokens = newVal.selectedTokens
+  set(newTokens) {
+    emit('input', {
+      ...props.value,
+      selectedTokens: newTokens,
+      selectedCollectibles: selectedCollectibles.value,
+    });
+  }
+});
+
+const collectiblesCount = computed(() => {
+  let count: number = 0;
+  let collections = Object.values(resolvedCollections.value)
+  collections.forEach(collection => {
+    count += collection.items.length;
+  })
+  return count;
+})
+
+const collections = computed(() => {
+  let collections = Object.values(resolvedCollections.value)
+  if (search.value) {
+    collections = collections.map(collection => {
+      return {
+        ...collection,
+        items: collection.items.filter(item => item.name.toLowerCase().includes(search.value.toLowerCase()))
+      }
+    }).filter(collection => collection.items.length > 0)
+  }
+  if (collections) {
+    return collections.map(collection => {
+      collection.items.map(item => {
+        if (item['toSendQuantity'] === undefined) {
+          item['toSendQuantity'] = 1
         }
-      },
-      deep: true
-    },
-    selectedTokens: {
-      handler(newVal) {
-        this.$emit('input', {
-          ...this.value,
-          selectedTokens: newVal,
-          selectedCollectibles: this.selectedCollectibles,
-        })
-      },
-      deep: true,
-    },
-    selectedCollectibles: {
-      handler(newVal) {
-        newVal.forEach(collectible => {
-          if (collectible.toSendQuantity > collectible.quantity) {
-            collectible.toSendQuantity = collectible.quantity
-          } else if (collectible.toSendQuantity < 1) {
-            collectible.toSendQuantity = 1
-          }
-        })
-        console.log(newVal)
-        this.$emit('input', {
-          ...this.value,
-          selectedTokens: this.selectedTokens,
-          selectedCollectibles: newVal,
-        })
-      },
-      deep: true,
-    },
-  },
-  methods: {
-    getAvailableTokens(currentIndex) {
-      const currentSelected = this.tokenModel[currentIndex];
-      // Collect tickers that have been selected in other selectors
-      const selectedTickers = this.tokenModel
-        .filter((token, index) => index !== currentIndex && token)
-        .map(token => token.ticker);
+        return item
+      })
+      return collection
+    })
+  }
+  return collections
+})
 
-      return this.tokens.filter(token => {
-        // Always include the token already selected in the current selector.
-        if (currentSelected && token.ticker === currentSelected.ticker) {
-          return true;
-        }
-        // Otherwise, include tokens not selected elsewhere.
-        return !selectedTickers.includes(token.ticker);
-      });
-    },
-    getPrice(token) {
-      if (!token) return '';
-      let price = this.price.lastPrice
-      const nativeTicker = networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)
-      if (token.ticker !== nativeTicker) {
-        price = token.last_price;
-      }
-      return (Number(token.quantity) * price).toLocaleString('en-US');
-    },
-    decreaseQuantityToSend(item) {
-      if (item.toSendQuantity > 1) {
-        item.toSendQuantity--
-      }
-    },
-    increaseQuantityToSend(item) {
-      console.log('test')
-      if (item.toSendQuantity < item.quantity) {
-        item.toSendQuantity++
-      }
-    },
-    removeTokenSelector(index) {
-      const updatedTokens = [...this.tokenModel];
-      updatedTokens.splice(index, 1);
-      this.tokenModel = updatedTokens;
-    },
-    addToken() {
-      const existingTickers = this.tokenModel.map(token => token?.ticker);
-      const missing = this.tokens.filter(token => !existingTickers.includes(token.ticker));
-      if (missing.length > 0) {
-        this.tokenModel = [...this.tokenModel, missing[0]];
-      }
-    },
-    setMax(index) {
-      this.$emit('setMax', index)
+watch(props.value, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    selectedTokens.value = newVal.selectedTokens
+  }
+}, {
+  deep: true
+})
+
+function getAvailableTokens(currentIndex) {
+  const currentSelected = tokenModel.value[currentIndex];
+  // Collect tickers that have been selected in other selectors
+  const selectedTickers = tokenModel.value
+    .filter((token, index) => index !== currentIndex && token)
+    .map(token => token.ticker);
+
+  return props.tokens.filter(token => {
+    // Always include the token already selected in the current selector.
+    if (currentSelected && token.ticker === currentSelected.ticker) {
+      return true;
     }
-  },
-  data() {
-    return {
-      selectedCollectibles: [],
-      search: '',
-      selectedTokens: []
-    };
-  },
-  mounted() {
-    const currencyTicker = networks.resolveCurrencyTicker(appWallet?.chain, appWallet?.network)
-    console.log(this.tokens)
-    const foundAsset = this.tokens.find(token => token.ticker === currencyTicker)
-    if (foundAsset) {
-      foundAsset.verified = true
-      this.selectedTokens = [foundAsset]
+    // Otherwise, include tokens not selected elsewhere.
+    return !selectedTickers.includes(token.ticker);
+  });
+}
+
+function getPrice(token) {
+  if (!token) return '';
+  let prce = price.value.lastPrice
+  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+  if (token.ticker !== nativeTicker) {
+    prce = token.last_price;
+  }
+  return (Number(token.quantity) * prce).toLocaleString('en-US');
+}
+
+function decreaseQuantityToSend(item) {
+  if (item.toSendQuantity > 1) {
+    item.toSendQuantity--
+  }
+}
+
+function increaseQuantityToSend(item) {
+  if (item.toSendQuantity < item.quantity) {
+    item.toSendQuantity++
+  }
+}
+
+function removeTokenSelector(index) {
+  const updatedTokens = [...tokenModel.value];
+  updatedTokens.splice(index, 1);
+  tokenModel.value = updatedTokens;
+}
+
+function addToken() {
+  const existingTickers = tokenModel.value.map(token => token?.ticker);
+  const missing = props.tokens.filter(token => !existingTickers.includes(token.ticker));
+  if (missing.length > 0) {
+    tokenModel.value = [...tokenModel.value, missing[0]];
+  }
+}
+
+function setMax(index) {
+  emit('setMax', index)
+}
+
+watch(selectedTokens, (newVal, _oldVal) => {
+  emit('input', {
+    ...props.value,
+    selectedTokens: newVal,
+    selectedCollectibles: selectedCollectibles.value,
+  })
+}, {
+  deep: true
+})
+
+watch(selectedCollectibles, (newVal, _oldVal) => {
+  newVal.forEach(collectible => {
+    if (collectible.toSendQuantity > collectible.quantity) {
+      collectible.toSendQuantity = collectible.quantity
+    } else if (collectible.toSendQuantity < 1) {
+      collectible.toSendQuantity = 1
     }
-  },
-};
+  })
+  console.log(newVal)
+  emit('input', {
+    ...props.value,
+    selectedCollectibles: newVal,
+  })
+}, {
+  deep: true
+})
+
+onMounted(() => {
+  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+  console.log(props.tokens)
+  const foundAsset = props.tokens.find(token => token.ticker === currencyTicker)
+  if (foundAsset) {
+    foundAsset.verified = true
+    selectedTokens.value = [foundAsset]
+  }
+})
 </script>
 
 <style scoped>

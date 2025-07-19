@@ -48,7 +48,7 @@ import {
   Headers,
   HeaderMap,
   Label,
-  ProtectedHeaderMap, KeyType, COSEKey, COSESign1,
+  ProtectedHeaderMap, KeyType, COSEKey, COSESign1, Int, CurveType,
 } from '@emurgo/cardano-message-signing-browser';
 
 import {
@@ -59,7 +59,9 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
 import cbor from 'cbor';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
+import { Cardano, util } from '@cardano-sdk/core';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -70,8 +72,7 @@ const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
 export function toUTxO(utxo): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
     TransactionInput.new(TransactionHash.from_hex(utxo.tx_hash), utxo.tx_index),
-    TransactionOutput.new(Address.from_bech32(utxo.payment_addr.bech32), toValue(utxo.asset_list, utxo.value)
-    )
+    TransactionOutput.new(Address.from_bech32(utxo.payment_addr.bech32), toValue(utxo.asset_list, utxo.value))
   );
 }
 
@@ -88,6 +89,32 @@ export function toValue(assets, lovelace) {
   });
   const value = Value.new(BigNum.from_str(lovelace));
   if (assets.length > 0 || !lovelace) value.set_multiasset(multiAsset);
+  return value;
+}
+
+export function toUTxO2(utxo: Cardano.Utxo): TransactionUnspentOutput {
+  return TransactionUnspentOutput.new(
+    TransactionInput.new(TransactionHash.from_hex(utxo[0].txId), utxo[0].index),
+    TransactionOutput.new(Address.from_bech32(utxo[1].address), toValue2(utxo[1].value.coins, utxo[1].value.assets))
+  );
+}
+
+export function toValue2(lovelace: Cardano.Lovelace, assets?: Cardano.TokenMap): Value {
+  const value: Value = Value.new(BigNum.from_str(lovelace.toString()));
+  if (assets) {
+    const multiAsset: MultiAsset = MultiAsset.new();
+    const policies: any[] = [...new Set(Object.keys(assets).map((assetId: string) => Cardano.AssetId.getPolicyId(assetId)))];
+    policies.forEach((policy) => {
+      const policyAssets = Object.entries(assets).filter(mapEntry =>
+        Cardano.AssetId.getPolicyId(mapEntry[0]) === policy);
+      const assetsValue: Assets = Assets.new();
+      policyAssets.forEach((asset) => {
+        assetsValue.insert(AssetName.new(util.hexToBytes(Cardano.AssetId.getAssetName(asset[0]))), BigNum.from_str(asset[1]));
+      });
+      multiAsset.insert(ScriptHash.from_bytes(util.hexToBytes(policy)), assetsValue);
+    });
+    value.set_multiasset(multiAsset);
+  }
   return value;
 }
 
@@ -183,31 +210,44 @@ export function hdPathToArray(path: string): number[] {
     }
   });
 }
+export const CoseLabel = {
+  address: Label.new_text('address'),
+  crv: Label.new_int(Int.new_i32(-1)),
+  x: Label.new_int(Int.new_i32(-2))
+};
 
-export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
-  const free: any[] = [];
+const createSigStructureHeaders = (addressBytes: Uint8Array) => {
   const protectedHeaders = HeaderMap.new();
-  free.push(protectedHeaders);
-  const labelAlgoid = Label.from_algorithm_id(AlgorithmId.EdDSA);
-  free.push(labelAlgoid);
-  const labelAddress = Label.new_text("address");
-  free.push(labelAddress);
-  const valueAddress = CBORValue.new_bytes(addressBytes);
-  free.push(valueAddress);
-  protectedHeaders.set_algorithm_id(labelAlgoid);
-  protectedHeaders.set_header(labelAddress, valueAddress);
-  const protectedSerialized = ProtectedHeaderMap.new(protectedHeaders);
-  free.push(protectedSerialized);
-  const unprotectedHeaders = HeaderMap.new();
-  free.push(unprotectedHeaders);
-  const headers = Headers.new(protectedSerialized, unprotectedHeaders);
-  free.push(headers);
-  const builder2 = COSESign1Builder.new(headers, toHexBuffer(payload2), false);
-  if (hashed) {
-    builder2.hash_payload();
-  }
-  freeCSLObjects(free);
-  return builder2;
+  protectedHeaders.set_key_id(addressBytes);
+  protectedHeaders.set_header(CoseLabel.address, CBORValue.new_bytes(addressBytes));
+  protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+  return protectedHeaders;
+};
+
+export const createSignDataBuilder = (addressBytes: Uint8Array, payload: string) => {
+  return COSESign1Builder.new(
+    Headers.new(ProtectedHeaderMap.new(createSigStructureHeaders(addressBytes)), HeaderMap.new()),
+    Buffer.from(payload, 'hex'),
+    false
+  );
+};
+
+export const createCoseKey = (addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex) => {
+  const coseKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
+  coseKey.set_key_id(addressBytes);
+  coseKey.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+  coseKey.set_header(CoseLabel.crv, CBORValue.from_label(Label.from_curve_type(CurveType.Ed25519)));
+  coseKey.set_header(CoseLabel.x, CBORValue.new_bytes(Buffer.from(publicKey, 'hex')));
+  return coseKey;
+};
+
+export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
+  const signedData = accountKey ? accountKey.sign(HexBlob.fromBytes(signingData)).bytes() : signingData;
+  const coseSign1 = builder.build(signedData);
+  const signatureHex = toHexString(coseSign1.to_bytes());
+  safeFreeCSLObject(builder);
+  safeFreeCSLObject(coseSign1);
+  return signatureHex;
 };
 
 export const createCOSEKeyHex = (pubKeyBytes) => {

@@ -1,12 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <base target="_blank">
-  <title>Sidepanel</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Quicksand:wght@300;400;500;600;700&family=Geologica:wght@100;300;400;500;700;900&family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@100;300;400;500;700;900&display=swap" rel="stylesheet">
 </head>
-<body style="min-width: 100px">
-  <div id="app"></div>
-  <script type="module" src="./main.ts"></script>
+<body>
+<div id="app"></div>
+<script type="module" src="./main.ts"></script>
+<!-- built files will be auto injected -->
 </body>
+<style>
+  html {
+    overflow-y: auto;
+  }
+  .v-application {
+    font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;
+  }
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  .geroButton {
+    text-transform: none;
+    background: linear-gradient(45deg, #00c7f3, #00ffd1)!important;
+    color: black!important;
+    &:disabled {
+      filter: brightness(0.5);
+      color: black!important;
+    }
+  }
+
+  .apexButton {
+    text-transform: none;
+    background: linear-gradient(45deg, #F8A282, #FECB82)!important;
+    color: black!important;
+    &:disabled {
+      filter: brightness(0.5);
+      color: black!important;
+    }
+  }
+
+  /* Track */
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Handle */
+  ::-webkit-scrollbar-thumb {
+    background: #383838;
+    border-radius: 30px;
+  }
+
+  /* Handle on hover */
+  ::-webkit-scrollbar-thumb:hover {
+    background: #f8f9fa;
+  }
+
+  .container {
+    width: 100%;
+    padding: 12px;
+    margin-right: auto;
+    margin-left: auto;
+  }
+  @media (min-width: 960px) {
+    .container {
+      max-width: 100%;
+    }
+  }
+  @media (min-width: 1785px) {
+    .container {
+      max-width: 100%;
+    }
+  }
+  @media (min-width: 1785px) {
+    .container {
+      max-width: 1785px;
+    }
+  }
+  #cashbacktermsexclusions {
+    display: none!important;
+  }
+  .settingsOverlay .v-overlay__content {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .hardwareOverlay .v-overlay__content {
+    display: flex;
+    flex-flow: column;
+    justify-content: space-between;
+    flex: 0 1 auto;
+    height: -webkit-fill-available;
+    padding: 36px;
+    width: 100%;
+  }
+  .no-opacity.v-btn--plain:not(.v-btn--active):not(.v-btn--loading):not(:focus):not(:hover) .v-btn__content {
+    opacity: 1;
+  }
+  .cashback-search.v-text-field--solo > .v-input__control > .v-input__slot {
+    background: #0f0f0f;
+  }
+  .text-transparent {
+    display: none;
+  }
+  .v-application--is-ltr .v-textarea.v-text-field--enclosed.metadataTextArea .v-text-field__slot textarea {
+    margin-top: 0;
+    line-height: 1;
+  }
+
+  .gradient-text {
+    background: linear-gradient(to right, #00c7f3, #00fad5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .apex-gradient-text {
+    background: linear-gradient(to right, #F8A282, #FECB82);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+</style>
 </html>
+

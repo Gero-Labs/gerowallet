@@ -20,36 +20,29 @@ import {
 import { Api } from '@/api/api';
 import networks from '@/utils/networks';
 import {
-  Blockchain,
   ChainDerivations,
   CoinTypes,
   ERROR,
   purpose,
-  Tip,
   WalletType,
   WalletTypePurpose,
 } from '@/models/types';
 import db from '@/db';
-import { chunkArray } from 'array-chunk-by-size';
 import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/chrome/config';
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 // import trezor from '@/shared/utils/trezor';
-import loading from '@/plugins/loading';
-import { appWallet, useStore } from '@/stores';
+import { appWallet } from '@/stores';
 import {
-  addVkeys,
+  addVkeys, buildAndSignData, createCoseKey,
   createCOSEKeyHex,
   createSignDataBuilder, getOwnedCred, hdPathToArray,
-  safeFreeCSLObject,
   toHexArray,
-  toHexString,
 } from '@/shared/utils/converter';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization, util } from '@cardano-sdk/core';
 import {
   addrToSignWith,
-  convertToTxSchema,
   getAddress,
   getCip129DrepId,
   getDrepKey,
@@ -57,16 +50,17 @@ import {
   getRewardAddress,
   getStakeKey, toPaymentCredential,
 } from '@/chrome/serialization';
-import { Ed25519PublicKey, Hash28ByteBase16, Bip32PrivateKey, Ed25519PrivateKey } from '@cardano-sdk/crypto';
+import { Ed25519PublicKey, Bip32PrivateKey, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
 import zkFoldApi from '@/api/zk-fold.api';
-import { HexBlob } from '@cardano-sdk/util';
+import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
+import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
+import { convertToTxSchema } from '@/chrome/helper';
 
 export class Wallet {
   db: Dexie;
-  api: Api;
-  private syncLock: Promise<void> | null = null; // Lock for the sync function
+  api: Api;// Lock for the sync function
 
   id: any;
   name: any;
@@ -254,54 +248,20 @@ export class Wallet {
     return getCip129DrepId(this.publicKey);
   }
 
-  paymentKeyHash(address: string): Hash28ByteBase16 {
-    const keyAddress: Cardano.Address = Cardano.Address.fromBech32(address);
-    try {
-      return Cardano.BaseAddress.fromAddress(keyAddress).getPaymentCredential().hash;
-    } catch (e) {
-      // I want application to not crush, but don't care about the message
-    }
-    try {
-      return Cardano.EnterpriseAddress.fromAddress(keyAddress).getPaymentCredential().hash
-    } catch (e) {
-      // I want application to not crush, but don't care about the message
-    }
-    try {
-      return Cardano.PointerAddress.fromAddress(keyAddress).getPaymentCredential().hash
-    } catch (e) {
-      // I want application to not crush, but don't care about the message
-    }
-    try {
-      return Cardano.RewardAddress.fromAddress(keyAddress).getPaymentCredential().hash
-    } catch (e) {
-      // I want application to not crush, but don't care about the message
-    }
-    return undefined;
-  }
-
   async signData(address: Cardano.PaymentAddress | Cardano.RewardAccount | string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
     let signatureHex: string, keyHex: string;
     const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
-    const buildAndSignData = (builder: any, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
-      const signedData = accountKey ? accountKey.sign(HexBlob.fromBytes(signingData)).bytes() : signingData;
-      const coseSign1 = builder.build(signedData);
-      const signatureHex = toHexString(coseSign1.to_bytes());
-      safeFreeCSLObject(builder);
-      safeFreeCSLObject(coseSign1);
-      return signatureHex;
-    };
 
     if (this.type === WalletType.Ledger) {
       const response: SignedMessageData = await ledger.signData(
         addr, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb,
       );
-
-      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload, payload.length > 99);
+      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
       signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
       keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
-
     } else {
       console.log('Signing with Software Wallet...');
+      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes())
       const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
       const keyHash: string = credential.hash;
       let accountKey: Ed25519PrivateKey
@@ -315,11 +275,12 @@ export class Wallet {
       } else {
         throw DataSignError.ProofGeneration;
       }
-
-      const builder = createSignDataBuilder(toHexArray(address), payload, false);
+      const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
       const toSign = builder.make_data_to_sign().to_bytes();
       signatureHex = buildAndSignData(builder, toSign, accountKey);
-      keyHex = createCOSEKeyHex(accountKey.toPublic().bytes());
+      const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
+      keyHex = util.bytesToHex(coseKey.to_bytes())
+      console.log(verifyDataSignature(signatureHex, keyHex, Buffer.from(payload, "hex").toString("utf8"), addr));
     }
 
     return { signature: signatureHex, key: keyHex };
@@ -564,326 +525,6 @@ export class Wallet {
     }
   }
 
-  async getLastSyncInfo() {
-    return this.db
-      .open()
-      .then(async db => {
-        const syncTable = db.table('sync');
-        if (!syncTable) throw new Error('No Sync table.');
-        const rows = await syncTable.toArray();
-        if (rows.length > 0) {
-          return rows[0];
-        } else {
-          return null;
-        }
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
-  async getAccountInfo(): Promise<any> {
-    return this.db
-      .open()
-      .then(async db => {
-        const accountTable = db.table('account');
-        if (!accountTable) throw new Error('No Account table.');
-        return accountTable.where({ walletId: this.id }).first();
-      })
-      .catch(err => {
-        console.debug(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
-  async setLastSyncInfo(tip: Tip): Promise<void> {
-    await this.db
-      .open()
-      .then(db => {
-        const syncTable = db.table('sync');
-        if (!syncTable) throw new Error('No Sync table.');
-        return syncTable.put({ id: 1, ...tip });
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
-  async setAccountInfo(accountInfo): Promise<any> {
-    const resAccount = await this.getAccountInfo();
-    const acc = {
-      walletId: this.id,
-      ...accountInfo,
-    };
-    const accountInfoId = await this.db
-      .open()
-      .then(db => {
-        const accountTable = db.table('account');
-        if (accountTable) {
-          if (resAccount) {
-            acc.id = resAccount.id;
-          }
-          return accountTable.put(acc);
-        }
-        return null;
-      })
-      .catch(err => {
-        console.error(`${err.stack || err}`);
-      });
-    return {
-      id: accountInfoId,
-      ...acc,
-    };
-  }
-
-  async startSync() {
-    console.log('startSync');
-    useStore().clearSyncIntervals()
-    // Chain Tip
-    try {
-      await appWallet.sync()
-    } catch (err) {
-      console.log(err)
-    }
-    if (!useStore().intervals.syncIntervalId) {
-      useStore().intervals.syncIntervalId = setInterval(async () => {
-        try {
-          await appWallet.sync()
-        } catch (err) {
-          console.log(err)
-        }
-      }, 20000)
-    }
-
-    // Ticker Price
-    try {
-      useStore().setPrice(await appWallet.fetchTickerStatistics())
-    } catch (err) {
-      console.log(err)
-    }
-    if (!useStore().intervals.tickerStatisticsIntervalId) {
-      useStore().intervals.tickerStatisticsIntervalId = setInterval(async () => {
-        try {
-          useStore().setPrice(await appWallet.fetchTickerStatistics())
-        } catch (err) {
-          console.log(err)
-        }
-      }, 20000)
-    }
-
-    // Fiat Rates
-    try {
-      useStore().setFiatRates(await appWallet.fetchFiatRates())
-    } catch (err) {
-      console.log(err)
-    }
-    if (!useStore().intervals.fiatRatesIntervalId) {
-      useStore().intervals.fiatRatesIntervalId = setInterval(async () => {
-        try {
-          useStore().setFiatRates(await appWallet.fetchFiatRates())
-        } catch (err) {
-          console.log(err)
-        }
-      }, 14400000);
-    }
-  }
-
-  endSync() {
-    clearInterval(useStore().intervals.syncIntervalId)
-    clearInterval(useStore().intervals.fiatRatesIntervalId)
-    clearInterval(useStore().intervals.tickerStatisticsIntervalId)
-  }
-
-  async sync(): Promise<void> {
-    if (this.syncLock) {
-      // If sync is already running, wait for it to complete
-      await this.syncLock;
-      return;
-    }
-    this.syncLock = (async () => {
-      try {
-        loading.setSyncing(true);
-        console.log('sync');
-        let tip: Tip = await this.fetchTip();
-        const lastSyncInfo = await this.getLastSyncInfo();
-        if (!lastSyncInfo) {
-          // loading.setText('Restoring Wallet Data. Please Wait ...')
-          loading.setRestoring(true);
-          await this.restore(tip);
-          loading.setRestoring(false);
-        } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
-          const promises = [];
-          if (!this.isEnterpriseAddress()) {
-            promises.push(this.syncTable(1)); // Sync Staking Pools
-            promises.push(this.syncTable(2)); // Sync DReps
-          }
-          // promises.push(this.syncProtocolParams(tip.epoch));
-          const prevAccountInfo = await this.getAccountInfo();
-          const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
-          const baseAddress: Cardano.Address = this.baseAddress()
-          const isEnterpriseAddress: boolean = baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
-          let address: string;
-          if (isEnterpriseAddress) {
-            address = baseAddress.toBech32();
-          } else {
-            address = this.stakeAddress().toBech32();
-          }
-          const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
-          const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
-          const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
-          await this.setSync(await this.api.sync(from, tip, address, rewards_sum, controlled_amount, withdrawable_amount));
-        }
-      } catch (err) {
-        console.log(err);
-      } finally {
-        // Release the lock after execution
-        this.syncLock = null;
-        loading.setSyncing(false); // Ensure to reset syncing state after execution
-      }
-    })();
-    // Wait for the locked sync operation to complete
-    await this.syncLock;
-  }
-
-  async restore(tip: Tip): Promise<void> {
-    const prevAccountInfo = await this.getAccountInfo();
-
-    // Create an array to hold the promises that need to be awaited
-    const promises = [];
-    if (!this.isEnterpriseAddress()) {
-      // Sync staking pools
-      promises.push(this.syncTable(1));
-
-      // Sync DReps
-      promises.push(this.syncTable(2));
-    }
-
-    // Sync account info and handle rewards and transactions
-    promises.push(this.syncAccountInfo().then(async accountInfo => {
-      if (accountInfo) {
-        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-          await this.syncAccountRewards();
-        }
-        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
-          const txs = await this.syncAccountTransactions(0);
-          if (txs) {
-            const units: Set<string> = new Set();
-            txs.forEach(tx => {
-              tx.inputs.forEach(input => {
-                if (input.asset_list) {
-                  input.asset_list.forEach(asset => {
-                    units.add(asset.policy_id + asset.asset_name);
-                  });
-                }
-              });
-              tx.outputs.forEach(output => {
-                if (output.asset_list) {
-                  output.asset_list.forEach(asset => {
-                    units.add(asset.policy_id + asset.asset_name);
-                  });
-                }
-              });
-            });
-            await this.syncAssets(Array.from(units), false);
-          }
-        }
-      }
-      return [];
-    }));
-
-    // Wait for all promises to complete
-    await Promise.all(promises);
-
-    // Set the last sync info once everything is done
-    await this.setLastSyncInfo(tip);
-  }
-
-  async resync() {
-    await this.db
-      .open()
-      .then(db => {
-        const syncTable = db.table('sync');
-        syncTable.clear();
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-    await this.db
-      .open()
-      .then(db => {
-        const syncTable = db.table('account');
-        syncTable.clear();
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-    await appWallet.sync();
-  }
-
-  async setSync(syncObject) {
-    console.log('setSync', syncObject);
-    if (syncObject && syncObject.success) {
-      const promises = [];
-      if (syncObject.account) {
-        promises.push(this.setAccountInfo(syncObject.account));
-      }
-      if (syncObject.assets) {
-        promises.push(this.setAssets2(syncObject.assets));
-      }
-      if (syncObject.rewards) {
-        promises.push(this.setAccountRewards(syncObject.rewards));
-      }
-      if (syncObject.transactions) {
-        promises.push(this.setAccountTransactions(syncObject.transactions));
-      }
-      if (syncObject.block) {
-        promises.push(this.setLastSyncInfo(syncObject.block));
-      }
-      if (promises.length > 0) {
-        await Promise.all(promises);
-      }
-    }
-    loading.setSyncing(false);
-  }
-
-  async syncAssets(units: string[], _force?: boolean): Promise<void> {
-    const blockchainDB: Dexie = await this.getBlockchainDb();
-    await this.setAssets(units, blockchainDB);
-  }
-
-  async setAssets(units: string[], blockchainDB: Dexie) {
-    const promises: any[] = [];
-    const smallerArrays = chunkArray({ input: units, bytesSize: 4000 });
-    smallerArrays.forEach(smallerArray => {
-      promises.push(this.getAssetsInfo(smallerArray, blockchainDB));
-    });
-    (await Promise.all(promises)).flat();
-  }
-
-  async setAssets2(assets): Promise<void> {
-    console.log('setAssets');
-    const blockchainDB: Dexie = await this.getBlockchainDb();
-    const assetsTable = blockchainDB.table('assets');
-    if (assetsTable) {
-      assetsTable.bulkPut(assets);
-    }
-  }
-
-  private async getAssetsInfo(units: string[], blockchainDB: Dexie) {
-    if (!units || units.length == 0) {
-      return;
-    }
-    try {
-      const assetsTable = blockchainDB.table('assets');
-      const res = await this.api.getAssetsInfo(units);
-      if (res) {
-        assetsTable.bulkPut(res);
-        return res;
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
   public async getDetailedAssetsInfo(policyId: string, assetName: string) {
     try {
       // const blockchainDB: Dexie = await this.getBlockchainDb();
@@ -901,237 +542,8 @@ export class Wallet {
     return null;
   }
 
-  private async getStakingPools() {
-    try {
-      const res = await this.api.getAllPools();
-      if (res) {
-        return res;
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
-  private async getDReps() {
-    try {
-      const res = await this.api.getAllDReps();
-      if (res) {
-        return res;
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
-  async syncTable(tableId): Promise<void> { //pools - 1, dreps - 2
-    if (this.chain == Blockchain.CARDANO || this.chain == Blockchain.APEX_PRIME) {
-      const blockchainDB: Dexie = await this.getBlockchainDb();
-      const syncTable = blockchainDB.table('sync');
-      const lastSyncArray = await syncTable.toArray();
-      const currentTime = new Date();
-      const sync = lastSyncArray?.find(element => element.id == tableId)
-      if (!sync) {
-        await this.setSyncTable(blockchainDB, syncTable, tableId);
-      } else {
-        const lastSyncTime = new Date(sync.time);
-        const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceLastSync >= 4) {
-          await this.setSyncTable(blockchainDB, syncTable, tableId);
-        }
-      }
-    }
-  }
-
-  async setSyncTable(blockchainDB: Dexie, syncTable, tableId: number) {
-    let res
-    let table
-    if (tableId == 1) {
-      res = await this.getStakingPools();
-      table = 'pools'
-    } else if (tableId == 2) {
-      res = await this.getDReps();
-      table = 'dreps'
-    }
-    blockchainDB.table(table).bulkPut(res);
-    syncTable.put({ id: tableId, time: new Date().getTime() });
-  }
-
-  async fetchTip(): Promise<Tip> {
-    try {
-      const tip = await this.api.getTip();
-      useStore().setConnected(true)
-      return tip
-    } catch (e) {
-      useStore().setConnected(false)
-      throw e
-    }
-  }
-
-  async fetchTickerStatistics(): Promise<any> {
-    return await this.api.fetchTickerStatistics();
-  }
-
-  async fetchFiatRates(): Promise<any> {
-    return await this.api.fetchFiatRates();
-  }
-
-  async syncAccountInfo(): Promise<any> {
-    try {
-      let res;
-      if (this.isEnterpriseAddress()) {
-        res = await this.api.getAccountInfo(this.baseAddress().toBech32());
-      } else {
-        res = await this.api.getAccountInfo(this.stakeAddress().toBech32());
-      }
-      if (res) {
-        return await this.setAccountInfo(res);
-      }
-    } catch (e) {
-      // console.log(e);
-    }
-  }
-
-  async syncAddresses(knownAddresses: string[]): Promise<Set<string>> {
-    const resolvedAddressesSet: Set<string> = new Set();
-    try {
-      const db = await this.db.open();
-      const addressesTable = db.table('addresses');
-      if (!addressesTable) {
-        throw new Error('No Addresses table.');
-      }
-
-      // Resolve the addresses using your helper function.
-      const resolvedAddresses = this.resolvePathsForMissingAddresses(knownAddresses);
-
-      // If we found any resolved addresses, bulk insert them.
-      if (resolvedAddresses?.length > 0) {
-        await addressesTable.bulkPut(resolvedAddresses);
-      }
-
-      // Return the resolved addresses.
-      resolvedAddresses.forEach(address => {
-        resolvedAddressesSet.add(address.address);
-      })
-      return resolvedAddressesSet;
-    } catch (err) {
-      console.error(`Failed to open database: ${err}`);
-      return resolvedAddressesSet;
-    }
-  }
-
-  resolvePathsForMissingAddresses(usedAddresses: string[]) {
-    const resolvedAddresses = [];
-    let addressIndex: number = 0;       // Start from the first address index
-    let consecutiveUnused: number = 0;  // Track consecutive unused addresses
-    const GAP_LIMIT = 20;       // Define the gap limit as 20
-    while (consecutiveUnused < GAP_LIMIT) {
-      const derivedAddress: string = this.deriveAddressFromPath(addressIndex).toBech32();
-      const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).toAddress().toBech32();
-      let found: boolean = false;
-      if (usedAddresses.includes(derivedAddress)) {
-        resolvedAddresses.push({
-          address: derivedAddress,
-          path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
-          cred: this.paymentKeyHash(derivedAddress),
-        });
-        consecutiveUnused = 0;  // Reset unused counter if we find a match
-        found = true;
-      }
-      if (usedAddresses.includes(internalDerivedAddress)) {
-        resolvedAddresses.push({
-          address: internalDerivedAddress,
-          path: `m/${purpose.hdwallet}'/1815'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
-          cred: this.paymentKeyHash(internalDerivedAddress)
-        });
-        consecutiveUnused = 0;  // Reset unused counter if we find a match
-        found = true;
-      }
-      if (!found) {
-        consecutiveUnused++;  // Increment unused address counter if no match is found
-      }
-      // If we've resolved all missing addresses, we can break early
-      if (usedAddresses.length === resolvedAddresses.length) {
-        break;
-      }
-      addressIndex++;  // Move to the next address index
-    }
-    return resolvedAddresses;
-  }
-
   deriveAddressFromPath(addressIndex: number): Cardano.Address {
     return getAddress(this.publicKey, this.chain, this.network, addressIndex)
-  }
-
-  deriveInternalAddressFromPath(addressIndex) {
-    return Cardano.BaseAddress.fromCredentials(
-      this.networkId(),
-      {
-        type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16.fromEd25519KeyHashHex(this.pubKeyInternal(addressIndex).hash().hex())
-      },
-      {
-        type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16.fromEd25519KeyHashHex(this.stakeKey().hash().hex())
-      }
-    );
-  }
-
-  async syncAccountRewards(): Promise<void> {
-    try {
-      if (this.isEnterpriseAddress()) {
-        return;
-      }
-      const res = await this.api.getAccountRewards(this.stakeAddress().toBech32());
-      if (res) {
-        await this.setAccountRewards(res);
-      }
-    } catch (e) {
-      // console.log(e);
-    }
-  }
-
-  async setAccountRewards(res): Promise<any[] | void> {
-    return this.db
-      .open()
-      .then(db => {
-        const rew = [];
-        const rewardsTable = db.table('rewards');
-
-        if (!rewardsTable) throw new Error('No Rewards table.');
-
-        res.forEach(reward => {
-          rew.push(rewardsTable.put(reward));
-        });
-
-        return rew;
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
-  }
-
-  async syncAccountTransactions(height: number): Promise<any> {
-    try {
-      let res
-      if (this.isEnterpriseAddress()) {
-        res = await this.api.getAccountTransactions(this.baseAddress().toBech32(), height);
-      } else {
-        res = await this.api.getAccountTransactions(this.stakeAddress().toBech32(), height);
-      }
-      if (res && Array.isArray(res)) {
-        const promises = [];
-        const txHashes: string[] = res.map(tx => tx.tx_hash);
-        const smallerArrays = chunkArray({ input: txHashes, bytesSize: 4000 });
-        smallerArrays.forEach(smallerArray => {
-          promises.push(this.api.getTransactionsInfo(smallerArray));
-        });
-        const txs = (await Promise.all(promises)).flat();
-        await this.setAccountTransactions(txs);
-        return txs;
-      }
-    } catch (e) {
-      console.log(e);
-    }
   }
 
   async setAccountTransactions(txs): Promise<any> {

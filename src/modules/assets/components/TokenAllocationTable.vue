@@ -1,8 +1,8 @@
 <template>
   <v-card outlined class="no-gutters fill-height" :loading="loadingTxs">
     <v-card-title>
-      Token Allocation ({{assets?.length + collectibles?.length}})
-      <v-spacer></v-spacer>
+      Token Allocation
+      <v-spacer />
       <v-menu
         v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"
         v-model="filtersMenu"
@@ -73,7 +73,7 @@
       <v-tabs class="ml-1" @change="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" background-color="transparent">
         <v-tab>
           Assets
-         <span style="color: white">&nbsp;{{ `(${assets ? assets.length : 0})` }}</span>
+         <span style="color: white">&nbsp;{{ `(${tokensList ? tokensList.length : 0})` }}</span>
         </v-tab>
         <v-tab :disabled="collectiblesLength === 0">
           Collectibles
@@ -88,13 +88,14 @@
             dense
             class="transparent"
             :headers="assetsHeaders"
-            :items="assets"
-            :sort-by.sync="assetsSort.by"
-            :sort-desc.sync="assetsSort.desc"
+            :items="tokensList"
+            :sort-by.sync="sortOptions.by"
+            :sort-desc.sync="sortOptions.desc"
             :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :custom-sort="customSort"
             @click:row="handleTokenRowClick"
+            :loading="loadingTokens"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -144,28 +145,26 @@
               <v-tooltip top :open-delay="500">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ item.quantity | toCurrency(false, 2, '', '', true, 0) }}
+                    {{ filters.toCurrency(item.quantity, false, 4, '', '', true, item.metadata?.decimals) }}
                   </span>
                 </template>
-                {{ item.quantity | toCurrency(false, 6, '', '', false, 0) }}
+                {{ filters.toCurrency(item.quantity, false, 6, '', '', false, item.metadata?.decimals) }}
               </v-tooltip>
             </template>
-            <template v-slot:[`item.last_price`]="{ item }">
-              <span v-if="!item.last_price">N/A</span>
+            <template v-slot:[`item.price`]="{ item }">
+              <span v-if="!item.price">N/A</span>
               <span v-else>
                 <v-tooltip top :open-delay="500">
                   <template v-slot:activator="{ on, attrs }">
                     <span v-bind="attrs" v-on="on">
-                      {{ item.last_price | toCurrency(false, 4, '$', '', true, 0) }}
+                      {{ filters.toCurrency(item.price, false, 4, '$', '', true, 0) }}
                     </span>
                   </template>
-                  {{ item.last_price | toCurrency(false, 6, '$', '', false, 0) }}
+                  {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
                 </v-tooltip>
               </span>
-            </template>
-            <template v-slot:[`item.change`]="{ item }">
-              <div style="display: flex" v-if="item.change !== undefined ">
-                <v-avatar tile size="20" class="mr-1">
+              <div style="display: flex; justify-self: center" v-if="item.change !== undefined">
+                <v-avatar tile size="12" class="mr-1" style="align-self: center;">
                   <v-img
                     :src="
                       item.change === 0
@@ -177,22 +176,26 @@
                     alt="trend"
                   ></v-img>
                 </v-avatar>
-                <span :style="item.change === 0 ? {color: '#A3A3A3' } : item.change > 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{
-                  Math.abs(item.change).toFixed(2) + "%"
-                }}</span>
+                <span
+                  :style="{
+                    color: item.change === 0 ? '#A3A3A3' : item.change > 0 ? '#47CD89' : '#F97066',
+                    fontSize: '10px',
+                  }"
+                >
+                  {{ Math.abs(item.change).toFixed(2) + "%" }}
+                </span>
               </div>
-              <span v-else>N/A</span>
             </template>
             <template v-slot:[`item.value`]="{ item }">
-              <span v-if="!item.last_price">N/A</span>
+              <span v-if="!item.price">N/A</span>
               <span v-else>
                  <v-tooltip top :open-delay="500">
                   <template v-slot:activator="{ on, attrs }">
                     <span v-bind="attrs" v-on="on">
-                      {{ item.value | toCurrency(false, 2, '$', '', true, 0) }}
+                      {{ filters.toCurrency(item.value, false, 4, '$', '', true, 0) }}
                     </span>
                   </template>
-                  {{ item.value | toCurrency(false, 6, '$', '', false, 0) }}
+                  {{ filters.toCurrency(item.value, false, 6, '$', '', false, 0) }}
                 </v-tooltip>
               </span>
             </template>
@@ -209,32 +212,26 @@
               <v-tooltip top :open-delay="500" v-if="item.mcap">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ Number(item.mcap) * price.lastPrice | toCurrency(false, 2, '$', '', true, 0) }}
+                    {{ filters.toCurrency(Number(item.mcap), false, 2, '$', '', true, 0) }}
                   </span>
                 </template>
-                {{ Number(item.mcap) * price.lastPrice | toCurrency(false, 4, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 0) }}
+                {{ filters.toCurrency(Number(item.mcap), false, 4, '$', '', false, 0) }}
               </v-tooltip>
               <span v-else>N/A</span>
             </template>
-            <template v-slot:[`item.total_allocation`]="{ item }">
-              <span v-if="!item.last_price && item.name !== networks.resolveCurrencyName(loggedWallet?.chain, loggedWallet?.network)">N/A</span>
+            <template v-slot:[`item.allocation`]="{ item }">
+              <span v-if="!item.allocation">N/A</span>
               <v-progress-linear
                 v-else
                 class="progress-bar"
                 height="14"
-                :value="item.total_allocation"
+                :value="item.allocation / totalAllocation * 100"
                 color="#00dff3"
               >
                 <template v-slot:default="{ value }">
                   <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
                 </template>
               </v-progress-linear>
-            </template>
-            <template v-slot:[`item.last_7_days`]="{ item }">
-              <div v-if="item.name === 'ADA'">
-                <sparkline :width="3"></sparkline>
-              </div>
-              <v-chip v-else outlined x-small color="#F97066">Soon</v-chip>
             </template>
           </v-data-table>
         </v-tab-item>
@@ -330,10 +327,6 @@
 <!--              ></v-progress-linear>-->
 <!--              <span class="table-text">{{ item.allocation }}%</span>-->
             </template>
-            <template v-slot:[`item.last_7_days`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <span>{{ item.last_7_days }}</span>-->
-            </template>
           </v-data-table>
         </v-tab-item>
       </v-tabs-items>
@@ -341,255 +334,301 @@
     <TokensDialog @close="closeDialog" :modalData="dialogData"></TokensDialog>
   </v-card>
 </template>
-<script>
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, computed, toRefs, onMounted, watch } from 'vue';
 import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Blockchain, Network } from '@/models/types';
 import assts from '@/utils/assets'
+import { walletStore } from '@/plugins/walletStore';
+import { loadingState } from '@/plugins/loading';
+import { networkStore } from '@/plugins/networkStore';
+import { xerberusStore } from '@/plugins/xerberusStore';
+import { dexHunterStore } from '@/plugins/dexHunterStore';
+import { realFiStore } from '@/plugins/realFiStore';
+import { get24hChange } from '@/shared/utils/resolver';
+import { setWalletConfiguration } from '@/db/wallet-db';
+import { coinGeckoStore } from '@/plugins/coinGeckoStore';
 
-export default {
-  name: "tokenAllocationTable",
-  components: { TokensDialog, Sparkline },
-  watch: {
-    async hideUnverified(val) {
-      await this.setHideUnverifiedTokens(val)
-    },
-    async hideScam(val) {
-      await this.setHideScamTokens(val)
-    },
-    async hideUnrated(val) {
-      await this.setHideUnratedTokens(val)
-    },
-    assetsSort: {
-      async handler(val) {
-        await this.setTokenAllocationTableSort(val)
-      },
-      deep: true
-    },
-  },
-  methods: {
-    ...mapActions(walletConfigStore, ['setHideScamTokens', 'setHideUnverifiedTokens', 'setHideUnratedTokens', 'setTokenAllocationTableSort']),
-    handleSwitchTab(tab) {
-      this.currentTab = tab;
-    },
-    closeDialog() {
-      this.dialogData = null;
-    },
-    handleOnRowClick(row) {
-      this.dialogData = row;
-    },
-    handleTokenRowClick(row) {
-      console.log(row)
-    },
-    clearFilters() {
-      this.hideUnverified = false
-      this.hideScam = false
-      this.hideUnrated = false
-    },
-    customSort(items, sortBy, sortDesc) {
-      if (!sortBy.length) return items;
+const { price } = toRefs(networkStore);
+const { loggedWallet, config, collections, tokens } = toRefs(walletStore);
+const { loadingTxs } = toRefs(loadingState);
+const { risks } = toRefs(xerberusStore);
+const { dexHunterTokens } = toRefs(dexHunterStore);
+const { tokens: realFiTokens } = toRefs(realFiStore);
+const { cache } = toRefs(coinGeckoStore)
 
-      return items.sort((a, b) => {
-        const sortKey = sortBy[0];
-        const compareA = a[sortKey];
-        const compareB = b[sortKey];
-        if (sortKey === 'risk') {
-          const riskOrder = {
-            'AAA': 1,
-            'AA': 2,
-            'A': 3,
-            'BBB': 4,
-            'BB': 5,
-            'B': 6,
-            'CCC': 7,
-            'CC': 8,
-            'C': 9,
-            'D': 10
-          };
+const hideScam = ref<boolean>(false);
+const hideUnrated = ref<boolean>(false);
+const hideUnverified = ref<boolean>(false);
+const sortOptions = ref<any>({
+  by: 'allocation',
+  desc: true
+})
+const loadingTokens = ref<boolean>(false);
+const filtersMenu = ref<boolean>(false);
+const collectiblesSortBy = ref<string>('name');
+const collectiblesSortDesc = ref<boolean>(false);
+const currentTab = ref<number>(0);
+const assetsHeaders = ref<any[]>([
+  { text: "Asset", align: "start", sortable: true, value: "name" },
+  { text: "Risk", align: "center", sortable: true, value: "risk", width: "64" },
+  { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "100" },
+  { text: "Price", align: "center", sortable: true, value: "price", width: "100"  },
+  { text: "Value", align: "center", sortable: true, value: "value", width: "72" },
+  // { text: "Cost Basis", align: "center", sortable: false, value: "cost_basis", width: "102" },
+  // { text: "AVG Price", align: "center", sortable: false, value: "avg_price", width: "98" },
+  // { text: "P&L", align: "center", sortable: false, value: "pnl" },
+  { text: "M. Cap", align: "center", sortable: true, value: "mcap", width: "100" },
+  { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
+]);
 
-          const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
-          const rankB = riskOrder[compareB] || 11;
+const collectiblesHeaders = ref<any[]>([
+  { text: "Asset", align: "start", sortable: true, value: "name" },
+  { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "90" },
+  { text: "Floor", align: "center", sortable: true, value: "floor" },
+  { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis", width: "102" },
+  { text: "AVG Price", align: "center", sortable: true, value: "avg_price", width: "98" },
+  { text: "P&L", align: "center", sortable: true, value: "pnl" },
+  { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
+]);
+const dialogData = ref<any>(null);
 
-          return sortDesc[0] ? rankB - rankA : rankA - rankB;
-        } else {
-          // Explicit undefined checks:
-          if (compareA === undefined && compareB !== undefined) {
-            // A is undefined, B is defined -> A should go to bottom
-            return sortDesc[0] ? 1 : -1;
-          } else if (compareB === undefined && compareA !== undefined) {
-            // B is undefined, A is defined -> B should go to bottom
-            return sortDesc[0] ? -1 : 1;
-          } else if (compareA === undefined && compareB === undefined) {
-            // Both undefined, consider them equal
-            return 0;
-          }
-
-          let result;
-          if (typeof compareA === 'string' && typeof compareB === 'string') {
-            result = compareA.localeCompare(compareB);
-          } else {
-            result = compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
-          }
-          return sortDesc[0] ? -result : result;
-        }
-      });
-    },
-  },
-  filters,
-  computed: {
-    totalAllocation() {
-      let totalAllocation = 0
-      if (this.resolvedAssets) {
-        if (this.resolvedAssets.length === 1) {
-          const token = this.resolvedAssets[0]
-          let res;
-          if (token.metadata.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)) {
-            res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * this.price?.lastPrice
-          } else {
-            res = this.resolvedAssets[0].value
-          }
-          return res;
-        }
-        this.resolvedAssets.forEach(token => {
-          if (token.value) {
-            totalAllocation += token.value
-          }
-        })
-      }
-      return totalAllocation * this.price?.lastPrice
-    },
-    filtersAmount() {
-      let amt = 0
-      if (this.hideScam) {
-        amt++
-      }
-      if (this.hideUnrated) {
-        amt++
-      }
-      if (this.hideUnverified) {
-        amt++
-      }
-      return amt
-    },
-    Network() {
-      return Network
-    },
-    Blockchain() {
-      return Blockchain
-    },
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'resolvedCollections', 'price', 'loadingTxs']),
-    ...mapState(walletConfigStore, ['getHideScamTokens', 'getHideUnverifiedTokens', 'getHideUnratedTokens', 'getTokenAllocationTableSort']),
-    filters() {
-      return filters
-    },
-    networks() {
-      return networks
-    },
-    collectiblesLength() {
-      let amount = 0;
-      if (this.resolvedCollections) {
-        this.resolvedCollections.forEach(collection => {
-          if (collection.items) {
-            amount += collection.items.length
-          }
-        })
-      }
-      return amount
-    },
-    assets() {
-      const resolvedAssets = structuredClone(this.resolvedAssets)
-      if (resolvedAssets && this.price) {
-        let res = resolvedAssets.map(token => {
-          token['quantity'] = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
-          if (token['name'] === networks.resolveCurrencyName(this.loggedWallet?.chain, this.loggedWallet?.network)) {
-            token['last_price'] = Number(filters.toCurrency(this.price.lastPrice, false, 4, '', '', true, 0).replaceAll(",", ""))
-            token['change'] = Number(this.price.priceChangePercent)
-          } else {
-            token['last_price'] = Number(filters.toCurrency(token.last_price * Number(this.price.lastPrice), false, 6, '', '', false, 0).replaceAll(',', ''))
-          }
-
-          token['value'] = Number(filters.toCurrency(token.quantity * token.last_price, false, 4, '', '', false, 0).replaceAll(",", ""))
-          if (token['value']) {
-            token['total_allocation'] = token['value'] / this.totalAllocation * 100
-          }
-          return token
-        })
-        if (this.hideScam) {
-          res = res.filter(token => !token.isScam)
-        }
-        if (this.hideUnverified) {
-          res = res.filter(token => token.verified)
-        }
-        if (this.hideUnrated) {
-          res = res.filter(token => {
-            return token.risk && token.risk !== 'N/A'
-          })
-        }
-        return res
-      }
-      return resolvedAssets
-    },
-    collectibles() {
-      let res =  this.resolvedCollections
-      if (res && this.hideScam) {
-        res = res.filter(collection => !collection.isScam)
-      }
-      return res
+const assetsSort = computed({
+  get() {
+    return config.value.tokenAllocationSort || {
+      by: 'allocation',
+      desc: true
     }
   },
-  data: () => ({
-    filtersMenu: false,
-    hideScam: false,
-    hideUnverified: false,
-    hideUnrated: false,
-    assetsSort: {
-      by: 'total_allocation',
-      desc: true
-    },
-    assetsSortBy: 'name',
-    assetsSortDesc: false,
-    collectiblesSortBy: 'name',
-    collectiblesSortDesc: false,
-    currentTab: 0,
-    chartData: [],
-    assetsHeaders: [
-      { text: "Asset", align: "start", sortable: true, value: "name" },
-      { text: "Risk", align: "center", sortable: true, value: "risk", width: "64" },
-      { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "100" },
-      { text: "Last Price", align: "center", sortable: true, value: "last_price", width: "100"  },
-      { text: "Change", align: "center", sortable: true, value: "change", width: "85" },
-      { text: "Value", align: "center", sortable: true, value: "value", width: "72" },
-      // { text: "Cost Basis", align: "center", sortable: false, value: "cost_basis", width: "102" },
-      // { text: "AVG Price", align: "center", sortable: false, value: "avg_price", width: "98" },
-      // { text: "P&L", align: "center", sortable: false, value: "pnl" },
-      { text: "Mcap", align: "center", sortable: true, value: "mcap", width: "100" },
-      { text: "Allocation", align: "center", sortable: true, value: "total_allocation", width: "150" },
-    ],
-    collectiblesHeaders: [
-      { text: "Asset", align: "start", sortable: true, value: "name" },
-      { text: "Quantity", align: "center", sortable: true, value: "quantity", width: "90" },
-      { text: "Floor", align: "center", sortable: true, value: "floor" },
-      { text: "Cost Basis", align: "center", sortable: true, value: "cost_basis", width: "102" },
-      { text: "AVG Price", align: "center", sortable: true, value: "avg_price", width: "98" },
-      { text: "P&L", align: "center", sortable: true, value: "pnl" },
-      { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
-      { text: "Last 7 Days", align: "center", sortable: true, value: "last_7_days", width: "140" },
-    ],
-    dialogData: null,
-    assts,
-  }),
-  mounted() {
-    this.hideUnverified = walletConfigStore().getHideUnverifiedTokens
-    this.hideScam = walletConfigStore().getHideScamTokens
-    this.hideUnrated = walletConfigStore().getHideUnratedTokens
-    this.assetsSort = walletConfigStore().getTokenAllocationTableSort
+  set(val) {
+    setWalletConfiguration(loggedWallet.value.id, 'tokenAllocationSort', val)
+  },
+})
+
+watch(hideScam, (newVal, _oldVal) => {
+  config.value.hideScamTokens = newVal
+})
+
+watch(hideUnverified, (newVal, _oldVal) => {
+  config.value.hideUnverifiedTokens = newVal
+})
+
+watch(hideUnrated, (newVal, _oldVal) => {
+  config.value.hideUnratedTokens = newVal
+})
+
+watch(sortOptions, (newVal, _oldVal) => {
+  assetsSort.value = newVal
+}, {
+  deep: true
+})
+
+// Watch for config changes after initial mount
+watch(() => config.value, (newConfig) => {
+  if (newConfig) {
+    hideScam.value = newConfig.hideScamTokens || false;
+    hideUnrated.value = newConfig.hideUnratedTokens || false;
+    hideUnverified.value = newConfig.hideUnverifiedTokens || false;
   }
-};
+}, { immediate: true })
+
+// Show loading when wallet is logged in but tokens aren't loaded yet
+watch([() => loggedWallet.value, () => tokens.value], ([wallet, tokensData]) => {
+  if (wallet && (!tokensData || Object.keys(tokensData).length === 0)) {
+    loadingTokens.value = true;
+  } else if (wallet && tokensData && Object.keys(tokensData).length > 0) {
+    loadingTokens.value = false;
+  } else if (!wallet) {
+    loadingTokens.value = false;
+  }
+}, { immediate: true })
+
+
+const handleSwitchTab = (tab) => {
+  currentTab.value = tab;
+}
+
+const closeDialog = () => {
+  dialogData.value = null;
+}
+
+const handleOnRowClick = (row) => {
+  dialogData.value = row;
+}
+
+const handleTokenRowClick = (row) => {
+  console.log(row)
+}
+
+const clearFilters = () => {
+  hideUnverified.value = false;
+  hideScam.value = false;
+  hideUnrated.value = false;
+}
+
+const customSort = (items, sortBy, sortDesc) => {
+  if (!sortBy.length) return items;
+
+  return items.sort((a, b) => {
+    const sortKey = sortBy[0];
+    const compareA = a[sortKey];
+    const compareB = b[sortKey];
+    if (sortKey === 'risk') {
+      const riskOrder = {
+        'AAA': 1,
+        'AA': 2,
+        'A': 3,
+        'BBB': 4,
+        'BB': 5,
+        'B': 6,
+        'CCC': 7,
+        'CC': 8,
+        'C': 9,
+        'D': 10
+      };
+
+      const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
+      const rankB = riskOrder[compareB] || 11;
+
+      return sortDesc[0] ? rankA - rankB : rankB - rankA;
+    } else if (sortKey === 'quantity') {
+      const quantityA = Number(filters.toCurrency(a.quantity, false, 6, '', '', false, a.metadata?.decimals).replaceAll(',', ''))
+      const quantityB = Number(filters.toCurrency(b.quantity, false, 6, '', '', false, b.metadata?.decimals).replaceAll(',', ''))
+      return sortDesc[0] ? quantityB - quantityA : quantityA - quantityB;
+    } else {
+      // Explicit undefined checks:
+      if (compareA === undefined && compareB !== undefined) {
+        // A is undefined, B is defined -> A should go to bottom
+        return sortDesc[0] ? 1 : -1;
+      } else if (compareB === undefined && compareA !== undefined) {
+        // B is undefined, A is defined -> B should go to bottom
+        return sortDesc[0] ? -1 : 1;
+      } else if (compareA === undefined && compareB === undefined) {
+        // Both undefined, consider them equal
+        return 0;
+      }
+
+      let result;
+      if (typeof compareA === 'string' && typeof compareB === 'string') {
+        result = compareA.localeCompare(compareB);
+      } else {
+        result = compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
+      }
+      return sortDesc[0] ? -result : result;
+    }
+  });
+}
+
+const totalAllocation = computed(() => {
+  let total = 0
+  if (tokensList.value.length === 1) {
+    const token = tokensList.value[0]
+    let res;
+    if (token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * price.value?.lastPrice
+    } else {
+      res = token.value
+    }
+    return res;
+  }
+  tokensList.value.forEach(token => {
+    if (token.value) {
+      total += token.value
+    }
+  })
+  return total
+})
+
+const filtersAmount = computed(() => {
+  let amt = 0
+  if (hideScam.value) {
+    amt++
+  }
+  if (hideUnrated.value) {
+    amt++
+  }
+  if (hideUnverified.value) {
+    amt++
+  }
+  return amt
+})
+
+const collectiblesLength = computed(() => {
+  let amount = 0;
+  if (collectibles.value.length > 0) {
+    collectibles.value.forEach((collection: any) => {
+      if (collection.items) {
+        amount += collection.items.length
+      }
+    })
+  }
+  return amount
+})
+
+const tokensList = computed(() => {
+  let res = Object.values(tokens.value).map((token: any) => {
+    if (token.policy_id === '') {
+      token.risk = 'AAA';
+      token.price = Number(price.value?.lastPrice);
+      let coinGeckoCurrency = 'cardano'
+      if (token.name === 'Cardano') {
+        coinGeckoCurrency = 'cardano'
+      } else if (token.name === 'Apex Fusion') {
+        coinGeckoCurrency = 'apex-2'
+      }
+      token.mcap = cache.value[coinGeckoCurrency]?.usd_market_cap
+      const quantity = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
+      token.value = quantity * token.price;
+      token.allocation = token.value;
+      token.change = price.value?.priceChangePercent;
+    } else {
+      token.risk = risks.value[token.fingerprint]?.risk
+      token.price = dexHunterTokens.value[token.unit]?.price
+      token.mcap = dexHunterTokens.value[token.unit]?.mcap
+      const quantity = Number(filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', ''))
+      token.value = quantity * token.price
+      token.allocation = token.value
+      token.change = get24hChange(realFiTokens.value[token.unit])?.percentChange
+    }
+    if (isNaN(token.allocation)) {
+      token.allocation = 0
+    }
+    return token
+  });
+  res = res.filter(token => {
+    if (hideScam.value && token.isScam) {
+      return false;
+    }
+    if (hideUnverified.value && !token.verified) {
+      return false;
+    }
+    if (hideUnrated.value && !token.risk) {
+      return false;
+    }
+    return true;
+  })
+  return res;
+});
+
+const collectibles = computed(() => {
+  let res = Object.values(collections.value).filter((collection: any) => collection.items.every(item => !item.metadata))
+  if (res && hideScam.value) {
+    res = res.filter((collection: any) => !collection.isScam)
+  }
+  return res
+})
+
+
+
+onMounted(() => {
+  sortOptions.value = assetsSort.value;
+  hideScam.value = config.value?.hideScamTokens || false;
+  hideUnrated.value = config.value?.hideUnratedTokens || false;
+  hideUnverified.value = config.value?.hideUnverifiedTokens || false;
+})
 </script>
 <style>
 .progress-bar {
