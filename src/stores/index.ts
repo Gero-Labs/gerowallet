@@ -12,14 +12,11 @@ import {
 
 } from '@/shared/utils/resolver';
 import networks from '@/utils/networks';
-import { musicStore } from '@/stores/modules/music';
 import { dexHunterStore } from '@/stores/modules/dexhunter';
-import { bringStore } from '@/stores/modules/bring';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { governanceStore } from '@/stores/modules/governance';
 import router from '@/modules/navigation/router';
 import { subscribeSync } from '@/stores/loaders/syncLoader';
-import { loadTransactions, subscribeTransactions } from '@/stores/loaders/transactionsLoader';
 import { loadAssets } from '@/stores/loaders/assetsLoader';
 import { loadConfig, subscribeConfig } from '@/stores/loaders/geroConfigLoader';
 import { Messaging } from '@/chrome/messaging';
@@ -28,8 +25,6 @@ import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
-import { Cardano } from '@cardano-sdk/core'
-
 export let appWallet: Wallet = undefined;
 export let subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
 
@@ -266,90 +261,6 @@ export const useStore = defineStore('store', {
       this.resolvedCollections = Object.values(collections)
       return this.resolvedCollections
     },
-    async setUtxosAndAddresses(transactions) {
-      const utxos: any[] = [];
-      const addresses: Set<string> = new Set();
-      if (!appWallet) {
-        return
-      }
-      let stakeAddress: string = '';
-      let address: string = '';
-      if (appWallet.isEnterpriseAddress()) {
-        address = appWallet.baseAddress().toBech32();
-      } else {
-        stakeAddress = appWallet.stakeAddress().toBech32()
-      }
-
-      const liveUtxos = new Map<string, [Cardano.TxIn, Cardano.TxOut]>();
-      transactions.sort((a, b) =>
-        a.block_height === b.block_height
-          ? a.tx_timestamp - b.tx_timestamp
-          : a.block_height - b.block_height
-      );
-
-      for (const transaction of transactions) {
-        for (const inp of transaction.tx.body.inputs) {
-          liveUtxos.delete(`${inp.txId}:${inp.index}`);
-        }
-        transaction.tx.body.outputs.forEach((out, idx) => {
-          let outAddress = out.address
-          const outAddressType = Cardano.Address.fromString(outAddress).getType()
-          try {
-            if (!appWallet.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase()
-              const rewardAddr = Cardano.RewardAddress.fromCredentials(
-                appWallet.networkId(),
-                baseAddress.getStakeCredential()
-              );
-              outAddress = rewardAddr.toAddress().toBech32();
-            }
-            if (address === outAddress || stakeAddress === outAddress) {
-              addresses.add(out.address)
-              liveUtxos.set(
-                `${transaction.tx.id}:${idx}`,
-                [
-                  {
-                    txId: transaction.tx.id,
-                    index: idx
-                  },
-                  {
-                    address: out.address,
-                    value: out.value,
-                    datumHash: out.datumHash,
-                    datum: out.datum,
-                    scriptReference: out.scriptReference
-                  }
-                ]
-              );
-            }
-          } catch (e) {
-            console.error(e)
-          }
-        });
-      }
-
-      if (Array.isArray(transactions) && transactions.length > 0) {
-
-      }
-      if (appWallet.type === WalletType.Google) {
-        await walletConfigStore().setUtxos(utxos)
-          .then(assets => this.resolveCollections(assets))
-          .then((resolvedCollections) => {
-            musicStore().resolveMusicPlaylist(resolvedCollections)
-          });
-      } else {
-        // await appWallet.syncAddresses(Array.from(addresses))
-        //   .then((resolvedAddresses: Set<string>) => {
-        //     const filteredKnownUtxos = utxos.filter(utxo => resolvedAddresses.has(utxo.payment_addr.bech32))
-        //     walletConfigStore().setUtxos(filteredKnownUtxos)
-        //   })
-        //   .then(() => this.loadResolvedAssets())
-        //   .then(assets => this.resolveCollections(assets))
-        //   .then((resolvedCollections) => {
-        //     musicStore().resolveMusicPlaylist(resolvedCollections)
-        //   });
-      }
-    },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
     },
@@ -381,8 +292,8 @@ export const useStore = defineStore('store', {
     },
     async login(walletId: number): Promise<void> {
       console.log('login')
-      loading.setLoading(true);
-      this.setLoadingTxs(true);
+      // loading.setLoading(true);
+      // this.setLoadingTxs(true);
       this.unsubscribeAll();
       const wallet = this.wallets.filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
       if (!wallet) {
@@ -414,21 +325,21 @@ export const useStore = defineStore('store', {
       // await dexHunterStore().loadTokens(false)
       const promises = []
       await walletConfigStore().loadConfig()
-      promises.push(walletConfigStore().loadAddresses())
+      // promises.push(walletConfigStore().loadAddresses())
       // promises.push(this.loadSync())
-      promises.push(walletConfigStore().loadAccountInfo())
+      // promises.push(walletConfigStore().loadAccountInfo())
       // promises.push(this.loadPools())
-      promises.push(governanceStore().loadDReps())
+      // promises.push(governanceStore().loadDReps())
       // promises.push(this.loadTransactions())
       // promises.push(tapToolsStore().loadPortfolio())
       // promises.push(tapToolsStore().loadPortfolioTrendedValue())
       promises.push(this.loadRewards())
-      promises.push(this.loadConnectedDapps())
+
       promises.push(walletConfigStore().loadContacts())
       // promises.push(bringStore().loadBringCache())
       await Promise.all(promises)
-      this.setLoadingTxs(false)
-      loading.setLoading(false);
+      // this.setLoadingTxs(false)
+      // loading.setLoading(false);
       this.subscribeConfig()
       // this.subscribeTransactions();
       this.subscribeSync()
@@ -451,8 +362,6 @@ export const useStore = defineStore('store', {
         cancelable: true,
         composed: false,
       }))
-      musicStore().setMusicPlaylist(undefined)
-      dexHunterStore().setTokens(undefined)
       this.provider = undefined;
       this.transactions = undefined;
       this.assets = undefined;
@@ -514,34 +423,8 @@ export const useStore = defineStore('store', {
     async subscribeSync() {
       await subscribeSync(this, appWallet, subscriptions)
     },
-    async loadTransactions() {
-      return await loadTransactions(this, appWallet);
-    },
-    async subscribeTransactions() {
-      return await subscribeTransactions(this, appWallet, subscriptions);
-    },
     async loadAssets() {
       return await loadAssets(this, appWallet, subscriptions);
-    },
-    async loadPools() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db: Dexie = await appWallet.getBlockchainDb()
-      return new Promise((resolve, reject) => {
-        subscriptions.set('pools', liveQuery(() => db.table('pools').toArray()).subscribe({
-          next: newPools => {
-            this.pools = newPools
-            resolve(this.pools);
-          },
-          error: error => {
-            console.error('Failed to Fetch Pools:', error)
-            reject(error);
-          }
-        }));
-      });
     },
     async loadRewards() {
       if (!appWallet) {
@@ -563,40 +446,6 @@ export const useStore = defineStore('store', {
         }));
       });
     },
-    async loadConnectedDapps() {
-      if (!appWallet) {
-        return new Promise((resolve, reject) => {
-          reject()
-        });
-      }
-      const db = await appWallet.getDb()
-      return new Promise((resolve, reject) => {
-        subscriptions.set('dapps', liveQuery(() => db.table('connected_dapps').toArray()).subscribe({
-          next: newConnectedDapps => {
-            this.connectedDapps = newConnectedDapps
-            if (chrome?.storage) {
-              if (newConnectedDapps) {
-                chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
-              } else {
-                chrome.storage.local.remove(STORAGE.whitelisted);
-              }
-            }
-            resolve(this.connectedDapps)
-          },
-          error: error => {
-            console.error('Failed to Fetch Connected Dapps:', error)
-            reject(error)
-          }
-        }));
-      });
-    },
-    async disconnectDapp(id: number) {
-      if (!appWallet) {
-        return
-      }
-      const db = await appWallet.getDb()
-      db.table('connected_dapps').delete(id)
-    }
   },
 });
 

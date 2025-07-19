@@ -203,13 +203,13 @@ import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/plugins/walletStore';
-import NetworkStore, { networkStore } from '@/plugins/networkStore';
+import { networkStore } from '@/plugins/networkStore';
 
-const { loggedWallet, utxos, account } = toRefs(walletStore);
+const { loggedWallet, utxos, account, keys } = toRefs(walletStore);
 const { dreps, tip } = toRefs(networkStore);
 
 // Get drepId and baseAddress from loggedWallet
-const drepId = computed(() => loggedWallet.value?.drepId);
+const drepId = computed(() => keys.value?.drep129[0].address);
 const baseAddress = computed(() => loggedWallet.value?.baseAddress);
 
 // Data refs

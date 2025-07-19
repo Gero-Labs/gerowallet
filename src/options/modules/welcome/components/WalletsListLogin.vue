@@ -51,11 +51,12 @@
 <script setup lang="ts">
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
-import { computed, ref, toRefs } from 'vue';
+import { computed, ref, toRefs, getCurrentInstance } from 'vue';
 import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/plugins/geroStore';
+import loading from '@/plugins/loading';
 
 const selectedWallet = ref<string | null>(null);
 
@@ -87,21 +88,32 @@ const resolveNetworkIcon = (item: Wallet): string => {
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
+  loading.setLoading(true);
+  loading.setText('Logging into wallet...');
+  
   try {
     const wallet = Object.values(wallets.value).filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
+    
+    loading.setText('Initializing wallet...');
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
+    
+    loading.setText('Redirecting...');
+    const queryParams = vmProxy.$route.query;
+    console.log(queryParams);
+    if (queryParams['redirect']) {
+      await vmProxy.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
+    } else {
+      await vmProxy.$router.push("/");
+    }
   } catch (error) {
     console.error(error);
-  }
-  const queryParams = vmProxy.$route.query;
-  console.log(queryParams);
-  if (queryParams['redirect']) {
-    await vmProxy.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
-  } else {
-    await vmProxy.$router.push("/");
+    loading.setText('Login failed');
+  } finally {
+    loading.setLoading(false);
+    loading.setText('');
   }
 };
 </script>

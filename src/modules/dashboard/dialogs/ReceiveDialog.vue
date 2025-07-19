@@ -24,7 +24,7 @@
             <v-list-item-avatar size="160" rounded>
               <div
                 class="qr-container"
-                :ref="el => qrContainers[i].value = el"
+                :ref="el => setQrContainerRef(el, i)"
               ></div>
             </v-list-item-avatar>
             <v-list-item-content class="pl-4">
@@ -117,6 +117,12 @@ const qrContainers = [ref<HTMLElement | null>(null), ref<HTMLElement | null>(nul
 const qrcodes: (QRCodeStyling | null)[] = [null, null, null];
 let copyButtonRefs = {};
 
+const setQrContainerRef = (el: Element | null, index: number) => {
+  if (el && qrContainers[index]) {
+    qrContainers[index].value = el as HTMLElement;
+  }
+}
+
 const setCopyButtonRef = (el, address) => {
   if (!copyButtonRefs) {
     copyButtonRefs = {};
@@ -196,7 +202,7 @@ watch(
     if (!open) return;
     await nextTick();
 
-    tabs.forEach((tabItem, i) => {
+    tabs.value.forEach((tabItem, i) => {
       // create QR instance if missing
       if (!qrcodes[i]) {
         qrcodes[i] = new QRCodeStyling({

@@ -57,37 +57,33 @@
     </v-dialog>
   </v-tab-item>
 </template>
-<script >
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, toRefs } from 'vue';
+import WalletStore, { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'CollateralTab',
-  computed: {
-    ...mapState(useStore, ['connectedDapps']),
-  },
-  methods: {
-    ...mapActions(useStore, ['disconnectDapp']),
-    confirmRemove(item) {
-      this.itemToDelete = item
-      this.confirmRemoveDialog = true
-    },
-    remove() {
-      this.disconnectDapp(this.itemToDelete.id)
-      this.itemToDelete = undefined
-      this.confirmRemoveDialog = false
-    }
-  },
-  data: () => ({
-    confirmRemoveDialog: false,
-    itemToDelete: undefined,
-    transaction: '62b6f02a8be5ccdd40c1d89068f9f0de05dc2fe67c7eda52dc6c673b7ee309e6',
-    headers: [
-      { text: "Domain", align: "start", sortable: true, value: "domain", width: '99%'},
-      { text: "", align: "start", sortable: false, value: "actions" },
-    ]
-  }),
-}
+const { loggedWallet, connectedDapps } = toRefs(walletStore);
+
+// Reactive data
+const confirmRemoveDialog = ref<boolean>(false);
+const itemToDelete = ref<any>(undefined);
+const transaction = ref<string>('');
+
+const headers = ref([
+  { text: "Domain", align: "start", sortable: true, value: "domain", width: '99%'},
+  { text: "", align: "start", sortable: false, value: "actions" },
+]);
+
+// Methods
+const confirmRemove = (item: any) => {
+  itemToDelete.value = item;
+  confirmRemoveDialog.value = true;
+};
+
+const remove = () => {
+  WalletStore.disconnectDapp(loggedWallet.value.id, itemToDelete.value.id);
+  itemToDelete.value = undefined;
+  confirmRemoveDialog.value = false;
+};
 </script>
 
 <style scoped>

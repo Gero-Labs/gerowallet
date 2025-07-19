@@ -73,11 +73,11 @@
 
         <v-list-item
           v-else-if="item.href"
-          :href="item.href"
           :disabled="item.soon"
           :key="index"
           :active-class="themeDark ? 'activePageDark' : 'activePage'"
-          target="_blank"
+          link
+          @click="openExternalLink(item.href)"
         >
           <v-list-item-avatar>
             <v-img :src="item.icon" :alt="item.title"></v-img>
@@ -139,16 +139,30 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
-import { useStore } from '@/stores'
 import networks from '@/utils/networks'
 import { musicStore } from '@/plugins/musicStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/plugins/walletStore';
-import { geroStore } from '@/plugins/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+
+interface NavigationItem {
+  title?: string;
+  icon?: string;
+  link?: string;
+  href?: string;
+  header?: string;
+  enabled?: boolean;
+  soon?: boolean;
+  new?: boolean;
+}
+
+type NavigationLinkItem = NavigationItem & { link: string };
+type NavigationHrefItem = NavigationItem & { href: string };
+type NavigationHeaderItem = NavigationItem & { header: string };
+type NavigationItemUnion = NavigationLinkItem | NavigationHrefItem | NavigationHeaderItem;
 
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
@@ -162,16 +176,12 @@ const breakpoint = vmProxy.$vuetify.breakpoint
 const themeDark = vmProxy.$vuetify.theme.isDark
 const router = vmProxy.$router
 
-// Pinia stores
-const store = useStore()
-
 // Reactive state
 const version = ref('')
 
 const { musicPlaylist } = toRefs(musicStore);
 
 const { loggedWallet, transactions } = toRefs(walletStore);
-const { wallets } = toRefs(geroStore);
 
 const account = computed(() => {
   return loggedWallet.value
@@ -188,7 +198,13 @@ function resolveIcon(icon: string) {
   return assts.resolveIcon(icon)
 }
 
-const items = computed(() => {
+function openExternalLink(href?: string) {
+  if (href) {
+    window.open(href, '_blank')
+  }
+}
+
+const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
   if (loggedWallet.value?.baseAddress) {
     isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
@@ -247,7 +263,10 @@ async function submitLogout() {
     method: MessageTypes.LOGOUT,
     data: { },
   }).then(() => {
-    router.push('/welcome')
+    // // Wait for next tick to ensure wallet store is cleared before navigation
+    vmProxy.$nextTick(() => {
+      router.push('/welcome')
+    })
   });
 }
 

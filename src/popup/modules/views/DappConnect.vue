@@ -41,56 +41,49 @@
     </v-card-actions>
   </PopupHeader>
 </template>
-<script>
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, computed, onMounted, toRefs } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
-import { mapState } from 'pinia';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/plugins/walletStore';
+import WalletStore from '@/plugins/walletStore';
 
-export default {
-  name: 'dapp-connect',
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['getUseSidePanel']),
-    useSidePanel: {
-      get() {
-        return this.getUseSidePanel
-      }
-    },
-    WalletType() {
-      return WalletType
-    }
-  },
-  components: { PopupHeader },
-  data() {
-    return {
-      appWallet,
-      consent: false,
-      controller: null
-    };
-  },
-  methods: {
-    async decline() {
-      await this.controller.returnData({ data: {}, error: APIError.Refused })
-      window.close();
-    },
-    async confirm() {
-      await appWallet.addConnectedDapp(this.$refs.popupHeader.domain);
-      await this.controller.returnData({ data: true, error: {} })
-      window.close();
-    },
-  },
-  mounted() {
-    if (this.useSidePanel) {
-      const params = new URLSearchParams(window.location.href);
-      this.tabId = Number(params.get("tabId"));
-      this.controller = Messaging.createInternalSidePanelController(this.tabId)
-    } else {
-      this.controller = Messaging.createInternalController()
-    }
-  }
+// Get store values
+const { loggedWallet, config } = toRefs(walletStore);
+
+// Reactive data
+const consent = ref<boolean>(false);
+const controller = ref<any>(null);
+const popupHeader = ref<any>(null);
+const tabId = ref<number | null>(null);
+
+// Computed properties
+const useSidePanel = computed(() => {
+  return config.value?.useSidePanel || false;
+});
+
+// Methods
+const decline = async () => {
+  await controller.value.returnData({ data: {}, error: APIError.Refused });
+  window.close();
 };
+
+const confirm = async () => {
+  await WalletStore.addConnectedDapp(loggedWallet.value.id, popupHeader.value.domain);
+  await controller.value.returnData({ data: true, error: {} });
+  window.close();
+};
+
+// Lifecycle
+onMounted(() => {
+  if (useSidePanel.value) {
+    const params = new URLSearchParams(window.location.href);
+    tabId.value = Number(params.get("tabId"));
+    controller.value = Messaging.createInternalSidePanelController(tabId.value);
+  } else {
+    controller.value = Messaging.createInternalController();
+  }
+});
 </script>
