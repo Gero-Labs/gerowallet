@@ -72,8 +72,7 @@ export class WalletBg {
   baseAddress: string;
   stakeAddress?: string;
   token?: string;
-  connectedDapps?: unknown;
-  subscriptions: Map<string, Subscription> = new Map<string, Subscription>()
+  subscriptions: Map<string, Subscription> = new Map<string, Subscription>();
 
   constructor(wallet: any) {
     this.id = wallet.id;
@@ -96,6 +95,7 @@ export class WalletBg {
   }
 
   async init(): Promise<void> {
+    LoadingState.setText('Setting up wallet address...');
     const promises = []
     if (this.type === WalletType.Google) {
       promises.push(zkFoldApi.walletAddress(this.userId).then(res => {
@@ -105,6 +105,8 @@ export class WalletBg {
         this.baseAddress = res['data']['address']
       }))
     }
+
+    LoadingState.setText('Loading blockchain data...');
     this.loadGenesis()
     const promises2: any[] = []
     promises2.push(this.loadAssets(), this.loadEpochParams())
@@ -123,6 +125,8 @@ export class WalletBg {
       promises2.push(BringStore.loadBringCache(this.baseAddress))
     }
     await Promise.all(promises2)
+
+    LoadingState.setText('Loading wallet data...');
     promises.push(
       this.startSync(),
       this.loadConfig(),
@@ -215,6 +219,14 @@ export class WalletBg {
         }
       })
     );
+
+    // Wait for all initialization promises to complete
+    LoadingState.setText('Finalizing wallet setup...');
+    await Promise.all(promises);
+
+    LoadingState.setText('Wallet initialization complete');
+    LoadingState.setLoading(false);
+    LoadingState.setText('');
   }
 
   unsubscribeAll() {
@@ -599,8 +611,8 @@ export class WalletBg {
     return new Promise((resolve, reject) => {
       this.subscriptions.set('dapps', liveQuery(() => walletDB.table('connected_dapps').toArray()).subscribe({
         next: newConnectedDapps => {
-          this.connectedDapps = newConnectedDapps
-          if (chrome?.storage) {
+          WalletStore.setConnectedDapps(newConnectedDapps)
+          if (chrome?.storage) { // TODO Remove
             if (newConnectedDapps) {
               chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
             } else {
@@ -1506,10 +1518,25 @@ export class WalletBg {
 }
 
 export async function login(wallet: any): Promise<WalletBg> {
-  const walletBg: WalletBg = new WalletBg(wallet);
-  WalletStore.setLoggedWallet(walletBg);
-  await walletBg.init();
-  return walletBg;
+  LoadingState.setLoading(true);
+  LoadingState.setText('Creating wallet instance...');
+
+  try {
+    const walletBg: WalletBg = new WalletBg(wallet);
+    WalletStore.setLoggedWallet(walletBg);
+
+    LoadingState.setText('Initializing wallet...');
+    await walletBg.init();
+
+    LoadingState.setText('Wallet ready');
+    return walletBg;
+  } catch (error) {
+    LoadingState.setText('Wallet initialization failed');
+    console.error('Error during wallet login:', error);
+    throw error;
+  } finally {
+    // Keep loading state active during initialization, it will be cleared after all promises resolve
+  }
 }
 
 export function alarmListener(alarm) {

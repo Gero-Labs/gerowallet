@@ -351,6 +351,7 @@ import { realFiStore } from '@/plugins/realFiStore';
 import { get24hChange } from '@/shared/utils/resolver';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { coinGeckoStore } from '@/plugins/coinGeckoStore';
+import WalletStore from '@/plugins/walletStore';
 
 const { price } = toRefs(networkStore);
 const { loggedWallet, config, collections, tokens } = toRefs(walletStore);
@@ -409,15 +410,15 @@ const assetsSort = computed({
 })
 
 watch(hideScam, (newVal, _oldVal) => {
-  config.value.hideScamTokens = newVal
+  WalletStore.setHideScamTokens(newVal);
 })
 
 watch(hideUnverified, (newVal, _oldVal) => {
-  config.value.hideUnverifiedTokens = newVal
+  WalletStore.setHideUnverifiedTokens(newVal);
 })
 
 watch(hideUnrated, (newVal, _oldVal) => {
-  config.value.hideUnratedTokens = newVal
+  WalletStore.setHideUnratedTokens(newVal);
 })
 
 watch(sortOptions, (newVal, _oldVal) => {

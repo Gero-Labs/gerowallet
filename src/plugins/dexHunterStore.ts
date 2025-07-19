@@ -21,7 +21,24 @@ chrome.storage.local.get('dexHunterStore', (res) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['dexHunterStore']) {
-    Object.assign(dexHunterStore, changes['dexHunterStore'].newValue);
+    const newValue = changes['dexHunterStore'].newValue;
+    
+    // Prevent flickering by checking if incoming data is stale for various properties
+    const updatedProps = { ...newValue };
+    
+    // Check dexHunterTokens - don't overwrite if current state has more tokens
+    if (newValue.dexHunterTokens && dexHunterStore.dexHunterTokens && 
+        Object.keys(newValue.dexHunterTokens).length < Object.keys(dexHunterStore.dexHunterTokens).length) {
+      delete updatedProps.dexHunterTokens;
+    }
+    
+    // Check blacklistPolicies - don't overwrite if current state has more policies
+    if (newValue.blacklistPolicies && dexHunterStore.blacklistPolicies && 
+        newValue.blacklistPolicies.length < dexHunterStore.blacklistPolicies.length) {
+      delete updatedProps.blacklistPolicies;
+    }
+    
+    Object.assign(dexHunterStore, updatedProps);
   }
 });
 

@@ -101,100 +101,112 @@
     </v-layout>
   </v-tab-item>
 </template>
-<script>
-import { walletConfigStore } from '@/stores/modules/walletConfig';
-import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { appWallet } from '@/stores';
 import db from '@/db';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
 import networks from '@/utils/networks';
-import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/plugins/walletStore';
+import { geroStore } from '@/plugins/geroStore';
+import { setWalletConfiguration } from '@/db/wallet-db';
 
-export default {
-  name: 'AdvancedSettingsTab',
-  components: { ToggleSwitch, BackupWalletDialog },
-  watch: {
-    cashbackPopupsDisabled(newVal) {
-      this.updateCashbackPopups(newVal);
-    },
+// Define emits
+const emit = defineEmits(['loading']);
+
+// Get reactive store properties
+const { loggedWallet, config } = toRefs(walletStore);
+const gStore = geroStore;
+
+// Access Vue instance for router
+const vmProxy = getCurrentInstance()!.proxy as any;
+
+// Reactive data
+const reSyncLoading = ref<boolean>(false);
+const deleteWalletDialog = ref<boolean>(false);
+const deleteWalletLoading = ref<boolean>(false);
+const cashbackPopupsDisabled = ref<boolean>(false);
+
+// Computed properties
+const txAutoSubmit = computed({
+  get() {
+    return config.value?.txAutoSubmit || false;
   },
-  computed: {
-    networks() {
-      return networks
-    },
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup', 'getUseSidePanel']),
-    txAutoSubmit: {
-      get() {
-        return this.getTxAutoSubmit
-      },
-      async set(val) {
-        await this.setTxAutoSubmit(val)
-      }
-    },
-    useSidePanel: {
-      get() {
-        return this.getUseSidePanel
-      },
-      async set(val) {
-        return this.setUseSidePanel(val)
-      }
-    },
-    cashbackPopups: {
-      get() {
-        return !this.cashbackPopupsDisabled
-      },
-      set(val) {
-        this.cashbackPopupsDisabled = !val
-      }
+  set(val: boolean) {
+    if (config.value) {
+      config.value.txAutoSubmit = val;
+      setWalletConfiguration(loggedWallet.value.id, 'txAutoSubmit', val);
     }
-  },
-  methods: {
-    ...mapActions(useStore, ['logout']),
-    ...mapActions(walletConfigStore, ['setTxAutoSubmit', 'setUseSidePanel']),
-    async loadCashbackPopups() {
-      const val = await getTurnOff()
-      this.cashbackPopupsDisabled = val.isTurnedOff;
-    },
-    async updateCashbackPopups(val) {
-      await setTurnOff(val);
-    },
-    async reSync() {
-      this.reSyncLoading = true
-      this.$emit('loading', true)
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.RESYNC,
-        data: { },
-      });
-      this.reSyncLoading = false
-      this.$emit('loading', false)
-    },
-    async deleteWalletConfirm() {
-      this.deleteWalletLoading = true
-      const walletId = appWallet.id
-      const name = appWallet.name
-      await this.logout()
-      await db.deleteWallet(walletId)
-      this.deleteWalletDialog = false
-      this.deleteWalletLoading = false
-      await this.$router.push("/welcome")
-      snackbar.fireSuccess(`Wallet '${name}' Deleted Successfully.`)
-    },
-  },
-  data: () => ({
-    reSyncLoading: false,
-    deleteWalletDialog: false,
-    deleteWalletLoading: false,
-    cashbackPopupsDisabled: false,
-  }),
-  created() {
-    this.loadCashbackPopups();
   }
-}
+});
+
+const useSidePanel = computed({
+  get() {
+    return config.value?.useSidePanel || false;
+  },
+  set(val: boolean) {
+    if (config.value) {
+      config.value.useSidePanel = val;
+      setWalletConfiguration(loggedWallet.value.id, 'useSidePanel', val);
+    }
+  }
+});
+
+const cashbackPopups = computed({
+  get() {
+    return !cashbackPopupsDisabled.value;
+  },
+  set(val: boolean) {
+    cashbackPopupsDisabled.value = !val;
+  }
+});
+
+// Watchers
+watch(cashbackPopupsDisabled, (newVal) => {
+  updateCashbackPopups(newVal);
+});
+
+// Methods
+const loadCashbackPopups = async () => {
+  const val = await getTurnOff();
+  cashbackPopupsDisabled.value = val.isTurnedOff;
+};
+
+const updateCashbackPopups = async (val: boolean) => {
+  await setTurnOff(val);
+};
+
+const reSync = async () => {
+  reSyncLoading.value = true;
+  emit('loading', true);
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.RESYNC,
+    data: {},
+  });
+  reSyncLoading.value = false;
+  emit('loading', false);
+};
+
+const deleteWalletConfirm = async () => {
+  deleteWalletLoading.value = true;
+  const walletId = appWallet.id;
+  const name = appWallet.name;
+  await gStore.logout();
+  await db.deleteWallet(walletId);
+  deleteWalletDialog.value = false;
+  deleteWalletLoading.value = false;
+  await vmProxy.$router.push('/welcome');
+  snackbar.fireSuccess(`Wallet '${name}' Deleted Successfully.`);
+};
+
+// Lifecycle
+onMounted(() => {
+  loadCashbackPopups();
+});
 </script>
 <style scoped>
 .custom-loader {

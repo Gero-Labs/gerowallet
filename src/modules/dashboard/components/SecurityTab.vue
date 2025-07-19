@@ -117,33 +117,34 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { ref, computed, onMounted, nextTick, toRefs } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
-import { useStore } from '@/stores';
 import { WalletType } from '@/models/types';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
+import WalletStore, { walletStore } from '@/plugins/walletStore';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
-const backup = computed(() => walletConfigStore().getBackup)
-const hasBackup = computed(() => walletConfigStore().hasBackup)
 
-const store = useStore();
-const loggedWallet = store.loggedWallet;
+const { loggedWallet, config } = toRefs(walletStore);
+
+const backup = computed(() => config.value?.backup || false);
+const hasBackup = computed(() => {
+  return loggedWallet.value?.type === WalletType.Normal;
+});
 
 const qrCodeRef = ref<HTMLElement|null>(null)
 
-const options: Partial<Options> = {
+const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
-  data: loggedWallet.publicKey.toString(),
+  data: loggedWallet.value.publicKey.toString(),
   image: assets.geroLogo,
   margin: 2,
   qrOptions: {
@@ -166,11 +167,11 @@ const options: Partial<Options> = {
   cornersDotOptions: {
     type: 'dot',
   },
-}
+}));
 let qrCode: QRCodeStyling;
 
 onMounted(async () => {
-  qrCode = new QRCodeStyling(options);
+  qrCode = new QRCodeStyling(options.value);
   await nextTick()
   if (qrCodeRef.value) {
     qrCode.append(qrCodeRef.value)

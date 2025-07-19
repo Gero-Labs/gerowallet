@@ -35,7 +35,30 @@ chrome.storage.local.get('networkStore', (res) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['networkStore']) {
-    Object.assign(networkStore, changes['networkStore'].newValue);
+    const newValue = changes['networkStore'].newValue;
+    
+    // Prevent flickering by checking if incoming data is stale for various properties
+    const updatedProps = { ...newValue };
+    
+    // Check assets - don't overwrite if current state has more assets
+    if (newValue.assets && networkStore.assets && 
+        Object.keys(newValue.assets).length < Object.keys(networkStore.assets).length) {
+      delete updatedProps.assets;
+    }
+    
+    // Check dreps - don't overwrite if current state has more dreps
+    if (newValue.dreps && networkStore.dreps && 
+        Object.keys(newValue.dreps).length < Object.keys(networkStore.dreps).length) {
+      delete updatedProps.dreps;
+    }
+    
+    // Check pools - don't overwrite if current state has more pools
+    if (newValue.pools && networkStore.pools && 
+        Object.keys(newValue.pools).length < Object.keys(networkStore.pools).length) {
+      delete updatedProps.pools;
+    }
+    
+    Object.assign(networkStore, updatedProps);
   }
 });
 

@@ -11,15 +11,15 @@
       <v-card-text class="text-left px-0">
         <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
           <template v-slot:[`item.utxo`]="{ item }">
-            <span class="mr-1">{{ `${item.tx_hash}#${item.tx_index}` | truncate }}</span>
-            <CopyButton x-small :value="`${item.tx_hash}#${item.tx_index}`"></CopyButton>
+            <span class="mr-1">{{ filters.truncate(`${item.utxo}`) }}</span>
+            <CopyButton x-small :value="`${item.utxo}`"></CopyButton>
           </template>
           <template v-slot:[`item.address`]="{ item }">
-            <span class="mr-1">{{ `${item.payment_addr.bech32}` | truncate }}</span>
-            <CopyButton x-small :value="`${item.payment_addr.bech32}`"></CopyButton>
+            <span class="mr-1">{{ filters.truncate(`${item.address}`) }}</span>
+            <CopyButton x-small :value="`${item.address}`"></CopyButton>
           </template>
           <template v-slot:[`item.balance`]="{ item }">
-            <span>{{ `${item.value}` | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
+            <span>{{ filters.toCurrency(`${item.balance}`, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
           </template>
         </v-data-table>
         <v-row no-gutters class="mt-4">
@@ -41,9 +41,9 @@
     </v-card>
   </v-tab-item>
 </template>
-<script>
-import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, computed, toRefs } from 'vue';
+import { appWallet } from '@/stores';
 import { buildTx } from '@/shared/utils/builder';
 import {
   Address, Transaction,
@@ -57,80 +57,68 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Messaging } from '@/chrome/messaging';
-// import { Cardano, Serialization } from '@cardano-sdk/core';
-// import { assetsToValue, toUTxO } from '@/chrome/serialization';
-// import { GenericTxBuilder } from '@cardano-sdk/tx-construction';
-// import { TxBuilderDependencies } from '@cardano-sdk/tx-construction/dist/esm/tx-builder/types';
-// import { TxBuilderProviders } from '@cardano-sdk/tx-construction/dist/esm/types';
+import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
+import { Cardano } from '@cardano-sdk/core';
 
-export default {
-  name: 'CollateralTab',
-  components: { CopyButton },
-  computed: {
-    networks() {
-      return networks
-    },
-    ...mapState(useStore, ['loggedWallet', 'baseAddress', 'latestTip']),
-    ...mapState(walletConfigStore, ['utxos', 'collateral']),
-    collateralCandidate() {
-      if (this.collateral) {
-        return [this.collateral]
-      }
-      return []
-    }
-  },
-  filters,
-  methods: {
-    async setCollateral() {
-      // const outputs: Serialization.TransactionOutput[] = []
-      // outputs.push(new Serialization.TransactionOutput(Cardano.Address.fromBech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])))
-      // const transactionUnspentOutputs: Serialization.TransactionUnspentOutput[] = []
-      // this.utxos.forEach((utxo) => transactionUnspentOutputs.push(toUTxO(utxo)));
-      // const txBuilderProviders: TxBuilderProviders
-      // const txBuilderDependencies: TxBuilderDependencies = {
-      //
-      // }
-      // const txBuilder: GenericTxBuilder = new GenericTxBuilder()
+// Define emits
+const emit = defineEmits(['close']);
 
-      // const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
+// Get reactive store properties
+const { loggedWallet, config, utxos, collateral } = toRefs(walletStore);
+const { tip } = toRefs(networkStore);
 
 
-      const outputs = TransactionOutputs.new();
-      outputs.add(TransactionOutput.new(Address.from_bech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
-      const tx = Transaction.new(txBody, TransactionWitnessSet.new())
-      const res = await Messaging.sendToBackground({
-        method: METHOD.signTx,
-        data: { tx: tx.to_hex(), partialSign: true },
-      });
-      if (res.data) {
-        const signedTx = Transaction.new(
-          tx.body(),
-          TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
-          undefined // TODO Transaction metadata
-        );
-        const txId = await appWallet.submitTx(signedTx, this.utxos);
-        console.log(txId)
-        snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`)
-        this.$emit('close')
-        //TODO Wait for Collateral to load up in UI
-      } else if (res.error) {
-        snackbar.setError(res.error.info)
-      }
-    }
-  },
-  data: () => ({
-    headers: [
-      {text: 'UTxO', sortable: false, value: 'utxo'},
-      {text: 'Address', sortable: false, value: 'address'},
-      {text: 'Balance', sortable: false, value: 'balance'},
-    ]
-  }),
-}
+// Reactive data
+const headers = ref([
+  {text: 'UTxO', sortable: false, value: 'utxo'},
+  {text: 'Address', sortable: false, value: 'address'},
+  {text: 'Balance', sortable: false, value: 'balance'},
+]);
+
+const collateralCandidate = computed<any>(() => {
+  if (collateral.value) {
+    const res = [collateral.value].map((utxo: Cardano.Utxo) => ({
+      utxo: `${utxo[0].txId}#${utxo[0].index}`,
+      address: utxo[1].address,
+      balance: utxo[1].value.coins.toString()
+    }));
+    console.log('Collateral', res);
+    return res;
+  }
+  return [];
+});
+
+// Methods
+const setCollateral = async () => {
+  const outputs = TransactionOutputs.new();
+  outputs.add(TransactionOutput.new(Address.from_bech32(baseAddress.value), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
+  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+  utxos.value.forEach((utxo: any) => transactionUnspentOutputs.add(toUTxO(utxo)));
+  const txBody = buildTx(loggedWallet.value, outputs, transactionUnspentOutputs, latestTip.value.slot, baseAddress.value);
+  const tx = Transaction.new(txBody, TransactionWitnessSet.new());
+
+  const res = await Messaging.sendToBackground({
+    method: METHOD.signTx,
+    data: { tx: tx.to_hex(), partialSign: true },
+  });
+
+  if (res.data) {
+    const signedTx = Transaction.new(
+      tx.body(),
+      TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
+      undefined // TODO Transaction metadata
+    );
+    const txId = await appWallet.submitTx(signedTx, utxos.value);
+    console.log(txId);
+    snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
+    emit('close');
+    //TODO Wait for Collateral to load up in UI
+  } else if (res.error) {
+    snackbar.setError(res.error.info);
+  }
+};
 </script>
 
 <style scoped>
