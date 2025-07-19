@@ -1,6 +1,5 @@
-import VueRouter, {NavigationGuardNext, Route} from 'vue-router';
+import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
 
-import { useStore } from '@/stores';
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
@@ -22,6 +21,7 @@ import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
 import MultiSig from '@/modules/multisig/views/MultiSig.vue';
+import WalletStore from '@/plugins/walletStore';
 
 const routes = [
   {
@@ -192,43 +192,29 @@ const router = new VueRouter({
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   loading.setLoading(true);
-  const store = useStore();
-  const wallets: any[] = store.wallets;
-  if (Array.isArray(wallets) && !wallets.length) {
-    await store.loadWallets();
-  }
-  const isLoggedIn = store.isLoggedIn;
-  if (to.matched.some(record => record.meta['requiresAuth'])) {
-    // this route requires auth, check if logged in
-    // if not, redirect to login page.
-    if (!isLoggedIn) {
-      const redirect = to.path != '/' ? to.path : null;
-      let path = '/welcome'
-      if (redirect) {
-        path += `?redirect=${to.fullPath}`
-      }
-      if (to.query && Object.keys(to?.query).length !== 0) {
-        const params = new URLSearchParams();
-        Object.entries(to.query).forEach(([key, value]) => {
-          if (Array.isArray(value)) {
-            value.forEach(v => params.append(key, v));
-          } else if (value) {
-            params.append(key, value.toString());
-          }
-        });
-        path += `?${params.toString()}`;
-      }
-      next({
-        path: path,
-      });
+
+  const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
+  const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
+  const isWelcome: boolean = to.name === 'welcome';
+
+  if (needsAuth && !isLoggedIn) {
+    // not logged in → send to /welcome (with optional redirect)
+    let redirectTo = '/welcome';
+    if (to.path !== '/') {
+      redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
-  } else if (to.name === 'welcome' && isLoggedIn) {
-    next({
-      path: '/',
-    });
+    loading.setLoading(false);
+    return next({ path: redirectTo });
   }
-  next();
+
+  if (isWelcome && isLoggedIn) {
+    // already logged in → don’t show welcome again
+    loading.setLoading(false);
+    return next({ path: '/' });
+  }
+
   loading.setLoading(false);
+  next();
 });
 
 export default router;

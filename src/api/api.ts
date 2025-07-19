@@ -23,7 +23,7 @@ export class Api {
   }
 
   async ablyToken(baseAddress: string) {
-    return await this.axiosInstance.get(`/api/ably/token?chain=${this.chain}&network=${this.network}&baseAddress=${baseAddress}`);
+    return await this.axiosInstance.get(`/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`);
   }
 
   async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
@@ -108,7 +108,7 @@ export class Api {
   async getTransactionsInfo(txHashes: string[]) {
     try {
       const { data, status } = await this.axiosInstance.post(`/api/transactions/info?chain=${this.chain}&network=${this.network}`, txHashes);
-      console.log("data:::", data);
+      console.log("data:", data);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
@@ -117,6 +117,10 @@ export class Api {
       }
       throw parseHttpError(error);
     }
+  }
+
+  async getTransactionsCbor(txHashes: string[]) {
+    return await this.axiosInstance.post(`/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, txHashes);
   }
 
   async getAllPools() {
@@ -149,17 +153,9 @@ export class Api {
     }
   }
 
-  async getAssetsInfo(units) {
-    try {
-      const { data, status } = await this.axiosInstance.post(
-        `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
-        units
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
+  async getAssetsInfo(units: string[]) {
+    const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    return await this.axiosInstance.post(url, units);
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
@@ -182,6 +178,10 @@ export class Api {
     );
     if (status === 200) return data;
     return parseHttpError(data);
+  }
+
+  async getGenesis() {
+    return await this.axiosInstance.get(`/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`);
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
@@ -238,88 +238,6 @@ export class Api {
     }
   }
 
-  async getAllBlacklistPolicies(): Promise<any> {
-    return await this.axiosInstance.get(`/api/assets/blacklist`);
-  }
-
-  async getAllTokens(): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/v2/swap/tokens`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async getAveragePrice(tokenIn: string, tokenOut: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/v2/swap/averagePrice/${tokenIn}/${tokenOut}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async estimate(amount_in: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
-    try {
-      const requestBody = {
-        amount_in,
-        referrer,
-        slippage,
-        token_in,
-        token_out,
-        blacklisted_dexes,
-      }
-      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/estimate`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
-    try {
-      const requestBody = {
-        amount_out,
-        referrer,
-        slippage,
-        token_in,
-        token_out,
-        blacklisted_dexes
-      }
-      const { data, status } = await this.axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
-    const requestBody = {
-      amount_in,
-      buyer_address,
-      slippage,
-      token_in,
-      token_out,
-      referrer,
-    }
-    const { data } = await this.axiosInstance.post(`/api/v2/swap`, requestBody);
-    return data
-  }
-
-  async swapSign(Signatures: number, txCbor: string): Promise<any> {
-    const requestBody = {
-      Signatures,
-      txCbor,
-    }
-    const { data } = await this.axiosInstance.post(`/api/v2/swap/sign`, requestBody);
-    return data
-  }
-
   async charts(tokenIn: string, tokenOut: string, period: string, from: number, to: number): Promise<any> {
     try {
       const requestBody = {
@@ -337,70 +255,9 @@ export class Api {
     }
   }
 
-  async mcap(unit: string): Promise<any> {
-    return await this.axiosInstance.get(`/api/v2/mcap/${unit}`);
-  }
-
-  async dailyPriceChange(unit: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/token/prices/chg?unit=${unit}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async assetRisk(fingerprint: string): Promise<any> {
-    if (fingerprint === 'asset12ffdj8kk2w485sr7a5ekmjjdyecz8ps2cm5zed') {
-      throw new Error('Asset not found')
-    }
-    const { data, status } = await this.axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
-    if (status === 200) return data;
-    return parseHttpError(data);
-  }
-
-  async getBlogPosts(pageSize: number, nextPage?: string): Promise<any> {
-    try {
-      let url = `/api/blog/posts?paging.limit=${pageSize}`
-      if (nextPage) {
-        url += `&paging.cursor=${nextPage}`
-      }
-      const { data, status } = await this.axiosInstance.get(url);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getMember(memberId: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/members/${memberId}`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async getPostMetrics(postId: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/blog/posts/${postId}/metrics`);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
-  async getPortfolio(stakeAddress: string): Promise<any> {
-    return await this.axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
-  }
-
-  async getPortfolioTrendedValue(stakeAddress: string): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.get(`/api/wallet/value/trended?address=${stakeAddress}&timeframe=1y&quote=USD`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -509,7 +366,7 @@ export class Api {
       /**
        * Update a transaction by ID
        * @param id - The ID of the transaction to update
-       * @param body - The body of the transaction to update 
+       * @param body - The body of the transaction to update
        * body example:
        * {
             "multisigAddress": "{multisigAddress}",

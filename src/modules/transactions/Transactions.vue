@@ -6,11 +6,8 @@
       style=" width: 39%;"
     />
     <v-card v-if="transactionInfo" style="overflow-y: auto; width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);">
-      <TransactionDetails
-        :transactionInfo="transactionInfo"
-      />
+      <TransactionDetails :transactionInfo="transactionInfo" />
     </v-card>
-
     <ReportDialog
       :isOpen="isReportDialogOpen"
       @close="isReportDialogOpen = false"

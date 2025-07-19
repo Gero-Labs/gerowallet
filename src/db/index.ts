@@ -1,93 +1,84 @@
-import Dexie, {DexieError} from 'dexie';
+import Dexie, { DexieError } from 'dexie';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { useStore } from '@/stores';
 import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
-import { walletDBSchema, walletDBVersion } from '@/db/schema';
+import {
+  blockChainDBSchema,
+  blockChainDBVersion,
+  geroDBSchema,
+  geroDBVersion,
+  walletDBSchema,
+  walletDBVersion,
+} from '@/db/schema';
 import { encrypt } from '@/shared/utils/crypto';
 import * as bip39 from 'bip39';
 import * as Crypto from '@cardano-sdk/crypto'
-import { bech32m } from 'bech32';
+import { bech32, bech32m } from 'bech32';
 
-const db: Dexie = new Dexie('GeroWalletDatabase');
-const blockChainDBVersion: number = 2;
-
-db.version(10).stores({
-  wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
-  config: '++id, key, value',
-  provider: '++id, [name+chain+network], baseUrl, apiKey',
-})
-  .upgrade(async (tx) => {
-    console.log('Upgrading database schema to version 11...', tx);
-    try {
-      const oldWallets = await tx.table('conceptualWallet').toArray();
-      const keys = await tx.table('key').toArray();
-      const publicKeyMap: Map<number, string> = new Map();
-      const encryptedPrivateKeyMap: Map<number, string> = new Map();
-      for (const key of keys) {
-        const id = key.conceptualWalletId;
-        if (key.hash.includes('xpub')) {
-          publicKeyMap.set(id, key.hash);
-        } else if (key.isEncrypted) {
-          encryptedPrivateKeyMap.set(id, key.hash)
-        }
-      }
-
-      // Check if the old table exists. If so, we are upgrading from the old version.
-      if (oldWallets) {
-        console.log('Migrating data from old schema (v9.2) to new schema (v10)...');
-
-        for (const oldWallet of oldWallets) {
-          const walletId = oldWallet.conceptualWalletId;
-          // Map fields from the old schema to the new one.
-          // For example:
-          const newWallet = {
-            id: walletId,
-            name: oldWallet.name,
-            icon: oldWallet.color,  // Default or map using your own logic
-            type: oldWallet.walletType || 'Normal',
-            theme: 'gero',
-            order: oldWallet.listOrder,
-            encryptedPrivateKey: encryptedPrivateKeyMap.get(walletId),
-            publicKey: publicKeyMap.get(walletId),
-            passwordLastUpdate: new Date(),
-            chain: 'Cardano',
-            network: 'Mainnet',
-          };
-
-          // Add the new wallet into the new wallets table.
-          await tx.table('wallets').add(newWallet);
-        }
-      }
-    } catch (error) {
-      console.error('Error migrating data from old schema to new schema:', error);
-    }
-});
-
-db.version(11).stores({
-  wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
-  config: '++id, key, value',
-  provider: '++id, [name+chain+network], baseUrl, apiKey',
-})
-
-db.open().catch(err => {
-  console.error(`Failed to open database: ${err.stack || err}`);
-});
-
-// await initializeConfigTable();
-//
-// async function initializeConfigTable() {
-//   await db['config'].toArray().then(async rows => {
-//     if (rows.length === 0) {
-//       const initialData = [{ key: 'provider', value: Provider.KOIOS }];
-//       await db['config'].bulkAdd(initialData).catch(error => {
-//         console.error('Error adding initial data:', error);
-//       });
-//     }
-//   });
-// }
+let db: Dexie = null
 
 export default {
+  async init(): Promise<Dexie> {
+    db = new Dexie('GeroWalletDatabase');
+    db.version(10).stores({
+      wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network',
+      config: '++id, key, value',
+      provider: '++id, [name+chain+network], baseUrl, apiKey',
+    })
+      .upgrade(async (tx) => {
+        console.log('Upgrading database schema to version 11...', tx);
+        try {
+          const oldWallets = await tx.table('conceptualWallet').toArray();
+          const keys = await tx.table('key').toArray();
+          const publicKeyMap: Map<number, string> = new Map();
+          const encryptedPrivateKeyMap: Map<number, string> = new Map();
+          for (const key of keys) {
+            const id = key.conceptualWalletId;
+            if (key.hash.includes('xpub')) {
+              publicKeyMap.set(id, key.hash);
+            } else if (key.isEncrypted) {
+              encryptedPrivateKeyMap.set(id, key.hash)
+            }
+          }
+
+          // Check if the old table exists. If so, we are upgrading from the old version.
+          if (oldWallets) {
+            console.log('Migrating data from old schema (v9.2) to new schema (v10)...');
+
+            for (const oldWallet of oldWallets) {
+              const walletId = oldWallet.conceptualWalletId;
+              // Map fields from the old schema to the new one.
+              // For example:
+              const newWallet = {
+                id: walletId,
+                name: oldWallet.name,
+                icon: oldWallet.color,  // Default or map using your own logic
+                type: oldWallet.walletType || 'Normal',
+                theme: 'gero',
+                order: oldWallet.listOrder,
+                encryptedPrivateKey: encryptedPrivateKeyMap.get(walletId),
+                publicKey: publicKeyMap.get(walletId),
+                passwordLastUpdate: new Date(),
+                chain: 'Cardano',
+                network: 'Mainnet',
+              };
+
+              // Add the new wallet into the new wallets table.
+              await tx.table('wallets').add(newWallet);
+            }
+          }
+        } catch (error) {
+          console.error('Error migrating data from old schema to new schema:', error);
+        }
+      });
+
+    db.version(geroDBVersion).stores(geroDBSchema)
+
+    db.open().catch(err => {
+      console.error(`Failed to open database: ${err.stack || err}`);
+    });
+    return db;
+  },
   async getProvider(chain, network) {
     const provider = await this.getConfiguration('provider');
     return db['provider'].where('[name+chain+network]').equals([provider.value, chain, network]).first();
@@ -115,6 +106,7 @@ export default {
     return { };
   },
   async getConfiguration(key) {
+    const db = await this.getGeroDb();
     return db['config'].where({ key: key }).first();
   },
   async getAllWallets() {
@@ -144,9 +136,14 @@ export default {
     const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, password);
     const accountIndex = 0;
     const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
-    const xpubHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
-    const words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
-    const publicKey = bech32m.encode('xpub', words, 120);
+    const xpubHex: Crypto.Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
+    let words: number[]
+    try {
+      words = bech32.toWords(Buffer.from(xpubHex, 'hex'))
+    } catch (e) {
+      words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
+    }
+    const publicKey = bech32.encode('xpub', words, 120);
     const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
       new Date(), chain, network, null, encryptedMnemonic);
     const walletId = await db['wallets'].add({
@@ -163,7 +160,6 @@ export default {
       network: wallet.network
     });
     await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic, isRestore);
-    await useStore().loadWallets();
     return walletId;
   },
   async createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
@@ -192,7 +188,6 @@ export default {
       userId: userId,
     });
     await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
-    await useStore().loadWallets();
     return walletId;
   },
   async getGoogleWalletWithEmail(email: string) {
@@ -215,7 +210,6 @@ export default {
       passwordLastUpdate: new Date(),
     });
     await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
-    await useStore().loadWallets();
     return walletId;
   },
   async createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
@@ -229,7 +223,8 @@ export default {
       if (rows.length === 0) {
         const initialData = [
           { key: 'currency', value: Currency.USD.short },
-          { key: 'txAutoSubmit', value: true }
+          { key: 'txAutoSubmit', value: true },
+          { key: 'useSidePanel', value: true },
         ];
         if (hasEncryptedMnemonic) {
           if (isRestore) {
@@ -271,13 +266,7 @@ export default {
     }
   },
   setBlockchainDBVersionSchema(db: Dexie) {
-    db.version(blockChainDBVersion).stores({
-      pools: 'pool_id_bech32',
-      dreps: 'drep_id',
-      sync: '++id, time',
-      assets: 'asset, fingerprint, asset_name, policy_id',
-      // protocol_params: 'epoch'
-    });
+    db.version(blockChainDBVersion).stores(blockChainDBSchema);
   },
   setWalletDBVersionSchema(db: Dexie) {
     console.log('setWalletDBVersionSchema')

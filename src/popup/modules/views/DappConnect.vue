@@ -48,11 +48,18 @@ import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import { mapState } from 'pinia';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: 'dapp-connect',
   computed: {
     ...mapState(useStore, ['loggedWallet']),
+    ...mapState(walletConfigStore, ['getUseSidePanel']),
+    useSidePanel: {
+      get() {
+        return this.getUseSidePanel
+      }
+    },
     WalletType() {
       return WalletType
     }
@@ -62,7 +69,7 @@ export default {
     return {
       appWallet,
       consent: false,
-      controller: Messaging.createInternalController()
+      controller: null
     };
   },
   methods: {
@@ -75,6 +82,15 @@ export default {
       await this.controller.returnData({ data: true, error: {} })
       window.close();
     },
+  },
+  mounted() {
+    if (this.useSidePanel) {
+      const params = new URLSearchParams(window.location.href);
+      this.tabId = Number(params.get("tabId"));
+      this.controller = Messaging.createInternalSidePanelController(this.tabId)
+    } else {
+      this.controller = Messaging.createInternalController()
+    }
   }
 };
 </script>

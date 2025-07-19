@@ -6,7 +6,7 @@
           <h3 style="color: white">Shop & Earn Pop-ups</h3>
           <span class="helper my-0">Get real-time cashback notifications as you explore supported retailer websites.</span>
         </v-col>
-        <v-col cols="3" style="align-content: center;">
+        <v-col cols="3" style="display: flex;">
           <v-switch dense inset v-model="cashbackPopups" hide-details style="margin: auto"></v-switch>
         </v-col>
       </v-row>
@@ -15,8 +15,17 @@
           <h3 style="color: white">Tx Auto Submit</h3>
           <span class="helper my-0">Automatically submit transactions after signing</span>
         </v-col>
-        <v-col cols="3" style="align-content: center;">
+        <v-col cols="3" style="display: flex;">
           <v-switch dense inset v-model="txAutoSubmit" hide-details style="margin: auto"></v-switch>
+        </v-col>
+      </v-row>
+      <v-row no-gutters class="py-2">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">Prompt Display Mode</h3>
+          <span class="helper my-0">Select pop-ups or side panel for signing and approval prompts</span>
+        </v-col>
+        <v-col cols="3" style="display: flex;">
+          <ToggleSwitch text-left="POPUP" text-right="SIDEPANEL" font-size="10px" v-model="useSidePanel" />
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -57,16 +66,16 @@
               <h3 class="white--text">Delete Wallet</h3>
               <span class="helper my-0">Deleting this wallet removes it from Gero Dashboard, and any remaining funds will be inaccessible. To regain access, restore using your recovery phrase</span>
             </v-col>
-            <v-col cols="3" style="align-content: end;">
+            <v-col cols="3" style="align-content: center;">
               <v-btn
-                block
-                outlined
+                text
+                class="px-1"
                 color="error"
                 @click="deleteWalletDialog = true"
                 :disabled="deleteWalletLoading"
                 :loading="deleteWalletLoading"
               >
-                <v-icon right class="mr-1">
+                <v-icon right class="mr-1 ml-0">
                   mdi-delete
                 </v-icon>
                 Delete Wallet
@@ -103,14 +112,13 @@ import networks from '@/utils/networks';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 export default {
   name: 'AdvancedSettingsTab',
-  components: { BackupWalletDialog },
+  components: { ToggleSwitch, BackupWalletDialog },
   watch: {
-    cashbackPopupsDisabled(newVal, oldVal) {
-      console.log('newVal', newVal)
-      console.log('oldVal', oldVal)
+    cashbackPopupsDisabled(newVal) {
       this.updateCashbackPopups(newVal);
     },
   },
@@ -119,13 +127,21 @@ export default {
       return networks
     },
     ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup']),
+    ...mapState(walletConfigStore, ['config', 'getTxAutoSubmit', 'getCashbackPopup', 'getUseSidePanel']),
     txAutoSubmit: {
       get() {
         return this.getTxAutoSubmit
       },
       async set(val) {
         await this.setTxAutoSubmit(val)
+      }
+    },
+    useSidePanel: {
+      get() {
+        return this.getUseSidePanel
+      },
+      async set(val) {
+        return this.setUseSidePanel(val)
       }
     },
     cashbackPopups: {
@@ -139,7 +155,7 @@ export default {
   },
   methods: {
     ...mapActions(useStore, ['logout']),
-    ...mapActions(walletConfigStore, ['setTxAutoSubmit']),
+    ...mapActions(walletConfigStore, ['setTxAutoSubmit', 'setUseSidePanel']),
     async loadCashbackPopups() {
       const val = await getTurnOff()
       this.cashbackPopupsDisabled = val.isTurnedOff;

@@ -1,3 +1,4 @@
+import { CID } from 'multiformats/cid'
 import apexBg from '@/assets/apex.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
@@ -113,6 +114,10 @@ import pairSvg from '@/assets/svg/pair.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
+import questionMark from '@/assets/svg/question-mark.svg'
+import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
+
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export default {
   apexBg,
@@ -194,6 +199,14 @@ export default {
   withdrawalSvg,
   buyAda,
   sellAda,
+  detectCIDVersion(cidStr: string) {
+    try {
+      const cid = CID.parse(cidStr);
+      return cid.version; // 0, 1, or 2
+    } catch (e) {
+      return null; // Not a valid CID
+    }
+  },
   resolveIcon(icon: string): string {
     if (!icon) {
       return errorImage;
@@ -201,6 +214,12 @@ export default {
 
     if (icon.startsWith('http') || icon.startsWith('data:')) {
       return icon;
+    } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
+      return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
+    } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
+      return `${baseUrl}/api/ipfs?path=${icon.replace('ipfs://', '').replace('ipfs/', '')}`
+    } else if (this.detectCIDVersion(icon) != null) {
+      return `${baseUrl}/api/ipfs?path=${icon}`
     }
 
     switch (icon) {
@@ -220,8 +239,34 @@ export default {
         return blueSvg;
       case 'grey':
         return greySvg;
+    }
+
+    const firstChar = icon.charAt(0);
+
+    let mimeType: string | null = null;
+
+    switch (firstChar) {
+      case '/':
+        mimeType = 'image/jpeg';
+        break;
+      case 'i':
+        mimeType = 'image/png';
+        break;
+      case 'R':
+        mimeType = 'image/gif';
+        break;
+      case 'U':
+        mimeType = 'image/webp';
+        break;
       default:
         return errorImage;
+    }
+
+    return `data:${mimeType};base64,${icon}`;
+  },
+  fallbackImage(e) {
+    if (e && e.target) {
+      e.target.src = this.errorImage
     }
   },
   resolveRisk(risk: string): string {
@@ -290,5 +335,7 @@ export default {
   pairSvg,
   pairApexSvg,
   cardanoSvg,
-  clarityLogo
+  clarityLogo,
+  questionMark,
+  questionMarkDark
 }

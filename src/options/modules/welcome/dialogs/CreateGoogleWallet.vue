@@ -108,7 +108,6 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Theme, WalletType } from '@/models/types';
@@ -195,8 +194,8 @@ const walletCreation = async (): Promise<void> => {
     ...newWallet.value,
     type: WalletType.Google,
     theme: Theme.GERO,
-    chain: store.network.blockchain,
-    network: store.network.network,
+    chain: network.value.blockchain,
+    network: network.value.network,
   };
   try {
     const walletId = await db.createNewGoogleWallet(

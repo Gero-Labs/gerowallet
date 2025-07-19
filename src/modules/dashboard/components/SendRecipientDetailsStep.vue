@@ -22,7 +22,7 @@
               max-width="452"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="!valid">
+                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="!valid || loading || !paymentAddress">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
@@ -141,7 +141,7 @@
                 <v-card-text class="pa-0">
                   <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders" :items="contacts ? Object.values(contacts) : []" hide-default-footer disable-pagination @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
                     <template v-slot:[`item.address`]="{ item }">
-                      {{ item.address | truncate }}<CopyButton x-small :value="item.address" />
+                      {{ filters.truncate(item.address) }}<CopyButton x-small :value="item.address" />
                     </template>
                     <template v-slot:[`item.actions`]="{ item }">
                       <v-btn color="error" icon x-small @click="removeCont(item)">
@@ -179,7 +179,7 @@
               :placeholder="`Enter a Recipient Address${loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? ' or an ADA Handle' : ''}`"
               rows="3"
               outlined
-              :rules="[rules.recipientRules(this.loggedWallet?.chain, this.loggedWallet?.network)]"
+              :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
               class="recipient-address"
               @input="resolveAddress"
               :loading="loading"
@@ -223,148 +223,145 @@
     </div>
   </v-form>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, toRefs, watch } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";
-import { mapActions, mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
-import { resolveAsset } from '@/shared/utils/resolver';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import filters from '@/shared/utils/filters';
 import adaHandleApi from '@/api/ada-handle.api';
+import { walletStore } from '@/plugins/walletStore';
+import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
+import assets from '@/utils/assets';
+import filters from '@/shared/utils/filters';
 
-export default {
-  components: { CopyButton, Select },
-  name: 'SendRecipientDetailsStep',
-  props: {
-    sendData: {
-      type: Object,
-      required: true,
-    },
-  },
-  watch: {
-    contact: {
-      async handler(val) {
-        await this.addOrUpdateContact(val)
-      },
-      deep: true,
-    },
-    sendData: {
-      handler(val) {
-        if (val && !val.recipientAddress) {
-          this.recipientAddress = ''
-        }
-      },
-      deep: true,
+interface Props {
+  sendData: any;
+}
+
+const props = defineProps<Props>();
+const emit = defineEmits(['updateRecipientAddress'])
+
+const { loggedWallet, contacts } = toRefs(walletStore)
+
+const valid = ref<boolean>(false);
+const paymentAddress = ref<string>('');
+const recipientAddress = ref<string>('');
+const resolved = ref<boolean>(undefined);
+const loading = ref<boolean>(false);
+const contactsMenu = ref<boolean>(false);
+const saveContactMenu = ref<boolean>(false);
+const asset = ref<any>(undefined);
+const contact = ref<any>({
+  name: '',
+  address: '',
+  img: undefined
+});
+const contactsHeaders = ref<any[]>([
+  { text: 'Name', value: 'name' },
+  { text: 'Address', value: 'address' },
+  { text: '', align: 'right', sortable: false, value: 'actions' },
+]);
+
+const selectContact = (item) => {
+  recipientAddress.value = item.address
+  paymentAddress.value = item.address
+  emit('updateRecipientAddress', recipientAddress.value)
+  contactsMenu.value = false
+}
+
+const saveContact = () => {
+  console.log('save contact')
+  contact.value = {}
+  let name
+  const address = paymentAddress.value
+  const img = asset.value?.img
+  if (contacts.value[paymentAddress.value] == null) {
+    name = ''
+  } else {
+    name = contacts.value[paymentAddress.value].name
+  }
+  if (!name && asset.value?.name) {
+    name = asset.value.name
+  }
+  contact.value = {
+    img,
+    name,
+    address
+  }
+}
+
+const resolveAddress = (val) => {
+  if (val && val.startsWith('$') && loggedWallet.value.network === Network.MAINNET && loggedWallet.value.chain === Blockchain.CARDANO) {
+    resolveAdaHandle(val)
+  } else {
+    resolved.value = undefined
+    paymentAddress.value = val
+    emit('updateRecipientAddress', val)
+  }
+}
+
+const removeCont = (item) => {
+  if (item && item.address) {
+    delete contacts.value[item.address]
+    removeContact(loggedWallet.value.id, item.address)
+    contactsMenu.value = false
+  } else {
+    delete contacts.value[contact.value.address]
+    removeContact(loggedWallet.value.id, contact.value.address)
+    saveContactMenu.value = false
+  }
+}
+
+const resolveAdaHandle = debounce(async function(val) {
+    if (val.length === 1) {
+      resolved.value = false
+      return
     }
-  },
-  filters,
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['contacts']),
-    Blockchain() {
-      return Blockchain
-    },
-    Network() {
-      return Network
-    },
-  },
-  methods: {
-    ...mapActions(walletConfigStore, ['addOrUpdateContact', 'removeContact']),
-    selectContact(item) {
-      this.recipientAddress = item.address
-      this.paymentAddress = item.address
-      this.$emit('updateRecipientAddress', this.recipientAddress)
-      this.contactsMenu = false
-    },
-    saveContact() {
-      this.contact = {}
-      let name
-      const address = this.paymentAddress
-      const img = this.asset ? this.asset.img : null
-      if (this.contacts[this.paymentAddress] == null) {
-        name = ''
-      } else {
-        name = this.contacts[this.paymentAddress].name
-      }
-      if (!name && this.asset?.name) {
-        name = this.asset.name
-      }
-      this.contact = {
-        img,
-        name,
-        address
-      }
-    },
-    removeCont(item) {
-      if (item && item.address) {
-        this.removeContact(item.address)
-        this.contactsMenu = false
-      } else {
-        this.removeContact(this.contact.address)
-        this.saveContactMenu = false
-      }
-    },
-    resolveAddress(val) {
-      if (val && val.startsWith('$') && this.loggedWallet.network === Network.MAINNET && this.loggedWallet.chain === Blockchain.CARDANO) {
-        this.resolveAdaHandle(val)
-      } else {
-        this.resolved = undefined
-        this.paymentAddress = val
-        this.$emit('updateRecipientAddress', val)
-      }
-    },
-    resolveAdaHandle: debounce(async function(val) {
-      if (val.length === 1) {
-        this.resolved = false
-        return
-      }
-      this.loading = true
-      adaHandleApi.resolve(val.replace('$','')).then(async res => {
-        if (res.status === 200 && res.data?.resolved_addresses?.ada) {
-          const assetRes = await appWallet.api.getDetailedAssetsInfo(res.data.policy, res.data.hex)
-          this.asset = await resolveAsset(assetRes.data, assetRes.data)
-          this.paymentAddress = res.data.resolved_addresses.ada
-          this.$emit('updateRecipientAddress', res.data.resolved_addresses.ada)
-          this.resolved = true
-        } else {
-          this.resolved = false
+    loading.value = true
+    adaHandleApi.resolve(val.replace('$','')).then(async res => {
+      console.log(res)
+      if (res.status === 200 && res.data?.resolved_addresses?.ada) {
+        const assetRes = {
+          unit: res.data.policy + res.data.hex,
+          img: res.data.image,
+          metadata: {
+            logo: res.data.image,
+          }
         }
-      }).catch(() => {
-        this.$emit('updateRecipientAddress', '')
-        this.resolved = false
-      }).finally(() => {
-        this.loading = false
-      })
-    }, 1000),
-  },
-  data: () => ({
-    valid: false,
-    paymentAddress: '',
-    recipientAddress: '',
-    resolved: undefined,
-    loading: false,
-    rules,
-    contactsMenu: false,
-    saveContactMenu: false,
-    asset: undefined,
-    contact: {
-      name: '',
-      address: '',
-      img: undefined
-    },
-    contactsHeaders: [
-      { text: 'Name', value: 'name' },
-      { text: 'Address', value: 'address' },
-      { text: '', align: 'right', sortable: false, value: 'actions' },
-    ]
-  })
-};
-</script>
+        asset.value = {
+          name: res.data.name,
+          img: assets.resolveIcon(res.data.image),
+        }
+        paymentAddress.value = res.data.resolved_addresses.ada
+        emit('updateRecipientAddress', res.data.resolved_addresses.ada)
+        resolved.value = true
+      } else {
+        resolved.value = false
+      }
+    }).catch(() => {
+      emit('updateRecipientAddress', '')
+      resolved.value = false
+    }).finally(() => {
+      loading.value = false
+    })
+  }, 1000);
 
+watch(contact, (val) => {
+  console.log('contact', val)
+  if (contacts.value[val.address] == null || contacts.value[val.address].name != val.name) {
+    contacts.value[val.address] = val
+    addOrUpdateContact(loggedWallet.value.id, val)
+  }
+}, { deep: true })
+
+watch(props.sendData, (val) => {
+  if (val && !val.recipientAddress) {
+    recipientAddress.value = ''
+  }
+}, { deep: true })
+</script>
 <style>
 .send-recipient-details-container {
   display: flex;
@@ -387,6 +384,5 @@ export default {
       resize: none;
     }
   }
-
 }
 </style>

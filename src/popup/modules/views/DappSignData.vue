@@ -16,7 +16,7 @@
       <v-card-actions class="justify-center pb-0 pt-3 px-0">
         <v-layout>
           <v-row>
-            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal" class="pb-0">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !signature" class="pb-0">
               <v-tooltip
                 v-model="tooltip.enabled"
                 top
@@ -49,7 +49,7 @@
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
@@ -62,10 +62,10 @@
                 block
                 class="geroButton"
                 style="color: black!important;"
-                @click="confirm"
+                @click="sign"
                 :loading="loading"
                 :disabled="!valid || loading">
-                Sign & Confirm
+                {{txAutoSubmit ? 'Sign & Confirm' : !signature ? 'SIGN' : 'CONFIRM'}}
               </v-btn>
             </v-col>
           </v-row>
@@ -80,17 +80,29 @@ import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { appWallet, useStore } from '@/stores';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { mapState } from 'pinia';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import { verifyData } from '@/shared/utils/converter';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 export default {
   name: 'DappSignData',
-  components: { USBBluetoothSwitch, PopupHeader },
+  components: { ToggleSwitch, PopupHeader },
   computed: {
     ...mapState(useStore, ['loggedWallet']),
+    ...mapState(walletConfigStore, ['getTxAutoSubmit', 'getUseSidePanel']),
+    txAutoSubmit: {
+      get() {
+        return this.getTxAutoSubmit
+      }
+    },
+    useSidePanel: {
+      get() {
+        return this.getUseSidePanel
+      }
+    },
     WalletType() {
       return WalletType
     }
@@ -106,7 +118,10 @@ export default {
       await this.controller.returnData({ data: undefined, error: DataSignError.UserDeclined })
       window.close();
     },
-    async confirm() {
+    async sign() {
+      if (!this.txAutoSubmit && this.signature) {
+        await this.confirm()
+      }
       const signAndReturnTx = async () => {
         this.loading = true
         try {
@@ -117,12 +132,13 @@ export default {
           const res = await appWallet.signData(address, payload, this.spendingPassword, 0, !this.isBT)
           console.log(res)
           verifyData(res, address, payload)
-          await this.controller.returnData({ data: res, error: undefined })
-          window.close();
+          this.signature = res;
+          if (this.txAutoSubmit) {
+            await this.confirm()
+          }
         } catch (e) {
           snackbar.setError(e)
           console.log(e);
-          await this.controller.returnData({ data: undefined, error: e });
         }
         this.loading = false
       };
@@ -138,13 +154,22 @@ export default {
         await signAndReturnTx();
       }
     },
+    async confirm() {
+      console.log(this.signature)
+      await this.controller.returnData({ data: this.signature, error: undefined })
+      window.close();
+    },
     async init() {
       console.log('init')
-      const request = await this.controller.requestData();
-      if (request?.data?.payload) {
-        this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')
+      try {
+        const request = await this.controller.requestData();
+        if (request?.data?.payload) {
+          this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')
+        }
+        this.request = request;
+      } catch (e) {
+        console.log(e);
       }
-      this.request = request;
     }
   },
   data() {
@@ -162,10 +187,20 @@ export default {
       },
       isBT: false,
       loading: false,
-      controller: Messaging.createInternalController()
+      controller: null,
+      tabId: null,
+      signature: undefined,
     };
   },
-  async created() {
+  async mounted() {
+    if (this.useSidePanel) {
+      const params = new URLSearchParams(window.location.href);
+      this.tabId = Number(params.get("tabId"));
+      this.controller = Messaging.createInternalSidePanelController(this.tabId)
+    } else {
+      this.controller = Messaging.createInternalController()
+    }
+
     await this.init();
   },
 };

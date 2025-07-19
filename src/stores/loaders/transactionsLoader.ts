@@ -31,6 +31,7 @@ export async function subscribeTransactions(
       dbInstance.table('transactions').toArray()
     ).subscribe({
       next: async (newTransactions: any[]) => {
+        console.log('newTransactions', newTransactions)
         const newT = newTransactions.map((tx: any) => tx.transaction);
         store.transactions = newT;
         if (store.setUtxosAndAddresses) {

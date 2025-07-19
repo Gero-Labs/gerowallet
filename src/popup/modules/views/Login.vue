@@ -60,10 +60,17 @@ import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
 export default {
   name: 'Login',
   computed: {
+    ...mapState(walletConfigStore, ['getUseSidePanel']),
+    useSidePanel: {
+      get() {
+        return this.getUseSidePanel
+      }
+    },
     WalletType() {
       return WalletType
     },
@@ -100,6 +107,15 @@ export default {
       assets,
     };
   },
+  mounted() {
+    if (this.useSidePanel) {
+      const params = new URLSearchParams(window.location.href);
+      this.tabId = Number(params.get("tabId"));
+      this.controller = Messaging.createInternalSidePanelController(this.tabId)
+    } else {
+      this.controller = Messaging.createInternalController()
+    }
+  }
 };
 </script>
 <style scoped>

@@ -19,6 +19,10 @@ const purpose = {
   voting: 1694,
 };
 
+const coin_type = {
+  cardano: 1815,
+}
+
 const CoreAddressTypes = {
   CARDANO_LEGACY: 0,
   CARDANO_BASE: 1,
@@ -47,14 +51,10 @@ const WalletTypePurpose = {
 };
 
 const CoinTypes = {
-  CARDANO: HARDENED + 1815, // HARD_DERIVATION_START + 1815;
+  CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
 };
 
-/**
- * Defined by bip44
- * https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#address-gap-limit
- */
 const BIP44_SCAN_SIZE = 20;
 
 const ChainDerivations = {
@@ -62,6 +62,8 @@ const ChainDerivations = {
   INTERNAL: 1,
   CHIMERIC_ACCOUNT: 2,
   DREP: 3,
+  CONSTITUTIONAL_COMMITTEE_COLD: 4,
+  CONSTITUTIONAL_COMMITTEE_HOT: 5,
 };
 
 enum Provider {
@@ -200,14 +202,24 @@ export type UTxO = {
   payment_addr: {
     bech32: string;
   }
-  asset_list: [
+  asset_list: {
     policy_id: string,
     asset_name: string,
     quantity: string
-  ],
+  }[],
+  reference_script: {
+    hash: string,
+    size: number,
+    type: string,
+    bytes: string,
+    value: any
+  },
+  stake_addr: string,
   datum_hash: string,
-  inline_datum: string,
-  reference_script: string,
+  inline_datum: {
+    bytes: string,
+    value: any
+  },
   value: string
 }
 
@@ -243,5 +255,6 @@ export {
   Blockchain,
   Network,
   ERROR,
-  Currency
+  Currency,
+  coin_type
 };

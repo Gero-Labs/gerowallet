@@ -162,7 +162,7 @@
           </v-tooltip>
           <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
             <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-              <USBBluetoothSwitch v-model="isBT" :disabled="txSubmitLoading" />
+              <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
             </v-card-subtitle>
           </div>
         </div>
@@ -212,7 +212,6 @@ import {
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
 import Vue from 'vue';
 import QRCodeStyling from 'qr-code-styling';
@@ -221,6 +220,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { multisigStore } from '@/stores/modules/multisig';
 import { Step, Token, SendData, Tooltip } from '@/modules/multisig/types/MultiSigTypes';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -301,14 +301,14 @@ const tokens = computed(() => {
       decimals: token.metadata.decimals,
       unit: token.unit
     }));
-    
+
     tokens.sort((a, b) => {
       if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
         return -1;
       }
       return (pinnedTokens.value.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker);
     });
-    
+
     return tokens;
   }
   return [];

@@ -3,11 +3,11 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
-    <v-overlay v-show="loading || isRestoring || loadingTxs" opacity="0.9" style="text-align: center;">
+    <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
+      {{ `Loading: ${loading}, isRestoring: ${isRestoring}, Disconnected: ${!connected}`}}
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
-        <v-card-text style="color: white" v-if="text">{{ text }}</v-card-text>
         <v-progress-linear
             buffer-value="0"
             color="primary"
@@ -16,6 +16,7 @@
             value="0"
             style="color: cyan; width: 100px; text-align: center"
         ></v-progress-linear>
+        <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
     <v-snackbar
@@ -37,17 +38,25 @@ import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import networks from '@/utils/networks';
 import { loadingState } from '@/plugins/loading';
+import { walletStore } from '@/plugins/walletStore';
 
-const { loading, isRestoring, text } = toRefs(loadingState);
+const { loading, isRestoring, text, connected } = toRefs(loadingState);
+const { loggedWallet } = toRefs(walletStore);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
 
 const store = useStore();
-
-const loadingTxs = computed(() => store.loadingTxs);
 const network = computed(() => store.network);
 const setNetwork = store.setNetwork;
+
+const isLoading = computed(() => {
+  if (loggedWallet.value) {
+    return loading.value || isRestoring.value || !connected.value;
+  } else {
+    return loading.value || isRestoring.value
+  }
+});
 
 onMounted(() => {
   if (!network) {

@@ -7,13 +7,14 @@
       v-for="(token, index) in collect"
       :key="index"
       :class="`stackedToken_${index}`"
+      @click="print(token)"
     >
       <v-avatar
         size="40"
         :color="token.img ? '' : 'black'"
       >
-        <v-img v-if="token.img" :src="token.img" :alt="token.asset_name"></v-img>
-        <span v-else class="white--text">{{ token.asset_name }}</span>
+        <v-img v-if="token.img" :src="assts.resolveIcon(token.img)" :alt="token.asset_name"></v-img>
+        <v-img v-else :src="assts.questionMarkDark" />
       </v-avatar>
     </v-btn>
     <v-btn
@@ -32,56 +33,59 @@
     </v-btn>
   </div>
 </template>
-<script>
-import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue';
 import { resolveAsset } from '@/shared/utils/resolver';
+import assts from '@/utils/assets';
 
-export default {
-  name: "StackedTokens",
-  props: {
-    tokens: {
-      type: Array,
-      default: () => [],
-    },
-  },
-  watch: {
-    tokens: {
-      handler(newVal) {
-        if (newVal) {
-          this.updateTokens(newVal);
-        }
-      },
-      deep: true,
-    },
-  },
-  methods: {
-    async updateTokens(tokens) {
-      this.collect = await Promise.all(tokens.slice(0, 4).map(token => {
-        if (token['policy_id'] !== '' && !this.assets[token['policy_id']+token['asset_name']]) {
-          appWallet.syncAssets([token['policy_id']+token['asset_name']], true)
-        }
-        return resolveAsset(this.assets[token['policy_id']+token['asset_name']], token)
-      }));
-    },
-  },
-  computed: {
-    ...mapState(useStore, ['assets']),
-    residue() {
-      return this.tokens.length > 4 ? this.tokens.length - 4 : 0;
-    },
-  },
-  data() {
-    return {
-      collect: [],
-    };
-  },
-  async created() {
-    if (this.tokens.length) {
-      await this.updateTokens(this.tokens);
-    }
-  },
-};
+interface Props {
+  tokens: Array<any>
+}
+
+const props = defineProps<Props>()
+
+const collect = ref([])
+
+const print = (token) => {
+  console.log(resolveAsset(token))
+}
+
+const updateTokens = async (tokens) => {
+  collect.value = tokens.slice(0, 4).map(token => {
+    return resolveAsset(token)
+
+
+    // if (!token.policy_id || !assets.value) {
+    //   return token
+    // }
+    // // if (token['policy_id'] !== '' && !assets[token['policy_id']+token['asset_name']]) {
+    // //   appWallet.syncAssets([token['policy_id']+token['asset_name']], true)
+    // // }
+    // let tok
+    // if (token.unit) {
+    //   tok = token.unit
+    // } else {
+    //   tok = token['policy_id']+token['asset_name']
+    // }
+    // return resolveAsset(, token)
+  });
+}
+
+watch(() => props.tokens, (newVal) => {
+  if (newVal) {
+    updateTokens(newVal)
+  }
+})
+
+const residue = computed(() => {
+  return props.tokens.length > 4 ? props.tokens.length - 4 : 0;
+})
+
+onMounted(async () => {
+  if (props.tokens.length) {
+    await updateTokens(props.tokens);
+  }
+})
 </script>
 
 <style>

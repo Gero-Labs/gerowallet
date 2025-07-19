@@ -51,11 +51,11 @@
 <script setup lang="ts">
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
-import { computed, ref } from 'vue';
+import { computed, ref, toRefs } from 'vue';
 import networks from '@/utils/networks';
-import { useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
-const store = useStore();
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { geroStore } from '@/plugins/geroStore';
 
 const selectedWallet = ref<string | null>(null);
 
@@ -70,10 +70,10 @@ interface Wallet {
   type?: WalletTypeValue;
 }
 
-const { wallets } = storeToRefs(store);
+const { wallets } = toRefs(geroStore);
 
 const availableWallets = computed<Wallet[]>(() => {
-  return wallets.value.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google);
+  return Object.values(wallets.value).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google);
 });
 
 const resolveNetworkIcon = (item: Wallet): string => {
@@ -88,7 +88,11 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    await store.setLogin(Number(walletId));
+    const wallet = Object.values(wallets.value).filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
   } catch (error) {
     console.error(error);
   }

@@ -7,6 +7,7 @@
         outlined
         prepend-inner-icon="mdi-magnify"
         @input="onSearchInput"
+        :loading="searchLoading"
       ></v-text-field>
     </v-card-title>
 
@@ -24,14 +25,14 @@
     </v-card-title>
 
     <v-card-text class="pb-0 px-2">
-      <v-list nav dense class="pa-0 transparent">
-        <v-list-item-group v-model="selectedToken" mandatory>
-          <v-list-item
-            v-for="(item, index) in filteredTokens"
-            :key="index"
-            :value="item"
-            @click="onChange"
-          >
+      <v-virtual-scroll
+        :bench="0"
+        :items="filteredTokens"
+        height="300"
+        item-height="64"
+      >
+        <template v-slot:default="{ item }">
+          <v-list-item :key="item.name" @click="onChange(item)">
             <v-list-item-action>
               <v-badge
                 overlap
@@ -51,6 +52,7 @@
                   <img
                     :src="item['img']"
                     :alt="`${item['ticker']} Logo`"
+                    @error="e => { e.target.onerror = null; e.target.src = item.fallback_img }"
                   />
                 </v-avatar>
               </v-badge>
@@ -58,6 +60,7 @@
                 <img
                   :src="item['img']"
                   :alt="`${item['ticker']} Logo`"
+                  @error="e => { e.target.onerror = null; e.target.src = item.fallback_img }"
                 />
               </v-avatar>
             </v-list-item-action>
@@ -71,11 +74,8 @@
             </v-list-item-content>
             <v-list-item-content class="text-right" v-if="item['balance']">
               <v-list-item-title>
-                {{ item['balance'] | toCurrency(false, 0, '', ' ' + item['ticker'], false, item['decimals']) }}
+                {{ filters.toCurrency(item['balance'], false, 0, '', ' ' + item['ticker'], true, item['decimals']) }}
               </v-list-item-title>
-              <v-list-item-subtitle>
-                {{ item['balance'] }}
-              </v-list-item-subtitle>
             </v-list-item-content>
             <v-list-item-action>
               <v-btn
@@ -87,8 +87,21 @@
               </v-btn>
             </v-list-item-action>
           </v-list-item>
-        </v-list-item-group>
-      </v-list>
+        </template>
+      </v-virtual-scroll>
+
+<!--      <v-list nav dense class="pa-0 transparent">-->
+<!--        <v-list-item-group v-model="selectedToken" mandatory>-->
+<!--          <v-list-item-->
+<!--            v-for="(item, index) in filteredTokens"-->
+<!--            :key="index"-->
+<!--            :value="item"-->
+<!--            @click="onChange"-->
+<!--          >-->
+<!--            -->
+<!--          </v-list-item>-->
+<!--        </v-list-item-group>-->
+<!--      </v-list>-->
     </v-card-text>
   </BaseDialog>
 </template>
@@ -114,14 +127,22 @@ export default defineComponent({
     availableTokens: {
       type: Array,
     },
+    searchMechanism: {
+      type: Function,
+    }
   },
   filters,
   data() {
     return {
       search: '',
+      additional: [],
+      searchLoading: false,
     };
   },
   computed: {
+    filters() {
+      return filters
+    },
     ...mapState(useStore, ['price', 'pinnedTokens']),
     debouncedSearch() {
       return debounce(this.performSearch, 300);
@@ -143,12 +164,12 @@ export default defineComponent({
     },
     filteredTokens() {
       const lowerCaseSearch = this.search.toLowerCase();
-      return this.availableTokens.filter(
+      return [...this.availableTokens, ...this.additional].filter(
         token =>
-          token['name'].toLowerCase().includes(lowerCaseSearch) ||
-          token['ticker'].toLowerCase().includes(lowerCaseSearch) ||
-          token['policy_id'].toLowerCase().includes(lowerCaseSearch)
-      );
+          token['name']?.toLowerCase().includes(lowerCaseSearch) ||
+          token['ticker']?.toLowerCase().includes(lowerCaseSearch) ||
+          token['policy_id']?.toLowerCase().includes(lowerCaseSearch)
+      )
     },
   },
   methods: {
@@ -156,16 +177,27 @@ export default defineComponent({
     onSearchInput() {
       this.debouncedSearch();
     },
-    performSearch() {
+    async performSearch() {
+      this.searchLoading = true;
+      if (this.searchMechanism) {
+        try {
+          this.additional = await this.searchMechanism(this.search.toLowerCase());
+        } catch (e) {
+          console.log(e)
+        }
+      }
       this.filteredTokens; // Trigger filtering
+      this.searchLoading = false;
     },
-    onChange() {
+    onChange(item) {
+      this.selectedToken = item
       this.$emit('close');
     },
     resolveToken(unit) {
       return this.availableTokens.find(token => token['unit'] === unit);
     },
   },
+
   unmounted() {
     this.debouncedSearch.cancel();
   },

@@ -30,39 +30,23 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
 import assets from '@/utils/assets';
 
-export default {
-  name: "SelectComponent",
-  props: {
-    items: {
-      type: Array,
-      required: true,
-    },
-    label: {
-      type: String,
-      default: "",
-    },
-    value: {
-      required: true,
-    },
-    disabled: {
-      type: Boolean,
-      default: false,
-    },
-    readonly: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  data: () => ({
-    assets,
-  })
+interface Props {
+  items: any[];
+  value: any;
+  label?: string;
+  disabled?: boolean;
+  readonly?: boolean;
 }
+
+const props = defineProps<Props>()
 </script>
 <style>
 .custom-select {
+  min-width: 100%;
+
   :is(label) {
     font-size: 14px;
     font-weight: 500;

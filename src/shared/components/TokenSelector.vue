@@ -36,11 +36,11 @@
                         </v-avatar>
                       </template>
                       <v-avatar size="40">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="40" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }" />
                     </v-avatar>
                     {{ selectedToken.ticker }}
                   </span>
@@ -70,11 +70,11 @@
                         </v-avatar>
                       </template>
                       <v-avatar size="40">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }"/>
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="40" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`"/>
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }"/>
                     </v-avatar>
                     {{ selectedToken.ticker }}
                     <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small>mdi-chevron-down</v-icon>
@@ -115,7 +115,15 @@
             <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right;">
               <v-list-item-content class="py-0">
                 <v-list-item-title>
-                  <CurrencyTextField v-model="selectedToken.quantity" :maximum="Number(selectedToken.balance)" :decimals="selectedToken.decimals" :minimum="minimum" :read-only="readOnly" @change="quantityChange"></CurrencyTextField>
+                  <CurrencyTextField
+                    v-model="selectedToken.quantity"
+                    :decimals="selectedToken.decimals"
+                    :read-only="readOnly"
+                    @change="quantityChange"
+                    :rules="[rules.required(), (v => parseFloat(v) <= Number(selectedToken.balance) || 'Insufficient Funds'), (v => parseFloat(v) > minimum || `Minimum Required ${minimum}`)]"
+                    :text-right="true"
+                    :is-quantity="false"
+                  />
                 </v-list-item-title>
                 <v-list-item-subtitle class="light-text" v-if="adaShortage !== 0" style="color: #f97066!important;">
                   Insufficient Funds
@@ -143,130 +151,124 @@
       <v-spacer></v-spacer>
       <span style="color: #667085">Balance: {{ balance }}</span>
     </v-card-actions>
-    <SelectTokenDialog v-model="selectedToken" :is-open="selectTokenDialog" @close="selectTokenDialog = false" :available-tokens="available"></SelectTokenDialog>
+    <SelectTokenDialog v-model="selectedToken" :is-open="selectTokenDialog" @close="selectTokenDialog = false" :available-tokens="available" :search-mechanism="search"></SelectTokenDialog>
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch, computed, toRefs } from 'vue'
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 import networks from '@/utils/networks';
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
+import rules from '@/utils/rules';
+import { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'TokenSelector',
-  components: { SelectTokenDialog, CurrencyTextField },
-  props: {
-    title: {
-      type: String,
-    },
-    titleColor: {
-      type: String,
-      default: 'white'
-    },
-    value: {
-      type: Object,
-      required: false,
-    },
-    available: {
-      type: Array,
-    },
-    index: {
-      type: Number,
-    },
-    bottomTitle: {
-      type: Boolean,
-      default: false
-    },
-    backgroundColor: {
-      type: String,
-      default: '#292929'
-    },
-    maxButtonEnabled: {
-      type: Boolean,
-      default: false
-    },
-    readOnly: {
-      type: Boolean,
-      default: false
-    },
-    price: {
-      type: String,
-    },
-    minimum: {
-      type: Number,
-      default: 0,
-    },
-    priceImpact: {
-      type: Number,
-      default: 0
-    },
-    adaShortage: {
-      type: Number,
-      default: 0,
-    },
-    tokenLock: {
-      type: Boolean,
-      default: false
-    }
+const props = defineProps({
+  title: {
+    type: String,
   },
-  filters,
-  watch: {
-    value(val) {
-      this.selectedToken = val
-    }
+  titleColor: {
+    type: String,
+    default: 'white'
   },
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    networks() {
-      return networks
-    },
-    balance() {
-      if (this.selectedToken.decimals) {
-        return (filters.toCurrency(this.selectedToken.balance, false, this.selectedToken.decimals, '', '', false, this.selectedToken.decimals))
-      }
-      return this.selectedToken.balance+''
-    },
-    selectedToken: {
-      get() {
-        return this.value
-      },
-      set(newToken) {
-        console.log(newToken)
-        this.$emit('input', newToken)
-      }
-    },
-    errors() {
-      const errors = []
-      if (this.adaShortage !== 0) {
-        errors.push(`Insufficient Funds. Shortage: ${filters.toCurrency(this.adaShortage, false, 3, '', ' '+this.selectedToken.ticker, true, 0)}`)
-      } else if (this.selectedToken.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network) && this.minimum > this.selectedToken.quantity) {
-        errors.push(`Min. Required: ${this.minimum +" " + this.selectedToken.ticker}`)
-      }
-      return errors
-    },
+  value: {
+    type: Object,
+    required: false,
   },
-  data() {
-    return {
-      selectTokenDialog: false,
-    };
+  available: {
+    type: Array,
   },
-  mounted() {
+  index: {
+    type: Number,
   },
-  methods: {
-    quantityChange(val) {
-      this.$emit('change', val ? val.replace(/^0+/, '') : 0)
-    },
-    setMax() {
-      // this.$emit('setMax', this.index)
-      this.selectedToken.quantity = this.balance.replaceAll(",","")
-    },
-    removeTokenSelector() {
-      this.$emit('remove', this.index)
-    }
+  bottomTitle: {
+    type: Boolean,
+    default: false
   },
-};
+  backgroundColor: {
+    type: String,
+    default: '#292929'
+  },
+  maxButtonEnabled: {
+    type: Boolean,
+    default: false
+  },
+  readOnly: {
+    type: Boolean,
+    default: false
+  },
+  price: {
+    type: String,
+  },
+  minimum: {
+    type: Number,
+    default: 0,
+  },
+  priceImpact: {
+    type: Number,
+    default: 0
+  },
+  adaShortage: {
+    type: Number,
+    default: 0,
+  },
+  tokenLock: {
+    type: Boolean,
+    default: false
+  },
+  search: {
+    type: Function,
+  }
+});
+const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
+
+const { loggedWallet } = toRefs(walletStore)
+
+const selectTokenDialog = ref<boolean>(false);
+const amount = ref('');
+
+const selectedToken = computed({
+  get() {
+    return props.value;
+  },
+  set(newToken) {
+    emit('input', newToken)
+  }
+})
+
+const balance = computed(() => {
+  if (selectedToken.value.decimals) {
+    return (filters.toCurrency(selectedToken.value.balance, false, selectedToken.value.decimals, '', '', false, selectedToken.value.decimals))
+  }
+  return selectedToken.value.balance+''
+})
+
+const errors = computed(() => {
+  const errors = []
+  if (adaShortage.value !== 0) {
+    errors.push(`Insufficient Funds. Shortage: ${filters.toCurrency(adaShortage.value, false, 3, '', ' '+selectedToken.value.ticker, true, 0)}`)
+  } else if (selectedToken.value.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) && minimum.value > selectedToken.value.quantity) {
+    errors.push(`Min. Required: ${minimum.value +" " + selectedToken.value.ticker}`)
+  }
+  return errors
+})
+
+function quantityChange(val) {
+  emit('change', val ? val.replace(/^0+/, '') : 0)
+}
+
+function setMax() {
+  // emit('setMax', props.index)
+  selectedToken.value.quantity = balance.value.replaceAll(",","")
+}
+
+function removeTokenSelector() {
+  emit('remove', props.index)
+}
+
+watch(props.value, (val) => {
+  selectedToken.value = val;
+})
 </script>
 <style scoped>
 .card-container {

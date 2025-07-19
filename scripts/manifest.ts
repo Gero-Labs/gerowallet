@@ -66,7 +66,7 @@ async function getManifest() {
         persistent: true,
       }
       : {
-        service_worker: './background/_virtual_index.js',
+        service_worker: './background/index.js',
         type: 'module'
       },
     permissions: [
@@ -79,7 +79,8 @@ async function getManifest() {
       'unlimitedStorage',
       'webNavigation',
       'notifications',
-      'identity'
+      'identity',
+      'sidePanel'
     ],
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
@@ -100,23 +101,10 @@ async function getManifest() {
     ],
     content_security_policy: {
       extension_pages: isDev ?
-        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://rest.ably.io https://realtime.ably.io wss://realtime.ably.io https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://sandbox-api.bringweb3.io http://localhost:* ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'`
-        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://rest.ably.io https://realtime.ably.io wss://realtime.ably.io/ https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'`
+        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://sandbox-api.bringweb3.io http://localhost:* ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'`
+        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'`
     },
   }
-
-  // // add sidepanel
-  // if (isFirefox) {
-  //   manifest.sidebar_action = {
-  //     default_panel: 'dist/sidepanel/index.html',
-  //   }
-  // }
-  // else {
-  //   // the sidebar_action does not work for chromium based
-  //   (manifest as any).side_panel = {
-  //     default_path: 'dist/sidepanel/index.html',
-  //   }
-  // }
 
   if (!isDev) {
     manifest['key'] = process.env['MANIFEST_KEY']

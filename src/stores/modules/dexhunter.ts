@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia';
-import { appWallet } from '@/stores';
-import { Chain } from '@keystonehq/keystone-sdk/dist/chains/keystone';
-import { Blockchain, Network } from '@/models/types';
-import { parseHttpError } from '@/shared/utils/parser';
+import dexHunterApi from '@/api/dexhunter-api';
+import filters from '@/shared/utils/filters';
 
 export const dexHunterStore = defineStore( 'dexHunterStore', {
   persist: {
@@ -13,13 +11,13 @@ export const dexHunterStore = defineStore( 'dexHunterStore', {
     blacklistPolicies: [],
   }),
   actions: {
-    async loadTokens() {
-      if (!appWallet || this.dexHunterTokens) {
+    async loadTokens(force: boolean = false) {
+      if (this.dexHunterTokens && !force) {
         return
       }
       try {
-        const res = await appWallet.api.getAllTokens();
-        this.setTokens(res.reduce(function(map, token) {
+        const res = await dexHunterApi.getSwapTokens();
+        this.setTokens(res.data.reduce(function(map, token) {
           map[token.token_id] = {
             name: token.token_ascii,
             ticker: token.ticker,
@@ -29,7 +27,8 @@ export const dexHunterStore = defineStore( 'dexHunterStore', {
             unit: token.token_id,
             verified: token.is_verified,
             balance: 0,
-            quantity: '0'
+            quantity: '0',
+            price: token.price,
           }
           return map;
         }, {}));
@@ -40,23 +39,37 @@ export const dexHunterStore = defineStore( 'dexHunterStore', {
     setTokens(val) {
       this.dexHunterTokens = val
     },
-    async loadBlacklistPolicies() {
-      if (!appWallet || appWallet.chain != Blockchain.CARDANO || appWallet.network != Network.MAINNET) {
-        return
+    async searchTokens(query?: string) {
+      const res = await dexHunterApi.getSwapTokens(query);
+      if (res) {
+        return await Promise.all(res.data.map(async token => {
+          let assetData;
+          try {
+            assetData = await dexHunterApi.getAssetData(token.token_id.slice(0, 56) + '.' + token.token_id.slice(56));
+          } catch (e) {
+            console.log(e)
+          }
+          let fallbackImg = 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg';
+          if (assetData?.logoCID) {
+            fallbackImg = filters.toIPFS(assetData.logoCID);
+          }
+
+          return this.dexHunterTokens[token.token_id] = {
+            name: token.token_ascii,
+            ticker: token.ticker,
+            img: `https://storage.googleapis.com/dexhunter-images/tokens/${token.token_id}.webp`,
+            fallback_img: fallbackImg,
+            decimals: Number(token.token_decimals),
+            unit: token.token_id,
+            verified: token.is_verified,
+            balance: 0,
+            quantity: '0',
+            price: token.price,
+          }
+        }))
+      } else {
+        return []
       }
-      try {
-        const res = await appWallet.api.getAllBlacklistPolicies()
-        if (res.status === 200) {
-          this.setBlacklistPolicies(res.data)
-        } else {
-          console.log(parseHttpError(res))
-        }
-      } catch (e) {
-        console.error(e)
-      }
-    },
-    setBlacklistPolicies(blacklistPolicies) {
-      this.blacklistPolicies = blacklistPolicies
     },
   }
 });

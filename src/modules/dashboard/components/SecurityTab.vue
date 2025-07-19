@@ -99,6 +99,18 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
+      <v-divider />
+      <v-list-item>
+        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
+          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />
+        </v-list-item-avatar>
+        <v-list-item-content>
+          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
+        </v-list-item-content>
+      </v-list-item>
+      <v-list-item class="px-2 py-1">
+
+      </v-list-item>
     </v-list>
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
@@ -159,7 +171,6 @@ let qrCode: QRCodeStyling;
 
 onMounted(async () => {
   qrCode = new QRCodeStyling(options);
-  console.log(qrCode)
   await nextTick()
   if (qrCodeRef.value) {
     qrCode.append(qrCodeRef.value)

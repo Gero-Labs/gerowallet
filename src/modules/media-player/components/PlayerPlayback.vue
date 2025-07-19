@@ -18,42 +18,34 @@
     <VolumeBar />
   </div>
 </template>
-<script>
-import { mapState } from 'pinia';
+<script setup lang="ts">
+import { computed, ref, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import { formatTime } from '@/shared/utils/converter';
-import { musicStore } from '@/stores/modules/music';
+import { musicStore } from '@/plugins/musicStore';
 import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 
-export default {
-  name: "player-player-playback",
-  components: { VolumeBar },
-  data() {
-    return {
-      progress: 0,
-      progressInterval: null,
-      isDragStart: false,
-    };
-  },
-  filters,
-  computed: {
-    ...mapState(musicStore, ['musicPlaylist', 'context']),
-    currentTrack() {
-      return this.musicPlaylist[this.context.currentIndex]
-    }
-  },
-  methods: {
-    formatTime,
-    onProgressChange(currentValue) {
-      // Calculate the new seek position in seconds based on the slider value.
-      const newSeekPosition = (currentValue / 100) * this.context.duration;
+const { musicPlaylist, context } = toRefs(musicStore);
 
-      // Set the new seek position in the Howl instance.
-      if (this.context.audio) {
-        this.context.audio.seek(newSeekPosition);
-        this.context.seek = newSeekPosition; // Update the seek position in the context.
-      }
-    }
+const progress = ref(0);
+const progressInterval = ref(null);
+const isDragStart = ref(false);
+
+const currentTrack = computed(() => {
+  if (musicPlaylist.value && context.value) {
+    return musicPlaylist.value[context.value.currentIndex];
+  }
+  return undefined;
+});
+
+const onProgressChange = (currentValue: number) => {
+  // Calculate the new seek position in seconds based on the slider value.
+  const newSeekPosition = (currentValue / 100) * context.value.duration;
+
+  // Set the new seek position in the Howl instance.
+  if (context.value.audio) {
+    context.value.audio.seek(newSeekPosition);
+    context.value.seek = newSeekPosition; // Update the seek position in the context.
   }
 };
 </script>

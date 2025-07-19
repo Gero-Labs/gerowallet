@@ -5,21 +5,24 @@ import { Cardano as CardanoCore } from '@cardano-sdk/core';
 
 export const getBalance = async (): Promise<string> => {
   const result = await Messaging.sendToContent({
-    method: METHOD.getBalance,data: {}
+    method: METHOD.getBalance,
+    data: {}
   });
   return result['data'];
 };
 
 export const enable = async (): Promise<any> => {
   const result = await Messaging.sendToContent({
-    method: METHOD.enable,data: {}
+    method: METHOD.enable,
+    data: { userGesture: navigator.userActivation?.isActive }
   });
   return result['data'];
 };
 
 export const isEnabled = async (): Promise<boolean> => {
   const result = await Messaging.sendToContent({
-    method: METHOD.isEnabled,data: {}
+    method: METHOD.isEnabled,
+    data: {}
   });
   return result['data'];
 };
@@ -27,7 +30,7 @@ export const isEnabled = async (): Promise<boolean> => {
 export const promptLogin = async (): Promise<void> => {
   const result = await Messaging.sendToContent({
     method: METHOD.popupLogin,
-    data: { },
+    data: { userGesture: navigator.userActivation?.isActive },
   });
   if (result['data']) {
     window.dispatchEvent(new CustomEvent('gero:login', {
@@ -42,7 +45,7 @@ export const promptLogin = async (): Promise<void> => {
 export const signData = async (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string): Promise<DataSignature> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signData,
-    data: { address, payload },
+    data: { address, payload, userGesture: navigator.userActivation?.isActive },
   });
   return result['data'];
 };
@@ -50,7 +53,7 @@ export const signData = async (address: CardanoCore.PaymentAddress | CardanoCore
 export const signTx = async (tx: string, partialSign: boolean = false): Promise<string> => {
   const result = await Messaging.sendToContent({
     method: METHOD.signTx,
-    data: { tx, partialSign },
+    data: { tx, partialSign, userGesture: navigator.userActivation?.isActive },
   });
   console.log('signTx Result', result['data'])
   return result['data'];
@@ -122,6 +125,7 @@ export const getCollateral = async (params) => {
 };
 
 export const submitTx = async (tx) => {
+  console.log('submitTx', tx);
   const result = await Messaging.sendToContent({
     method: METHOD.submitTx,
     data: { tx } ,

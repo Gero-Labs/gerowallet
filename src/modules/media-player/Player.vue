@@ -8,15 +8,15 @@
       </div>
 
       <div style="flex: none; align-self: start;" v-show="!context.minimized">
-        <v-btn icon x-small color="white" @click="setMinimized">
+        <v-btn icon x-small color="white" @click="MusicStore.setMinimized">
           <v-icon x-small>mdi-window-minimize</v-icon>
         </v-btn>
-        <v-btn icon x-small color="white" class="mr-2" @click="setMediaPlayerShown(!context.shown)">
+        <v-btn icon x-small color="white" class="mr-2" @click="MusicStore.setMediaPlayerShown(!context.shown)">
           <v-icon x-small>mdi-window-close</v-icon>
         </v-btn>
       </div>
       <div v-show="context.minimized" class="ml-2">
-        <v-btn small icon text plain large color="white" @click="setMaximized">
+        <v-btn small icon text plain large color="white" @click="MusicStore.setMaximized">
           <v-icon small>
             mdi-chevron-double-right
           </v-icon>
@@ -25,30 +25,18 @@
     </div>
   </div>
 </template>
-<script>
+<script setup lang="ts">
+import { toRefs, computed } from 'vue';
 import CurrentTrack from '@/modules/media-player/components/CurrentTrack.vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
 import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue';
-import { mapActions, mapState } from 'pinia';
-import { musicStore } from '@/stores/modules/music';
+import MusicStore, { musicStore } from '@/plugins/musicStore';
 
-export default {
-  name: "player",
-  components: {
-    CurrentTrack,
-    PlayerControls,
-    PlayerPlayback,
-  },
-  computed: {
-    ...mapState(musicStore, ['musicPlaylist', 'context']),
-    currentTrack() {
-      return this.musicPlaylist[this.context.currentIndex]
-    }
-  },
-  methods: {
-    ...mapActions(musicStore, ['setMinimized', 'setMaximized', 'setMediaPlayerShown']),
-  }
-};
+const { musicPlaylist, context } = toRefs(musicStore);
+
+const currentTrack = computed(() => {
+  return musicPlaylist.value[context.value.currentIndex]
+});
 </script>
 <style scoped lang="sass">
 .player

@@ -169,7 +169,7 @@
                     </div>
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === WalletType.Ledger">
-                    <USBBluetoothSwitch v-model="isBluetooth" />
+                    <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBluetooth" />
                   </div>
                   <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan"> </div>
                   <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px">
@@ -335,13 +335,13 @@ import QRCodeStyling from 'qr-code-styling';
 import Vue from 'vue';
 import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
 import snackbar from '@/plugins/snackbar';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import assets from '@/utils/assets';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 export default {
   name: "PairHardwareWallet",
   components: {
-    USBBluetoothSwitch,
+    ToggleSwitch,
     QrcodeStream,
   },
   props: {
