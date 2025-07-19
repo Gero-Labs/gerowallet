@@ -65,6 +65,7 @@ import {useStore} from "@/stores";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import { Blockchain } from '@/models/types';
 
 export default {
   components: {
@@ -91,6 +92,19 @@ export default {
   },
   computed: {
     ...mapState(useStore, ['loggedWallet', 'price', 'loadingTxs', 'baseAddress']),
+    isApex() {
+      return this.loggedWallet?.chain === Blockchain.APEX_PRIME || this.loggedWallet?.chain === Blockchain.APEX_VECTOR
+    },
+    chartColors() {
+      if (this.isApex) {
+        return ['#dc753e', '#e67e22', '#d35400', '#f39c12', '#ff8c42', '#a0522d', '#cd853f', '#ff7f50', '#ffa500', '#ff6347']
+      } else {
+        return ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C']
+      }
+    },
+    primaryColor() {
+      return this.isApex ? '#dc753e' : '#00c7f3'
+    },
     shortenAddress() {
       return this.baseAddress ? filters.shortenStringWithEllipsis(this.baseAddress, 14) : ''
     },
@@ -196,18 +210,7 @@ export default {
             },
           ],
         },
-        colors: [
-          "#00DFF3",
-          "#155B75",
-          "#167dd6",
-          "#900C3F",
-          "#511849",
-          "#3D3D6B",
-          "#2A7B9B",
-          "#00BAAD",
-          "#57C785",
-          "#ADD45C",
-        ],
+        colors: this.chartColors,
         legend: {
           align: "right",
           verticalAlign: "middle",
@@ -229,8 +232,8 @@ export default {
             fillColor: {
               linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
               stops: [
-                [0.1, "#00c7f333"],
-                [1, "#00c7f300"],
+                [0.1, this.primaryColor + '33'],
+                [1, this.primaryColor + '00'],
               ],
             },
           },
@@ -400,7 +403,24 @@ export default {
           return;
         }
 
-        this.loadChart(newVal)
+        // Add a small delay to ensure data is stable before reloading chart
+        this.$nextTick(() => {
+          this.loadChart(newVal)
+        })
+      },
+      deep: true,
+    },
+    loggedWallet: {
+      handler(newVal, oldVal) {
+        // Force chart reload when wallet changes
+        if (newVal && oldVal && newVal.id !== oldVal.id) {
+          // Use a slight delay to ensure DOM and data are fully updated
+          setTimeout(() => {
+            this.$nextTick(() => {
+              this.loadChart(this.chartData)
+            })
+          }, 100)
+        }
       },
       deep: true,
     },

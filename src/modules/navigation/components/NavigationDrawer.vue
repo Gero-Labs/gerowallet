@@ -13,7 +13,7 @@
       <v-list-item class="text-center">
         <v-list-item-content class="py-2">
           <v-list-item-title>
-            <img :src="assts.geroDashboard" width="100" alt="logo" />
+            <img :src="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? assts.geroDashboardApex : assts.geroDashboard" width="100" alt="logo" />
           </v-list-item-title>
           <v-list-item-subtitle>
             <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">
@@ -50,7 +50,8 @@
               :src="item.icon"
               :alt="item.title"
               contain
-              style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+              :style="{ filter: iconFilter }"
+              :class="{ 'apex-icon': isApex.value, 'apex-active-icon': isApex.value }"
             />
           </v-list-item-avatar>
 
@@ -154,6 +155,7 @@ import { musicStore } from '@/stores/modules/music'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
+import { Blockchain } from '@/models/types'
 
 const changeLogRef = ref(changeLog)
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
@@ -181,6 +183,20 @@ const transactionsCount = computed(() => store.transactions?.length || 0)
 const baseAddress = computed(() => store.baseAddress)
 const musicPlaylist = computed(() => music.musicPlaylist)
 const context = computed(() => music.context)
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR
+})
+
+const iconFilter = computed(() => {
+  if (isApex.value) {
+    // Brighter orange filter for Apex chains
+    return 'invert(64%) sepia(89%) saturate(1200%) hue-rotate(353deg) brightness(110%) contrast(95%)'
+  } else {
+    // White filter for Cardano chains  
+    return 'invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%)'
+  }
+})
 
 const account = computed(() => {
   return loggedWallet.value
@@ -276,27 +292,27 @@ onMounted(() => {
 
 .menuItem.activePage {
   border: none !important;
-  border-right: 1px solid #00c7f3 !important;
+  border-right: 1px solid var(--primary-color, #00c7f3) !important;
 }
 
 .menuItem.activePageDark {
   border: none !important;
-  border-right: 1px solid #00D1FF !important;
+  border-right: 1px solid var(--bright-color, #00D1FF) !important;
 }
 
 /* More specific targeting for active menu items */
 .v-list-item.menuItem.activePage,
 .v-list-item--active.menuItem.activePage {
-  border-right: 1px solid #00c7f3 !important;
+  border-right: 1px solid var(--primary-color, #00c7f3) !important;
 }
 
 .v-list-item.menuItem.activePageDark,
 .v-list-item--active.menuItem.activePageDark {
-  border-right: 1px solid #00D1FF !important;
+  border-right: 1px solid var(--bright-color, #00D1FF) !important;
 }
 
 .activePage {
-  background: linear-gradient(45deg, #00c7f3, #00ffd1);
+  background: linear-gradient(45deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1)) !important;
 }
 
 .activePageDark {
@@ -306,13 +322,19 @@ onMounted(() => {
   border-radius: 6px;
   background:
     linear-gradient(to right, #0C0E12, #0C0E12),
-    linear-gradient(to right, #0C0E12 8%, #00D1FF);
+    linear-gradient(to right, #0C0E12 8%, var(--bright-color, #00D1FF)) !important;
   background-clip: padding-box, border-box;
   background-origin: padding-box, border-box;
 }
 
+/* Dynamic icon filter for active items */
 .activePageDark .v-image {
-  filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
+  filter: var(--icon-filter, brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)) !important;
+}
+
+/* Apex active icon filter - higher specificity to override active page filter */
+.activePageDark .v-image.apex-active-icon {
+  filter: invert(47%) sepia(73%) saturate(615%) hue-rotate(353deg) brightness(96%) contrast(91%) !important;
 }
 
 .theme--dark.v-list-item:not(.v-list-item--active):not(.v-list-item--disabled) {

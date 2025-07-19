@@ -7,12 +7,12 @@
           <v-col cols="12" class="mb-2">
             <v-card outlined class="fill-height dashboard-card-radius">
               <v-card-text>
-                <PortfolioChart :chart-data="computeChartData" :loading="loadingChart" :portfolio-value-ada="computedValues.totalValue" :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"></PortfolioChart>
+                <PortfolioChart :chart-data="computeChartData" :portfolio-value-ada="computedValues.totalValue" :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"></PortfolioChart>
               </v-card-text>
             </v-card>
           </v-col>
           <!-- Market-style cards for owned tokens -->
-          <v-col cols="12" class="pt-0">
+          <v-col cols="12" class="pt-0" v-if="loggedWallet?.chain !== Blockchain.APEX_PRIME && loggedWallet?.chain !== Blockchain.APEX_VECTOR">
             <OwnedTokensMarketCards />
           </v-col>
         </v-row>
@@ -104,6 +104,45 @@
           </div>
         </div>
       </v-col>
+      
+      <!-- Apex Carousel Card -->
+      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR">
+        <div class="carousel-wrapper apex-carousel-wrapper" :class="{ 'carousel-behind-overlay': isLoading }">
+          <v-carousel
+            v-model="currentApexCarouselIndex"
+            :cycle="false"
+            height="100%"
+            hide-delimiter-background
+            hide-delimiters
+            hide-navigation
+            class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
+          >
+            <v-carousel-item
+              v-for="(item, index) in apexCarouselItems"
+              :key="index"
+              :src="item.backgroundImage"
+              :class="{ 'apex-welcome-background': item.id === 'apex-welcome' }"
+            >
+              <div class="carousel-overlay apex-carousel-overlay">
+                <div class="carousel-content-center">
+                  <img 
+                    :src="item.logo" 
+                    :alt="item.logoAlt" 
+                    class="carousel-logo apex-logo mb-3"
+                  />
+                  <div class="carousel-text apex-text">
+                    <div class="apex-title-container">
+                      <div class="apex-title-line-1">Welcome to</div>
+                      <div class="apex-title-line-2">Apex Fusion</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </v-carousel-item>
+          </v-carousel>
+        </div>
+      </v-col>
+      
       <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
         <TokenAllocationTable></TokenAllocationTable>
       </v-col>
@@ -146,6 +185,8 @@ import debitCardBgImage from '@/assets/debitcardbg.png';
 import cashbackImage from '@/assets/cashback.png';
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png';
 import logoStackedLight from '@/assets/logo-stacked-light.svg';
+import apexBg from '@/assets/apexBg.png';
+import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg';
 
 export default {
   name: 'dashboard',
@@ -181,6 +222,20 @@ export default {
           lpsValue += position.adaValue
         })
       }
+      
+      // Fallback for chains without portfolio API support (like Apex)
+      if (!this.portfolio && this.resolvedAssets) {
+        this.resolvedAssets.forEach(asset => {
+          if (asset.quantity && asset.quantity > 0) {
+            // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
+            if (asset.unit === 'lovelace' || asset.unit === '') {
+              assetsValue += asset.quantity / 1000000 // Convert to main unit (ADA/APEX)
+            }
+            // Add other asset values if they have USD/ADA pricing data
+          }
+        })
+      }
+      
       const totalValue = assetsValue + collectibles + lpsValue
       return { totalValue, assetsValue, collectibles, lpsValue }
     },
@@ -198,17 +253,27 @@ export default {
     },
     computeChartData() {
       if (this.loggedWallet?.chain === Blockchain.CARDANO && this.loggedWallet?.network === Network.MAINNET) {
-        return this.portfolioTrendedValue
+        return this.portfolioTrendedValue || []
       }
-      let graphData = undefined
+      
+      let graphData = []
       let currentBalance = 0
-      if (this.calculatedTransactions) {
-        graphData = []
+      
+      if (this.calculatedTransactions && this.calculatedTransactions.length > 0) {
         this.calculatedTransactions.forEach(tx => {
           currentBalance += tx.ada
           graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
         })
+      } else {
+        // Fallback: create a single data point with current time and zero balance
+        // This ensures the chart shows even with no transaction history
+        // Add wallet ID to timestamp to make each wallet's data unique
+        const now = new Date().getTime()
+        const walletIdOffset = this.loggedWallet?.id ? String(this.loggedWallet.id).charCodeAt(0) : 0
+        const uniqueTimestamp = now + walletIdOffset
+        graphData.push([uniqueTimestamp, 0])
       }
+      
       return graphData
     },
   },
@@ -219,12 +284,12 @@ export default {
       store: useStore,
       filters,
       activities: [],
-      loadingChart: true,
       transactions: undefined,
       txIos: undefined,
       blockchainDB: undefined,
       showClaimDialog: false,
       currentCarouselIndex: 0,
+      currentApexCarouselIndex: 0,
       progressValue: 0,
       progressInterval: null,
       carouselPaused: false,
@@ -257,6 +322,16 @@ export default {
           backgroundImage: cashbackCarouselImage,
           cardImage: cashbackImage,
           action: 'navigateToCashback'
+        }
+      ],
+      apexCarouselItems: [
+        {
+          id: 'apex-welcome',
+          title: 'Welcome to Apex Fusion',
+          logo: geroDashboardApex,
+          logoAlt: 'Apex Fusion Logo',
+          backgroundImage: apexBg,
+          action: 'showApexWelcome'
         }
       ]
     }
@@ -299,6 +374,9 @@ export default {
         case 'navigateToCashback':
           this.navigateToCashback();
           break;
+        case 'showApexWelcome':
+          this.showApexWelcome();
+          break;
         default:
           console.log('Carousel item clicked:', item.id);
       }
@@ -316,6 +394,10 @@ export default {
       if (this.$route.path !== '/cashback') {
         this.$router.push('/cashback');
       }
+    },
+    showApexWelcome() {
+      console.log('Welcome to Apex Fusion!');
+      // Add your Apex welcome logic here
     },
     pauseCarousel() {
       this.carouselPaused = true;
@@ -362,7 +444,7 @@ export default {
 }
 
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1));
 }
 
 .v-data-table-header {
@@ -771,5 +853,96 @@ export default {
   line-height: 1.2 !important;
 }
 
+/* Apex Carousel Specific Styles */
+.apex-carousel-wrapper {
+  position: relative;
+  height: 100%;
+}
+
+.apex-carousel {
+  border-radius: 8px !important;
+  transition: all 0.3s ease-in-out;
+  overflow: hidden;
+  background: rgba(220, 117, 62, 0.06) !important;
+  backdrop-filter: blur(10px) saturate(110%);
+  border: 1px solid rgba(220, 117, 62, 0.12);
+  box-shadow: 
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(220, 117, 62, 0.08);
+}
+
+.apex-carousel:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 20px rgba(220, 117, 62, 0.2);
+}
+
+.apex-carousel-overlay {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 16px;
+  border-radius: 4px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  z-index: 2;
+  transition: all 0.3s ease-in-out;
+}
+
+.apex-welcome-background {
+  overflow: hidden;
+}
+
+.apex-welcome-background .v-responsive__content {
+  animation: gentleGrow 10s ease-in-out infinite alternate !important;
+  transform-origin: center center !important;
+}
+
+.apex-welcome-background .apex-carousel-overlay {
+  animation: counterGrow 10s ease-in-out infinite alternate !important;
+  transform-origin: center center !important;
+}
+
+.apex-logo {
+  height: 90px;
+  width: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 10px rgba(220, 117, 62, 0.3));
+}
+
+.apex-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.apex-title-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.apex-title-line-1 {
+  font-size: 1.4rem !important;
+  font-weight: 400 !important;
+  line-height: 1.1 !important;
+  color: #ffffff !important;
+  opacity: 0.9;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  margin-bottom: 2px;
+}
+
+.apex-title-line-2 {
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  color: #ffffff !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 10px rgba(220, 117, 62, 0.4);
+}
 
 </style>

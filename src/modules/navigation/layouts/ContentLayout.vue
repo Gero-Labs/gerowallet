@@ -3,8 +3,11 @@
     <v-app style="background: transparent !important;">
       <v-main style="position: relative; z-index: 1; background: transparent !important;">
       <v-container class="pa-0" style="position: relative;">
-        <!-- Cardano Background - Confined to dashboard working area -->
-        <div class="cardano-background-dashboard" :style="{ backgroundImage: `url(${assets.cardanoBg})` }"></div>
+        <!-- Background - Confined to dashboard working area -->
+        <div 
+          :class="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? 'apex-background-dashboard' : 'cardano-background-dashboard'" 
+          :style="{ backgroundImage: `url(${loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? assets.apexBg : assets.cardanoBg})` }"
+        ></div>
         
         <v-layout :align-start="true">
           <NavigationDrawer v-model="drawer" />
@@ -35,9 +38,9 @@
                 />
 
                 <!-- GERO Ticker -->
-                <div class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer;" @click="openSwapDialog">
+                <div v-if="loggedWallet?.chain !== Blockchain.APEX_PRIME && loggedWallet?.chain !== Blockchain.APEX_VECTOR" class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer;" @click="openSwapDialog">
                   <div class="d-flex flex-column">
-                    <span class="gero-label" style="font-size: 12px; font-weight: 600; color: #00c7f3;">GERO</span>
+                    <span class="gero-label" style="font-size: 12px; font-weight: 600;" :style="{ color: primaryColor }">GERO</span>
                     <span class="gero-price" style="font-size: 10px; color: #fff;">${{ geroPrice }}</span>
                   </div>
                 </div>
@@ -58,7 +61,7 @@
                     >
                       <v-icon
                         small
-                        :color="connected ? '#00c7f3' : '#ff6464'"
+                        :color="connected ? primaryColor : '#ff6464'"
                         :class="{ 'sync-animation': isSyncing }"
                       >
                         {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
@@ -69,7 +72,7 @@
                         class="epoch-progress-liquid-glass"
                         height="8"
                         :value="epochSlotPercentage"
-                        color="#00c7f3"
+                        :color="primaryColor"
                         background-color="transparent"
                         style="width: 50px;"
                       ></v-progress-linear>
@@ -175,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs, watchEffect, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, toRefs, watchEffect, getCurrentInstance, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
 import Player from '@/modules/media-player/Player.vue'
@@ -259,6 +262,12 @@ const geroPrice = computed(() => {
   return 'GERO'
 })
 
+const primaryColor = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR 
+    ? '#dc753e' 
+    : '#00c7f3'
+})
+
 const geroChange = computed(() => {
   return geroToken.value?.change || 0
 })
@@ -302,6 +311,78 @@ function closeDialog() {
 }
 
 
+// Theme management - update colors when chain changes
+const updateThemeColors = () => {
+  const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR
+  
+  if (isApex) {
+    // Apex Orange Theme
+    const orangeColors = {
+      primary: '#dc753e',
+      secondary: '#ff9f6b', 
+      accent: '#e67e22',
+      light: '#f39c12',
+      dark: '#d35400',
+      darker: '#a0522d',
+      muted: '#cd853f',
+      bright: '#ff8c42',
+      gradient1: '#ff7f50',
+      gradient2: '#ffa500'
+    }
+    
+    // Set CSS custom properties for Apex
+    document.documentElement.style.setProperty('--primary-color', orangeColors.primary)
+    document.documentElement.style.setProperty('--secondary-color', orangeColors.secondary)
+    document.documentElement.style.setProperty('--accent-color', orangeColors.accent)
+    document.documentElement.style.setProperty('--light-color', orangeColors.light)
+    document.documentElement.style.setProperty('--dark-color', orangeColors.dark)
+    document.documentElement.style.setProperty('--darker-color', orangeColors.darker)
+    document.documentElement.style.setProperty('--muted-color', orangeColors.muted)
+    document.documentElement.style.setProperty('--bright-color', orangeColors.bright)
+    document.documentElement.style.setProperty('--gradient1-color', orangeColors.gradient1)
+    document.documentElement.style.setProperty('--gradient2-color', orangeColors.gradient2)
+    document.documentElement.style.setProperty('--icon-filter', 'invert(64%) sepia(89%) saturate(1200%) hue-rotate(353deg) brightness(110%) contrast(95%)')
+    
+    // Note: Vuetify theme updates handled by NetworkSelector component
+  } else {
+    // Cardano Teal Theme  
+    const tealColors = {
+      primary: '#00c7f3',
+      secondary: '#00ffd1',
+      accent: '#2f9cac', 
+      light: '#00DFF3',
+      dark: '#00BAAD',
+      darker: '#155B75',
+      muted: '#009DAB',
+      bright: '#00D1FF',
+      gradient1: '#00dff3',
+      gradient2: '#00fad5'
+    }
+    
+    // Set CSS custom properties for Cardano
+    document.documentElement.style.setProperty('--primary-color', tealColors.primary)
+    document.documentElement.style.setProperty('--secondary-color', tealColors.secondary)
+    document.documentElement.style.setProperty('--accent-color', tealColors.accent)
+    document.documentElement.style.setProperty('--light-color', tealColors.light)
+    document.documentElement.style.setProperty('--dark-color', tealColors.dark)
+    document.documentElement.style.setProperty('--darker-color', tealColors.darker)
+    document.documentElement.style.setProperty('--muted-color', tealColors.muted)
+    document.documentElement.style.setProperty('--bright-color', tealColors.bright)
+    document.documentElement.style.setProperty('--gradient1-color', tealColors.gradient1)
+    document.documentElement.style.setProperty('--gradient2-color', tealColors.gradient2)
+    document.documentElement.style.setProperty('--icon-filter', 'brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)')
+    
+    // Note: Vuetify theme updates handled by NetworkSelector component
+  }
+}
+
+// Watch for wallet chain changes
+watch(() => loggedWallet.value?.chain, (newChain) => {
+  if (newChain) {
+    updateThemeColors()
+  }
+}, { immediate: true })
+
 // Lifecycle
 onMounted(async () => {
   if (store.loggedWallet?.id) {
@@ -311,6 +392,8 @@ onMounted(async () => {
       console.error(err)
     }
   }
+  // Ensure colors are set on mount
+  updateThemeColors()
   Loading.setLoading(false)
 })
 </script>
@@ -330,6 +413,45 @@ onMounted(async () => {
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.4);
+}
+
+/* Apex background with same styling as Cardano */
+.apex-background-dashboard {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* Behind dashboard content */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
+  pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.4);
+}
+
+/* Force progress bar colors to use CSS variables with higher specificity */
+.v-progress-linear .v-progress-linear__determinate,
+.v-progress-linear__determinate {
+  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1)) !important;
+  border-color: var(--primary-color, #00c7f3) !important;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__determinate {
+  background: var(--primary-color, #00c7f3) !important;
+}
+
+/* Target progress bars by attribute for maximum specificity */
+[style*="background-color: rgb(220, 117, 62)"] {
+  background-color: var(--primary-color, #dc753e) !important;
+  border-color: var(--primary-color, #dc753e) !important;
+}
+
+/* Override any inline styles for progress bars */
+.v-progress-linear[style] .v-progress-linear__determinate {
+  background: var(--primary-color, #00c7f3) !important;
+  border-color: var(--primary-color, #00c7f3) !important;
 }
 
 /* Ensure v-app has pure black background outside working area */

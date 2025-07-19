@@ -92,8 +92,8 @@
                       </v-row>
                       <v-overlay
                         :absolute="true"
-                        :opacity="hover ? 0.4 : 1"
-                        :style=" hover && overlay ? { backdropFilter: 'blur(6px)' } : {}"
+                        :opacity="1"
+                        :style="overlay ? { backdropFilter: 'blur(15px)', WebkitBackdropFilter: 'blur(15px)', backgroundColor: 'rgba(0, 0, 0, 0.8)' } : {}"
                         color="black"
                         :value="overlay"
                       >

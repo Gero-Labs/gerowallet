@@ -34,11 +34,19 @@ export default {
   watch: {
     selectedNetwork(val) {
       this.store.setNetwork(val)
-      // if (val.blockchain.includes("Apex")) {
-      //   this.$vuetify.theme.themes.dark.primary ='#dc753e'
-      // } else {
-      //   this.$vuetify.theme.themes.dark.primary ='#2f9cac'
-      // }
+      if (val.blockchain.includes("Apex")) {
+        this.$vuetify.theme.themes.dark.primary = '#dc753e'
+        this.$vuetify.theme.themes.dark.geroTeal = '#dc753e'
+        // Set CSS custom properties for Apex
+        document.documentElement.style.setProperty('--primary-color', '#dc753e')
+        document.documentElement.style.setProperty('--secondary-color', '#ff9f6b')
+      } else {
+        this.$vuetify.theme.themes.dark.primary = '#2f9cac'
+        this.$vuetify.theme.themes.dark.geroTeal = '#00DFF3'
+        // Set CSS custom properties for Cardano
+        document.documentElement.style.setProperty('--primary-color', '#00c7f3')
+        document.documentElement.style.setProperty('--secondary-color', '#00ffd1')
+      }
     }
   },
   data: () => ({
@@ -52,6 +60,21 @@ export default {
     } else {
       this.selectedNetwork = this.networks.networks[0]
       useStore().setNetwork(this.selectedNetwork)
+    }
+    
+    // Set initial theme based on current network
+    if (this.selectedNetwork?.blockchain.includes("Apex")) {
+      this.$vuetify.theme.themes.dark.primary = '#dc753e'
+      this.$vuetify.theme.themes.dark.geroTeal = '#dc753e'
+      // Set CSS custom properties for Apex
+      document.documentElement.style.setProperty('--primary-color', '#dc753e')
+      document.documentElement.style.setProperty('--secondary-color', '#ff9f6b')
+    } else {
+      this.$vuetify.theme.themes.dark.primary = '#2f9cac'
+      this.$vuetify.theme.themes.dark.geroTeal = '#00DFF3'
+      // Set CSS custom properties for Cardano
+      document.documentElement.style.setProperty('--primary-color', '#00c7f3')
+      document.documentElement.style.setProperty('--secondary-color', '#00ffd1')
     }
   }
 }

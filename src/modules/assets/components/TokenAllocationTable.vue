@@ -70,7 +70,7 @@
           </v-card-actions>
         </v-card>
       </v-menu>
-      <v-tabs class="ml-1" @change="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" background-color="transparent">
+      <v-tabs class="ml-1" @change="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" background-color="transparent" :color="primaryColor" :slider-color="primaryColor">
         <v-tab>
           Assets
          <span style="color: white">&nbsp;{{ `(${assets ? assets.length : 0})` }}</span>
@@ -1887,7 +1887,7 @@ export default {
         tooltip.style.cssText = `
           position: absolute;
           background: rgba(20, 20, 20, 0.95);
-          border: 1px solid #00c7f3;
+          border: 1px solid var(--primary-color, #00c7f3);
           border-radius: 6px;
           padding: 10px 14px;
           color: white;
@@ -2063,6 +2063,11 @@ export default {
   },
   filters,
   computed: {
+    primaryColor() {
+      return this.loggedWallet?.chain === 'Apex Fusion Prime' || this.loggedWallet?.chain === 'Apex Fusion Vector' 
+        ? '#dc753e' 
+        : '#00c7f3'
+    },
     isSwapDisabled() {
       if (this.loggedWallet) {
         return !networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network)
@@ -2389,7 +2394,7 @@ export default {
   padding: 6px 10px;
   border: none;
   border-radius: 20px;
-  background: linear-gradient(135deg, #00dff3 0%, #00c7f3 100%);
+  background: linear-gradient(135deg, var(--secondary-color, #00dff3) 0%, var(--primary-color, #00c7f3) 100%);
   color: #1a1a1a;
   font-size: 10px;
   font-weight: 600;
@@ -2419,7 +2424,7 @@ export default {
 .ai-analysis-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 223, 243, 0.6);
-  background: linear-gradient(135deg, #00c7f3 0%, #00dff3 100%);
+  background: linear-gradient(135deg, var(--primary-color, #00c7f3) 0%, var(--secondary-color, #00dff3) 100%);
 }
 
 .ai-analysis-btn:active {
@@ -2845,7 +2850,7 @@ export default {
 
 .stat-value {
   font-weight: 600;
-  color: #00c7f3 !important;
+  color: var(--primary-color, #00c7f3) !important;
   font-size: 0.875rem;
 }
 

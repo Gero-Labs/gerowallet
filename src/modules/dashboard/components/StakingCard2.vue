@@ -354,7 +354,7 @@ export default {
 </script>
 <style>
 .v-progress-linear__determinate {
-  background: linear-gradient(90deg, #00c7f3, #00ffd1);
+  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1));
 }
 
 .v-data-table-header {

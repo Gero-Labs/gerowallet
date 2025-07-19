@@ -20,7 +20,7 @@
             <template v-slot:activator="{ on, attrs }">
               <v-icon
                 small
-                color="#00c7f3"
+                :color="primaryColor"
                 v-bind="attrs"
                 v-on="on"
                 class="refresh-icon"
@@ -102,7 +102,7 @@
             <template v-slot:activator="{ on, attrs }">
               <v-icon
                 small
-                color="#00c7f3"
+                :color="primaryColor"
                 v-bind="attrs"
                 v-on="on"
                 class="refresh-icon"
@@ -191,7 +191,7 @@
             <template v-slot:activator="{ on, attrs }">
               <v-icon
                 small
-                color="#00c7f3"
+                :color="primaryColor"
                 v-bind="attrs"
                 v-on="on"
                 class="refresh-icon"
@@ -612,6 +612,12 @@ export default {
   },
   computed: {
     ...mapState(() => useStore(), ['loggedWallet', 'resolvedAssets', 'price', 'loadingTxs']),
+    
+    primaryColor() {
+      return this.loggedWallet?.chain === 'Apex Fusion Prime' || this.loggedWallet?.chain === 'Apex Fusion Vector' 
+        ? '#dc753e' 
+        : '#00c7f3'
+    },
     
     loadingOwnedTokens() {
       return this.loadingTxs || !this.resolvedAssets

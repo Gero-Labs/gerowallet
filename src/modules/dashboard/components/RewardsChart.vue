@@ -6,6 +6,7 @@ import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import { mapState } from 'pinia';
 import { useStore } from '@/stores';
+import { Blockchain } from '@/models/types';
 
 export default {
   components: {
@@ -28,7 +29,20 @@ export default {
     }
   },
   computed: {
-    ...mapState(useStore, ['loadingTxs']),
+    ...mapState(useStore, ['loadingTxs', 'loggedWallet']),
+    primaryColor() {
+      return this.loggedWallet?.chain === Blockchain.APEX_PRIME || this.loggedWallet?.chain === Blockchain.APEX_VECTOR 
+        ? '#dc753e' 
+        : '#00DFF3'
+    },
+    dynamicColors() {
+      const isApex = this.loggedWallet?.chain === Blockchain.APEX_PRIME || this.loggedWallet?.chain === Blockchain.APEX_VECTOR
+      if (isApex) {
+        return ['#dc753e', '#e67e22', '#d35400', '#f39c12', '#ff8c42', '#a0522d', '#cd853f', '#ff7f50', '#ffa500', '#ff6347']
+      } else {
+        return ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C']
+      }
+    },
     chartOptions() {
       // if (Object.values(this.chartData).length === 0) {
       //   return null
@@ -98,7 +112,7 @@ export default {
           min: 0,
           opposite: true,
         },
-        colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+        colors: this.dynamicColors,
         series: [
           {
             name: 'Rewards',
