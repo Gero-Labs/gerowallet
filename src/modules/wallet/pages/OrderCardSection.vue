@@ -18,6 +18,6 @@ import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.v
 .block {
   display: flex;
   flex-direction: column;
-  gap: 64px;
+  gap: 32px;
 }
 </style>

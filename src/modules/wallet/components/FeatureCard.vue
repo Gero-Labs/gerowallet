@@ -67,45 +67,44 @@ interface Props {
 defineProps<Props>();
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .feature-card {
+  padding: $spacing-2xl;
+  @include flex-column;
+  gap: $spacing-3xl;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.feature-icon {
-  margin: 0 auto;
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #373a41;
-  background: #0c0e12;
-  box-shadow: 0px 0px 0px 1px rgba(12, 14, 18, 0.18) inset, 0px -2px 0px 0px rgba(12, 14, 18, 0.05) inset,
-    0px 1px 2px 0px rgba(255, 255, 255, 0);
-}
-
-.feature-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.feature-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: white;
-  line-height: 1.3;
-}
-
-.feature-description {
-  font-size: 16px;
-  color: #94979c;
-  line-height: 1.6;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: $shadow-lg;
+  }
+  
+  .feature-icon {
+    margin: 0 auto;
+    width: 48px;
+    height: 48px;
+    border-radius: $border-radius-md;
+    padding: $spacing-md;
+    @include flex-center;
+    border: 1px solid $border-primary;
+    background: $background-dark;
+    box-shadow: $shadow-button;
+  }
+  
+  .feature-card-content {
+    @include flex-column;
+    gap: $spacing-sm;
+  }
+  
+  .feature-title {
+    @include text-style($font-size-xl, $font-weight-semibold, $line-height-tight);
+  }
+  
+  .feature-description {
+    @include body-text($font-size-base);
+  }
 }
 </style>
