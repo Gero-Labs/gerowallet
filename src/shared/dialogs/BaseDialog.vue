@@ -27,7 +27,7 @@
               {{subtitle}}
             </v-list-item-subtitle>
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
-              {{subtitle2 | truncate}}<CopyButton x-small :value="subtitle2" class="ml-1"></CopyButton>
+              {{ truncate(subtitle2) }}<CopyButton x-small :value="subtitle2" class="ml-1"></CopyButton>
             </v-list-item-subtitle>
           </v-list-item-content>
         </v-list-item>
@@ -39,69 +39,68 @@
     </v-card>
   </v-dialog>
 </template>
-<script>
+<script setup lang="ts">
+import { computed } from 'vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
-export default {
-  name: "baseDialog",
-  components: { CopyButton },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    img: {
-      type: String,
-    },
-    title: {
-      type: String,
-    },
-    subtitle: {
-      type: String
-    },
-    subtitle2: {
-      type: String
-    },
-    height: {
-      type: Number,
-      default: 800
-    },
-    minHeight: {
-      type: Number,
-      default: 800
-    },
-    width: {
-      type: Number,
-      default: 850
-    },
-    loading: {
-      type: Boolean,
-      default: false
-    },
-    persistent: {
-      type: Boolean,
-      default: true
-    },
-    scrollable: {
-      type: Boolean,
-      default: true
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
+  },
+  img: {
+    type: String,
+  },
+  title: {
+    type: String,
+  },
+  subtitle: {
+    type: String
+  },
+  subtitle2: {
+    type: String
+  },
+  height: {
+    type: Number,
+    default: 800
+  },
+  minHeight: {
+    type: Number,
+    default: 800
+  },
+  width: {
+    type: Number,
+    default: 850
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  persistent: {
+    type: Boolean,
+    default: true
+  },
+  scrollable: {
+    type: Boolean,
+    default: true
+  }
+});
+
+const emit = defineEmits(['close']);
+
+const { truncate } = filters;
+
+const isDialogOpen = computed({
+  get() {
+    return props.isOpen;
+  },
+  set(val: boolean) {
+    if (!val) {
+      emit('close');
     }
-  },
-  filters,
-  computed: {
-    isDialogOpen: {
-      get() {
-        return this.isOpen;
-      },
-      set(val) {
-        if (!val) {
-          this.$emit('close');
-        }
-      }
-    },
-  },
-};
+  }
+});
 </script>
 <style scoped>
 .close-button {

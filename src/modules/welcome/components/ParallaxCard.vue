@@ -14,65 +14,77 @@
     </div>
   </div>
 </template>
-<script>
-export default {
-  name: "ParallaxCard",
-  props: ['dataImage'],
-  computed: {
-    mousePX() {
-      return this.mouseX / this.width;
-    },
-    mousePY() {
-      return this.mouseY / this.height;
-    },
-    cardStyle() {
-      const rX = this.mousePX * 30;
-      const rY = this.mousePY * -30;
-      return {
-        transform: `rotateY(${rX}deg) rotateX(${rY}deg)`
-      };
-    },
-    cardBgTransform() {
-      const tX = this.mousePX * -30;
-      const tY = this.mousePY * -30;
-      return {
-        transform: `translateX(${tX}px) translateY(${tY}px) scale(1.2)`
-      }
-    },
-    cardBgImage() {
-      return {
-        backgroundImage: `url(${this.dataImage})`,
-        backgroundSize: 'cover'
-      }
-    }
-  },
-  methods: {
-    handleMouseMove(e) {
-      this.mouseX = e.offsetX - this.width/2
-      this.mouseY = e.pageY - this.height - this.$refs.card.offsetTop - 3*this.height/4;
-    },
-    handleMouseEnter() {
-      clearTimeout(this.mouseLeaveDelay);
-    },
-    handleMouseLeave() {
-      this.mouseLeaveDelay = setTimeout(()=>{
-        this.mouseX = 0;
-        this.mouseY = 0;
-      }, 500);
-    }
-  },
-  data: () => ({
-    width: 0,
-    height: 0,
-    mouseX: 0,
-    mouseY: 0,
-    mouseLeaveDelay: null
-  }),
-  mounted() {
-    this.width = this.$refs.card.offsetWidth;
-    this.height = this.$refs.card.offsetHeight;
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+
+const props = defineProps({
+  dataImage: {
+    type: String
   }
-}
+});
+
+const card = ref<HTMLElement | null>(null);
+const width = ref(0);
+const height = ref(0);
+const mouseX = ref(0);
+const mouseY = ref(0);
+const mouseLeaveDelay = ref<NodeJS.Timeout | null>(null);
+
+const mousePX = computed(() => {
+  return mouseX.value / width.value;
+});
+
+const mousePY = computed(() => {
+  return mouseY.value / height.value;
+});
+
+const cardStyle = computed(() => {
+  const rX = mousePX.value * 30;
+  const rY = mousePY.value * -30;
+  return {
+    transform: `rotateY(${rX}deg) rotateX(${rY}deg)`
+  };
+});
+
+const cardBgTransform = computed(() => {
+  const tX = mousePX.value * -30;
+  const tY = mousePY.value * -30;
+  return {
+    transform: `translateX(${tX}px) translateY(${tY}px) scale(1.2)`
+  };
+});
+
+const cardBgImage = computed(() => {
+  return {
+    backgroundImage: `url(${props.dataImage})`,
+    backgroundSize: 'cover'
+  };
+});
+
+const handleMouseMove = (e: MouseEvent) => {
+  mouseX.value = e.offsetX - width.value / 2;
+  mouseY.value = e.pageY - height.value - (card.value?.offsetTop || 0) - 3 * height.value / 4;
+};
+
+const handleMouseEnter = () => {
+  if (mouseLeaveDelay.value) {
+    clearTimeout(mouseLeaveDelay.value);
+  }
+};
+
+const handleMouseLeave = () => {
+  mouseLeaveDelay.value = setTimeout(() => {
+    mouseX.value = 0;
+    mouseY.value = 0;
+  }, 500);
+};
+
+onMounted(() => {
+  if (card.value) {
+    width.value = card.value.offsetWidth;
+    height.value = card.value.offsetHeight;
+  }
+});
 </script>
 <style lang="scss" scoped>
 $hoverEasing: cubic-bezier(0.23, 1, 0.32, 1);

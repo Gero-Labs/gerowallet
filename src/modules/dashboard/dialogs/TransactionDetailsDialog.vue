@@ -3,20 +3,18 @@
     <TransactionDetails :transaction-info="transactionInfo"></TransactionDetails>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 
-export default {
-  name: 'TransactionDetailsDialog',
-  components: { TransactionDetails, BaseDialog },
-  props: {
-    transactionInfo: {
-      type: Object,
-      default: null,
-    },
+defineProps({
+  transactionInfo: {
+    type: Object,
+    default: null,
   },
-};
+});
+
+defineEmits(['close']);
 </script>
 <style scoped >
 

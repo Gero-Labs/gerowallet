@@ -15,37 +15,27 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import filters from '@/shared/utils/filters';
-import axios from 'axios';
 
-export default {
-  name: 'HowItWorksDialog',
-  components: {BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    }
-  },
-  filters,
-  data: () => ({
-    loading: true,
-    disabled: true,
-  }),
-  mounted() {
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
+  }
+});
 
-  },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.loading = true
-        this.default = true
-      }
-    }
-  },
-};
+const emit = defineEmits(['close']);
+
+const loading = ref(true);
+const disabled = ref(true);
+
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    loading.value = true;
+  }
+});
 </script>
 <style scoped>
 

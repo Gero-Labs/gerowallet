@@ -53,70 +53,65 @@
     </v-card>
   </v-form>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, onMounted, toRefs } from 'vue';
 import { useStore } from '@/stores';
-import { mapActions, mapState } from 'pinia';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { geroStore } from '@/plugins/geroStore';
+import { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'Login',
-  computed: {
-    ...mapState(walletConfigStore, ['getUseSidePanel']),
-    useSidePanel: {
-      get() {
-        return this.getUseSidePanel
-      }
-    },
-    WalletType() {
-      return WalletType
-    },
-    ...mapState(useStore, ['wallets']),
-    availableWallets() {
-      return this.wallets.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET)
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['login']),
-    async submitLogin(walletId) {
-      this.login(walletId)
-      await this.controller.returnData({ data: 'login', error: undefined })
-      window.close();
-    },
-    resolveIcon(icon) {
-      if (icon) {
-        return assets.resolveIcon(icon)
-      }
-      return ''
-    },
-    resolveNetworkIcon(item) {
-      const network = networks.resolveNetwork(item.chain, item.network)
-      if (network) {
-        return network.icon
-      }
-      return ''
-    },
-  },
-  data() {
-    return {
-      selectedWallet: {},
-      controller: Messaging.createInternalController(),
-      assets,
-    };
-  },
-  mounted() {
-    if (this.useSidePanel) {
-      const params = new URLSearchParams(window.location.href);
-      this.tabId = Number(params.get("tabId"));
-      this.controller = Messaging.createInternalSidePanelController(this.tabId)
-    } else {
-      this.controller = Messaging.createInternalController()
-    }
-  }
+const store = useStore();
+const walletConfig = walletConfigStore();
+
+const { wallets } = toRefs(geroStore);
+const { config } = toRefs(walletStore);
+
+const selectedWallet = ref({});
+const controller = ref(Messaging.createInternalController());
+const tabId = ref<number>();
+
+const useSidePanel = computed(() => {
+  return config.value?.useSidePanel || true;
+});
+
+const availableWallets = computed(() => {
+  return wallets.value.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET);
+});
+
+const submitLogin = async (walletId: string) => {
+  store.login(walletId);
+  await controller.value.returnData({ data: 'login', error: undefined });
+  window.close();
 };
+
+const resolveIcon = (icon: string) => {
+  if (icon) {
+    return assets.resolveIcon(icon);
+  }
+  return '';
+};
+
+const resolveNetworkIcon = (item: any) => {
+  const network = networks.resolveNetwork(item.chain, item.network);
+  if (network) {
+    return network.icon;
+  }
+  return '';
+};
+
+onMounted(() => {
+  if (useSidePanel.value) {
+    const params = new URLSearchParams(window.location.href);
+    tabId.value = Number(params.get("tabId"));
+    controller.value = Messaging.createInternalSidePanelController(tabId.value);
+  } else {
+    controller.value = Messaging.createInternalController();
+  }
+});
 </script>
 <style scoped>
 

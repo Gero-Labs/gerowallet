@@ -88,18 +88,18 @@
             </v-card-subtitle>
             <v-card-text class="text-center">
               <div class="qr-scanner" v-show="isInit">
-                <QrcodeStream @decode="onDecode" @init="onInit">
-                  <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>
-                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>
-                  </div>
-                </QrcodeStream>
+<!--                <QrcodeStream @decode="onDecode" @init="onInit">-->
+<!--                  <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
+<!--                    <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
+<!--                  </div>-->
+<!--                </QrcodeStream>-->
               </div>
               <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
                 <v-progress-circular size="150" indeterminate></v-progress-circular>
@@ -215,7 +215,7 @@ import snackbar from '@/plugins/snackbar';
 import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
 import Vue from 'vue';
 import QRCodeStyling from 'qr-code-styling';
-import { QrcodeStream } from "vue-qrcode-reader";
+// import { QrcodeStream } from "vue-qrcode-reader";
 import { UREncoder } from '@keystonehq/keystone-sdk';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { multisigStore } from '@/stores/modules/multisig';
