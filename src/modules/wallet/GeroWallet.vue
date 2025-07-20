@@ -32,7 +32,8 @@ onBeforeMount(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import './styles/index.scss';
 .gero-wallet {
   display: flex;
   flex-direction: column;

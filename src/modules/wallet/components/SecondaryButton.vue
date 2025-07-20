@@ -15,25 +15,13 @@ defineEmits<{
 }>();
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .secondary-button {
-  background: #13161b;
-  border: 1px solid #373a41;
-  border-radius: 8px;
-  padding: 12px 18px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #cecfd2;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0px 1px 2px 0px rgba(255, 255, 255, 0), inset 0px -2px 0px 0px rgba(12, 14, 18, 0.05),
-    inset 0px 0px 0px 1px rgba(12, 14, 18, 0.18);
-  width: fit-content;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  @include secondary-button;
+  @include button-size;
+  width: 100%;
 }
 
 .secondary-button:hover {

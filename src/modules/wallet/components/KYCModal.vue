@@ -356,7 +356,9 @@ const handleNext = () => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .kyc-modal {
   border-radius: 12px;
 }
@@ -545,7 +547,6 @@ const handleNext = () => {
   margin: 0;
 }
 
-/* Uploaded File Display */
 .uploaded-file {
   border: 1px solid #22262f;
   border-radius: 12px;
@@ -559,7 +560,7 @@ const handleNext = () => {
 
 .uploaded-image {
   max-width: 100%;
-  max-height: 120px;
+  max-height: 220px;
   object-fit: contain;
   border-radius: 8px;
 }
@@ -697,7 +698,7 @@ const handleNext = () => {
 
 .photo-image {
   max-width: 100%;
-  max-height: 120px;
+  max-height: 220px;
   object-fit: cover;
   border-radius: 8px;
 }

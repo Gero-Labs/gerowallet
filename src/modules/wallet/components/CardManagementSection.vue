@@ -31,20 +31,26 @@
 import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
 </script>
 
-<style scoped lang="scss">
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .management-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 60px;
+  gap: $spacing-4xl;
   width: 100%;
-  padding: 32px;
+  padding: $spacing-3xl;
+  
+  @include mobile {
+    flex-direction: column;
+    gap: $spacing-2xl;
+  }
 }
 
 .management-column-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  @include flex-column;
+  gap: $spacing-lg;
   width: 100%;
 
   .featured-icon {
@@ -52,25 +58,20 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
     height: 48px;
     background: #0b4a6f;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @include flex-center;
   }
 
   .management-heading {
-    font-size: 32px;
-    font-weight: 700;
-    color: white;
+    @include heading-style($font-size-3xl);
   }
+  
   .management-description {
-    font-size: 16px;
-    font-weight: 400;
-    color: #94979c;
+    @include body-text($font-size-base);
   }
+  
   .feature-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    @include flex-column;
+    gap: $spacing-md;
   }
 }
 </style>

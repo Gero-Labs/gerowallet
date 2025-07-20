@@ -41,7 +41,9 @@ const handleContactSupport = () => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .application-status-section {
   padding: 64px;
   border-radius: 8px;

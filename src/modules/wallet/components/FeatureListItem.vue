@@ -34,23 +34,21 @@ interface Props {
 defineProps<Props>();
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .feature-list-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.feature-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.feature-text {
-  color: #94979c;
-  font-size: 1rem;
-  line-height: 1.5;
+  gap: $spacing-md;
+  
+  .feature-icon {
+    @include flex-center;
+    flex-shrink: 0;
+  }
+  
+  .feature-text {
+    @include body-text($font-size-base);
+  }
 }
 </style>

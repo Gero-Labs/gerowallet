@@ -37,17 +37,24 @@ const openModal = () => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
-  padding: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: $spacing-2xl;
+  padding: $spacing-3xl;
+  
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: $spacing-xl;
+  }
 }
 
 .bottom-cta {
   display: flex;
   justify-content: center;
-  padding: 32px;
+  padding: $spacing-3xl;
 }
 </style>
