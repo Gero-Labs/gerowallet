@@ -89,7 +89,7 @@
                 backgroundPositionY: '295px',
                 zIndex: 0,
               }" />
-              <div style="display: flex;" v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0" class="fill-height">
+              <div style="display: flex; justify-self: center;" v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0" class="fill-height">
                 <NoWalletsWelcomeCard />
               </div>
               <div style="display: flex;" v-else-if="createOrImportSeedPhrase" class="fill-height">
@@ -141,7 +141,14 @@
           </v-col>
         </v-row>
       </v-card-text>
-      <CreateGoogleWallet :isOpen="newGoogleWalletDialog" @close="newGoogleWalletDialog = false" :persistent="false" :google-account="profile" :tokens="{ accessToken, idToken}" />
+      <CreateGoogleWallet
+        :isOpen="newGoogleWalletDialog"
+        @close="newGoogleWalletDialog = false"
+        :persistent="false"
+        :google-account="profile"
+        :tokens="{ accessToken, idToken}"
+        :network="selectedNetwork"
+      />
     </v-card>
   </v-container>
 </template>

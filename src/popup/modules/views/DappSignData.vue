@@ -74,136 +74,128 @@
     </PopupHeader>
   </v-form>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, onMounted, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { appWallet, useStore } from '@/stores';
+import { appWallet } from '@/stores';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
-import { mapState } from 'pinia';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import { verifyData } from '@/shared/utils/converter';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'DappSignData',
-  components: { ToggleSwitch, PopupHeader },
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['getTxAutoSubmit', 'getUseSidePanel']),
-    txAutoSubmit: {
-      get() {
-        return this.getTxAutoSubmit
-      }
-    },
-    useSidePanel: {
-      get() {
-        return this.getUseSidePanel
-      }
-    },
-    WalletType() {
-      return WalletType
-    }
-  },
-  methods: {
-    enableToolTip() {
-      this.tooltip.enabled = true;
-      setTimeout(() => {
-        this.tooltip.enabled = false;
-      }, 3000);
-    },
-    async decline() {
-      await this.controller.returnData({ data: undefined, error: DataSignError.UserDeclined })
-      window.close();
-    },
-    async sign() {
-      if (!this.txAutoSubmit && this.signature) {
-        await this.confirm()
-      }
-      const signAndReturnTx = async () => {
-        this.loading = true
-        try {
-          const address = this.request.data.address
-          console.log('address', address)
-          const payload = this.request.data.payload
-          console.log('payload', payload)
-          const res = await appWallet.signData(address, payload, this.spendingPassword, 0, !this.isBT)
-          console.log(res)
-          verifyData(res, address, payload)
-          this.signature = res;
-          if (this.txAutoSubmit) {
-            await this.confirm()
-          }
-        } catch (e) {
-          snackbar.setError(e)
-          console.log(e);
-        }
-        this.loading = false
-      };
-      if (appWallet.type === WalletType.Normal) {
-        if (this.$refs.form.validate()) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
-        }
-      } else {
-        await signAndReturnTx();
-      }
-    },
-    async confirm() {
-      console.log(this.signature)
-      await this.controller.returnData({ data: this.signature, error: undefined })
-      window.close();
-    },
-    async init() {
-      console.log('init')
-      try {
-        const request = await this.controller.requestData();
-        if (request?.data?.payload) {
-          this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')
-        }
-        this.request = request;
-      } catch (e) {
-        console.log(e);
-      }
-    }
-  },
-  data() {
-    return {
-      rules,
-      spendingPassword: '',
-      showPassword: false,
-      request: null,
-      message: ``,
-      password: '',
-      valid: false,
-      tooltip: {
-        enabled: false,
-        text: 'Wrong Spending Password!'
-      },
-      isBT: false,
-      loading: false,
-      controller: null,
-      tabId: null,
-      signature: undefined,
-    };
-  },
-  async mounted() {
-    if (this.useSidePanel) {
-      const params = new URLSearchParams(window.location.href);
-      this.tabId = Number(params.get("tabId"));
-      this.controller = Messaging.createInternalSidePanelController(this.tabId)
-    } else {
-      this.controller = Messaging.createInternalController()
-    }
+const { loggedWallet, config } = toRefs(walletStore);
 
-    await this.init();
-  },
+const spendingPassword = ref('');
+const showPassword = ref(false);
+const request = ref<any>(null);
+const message = ref('');
+const password = ref('');
+const valid = ref(false);
+const tooltip = ref({
+  enabled: false,
+  text: 'Wrong Spending Password!'
+});
+const isBT = ref(false);
+const loading = ref(false);
+const controller = ref<any>(null);
+const tabId = ref<number | null>(null);
+const signature = ref<any>(undefined);
+const form = ref<any>(null);
+
+const txAutoSubmit = computed(() => {
+  return config.value?.txAutoSubmit || true;
+});
+
+const useSidePanel = computed(() => {
+  return config.value?.useSidePanel || true;
+});
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
 };
+
+const decline = async () => {
+  await controller.value.returnData({ data: undefined, error: DataSignError.UserDeclined });
+  window.close();
+};
+
+const confirm = async () => {
+  console.log(signature.value);
+  await controller.value.returnData({ data: signature.value, error: undefined });
+  window.close();
+};
+
+const sign = async () => {
+  if (!txAutoSubmit.value && signature.value) {
+    await confirm();
+    return;
+  }
+
+  const signAndReturnTx = async () => {
+    loading.value = true;
+    try {
+      const address = request.value.data.address;
+      console.log('address', address);
+      const payload = request.value.data.payload;
+      console.log('payload', payload);
+      const res = await appWallet.signData(address, payload, spendingPassword.value, 0, !isBT.value);
+      console.log(res);
+      verifyData(res, address, payload);
+      signature.value = res;
+      if (txAutoSubmit.value) {
+        await confirm();
+      }
+    } catch (e) {
+      snackbar.setError(e);
+      console.log(e);
+    }
+    loading.value = false;
+  };
+
+  if (appWallet.type === WalletType.Normal) {
+    if (form.value.validate()) {
+      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+        await signAndReturnTx();
+      } else {
+        enableToolTip();
+      }
+    }
+  } else {
+    await signAndReturnTx();
+  }
+};
+
+const init = async () => {
+  console.log('init');
+  try {
+    const requestData = await controller.value.requestData();
+    if (requestData?.data?.payload) {
+      message.value = Buffer.from(requestData.data.payload, 'hex').toString('utf-8');
+    }
+    request.value = requestData;
+  } catch (e) {
+    console.log(e);
+  }
+};
+
+onMounted(async () => {
+  if (useSidePanel.value) {
+    const params = new URLSearchParams(window.location.href);
+    tabId.value = Number(params.get("tabId"));
+    controller.value = Messaging.createInternalSidePanelController(tabId.value);
+  } else {
+    controller.value = Messaging.createInternalController();
+  }
+
+  await init();
+});
 </script>
 <style scoped>
 .dapp-sign-details {

@@ -149,10 +149,10 @@
 import { computed, ref, reactive, nextTick, getCurrentInstance } from 'vue';
 import rules from "@/utils/rules";
 import { Theme, Network } from "@/models/types";
-import db from "@/db";
-import { useStore } from "@/stores";
 import assets from '@/utils/assets';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GeroStore from '@/plugins/geroStore';
+import { createNewWallet } from '@/db/gero-db';
 
 interface Props {
   isOpen: boolean;
@@ -207,14 +207,16 @@ const dialogLocal = computed({
 const walletCreationStep = async () => {
   creatingWalletLoader.value = true;
   try {
-    const walletId = await db.createNewWallet(
-      newWallet.name, 
-      newWallet.icon, 
-      Theme.GERO, 
-      null, 
-      newWallet.password, 
-      props.network.blockchain, 
+    GeroStore.createNewWallet(newWallet.name,
+      newWallet.icon,
+      Theme.GERO,
+      null,
+      newWallet.password,
+      props.network.blockchain,
       props.network.network
+    )
+    const walletId = await createNewWallet(
+
     );
     dialogLocal.value = false;
     resetDialog();

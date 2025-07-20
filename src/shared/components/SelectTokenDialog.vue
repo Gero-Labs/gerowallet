@@ -105,102 +105,99 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { ref, computed, onUnmounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import { mapActions, mapState } from 'pinia';
 import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
+import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
 
-export default defineComponent({
-  name: 'SelectTokenDialog',
-  components: { BaseDialog },
-  props: {
-    value: {
-      type: Object,
-    },
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    availableTokens: {
-      type: Array,
-    },
-    searchMechanism: {
-      type: Function,
+interface Props {
+  value?: any;
+  isOpen?: boolean;
+  availableTokens?: any[];
+  searchMechanism?: Function;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  isOpen: false,
+  availableTokens: () => [],
+});
+
+const emit = defineEmits<{
+  close: [];
+  input: [token: any];
+}>();
+
+const { price } = toRefs(networkStore);
+const { pinnedTokens } = toRefs(walletStore);
+
+const search = ref('');
+const additional = ref<any[]>([]);
+const searchLoading = ref(false);
+
+const favoriteTokens = computed(() => {
+  return pinnedTokens.value.filter(unit =>
+    props.availableTokens.some(token => token['unit'] === unit)
+  );
+});
+
+const selectedToken = computed({
+  get() {
+    return props.value;
+  },
+  set(newToken) {
+    if (newToken && props.availableTokens.length > 0) {
+      emit('input', newToken);
     }
   },
-  filters,
-  data() {
-    return {
-      search: '',
-      additional: [],
-      searchLoading: false,
-    };
-  },
-  computed: {
-    filters() {
-      return filters
-    },
-    ...mapState(useStore, ['price', 'pinnedTokens']),
-    debouncedSearch() {
-      return debounce(this.performSearch, 300);
-    },
-    favoriteTokens() {
-      return this.pinnedTokens.filter(unit =>
-        this.availableTokens.some(token => token['unit'] === unit)
-      );
-    },
-    selectedToken: {
-      get() {
-        return this.value;
-      },
-      set(newToken) {
-        if (newToken && this.availableTokens.length > 0) {
-          this.$emit('input', newToken);
-        }
-      },
-    },
-    filteredTokens() {
-      const lowerCaseSearch = this.search.toLowerCase();
-      return [...this.availableTokens, ...this.additional].filter(
-        token =>
-          token['name']?.toLowerCase().includes(lowerCaseSearch) ||
-          token['ticker']?.toLowerCase().includes(lowerCaseSearch) ||
-          token['policy_id']?.toLowerCase().includes(lowerCaseSearch)
-      )
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['toggleFavoriteToken']),
-    onSearchInput() {
-      this.debouncedSearch();
-    },
-    async performSearch() {
-      this.searchLoading = true;
-      if (this.searchMechanism) {
-        try {
-          this.additional = await this.searchMechanism(this.search.toLowerCase());
-        } catch (e) {
-          console.log(e)
-        }
-      }
-      this.filteredTokens; // Trigger filtering
-      this.searchLoading = false;
-    },
-    onChange(item) {
-      this.selectedToken = item
-      this.$emit('close');
-    },
-    resolveToken(unit) {
-      return this.availableTokens.find(token => token['unit'] === unit);
-    },
-  },
+});
 
-  unmounted() {
-    this.debouncedSearch.cancel();
-  },
+const filteredTokens = computed(() => {
+  const lowerCaseSearch = search.value.toLowerCase();
+  return [...props.availableTokens, ...additional.value].filter(
+    token =>
+      token['name']?.toLowerCase().includes(lowerCaseSearch) ||
+      token['ticker']?.toLowerCase().includes(lowerCaseSearch) ||
+      token['policy_id']?.toLowerCase().includes(lowerCaseSearch)
+  );
+});
+
+const performSearch = async () => {
+  searchLoading.value = true;
+  if (props.searchMechanism) {
+    try {
+      additional.value = await props.searchMechanism(search.value.toLowerCase());
+    } catch (e) {
+      console.log(e);
+    }
+  }
+  searchLoading.value = false;
+};
+
+const debouncedSearch = debounce(performSearch, 300);
+
+const onSearchInput = () => {
+  debouncedSearch();
+};
+
+const onChange = (item: any) => {
+  selectedToken.value = item;
+  emit('close');
+};
+
+const resolveToken = (unit: string) => {
+  return props.availableTokens.find(token => token['unit'] === unit);
+};
+
+const toggleFavoriteToken = (token: any) => {
+  store.toggleFavoriteToken(token);
+};
+
+onUnmounted(() => {
+  debouncedSearch.cancel();
 });
 </script>
 

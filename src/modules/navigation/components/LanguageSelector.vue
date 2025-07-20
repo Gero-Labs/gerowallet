@@ -21,37 +21,32 @@
     </v-list>
   </v-menu>
 </template>
-<script>
-import { mapActions, mapState } from 'pinia';
-import { useStore } from "@/stores";
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
+import { toRefs } from 'vue';
+import { walletStore } from '@/plugins/walletStore';
 import languages from '@/plugins/languages';
+import { geroStore } from '@/plugins/geroStore';
 
-export default {
-  name: "LanguageSelector",
-  computed: {
-    ...mapState(useStore, ['locale']),
-    currentLanguage() {
-      return this.languages[this.$i18n.locale]
-    }
-  },
-  methods: {
-    ...mapActions(useStore, ['setLocale']),
-  },
-  watch: {
-    selectedLang(val) {
-      const locale = Object.keys(this.languages)[val]
-      this.setLocale(locale)
-      this.$i18n.locale = Object.keys(this.languages)[val];
-    }
-  },
-  data: () => ({
-    languages,
-    selectedLang: -1,
-  }),
-  mounted() {
-    this.selectedLang = Object.keys(this.languages).indexOf(this.locale)
+const { locale } = toRefs(geroStore);
+const selectedLang = ref(-1);
+const instance = getCurrentInstance();
+
+const currentLanguage = computed(() => {
+  return languages[instance?.proxy?.$i18n?.locale || 'en']
+});
+
+watch(selectedLang, (val) => {
+  const localeKey = Object.keys(languages)[val]
+  walletStore.setLocale(localeKey)
+  if (instance?.proxy?.$i18n) {
+    instance.proxy.$i18n.locale = Object.keys(languages)[val];
   }
-}
+});
+
+onMounted(() => {
+  selectedLang.value = Object.keys(languages).indexOf(locale.value)
+});
 </script>
 <style>
 .toggleUpDown {

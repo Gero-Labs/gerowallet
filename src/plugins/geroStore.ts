@@ -1,4 +1,5 @@
 import Vue from 'vue';
+import { deleteWallet } from '@/db/gero-db';
 
 export interface GeroStore {
   wallets: any;
@@ -51,6 +52,14 @@ export default {
   setConfig(config: any) {
     geroStore.config = config;
     persist({ config: config });
+  },
+  createNewWallet
+  removeWallet(walletId: number) {
+    if (geroStore.wallets && geroStore.wallets[walletId]) {
+      delete geroStore.wallets[walletId];
+      persist({ wallets: geroStore.wallets });
+      deleteWallet(walletId);
+    }
   },
   state: geroStore
 }

@@ -19,14 +19,8 @@
     </v-layout>
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
-
-export default {
-  name: 'Market',
-  components: { SwapWidget },
-
-}
 </script>
 
 <style scoped>

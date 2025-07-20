@@ -5,26 +5,19 @@
     </v-main>
   </v-app>
 </template>
-<script>
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { onMounted, toRefs } from 'vue';
 import LoadingState from '@/plugins/loading';
+import { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'PopupLayout',
-  computed: {
-    ...mapState(useStore, ['loggedWallet'])
-  },
-  methods: {
-    ...mapActions(useStore, ['simpleLogin'])
-  },
-  async mounted() {
-    if (this.loggedWallet?.id) {
-      await this.simpleLogin(this.loggedWallet.id)
-    }
-    LoadingState.setLoading(false)
+const { loggedWallet } = toRefs(walletStore);
+
+onMounted(async () => {
+  if (loggedWallet.value?.id) {
+    await store.simpleLogin(loggedWallet.value.id);
   }
-}
+  LoadingState.setLoading(false);
+});
 </script>
 
 <style>

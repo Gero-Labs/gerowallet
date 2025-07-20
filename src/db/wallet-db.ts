@@ -1,22 +1,33 @@
 import Dexie, { DexieError } from 'dexie';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
 
+const dbCache: Map<string, Dexie> = new Map();
+
 export async function getDb(id: number): Promise<Dexie> {
     const dbName = 'wallet-' + id;
-    try {
-      const db: Dexie = new Dexie(dbName);
-      return await db.open();
-  } catch (error: DexieError | any) {
-    console.log(error)
-    if (error.name === 'NoSuchDatabaseError') {
-      const db: Dexie = new Dexie(dbName);
-      db.version(walletDBVersion).stores(walletDBSchema);
-      return db.open();
-    } else {
-      console.error('Error opening database:', error);
-      return null
+    
+    if (dbCache.has(dbName)) {
+        return dbCache.get(dbName)!;
     }
-  }
+    
+    try {
+        const db: Dexie = new Dexie(dbName);
+        await db.open();
+        dbCache.set(dbName, db);
+        return db;
+    } catch (error: DexieError | any) {
+        console.log(error)
+        if (error.name === 'NoSuchDatabaseError') {
+            const db: Dexie = new Dexie(dbName);
+            db.version(walletDBVersion).stores(walletDBSchema);
+            await db.open();
+            dbCache.set(dbName, db);
+            return db;
+        } else {
+            console.error('Error opening database:', error);
+            return null
+        }
+    }
 }
 
 export async function setWalletConfiguration(id: number, key: string, value: any) {
@@ -79,6 +90,15 @@ export async function addConnectedDapp(walletId: number, domain: string) {
 export async function removeDapp(id: number, dappId: string) {
   const db: Dexie = await getDb(id);
   db.table('connected_dapps').delete(dappId)
+}
+
+export function clearDbCache(id: number) {
+  const dbName = 'wallet-' + id;
+  const db = dbCache.get(dbName);
+  if (db) {
+    db.close();
+    dbCache.delete(dbName);
+  }
 }
 
 

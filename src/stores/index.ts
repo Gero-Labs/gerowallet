@@ -3,22 +3,13 @@ import loading from '@/plugins/loading';
 import db from '@/db';
 import { ERROR, WalletType } from '@/models/types';
 import { Wallet } from '@/models/wallet';
-import Dexie, { liveQuery, Subscription } from 'dexie';
+import { liveQuery, Subscription } from 'dexie';
 import { STORAGE } from '@/chrome/config';
-import {
-  findCollectionDescription,
-  findCollectionName,
-  longestCommonStartingSubstring,
-
-} from '@/shared/utils/resolver';
 import networks from '@/utils/networks';
-import { dexHunterStore } from '@/stores/modules/dexhunter';
 import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { governanceStore } from '@/stores/modules/governance';
 import router from '@/modules/navigation/router';
-import { subscribeSync } from '@/stores/loaders/syncLoader';
 import { loadAssets } from '@/stores/loaders/assetsLoader';
-import { loadConfig, subscribeConfig } from '@/stores/loaders/geroConfigLoader';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import * as CryptoTS from 'crypto-ts';
@@ -201,66 +192,6 @@ export const useStore = defineStore('store', {
     setResolvedAssets(val) {
       this.resolvedAssets = val
     },
-    async resolveCollections(collectibles) {
-      const unresolvedUnits = []
-      const collections = {}
-      collectibles.forEach(collectible => {
-        if (!this.assets) {
-          return
-        }
-        const asset = this.assets[collectible.unit]
-        if (!asset) {
-          unresolvedUnits.push(collectible.unit)
-        }
-        if (collections[collectible.policy_id]) {
-          collections[collectible.policy_id]['items'].push(collectible)
-          collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
-          const description = findCollectionDescription(collectible)
-          if (description) {
-            collections[collectible.policy_id]['description'] = description
-          }
-        } else {
-          collections[collectible.policy_id] = {}
-          collections[collectible.policy_id]['items'] = [collectible]
-          collections[collectible.policy_id]['name'] = findCollectionName(collectible)
-          const description = findCollectionDescription(collectible)
-          if (description) {
-            collections[collectible.policy_id]['description'] = description
-          }
-          collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
-          collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
-          collections[collectible.policy_id]['isScam'] = collectible.isScam
-        }
-      })
-      if (unresolvedUnits.length > 0) {
-        // await appWallet.syncAssets(unresolvedUnits, true)
-      }
-      Object.values(collections).forEach(collection => {
-        const items = collection['items']
-        if (items[0]['policy_id'] === 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a') {
-          collection['name'] = 'adaHandle'
-        } else if (items[0]['policy_id'] === '85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18') {
-          collection['name'] = 'MusicBox Dimensions'
-        } else if (!collection['name']) {
-          if (items.some(item => item['onchain_metadata'])) {
-            collection['name'] = longestCommonStartingSubstring(items
-              .filter(item => item['onchain_metadata'] && item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')])
-              .map(item => item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')]))
-          }
-          if (!collection['name']) {
-            collection['name'] = longestCommonStartingSubstring(items.map(item => item[Object.keys(item).find(key => key.toLowerCase() === 'name')]))
-          }
-          if (!collection['name']) {
-            collection['name'] = items[0]['policy_id']
-          }
-        }
-        if (Array.isArray(collection['name'])) {
-          collection['name'] = collection['name'].join(' ');
-        }
-      })
-      this.resolvedCollections = Object.values(collections)
-      return this.resolvedCollections
-    },
     setBaseAddress(baseAddress) {
       this.baseAddress = baseAddress
     },
@@ -340,9 +271,7 @@ export const useStore = defineStore('store', {
       await Promise.all(promises)
       // this.setLoadingTxs(false)
       // loading.setLoading(false);
-      this.subscribeConfig()
       // this.subscribeTransactions();
-      this.subscribeSync()
     },
     async logout() {
       console.log('logout')
@@ -390,12 +319,6 @@ export const useStore = defineStore('store', {
     setFiatRates(fiatRates) {
       this.fiatRates = fiatRates
     },
-    async setWelcomeDone(welcomeDone) {
-      await db.setConfiguration('welcomeDone', welcomeDone)
-    },
-    setStakingProView(isPro) {
-      this.stakingProView = isPro
-    },
     setAssets(assets) {
       this.assets = assets
       if (chrome?.storage) {
@@ -416,12 +339,6 @@ export const useStore = defineStore('store', {
     },
     async loadConfig() {
       await loadConfig(this)
-    },
-    async subscribeConfig() {
-      await subscribeConfig(this, subscriptions)
-    },
-    async subscribeSync() {
-      await subscribeSync(this, appWallet, subscriptions)
     },
     async loadAssets() {
       return await loadAssets(this, appWallet, subscriptions);
@@ -448,27 +365,3 @@ export const useStore = defineStore('store', {
     },
   },
 });
-
-// export default {
-//     namespaced: true,
-//     save(key, value) {
-//         if (env === 'production') {
-//             // eslint-disable-next-line
-//             chrome.storage.sync.set({ [key]: value });
-//         } else {
-//             localStorage.setItem(key, JSON.stringify(value))
-//         }
-//     },
-//     async get(key) {
-//         if (env === 'production') {
-//             // eslint-disable-next-line
-//             const res = await chrome.storage.sync.get([key])
-//             if (Object.keys(res).length === 0) {
-//                 return null
-//             }
-//             return res[key];
-//         } else {
-//             return JSON.parse(localStorage.getItem(key))
-//         }
-//     }
-// }

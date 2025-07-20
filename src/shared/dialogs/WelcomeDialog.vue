@@ -252,64 +252,58 @@
     </v-carousel>
   </v-dialog>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
-import { Blockchain, Network } from '@/models/types';
+<script setup lang="ts">
+import { ref, watch } from 'vue';
 import assets from '@/utils/assets';
 
-export default defineComponent({
-  name: 'WelcomeDialog',
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    }
-  },
-  watch: {
-    isOpen(value) {
-      if (!value) {
-        setTimeout(() => this.carousel = 0, 2000);
-      }
-    }
-  },
-  methods: {
-    ...mapActions(useStore, ['login']),
-    setWelcomeDone() {
-      this.$emit('close')
-    },
-    setNewDesign() {
-      this.text = `<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
+  }
+});
+
+const emit = defineEmits(['close']);
+
+const carousel = ref(0);
+const text = ref(`<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
+           <p>Rebuilt from the ground up with a fresh architecture and user interface.</p>
+           <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`);
+watch(() => props.isOpen, (value) => {
+  if (!value) {
+    setTimeout(() => carousel.value = 0, 2000);
+  }
+});
+const setWelcomeDone = () => {
+  emit('close')
+};
+
+const setNewDesign = () => {
+  text.value = `<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
            <p>Rebuilt from the ground up with a fresh architecture and user interface.</p>
            <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`
-    },
-    setCashback() {
-      this.text = `<p>We've partnered with <strong>Bring</strong>, Cardano's first white-label crypto cashback provider, to integrate crypto cashback directly into the Gero Dashboard.</p>
+};
+
+const setCashback = () => {
+  text.value = `<p>We've partnered with <strong>Bring</strong>, Cardano's first white-label crypto cashback provider, to integrate crypto cashback directly into the Gero Dashboard.</p>
                    <p>Earn cryptocurrency on everyday purchases from over 750 top retailers</p>`
-    },
-    setGovernance() {
-      this.text = `<p>Engage with Cardano's decentralized governance framework that shapes how network changes and upgrades are implemented.</p>
+};
+
+const setGovernance = () => {
+  text.value = `<p>Engage with Cardano's decentralized governance framework that shapes how network changes and upgrades are implemented.</p>
                    <p>You can delegate to a DRep or choose other voting methods right from the dashboard.</p>`
-    },
-    setMoreSecure() {
-      this.text = `<p>Introducing <strong>Cardano Shield</strong></p>
+};
+
+const setMoreSecure = () => {
+  text.value = `<p>Introducing <strong>Cardano Shield</strong></p>
                    <p>Making the Gero Dashboard the most secure wallet on Cardano.</p>
                    <p>Our superior UX design helps protect even novice users, and we've integrated Xerberus's Risk Rating for added Security.</p>`
-    },
-    setUpToDate() {
-      this.text = `<p>Stay updated with the latest blockchain and Gero news in our new Blogs section.</p>
+};
+
+const setUpToDate = () => {
+  text.value = `<p>Stay updated with the latest blockchain and Gero news in our new Blogs section.</p>
                    <p>Access content from well known Cardano knowledge bases and top content creators.</p>`
-    }
-  },
-  data: () => ({
-    carousel: 0,
-    text: `<p>Experience the completely redesigned<br><strong>Gero Dashboard</strong></p>
-           <p>Rebuilt from the ground up with a fresh architecture and user interface.</p>
-           <p>This upgrade unlocks new opportunities and capabilities that were previously unattainable.</p>`,
-    assets,
-  }),
-});
+};
 </script>
 <style scoped>
 

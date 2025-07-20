@@ -9,7 +9,6 @@ import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 import DappSignData from '@/popup/modules/views/DappSignData.vue';
 import SignTx from '@/popup/modules/views/SignTx.vue';
-import zkFiat from "@/modules/zkFiat/zkFiat.vue";
 import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
 import loading from '@/plugins/loading';
@@ -72,15 +71,6 @@ const routes = [
     path: '/governance',
     name: 'governance',
     component: Governance,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/zkFiat',
-    name: 'zkFiat',
-    component: zkFiat,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,

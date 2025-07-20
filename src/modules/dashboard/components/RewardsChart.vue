@@ -1,117 +1,98 @@
 <template>
   <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
 </template>
-<script>
+<script setup lang="ts">
+import { computed } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
 
-export default {
-  components: {
-    VueHighcharts,
+const props = defineProps({
+  chartData: {
+    type: Object,
+    default: () => {},
   },
-  props: {
-    chartData: {
-      type: Object,
-      default: () => {},
+  project: {
+    type: Object,
+    default: () => {},
+  },
+});
+
+const chartOptions = computed(() => {
+  return {
+    accessibility: {
+      enabled: false,
     },
-    project: {
-      type: Object,
-      default: () => {},
-    },
-  },
-  mode: 'production',
-  data() {
-    return {
-      Highcharts,
-    }
-  },
-  computed: {
-    ...mapState(useStore, ['loadingTxs']),
-    chartOptions() {
-      // if (Object.values(this.chartData).length === 0) {
-      //   return null
-      // }
-      return {
-        accessibility: {
-          enabled: false,
-        },
-        endOnTick: false,
-        legend:{ enabled:false },
-        title: {
-          text: 'Rewards History',
-          floating: true,
-          align: 'center',
-          verticalAlign: 'top',
-          style: {
-            color: "#FFF",
-            fontWeight: 'bold',
-            fontSize: '14px'
-          }
-        },
-        chart: {
-          type: 'column',
-          backgroundColor: 'transparent',
-          height: 155,
-          style: {
-            fontFamily: 'Quicksand',
-          },
-        },
-        rangeSelector: {
-          enabled: false,
-          inputEnabled: false,
-        },
-        scrollbar: {
-          enabled: false,
-        },
-        navigator: {
-          enabled: false,
-        },
-        credits: {
-          enabled: false,
-        },
-        xAxis: {
-          crosshair: true,
-          allowDecimals: false,
-          title: {
-            enabled: false,
-            text: 'Time',
-          },
-          labels: {
-            style: {
-              fontFamily: 'Inter',
-              color: '#fff'
-            },
-          },
-          categories: Object.keys(this.chartData)
-        },
-        yAxis: {
-          title: {
-            enabled: false,
-          },
-          labels: {
-            style: {
-              color: '#fff'
-            }
-          },
-          min: 0,
-          opposite: true,
-        },
-        colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
-        series: [
-          {
-            name: 'Rewards',
-            data: Object.values(this.chartData),
-          },
-        ],
-        useUTC: true,
+    endOnTick: false,
+    legend:{ enabled:false },
+    title: {
+      text: 'Rewards History',
+      floating: true,
+      align: 'center',
+      verticalAlign: 'top',
+      style: {
+        color: "#FFF",
+        fontWeight: 'bold',
+        fontSize: '14px'
       }
     },
-  },
-  watch: {},
-  mounted() {},
-}
+    chart: {
+      type: 'column',
+      backgroundColor: 'transparent',
+      height: 155,
+      style: {
+        fontFamily: 'Quicksand',
+      },
+    },
+    rangeSelector: {
+      enabled: false,
+      inputEnabled: false,
+    },
+    scrollbar: {
+      enabled: false,
+    },
+    navigator: {
+      enabled: false,
+    },
+    credits: {
+      enabled: false,
+    },
+    xAxis: {
+      crosshair: true,
+      allowDecimals: false,
+      title: {
+        enabled: false,
+        text: 'Time',
+      },
+      labels: {
+        style: {
+          fontFamily: 'Inter',
+          color: '#fff'
+        },
+      },
+      categories: Object.keys(props.chartData)
+    },
+    yAxis: {
+      title: {
+        enabled: false,
+      },
+      labels: {
+        style: {
+          color: '#fff'
+        }
+      },
+      min: 0,
+      opposite: true,
+    },
+    colors: ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+    series: [
+      {
+        name: 'Rewards',
+        data: Object.values(props.chartData),
+      },
+    ],
+    useUTC: true,
+  }
+});
 </script>
 <style>
 .highcharts-yaxis-grid .highcharts-grid-line {

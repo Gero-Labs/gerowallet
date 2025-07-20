@@ -49,7 +49,7 @@
       <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block;">
-      <v-form ref="form" v-model="valid">
+      <v-form ref="formRef" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>Delegation Amt.
@@ -157,18 +157,18 @@
         </v-card-subtitle>
         <v-card-text class="text-center">
           <div class="qr-scanner" v-show="isInit">
-            <QrcodeStream @decode="onDecode" @init="onInit">
-              <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>
-                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>
-              </div>
-            </QrcodeStream>
+<!--            <QrcodeStream @decode="onDecode" @init="onInit">-->
+<!--              <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
+<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
+<!--              </div>-->
+<!--            </QrcodeStream>-->
           </div>
           <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
             <v-progress-circular size="150" indeterminate></v-progress-circular>
@@ -178,7 +178,7 @@
       </v-card>
 
       <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
-      <div id="qr-code" ref="qrCode" class="text-center" v-show="!keystoneScan"> </div>
+      <div id="qr-code" ref="qrCodeRef" class="text-center" v-show="!keystoneScan"> </div>
       <div class="text-center pt-2">
         <v-btn
           text
@@ -197,12 +197,11 @@
     </v-overlay>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, toRefs, watch, computed } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
+import { appWallet } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/utils/rules';
 import networks from "@/utils/networks";
@@ -211,216 +210,209 @@ import { WalletType } from '@/models/types';
 import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
 import { UREncoder } from '@keystonehq/keystone-sdk';
 import QRCodeStyling from 'qr-code-styling';
-import { QrcodeStream } from "vue-qrcode-reader";
-import Vue from 'vue';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/plugins/walletStore';
+import { walletConfigStore } from '@/stores/modules/walletConfig';
 
-export default {
-  name: 'DelegateDialog',
-  components: { ToggleSwitch, QrcodeStream, CopyButton, BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    pool: {
-      type: Object,
-      default: () => {},
-    },
-    tx: {
-      type: Transaction,
-      default: () => {},
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.spendingPassword = ''
-        this.showPassword = ''
-        if (this.$refs.form) {
-          this.$refs.form.resetValidation()
-        }
-      }
-    },
-    spendingPassword() {
-      this.passwordRules = [
-        rules.required()
-      ]
-    }
+  pool: {
+    type: Object,
+    default: () => {},
   },
-  computed: {
-    WalletType() {
-      return WalletType
-    },
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['utxos', 'addresses', 'account']),
-    depositFee() {
-      let depositFee = 0;
-      const totalAdaBalance = BigNum.from_str(this.account.controlled_amount.toString())
-      let totalAdaOutput = 0
-      if (this.tx?.body()?.inputs()) {
-        for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
-          const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          if (utxo) {
-            totalAdaOutput -= Number(utxo.value)
-          }
-        }
-      }
-      if (this.tx?.body()?.outputs()) {
-        for (let i = 0; i < this.tx?.body()?.outputs().len(); i++) {
-          const output = this.tx?.body()?.outputs().get(i)
-          totalAdaOutput += Number(output.amount().coin().to_str())
-        }
-        depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str())
-        return depositFee*-1;
-      }
-      return 0
-    },
-    cols() {
-      if (this.depositFee > 0) {
-        return 3
-      } else {
-        return 4
+  tx: {
+    type: Transaction,
+    default: () => {},
+  }
+});
+
+const emit = defineEmits(['close']);
+
+const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+
+const loading = ref(false);
+const spendingPassword = ref('');
+const showPassword = ref(false);
+const tooltip = ref({
+  enabled: false,
+  text: 'Wrong Spending Password!',
+});
+const valid = ref(false);
+const passwordRules = ref([rules.required()]);
+const isBT = ref(false);
+const overlay = ref(false);
+const type = ref(undefined);
+const cbor = ref(undefined);
+const keystoneScan = ref(false);
+const isInit = ref(false);
+const qrCode = ref(undefined);
+const qrCodeRef = ref(null);
+const formRef = ref(null);
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    spendingPassword.value = ''
+    showPassword.value = false
+    if (formRef.value) {
+      formRef.value.resetValidation()
+    }
+  }
+});
+
+watch(spendingPassword, () => {
+  passwordRules.value = [rules.required()]
+});
+const depositFee = computed(() => {
+  let depositFeeValue = 0;
+  const totalAdaBalance = BigNum.from_str(account.value.controlled_amount.toString())
+  let totalAdaOutput = 0
+  if (props.tx?.body()?.inputs()) {
+    for (let i = 0; i < props.tx?.body()?.inputs().len(); i++) {
+      const input = props.tx?.body()?.inputs().get(i)
+      const utxo = utxos.value?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
+      if (utxo) {
+        totalAdaOutput -= Number(utxo.value)
       }
     }
-  },
-  methods: {
-    backScan() {
-      if (this.keystoneScan) {
-        this.keystoneScan = false
-        this.isInit = false
-      } else {
-        this.overlay = false
-      }
-    },
-    async onDecode(result) {
-      console.log(result)
-      const signature = parseSignature(result);
+  }
+  if (props.tx?.body()?.outputs()) {
+    for (let i = 0; i < props.tx?.body()?.outputs().len(); i++) {
+      const output = props.tx?.body()?.outputs().get(i)
+      totalAdaOutput += Number(output.amount().coin().to_str())
+    }
+    depositFeeValue = totalAdaOutput + Number(props.tx.body().fee().to_str())
+    return depositFeeValue*-1;
+  }
+  return 0
+});
+
+const cols = computed(() => {
+  if (depositFee.value > 0) {
+    return 3
+  } else {
+    return 4
+  }
+});
+const backScan = () => {
+  if (keystoneScan.value) {
+    keystoneScan.value = false
+    isInit.value = false
+  } else {
+    overlay.value = false
+  }
+};
+
+const onDecode = async (result) => {
+  console.log(result)
+  const signature = parseSignature(result);
+  const signedTx = Transaction.new(
+    props.tx.body(),
+    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+    undefined // TODO Transaction metadata
+  );
+  console.log(signedTx.to_json())
+  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  console.log(txId)
+  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
+  emit('close')
+};
+
+const onInit = (promise) => {
+  promise.then(() => {
+    isInit.value = true
+    console.log("Camera initialized successfully");
+  }).catch((error) => {
+    console.error("Camera initialization failed:", error);
+  });
+};
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+};
+
+const signDelegationTx = async () => {
+  const signAndReturnTx = async () => {
+    loading.value = true
+    try {
+      const txCbor = props.tx.to_hex()
+      const partialSign = false
+      const response = await appWallet.signTx(
+        txCbor,
+        partialSign,
+        spendingPassword.value,
+        0,
+        utxos.value,
+        keys.value,
+        !isBT.value
+      );
       const signedTx = Transaction.new(
-        this.tx.body(),
-        TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+        props.tx.body(),
+        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
         undefined // TODO Transaction metadata
       );
-      console.log(signedTx.to_json())
-      const txId = await appWallet.submitTx(signedTx, this.utxos);
+      const txId = await appWallet.submitTx(signedTx, utxos.value);
       console.log(txId)
-      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-      this.$emit('close')
-    },
-    onInit(promise) {
-      promise.then(() => {
-        this.isInit = true
-        console.log("Camera initialized successfully");
-      }).catch((error) => {
-        console.error("Camera initialization failed:", error);
-      });
-    },
-    enableToolTip() {
-      this.tooltip.enabled = true;
-      setTimeout(() => {
-        this.tooltip.enabled = false;
-      }, 3000);
-    },
-    async signDelegationTx() {
-      const signAndReturnTx = async () => {
-        this.loading = true
-        try {
-          const txCbor = this.tx.to_hex()
-          const partialSign = false
-          const response = await appWallet.signTx(
-            txCbor,
-            partialSign,
-            this.spendingPassword,
-            0,
-            this.utxos,
-            this.addresses,
-            !this.isBT
-          );
-          const signedTx = Transaction.new(
-            this.tx.body(),
-            TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-            undefined // TODO Transaction metadata
-          );
-          const txId = await appWallet.submitTx(signedTx, this.utxos);
-          console.log(txId)
-          snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
-          this.$emit('close')
-        } catch (e) {
-          snackbar.setError(e)
-          console.log(e);
-        }
-        this.loading = false
-      };
-      if (appWallet?.type === WalletType.Normal) {
-        if (this.$refs.form.validate()) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
-        }
-      } else if (appWallet?.type === WalletType.Keystone) {
-        if (this.qrCode) {
-          this.qrCode = null; // Clear the QRCode instance
-          if (this.$refs.qrCode)
-            this.$refs.qrCode.innerHTML = '';
-        }
-
-        const ur = createKeystoneSignRequest(this.tx, this.loggedWallet, this.utxos, this.addresses)
-        this.type = ur.type
-        this.cbor = Buffer.from(ur.cbor).toString('hex')
-        this.qrCode = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-        this.overlay = true
-        Vue.nextTick(() => {
-          this.qrCode.append(this.$refs.qrCode);
-        });
-      } else {
-        await signAndReturnTx();
-      }
-    },
-    getColor(value) {
-      if (value > 100) {
-        value = 100
-      }
-      value = value / 100
-      //value from 0 to 1
-      const hue = ((1 - value) * 120).toString(10);
-      return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-    },
-    poolExtendedInfo(pool) {
-      if (pool && pool.pool_extended_info) {
-        return JSON.parse(pool.pool_extended_info);
-      }
-      return undefined
-    },
-    fallbackImage(e) {
-      e.target.src = this.errorImage
+      snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
+      emit('close')
+    } catch (e) {
+      snackbar.setError(e)
+      console.log(e);
     }
-  },
-  filters,
-  data: () => ({
-    networks,
-    loading: false,
-    spendingPassword: '',
-    showPassword: false,
-    tooltip: {
-      enabled: false,
-      text: 'Wrong Spending Password!',
-    },
-    valid: false,
-    passwordRules: [
-      rules.required()
-    ],
-    isBT: false,
-    overlay: false,
-    type: undefined,
-    cbor: undefined,
-    keystoneScan: false,
-    isInit: false,
-  }),
-}
+    loading.value = false
+  };
+  if (appWallet?.type === WalletType.Normal) {
+    if (formRef.value.validate()) {
+      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+        await signAndReturnTx();
+      } else {
+        enableToolTip();
+      }
+    }
+  } else if (appWallet?.type === WalletType.Keystone) {
+    if (qrCode.value) {
+      qrCode.value = null;
+      if (qrCodeRef.value)
+        qrCodeRef.value.innerHTML = '';
+    }
+
+    const ur = createKeystoneSignRequest(props.tx, loggedWallet.value, utxos.value, keys.value)
+    type.value = ur.type
+    cbor.value = Buffer.from(ur.cbor).toString('hex')
+    qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
+    overlay.value = true
+    nextTick(() => {
+      qrCode.value.append(qrCodeRef.value);
+    });
+  } else {
+    await signAndReturnTx();
+  }
+};
+
+const getColor = (value) => {
+  if (value > 100) {
+    value = 100
+  }
+  value = value / 100
+  //value from 0 to 1
+  const hue = ((1 - value) * 120).toString(10);
+  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
+};
+
+const poolExtendedInfo = (pool) => {
+  if (pool && pool.pool_extended_info) {
+    return JSON.parse(pool.pool_extended_info);
+  }
+  return undefined
+};
+
+const fallbackImage = (e) => {
+  e.target.src = ''
+};
 </script>
 <style scoped>
 
