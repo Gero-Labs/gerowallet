@@ -1,15 +1,17 @@
 <template>
-  <div class="gero-wallet">
+  <div class="gero-wallet wallet-module">
     <component :is="section" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onBeforeMount } from 'vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 
-const section = ref();
 const status = ref('new');
+const section = ref(OrderCardSection);
+
 const setActiveStatus = () => {
   switch (status.value) {
     case 'new':
@@ -34,6 +36,7 @@ onBeforeMount(() => {
 
 <style lang="scss" scoped>
 @import './styles/index.scss';
+
 .gero-wallet {
   display: flex;
   flex-direction: column;

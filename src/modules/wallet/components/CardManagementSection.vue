@@ -54,7 +54,7 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
   width: 100%;
 
   .featured-icon {
-    width: 48px;
+    width: 48px;      
     height: 48px;
     background: #0b4a6f;
     border-radius: 50%;

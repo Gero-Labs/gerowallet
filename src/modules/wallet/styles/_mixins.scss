@@ -70,8 +70,10 @@
 }
 
 
+
+
+
 @mixin modal-card {
-  @include card-base;
   box-shadow: $shadow-lg;
   position: relative;
 }

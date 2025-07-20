@@ -107,40 +107,41 @@ const setKYCStatus = () => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import '../styles/variables';
+@import '../styles/mixins';
 .order-card-modal {
-  border-radius: 12px;
+  border-radius: $border-radius-lg;
 }
 
 .modal-card {
   background: #0c0e12;
-  border-radius: 12px;
-  box-shadow: 0px 3px 3px -1.5px rgba(255, 255, 255, 0), 0px 8px 8px -4px rgba(255, 255, 255, 0),
-    0px 20px 24px -4px rgba(255, 255, 255, 0);
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-md;
   position: relative;
 }
 
 .close-btn {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: $spacing-md;
+  right: $spacing-md;
   z-index: 10;
-  color: #94979c;
+  color: $text-secondary;
 }
 
 .modal-content {
-  padding: 24px;
+  padding: $spacing-2xl;
 }
 
 .card-mockup-section {
-  margin-bottom: 20px;
+  margin-bottom: $spacing-xl;
 }
 
 .cards-wrapper {
   position: relative;
   height: 254px;
-  background: linear-gradient(135deg, #013e44 0%, #005f67 100%);
-  border-radius: 8px;
+  background: linear-gradient(135deg, $background-dark 0%, $primary-cyan 100%);
+  border-radius: $border-radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -150,21 +151,19 @@ const setKYCStatus = () => {
   text-align: center;
 }
 .header-content {
-  padding: 0 32px;
+  padding: 0 $spacing-2xl;
 }
 
 .modal-title {
-  font-weight: 600;
-  font-size: 24px;
-  color: #f7f7f7;
-  margin: 0 0 8px 0;
+  @include heading-style($font-size-2xl);
+  color: $text-primary;
+  margin: 0 0 $spacing-md 0;
   line-height: 1.17;
 }
 
 .modal-subtitle {
-  font-weight: 400;
-  font-size: 16px;
-  color: #94979c;
+  @include body-text($font-size-base);
+  color: $text-secondary;
   margin: 0;
   line-height: 1.5;
 }
@@ -172,37 +171,34 @@ const setKYCStatus = () => {
 .check-items {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 32px;
+  gap: $spacing-xl;
+  padding: $spacing-2xl;
 }
 
 .check-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: $spacing-md;
 }
 
 .check-text {
-  font-weight: 400;
-  font-size: 16px;
-  color: #94979c;
+  @include body-text($font-size-base);
+  color: $text-secondary;
   line-height: 1.5;
 }
 
 .modal-actions {
   display: flex;
-  gap: 12px;
+  gap: $spacing-md;
   width: 100%;
-  margin-top: 8px;
+  margin-top: $spacing-md;
 }
 
 .modal-actions :deep(.secondary-button),
 .modal-actions :deep(.gradient-button) {
   flex: 1;
   width: 100%;
-  height: 44px;
-  font-size: 16px;
-  font-weight: 600;
-  text-transform: none;
+  height: $spacing-2xl;
+  @include button-size($spacing-sm, $spacing-md, $font-size-base);
 }
 </style>

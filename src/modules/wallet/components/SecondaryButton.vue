@@ -21,16 +21,15 @@ defineEmits<{
 .secondary-button {
   @include secondary-button;
   @include button-size;
-  width: 100%;
+  width: fit-content;
 }
 
 .secondary-button:hover {
-  background: #1a1d22;
-  border-color: #4a4d54;
-  color: #e0e1e4;
+  background: $background-dark;
+  border-color: $border-secondary;
+  color: $text-secondary;
   transform: translateY(-1px);
-  box-shadow: 0px 4px 8px 0px rgba(0, 0, 0, 0.2), inset 0px -2px 0px 0px rgba(12, 14, 18, 0.1),
-    inset 0px 0px 0px 1px rgba(12, 14, 18, 0.25);
+  box-shadow: $shadow-md;
 }
 
 .secondary-button:active {
@@ -44,8 +43,8 @@ defineEmits<{
 
 @media (max-width: 768px) {
   .secondary-button {
-    padding: 10px 16px;
-    font-size: 14px;
+    padding: $spacing-sm $spacing-md;
+    @include body-text($font-size-base);
   }
 }
 </style>
