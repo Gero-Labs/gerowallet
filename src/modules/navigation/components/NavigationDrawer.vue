@@ -195,6 +195,7 @@ const items = computed(() => {
     { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactionsCount.value > 0 },
+    { title: 'Gero Wallet', icon: assts.barChart, link: '/wallet', enabled: true },
     { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },

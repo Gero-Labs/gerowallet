@@ -105,6 +105,8 @@ import pairSvg from '@/assets/svg/pair.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
+import cardBanner from '@/assets/img/cardBanner.svg';
+import card from '@/assets/img/card.svg';
 
 export default {
   apexBg,
@@ -275,5 +277,7 @@ export default {
   pairSvg,
   pairApexSvg,
   cardanoSvg,
-  clarityLogo
+  clarityLogo,
+  cardBanner,
+  card
 }

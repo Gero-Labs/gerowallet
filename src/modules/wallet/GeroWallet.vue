@@ -1,0 +1,44 @@
+<template>
+  <div class="gero-wallet">
+    <component :is="section" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
+import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
+
+const section = ref();
+const status = ref('new');
+const setActiveStatus = () => {
+  switch (status.value) {
+    case 'new':
+      section.value = OrderCardSection;
+      break;
+    case 'pending':
+      section.value = PendingSection;
+      break;
+  }
+};
+
+watchEffect(() => {
+  status.value = localStorage.getItem('kycStatus') || 'new';
+  console.log('status', status.value);
+  setActiveStatus();
+});
+
+onBeforeMount(() => {
+  setActiveStatus();
+});
+</script>
+
+<style scoped>
+.gero-wallet {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  width: 100%;
+  height: 100%;
+  padding: 32px;
+}
+</style>
