@@ -5,7 +5,7 @@
         <div class="modal-content">
           <div class="card-mockup-section">
             <div class="cards-wrapper">
-              <img src="@/assets/img/multiCards.svg" alt="Cards" class="card" />
+              <img src="@/modules/wallet/icons/multiCards.svg" alt="Cards" class="card" />
             </div>
           </div>
 

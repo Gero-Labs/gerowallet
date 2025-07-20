@@ -2,7 +2,7 @@
   <section class="application-status-section">
     <div class="status-content">
       <div class="card-container">
-        <img src="@/assets/img/card.svg" alt="card" />
+        <img src="@/modules/wallet/icons/card.svg" alt="card" />
       </div>
 
       <div class="status-info">

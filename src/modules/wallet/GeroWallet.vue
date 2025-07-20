@@ -8,8 +8,9 @@
 import { ref, onBeforeMount } from 'vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
+import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
 
-const status = ref('new');
+const status = ref('approved');
 const section = ref(OrderCardSection);
 
 const setActiveStatus = () => {
@@ -20,14 +21,17 @@ const setActiveStatus = () => {
     case 'pending':
       section.value = PendingSection;
       break;
+    case 'approved':
+      section.value = HomeSection;
+      break;
   }
 };
 
-watchEffect(() => {
-  status.value = localStorage.getItem('kycStatus') || 'new';
-  console.log('status', status.value);
-  setActiveStatus();
-});
+// watchEffect(() => {
+//   status.value =  localStorage.getItem('kycStatus') || 'new';
+//   console.log('status', status.value);
+//   setActiveStatus();
+// });
 
 onBeforeMount(() => {
   setActiveStatus();
