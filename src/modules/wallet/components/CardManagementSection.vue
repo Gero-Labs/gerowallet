@@ -1,6 +1,6 @@
 <template>
   <div class="management-content">
-    <img src="@/assets/img/card.svg" alt="card" />
+    <img src="@/modules/wallet/icons/card.svg" alt="card" />
     <div class="management-column-content">
       <div class="featured-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
