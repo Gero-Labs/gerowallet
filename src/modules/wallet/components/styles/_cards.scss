@@ -3,7 +3,6 @@
 
 // Feature Card
 .feature-card {
-  @include card-base;
   padding: $spacing-2xl;
   @include flex-column;
   gap: $spacing-lg;
@@ -81,7 +80,6 @@
   }
   
   .card-preview {
-    @include card-base;
     padding: $spacing-2xl;
     text-align: center;
     

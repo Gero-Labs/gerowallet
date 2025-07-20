@@ -36,7 +36,6 @@
 import SecondaryButton from './SecondaryButton.vue';
 
 const handleContactSupport = () => {
-  // Handle contact support logic
   console.log('Contact support clicked');
 };
 </script>
@@ -45,17 +44,17 @@ const handleContactSupport = () => {
 @import '../styles/variables';
 @import '../styles/mixins';
 .application-status-section {
-  padding: 64px;
-  border-radius: 8px;
-  border: 1px solid #1f242f;
-  background: linear-gradient(100deg, #00e4f9 -35.87%, #162d2f 40.02%, #121212 84.89%);
+  padding: $spacing-2xl;
+  border-radius: $border-radius-lg;
+  border: 1px solid $border-secondary;
+  background: linear-gradient(100deg, $primary-cyan -35.87%, $background-dark 40.02%, $background-dark 84.89%);
 }
 
 .status-content {
   display: flex;
   align-items: center;
-  gap: 60px;
-  padding: 32px 0;
+  gap: $spacing-2xl;
+  padding: $spacing-2xl 0;
 }
 
 .card-container {
@@ -66,11 +65,11 @@ const handleContactSupport = () => {
   position: relative;
   width: 428px;
   height: 258px;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-  border-radius: 25px;
+  background: linear-gradient(135deg, $background-dark 0%, $primary-cyan 100%);
+  border-radius: $border-radius-lg;
   border: 1px solid rgba(255, 255, 255, 0.2);
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: $shadow-md;
 }
 
 .card-strip {
@@ -78,19 +77,19 @@ const handleContactSupport = () => {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 130px;
-  background: #252b37;
+  height: $spacing-2xl;
+  background: $background-dark;
   opacity: 0.79;
 }
 
 .payment-method-icon {
   position: absolute;
-  bottom: 22px;
-  right: 22px;
-  width: 62px;
-  height: 43px;
+  bottom: $spacing-md;
+  right: $spacing-md;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
+  border-radius: $border-radius-sm;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,17 +97,17 @@ const handleContactSupport = () => {
 
 .mastercard-icon {
   position: relative;
-  width: 40px;
-  height: 24px;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
 }
 
 .mastercard-left {
   position: absolute;
   left: 0;
   top: 0;
-  width: 24px;
-  height: 24px;
-  background: #dadada;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
+  background: $text-secondary;
   border-radius: 50%;
   opacity: 0.5;
 }
@@ -117,97 +116,90 @@ const handleContactSupport = () => {
   position: absolute;
   right: 0;
   top: 0;
-  width: 20px;
-  height: 24px;
-  background: linear-gradient(135deg, #f9a000 0%, #6d6dbb 100%);
+  width: $spacing-2xl;
+  height: $spacing-2xl;
+  background: linear-gradient(135deg, $primary-cyan 0%, $background-dark 100%);
   border-radius: 50%;
   opacity: 0.5;
 }
 
 .mastercard-middle {
   position: absolute;
-  left: 16px;
-  top: 3px;
-  width: 9px;
-  height: 18px;
-  background: #ffffff;
-  border-radius: 4px;
+  left: $spacing-md;
+  top: $spacing-md;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
+  background: $text-primary;
+  border-radius: $border-radius-sm;
 }
 
 .card-number {
   position: absolute;
-  bottom: 52px;
-  left: 22px;
-  font-family: 'Manrope', sans-serif;
-  font-weight: 600;
-  font-size: 22px;
-  color: white;
+  bottom: $spacing-2xl;
+  left: $spacing-md;
+  @include heading-style($font-size-2xl);
+  color: $text-primary;
   letter-spacing: 2px;
 }
 
 .cardholder {
   position: absolute;
-  bottom: 85px;
-  left: 22px;
-  font-family: 'Manrope', sans-serif;
-  font-weight: 600;
-  font-size: 16px;
-  color: white;
+  bottom: $spacing-2xl;
+  left: $spacing-md;
+  @include body-text($font-size-base);
+  color: $text-primary;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .expiry {
   position: absolute;
-  bottom: 85px;
-  right: 22px;
-  font-family: 'Manrope', sans-serif;
-  font-weight: 600;
-  font-size: 16px;
-  color: white;
+  bottom: $spacing-2xl;
+  right: $spacing-md;
+  @include body-text($font-size-base);
+  color: $text-primary;
   letter-spacing: 1px;
 }
 
 .paypass-icon {
   position: absolute;
-  top: 27px;
-  right: 27px;
-  color: white;
+  top: $spacing-2xl;
+  right: $spacing-2xl;
+  color: $text-primary;
 }
 
 .gero-logo {
   position: absolute;
-  top: 14px;
-  left: 14px;
-  width: 63px;
-  height: 50px;
+  top: $spacing-md;
+  left: $spacing-md;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .logo-placeholder {
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
+  color: $text-primary;
+  @include body-text($font-size-base);
 }
 
 .status-info {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: $spacing-2xl;
   max-width: 560px;
 }
 
 .icon-and-text {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: $spacing-xl;
 }
 
 .featured-icon {
-  width: 48px;
-  height: 48px;
+  width: $spacing-2xl;
+  height: $spacing-2xl;
   background: rgba(0, 223, 243, 0.2);
   border-radius: 50%;
   display: flex;
@@ -218,23 +210,19 @@ const handleContactSupport = () => {
 .heading-and-supporting-text {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: $spacing-xl;
 }
 
 .heading {
-  font-family: 'Inter', sans-serif;
-  font-weight: 600;
-  font-size: 30px;
-  color: #f7f7f7;
+  @include heading-style($font-size-2xl);
+  color: $text-primary;
   margin: 0;
   line-height: 1.27;
 }
 
 .supporting-text {
-  font-family: 'Inter', sans-serif;
-  font-weight: 400;
-  font-size: 18px;
-  color: #94979c;
+  @include body-text($font-size-base);
+  color: $text-secondary;
   margin: 0;
   line-height: 1.56;
 }
@@ -242,49 +230,49 @@ const handleContactSupport = () => {
 @media (max-width: 1024px) {
   .status-content {
     flex-direction: column;
-    gap: 40px;
+    gap: $spacing-2xl;
     text-align: center;
   }
 
   .credit-card-mockup {
     width: 360px;
-    height: 220px;
+    height: $spacing-2xl;
   }
 
   .heading {
-    font-size: 26px;
+    @include heading-style($font-size-2xl);
   }
 
   .supporting-text {
-    font-size: 16px;
+    @include body-text($font-size-base);
   }
 }
 
 @media (max-width: 768px) {
   .application-status-section {
-    padding: 60px 0;
+    padding: $spacing-2xl 0;
   }
 
   .credit-card-mockup {
     width: 320px;
-    height: 200px;
+    height: $spacing-2xl;
   }
 
   .card-number {
-    font-size: 18px;
+    @include heading-style($font-size-2xl);
   }
 
   .cardholder,
   .expiry {
-    font-size: 14px;
+    @include body-text($font-size-base);
   }
 
   .heading {
-    font-size: 24px;
+    @include heading-style($font-size-2xl);
   }
 
   .supporting-text {
-    font-size: 15px;
+    @include body-text($font-size-base);
   }
 }
 </style>
