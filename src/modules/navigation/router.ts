@@ -21,6 +21,7 @@ import Governance from '@/modules/governance/Governance.vue';
 import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
+import Wallet from '@/modules/wallet/GeroWallet.vue';
 
 const routes = [
   {
@@ -165,6 +166,15 @@ const routes = [
     meta: {
       layout: PopupLayout,
       requiresAuth: false,
+    },
+  },
+  {
+    path: '/wallet',
+    name: 'wallet',
+    component: Wallet,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
     },
   },
   {
