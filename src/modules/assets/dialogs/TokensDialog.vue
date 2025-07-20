@@ -28,72 +28,68 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
-import filters from '@/shared/utils/filters';
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
 
-export default {
-  name: "tokensDialog",
-  components: { AssetDetails,  BaseDialog },
-  props: {
-    modalData: {
-      type: Object,
-      default: null,
-    },
+const props = defineProps({
+  modalData: {
+    type: Object,
+    default: null,
   },
-  watch: {
-    isDialogVisible(val) {
-      if (val) {
-        this.pickedToken = null
-      }
+});
+
+const emit = defineEmits(['close']);
+
+const pickedToken = ref(null);
+
+const description = computed(() => {
+  let desc = '';
+  if (props.modalData) {
+    if (Array.isArray(props.modalData.description)) {
+      desc = props.modalData.description.join(" ");
+    } else {
+      desc = props.modalData.description;
     }
+  }
+  return desc;
+});
+
+const tokensData = computed(() => {
+  return props.modalData?.items;
+});
+
+const displayedTokens = computed(() => {
+  return tokensData.value;
+});
+
+const isDialogVisible = computed(() => {
+  return !!props.modalData;
+});
+
+const page = computed({
+  get() {
+    return 1;
   },
-  filters,
-  computed: {
-    description() {
-      let description = ''
-      if (this.modalData) {
-        if (Array.isArray(this.modalData.description)) {
-          description = this.modalData.description.join(" ")
-        } else {
-          description = this.modalData.description
-        }
-      }
-      return description
-    },
-    tokensData() {
-      return this.modalData?.items
-    },
-    displayedTokens() {
-      return this.tokensData;
-    },
-    isDialogVisible: {
-      get() {
-        return !!this.modalData;
-      },
-    },
-    page: {
-      get() {
-        return 1;
-      },
-      set(value) {
-        console.log(value);
-      },
-    },
+  set(value) {
+    console.log(value);
   },
-  data: () => ({
-    pickedToken: null,
-  }),
-  methods: {
-    handleTokenClick(token) {
-      this.pickedToken = token;
-    },
-    handleBreadcrumbClick() {
-      this.pickedToken = null;
-    },
-  },
+});
+
+const handleTokenClick = (token: any) => {
+  pickedToken.value = token;
 };
+
+const handleBreadcrumbClick = () => {
+  pickedToken.value = null;
+};
+
+watch(isDialogVisible, (val) => {
+  if (val) {
+    pickedToken.value = null;
+  }
+});
 </script>
 <style scoped>
 .close-button {

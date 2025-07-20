@@ -146,86 +146,87 @@
     </v-card>
   </v-overlay>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
 
-export default defineComponent({
-  name: 'SettingsOverlay',
-  props: {
-    value: {
-      type: Boolean,
-    },
+interface Props {
+  value?: boolean;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  input: [value: boolean];
+  setSlippage: [value: string];
+}>();
+
+const customSlippage = ref(2);
+const slippageTolerance = ref(2);
+const slippageToleranceType = ref('auto');
+const unlimitedSlippage = ref('off');
+const automaticSlippage = ref('off');
+const unlimitedSlippageTooltipEnabled = ref(false);
+const automaticSlippageTooltipEnabled = ref(false);
+
+const slippage = computed(() => {
+  if (automaticSlippage.value === 'on') {
+    return 'auto';
+  } else if (unlimitedSlippage.value === 'on') {
+    return 'unlimited';
+  } else if (slippageTolerance.value == -1) {
+    return customSlippageTolerance.value.toString();
+  }
+  return slippageTolerance.value.toString();
+});
+
+const customSlippageTolerance = computed({
+  get() {
+    return customSlippage.value;
   },
-  computed: {
-    slippage() {
-      if (this.automaticSlippage === 'on') {
-        return 'auto'
-      } else if (this.unlimitedSlippage === 'on') {
-        return 'unlimited'
-      } else if (this.slippageTolerance == -1) {
-        return this.customSlippageTolerance.toString()
-      }
-      return this.slippageTolerance.toString()
-    },
-    customSlippageTolerance: {
-      get() {
-        return this.customSlippage
-      },
-      set(val) {
-        if (val === '') {
-          val = 0
-        }
-        let num = Number(val)
-        if (num > 100) {
-          num = 100
-        }
-        this.customSlippage = num
-      }
-    },
-  },
-  watch: {
-    slippage(val) {
-      this.$emit('setSlippage', val)
+  set(val: any) {
+    if (val === '') {
+      val = 0;
     }
-  },
-  methods: {
-    disableUnlimitedSlippageTooltip() {
-      if (this.unlimitedSlippageTooltipEnabled) {
-        this.unlimitedSlippageTooltipEnabled = false
-      }
-    },
-    disableAutomaticSlippageTooltip() {
-      if (this.automaticSlippageTooltipEnabled) {
-        this.automaticSlippageTooltipEnabled = false
-      }
-    },
-    onSlippageToleranceChange(val) {
-      if (val != -1) {
-        this.customSlippageTolerance = val
-      }
-    },
-    unlimitedSlippageChange(val) {
-      if (val === 'on') {
-        this.customSlippage = -1
-      } else {
-        this.customSlippage = 2
-      }
-    },
-    closeOverlay() {
-      this.$emit('input', false);
-    },
-  },
-  data() {
-    return {
-      customSlippage: 2,
-      slippageTolerance: 2,
-      slippageToleranceType: 'auto',
-      unlimitedSlippage: 'off',
-      automaticSlippage: 'off',
-      unlimitedSlippageTooltipEnabled: false,
-      automaticSlippageTooltipEnabled: false,
-    };
-  },
+    let num = Number(val);
+    if (num > 100) {
+      num = 100;
+    }
+    customSlippage.value = num;
+  }
+});
+
+const disableUnlimitedSlippageTooltip = () => {
+  if (unlimitedSlippageTooltipEnabled.value) {
+    unlimitedSlippageTooltipEnabled.value = false;
+  }
+};
+
+const disableAutomaticSlippageTooltip = () => {
+  if (automaticSlippageTooltipEnabled.value) {
+    automaticSlippageTooltipEnabled.value = false;
+  }
+};
+
+const onSlippageToleranceChange = (val: number) => {
+  if (val != -1) {
+    customSlippageTolerance.value = val;
+  }
+};
+
+const unlimitedSlippageChange = (val: string) => {
+  if (val === 'on') {
+    customSlippage.value = -1;
+  } else {
+    customSlippage.value = 2;
+  }
+};
+
+const closeOverlay = () => {
+  emit('input', false);
+};
+
+watch(slippage, (val) => {
+  emit('setSlippage', val);
 });
 </script>
 <style scoped>

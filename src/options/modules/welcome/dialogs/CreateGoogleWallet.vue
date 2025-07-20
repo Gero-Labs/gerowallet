@@ -109,13 +109,14 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { Theme, WalletType } from '@/models/types';
 import { useStore } from '@/stores';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import db from '@/db';
 import { storeToRefs } from 'pinia';
+import { Network } from '@/models/types';
+import { createNewGoogleWallet } from '@/db/gero-db';
 
 const store = useStore();
 const { network } = storeToRefs(store);
@@ -137,6 +138,7 @@ interface Props {
     idToken: string,
     accessToken: string,
   };
+  network: Network;
 }
 
 const props = defineProps<Props>();
@@ -194,12 +196,19 @@ const walletCreation = async (): Promise<void> => {
     ...newWallet.value,
     type: WalletType.Google,
     theme: Theme.GERO,
-    chain: network.value.blockchain,
-    network: network.value.network,
+    chain: props.network.blockchain,
+    network: props.network.network,
   };
   try {
-    const walletId = await db.createNewGoogleWallet(
-      wallet.name, wallet.icon, wallet.theme, wallet.password, wallet.chain, wallet.network, props.tokens.idToken);
+    const walletId = await createNewGoogleWallet(
+      wallet.name,
+      wallet.icon,
+      wallet.theme,
+      wallet.password,
+      wallet.chain,
+      wallet.network,
+      props.tokens.idToken
+    );
     emit('close');
     await store.login(walletId);
     await vmProxy.$router.push('/');

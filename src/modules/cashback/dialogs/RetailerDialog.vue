@@ -37,96 +37,97 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import filters from '@/shared/utils/filters';
 import axios from 'axios';
-import { useStore } from '@/stores';
-import { mapState } from 'pinia';
 import networks from '@/utils/networks';
 import cashbackApi from '@/api/cashback-api';
+import { walletStore } from '@/plugins/walletStore';
 
-export default {
-  name: 'RetailerDialog',
-  components: {BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    retailer: {
-      type: Object
-    },
-    retailerTermsBasePath: {
-      type: String,
-      default: 'https://media.bringweb3.io/cashback-terms'
-    },
-    searchTerm: {
-      type: String,
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  filters,
-  computed: {
-    ...mapState(useStore, ['baseAddress', 'loggedWallet']),
+  retailer: {
+    type: Object
   },
-  methods: {
-    startShopping() {
-      if (this.retailerUrl) {
-        window.open(this.retailerUrl, '_blank');
-        cashbackApi.analytics(this.retailer.id, this.retailer.name, this.baseAddress, networks.resolveCurrencySymbol(this.loggedWallet?.chain, this.loggedWallet?.network), this.searchTerm);
-      }
-    },
-    async getContent() {
-      this.fileContent = "";
-      try {
-        const response = await axios.get(this.retailerTermsBasePath+this.retailer?.termsPath)
-        this.fileContent = response.data;
-        this.disabled = false
-      } catch (e) {
-        this.fileContent = e;
-      }
-    },
-    async activate() {
-      try {
-        let search = ''
-        if (this.searchTerm) {
-          search = this.searchTerm
-        }
-        const response = await cashbackApi.activate(this.retailer.id, this.baseAddress, networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network), search)
-        if (response.status) {
-          this.retailerUrl = response.url
-        } else {
-          this.retailerUrl = ""
-        }
-      } catch (e) {
-        console.log(e)
-      }
-    },
+  retailerTermsBasePath: {
+    type: String,
+    default: 'https://media.bringweb3.io/cashback-terms'
   },
-  data: () => ({
-    retailerUrl: null,
-    fileContent: null,
-    loading: true,
-    disabled: true,
-  }),
-  mounted() {
+  searchTerm: {
+    type: String,
+  }
+});
 
-  },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.retailerUrl = null
-        this.loading = true
-        this.default = true
-        const promises = []
-        promises.push(this.getContent());
-        promises.push(this.activate());
-        Promise.all(promises)
-        this.loading = false
-      }
-    }
-  },
+const emit = defineEmits(['close']);
+const { loggedWallet } = toRefs(walletStore);
+
+const retailerUrl = ref<string | null>(null);
+const fileContent = ref<string | null>(null);
+const loading = ref(true);
+const disabled = ref(true);
+
+const startShopping = () => {
+  if (retailerUrl.value) {
+    window.open(retailerUrl.value, '_blank');
+    cashbackApi.analytics(
+      props.retailer.id,
+      props.retailer.name,
+      loggedWallet.value?.baseAddress.value,
+      networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
+      props.searchTerm
+    );
+  }
 };
+
+const getContent = async () => {
+  fileContent.value = "";
+  try {
+    const response = await axios.get(props.retailerTermsBasePath + props.retailer?.termsPath);
+    fileContent.value = response.data;
+    disabled.value = false;
+  } catch (e) {
+    fileContent.value = e as string;
+  }
+};
+
+const activate = async () => {
+  try {
+    let search = '';
+    if (props.searchTerm) {
+      search = props.searchTerm;
+    }
+    const response = await cashbackApi.activate(
+      props.retailer.id,
+      baseAddress.value,
+      networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network),
+      search
+    );
+    if (response.status) {
+      retailerUrl.value = response.url;
+    } else {
+      retailerUrl.value = "";
+    }
+  } catch (e) {
+    console.log(e);
+  }
+};
+
+watch(() => props.isOpen, async (val) => {
+  if (val) {
+    retailerUrl.value = null;
+    loading.value = true;
+    disabled.value = true;
+    const promises = [];
+    promises.push(getContent());
+    promises.push(activate());
+    await Promise.all(promises);
+    loading.value = false;
+  }
+});
 </script>
 <style scoped>
 

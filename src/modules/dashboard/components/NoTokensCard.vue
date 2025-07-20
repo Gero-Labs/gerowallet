@@ -32,9 +32,8 @@
     <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
   </v-card>
 </template>
-<script>
-import {mapState} from "pinia";
-import { appWallet, useStore } from '@/stores';
+<script setup lang="ts">
+import { computed, ref, toRefs } from 'vue';
 import {Blockchain} from "@/models/types";
 import networks from "@/utils/networks";
 import {
@@ -46,65 +45,56 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/plugins/networkStore';
 
-export default {
-  name: "NoTokensCard",
-  components: { DelegateDialog },
-  computed: {
-    geroPoolExists() {
-      if (this.loggedWallet) {
-        return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-      }
-      return false
-    },
-    assetType() {
-      if (!this.loggedWallet) {
-        return ''
-      }
-      return networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    hasAssets() {
-      return !!this.account
-    },
-    Blockchain() {
-      return Blockchain
-    },
-    ...mapState(useStore, ['loggedWallet', 'pools', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-  },
-  methods: {
-    delegateToGero() {
-      const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-      this.selectedPool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (!this.selectedPool) {
-        console.log('Pool Not Found')
-        return;
-      }
-      const wallet = appWallet;
-      // Registration Certificate
-      const certificates = [];
-      if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-        certificates.push(registrationCertificate);
-      }
-      // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(poolId)));
-      certificates.push(delegationCertificate);
-      // UTxOs
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.isDelegateDialogOpen = true
-    }
-  },
-  data: () => ({
-    isDelegateDialogOpen: false,
-    selectedPool: undefined,
-    txData: undefined,
-  })
+const { loggedWallet, utxos, account } = toRefs(walletStore);
+const { tip, pools } = toRefs(networkStore)
+
+const isDelegateDialogOpen = ref(false);
+const selectedPool = ref(undefined);
+const txData = ref(undefined);
+const geroPoolExists = computed(() => {
+  if (loggedWallet.value) {
+    return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+  }
+  return false
+});
+
+const assetType = computed(() => {
+  if (!loggedWallet.value) {
+    return ''
+  }
+  return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+});
+
+const hasAssets = computed(() => {
+  return !!account.value
+});
+const delegateToGero = () => {
+  const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+  selectedPool.value = pools.value.find(pool => pool.pool_id_bech32 === poolId)
+  if (!selectedPool.value) {
+    console.log('Pool Not Found')
+    return;
+  }
+  const wallet = loggedWallet.value;
+  // Registration Certificate
+  const certificates = [];
+  if (!account.value?.active) {
+    const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
+    certificates.push(registrationCertificate);
+  }
+  // Delegation Certificate
+  const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(poolId)));
+  certificates.push(delegationCertificate);
+  // UTxOs
+  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
+  const txBody = buildTx(loggedWallet.value, undefined, transactionUnspentOutputs, tip.value.slot, baseAddress.value, certificates, [])
+  txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
+  console.log(txBody.to_json())
+  isDelegateDialogOpen.value = true
 };
 </script>
 <style scoped>

@@ -49,7 +49,7 @@
       Back
     </v-btn>
     <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false" :network="props.network"></CreateWallet>
-    <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange"></RestoreWallet>
+    <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange" :network="props.network"></RestoreWallet>
     <PairHardwareWallet :dialog="pairHardwareWalletDialog" @dialogChange="pairHardwareWalletDialogChange"></PairHardwareWallet>
   </v-card>
 </template>

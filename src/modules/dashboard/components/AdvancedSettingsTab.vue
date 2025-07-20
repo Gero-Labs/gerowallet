@@ -103,7 +103,6 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
-import { appWallet } from '@/stores';
 import db from '@/db';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
@@ -113,6 +112,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/plugins/walletStore';
 import { geroStore } from '@/plugins/geroStore';
+import GeroStore from '@/plugins/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 
 // Define emits
@@ -120,10 +120,10 @@ const emit = defineEmits(['loading']);
 
 // Get reactive store properties
 const { loggedWallet, config } = toRefs(walletStore);
-const gStore = geroStore;
 
 // Access Vue instance for router
 const vmProxy = getCurrentInstance()!.proxy as any;
+const router = vmProxy.$router
 
 // Reactive data
 const reSyncLoading = ref<boolean>(false);
@@ -191,15 +191,30 @@ const reSync = async () => {
   emit('loading', false);
 };
 
+async function submitLogout() {
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.LOGOUT,
+    data: { },
+  }).then(() => {
+    // // Wait for next tick to ensure wallet store is cleared before navigation
+    vmProxy.$nextTick(() => {
+      router.push('/welcome')
+    })
+  });
+}
+
 const deleteWalletConfirm = async () => {
   deleteWalletLoading.value = true;
-  const walletId = appWallet.id;
-  const name = appWallet.name;
-  await gStore.logout();
-  await db.deleteWallet(walletId);
+  const walletId = loggedWallet.value.id;
+  const name = loggedWallet.value.name;
+  
+  // Remove wallet from geroStore (this will also delete from database)
+  await GeroStore.removeWallet(walletId);
+  
+  // Then logout
+  await submitLogout();
   deleteWalletDialog.value = false;
   deleteWalletLoading.value = false;
-  await vmProxy.$router.push('/welcome');
   snackbar.fireSuccess(`Wallet '${name}' Deleted Successfully.`);
 };
 

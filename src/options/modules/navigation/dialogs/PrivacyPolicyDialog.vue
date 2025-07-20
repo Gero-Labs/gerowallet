@@ -772,21 +772,19 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 
-export default {
-  name: "PrivacyPolicyDialog",
-  components: { BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    persistent: {
-      type: Boolean,
-      default: true,
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
+  },
+  persistent: {
+    type: Boolean,
+    default: true,
   }
-}
+});
+
+const emit = defineEmits(['close']);
 </script>

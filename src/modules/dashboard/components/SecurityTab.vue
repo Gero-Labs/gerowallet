@@ -19,7 +19,7 @@
             Ed25519-Bip32 Extended Public Key
           </v-list-item-subtitle>
           <v-list-item-subtitle class="text-left">
-            <CopyButton :title="filters.truncate(loggedWallet.publicKey) " :value="loggedWallet.publicKey" x-small />
+            <CopyButton :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-avatar size="160" rounded>
@@ -126,7 +126,7 @@ import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import WalletStore, { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/plugins/walletStore';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
@@ -144,7 +144,7 @@ const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
-  data: loggedWallet.value.publicKey.toString(),
+  data: loggedWallet.value?.publicKey.toString(),
   image: assets.geroLogo,
   margin: 2,
   qrOptions: {

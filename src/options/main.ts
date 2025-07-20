@@ -8,7 +8,6 @@ import { createPinia, Pinia, PiniaVuePlugin } from 'pinia';
 import VueShowdown from 'vue-showdown'
 import i18n from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
-// VueQrcodeReader imported conditionally below
 import router from '../modules/navigation/router';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { ClickOutside } from 'vuetify/lib/directives';
@@ -27,12 +26,6 @@ function loadPersistedWallet(): Promise<void> {
 loadPersistedWallet().then(() => {
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
-  // Only register VueQrcodeReader in browser context (not service worker)
-  if (typeof document !== 'undefined') {
-    import('vue-qrcode-reader').then((VueQrcodeReader) => {
-      Vue.use(VueQrcodeReader.default || VueQrcodeReader);
-    });
-  }
   Vue.use(PiniaVuePlugin);
   Vue.use(VueShowdown, {
     // set default flavor of showdown

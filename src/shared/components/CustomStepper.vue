@@ -5,27 +5,23 @@
     </v-stepper-items>
   </v-stepper>
 </template>
+<script setup lang="ts">
+import { computed } from 'vue';
 
-<script>
-export default {
-  props: {
-    steps: {
-      type: Array,
-      required: true,
-    },
-    currentStep: {
-      type: Number,
-      default: 1,
-    },
+const props = defineProps({
+  steps: {
+    type: Array,
+    required: true,
   },
-  computed: {
-    activeStep() {
-      return this.currentStep;
-    },
+  currentStep: {
+    type: Number,
+    default: 1,
   },
-  methods: {
-  },
-};
+});
+
+const activeStep = computed(() => {
+  return props.currentStep;
+});
 </script>
 <style scoped>
 
