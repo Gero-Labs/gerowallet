@@ -118,8 +118,8 @@
 import { toRefs, computed, watch, onMounted } from "vue";
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import networks from '@/utils/networks';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 interface Props {
   value: any;
@@ -156,7 +156,7 @@ const tokenModel = computed({
 
 const collectiblesCount = computed(() => {
   let count: number = 0;
-  let collections = Object.values(resolvedCollections.value)
+  let collections: any[] = Object.values(resolvedCollections.value)
   collections.forEach(collection => {
     count += collection.items.length;
   })
@@ -164,7 +164,7 @@ const collectiblesCount = computed(() => {
 })
 
 const collections = computed(() => {
-  let collections = Object.values(resolvedCollections.value)
+  let collections: any[] = Object.values(resolvedCollections.value)
   if (search.value) {
     collections = collections.map(collection => {
       return {

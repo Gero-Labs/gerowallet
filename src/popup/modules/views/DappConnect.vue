@@ -47,8 +47,8 @@ import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
-import { walletStore } from '@/plugins/walletStore';
-import WalletStore from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 
 // Get store values
 const { loggedWallet, config } = toRefs(walletStore);

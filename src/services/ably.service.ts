@@ -1,6 +1,6 @@
 import * as Ably from 'ably';
 import FIFOCache from 'tiny-fifo-cache';
-import LoadingState from '@/plugins/loading';
+import LoadingState from '@/stores/loading';
 import { Api } from '@/api/api';
 
 // @ts-ignore

@@ -24,9 +24,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
 import { toRefs } from 'vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import languages from '@/plugins/languages';
-import { geroStore } from '@/plugins/geroStore';
+import { geroStore } from '@/stores/geroStore';
 
 const { locale } = toRefs(geroStore);
 const selectedLang = ref(-1);

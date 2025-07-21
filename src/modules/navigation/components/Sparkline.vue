@@ -16,7 +16,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
-import { networkStore } from '@/plugins/networkStore';
+import { networkStore } from '@/stores/networkStore';
 
 const width = ref<number>(2);
 const radius = ref<number>(0);

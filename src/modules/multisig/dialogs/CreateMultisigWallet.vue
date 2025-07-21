@@ -41,7 +41,7 @@
                 label="Singer wallet address"
                 v-model="signer.address" 
                 outlined dense
-                :rules="[rules.required(), rules.paymentAddress(rootStore.loggedWallet.network !== 'mainnet')]"
+                :rules="[rules.required(), rules.paymentAddress(loggedWallet.value.network !== 'mainnet')]"
                 :readonly="index === 0 && signer.address === baseAddress"
                 :error="!!duplicateSignerError.message && duplicateSignerError.duplicateAddresses.includes(signer.address)"
                 :error-messages="duplicateSignerError.message" @keyup="checkDuplicateSigner()">
@@ -141,10 +141,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { useStore, appWallet } from '@/stores';
+import { ref, computed, watch, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ed25519KeyHashHex } from '@cardano-sdk/crypto';
 import networks from '@/utils/networks';
@@ -160,15 +159,14 @@ import { isPaymentAddress } from '@/chrome/serialization';
 const props = defineProps<{ isOpen: boolean }>()
 const emit = defineEmits(['close']);
 
-const rootStore = useStore();
+const { loggedWallet, baseAddress } = toRefs(walletStore);
 // const mStore = multisigStore();
-const walletConfig = walletConfigStore();
 
 const loading = ref(false);
 const multisigName = ref('');
 const requiredSigners = ref(2);
 const signers = ref([
-  { name: rootStore.loggedWallet.name, address: rootStore.baseAddress, menuOpen: false, optionsMenuOpen: false },
+  { name: loggedWallet.value.name, address: baseAddress.value, menuOpen: false, optionsMenuOpen: false },
   { name: '', address: '', menuOpen: true, optionsMenuOpen: true }
 ]);
 
@@ -194,8 +192,7 @@ const truncate = filters.truncate;
 
 const signersArray = computed(() => [2, 3, 4, 5, 6, 7].filter(n => n <= signers.value.length));
 
-const baseAddress = computed(() => rootStore.baseAddress);
-const contacts = computed(() => walletConfig.contacts);
+const { contacts } = toRefs(walletStore);
 
 const isFormValid = computed(() => {
   const invalid = signers.value.filter(s => !s.address.trim() || !isPaymentAddress(s.address));
@@ -217,7 +214,7 @@ function resetForm() {
   contactStatus.value = { message: '', type: 'info' };
   duplicateSignerError.value = { message: '', duplicateAddresses: [] };
   signers.value = [
-    { name: rootStore.loggedWallet.name, address: rootStore.baseAddress, menuOpen: false, optionsMenuOpen: false },
+    { name: loggedWallet.value.name, address: baseAddress.value, menuOpen: false, optionsMenuOpen: false },
     { name: '', address: '', menuOpen: false, optionsMenuOpen: false }
   ];
 }
@@ -268,7 +265,7 @@ function selectContact(item: any, signer: any) {
 
 function removeCont(item: any, signer: any) {
   if (item?.address) {
-    walletConfig.removeContact(item.address);
+    // walletConfig.removeContact(item.address); // TODO: Implement in walletStore
     signer.menuOpen = false;
   }
   contactStatus.value = {
@@ -312,7 +309,7 @@ async function createMultisigWallet() {
     hash: nativeScript.hash()
   };
   const stakeCredential = paymentCredential;
-  const netId = networks.resolveNetworkId(rootStore.loggedWallet.chain, rootStore.loggedWallet.network) === 1
+  const netId = networks.resolveNetworkId(loggedWallet.value.chain, loggedWallet.value.network) === 1
     ? Cardano.NetworkId.Mainnet
     : Cardano.NetworkId.Testnet;
   const scriptBaseAddr = Cardano.BaseAddress
@@ -344,7 +341,7 @@ async function createMultisigWallet() {
   await db.createNewWalletDb(multisigDBName, false, false).catch(e => console.error(e));
   await appWallet.api.multiSig.createWallet(
     { stakeAddress: multisigWallet.stakeAddress, bech32Address: multisigWallet.paymentAddress, scriptCBOR: multisigWallet.cbor },
-    rootStore.baseAddress
+    baseAddress.value
   );
 }
 
@@ -361,7 +358,7 @@ function nextStep() {
 // Watchers
 watch(contact, async (val) => {
   console.log('contact', val);
-  await walletConfig.addOrUpdateContact(val);
+  // await walletConfig.addOrUpdateContact(val); // TODO: Implement in walletStore
 }, { deep: true });
 
 watch(contactStatus, (newVal) => {

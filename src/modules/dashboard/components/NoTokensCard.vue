@@ -45,8 +45,8 @@ import {
 import { toUTxO } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 const { loggedWallet, utxos, account } = toRefs(walletStore);
 const { tip, pools } = toRefs(networkStore)

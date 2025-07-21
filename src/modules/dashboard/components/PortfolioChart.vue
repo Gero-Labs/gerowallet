@@ -37,9 +37,9 @@ import Highstock from "highcharts/highstock";
 import filters from "@/shared/utils/filters";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
-import { loadingState } from '@/plugins/loading';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { loadingState } from '@/stores/loading';
 
 const { loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);

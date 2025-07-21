@@ -231,7 +231,7 @@ import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import adaHandleApi from '@/api/ada-handle.api';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';

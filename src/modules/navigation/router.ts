@@ -11,7 +11,6 @@ import DappSignData from '@/popup/modules/views/DappSignData.vue';
 import SignTx from '@/popup/modules/views/SignTx.vue';
 import Cashback from "@/modules/cashback/Cashback.vue";
 import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
-import loading from '@/plugins/loading';
 import Swap from '@/modules/swap/Swap.vue';
 import Login from '@/popup/modules/views/Login.vue';
 import DevTools from '@/modules/devTools/DevTools.vue';
@@ -20,7 +19,7 @@ import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
 import MultiSig from '@/modules/multisig/views/MultiSig.vue';
-import WalletStore from '@/plugins/walletStore';
+import WalletStore from '@/stores/walletStore';
 
 const routes = [
   {
@@ -181,8 +180,6 @@ const router = new VueRouter({
 });
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
-  loading.setLoading(true);
-
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
@@ -193,17 +190,12 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
-    loading.setLoading(false);
     return next({ path: redirectTo });
   }
-
   if (isWelcome && isLoggedIn) {
     // already logged in → don’t show welcome again
-    loading.setLoading(false);
     return next({ path: '/' });
   }
-
-  loading.setLoading(false);
   next();
 });
 

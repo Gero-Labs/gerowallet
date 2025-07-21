@@ -152,9 +152,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useStore } from '@/stores';
-import { multisigStore } from '@/stores/modules/multisig';
+import { ref, computed, onMounted, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+// import { multisigStore } from '@/stores/modules/multisig';
 import { NativeScript } from '@emurgo/cardano-serialization-lib-browser';
 import Dexie from 'dexie';
 import filters from '@/shared/utils/filters';
@@ -176,12 +176,15 @@ const search = ref('');
 const selectedAddress = ref('');
 const multisigWalletTransactions = ref<Transaction[]>([]);
 
-const rootStore = useStore();
-const multisigStoreInstance = multisigStore();
+// Use walletStore for logged wallet information
+const { loggedWallet, getWallet } = toRefs(walletStore);
+// const multisigStoreInstance = multisigStore();
 
 // Computed wrappers for Pinia getters
-const getMultiSigWallet = computed(() => multisigStoreInstance.getMultiSigWallet);
-const getMultiSigWallets = computed(() => multisigStoreInstance.getMultiSigWallets);
+// const getMultiSigWallet = computed(() => multisigStoreInstance.getMultiSigWallet);
+// const getMultiSigWallets = computed(() => multisigStoreInstance.getMultiSigWallets);
+const getMultiSigWallet = computed(() => ({}));
+const getMultiSigWallets = computed(() => []);
 
 // Headers for the data table
 const headers = [
@@ -198,7 +201,8 @@ const showMultisigWallets = computed(() => {
 });
 
 const walletInfo = computed<WalletInfo[]>(() => {
-  const { currentBalance, total, paid, pending, expired } = multisigStoreInstance.calculatedTransactions;
+  // const { currentBalance, total, paid, pending, expired } = multisigStoreInstance.calculatedTransactions;
+  const { currentBalance, total, paid, pending, expired } = { currentBalance: 0, total: 0, paid: 0, pending: 0, expired: 0 };
   return [
     {
       icon: assets.multisigDollar,
@@ -251,7 +255,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
 const multiSigAmountReached = ref(false);
 
 const checkMultiSigAmount = async () => {
-  const multisigTable = await rootStore.getWallet.db.table('multisig');
+  const multisigTable = await getWallet.value.db.table('multisig');
   const multisigAmount = await multisigTable.count();
   multiSigAmountReached.value = multisigAmount >= MAX_MULTISIG_WALLETS_PER_USER;
 };
@@ -266,19 +270,19 @@ onMounted(async () => {
 const initialLoad = async (): Promise<void> => {
   loading.value = true;
   try {
-    const dbWallet = new Dexie('wallet-' + rootStore.loggedWallet.id);
+    const dbWallet = new Dexie('wallet-' + loggedWallet.value.id);
     await dbWallet.open();
     let multisigs = await dbWallet.table('multisig').toArray();
     if (multisigs.length > 0) {
       multisigs = parseMultisigWallets(multisigs) as MultisigWalletInterface[];
-      multisigStoreInstance.setMultiSigWallets(multisigs);
-      await multisigStoreInstance.setSelectedMultisig(
-        multisigs[0],
-        rootStore.loggedWallet.chain,
-        rootStore.loggedWallet.network
-      );
+      // multisigStoreInstance.setMultiSigWallets(multisigs);
+      // await multisigStoreInstance.setSelectedMultisig(
+      //   multisigs[0],
+      //   loggedWallet.value.chain,
+      //   loggedWallet.value.network
+      // );
       setSelectedAddress(multisigs[0].paymentAddress || '');
-      await multisigStoreInstance.initAll();
+      // await multisigStoreInstance.initAll();
     }
   } catch (error) {
     console.error('Failed to load multisig data:', error);
@@ -315,7 +319,7 @@ const onSelectedWallet = (selectedValue: string): void => {
     multisig => (multisig.addressBech32 || multisig.id) === selectedValue
   );
   if (selected.length > 0) {
-    multisigStoreInstance.multiSigWallet = selected[0];
+    // multisigStoreInstance.multiSigWallet = selected[0];
   }
 };
 

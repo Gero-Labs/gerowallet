@@ -200,7 +200,6 @@ import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { appWallet } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/utils/rules';
 import networks from "@/utils/networks";
@@ -211,7 +210,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore'
+import { walletStore } from '@/stores/walletStore'
 
 const props = defineProps({
   isOpen: {
@@ -324,7 +323,7 @@ const onDecode = async (result: any) => {
     undefined // TODO Transaction metadata
   );
   console.log(signedTx.to_json())
-  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId)
   snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
   emit('close')
@@ -352,7 +351,7 @@ const signDelegationTx = async () => {
     try {
       const txCbor = props.tx.to_hex()
       const partialSign = false
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -366,7 +365,7 @@ const signDelegationTx = async () => {
         TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
         undefined // TODO Transaction metadata
       );
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId)
       snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
       emit('close')
@@ -376,15 +375,15 @@ const signDelegationTx = async () => {
     }
     loading.value = false
   };
-  if (appWallet?.type === WalletType.Normal) {
+  if (loggedWallet.value?.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
         await signAndReturnTx();
       } else {
         enableToolTip();
       }
     }
-  } else if (appWallet?.type === WalletType.Keystone) {
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
     if (qrCode.value) {
       qrCode.value = null; // Clear the QRCode instance
       if (qrCodeRef.value)

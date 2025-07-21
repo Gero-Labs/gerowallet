@@ -154,7 +154,6 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, getCurrentInstance, toRefs } from 'vue';
-import { useStore } from '@/stores';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import PrivacyPolicyDialog from '@/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue';
@@ -168,7 +167,7 @@ import NetworkSelector from '@/options/modules/navigation/components/NetworkSele
 import CreateGoogleWallet from '@/options/modules/welcome/dialogs/CreateGoogleWallet.vue';
 import { Messaging } from '@/chrome/messaging';
 import db from '@/db';
-import { geroStore } from '@/plugins/geroStore';
+import { geroStore } from '@/stores/geroStore';
 
 const privacyPolicyDialog = ref(false);
 const changeLogDialog = ref(false);
@@ -176,7 +175,6 @@ const newGoogleWalletDialog = ref(false);
 const createOrImportSeedPhrase = ref<boolean>(false);
 const selectedNetwork = ref<any>(null);
 
-const store = useStore();
 const { wallets } = toRefs(geroStore);
 
 const onNetworkChanged = (network: any) => {
@@ -190,22 +188,11 @@ const disableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = false;
 }
 
-type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
-
-interface Wallet {
-  id: string;
-  name: string;
-  chain: string;
-  network: string;
-  icon?: string;
-  type?: WalletTypeValue;
-}
-
 //@ts-ignore
 const version = ref<string>(APP_VERSION);
 
-const availableWallets = computed<Wallet[]>(() => {
-  return Object.values(wallets.value)?.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google);
+const availableWallets = computed(() => {
+  return Object.values(wallets.value)?.filter((wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google);
 });
 
 const geroLogoApex = assets.geroDashboardApex;
@@ -238,7 +225,7 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    await store.setLogin(Number(walletId));
+    // await store.setLogin(Number(walletId)); TODO google wallet
   } catch (error) {
     console.error(error);
   }

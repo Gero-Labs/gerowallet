@@ -29,7 +29,7 @@
 import { ref, watch, onMounted, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   risk: {

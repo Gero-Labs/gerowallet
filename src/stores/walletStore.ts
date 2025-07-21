@@ -3,6 +3,10 @@ import { Cardano } from '@cardano-sdk/core';
 import { WalletBg } from '@/chrome/walletBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 
+interface WhitelistedEntry {
+  domain: string;
+  id: number;
+}
 export interface WalletStore {
   loggedWallet: any;
   account: any;
@@ -129,9 +133,31 @@ function persist(patch: Partial<WalletStore>) {
 }
 
 export default {
-  setLoggedWallet(loggedWallet: WalletBg) {
-    walletStore.loggedWallet = loggedWallet;
-    persist({ loggedWallet: loggedWallet });
+  setLoggedWallet(walletBg: WalletBg | null) {
+    // Store the WalletBg instance in memory for runtime access
+    walletStore.loggedWallet = walletBg;
+    
+    // Handle null case (logout)
+    if (!walletBg) {
+      persist({ loggedWallet: null });
+      return;
+    }
+    
+    // Only persist the serializable wallet data, not the full WalletBg instance
+    const serializableWalletData = {
+      id: walletBg.id,
+      name: walletBg.name,
+      type: walletBg.type,
+      chain: walletBg.chain,
+      network: walletBg.network,
+      baseAddress: walletBg.baseAddress,
+      stakeAddress: walletBg.stakeAddress,
+      userId: walletBg.userId,
+      icon: walletBg.icon,
+      theme: walletBg.theme
+    };
+    
+    persist({ loggedWallet: serializableWalletData });
   },
   setAccount(account: any) {
     walletStore.account = account;
@@ -277,6 +303,11 @@ export default {
     // Remove from database - the loadConnectedDapps() subscription will sync
     // but won't cause UI flickering since we already updated the store
     removeDapp(walletId, id);
+  },
+  isWhitelisted(origin: string): boolean {
+    if (!walletStore.connectedDapps || !Array.isArray(walletStore.connectedDapps)) return false;
+    const whitelisted = walletStore.connectedDapps as WhitelistedEntry[]
+    return !!whitelisted.find(el => origin.includes(el.domain));
   },
   logout() {
     this.setLoggedWallet(null);

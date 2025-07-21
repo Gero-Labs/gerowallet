@@ -147,20 +147,17 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import { useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
+import { ref, computed, watch, onMounted, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
 import { Transaction, TransactionOutput, TransactionOutputs, TransactionUnspentOutputs, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
-import { appWallet } from '@/stores';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
 import { UREncoder } from '@keystonehq/keystone-sdk';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { isPaymentAddress } from '@/chrome/serialization';
-import { multisigStore } from '@/stores/modules/multisig';
+// import { multisigStore } from '@/stores/modules/multisig';
 import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx as buildTransaction } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
@@ -180,10 +177,12 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(['close']);
 
-const store = useStore();
-const { loggedWallet, resolvedAssets, baseAddress, latestTip, pinnedTokens } = storeToRefs(store);
-const { utxos, addresses } = storeToRefs(walletConfigStore());
-const { multiSigWallet } = storeToRefs(multisigStore());
+const { loggedWallet, resolvedAssets, baseAddress, latestTip, pinnedTokens } = toRefs(walletStore);
+// const { utxos, addresses } = storeToRefs(walletConfigStore()); // Using walletStore instead
+const { utxos } = toRefs(walletStore);
+// TODO: Get addresses from walletStore if needed
+const addresses = ref(new Set()); // Placeholder
+// const { multiSigWallet } = storeToRefs(multisigStore());
 
 
 const steps: Step[] = [
@@ -317,7 +316,7 @@ const onDecode = async (result: string) => {
     undefined
   );
   console.log(signedTx.to_json());
-  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId);
   snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
   emit('close');
@@ -346,7 +345,7 @@ const signAndSubmitTx = async () => {
       if (!txData.value || !txBody.value) return;
       const txCbor = txData.value.to_hex();
       const partialSign = false;
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -361,7 +360,7 @@ const signAndSubmitTx = async () => {
         undefined
       );
       console.log(signedTx.to_json());
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId);
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
       emit('close');
@@ -372,13 +371,13 @@ const signAndSubmitTx = async () => {
     txSubmitLoading.value = false;
   };
 
-  if (appWallet?.type === WalletType.Normal) {
-    if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
       await signAndReturnTx();
     } else {
       enableToolTip();
     }
-  } else if (appWallet?.type === WalletType.Keystone) {
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
     if (qrCode.value) {
       qrCode.value = null;
       if (document.getElementById('qr-code')) {
@@ -526,7 +525,7 @@ const resetData = () => {
   txSubmitLoading.value = false;
   txBody.value = undefined;
   txData.value = undefined;
-  const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
+  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker);
   if (foundAsset) {
     foundAsset.verified = true;

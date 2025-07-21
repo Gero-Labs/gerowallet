@@ -157,12 +157,12 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, watch, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, watch, ref, onMounted, onBeforeUnmount, toRefs } from 'vue';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
-import { dexHunterStore } from '@/stores/modules/dexhunter';
-import { appWallet, useStore } from '@/stores';
+import { geroStore } from '@/stores/geroStore';
+import { networkStore } from '@/stores/networkStore';
 import filters from '@/shared/utils/filters';
 import networks, { cardanoLogo } from '@/utils/networks';
 import debounce from 'lodash/debounce';
@@ -170,15 +170,17 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { dexHunterStore } from '@/stores/dexHunterStore';
+import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 
 const emit = defineEmits(['onSwap'])
 
-const { loggedWallet, resolvedAssets, pinnedTokens, price, baseAddress } = useStore();
-const { dexHunterTokens, searchTokens } = dexHunterStore();
-const { utxos } = walletConfigStore();
+const { loggedWallet, resolvedAssets, pinnedTokens, baseAddress } = toRefs(walletStore);
+const { price } = toRefs(networkStore);
+const { dexHunterTokens } = toRefs(dexHunterStore);
+const { utxos } = toRefs(walletStore);
 
 const isUpdating = ref<boolean>(false);
 const lastNonADATokenA = ref(null);
@@ -230,7 +232,7 @@ const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
 const blacklisted_dexes = ref<any[]>([]);
-const search = ref(searchTokens);
+const search = ref(dexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<string>('one');

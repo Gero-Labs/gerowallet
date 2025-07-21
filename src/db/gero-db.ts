@@ -103,6 +103,16 @@ export async function getLatestWalletByOrder() {
   return null;
 }
 
+export async function getAllWallets() {
+  const db: Dexie = await getDb();
+  const wallets = await db['wallets'].toArray();
+  const walletsMap = {};
+  wallets.forEach(wallet => {
+    walletsMap[wallet.id] = wallet;
+  });
+  return walletsMap;
+}
+
 export async function createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
   const db = new Dexie(walletName);
@@ -183,7 +193,25 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
   return walletId;
 }
 
+export async function  createNewHardwareWallet(wallet: any) {
+  const db: Dexie = await getDb();
+  let order = await getLatestWalletByOrder();
+  if (order == null) {
+    order = 1;
+  } else {
+    order++;
+  }
+  const walletId = await db['wallets'].add({
+    ...wallet,
+    order: order,
+    passwordLastUpdate: new Date(),
+  });
+  await createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
+  return walletId;
+}
+
 export async function createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
+  const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {
     order = 1;
@@ -224,4 +252,48 @@ export async function deleteWallet(walletId: number|string) {
   await Dexie.delete(walletName).catch(err => {
     console.error(`Failed to delete database '${walletName}': ${err.stack || err}`);
   });
+}
+
+/**
+ * Set wallet name in the database
+ * @param walletId - The wallet ID
+ * @param name - The new wallet name
+ */
+export async function setWalletName(walletId: number, name: string): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { name });
+}
+
+/**
+ * Set wallet icon in the database
+ * @param walletId - The wallet ID
+ * @param icon - The new wallet icon
+ */
+export async function setWalletIcon(walletId: number, icon: string): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { icon });
+}
+
+/**
+ * Update private key and mnemonic in the database
+ * @param walletId - The wallet ID
+ * @param encryptedPrivateKey - The new encrypted private key
+ * @param encryptedMnemonic - The new encrypted mnemonic (optional)
+ */
+export async function updatePrivateKeyAndMnemonic(
+  walletId: number, 
+  encryptedPrivateKey: string, 
+  encryptedMnemonic?: string | null
+): Promise<void> {
+  const db: Dexie = await getDb();
+  const updateData: any = { 
+    encryptedPrivateKey,
+    passwordLastUpdate: new Date()
+  };
+  
+  if (encryptedMnemonic !== undefined) {
+    updateData.encryptedMnemonic = encryptedMnemonic;
+  }
+  
+  await db['wallets'].update(walletId, updateData);
 }

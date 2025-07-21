@@ -29,7 +29,7 @@
 </template>
 <script setup lang="ts">
 import { toRefs, computed } from 'vue';
-import MusicStore, { musicStore } from '@/plugins/musicStore';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
 const props = defineProps({
   xSmall: {

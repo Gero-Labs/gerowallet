@@ -4,15 +4,13 @@ import 'vuetify/dist/vuetify.min.css';
 import Vue from 'vue';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
-import { createPinia, Pinia, PiniaVuePlugin } from 'pinia';
 import VueShowdown from 'vue-showdown'
 import i18n from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
-import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
-import walletStore from '@/plugins/geroStore';
+import walletStore from '@/stores/geroStore';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -26,7 +24,6 @@ function loadPersistedWallet(): Promise<void> {
 loadPersistedWallet().then(() => {
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
-  Vue.use(PiniaVuePlugin);
   Vue.use(VueShowdown, {
     // set default flavor of showdown
     flavor: 'github',
@@ -35,8 +32,6 @@ loadPersistedWallet().then(() => {
       emoji: false,
     },
   })
-  const pinia: Pinia = createPinia();
-  pinia.use(piniaPluginPersistedstate);
 
   Vue.use(VueRouter);
   Vue.directive('click-outside', ClickOutside);
@@ -44,7 +39,6 @@ loadPersistedWallet().then(() => {
   new Vue({
     vuetify,
     i18n,
-    pinia,
     router,
     render: h => h(App)
   }).$mount('#app');

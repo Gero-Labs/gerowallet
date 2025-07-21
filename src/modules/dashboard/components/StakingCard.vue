@@ -183,9 +183,9 @@ import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
-import { loadingState } from '@/plugins/loading';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { loadingState } from '@/stores/loading';
 
 const props = defineProps({
   chartData: Object,

@@ -43,7 +43,6 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
-import { appWallet } from '@/stores';
 import { buildTx } from '@/shared/utils/builder';
 import {
   Address, Transaction,
@@ -58,15 +57,15 @@ import networks from '@/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { Cardano } from '@cardano-sdk/core';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Get reactive store properties
-const { loggedWallet, config, utxos, collateral } = toRefs(walletStore);
+const { loggedWallet, utxos, collateral } = toRefs(walletStore);
 const { tip } = toRefs(networkStore);
 
 
@@ -93,13 +92,13 @@ const collateralCandidate = computed<any>(() => {
 // Methods
 const setCollateral = async () => {
   const outputs = TransactionOutputs.new();
-  outputs.add(TransactionOutput.new(Address.from_bech32(baseAddress.value), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
+  outputs.add(TransactionOutput.new(Address.from_bech32(loggedWallet.value.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
   const transactionUnspentOutputs = TransactionUnspentOutputs.new();
   utxos.value.forEach((utxo: any) => transactionUnspentOutputs.add(toUTxO(utxo)));
-  const txBody = buildTx(loggedWallet.value, outputs, transactionUnspentOutputs, latestTip.value.slot, baseAddress.value);
+  const txBody = buildTx(loggedWallet.value, outputs, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress);
   const tx = Transaction.new(txBody, TransactionWitnessSet.new());
 
-  const res = await Messaging.sendToBackground({
+  const res: any = await Messaging.sendToBackground({
     method: METHOD.signTx,
     data: { tx: tx.to_hex(), partialSign: true },
   });
@@ -110,7 +109,7 @@ const setCollateral = async () => {
       TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
       undefined // TODO Transaction metadata
     );
-    const txId = await appWallet.submitTx(signedTx, utxos.value);
+    const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
     console.log(txId);
     snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
     emit('close');
