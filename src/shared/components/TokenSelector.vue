@@ -161,7 +161,7 @@ import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   title: {

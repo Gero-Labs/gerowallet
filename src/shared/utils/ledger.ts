@@ -37,8 +37,7 @@ import {
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { Wallet } from '@/models/wallet';
-import networks from '@/utils/networks';
-import { appWallet } from '@/stores';
+// import networks from '@/utils/networks';
 import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';
@@ -189,7 +188,7 @@ export default {
     const txBody = tx.body();
     console.log(txBody.to_json());
     const address: Address = Address.from_bech32(wallet.baseAddress().toBech32());
-    const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
+    // const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = Array.from(creds).map(el => {
       return {
         cred: el.cred,
@@ -198,9 +197,9 @@ export default {
       }
     })
     const accountData = {
-      state: {
-        networkId: network.networkId
-      },
+      // state: {
+      //   networkId: network.networkId
+      // },
       account: {
         pub: wallet.publicKey,
         path: [purpose.hdwallet, coin_type.cardano, index]
@@ -247,7 +246,7 @@ export default {
 
     const lTx = {
       network: {
-        protocolMagic: network.networkParams?.networkMagic,
+        // protocolMagic: network.networkParams?.networkMagic,
         networkId: 1,
       },
       inputs,
@@ -831,10 +830,10 @@ export default {
       const paymentCred = cred.paymentCred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
       let out;
       let format2 = TxOutputFormat.ARRAY_LEGACY;
-      let isBabbage = false
+      // let isBabbage = false
       if (output2.serialization_format() === CborContainerType.Map) {
         format2 = TxOutputFormat.MAP_BABBAGE;
-        isBabbage = true
+        // isBabbage = true
       }
       try {
         if (paymentCred) {
@@ -868,7 +867,7 @@ export default {
       let plutusScriptBytes
       if (outputJs.script_ref) {
         const cslPlutusScript = output2.script_ref();
-        const decodedPlutusScript = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
+        const decodedPlutusScript: any = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
         plutusScriptBytes = ((_a = decodedPlutusScript == null ? void 0 : decodedPlutusScript.value) == null ? void 0 : _a.value) ?? cslPlutusScript.to_bytes();
         let script = null;
         if (plutusScriptBytes) {

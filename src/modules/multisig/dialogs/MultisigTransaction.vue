@@ -190,14 +190,13 @@
   </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStepMultisig from '@/modules/multisig/components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '@/modules/multisig/components/AssetsToSendStep.vue';
 import SummaryStep from '@/modules/multisig/components/SummaryStep.vue';
-import { appWallet, useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
+import { walletStore } from '@/stores/walletStore';
 import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx as buildTransaction } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
@@ -217,8 +216,7 @@ import Vue from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
 import { UREncoder } from '@keystonehq/keystone-sdk';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
-import { multisigStore } from '@/stores/modules/multisig';
+// import { multisigStore } from '@/stores/modules/multisig';
 import { Step, Token, SendData, Tooltip } from '@/modules/multisig/types/MultiSigTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
@@ -232,16 +230,18 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const store = useStore();
-const { loggedWallet, baseAddress, latestTip, pinnedTokens } = storeToRefs(store);
-const multiSigStore = multisigStore();
-const walletConfig = walletConfigStore();
+const { loggedWallet, baseAddress, latestTip, pinnedTokens } = toRefs(walletStore);
+// const multiSigStore = multisigStore();
 
-const multiSigWallet = computed(() => multiSigStore.multiSigWallet);
-const multiSigWallets = computed(() => multiSigStore.multiSigWallets);
-const resolvedAssets = computed(() => multiSigStore.resolvedAssets);
-const utxos = computed(() => walletConfig.utxos);
-const addresses = computed(() => walletConfig.addresses);
+// const multiSigWallet = computed(() => multiSigStore.multiSigWallet);
+// const multiSigWallets = computed(() => multiSigStore.multiSigWallets);
+// const resolvedAssets = computed(() => multiSigStore.resolvedAssets);
+const multiSigWallet = computed(() => ({}));
+const multiSigWallets = computed(() => []);
+const resolvedAssets = computed(() => []);
+const { utxos } = toRefs(walletStore);
+// TODO: Get addresses from walletStore if needed
+const addresses = computed(() => new Set()); // Placeholder
 
 const currentStep = ref(1);
 const tooltip = ref<Tooltip>({
@@ -383,7 +383,7 @@ const onDecode = async (result: string) => {
     undefined
   );
   console.log(signedTx.to_json());
-  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId);
   snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
   emit('close');
@@ -411,7 +411,7 @@ const signAndSubmitTx = async () => {
     try {
       const txCbor = txData.value.to_hex();
       const partialSign = false;
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -426,7 +426,7 @@ const signAndSubmitTx = async () => {
         undefined
       );
       console.log(signedTx.to_json());
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId);
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
       emit('close');
@@ -437,13 +437,13 @@ const signAndSubmitTx = async () => {
     txSubmitLoading.value = false;
   };
 
-  if (appWallet?.type === WalletType.Normal) {
-    if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
       await signAndReturnTx();
     } else {
       enableToolTip();
     }
-  } else if (appWallet?.type === WalletType.Keystone) {
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
     if (qrCode.value) {
       qrCode.value = null;
       if (document.getElementById('qrCode')) {
@@ -588,7 +588,7 @@ const resetData = () => {
   txSubmitLoading.value = false;
   txBody.value = undefined;
   txData.value = undefined;
-  const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network);
+  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker);
   if (foundAsset) {
     foundAsset.verified = true;

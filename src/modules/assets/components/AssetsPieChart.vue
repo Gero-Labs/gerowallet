@@ -16,7 +16,7 @@ import { toRefs, computed, getCurrentInstance } from 'vue'
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 Highcharts3D(Highcharts)
 

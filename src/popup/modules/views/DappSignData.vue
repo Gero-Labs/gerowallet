@@ -78,14 +78,13 @@
 import { ref, computed, onMounted, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { appWallet } from '@/stores';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import { verifyData } from '@/shared/utils/converter';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const { loggedWallet, config } = toRefs(walletStore);
 
@@ -145,7 +144,7 @@ const sign = async () => {
       console.log('address', address);
       const payload = request.value.data.payload;
       console.log('payload', payload);
-      const res = await appWallet.signData(address, payload, spendingPassword.value, 0, !isBT.value);
+      const res = await loggedWallet.value.signData(address, payload, spendingPassword.value, 0, !isBT.value);
       console.log(res);
       verifyData(res, address, payload);
       signature.value = res;
@@ -159,9 +158,9 @@ const sign = async () => {
     loading.value = false;
   };
 
-  if (appWallet.type === WalletType.Normal) {
+  if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
         await signAndReturnTx();
       } else {
         enableToolTip();

@@ -124,7 +124,7 @@ import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 
 // Get reactive store properties

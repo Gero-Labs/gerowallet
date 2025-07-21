@@ -87,10 +87,10 @@ import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
 import networks from '@/utils/networks';
 import time from '@/plugins/time';
-import { walletStore } from '@/plugins/walletStore';
-import { loadingState } from '@/plugins/loading';
+import { walletStore } from '@/stores/walletStore';
+import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
-import { networkStore } from '@/plugins/networkStore';
+import { networkStore } from '@/stores/networkStore';
 
 const emit = defineEmits(['row-click'])
 

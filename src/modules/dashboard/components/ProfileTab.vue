@@ -151,9 +151,10 @@ import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
 import rules from '@/utils/rules';
-import { walletStore } from '@/plugins/walletStore';
-import { geroStore } from '@/plugins/geroStore';
-import WalletStore from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import geroStoreDefault from '@/stores/geroStore';
+import WalletStore from '@/stores/walletStore';
 
 // Define emits
 const emit = defineEmits(['close']);
@@ -197,11 +198,11 @@ const existedWalletName = () => {
 // Methods
 const showGuide = () => {
   emit('close');
-  store.setWelcomeDone(false);
+  geroStoreDefault.setConfig({ welcomeDone: false });
 };
 
 const setLoggedWalletName = (newWalletName: string) => {
-  store.setWalletName(loggedWallet.value.id, newWalletName);
+  geroStoreDefault.setWalletName(loggedWallet.value.id, newWalletName);
 };
 
 const uploadPicture = () => {
@@ -216,7 +217,7 @@ const onFileChange = (event: Event) => {
   const reader = new FileReader();
   reader.onload = e => {
     const picBase64 = e.target?.result as string;
-    store.setWalletIcon(loggedWallet.value.id, picBase64);
+    geroStoreDefault.setWalletIcon(loggedWallet.value.id, picBase64);
   };
   reader.readAsDataURL(file);
 };

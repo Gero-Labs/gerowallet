@@ -60,23 +60,18 @@ import CollateralTab          from '@/modules/dashboard/components/CollateralTab
 import ProfileTab             from '@/modules/dashboard/components/ProfileTab.vue'
 import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDappsTab.vue'
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
-import { walletConfigStore }  from '@/stores/modules/walletConfig'
+import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
 
 // Props & Emitting
 const props = defineProps<{ isOpen: boolean }>()
 const emit  = defineEmits<{ (e: 'close'): void }>()
 
-// Pinia store
-const walletConfig = walletConfigStore()
-
 // Derive whether we've ever loaded a backup setting
-const hasBackup = computed(() =>
-  !!(walletConfig.config && 'backup' in walletConfig.config)
-)
+const hasBackup = computed(() => walletStoreDefault.hasBackup())
 
 // Read the actual backup‐enabled flag (defaults to true)
-const getBackup = computed(() => walletConfig.getBackup)
+const getBackup = computed(() => walletStoreDefault.getBackup())
 
 // Show a badge if user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)

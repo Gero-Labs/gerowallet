@@ -40,9 +40,8 @@
     </v-card>
   </template>
   <script setup lang="ts">
-  import { ref, computed } from 'vue';
-  import { useStore } from '@/stores';
-  import { walletConfigStore } from '@/stores/modules/walletConfig';
+  import { ref, computed, toRefs } from 'vue';
+  import { walletStore } from '@/stores/walletStore';
   import Select from '@/shared/components/Select.vue';
   import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
   import DappAddress from '@/popup/modules/components/DappAddress.vue';
@@ -71,17 +70,13 @@
     txData?: TxData;
   }>();
 
-  const store = useStore();
-  const walletConfig = walletConfigStore();
+  const { loggedWallet, baseAddress } = toRefs(walletStore);
+  const { config, utxos } = toRefs(walletStore);
   const loading = ref(false);
   const tx = ref<Transaction | undefined>();
   const risks = ref<Risks>({
     score: undefined,
   });
-
-  const loggedWallet = computed(() => store.loggedWallet);
-  const baseAddress = computed(() => store.baseAddress);
-  const utxos = computed(() => walletConfig.utxos);
 
   const changeAddress = computed(() => baseAddress.value);
 

@@ -22,7 +22,7 @@
 import { computed, ref, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import { formatTime } from '@/shared/utils/converter';
-import { musicStore } from '@/plugins/musicStore';
+import { musicStore } from '@/stores/musicStore';
 import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 
 const { musicPlaylist, context } = toRefs(musicStore);

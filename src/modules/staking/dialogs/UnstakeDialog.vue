@@ -84,13 +84,12 @@
 import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
-import { appWallet } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   isOpen: {
@@ -174,7 +173,7 @@ const signUnStakeTx = async () => {
     try {
       const txCbor = props.tx.to_hex();
       const partialSign = false;
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -188,7 +187,7 @@ const signUnStakeTx = async () => {
         TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
         undefined // TODO Transaction metadata
       );
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId);
       snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`);
       emit('close');
@@ -198,9 +197,9 @@ const signUnStakeTx = async () => {
     }
     loading.value = false;
   };
-  if (appWallet?.type === WalletType.Normal) {
+  if (loggedWallet.value?.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
         await signAndReturnTx();
       } else {
         enableToolTip();

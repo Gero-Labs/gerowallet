@@ -20,21 +20,6 @@ export default {
     }
     return null;
   },
-  // async createNewHardwareWallet(wallet: any) {
-  //   let order = await this.getLatestWalletByOrder();
-  //   if (order == null) {
-  //     order = 1;
-  //   } else {
-  //     order++;
-  //   }
-  //   const walletId = await db['wallets'].add({
-  //     ...wallet,
-  //     order: order,
-  //     passwordLastUpdate: new Date(),
-  //   });
-  //   await this.createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
-  //   return walletId;
-  // },
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database
@@ -63,20 +48,5 @@ export default {
   },
   async checkIfDbExists(dbName: string) {
     return await Dexie.exists(dbName);
-  },
-  setWalletName(walletId: number, name: string) {
-    db['wallets'].update(walletId, { name: name });
-  },
-  setWalletIcon(walletId: number, icon: string) {
-    db['wallets'].update(walletId, { icon: icon });
-  },
-  updatePrivateKeyAndMnemonic(walletId: number, encryptedPrivateKey: string, encryptedMnemonic: string) {
-    if (encryptedPrivateKey && encryptedMnemonic) {
-      db['wallets'].update(walletId, { encryptedPrivateKey: encryptedPrivateKey, encryptedMnemonic: encryptedMnemonic });
-    } else if (encryptedPrivateKey) {
-      db['wallets'].update(walletId, { encryptedPrivateKey: encryptedPrivateKey });
-    } else if (encryptedMnemonic) {
-      db['wallets'].update(walletId, { encryptedMnemonic: encryptedMnemonic });
-    }
   }
 };

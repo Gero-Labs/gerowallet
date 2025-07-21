@@ -16,7 +16,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, toRefs } from 'vue';
-import MusicStore, { musicStore } from '@/plugins/musicStore';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
 const { context } = toRefs(musicStore);
 

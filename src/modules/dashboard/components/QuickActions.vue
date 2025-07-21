@@ -93,7 +93,7 @@ import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
 import SendDialog from "../dialogs/SendDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   utxos: {

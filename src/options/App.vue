@@ -32,24 +32,17 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, computed, toRefs } from 'vue'
-import { useStore } from "@/stores";
+import { ref, computed, toRefs } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
-import networks from '@/utils/networks';
-import { loadingState } from '@/plugins/loading';
-import { walletStore } from '@/plugins/walletStore';
+import { loadingState } from '@/stores/loading';
+import { walletStore } from '@/stores/walletStore';
 
 const { loading, isRestoring, text, connected } = toRefs(loadingState);
 const { loggedWallet } = toRefs(walletStore);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
-
-const store = useStore();
-const network = computed(() => store.network);
-const setNetwork = store.setNetwork;
-
 const isLoading = computed(() => {
   if (loggedWallet.value) {
     return loading.value || isRestoring.value || !connected.value;
@@ -57,12 +50,6 @@ const isLoading = computed(() => {
     return loading.value || isRestoring.value
   }
 });
-
-onMounted(() => {
-  if (!network) {
-    setNetwork(networks.networks[0])
-  }
-})
 </script>
 <style lang="scss">
 .v-application {

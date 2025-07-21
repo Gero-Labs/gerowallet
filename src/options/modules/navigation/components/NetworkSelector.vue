@@ -31,10 +31,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const emit = defineEmits<{
-  'update:modelValue': [value: any];
-  'network-changed': [network: any];
-}>();
+const emit = defineEmits(['update:modelValue', 'network-changed']);
 
 const selectedNetwork = ref<any>(undefined);
 

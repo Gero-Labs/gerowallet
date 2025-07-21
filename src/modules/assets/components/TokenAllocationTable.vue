@@ -342,16 +342,16 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { Blockchain, Network } from '@/models/types';
 import assts from '@/utils/assets'
-import { walletStore } from '@/plugins/walletStore';
-import { loadingState } from '@/plugins/loading';
-import { networkStore } from '@/plugins/networkStore';
-import { xerberusStore } from '@/plugins/xerberusStore';
-import { dexHunterStore } from '@/plugins/dexHunterStore';
-import { realFiStore } from '@/plugins/realFiStore';
+import { walletStore } from '@/stores/walletStore';
+import { loadingState } from '@/stores/loading';
+import { networkStore } from '@/stores/networkStore';
+import { xerberusStore } from '@/stores/xerberusStore';
+import { dexHunterStore } from '@/stores/dexHunterStore';
+import { realFiStore } from '@/stores/realFiStore';
 import { get24hChange } from '@/shared/utils/resolver';
 import { setWalletConfiguration } from '@/db/wallet-db';
-import { coinGeckoStore } from '@/plugins/coinGeckoStore';
-import WalletStore from '@/plugins/walletStore';
+import { coinGeckoStore } from '@/stores/coinGeckoStore';
+import WalletStore from '@/stores/walletStore';
 
 const { price } = toRefs(networkStore);
 const { loggedWallet, config, collections, tokens } = toRefs(walletStore);

@@ -30,7 +30,7 @@ import { toRefs, computed } from 'vue';
 import CurrentTrack from '@/modules/media-player/components/CurrentTrack.vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
 import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue';
-import MusicStore, { musicStore } from '@/plugins/musicStore';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
 const { musicPlaylist, context } = toRefs(musicStore);
 

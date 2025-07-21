@@ -38,7 +38,7 @@ import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   title: {

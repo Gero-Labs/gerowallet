@@ -77,10 +77,10 @@ import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTab
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import { Cardano } from '@cardano-sdk/core';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
-import { networkStore } from '@/plugins/networkStore';
-import TapToolsStore, { tapToolsStore } from '@/plugins/tapToolsStore';
+import { networkStore } from '@/stores/networkStore';
+import TapToolsStore, { tapToolsStore } from '@/stores/tapToolsStore';
 
 const { loggedWallet, transactions, account } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
@@ -121,7 +121,7 @@ const computedValues = computed(() => {
 
 const computeChartData = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
-    return portfolioTrendedValue.value
+    return Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : []
   }
   let graphData = undefined
   let currentBalance = 0
@@ -132,7 +132,7 @@ const computeChartData = computed(() => {
       graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
     })
   }
-  return graphData
+  return graphData || []
 });
 
 const loadKaiserExScript = () => {

@@ -31,8 +31,6 @@ import db from '@/db';
 import { APIError, DataSignError, STORAGE, TxSendError, TxSignError } from '@/chrome/config';
 import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
-// import trezor from '@/shared/utils/trezor';
-import { appWallet } from '@/stores';
 import {
   addVkeys, buildAndSignData, createCoseKey,
   createCOSEKeyHex,
@@ -53,7 +51,6 @@ import {
 import { Ed25519PublicKey, Bip32PrivateKey, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import trezor from '@/shared/utils/trezor';
 import { walletDBSchema, walletDBVersion } from '@/db/schema';
-import zkFoldApi from '@/api/zk-fold.api';
 import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { convertToTxSchema } from '@/chrome/helper';
@@ -94,45 +91,12 @@ export class Wallet {
     this.encryptedMnemonic = encryptedMnemonic
   }
 
-  async init(): Promise<void> {
-    const promises = []
-    if (this.type === WalletType.Google) {
-      promises.push(zkFoldApi.walletAddress(this.userId).then(res => {
-        if (res['status'] !== 200) {
-          throw new Error('Failed to get address');
-        }
-        this.zkBaseAddress = Cardano.Address.fromBech32(res['data']['address'])
-      }))
-    }
-    promises.push(this.db.open().catch(async err => {
-      if (err.name === 'NoSuchDatabaseError') {
-        await db.createNewWalletDb(this.id, !!this.encryptedMnemonic);
-      }
-    }))
-    await Promise.all(promises)
-  }
-
   static class(wallet, provider) {
     const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
       wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network, wallet.userId, wallet.encryptedMnemonic);
     wal.api = new Api(wallet, provider);
     wal.db = new Dexie('wallet-' + wallet.id);
     wal.db.version(walletDBVersion).stores(walletDBSchema);
-    return wal;
-  }
-
-  static multisigClass(wallet, provider) {
-    const wal: Wallet = new Wallet(wallet.id, wallet.name, wallet.icon, wallet.type, wallet.theme, wallet.order,
-      wallet.encryptedPrivateKey, wallet.publicKey, wallet.passwordLastUpdate, wallet.chain, wallet.network);
-    wal.api = new Api(wallet, provider);
-    wal.db = new Dexie(wallet.multisigDBName);
-    wal.db.version(walletDBVersion).stores(walletDBSchema);
-    wal.db.open().catch(async err => {
-      if (err.name === 'NoSuchDatabaseError') {
-        await db.createNewWalletDb(wallet.id, false, false);
-      }
-      console.log(err);
-    });
     return wal;
   }
 
@@ -358,12 +322,12 @@ export class Wallet {
     const txBody: TransactionBody = rawTx.body();
     const baseAddress: Cardano.Address = this.baseAddress();
     const stakeAddress: RewardAddress = RewardAddress.from_address(Address.from_bech32(this.stakeAddress().toBech32()))
-    const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
+    // const network= networks.resolveNetwork(appWallet.chain, appWallet.network); TODO
     const credList: Set<any> = new Set()
     const accountData = {
-      state: {
-        networkId: network.networkId
-      },
+      // state: {
+      //   networkId: network.networkId
+      // },
       account: {
         pub: this.publicKey,
         path: [purpose.hdwallet, 1815, accountIndex]

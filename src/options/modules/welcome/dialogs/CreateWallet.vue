@@ -148,16 +148,17 @@
 <script setup lang="ts">
 import { computed, ref, reactive, nextTick, getCurrentInstance } from 'vue';
 import rules from "@/utils/rules";
-import { Theme, Network } from "@/models/types";
+import { Theme } from "@/models/types";
 import assets from '@/utils/assets';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import GeroStore from '@/plugins/geroStore';
-import { createNewWallet } from '@/db/gero-db';
+import GeroStore from '@/stores/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 interface Props {
   isOpen: boolean;
   persistent: boolean;
-  network: Network;
+  network: any;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -165,13 +166,10 @@ const props = withDefaults(defineProps<Props>(), {
   persistent: false,
 });
 
-const emit = defineEmits<{
-  close: [];
-}>();
+const emit = defineEmits(['close']);
 
-const instance = getCurrentInstance();
-const router = instance?.proxy?.$router;
-const store = useStore();
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy?.$router;
 
 const form = ref<any>(null);
 const show1 = ref(false);
@@ -207,23 +205,28 @@ const dialogLocal = computed({
 const walletCreationStep = async () => {
   creatingWalletLoader.value = true;
   try {
-    GeroStore.createNewWallet(newWallet.name,
+    const wallet = await GeroStore.createNewWallet(
+      newWallet.name,
       newWallet.icon,
       Theme.GERO,
       null,
       newWallet.password,
       props.network.blockchain,
       props.network.network
-    )
-    const walletId = await createNewWallet(
-
     );
     dialogLocal.value = false;
-    resetDialog();
-    await store.login(walletId);
-    await router?.push('/');
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    }).then(() => {
+      vmProxy.$nextTick(() => {
+        resetDialog();
+        router.push('/')
+      })
+    });
   } catch (error) {
     console.error('Error creating wallet:', error);
+  } finally {
     creatingWalletLoader.value = false;
   }
 };

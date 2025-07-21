@@ -280,14 +280,14 @@ import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
-import { loadingState } from '@/plugins/loading'
+import { loadingState } from '@/stores/loading'
 import changeLogPlugin from '@/plugins/changeLog'
 import timePlugin from '@/plugins/time'
-import WalletStore, { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
-import { geroStore } from '@/plugins/geroStore';
-import MusicStore, { musicStore } from '@/plugins/musicStore';
+import { geroStore } from '@/stores/geroStore';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any

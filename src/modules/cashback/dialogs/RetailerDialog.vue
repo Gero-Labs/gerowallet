@@ -43,7 +43,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import axios from 'axios';
 import networks from '@/utils/networks';
 import cashbackApi from '@/api/cashback-api';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   isOpen: {
