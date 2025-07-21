@@ -25,7 +25,7 @@
 <script setup lang="ts">
 import { toRefs, computed, ref, onMounted } from 'vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
-import { musicStore } from '@/plugins/musicStore';
+import { musicStore } from '@/stores/musicStore';
 
 const { musicPlaylist, context } = toRefs(musicStore);
 

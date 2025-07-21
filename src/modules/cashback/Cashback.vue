@@ -156,7 +156,7 @@ import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue'
 import filters from "@/shared/utils/filters";
 import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
 import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
-import { bringStore } from '@/plugins/bringStore';
+import { bringStore } from '@/stores/bringStore';
 import cashbackApi from '@/api/cashback-api';
 import assets from '@/utils/assets';
 

@@ -19,8 +19,8 @@
 <script setup lang="ts">
 import { computed, toRefs, watch, ref, onMounted } from 'vue';
 import networks from '@/utils/networks';
-import { networkStore } from '@/plugins/networkStore';
-import { walletStore } from '@/plugins/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
 
 const { price } = toRefs(networkStore);

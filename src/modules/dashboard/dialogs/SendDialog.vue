@@ -192,7 +192,6 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import { appWallet } from '@/stores';
 import { assetsToValue, parseAddress, toUTxO, toUTxO2 } from '@/shared/utils/converter';
 import { buildTx as buildTx2 } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
@@ -213,8 +212,8 @@ import QRCodeStyling from 'qr-code-styling';
 import { UREncoder } from '@keystonehq/keystone-sdk';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 interface Props {
   isOpen: boolean;
@@ -356,7 +355,7 @@ const onDecode = async (result) => {
     undefined // TODO Transaction metadata
   );
   console.log(signedTx.to_json())
-  const txId = await appWallet.submitTx(signedTx, utxos.value);
+  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId)
   snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
   emit('close')
@@ -384,7 +383,7 @@ async function signAndSubmitTx() {
     try {
       const txCbor = txData.value.to_hex()
       const partialSign = false
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -399,7 +398,7 @@ async function signAndSubmitTx() {
         undefined // TODO Transaction metadata
       );
       console.log(signedTx.to_json())
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId)
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
       emit('close');
@@ -410,7 +409,7 @@ async function signAndSubmitTx() {
     txSubmitLoading.value = false
   };
   if (loggedWallet.value?.type === WalletType.Normal) {
-    if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
       await signAndReturnTx();
     } else {
       enableToolTip();

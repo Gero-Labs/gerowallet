@@ -188,7 +188,6 @@ import filters from '@/shared/utils/filters';
 
 const { truncate, toCurrency } = filters;
 import networks from '@/utils/networks';
-import { appWallet } from '@/stores';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
 import {
   Certificate,
@@ -202,8 +201,8 @@ import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 const { loggedWallet, utxos, account, keys } = toRefs(walletStore);
 const { dreps, tip } = toRefs(networkStore);
@@ -312,7 +311,7 @@ const getIconByURI = (uri: string) => {
 const delegate = async () => {
   delegateLoading.value = true
   console.log('delegate', delegationModel.value)
-  const wallet = appWallet;
+  const wallet = loggedWallet.value;
   const certificates = [];
   if (!account.value?.active) {
     const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
@@ -354,7 +353,7 @@ const delegate = async () => {
         undefined
       );
       console.log(signedTx.to_json())
-      const txId = await appWallet.submitTx(signedTx, utxos.value);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId)
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
     }
@@ -368,7 +367,7 @@ const delegate = async () => {
 const drepDelegate = (row: any) => {
   console.log('delegate', row)
   selectedDRep.value = row
-  const wallet = appWallet;
+  const wallet = loggedWallet.value;
   const certificates = [];
   if (!account.value?.active) {
     const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Ed25519KeyHash.from_hex(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())))))

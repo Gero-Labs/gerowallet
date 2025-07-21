@@ -237,8 +237,8 @@ import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { decrypt } from '@/shared/utils/crypto';
 import snackbar from '@/plugins/snackbar';
-import { walletStore } from '@/plugins/walletStore';
-import WalletStore from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 
 interface Props {
   isOpen: boolean;

@@ -115,12 +115,12 @@
     </v-card>
   </template>
   <script setup lang="ts">
-  import { ref, computed, watch, onMounted } from 'vue';
-  import { useStore } from '@/stores';
-  import { multisigStore } from '@/stores/modules/multisig';
+  import { ref, computed, watch, onMounted, toRefs } from 'vue';
+  import { walletStore } from '@/stores/walletStore';
+  import { networkStore } from '@/stores/networkStore';
+  // import { multisigStore } from '@/stores/modules/multisig';
   import TokenSelector from '@/shared/components/TokenSelector.vue';
   import networks from '@/utils/networks';
-  import { appWallet } from '@/stores';
   import type { Token, Collectible } from '@/modules/multisig/types/MultiSigTypes';
 
   // Props
@@ -140,8 +140,8 @@
     (e: 'setMax', index: number): void;
   }>();
 
-  const store = useStore();
-  const multiSigStore = multisigStore();
+  const { loggedWallet } = toRefs(walletStore);
+  // const multiSigStore = multisigStore();
   const search = ref('');
   const selectedCollectibles = ref<Collectible[]>([]);
   const selectedTokens = ref<Token[]>([]);
@@ -163,7 +163,8 @@
   });
 
   const collections = computed(() => {
-    let collections = structuredClone(multiSigStore.resolvedCollections);
+    // let collections = structuredClone(multiSigStore.resolvedCollections);
+    let collections = [];
     if (search.value) {
       collections = collections.map(collection => ({
         ...collection,
@@ -202,8 +203,8 @@
 
   const getPrice = (token: Token) => {
     if (!token) return '';
-    let price = store.price.lastPrice;
-    const nativeTicker = networks.resolveCurrencyTicker(store.loggedWallet?.chain, store.loggedWallet?.network);
+    let price = networkStore.price.lastPrice;
+    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
     if (token.ticker !== nativeTicker) {
       price = token.last_price;
     }
@@ -270,7 +271,7 @@
   }, { deep: true });
 
   onMounted(() => {
-    const currencyTicker = networks.resolveCurrencyTicker(appWallet?.chain, appWallet?.network);
+    const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
     const foundAsset = props.tokens.find(token => token.ticker === currencyTicker);
     if (foundAsset) {
       foundAsset.verified = true;

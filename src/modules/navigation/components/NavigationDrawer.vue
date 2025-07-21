@@ -140,11 +140,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
-import { musicStore } from '@/plugins/musicStore'
+import { musicStore } from '@/stores/musicStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 

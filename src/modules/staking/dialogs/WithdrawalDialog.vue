@@ -91,7 +91,7 @@ import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const props = defineProps({
   isOpen: {

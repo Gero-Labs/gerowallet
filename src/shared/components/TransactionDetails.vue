@@ -660,8 +660,8 @@ import { resolveAsset } from '@/shared/utils/resolver';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Buffer } from 'buffer';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import networks from '@/utils/networks';
 

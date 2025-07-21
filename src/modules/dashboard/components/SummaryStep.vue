@@ -66,7 +66,7 @@ import {
 } from '@/shared/utils/builder';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
 
 interface Props {

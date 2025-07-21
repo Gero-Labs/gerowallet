@@ -9,7 +9,7 @@
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
         <v-list nav dense class="pa-0" style="background-color: #ffffff0a;" v-if="availableWallets?.length > 0">
           <v-list-item-group v-model="selectedWallet" color="primary">
-            <v-list-item v-for="(item, i) in availableWallets" :key="`wallet-${i}`" @click="submitLogin(item.id)">
+            <v-list-item v-for="(item, i) in availableWallets" :key="`wallet-${i}`" @click="submitLogin(item)">
               <v-list-item-icon>
                 <v-badge
                   overlap
@@ -55,17 +55,13 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, toRefs } from 'vue';
-import { useStore } from '@/stores';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { Messaging } from '@/chrome/messaging';
 import assets from '@/utils/assets';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
-import { geroStore } from '@/plugins/geroStore';
-import { walletStore } from '@/plugins/walletStore';
-
-const store = useStore();
-const walletConfig = walletConfigStore();
+import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);
@@ -82,10 +78,14 @@ const availableWallets = computed(() => {
   return wallets.value.filter(wallet => wallet.chain === Blockchain.CARDANO && wallet.network === Network.MAINNET);
 });
 
-const submitLogin = async (walletId: string) => {
-  store.login(walletId);
-  await controller.value.returnData({ data: 'login', error: undefined });
-  window.close();
+const submitLogin = async (wallet: string) => {
+  await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.LOGIN,
+    data: { wallet },
+  }).then(async () => {
+    await controller.value.returnData({ data: 'login', error: undefined });
+    window.close();
+  });
 };
 
 const resolveIcon = (icon: string) => {

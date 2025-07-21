@@ -108,11 +108,10 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
-import { walletStore } from '@/plugins/walletStore';
-import { networkStore } from '@/plugins/networkStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 interface Props {
   value?: any;
@@ -193,7 +192,8 @@ const resolveToken = (unit: string) => {
 };
 
 const toggleFavoriteToken = (token: any) => {
-  store.toggleFavoriteToken(token);
+  // TODO: Implement without Pinia - functionality temporarily disabled
+  console.log('Toggle favorite token:', token);
 };
 
 onUnmounted(() => {

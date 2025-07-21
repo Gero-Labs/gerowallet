@@ -71,7 +71,7 @@
 import { ref, computed, watch, toRefs } from 'vue';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
-import MusicStore, { musicStore } from '@/plugins/musicStore';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
 const { musicPlaylist, context } = toRefs(musicStore);
 

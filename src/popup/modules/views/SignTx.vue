@@ -106,7 +106,6 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
-import { appWallet } from '@/stores';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { TxSignError } from '@/chrome/config';
@@ -131,7 +130,7 @@ import snackbar from '@/plugins/snackbar';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
@@ -308,7 +307,7 @@ const sign = async () => {
     try {
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
-      const response = await appWallet.signTx(
+      const response = await loggedWallet.value.signTx(
         txCbor,
         partialSign,
         spendingPassword.value,
@@ -328,9 +327,9 @@ const sign = async () => {
     }
     txSignLoading.value = false;
   };
-  if (appWallet.type === WalletType.Normal) {
+  if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (appWallet.verifySpendingPassword(spendingPassword.value)) {
+      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
         await signAndReturnTx();
       } else {
         enableToolTip();

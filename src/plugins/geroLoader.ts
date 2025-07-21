@@ -1,6 +1,6 @@
 import Dexie, { liveQuery, Subscription } from 'dexie';
 import { getDb } from '@/db/gero-db';
-import GeroStore from '@/plugins/geroStore';
+import GeroStore from '@/stores/geroStore';
 
 const subscriptions: Map<string, Subscription> = new Map();
 

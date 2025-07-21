@@ -173,17 +173,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeMount } from 'vue';
-import { useStore } from '@/stores';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
-import { multisigStore } from '@/stores/modules/multisig';
+import { ref, computed, watch, onMounted, onBeforeMount, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+// import { multisigStore } from '@/stores/modules/multisig';
 import { Blockchain, Network } from '@/models/types';
 import rules from "@/utils/rules";
 import debounce from 'lodash/debounce';
 import { resolveAsset } from '@/shared/utils/resolver';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import { appWallet } from '@/stores';
 import type { Asset, Contact } from '@/modules/multisig/types/MultiSigTypes';
 
 // Props
@@ -202,9 +200,8 @@ const emit = defineEmits<{
 }>();
 
 // Store setup
-const store = useStore();
-const walletConfig = walletConfigStore();
-const multisig = multisigStore();
+const { loggedWallet, contacts } = toRefs(walletStore);
+// const multisig = multisigStore();
 
 // Refs
 const form = ref<HTMLFormElement | null>(null);
@@ -226,10 +223,10 @@ const contact = ref<Contact>({
 });
 
 // Computed
-const loggedWallet = computed(() => store.loggedWallet);
-const multiSigWallet = computed(() => multisig.multiSigWallet);
-const multiSigWallets = computed(() => multisig.multiSigWallets);
-const contacts = computed(() => walletConfig.contacts);
+// const multiSigWallet = computed(() => multisig.multiSigWallet);
+// const multiSigWallets = computed(() => multisig.multiSigWallets);
+const multiSigWallet = computed(() => ({}));
+const multiSigWallets = computed(() => []);
 
 const recipientRules = computed(() => {
   if (loggedWallet.value?.network === Network.MAINNET) {
@@ -279,10 +276,10 @@ const saveContact = () => {
 
 const removeCont = (item?: Contact) => {
   if (item?.address) {
-    walletConfig.removeContact(item.address);
+    // walletConfig.removeContact(item.address); // TODO: Implement contact removal in walletStore
     contactsMenu.value = false;
   } else {
-    walletConfig.removeContact(contact.value.address);
+    // walletConfig.removeContact(contact.value.address); // TODO: Implement contact removal in walletStore
     saveContactMenu.value = false;
   }
 };
@@ -309,13 +306,13 @@ const resolveAdaHandle = debounce(async (val: string) => {
   loading.value = true;
   
   try {
-    const address = await appWallet.api.getAssetNFTAddress(
+    const address = await loggedWallet.value.api.getAssetNFTAddress(
       'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a',
       Buffer.from(val.replace('$', '')).toString('hex')
     );
     
     paymentAddress.value = address.payment_address;
-    const res = await appWallet.api.getDetailedAssetsInfo(
+    const res = await loggedWallet.value.api.getDetailedAssetsInfo(
       'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a',
       Buffer.from(val.replace('$', '')).toString('hex')
     );
@@ -337,7 +334,7 @@ const resolveAdaHandle = debounce(async (val: string) => {
 
 // Watchers
 watch(contact, async (val) => {
-  await walletConfig.addOrUpdateContact(val);
+  // await walletConfig.addOrUpdateContact(val); // TODO: Implement contact add/update in walletStore
 }, { deep: true });
 
 watch(() => props.sendData, (val) => {

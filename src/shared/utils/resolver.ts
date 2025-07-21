@@ -4,12 +4,12 @@ import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob, isNotNil } from '@cardano-sdk/util';
 import { TextDecoder } from 'web-encoding';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
-import DexHunterStore from '@/plugins/dexHunterStore';
-import NetworkStore from '@/plugins/networkStore';
+import DexHunterStore from '@/stores/dexHunterStore';
+import NetworkStore from '@/stores/networkStore';
 import { CID } from 'multiformats/cid';
 
 // Service worker compatible icon resolution
-const isServiceWorker = typeof document === 'undefined' && typeof importScripts === 'function';
+const isServiceWorker = typeof document === 'undefined';
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 // For service worker, we'll provide fallback values instead of importing assets

@@ -98,7 +98,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 
 const props = defineProps<{ isOpen: boolean }>();

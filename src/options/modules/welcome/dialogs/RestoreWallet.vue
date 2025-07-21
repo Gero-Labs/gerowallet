@@ -245,10 +245,11 @@ import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
 import * as bip39 from "bip39";
 import rules from "@/utils/rules";
 import { Network, Theme } from '@/models/types';
-import { useStore } from "@/stores";
 import MnemonicAutocomplete from "@/modules/welcome/components/MnemonicAutocomplete.vue";
 import assets from '@/utils/assets';
-import { createNewWallet } from '@/db/gero-db';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import GeroStore from '@/stores/geroStore';
 
 // Props
 interface Props {
@@ -261,16 +262,11 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 // Emits
-const emit = defineEmits<{
-  dialogChange: [value: boolean];
-}>();
-
-// Store
-const store = useStore();
+const emit = defineEmits(['dialogChange']);
 
 // Vue instance
-const instance = getCurrentInstance();
-const router = instance?.proxy?.$router;
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy?.$router;
 
 // Template refs
 const form = ref<any>(null);
@@ -373,7 +369,7 @@ const walletCreationStep2 = async () => {
   if (form2.value?.validate()) {
     creatingWalletLoader.value = true;
     try {
-      const walletId = await createNewWallet(
+      const wallet = await GeroStore.createNewWallet(
         newWallet.value.name,
         newWallet.value.icon,
         Theme.GERO,
@@ -383,12 +379,18 @@ const walletCreationStep2 = async () => {
         props.network.network
       );
       dialogLocal.value = false;
-      resetDialog();
-      await store.login(walletId);
-      await router.push('/');
-      creatingWalletLoader.value = false;
-    } catch (e) {
-      console.log(e);
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      }).then(() => {
+        vmProxy.$nextTick(() => {
+          resetDialog();
+          router.push('/')
+        })
+      });
+    } catch (error) {
+      console.error('Error creating wallet:', error);
+    } finally {
       creatingWalletLoader.value = false;
     }
   }

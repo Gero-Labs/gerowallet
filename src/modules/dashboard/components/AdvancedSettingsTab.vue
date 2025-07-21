@@ -110,9 +110,9 @@ import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/plugins/walletStore';
-import { geroStore } from '@/plugins/geroStore';
-import GeroStore from '@/plugins/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 
 // Define emits

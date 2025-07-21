@@ -50,7 +50,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { convertToTxSchema } from '@/chrome/helper';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import { walletStore } from '@/plugins/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 
 if (import.meta.hot) {
@@ -237,12 +237,12 @@ app.add(METHOD.enable, (request, sendResponse) => {
     });
   };
 
+
   const currentWallet = walletManager.getWallet();
   if (!currentWallet) {
     return reply({ error: APIError.AccountNotSet });
   }
-
-  if (currentWallet.isWhitelisted(origin)) {
+  if (WalletStore.isWhitelisted(origin)) {
     return reply({ data: true });
   }
 
@@ -260,7 +260,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
     }
   };
 
-  if (currentWallet.config['useSidePanel'] && request.data.userGesture) {
+  if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
     const sidepanelUrl =
       `index.html#/${POPUP.dappConnect}` +
       `?website=${encodeURIComponent(origin)}` +
@@ -531,9 +531,8 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.popupLogin, async (request, sendResponse) => {
-  const currentWallet = walletManager.getWallet();
   let responsePromise: Promise<any>;
-  if (currentWallet?.config['useSidePanel'] && request.data.userGesture) {
+  if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
     const url =
       `index.html#/${POPUP.login}` +
       `&tabId=${request.send.tab.id}`;
@@ -576,9 +575,8 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
 
 app.add(METHOD.signData, (request, sendResponse) => {
   console.log('signData', request)
-  const currentWallet = walletManager.getWallet();
   let responsePromise: Promise<any>;
-  if (currentWallet?.config['useSidePanel']) {
+  if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.dappSignData}` +
       `?website=${encodeURIComponent(request.origin)}` +
@@ -628,10 +626,8 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
-  console.log('signTx', request)
-  const currentWallet = walletManager.getWallet();
   let responsePromise: Promise<any>;
-  if (currentWallet?.config['useSidePanel']) {
+  if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.signTx}` +
       `?website=${encodeURIComponent(request.origin)}` +

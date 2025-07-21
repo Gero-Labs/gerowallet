@@ -59,7 +59,7 @@
 </template>
 <script setup lang="ts">
 import { ref, toRefs } from 'vue';
-import WalletStore, { walletStore } from '@/plugins/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 
 const { loggedWallet, connectedDapps } = toRefs(walletStore);
 

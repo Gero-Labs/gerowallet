@@ -117,7 +117,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
-import { walletStore } from '@/plugins/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
 const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
