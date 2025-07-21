@@ -32,7 +32,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue'
+import { ref, computed, toRefs, watch } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
@@ -43,11 +43,39 @@ const { loggedWallet } = toRefs(walletStore);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
+// Add timeout for connection issues
+const connectionTimeout = ref<NodeJS.Timeout | null>(null);
+const forceShowWallet = ref(false);
+
 const isLoading = computed(() => {
-  if (loggedWallet.value) {
+  if (loggedWallet.value && !forceShowWallet.value) {
     return loading.value || isRestoring.value || !connected.value;
   } else {
     return loading.value || isRestoring.value
+  }
+});
+
+// Set a timeout to show wallet even if connection fails OR if stuck loading
+watch([loggedWallet, connected, loading], ([wallet, conn, load]) => {
+  if (wallet && (!conn || load)) {
+    // Clear existing timeout
+    if (connectionTimeout.value) {
+      clearTimeout(connectionTimeout.value);
+    }
+    
+    // Set new timeout - show wallet after 15 seconds even if loading/disconnected
+    connectionTimeout.value = setTimeout(() => {
+      console.log('⚠️ Loading/Connection timeout - forcing wallet display');
+      console.log('Current state:', { loading: load, connected: conn, wallet: !!wallet });
+      forceShowWallet.value = true;
+    }, 15000);
+  } else if (conn && !load && wallet) {
+    // Clear timeout if fully connected and loaded
+    if (connectionTimeout.value) {
+      clearTimeout(connectionTimeout.value);
+      connectionTimeout.value = null;
+    }
+    forceShowWallet.value = false;
   }
 });
 </script>

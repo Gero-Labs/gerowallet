@@ -236,6 +236,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
 import { decrypt } from '@/shared/utils/crypto';
+import * as CryptoTS from 'crypto-ts';
 import snackbar from '@/plugins/snackbar';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
@@ -390,7 +391,23 @@ const randomReplace = (array: string[], count: number) => {
 const decryptMnemonic = async (): Promise<void> => {
   if (vmProxy.$refs.formUnlock.validate()) {
     try {
-      const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value)
+      console.log('🔍 encryptedMnemonic type:', typeof loggedWallet.value.encryptedMnemonic);
+      console.log('🔍 encryptedMnemonic content:', loggedWallet.value.encryptedMnemonic);
+      
+      let decryptedMnemonic;
+      
+      // Handle both simple string encryption and salt-based encryption
+      if (typeof loggedWallet.value.encryptedMnemonic === 'string') {
+        // Simple AES encryption
+        decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value);
+      } else {
+        // Salt-based encryption - decrypt like private key
+        const bytes = CryptoTS.AES.decrypt(loggedWallet.value.encryptedMnemonic, password.value);
+        const decryptedBytes = JSON.parse(bytes.toString(CryptoTS.enc.Utf8));
+        // For mnemonic, it should still be a simple string after AES decryption
+        decryptedMnemonic = decryptedBytes;
+      }
+      
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
         throw new Error('Invalid Password')
       }
@@ -399,7 +416,7 @@ const decryptMnemonic = async (): Promise<void> => {
       overlay.value = false
     } catch (e) {
       snackbar.setError("Wrong Password")
-      console.log(e) //TODO
+      console.log('🔍 Decryption error:', e) //TODO
     }
   }
 }

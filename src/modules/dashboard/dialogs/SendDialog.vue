@@ -213,6 +213,7 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 
 interface Props {
@@ -409,7 +410,96 @@ async function signAndSubmitTx() {
     txSubmitLoading.value = false
   };
   if (loggedWallet.value?.type === WalletType.Normal) {
-    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
+    // Check if wallet is properly initialized before verifying password
+    const currentWallet = WalletStore.state.loggedWallet;
+    console.log('🔍 SendDialog wallet check BEFORE:', {
+      loggedWalletValue: loggedWallet.value,
+      currentWallet: currentWallet
+    });
+    console.log('🔍 SendDialog wallet check:', {
+      hasWallet: !!currentWallet,
+      walletType: typeof currentWallet,
+      hasVerifyMethod: currentWallet && typeof currentWallet.verifySpendingPassword === 'function',
+      walletKeys: currentWallet ? Object.keys(currentWallet) : 'no wallet',
+      walletConstructor: currentWallet ? currentWallet.constructor.name : 'no constructor'
+    });
+    
+    console.log('🔍 Full wallet object:', currentWallet);
+    console.log('🔍 Wallet properties:', currentWallet ? Object.entries(currentWallet).reduce((acc, [key, value]) => {
+      acc[key] = typeof value === 'object' ? '[object]' : value;
+      return acc;
+    }, {}) : 'no wallet');
+    
+    if (!currentWallet || typeof currentWallet.verifySpendingPassword !== 'function') {
+      // Check if we have wallet data but it's just serialized (not a WalletBg instance)
+      if (currentWallet && currentWallet.id && currentWallet.name && !currentWallet.verifySpendingPassword) {
+        console.log('🔧 Wallet data exists but needs to be converted to WalletBg instance');
+        console.log('🔧 Checking if wallet data has publicKey...');
+        
+        let walletDataToUse = currentWallet;
+        
+        // If the wallet data is missing publicKey, try to fetch complete data from database
+        if (!currentWallet.publicKey) {
+          console.log('🔧 Current wallet data missing publicKey, fetching from database...');
+          try {
+            const { getWalletById } = await import('@/db/gero-db');
+            const completeWalletData = await getWalletById(currentWallet.id);
+            
+            if (completeWalletData && completeWalletData.publicKey) {
+              console.log('✅ Complete wallet data with publicKey loaded from database');
+              walletDataToUse = completeWalletData;
+            } else {
+              console.error('❌ Database wallet data also missing publicKey');
+              snackbar.setError('Wallet data is incomplete. Please try logging out and back in.');
+              txSubmitLoading.value = false;
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Error loading wallet from database:', error);
+            snackbar.setError('Failed to load complete wallet data: ' + error.message);
+            txSubmitLoading.value = false;
+            return;
+          }
+        }
+        
+        console.log('🔧 Attempting to manually initialize WalletBg...');
+        try {
+          // Try to manually trigger WalletBg creation through walletManager
+          const walletManager = (await import('@/services/walletManager.service')).walletManager;
+          const walletBg = await walletManager.setWallet(walletDataToUse);
+          
+          if (walletBg && typeof walletBg.verifySpendingPassword === 'function') {
+            console.log('✅ Manual WalletBg initialization successful');
+            // Retry the password verification now that we have a proper instance
+            if (WalletStore.verifySpendingPassword(spendingPassword.value)) {
+              await signAndReturnTx();
+              return;
+            } else {
+              enableToolTip();
+              return;
+            }
+          } else {
+            console.error('❌ Manual WalletBg initialization failed');
+            snackbar.setError('Failed to initialize wallet. The wallet data may be corrupted.');
+          }
+        } catch (error) {
+          console.error('❌ Error during manual WalletBg initialization:', error);
+          snackbar.setError('Wallet initialization failed: ' + error.message);
+        }
+        
+        txSubmitLoading.value = false;
+        return;
+      }
+      
+      // Wallet is not properly initialized - this could be due to missing publicKey or other issues
+      console.error('❌ Wallet not properly initialized for transaction signing');
+      console.error('❌ Current wallet object:', currentWallet);
+      snackbar.setError('Wallet initialization error. Please try logging out and back in.');
+      txSubmitLoading.value = false;
+      return;
+    }
+    
+    if (WalletStore.verifySpendingPassword(spendingPassword.value)) {
       await signAndReturnTx();
     } else {
       enableToolTip();

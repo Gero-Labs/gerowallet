@@ -49,6 +49,7 @@ import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { convertToTxSchema } from '@/chrome/helper';
+import LoadingState from '@/stores/loading';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
@@ -65,9 +66,36 @@ loadConfig().then(() => {
 })
 loadWallets().then(async () => {
   console.log('Wallets loaded')
+  console.log('🔍 Logged wallet from storage:', walletStore.loggedWallet);
   if (walletStore.loggedWallet) {
-    await walletManager.setWallet(walletStore.loggedWallet);
+    console.log('🔄 Attempting to set wallet:', walletStore.loggedWallet.id, walletStore.loggedWallet.name);
+    try {
+      // Fetch complete wallet data from database to ensure we have all fields including publicKey
+      const { getWalletById } = await import('@/db/gero-db');
+      const completeWalletData = await getWalletById(walletStore.loggedWallet.id);
+      
+      if (completeWalletData && completeWalletData.publicKey) {
+        console.log('✅ Complete wallet data loaded from database with publicKey');
+        await walletManager.setWallet(completeWalletData);
+        console.log('✅ Wallet set successfully');
+      } else if (completeWalletData) {
+        console.warn('⚠️ Wallet data from database is missing publicKey - using cached data anyway');
+        await walletManager.setWallet(walletStore.loggedWallet);
+      } else {
+        console.warn('⚠️ Could not load wallet from database - using cached data');
+        await walletManager.setWallet(walletStore.loggedWallet);
+      }
+    } catch (error) {
+      console.error('❌ Failed to set wallet:', error);
+    }
+  } else {
+    console.log('⚠️ No logged wallet found in storage - clearing loading state');
+    // Clear loading state when no wallet exists
+    LoadingState.setLoading(false);
+    LoadingState.setText('');
   }
+}).catch(error => {
+  console.error('❌ Failed to load wallets:', error);
 });
 
 //@ts-ignore

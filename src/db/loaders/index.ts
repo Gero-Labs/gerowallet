@@ -1,4 +1,5 @@
-export { BaseLoader, ILoader, LoaderRegistry } from './base';
+export { BaseLoader, LoaderRegistry } from './base';
+export type { ILoader } from './base';
 export {
   PoolsLoader,
   DRepsLoader,

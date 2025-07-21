@@ -77,7 +77,14 @@ export class WalletManager {
       return this.walletBg;
     } catch (error) {
       LoadingState.setText('Wallet initialization failed');
-      console.error('Error during wallet login:', error);
+      console.error('❌ CRITICAL: Wallet login failed with error:', error);
+      console.error('❌ Error stack:', error?.stack);
+      console.error('❌ Error details:', {
+        message: error?.message,
+        name: error?.name,
+        cause: error?.cause
+      });
+      LoadingState.setLoading(false); // Ensure loading state is cleared even on error
       await this.logout();
       throw error;
     }

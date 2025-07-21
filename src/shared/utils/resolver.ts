@@ -22,18 +22,21 @@ let greySvg = '';
 let errorImage = '';
 
 if (!isServiceWorker) {
-  try {
-    greenSvg = require('@/assets/svg/green.svg').default || require('@/assets/svg/green.svg');
-    purpleSvg = require('@/assets/svg/purple.svg').default || require('@/assets/svg/purple.svg');
-    pinkSvg = require('@/assets/svg/pink.svg').default || require('@/assets/svg/pink.svg');
-    orangeSvg = require('@/assets/svg/orange.svg').default || require('@/assets/svg/orange.svg');
-    blueSvg = require('@/assets/svg/blue.svg').default || require('@/assets/svg/blue.svg');
-    greySvg = require('@/assets/svg/grey.svg').default || require('@/assets/svg/grey.svg');
-    errorImage = require('@/assets/img/1x1.png').default || require('@/assets/img/1x1.png');
-  } catch (e) {
-    // Fallback if require fails
-    console.warn('Failed to load assets:', e);
-  }
+  // Load assets asynchronously
+  (async () => {
+    try {
+      greenSvg = (await import('@/assets/svg/green.svg')).default;
+      purpleSvg = (await import('@/assets/svg/purple.svg')).default;
+      pinkSvg = (await import('@/assets/svg/pink.svg')).default;
+      orangeSvg = (await import('@/assets/svg/orange.svg')).default;
+      blueSvg = (await import('@/assets/svg/blue.svg')).default;
+      greySvg = (await import('@/assets/svg/grey.svg')).default;
+      errorImage = (await import('@/assets/img/1x1.png')).default;
+    } catch (e) {
+      // Fallback if imports fail
+      console.warn('Failed to load assets:', e);
+    }
+  })();
 }
 
 function detectCIDVersion(cidStr: string) {

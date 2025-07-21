@@ -68,7 +68,7 @@ export const sharedConfig: UserConfig = {
     },
   ],
   optimizeDeps: {
-    include: ['vue', '@vueuse/core', 'webextension-polyfill', 'buffer', '@cardano-sdk/crypto', 'readable-stream', 'util', 'pbkdf2'],
+    include: ['vue', '@vueuse/core', 'webextension-polyfill', 'buffer', '@cardano-sdk/crypto', 'readable-stream', 'util'],
     exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
     esbuildOptions: {
       plugins: [],
@@ -122,7 +122,7 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public' },
             ],
             hook: 'writeBundle',
-          }),
+          }) as any,
           {
             name: 'cbor-fix',
             resolveId(id, importer) {

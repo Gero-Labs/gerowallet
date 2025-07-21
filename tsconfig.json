@@ -2,6 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "incremental": false,
+    "isolatedModules": true,
     "resolveJsonModule": true,
     "strict": true,
     "sourceMap": true,
@@ -10,6 +11,7 @@
     "importHelpers": true,
     "downlevelIteration": true,
     "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "useDefineForClassFields": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
@@ -19,13 +21,12 @@
     "strictPropertyInitialization": false,
     "noImplicitAny": false,
     "noImplicitThis": true,
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noImplicitReturns": true,
     "noImplicitOverride": true,
     "noUnusedParameters": false,
-    "noImplicitUseStrict": false,
     "noFallthroughCasesInSwitch": true,
-    "noPropertyAccessFromIndexSignature": true,
+    "noPropertyAccessFromIndexSignature": false,
     "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -33,15 +34,39 @@
     "jsx": "preserve",
     "target": "ES2020",
     "module": "ESNext",
+    "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "types": [
       "chrome",
-      "unplugin-fonts/client",
-      "vite/client"
+      "vite/client",
+      "node"
     ],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     },
-    "lib": ["DOM", "ESNext"]
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2020",
+      "ESNext"
+    ]
   },
-  "exclude": ["dist", "node_modules"]
+  "include": [
+    "src/**/*",
+    "scripts/**/*",
+    "*.ts",
+    "*.mts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "extension",
+    "test-backend.html",
+    "src/moonpay-js",
+    "src/shared/utils/coinSelection2.js",
+    "src/shims/*.js"
+  ]
 }

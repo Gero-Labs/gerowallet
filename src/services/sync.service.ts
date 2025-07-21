@@ -30,13 +30,21 @@ export class SyncService {
    */
   async sync(tip?: Tip) {
     try {
+      console.log('🔍 Starting wallet sync for addresses:', {
+        baseAddress: this.walletBg.baseAddress,
+        stakeAddress: this.walletBg.stakeAddress
+      });
+      
       if (!tip) {
+        console.log('🔍 Fetching blockchain tip...');
         tip = await this.api.getTip();
+        console.log('🔍 Blockchain tip:', tip);
       }
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
         await this.walletBg.restore(tip);
+        LoadingState.setRestoring(false);
       } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const promises = [];
         promises.push(this.syncGenesis());

@@ -15,7 +15,8 @@ import { ref, computed, onMounted } from 'vue';
 const props = defineProps({
   value: {
     type: String,
-    required: true,
+    required: false,
+    default: '',
   },
   xSmall: {
     type: Boolean,

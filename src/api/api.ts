@@ -17,7 +17,6 @@ export class Api {
       timeout: 120000,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
       },
     });
   }

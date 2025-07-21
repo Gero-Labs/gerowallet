@@ -113,6 +113,12 @@ export async function getAllWallets() {
   return walletsMap;
 }
 
+export async function getWalletById(walletId: number) {
+  const db: Dexie = await getDb();
+  const wallet = await db['wallets'].get(walletId);
+  return wallet;
+}
+
 export async function createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
   const db = new Dexie(walletName);

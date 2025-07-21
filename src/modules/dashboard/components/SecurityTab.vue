@@ -19,7 +19,7 @@
             Ed25519-Bip32 Extended Public Key
           </v-list-item-subtitle>
           <v-list-item-subtitle class="text-left">
-            <CopyButton :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
+            <CopyButton v-if="loggedWallet?.publicKey" :title="filters.truncate(loggedWallet.publicKey)" :value="loggedWallet.publicKey" x-small />
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-avatar size="160" rounded>
@@ -144,7 +144,7 @@ const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
-  data: loggedWallet.value?.publicKey.toString(),
+  data: loggedWallet.value?.publicKey?.toString() || '',
   image: assets.geroLogo,
   margin: 2,
   qrOptions: {
@@ -171,10 +171,12 @@ const options = computed((): Partial<Options> => ({
 let qrCode: QRCodeStyling;
 
 onMounted(async () => {
-  qrCode = new QRCodeStyling(options.value);
-  await nextTick()
-  if (qrCodeRef.value) {
-    qrCode.append(qrCodeRef.value)
+  if (loggedWallet.value?.publicKey) {
+    qrCode = new QRCodeStyling(options.value);
+    await nextTick()
+    if (qrCodeRef.value) {
+      qrCode.append(qrCodeRef.value)
+    }
   }
 })
 </script>

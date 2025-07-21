@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { WalletBg } from '@/chrome/walletBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
+import { walletManager } from '@/services/walletManager.service';
 
 interface WhitelistedEntry {
   domain: string;
@@ -16,6 +17,7 @@ export interface WalletStore {
   keys: any;
   tokens: {};
   collections: {};
+  pinnedTokens: string[];
   config: any;
   fiatRates: {};
   fiatRatesIntervalId: any;
@@ -33,6 +35,7 @@ export const walletStore = Vue.observable<WalletStore>({
   keys: null,
   tokens: {},
   collections: {},
+  pinnedTokens: [],
   config: {
     tokenAllocationSort: {
       by: 'allocation',
@@ -57,7 +60,13 @@ export const walletStore = Vue.observable<WalletStore>({
 chrome.storage.local.get('walletStore', (res) => {
   const stored = res['walletStore']
   if (stored) {
+    // Preserve the loggedWallet if it's already a WalletBg instance
+    const currentLoggedWallet = walletStore.loggedWallet;
     Object.assign(walletStore, stored);
+    // Restore the WalletBg instance if it was overwritten with serialized data
+    if (currentLoggedWallet && typeof currentLoggedWallet.verifySpendingPassword === 'function') {
+      walletStore.loggedWallet = currentLoggedWallet;
+    }
   }
 });
 
@@ -117,6 +126,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
 function persist(patch: Partial<WalletStore>) {
   const next = { ...walletStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
+      // Skip circular references and problematic objects
+      if (value && typeof value === 'object') {
+        if (value.constructor && (value.constructor.name === 'WalletBg' || 
+                                 value.constructor.name === 'SyncService' ||
+                                 value.constructor.name === 'Api')) {
+          return '[Circular Reference]';
+        }
+      }
+      
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
           obj[key] = value;
@@ -154,7 +172,12 @@ export default {
       stakeAddress: walletBg.stakeAddress,
       userId: walletBg.userId,
       icon: walletBg.icon,
-      theme: walletBg.theme
+      theme: walletBg.theme,
+      publicKey: walletBg.publicKey,
+      encryptedPrivateKey: walletBg.encryptedPrivateKey,
+      encryptedMnemonic: walletBg.encryptedMnemonic,
+      passwordLastUpdate: walletBg.passwordLastUpdate,
+      order: walletBg.order
     };
     
     persist({ loggedWallet: serializableWalletData });
@@ -322,6 +345,27 @@ export default {
     this.setFiatRatesIntervalId(null);
     this.setRewards([]);
     this.setConnectedDapps([]);
+  },
+  verifySpendingPassword(password: string): boolean {
+    // If loggedWallet is a WalletBg instance, use it directly
+    if (walletStore.loggedWallet && typeof walletStore.loggedWallet.verifySpendingPassword === 'function') {
+      return walletStore.loggedWallet.verifySpendingPassword(password);
+    }
+    
+    // Fallback: try to access WalletBg from WalletManager service
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet && typeof currentWallet.verifySpendingPassword === 'function') {
+      return currentWallet.verifySpendingPassword(password);
+    }
+    
+    // If no WalletBg instance is available, the wallet might not be properly initialized
+    // This could be due to missing publicKey or other initialization issues
+    console.error('❌ WalletBg instance not available for password verification');
+    console.error('❌ LoggedWallet:', walletStore.loggedWallet);
+    console.error('❌ CurrentWallet from manager:', currentWallet);
+    
+    // Return false instead of throwing - this allows the UI to show "wrong password" instead of crashing
+    return false;
   },
   state: walletStore
 };

@@ -13,9 +13,22 @@ import { ERROR, WalletType } from '@/models/types';
 import { Wallet } from '@/models/wallet';
 import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
+import { decrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
+
+// Helper function to decrypt private key with salt handling
+function decryptWithPassword(password: string, privateKey: any): Buffer {
+  const passwordHex = Buffer.from(password).toString('hex');
+  let decryptedHex;
+  try {
+    decryptedHex = decrypt_with_password(passwordHex, privateKey);
+  } catch (err) {
+    throw new Error('Wrong Passphrase');
+  }
+  return Buffer.from(decryptedHex, 'hex');
+}
 
 export interface GeroStore {
   wallets: any;
@@ -153,7 +166,7 @@ export default {
         // Decrypt current private key
         const bytes = CryptoTS.AES.decrypt(wallet.encryptedPrivateKey, currentPassword);
         const decryptedBytes = JSON.parse(bytes.toString(CryptoTS.enc.Utf8));
-        const buffer: Buffer = Buffer.from(decryptedBytes);
+        const buffer: Buffer = decryptWithPassword(currentPassword, decryptedBytes);
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password

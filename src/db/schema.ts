@@ -22,12 +22,13 @@ export const walletDBSchema = {
   multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
 }
 
-export const blockChainDBVersion: number = 5;
+export const blockChainDBVersion: number = 6;
 
 export const blockChainDBSchema = {
   pools: 'pool_id_bech32',
   dreps: 'drep_id',
   sync: '++id, time',
+  sync_tables: '++id, time',
   assets: 'asset, fingerprint, asset_name, policy_id',
   epoch_params: 'epoch',
   genesis_info: 'id'

@@ -1,5 +1,7 @@
 import Dexie, { DexieError, Subscription } from 'dexie';
 import { Api } from '@/api/api';
+import * as CryptoTS from 'crypto-ts';
+import { decrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto'
 import networks from '@/utils/networks';
@@ -61,6 +63,22 @@ export class WalletBg {
   subscriptions: Map<string, Subscription> = new Map<string, Subscription>();
 
   constructor(wallet: any) {
+    console.log('🔍 WalletBg constructor received wallet data:', {
+      id: wallet.id,
+      name: wallet.name,
+      type: wallet.type,
+      publicKey: wallet.publicKey,
+      publicKeyLength: wallet.publicKey?.length,
+      hasEncryptedPrivateKey: !!wallet.encryptedPrivateKey,
+      hasEncryptedMnemonic: !!wallet.encryptedMnemonic,
+      allKeys: Object.keys(wallet)
+    });
+    
+    if (!wallet.publicKey) {
+      console.error('❌ CRITICAL: Wallet publicKey is missing!', wallet);
+      throw new Error('Wallet publicKey is required but missing. The wallet data may be corrupted.');
+    }
+    
     this.id = wallet.id;
     this.name = wallet.name;
     this.icon = wallet.icon;
@@ -245,8 +263,13 @@ export class WalletBg {
   }
 
   setAssets(utxos?: Cardano.Utxo[]) {
+    console.log('🔍 setAssets called with UTXOs:', utxos?.length || 0);
     if (!utxos) {
+      console.log('⚠️ No UTXOs provided to setAssets');
       return;
+    }
+    if (utxos.length === 0) {
+      console.log('⚠️ Empty UTXOs array - wallet appears to have no funds/tokens');
     }
     const assets = {};
     let adaBalance: bigint = 0n;
@@ -616,7 +639,14 @@ export class WalletBg {
   }
 
   async restore(tip: Tip): Promise<void> {
+    console.log('🔄 Starting wallet restore for tip:', tip);
+    console.log('🔄 Wallet addresses being restored:', {
+      baseAddress: this.baseAddress,
+      stakeAddress: this.stakeAddress
+    });
+    
     const prevAccountInfo = await this.getAccountInfo();
+    console.log('🔄 Previous account info:', prevAccountInfo);
 
     // Create an array to hold the promises that need to be awaited
     const promises = [];
@@ -665,6 +695,18 @@ export class WalletBg {
 
   isEnterpriseAddress(): boolean {
     return Cardano.Address.fromBech32(this.baseAddress).getType() === Cardano.AddressType.EnterpriseScript;
+  }
+
+  verifySpendingPassword(password: string): boolean {
+    try {
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      const decryptedBytes = JSON.parse(bytes.toString(CryptoTS.enc.Utf8));
+      const passwordHex = Buffer.from(password).toString('hex');
+      decrypt_with_password(passwordHex, decryptedBytes);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   public async getDb(): Promise<Dexie> {
