@@ -5,9 +5,15 @@
                     :highcharts="Highcharts"
     ></vue-highcharts>
     <v-card v-else flat class="transparent fill-height">
-      <v-card-title class="justify-center fill-height"><v-icon>
-        mdi-alert
-      </v-icon>&nbsp;No Data Available</v-card-title>
+      <v-card-title class="justify-center fill-height">
+        <template v-if="loading">
+          <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
+          &nbsp;Loading Assets...
+        </template>
+        <template v-else>
+          <v-icon>mdi-alert</v-icon>&nbsp;No Data Available
+        </template>
+      </v-card-title>
     </v-card>
   </div>
 </template>
@@ -17,15 +23,17 @@ import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
 import { walletStore } from '@/stores/walletStore';
+import { loadingState } from '@/stores/loading';
 
 Highcharts3D(Highcharts)
 
 const { tokens, collections } = toRefs(walletStore)
+const { loading } = toRefs(loadingState)
 
 const collectiblesAmount = computed(() => {
   let amount = 0;
   if (collections.value) {
-    Object.values(collections.value).forEach(collection => {
+    Object.values(collections.value).forEach((collection: any) => {
       if (collection.items) {
         amount += collection.items.length
       }
@@ -39,15 +47,15 @@ const chartData = computed(() => {
   if (!tokens.value || !collections.value) {
     return []
   }
-  
+
   const tokenCount = Object.keys(tokens.value).length
   const collectibleCount = collectiblesAmount.value
   const totalTokens = tokenCount + collectibleCount
-  
+
   if (totalTokens === 0) {
     return []
   }
-  
+
   return [
     ["Assets", (tokenCount / totalTokens) * 100],
     ["Collectibles", (collectibleCount / totalTokens) * 100],
@@ -55,7 +63,7 @@ const chartData = computed(() => {
 });
 
 const filteredChartData = computed(() => {
-  return chartData.value.filter(d => d[1] > 0)
+  return chartData.value.filter((d: any[]) => d[1] > 0)
 })
 
 const isAllZeroes = computed(() => {
@@ -77,10 +85,20 @@ const computedColors = computed(() => {
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const chartOptions = computed(() => {
-  if (isAllZeroes.value || filteredChartData.value.length === 0) {
+  // Don't render chart while wallet is loading to prevent flickering
+  if (loading.value) {
     return null
   }
   
+  // Also wait for tokens and collections to be actually loaded
+  if (!tokens.value || !collections.value) {
+    return null
+  }
+
+  if (isAllZeroes.value || filteredChartData.value.length === 0) {
+    return null
+  }
+
   return {
     legend: {
       itemStyle: {

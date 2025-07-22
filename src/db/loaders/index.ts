@@ -1,20 +1,3 @@
-export { BaseLoader, ILoader, LoaderRegistry } from './base';
-export {
-  PoolsLoader,
-  DRepsLoader,
-  AssetsLoader,
-  GenesisLoader,
-  EpochParamsLoader
-} from './network';
-export {
-  AccountLoader,
-  ContactsLoader,
-  ConfigLoader,
-  RewardsLoader,
-  ConnectedDappsLoader,
-  TransactionsLoader
-} from './wallet';
-
 import Dexie from 'dexie';
 import { LoaderRegistry } from './base';
 import {
@@ -31,7 +14,7 @@ import {
   RewardsLoader,
   ConnectedDappsLoader,
   TransactionsLoader
-} from './wallet';
+} from './walletLoader';
 
 /**
  * Factory for creating and managing all wallet loaders

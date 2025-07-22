@@ -2,9 +2,9 @@ import Dexie from 'dexie';
 import { BaseLoader } from './base';
 import WalletStore from '@/stores/walletStore';
 import { STORAGE } from '@/chrome/config';
-import { Cardano } from '@cardano-sdk/core';
 import { toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
+import Loading from '@/stores/loading';
 
 /**
  * Loader for wallet account information
@@ -19,7 +19,7 @@ export class AccountLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const walletDB = await this.getDb();
-    
+
     return this.createSubscription(
       () => walletDB.table('account').where({ walletId: this.walletId }).first(),
       (account) => {
@@ -42,7 +42,7 @@ export class ContactsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const walletDB = await this.getDb();
-    
+
     return this.createSubscription(
       () => walletDB.table('contacts').toArray(),
       (newContacts) => {
@@ -69,7 +69,7 @@ export class ConfigLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const walletDB = await this.getDb();
-    
+
     return this.createSubscription(
       () => walletDB.table('config').toArray(),
       (config) => {
@@ -93,7 +93,7 @@ export class RewardsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const db = await this.getDb();
-    
+
     return this.createSubscription(
       () => db.table('rewards').orderBy("epoch").toArray(),
       (newRewards) => {
@@ -113,7 +113,7 @@ export class ConnectedDappsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const walletDB = await this.getDb();
-    
+
     return this.createSubscription(
       () => walletDB.table('connected_dapps').toArray(),
       (newConnectedDapps) => {
@@ -154,11 +154,12 @@ export class TransactionsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const walletDB = await this.getDb();
-    
+
     return this.createSubscription(
       () => walletDB.table('transactions').toArray(),
       async (newTransactions: any[]) => {
         console.log('newTransactions', newTransactions);
+        Loading.setLoadingTxs(true);
         try {
           let transactions: any = [];
           if (newTransactions) {
@@ -169,14 +170,14 @@ export class TransactionsLoader extends BaseLoader {
             } else {
               currentStake = this.walletContext.stakeAddress;
             }
-            
+
             transactions = newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp)
               .map((tx) => {
                 let sentAmount: number = 0;
                 let receivedAmount: number = 0;
                 const sentAssets: any = {};
                 const receivedAssets: any = {};
-                
+
                 tx.utxo?.inputs.forEach(input => {
                   if ((input.address === currentAddress || toStakeAddress(input.address, this.walletContext.networkId()) === currentStake) && !input.data_hash) {
                     const value = input.amount.find(amount => amount.unit === 'lovelace');
@@ -217,7 +218,7 @@ export class TransactionsLoader extends BaseLoader {
                     }
                   }
                 });
-                
+
                 const totalAmount = receivedAmount - sentAmount;
                 const assets: any = {...sentAssets};
                 const refAssets = {...sentAssets};
@@ -229,14 +230,14 @@ export class TransactionsLoader extends BaseLoader {
                     assets[receivedAsset.unit] = receivedAsset;
                   }
                 });
-                
+
                 const refAssetsCopy = {...refAssets};
                 Object.values(refAssets).forEach((asset: any) => {
                   if (Number(refAssetsCopy[asset.unit].quantity) === 0) {
                     delete refAssetsCopy[asset.unit];
                   }
                 });
-                
+
                 const network = networks.resolveNetwork(this.walletContext.chain, this.walletContext.network);
                 const nativeAsset = {
                   unit: "lovelace",
@@ -251,7 +252,7 @@ export class TransactionsLoader extends BaseLoader {
                     ticker: network?.currencyTicker,
                   }
                 };
-                
+
                 return {
                   ...tx,
                   sentAmount,
@@ -265,9 +266,10 @@ export class TransactionsLoader extends BaseLoader {
           }
           WalletStore.setTransactions(transactions);
           await this.walletContext.setUtxosAndAddresses(transactions);
+          Loading.setLoadingTxs(false);
         } catch (e) {
           console.error(e);
-          // Return empty array on error instead of failing completely
+          // Return an empty array on error instead of failing completely
           WalletStore.setTransactions([]);
         }
       },

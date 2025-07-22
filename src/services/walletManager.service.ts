@@ -59,8 +59,25 @@ export class WalletManager {
         console.log('Creating new WalletBg instance for wallet:', wallet.id);
 
         const walletBg: WalletBg = new WalletBg(wallet);
-        WalletStore.setLoggedWallet(walletBg);
-
+        WalletStore.setLoggedWallet({
+          id: walletBg.id,
+          name: walletBg.name,
+          icon: walletBg.icon,
+          type: walletBg.type,
+          theme: walletBg.theme,
+          order: walletBg.order,
+          chain: walletBg.chain,
+          network: walletBg.network,
+          publicKey: walletBg.publicKey,
+          provider: walletBg.provider,
+          encryptedPrivateKey: walletBg.encryptedPrivateKey,
+          passwordLastUpdate: walletBg.passwordLastUpdate,
+          userId: walletBg?.userId,
+          encryptedMnemonic: walletBg?.encryptedMnemonic,
+          baseAddress: walletBg.baseAddress,
+          stakeAddress: walletBg.stakeAddress,
+          token: walletBg.token
+        });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
 
@@ -230,7 +247,6 @@ export class WalletManager {
     try {
       // Close extension popups and cleanup subscriptions
       this.closeAllOtherExtensionPopups();
-
       // Clean up alarms
       if (chrome?.alarms?.onAlarm?.hasListeners()) {
         const { alarmListener } = await import('@/chrome/walletBg');
@@ -242,10 +258,14 @@ export class WalletManager {
       ablyService.close();
 
       // Send logout message to background
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.LOGOUT,
-        data: {},
-      });
+      try {
+        await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.LOGOUT,
+          data: {},
+        });
+      } catch (error) {
+        console.warn('Failed to send logout message to background (non-critical):', error instanceof Error ? error.message : error);
+      }
 
       // Clear Chrome storage
       if (chrome?.storage) {
@@ -327,6 +347,7 @@ export class WalletManager {
 
   /**
    * Close all other extension popup windows
+   * TODO Close sideBar
    */
   private closeAllOtherExtensionPopups(): void {
     if (typeof chrome !== 'undefined' && chrome.windows) {
