@@ -9,12 +9,13 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
 import Highcharts from 'highcharts';
+// Using any for Highcharts types to avoid complex type issues
 
 interface Props {
   classname?: string;
-  styles?: Record<string, any>;
+  styles?: Record<string, string | number>;
   options?: any;
-  highcharts?: any;
+  highcharts?: typeof Highcharts;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -23,77 +24,86 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const chart = ref<any>(null);
-const loading = ref<boolean>(true);
 const instance = getCurrentInstance();
 
-const getChart = () => {
+const getChart = (): any => {
   return chart.value;
 };
 
-const addSeries = (options: any) => {
+const addSeries = (options: any): void => {
   delegateMethod('addSeries', options);
 };
 
-const removeSeries = () => {
-  while (getChart().series.length !== 0) {
-    getChart().series[0].remove();
+const removeSeries = (): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    while (chartInstance.series.length !== 0) {
+      chartInstance.series[0].remove();
+    }
   }
 };
 
-const mergeOption = (options: any) => {
+const mergeOption = (options: any): void => {
   delegateMethod('update', options);
 };
 
-const showLoading = (txt: string) => {
-  getChart().showLoading(txt);
-};
-
-const hideLoading = () => {
-  getChart().hideLoading();
-};
-
-const delegateMethod = (name: string, ...args: any[]) => {
-  if (!getChart()) {
-    console.log(`Cannot call [${name}] before the chart is initialized. Set prop [options] first.`, instance);
-    return;
+const showLoading = (txt: string): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.showLoading(txt);
   }
-  return getChart()[name](...args);
 };
 
-const init = () => {
-  if (!getChart() && props.options && instance?.proxy?.$el) {
+const hideLoading = (): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.hideLoading();
+  }
+};
+
+const delegateMethod = (name: string, ...args: unknown[]): unknown => {
+  const chartInstance = getChart();
+  if (!chartInstance) {
+    console.log(`Cannot call [${name}] before the chart is initialized. Set prop [options] first.`, instance);
+    return undefined;
+  }
+  return (chartInstance as any)[name](...args);
+};
+
+const init = (): void => {
+  const chartInstance = getChart();
+  if (!chartInstance && props.options && instance?.proxy?.$el) {
     const highchartInstance = props.highcharts || Highcharts;
-    if (highchartInstance.product === 'Highstock') {
-      chart.value = new highchartInstance.stockChart(instance.proxy.$el, props.options);
-      return;
-    } else if (highchartInstance.product === 'Highmaps') {
-      chart.value = new highchartInstance.mapChart(instance.proxy.$el, props.options);
-      return;
-    }
-    chart.value = new highchartInstance.Chart(instance.proxy.$el, props.options);
+    const element = instance.proxy.$el as HTMLElement;
+    
+    // Create standard Highcharts chart
+    chart.value = new highchartInstance.Chart(element, props.options);
   }
 };
 
 watch(
   () => props.options,
-  (options) => {
-    if (!getChart() && options) {
+  (options: any) => {
+    const chartInstance = getChart();
+    if (!chartInstance && options) {
       init();
-    } else if (getChart() && options) {
-      getChart().update(props.options);
+    } else if (chartInstance && options) {
+      chartInstance.update(options);
     }
   }
 );
 
 onMounted(() => {
-  if (!getChart() && props.options) {
+  const chartInstance = getChart();
+  if (!chartInstance && props.options) {
     init();
   }
 });
 
 onBeforeUnmount(() => {
-  if (getChart()) {
-    getChart().destroy();
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.destroy();
   }
 });
 

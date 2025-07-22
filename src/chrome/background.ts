@@ -1,3 +1,5 @@
+import Loading from '@/stores/loading';
+
 self.addEventListener('online', () => {
   console.log('Network is online');
   // You can dispatch custom events or use a global state manager
@@ -66,7 +68,10 @@ loadConfig().then(() => {
 loadWallets().then(async () => {
   console.log('Wallets loaded')
   if (walletStore.loggedWallet) {
+    console.log('Login in wallet: ', walletStore.loggedWallet.name);
     await walletManager.setWallet(walletStore.loggedWallet);
+  } else {
+    Loading.setLoading(false)
   }
 });
 

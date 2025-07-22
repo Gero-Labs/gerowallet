@@ -42,7 +42,6 @@ import { Cardano, Serialization, util } from '@cardano-sdk/core';
 import {
   addrToSignWith,
   getAddress,
-  getCip129DrepId,
   getDrepKey,
   getPublicKey,
   getRewardAddress,
@@ -201,15 +200,6 @@ export class Wallet {
   stakeAddress(): Cardano.Address {
     return getRewardAddress(this.publicKey, this.chain, this.network)
     // return RewardAddress.from_address(Address.from_bech32("stake1u9637sgvdl9nhmsw8lsgkr9sm3p0yn9r96xdhmu6ya5he3q847rpv"))
-  }
-
-  isEnterpriseAddress(): boolean {
-    const baseAddress = this.baseAddress();
-    return baseAddress.getType() === Cardano.AddressType.EnterpriseScript;
-  }
-
-  drepId(): Cardano.DRepID {
-    return getCip129DrepId(this.publicKey);
   }
 
   async signData(address: Cardano.PaymentAddress | Cardano.RewardAccount | string, payload: string, password: string, accountIndex: number, isUsb: boolean) {

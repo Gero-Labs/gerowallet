@@ -1,4 +1,4 @@
-import Dexie, { DexieError, Subscription } from 'dexie';
+import Dexie, { DexieError } from 'dexie';
 import { Api } from '@/api/api';
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto'
@@ -11,14 +11,22 @@ import {
   coin_type,
   Tip,
   WalletType,
-  BIP44_SCAN_SIZE,
+  BIP44_SCAN_SIZE, WalletTypePurpose, CoinTypes, ERROR,
 } from '@/models/types';
 import {
-  getAddress, getCcColdKey, getCcHotKey, getCip105DrepId, getCip129DrepId, getDrepKey,
-  getPublicKey,
+  addrToSignWith,
+  getAddress,
+  getCcColdKey,
+  getCcHotKey,
+  getCip105DrepId,
+  getCip129DrepId,
+  getDrepKey,
+  getPaymentKeyExternal,
+  getPaymentKeyInternal,
   getRewardAddress,
   getStakeKey,
   keyHashFromAddress,
+  toPaymentCredential,
 } from '@/chrome/serialization';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
@@ -31,6 +39,24 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
+import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import ledger from '@/shared/utils/ledger';
+import {
+  buildAndSignData,
+  createCoseKey,
+  createCOSEKeyHex,
+  createSignDataBuilder,
+  toHexArray,
+} from '@/shared/utils/converter';
+import { Ed25519PrivateKey } from '@cardano-sdk/crypto';
+import { DataSignError } from '@/chrome/config';
+import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
+import { util } from '@cardano-sdk/core';
+import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
+import { Buffer } from 'buffer';
+import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import * as CryptoTS from 'crypto-ts';
+import { decrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 
 
 let blockchainDb: Dexie = null;
@@ -58,7 +84,6 @@ export class WalletBg {
   baseAddress: string;
   stakeAddress?: string;
   token?: string;
-  subscriptions: Map<string, Subscription> = new Map<string, Subscription>();
 
   constructor(wallet: any) {
     this.id = wallet.id;
@@ -501,18 +526,6 @@ export class WalletBg {
     return this.syncService.syncTable(tableId);
   }
 
-  async setSyncTable(blockchainDB: Dexie, syncTable, tableId: number) {
-    return this.syncService.setSyncTable(blockchainDB, syncTable, tableId);
-  }
-
-  async syncGenesis(): Promise<void> {
-    return this.syncService.syncGenesis();
-  }
-
-  async syncKeys(knownAddresses: string[]): Promise<any> {
-    return this.syncService.syncKeys(knownAddresses);
-  }
-
   resolvePathsForMissingAddresses(usedAddresses: string[]): any {
     const resolvedAddresses: any[] = [];
     let addressIndex: number = 0;       // Start from the first address index
@@ -546,7 +559,7 @@ export class WalletBg {
       script: []
     }
     while (consecutiveUnused < BIP44_SCAN_SIZE) {
-      const derivedAddress: string = this.deriveAddressFromPath(addressIndex).toBech32();
+      const derivedAddress: string = this.deriveExternalAddressFromPath(addressIndex).toBech32();
       const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).toAddress().toBech32();
       let found: boolean = false;
       const derivedPaymentAddress = {
@@ -587,7 +600,7 @@ export class WalletBg {
     return keys;
   }
 
-  deriveAddressFromPath(addressIndex: number): Cardano.Address {
+  deriveExternalAddressFromPath(addressIndex: number): Cardano.Address {
     return getAddress(this.publicKey, this.chain, this.network, addressIndex)
   }
 
@@ -596,7 +609,7 @@ export class WalletBg {
       this.networkId(),
       {
         type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16(this.pubKeyInternal(addressIndex).hash().hex())
+        hash: Hash28ByteBase16(this.paymentKeyInternal(addressIndex).hash().hex())
       },
       {
         type: Cardano.CredentialType.KeyHash,
@@ -605,14 +618,55 @@ export class WalletBg {
     );
   }
 
-  pubKeyInternal(index: number): Ed25519PublicKey {
-    return getPublicKey(this.publicKey)
-      .derive([ChainDerivations.INTERNAL, index])
-      .toRawKey();
+  paymentKeyExternal(index: number): Ed25519PublicKey {
+    return getPaymentKeyExternal(this.publicKey, index);
+  }
+
+  paymentKeyInternal(index: number): Ed25519PublicKey {
+    return getPaymentKeyInternal(this.publicKey, index);
   }
 
   stakeKey(): Ed25519PublicKey {
     return getStakeKey(this.publicKey, 0)
+  }
+
+  drepKey(): Ed25519PublicKey {
+    return getDrepKey(this.publicKey, 0)
+  }
+
+  decryptWithPassword(password: string, privateKey): Buffer {
+    const passwordHex = Buffer.from(password).toString('hex');
+    let decryptedHex;
+    try {
+      decryptedHex = decrypt_with_password(passwordHex, privateKey);
+    } catch (err) {
+      throw new Error('Wrong Passphrase');
+    }
+    return Buffer.from(decryptedHex, 'hex');
+  }
+
+  requestAccountKey(password: string, accountIndex: number): {
+    accountKey: Bip32PrivateKey,
+    paymentKey: Ed25519PrivateKey,
+    stakeKey: Ed25519PrivateKey,
+    drepKey: Ed25519PrivateKey
+  } {
+    let accountKey: Bip32PrivateKey;
+    try {
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      const buffer: Buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      accountKey = Bip32PrivateKey.fromBytes(buffer)
+        .derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]);
+    } catch (e) {
+      throw ERROR.wrongPassword;
+    }
+
+    return {
+      accountKey,
+      paymentKey: accountKey.derive([ChainDerivations.EXTERNAL, 0]).toRawKey(),
+      stakeKey: accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, 0]).toRawKey(),
+      drepKey: accountKey.derive([ChainDerivations.DREP, 0]).toRawKey()
+    };
   }
 
   async restore(tip: Tip): Promise<void> {
@@ -645,6 +699,46 @@ export class WalletBg {
 
     // Set the last sync info once everything is done
     await this.setLastSyncInfo(tip);
+  }
+
+  async signData(address: Cardano.PaymentAddress | Cardano.RewardAccount | string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
+    let signatureHex: string, keyHex: string;
+    const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
+
+    if (this.type === WalletType.Ledger) {
+      const response: SignedMessageData = await ledger.signData(
+        addr, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb,
+      );
+      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
+      signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
+      keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
+    } else {
+      console.log('Signing with Software Wallet...');
+      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes())
+      const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
+      const keyHash: string = credential.hash;
+      let accountKey: Ed25519PrivateKey
+      const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
+      if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
+        accountKey = paymentKey;
+      } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
+        accountKey = paymentKey;
+      } else if (keyHash === this.stakeKey().hash().hex()) {
+        accountKey = stakeKey;
+      } else if (keyHash === this.drepKey().hash().hex()) {
+        accountKey = drepKey;
+      } else {
+        throw DataSignError.ProofGeneration;
+      }
+      const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
+      const toSign = builder.make_data_to_sign().to_bytes();
+      signatureHex = buildAndSignData(builder, toSign, accountKey);
+      const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
+      keyHex = util.bytesToHex(coseKey.to_bytes())
+      console.log(verifyDataSignature(signatureHex, keyHex, Buffer.from(payload, "hex").toString("utf8"), addr));
+    }
+
+    return { signature: signatureHex, key: keyHex };
   }
 
   async syncAccountInfo(): Promise<any> {
@@ -752,8 +846,6 @@ export class WalletBg {
     NetworkStore.setTickerStatisticsIntervalId(null)
   }
 }
-
-// Login function moved to WalletManager service
 
 export function alarmListener(alarm) {
   if (alarm.name === 'refreshDexHunterPrices') {

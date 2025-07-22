@@ -190,7 +190,7 @@ export class SyncService {
     }
     if (res) {
       blockchainDB.table(table).bulkPut(res);
-      const syncTablesTable = blockchainDB.table('sync_tables') || blockchainDB.table('sync');
+      const syncTablesTable = blockchainDB.table('sync');
       syncTablesTable.put({ id: tableId, time: new Date().getTime() });
     }
   }
