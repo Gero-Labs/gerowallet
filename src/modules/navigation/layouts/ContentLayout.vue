@@ -1,11 +1,18 @@
 <template>
-  <v-app>
-    <v-main>
-      <v-container class="pa-0">
+  <div>
+    <v-app style="background: transparent !important;">
+      <v-main style="position: relative; z-index: 1; background: transparent !important;">
+      <v-container class="pa-0" style="position: relative;">
+        <!-- Background - Confined to dashboard working area -->
+        <div 
+          :class="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? 'apex-background-dashboard' : 'cardano-background-dashboard'" 
+          :style="{ backgroundImage: `url(${loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? assets.apexBg : assets.cardanoBg})` }"
+        ></div>
+        
         <v-layout :align-start="true">
           <NavigationDrawer v-model="drawer" />
           <v-sheet
-            style="height: 100vh; width: 100%; overflow-y: auto; background-color: transparent"
+            style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent"
           >
             <v-row no-gutters v-if="isBeta">
               <v-col cols="12">
@@ -18,145 +25,73 @@
               column
               class="no-gutters px-4 transparent"
               :justify-start="true"
-              style="min-height: calc(100vh - 90px); flex-direction: column;"
+              style="min-height: calc(100vh - 90px); flex-direction: column; background-color: transparent;"
             >
-              <v-app-bar flat class="transparent" color="transparent" style="max-height: 64px;">
+              <v-app-bar 
+                flat 
+                color="transparent" 
+                style="max-height: 55px;"
+              >
                 <v-app-bar-nav-icon
                   v-if="$vuetify.breakpoint.mobile"
                   @click.stop="drawer = !drawer"
                 />
 
-                <PriceTicker />
-
-                <Sparkline v-if="loggedWallet?.chain === Blockchain.CARDANO" />
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                  v-if="loggedWallet?.chain === Blockchain.CARDANO"
-                />
-
-                <v-progress-linear
-                  v-if="epochSlotPercentage"
-                  striped
-                  :value="epochSlotPercentage"
-                  height="22"
-                  rounded
-                  style="width: 100px; min-width: 50px;"
-                  :buffer-value="100"
-                >
-                  <template v-slot:default="{ value }">
-                    <v-list-item two-line>
-                      <v-list-item-content class="py-0 text-center">
-                        <v-list-item-title class="ma-0" style="font-size: 10px">
-                          {{ 'Epoch ' + tip.epoch }}
-                        </v-list-item-title>
-                        <v-list-item-subtitle class="ma-0" style="font-size: 8px; color: white">
-                          {{ Math.ceil(value) }}%
-                        </v-list-item-subtitle>
-                      </v-list-item-content>
-                    </v-list-item>
-                  </template>
-                </v-progress-linear>
-
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                />
-
-                <v-list-item
-                  v-if="tip"
-                  two-line
-                  class="px-0"
-                  style="min-height: auto; flex: unset"
-                >
-                  <v-list-item-icon class="ma-0" style="align-self: center;">
-                    <v-icon
-                      small
-                      :color="connected ? '#47cd89' : '#ff6464'"
-                    >
-                      {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
-                    </v-icon>
-                  </v-list-item-icon>
-
-                  <v-list-item-content class="my-0" style="padding:0 !important; display: flow;">
-                    <v-list-item-title class="ma-0" style="font-size: 12px;">
-                      {{ loggedWallet?.network }}
-                      <v-btn x-small icon class="mx-0" :loading="isSyncing && connected" disabled>
-                        <v-avatar size="20">
-                          <v-icon x-small>mdi-sync</v-icon>
-                        </v-avatar>
-
-                        <template v-slot:loader>
-                          <span class="custom-loader">
-                            <v-icon x-small>mdi-sync</v-icon>
-                          </span>
-                        </template>
-                      </v-btn>
-                    </v-list-item-title>
-
-                    <v-list-item-subtitle style="font-size: 10px">
-                      <v-tooltip bottom content-class="smallToolTip">
-                        <template v-slot:activator="{ on, attrs }">
-                          <span v-bind="attrs" v-on="on">
-                            {{ time.format(new Date(tip.time)) }}
-                          </span>
-                        </template>
-
-                        <span>
-                          {{ new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(tip.time)) }}
-                        </span>
-                      </v-tooltip>
-                    </v-list-item-subtitle>
-                  </v-list-item-content>
-                </v-list-item>
-
-                <v-divider
-                  vertical
-                  class="mx-1"
-                  style="max-height: 30px; min-height: 30px; align-self: center;"
-                />
-
-                <CopyButton
-                  ref="copyAddress"
-                  x-small
-                  :avatar="assets.googleSvg"
-                  :title="loggedWallet?.userId"
-                  :value="loggedWallet?.userId"
-                  v-if="loggedWallet?.userId"
-                />
-
-                <CopyButton
-                  ref="copyAddress"
-                  x-small
-                  :avatar="assets.walletSvg"
-                  :title="filters.shortenStringWithEllipsis(loggedWallet?.baseAddress, 14)"
-                  :value="loggedWallet?.baseAddress"
-                  v-else-if="loggedWallet?.baseAddress"
-                />
+                <!-- GERO Ticker -->
+                <div v-if="loggedWallet?.chain !== Blockchain.APEX_PRIME && loggedWallet?.chain !== Blockchain.APEX_VECTOR" class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer;" @click="openSwapDialog">
+                  <div class="d-flex flex-column">
+                    <span class="gero-label" style="font-size: 12px; font-weight: 600;" :style="{ color: primaryColor }">GERO</span>
+                    <span class="gero-price" style="font-size: 10px; color: #fff;">${{ geroPrice }}</span>
+                  </div>
+                </div>
 
                 <v-spacer />
-
+                
                 <QuickActionsBox />
+                
+                <v-spacer />
 
-                <v-btn
-                  class="ml-2"
-                  small
-                  icon
-                  text
-                  :plain="!context.shown"
-                  v-if="musicPlaylist?.length > 0"
-                  @click="handleMusicPlayerToggle"
-                >
-                  <v-icon>
-                    mdi-play-box-outline
-                  </v-icon>
-                </v-btn>
+                <v-tooltip bottom content-class="network-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <div
+                      style="display: flex; align-items: center; gap: 4px; min-width: 60px;"
+                      v-bind="attrs"
+                      v-on="on"
+                    >
+                      <v-icon
+                        small
+                        :color="connected ? primaryColor : '#ff6464'"
+                        :class="{ 'sync-animation': isSyncing }"
+                      >
+                        {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
+                      </v-icon>
+
+                      <!-- Small epoch progress bar -->
+                      <v-progress-linear
+                        class="epoch-progress-liquid-glass"
+                        height="8"
+                        :value="epochSlotPercentage"
+                        :color="primaryColor"
+                        background-color="transparent"
+                        style="width: 50px;"
+                      ></v-progress-linear>
+
+                    </div>
+                  </template>
+                  
+                  <div class="network-tooltip-content">
+                    <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
+                    <div><strong>Last Sync:</strong> {{ tip?.time ? time.format(new Date(tip.time)) : 'N/A' }}</div>
+                    <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                    <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                  </div>
+                </v-tooltip>
+
+                <!-- Notifications Menu (preserved from current version) -->
                 <v-menu offset-y :close-on-content-click="false">
                   <template v-slot:activator="{ on, attrs }">
-                    <v-btn class="ml-2" small icon v-bind="attrs" v-on="on">
-                      <v-icon>mdi-bell-outline</v-icon>
+                    <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
+                      <v-icon size="20">mdi-bell-outline</v-icon>
                     </v-btn>
                   </template>
                   <v-card outlined rounded min-width="250">
@@ -187,7 +122,8 @@
                     </v-card-text>
                   </v-card>
                 </v-menu>
-                <v-btn small class="ml-2" @click="currentDialog = dialogs.SETTINGS" icon>
+
+                <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                   <v-badge bordered color="error" dot v-if="shouldBackup">
                     <v-avatar size="20">
                       <img :src="assets.settingsSvg" alt="Settings" />
@@ -262,21 +198,25 @@
       :isOpen="backupWalletDialog"
       @close="backupWalletDialog = false"
     />
-  </v-app>
+
+    <SwapDialog
+      :isOpen="isSwapDialogOpen"
+      @close="closeSwapDialog"
+    />
+    </v-app>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, toRefs, watch, getCurrentInstance } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue'
-import PriceTicker from '@/modules/navigation/components/PriceTicker.vue'
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue'
 import Player from '@/modules/media-player/Player.vue'
 import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue'
-import CopyButton from '@/shared/components/CopyButton.vue'
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue'
-import Sparkline from '@/modules/navigation/components/Sparkline.vue'
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue'
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
+import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue'
 import { Blockchain } from '@/models/types';
 import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
@@ -302,16 +242,39 @@ const drawer = ref<boolean>(false)
 const currentDialog  = ref<string|null>(null)
 const dialogs = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
+const swapDialog = ref(false)
 
-const handleMusicPlayerToggle = () => {
-  // Check if we're currently on the music/media player page
-  if (currentPage.value?.name === 'MediaPlayer' || currentPage.value?.path === '/media-player') {
-    // Do nothing if already on music page
-    return;
+// Computed for proper reactivity with Vue 2 components
+const isSwapDialogOpen = computed(() => swapDialog.value)
+
+// GERO ticker data
+const geroToken = computed(() => {
+  const resolvedAssets = walletStore.resolvedAssets || []
+  return resolvedAssets.find((asset: any) => 
+    asset.name?.toLowerCase().includes('gero') || 
+    asset.metadata?.ticker?.toLowerCase() === 'gero'
+  )
+})
+
+const geroPrice = computed(() => {
+  if (geroToken.value?.last_price) {
+    return geroToken.value.last_price.toFixed(6)
   }
-  
-  // Otherwise toggle the media player visibility
-  MusicStore.setMediaPlayerShown(!context.value.shown);
+  return 'GERO'
+})
+
+const primaryColor = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR 
+    ? '#dc753e' 
+    : '#00c7f3'
+})
+
+function openSwapDialog() {
+  swapDialog.value = true
+}
+
+function closeSwapDialog() {
+  swapDialog.value = false
 }
 const time = timePlugin
 const changeLog  = changeLogPlugin
@@ -342,26 +305,250 @@ function closeChangeLogDialog() {
 function closeDialog() {
   currentDialog.value = null
 }
+
+// Theme management - update colors when chain changes
+const updateThemeColors = () => {
+  const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR
+  
+  if (isApex) {
+    // Apex Orange Theme
+    const orangeColors = {
+      primary: '#dc753e',
+      secondary: '#ff9f6b', 
+      accent: '#e67e22',
+      light: '#f39c12',
+      dark: '#d35400',
+      darker: '#a0522d',
+      muted: '#cd853f',
+      bright: '#ff8c42',
+      gradient1: '#ff7f50',
+      gradient2: '#ffa500'
+    }
+    
+    // Set CSS custom properties for Apex
+    document.documentElement.style.setProperty('--primary-color', orangeColors.primary)
+    document.documentElement.style.setProperty('--secondary-color', orangeColors.secondary)
+    document.documentElement.style.setProperty('--accent-color', orangeColors.accent)
+    document.documentElement.style.setProperty('--light-color', orangeColors.light)
+    document.documentElement.style.setProperty('--dark-color', orangeColors.dark)
+    document.documentElement.style.setProperty('--darker-color', orangeColors.darker)
+    document.documentElement.style.setProperty('--muted-color', orangeColors.muted)
+    document.documentElement.style.setProperty('--bright-color', orangeColors.bright)
+    document.documentElement.style.setProperty('--gradient1-color', orangeColors.gradient1)
+    document.documentElement.style.setProperty('--gradient2-color', orangeColors.gradient2)
+    document.documentElement.style.setProperty('--icon-filter', 'invert(64%) sepia(89%) saturate(1200%) hue-rotate(353deg) brightness(110%) contrast(95%)')
+    
+  } else {
+    // Cardano Teal Theme  
+    const tealColors = {
+      primary: '#00c7f3',
+      secondary: '#00ffd1',
+      accent: '#2f9cac', 
+      light: '#00DFF3',
+      dark: '#00BAAD',
+      darker: '#155B75',
+      muted: '#009DAB',
+      bright: '#00D1FF',
+      gradient1: '#00dff3',
+      gradient2: '#00fad5'
+    }
+    
+    // Set CSS custom properties for Cardano
+    document.documentElement.style.setProperty('--primary-color', tealColors.primary)
+    document.documentElement.style.setProperty('--secondary-color', tealColors.secondary)
+    document.documentElement.style.setProperty('--accent-color', tealColors.accent)
+    document.documentElement.style.setProperty('--light-color', tealColors.light)
+    document.documentElement.style.setProperty('--dark-color', tealColors.dark)
+    document.documentElement.style.setProperty('--darker-color', tealColors.darker)
+    document.documentElement.style.setProperty('--muted-color', tealColors.muted)
+    document.documentElement.style.setProperty('--bright-color', tealColors.bright)
+    document.documentElement.style.setProperty('--gradient1-color', tealColors.gradient1)
+    document.documentElement.style.setProperty('--gradient2-color', tealColors.gradient2)
+    document.documentElement.style.setProperty('--icon-filter', 'brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)')
+  }
+}
+
+// Watch for wallet chain changes
+watch(() => loggedWallet.value?.chain, (newChain) => {
+  if (newChain) {
+    updateThemeColors()
+  }
+}, { immediate: true })
+
+// Lifecycle
+onMounted(async () => {
+  // Ensure colors are set on mount
+  updateThemeColors()
+})
 </script>
 
-<style scoped>
+<style>
+/* Cardano Background - Confined to dashboard working area */
+.cardano-background-dashboard {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* Behind dashboard content */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
+  pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.4);
+}
+
+/* Apex background with same styling as Cardano */
+.apex-background-dashboard {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1; /* Behind dashboard content */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
+  pointer-events: none; /* Allow clicks through */
+  filter: brightness(0.4);
+}
+
+/* Force progress bar colors to use CSS variables with higher specificity */
+.v-progress-linear .v-progress-linear__determinate,
+.v-progress-linear__determinate {
+  background: linear-gradient(90deg, var(--primary-color, #00c7f3), var(--secondary-color, #00ffd1)) !important;
+  border-color: var(--primary-color, #00c7f3) !important;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__determinate {
+  background: var(--primary-color, #00c7f3) !important;
+}
+
+/* Ensure v-app has pure black background outside working area */
+.v-application {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Override any Vuetify theme variables */
+body {
+  background-color: #000000 !important;
+  background: #000000 !important;
+}
+
+html {
+  background-color: #000000 !important;
+  background: #000000 !important;
+}
+
+/* Make content areas transparent to show background */
+.v-container {
+  background-color: transparent !important;
+}
+
+.v-sheet.transparent {
+  background-color: transparent !important;
+}
+
 div.v-toolbar__content {
   padding-right: 8px !important;
   padding-left: 8px !important;
 }
 
-.custom-loader {
-  animation: loader 1s infinite;
-  display: flex;
+.sync-animation {
+  animation: sync-pulse 2s ease-in-out infinite;
 }
 
-@keyframes loader {
-  from { transform: rotate(0); }
-  to   { transform: rotate(-360deg); }
+@keyframes sync-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.epoch-progress-liquid-glass {
+  border-radius: 8px;
+  margin: 2px 0;
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 199, 243, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__background {
+  background: transparent !important;
+}
+
+.epoch-progress-liquid-glass .v-progress-linear__determinate {
+  background: linear-gradient(90deg, 
+    rgba(0, 199, 243, 0.8) 0%, 
+    rgba(0, 199, 243, 1) 50%, 
+    rgba(0, 199, 243, 0.8) 100%) !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 
+    0 0 20px rgba(0, 199, 243, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.network-tooltip {
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background-color: rgba(20, 20, 20, 0.95) !important;
+  border: 1px solid rgba(0, 199, 243, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.network-tooltip-content {
+  line-height: 1.3;
+}
+
+.network-tooltip-content div {
+  margin-bottom: 2px;
+}
+
+.network-tooltip-content div:last-child {
+  margin-bottom: 0;
 }
 
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
+}
+
+.gero-ticker {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.gero-ticker:hover {
+  background-color: rgba(0, 199, 243, 0.1);
+  transform: scale(1.05);
+}
+
+.gero-ticker:active {
+  transform: scale(0.98);
+}
+
+.toolbar-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+}
+
+.toolbar-icon-btn .v-icon {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 </style>
