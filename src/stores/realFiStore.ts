@@ -49,10 +49,12 @@ export default {
   async updateTokenHistory(tokensUnits: string[]) {
     for (const unit of tokensUnits) {
       try {
-        const res = await realfiApi.historicalCandles(unit);
-        if (res.status === 200) {
-          const data = res.data;
-          await persistTokenPatch(unit, { data });
+        if (unit !== 'lovelace') {
+          const res = await realfiApi.historicalCandles(unit);
+          if (res.status === 200) {
+            const data = res.data;
+            await persistTokenPatch(unit, { data });
+          }
         }
       } catch (e) {
         console.warn(`failed to fetch ${unit}`, e);

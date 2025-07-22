@@ -4,7 +4,7 @@
       <router-view></router-view>
     </component>
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
-      {{ `Loading: ${loading}, isRestoring: ${isRestoring}, Disconnected: ${!connected}`}}
+      {{ `Loading: ${loading}, isRestoring: ${isRestoring}` }}
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
@@ -36,19 +36,14 @@ import { ref, computed, toRefs } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
-import { walletStore } from '@/stores/walletStore';
 
-const { loading, isRestoring, text, connected } = toRefs(loadingState);
-const { loggedWallet } = toRefs(walletStore);
+const { loading, isRestoring, text } = toRefs(loadingState);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
+
 const isLoading = computed(() => {
-  if (loggedWallet.value) {
-    return loading.value || isRestoring.value || !connected.value;
-  } else {
-    return loading.value || isRestoring.value
-  }
+  return loading.value || isRestoring.value;
 });
 </script>
 <style lang="scss">

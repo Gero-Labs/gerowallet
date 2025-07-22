@@ -1,6 +1,5 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
-import { WalletBg } from '@/chrome/walletBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 
 interface WhitelistedEntry {
@@ -133,31 +132,9 @@ function persist(patch: Partial<WalletStore>) {
 }
 
 export default {
-  setLoggedWallet(walletBg: WalletBg | null) {
-    // Store the WalletBg instance in memory for runtime access
-    walletStore.loggedWallet = walletBg;
-    
-    // Handle null case (logout)
-    if (!walletBg) {
-      persist({ loggedWallet: null });
-      return;
-    }
-    
-    // Only persist the serializable wallet data, not the full WalletBg instance
-    const serializableWalletData = {
-      id: walletBg.id,
-      name: walletBg.name,
-      type: walletBg.type,
-      chain: walletBg.chain,
-      network: walletBg.network,
-      baseAddress: walletBg.baseAddress,
-      stakeAddress: walletBg.stakeAddress,
-      userId: walletBg.userId,
-      icon: walletBg.icon,
-      theme: walletBg.theme
-    };
-    
-    persist({ loggedWallet: serializableWalletData });
+  setLoggedWallet(loggedWallet: any) {
+    walletStore.loggedWallet = loggedWallet;
+    persist({ loggedWallet: loggedWallet });
   },
   setAccount(account: any) {
     walletStore.account = account;

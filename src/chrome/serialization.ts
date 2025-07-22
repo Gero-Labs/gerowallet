@@ -133,6 +133,7 @@ export function stakeKeyHash(pubKey: Bip32PublicKey, index: number): Ed25519KeyH
 }
 
 export function getAddress(xpub: string, chain: string, network: string, index: number = 0): Cardano.Address {
+  console.info('getting address');
   const networkId = networks.resolveNetworkId(chain, network);
   const pubKey = getPublicKey(xpub);
   return buildBaseAddress(networkId,
@@ -480,7 +481,7 @@ export async function submitTx(tx: string, chain: string, network: string): Prom
   })
 }
 
-export const urlScan = async url => {
+export const urlScan = async (url: string) => {
   return await fetch(`${baseUrl}/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
@@ -496,6 +497,18 @@ export function getPublicKey(xpub: string): Bip32PublicKey {
   }
   const byteArray = Uint8Array.from(bech32.fromWords(words.words));
   return Bip32PublicKey.fromBytes(byteArray);
+}
+
+export function getPaymentKeyExternal(xpub: string, index: number): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.EXTERNAL, index])
+    .toRawKey()
+}
+
+export function getPaymentKeyInternal(xpub: string, index: number): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.INTERNAL, index])
+    .toRawKey()
 }
 
 export function getStakeKey(xpub: string, index: number): Ed25519PublicKey {
