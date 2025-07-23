@@ -291,7 +291,7 @@ const handleNext = () => {
   text-transform: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .modal-actions {
     padding: 0 $spacing-lg $spacing-lg;
   }

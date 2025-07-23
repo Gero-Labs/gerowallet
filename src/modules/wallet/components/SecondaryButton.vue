@@ -41,7 +41,7 @@ defineEmits<{
   z-index: 1;
 }
 
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .secondary-button {
     padding: $spacing-sm $spacing-md;
     @include body-text($font-size-base);

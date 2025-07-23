@@ -62,4 +62,26 @@ export interface WalletEvents {
   'card-ordered': CardApplication;
   'kyc-completed': KYCData;
   'modal-closed': void;
-} 
+}
+
+export interface Transaction {
+  id: number;
+  date: string;
+  name: string;
+  avatarText?: string;
+  icon?: string;
+  amount: string;
+  category: string;
+  categoryClass: string;
+  categoryDotClass: string;
+}
+export interface ExchangeRate {
+  id: number;
+  pair: string;
+  value: string;
+  currency: string;
+  icon: string;
+  change: string;
+  trend: 'positive' | 'negative';
+  trendIcon: string;
+}
