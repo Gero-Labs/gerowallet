@@ -115,7 +115,7 @@ const setKYCStatus = () => {
 }
 
 .modal-card {
-  background: #0c0e12;
+  background: $background-dark;
   border-radius: $border-radius-lg;
   box-shadow: $shadow-md;
   position: relative;
@@ -125,7 +125,7 @@ const setKYCStatus = () => {
   position: absolute;
   top: $spacing-md;
   right: $spacing-md;
-  z-index: 10;
+  z-index: $z-sticky;
   color: $text-secondary;
 }
 

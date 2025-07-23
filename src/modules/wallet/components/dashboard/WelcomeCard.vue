@@ -25,6 +25,7 @@ defineEmits<{
 .welcome-card {
   border-radius: $border-radius-lg;
   background-image: url('@/modules/wallet/icons/cardHomeBanner.svg');
+  background-repeat: no-repeat;
   height: 232px;
   display: flex;
   align-items: center;

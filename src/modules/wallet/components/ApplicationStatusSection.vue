@@ -227,7 +227,7 @@ const handleContactSupport = () => {
   line-height: 1.56;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: $breakpoint-lg) {
   .status-content {
     flex-direction: column;
     gap: $spacing-2xl;
@@ -248,7 +248,7 @@ const handleContactSupport = () => {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .application-status-section {
     padding: $spacing-2xl 0;
   }

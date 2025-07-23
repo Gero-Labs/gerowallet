@@ -118,7 +118,7 @@ defineProps<Props>();
   text-align: center;
 }
 
-@media (max-width: 768px) {
+@media (max-width: $breakpoint-md) {
   .progress-container {
     width: 100%;
     gap: $spacing-sm;
