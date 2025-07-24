@@ -36,7 +36,11 @@ export class SyncService {
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
-        await this.walletBg.restore(tip);
+        try {
+          await this.walletBg.restore(tip);
+        } finally {
+          LoadingState.setRestoring(false);
+        }
       } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const promises = [];
         promises.push(this.syncGenesis());

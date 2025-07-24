@@ -51,7 +51,7 @@
 
                 <v-spacer />
 
-                <v-tooltip bottom content-class="network-tooltip">
+                <v-tooltip bottom :content-class="connected ? 'network-tooltip' : 'network-tooltip offline'">
                   <template v-slot:activator="{ on, attrs }">
                     <div
                       style="display: flex; align-items: center; gap: 4px; min-width: 60px;"
@@ -70,11 +70,13 @@
                       <v-progress-linear
                         class="epoch-progress-liquid-glass"
                         height="8"
+                        :buffer-value="epochSlotPercentage"
                         :value="epochSlotPercentage"
-                        :color="primaryColor"
+                        :color="connected ? primaryColor : '#ff6464'"
                         background-color="transparent"
                         style="width: 50px;"
                         striped
+                        :stream="connected"
                       ></v-progress-linear>
 
                     </div>
@@ -85,6 +87,10 @@
                     <div><strong>Last Sync:</strong> {{ tip?.time ? time.format(new Date(tip.time)) : 'N/A' }}</div>
                     <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
                     <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                    <div>
+                      <strong class="mr-1">Status:</strong>
+                      <span :style="connected ? { color: 'inherit' } : { color: '#ff6464' }">{{ connected ? 'Online' : 'Offline' }}</span>
+                    </div>
                   </div>
                 </v-tooltip>
 
@@ -380,19 +386,16 @@ onMounted(async () => {
 /* Ensure v-app has pure black background outside working area */
 .v-application {
   background: #000000 !important;
-  background-color: #000000 !important;
   position: relative;
   z-index: 1;
 }
 
 /* Override any Vuetify theme variables */
 body {
-  background-color: #000000 !important;
   background: #000000 !important;
 }
 
 html {
-  background-color: #000000 !important;
   background: #000000 !important;
 }
 
@@ -431,10 +434,6 @@ div.v-toolbar__content {
   background: rgba(255, 255, 255, 0.1) !important;
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow:
-    0 8px 32px rgba(0, 199, 243, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
@@ -459,6 +458,10 @@ div.v-toolbar__content {
   background-color: rgba(20, 20, 20, 0.95) !important;
   border: 1px solid rgba(0, 199, 243, 0.3) !important;
   backdrop-filter: blur(8px) !important;
+
+  &.offline {
+    border: 1px solid rgba(243, 0, 0, 0.3) !important;
+  }
 }
 
 .network-tooltip-content {

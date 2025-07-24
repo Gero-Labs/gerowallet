@@ -145,6 +145,7 @@ import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
@@ -260,18 +261,45 @@ watch(() => breakpoint.mobile,
 
 async function submitLogout() {
   try {
+    // Clear all Chrome alarms
+    if (chrome.alarms) {
+      chrome.alarms.clearAll();
+      console.debug('All Chrome alarms cleared during logout');
+    }
+    
+    // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
     
-    // Use replace instead of push to avoid navigation guard conflicts
-    // and ensure we don't add to browser history during logout
-    await router.replace('/welcome');
+    // Clear the wallet store immediately to allow navigation to welcome
+    WalletStore.logout();
+    
+    // Navigate to welcome page immediately since store is now cleared
+    router.replace('/welcome').catch(err => {
+      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
+      // Fallback: force page reload to welcome
+      window.location.hash = '#/welcome';
+    });
   } catch (error) {
     console.error('Error during logout:', error);
-    // Force navigation to welcome even if logout fails
-    await router.replace('/welcome');
+    // Clear store and navigate even if logout message fails
+    try {
+      // Clear alarms even if other logout steps fail
+      if (chrome.alarms) {
+        chrome.alarms.clearAll();
+        console.debug('Chrome alarms cleared during error recovery');
+      }
+      WalletStore.logout();
+    } catch (storeError) {
+      console.warn('Failed to clear wallet store during logout:', storeError);
+    }
+    
+    router.replace('/welcome').catch(err => {
+      console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
+      window.location.hash = '#/welcome';
+    });
   }
 }
 
