@@ -20,7 +20,7 @@ import {
  * Factory for creating and managing all wallet loaders
  */
 export class LoaderFactory {
-  private registry = LoaderRegistry.getInstance();
+  private registry = new LoaderRegistry();
 
   constructor(
     private walletContext: {

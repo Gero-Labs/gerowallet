@@ -12,6 +12,7 @@ import BringStore from '@/stores/bringStore';
 import ablyService from '@/services/ably.service';
 import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
+import { clearDbCache } from '@/db/wallet-db';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -44,7 +45,7 @@ export class WalletManager {
    * @returns WalletBg instance or null if failed
    */
   async login(wallet: any): Promise<WalletBg | null> {
-    console.log('WalletManager: Starting login process');
+    console.debug('WalletManager: Starting login process');
     LoadingState.setText('Creating wallet instance...');
     LoadingState.setLoading(true);
 
@@ -56,7 +57,10 @@ export class WalletManager {
 
       // Create new wallet instance if needed
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
-        console.log('Creating new WalletBg instance for wallet:', wallet.id);
+        console.debug('Creating new WalletBg instance for wallet:', wallet.id);
+
+        // Clear wallet store data immediately to prevent cross-wallet contamination
+        WalletStore.clearForWalletSwitch();
 
         const walletBg: WalletBg = new WalletBg(wallet);
         WalletStore.setLoggedWallet({
@@ -85,9 +89,8 @@ export class WalletManager {
         this.currentWalletId = wallet.id;
 
         LoadingState.setText('Wallet ready');
-        LoadingState.setLoading(false);
 
-        console.log('Wallet login successful for wallet:', wallet.id);
+        console.debug('Wallet login successful for wallet:', wallet.id);
         return walletBg;
       }
 
@@ -97,6 +100,8 @@ export class WalletManager {
       console.error('Error during wallet login:', error);
       await this.logout();
       throw error;
+    } finally {
+      LoadingState.setLoading(false);
     }
   }
 
@@ -156,7 +161,7 @@ export class WalletManager {
       address = walletBg.stakeAddress;
     }
 
-    console.log('🔍 Wallet initialization debug:', {
+    console.debug('🔍 Wallet initialization debug:', {
       chain,
       network,
       address,
@@ -165,27 +170,40 @@ export class WalletManager {
       isEnterpriseAddress: walletBg.isEnterpriseAddress()
     });
 
-    console.log('🔐 Setting up Ably service:', { chain, network, address });
+    console.debug('🔐 Setting up Ably service:', { chain, network, address });
+    console.debug('🔐 Ably service current state before setup:', {
+      connectionState: ablyService['client']?.connection?.state,
+      hasAuthParams: !!ablyService['authParams'],
+      hasApi: !!ablyService['api']
+    });
+
+    // Force close existing connection if any to ensure fresh authentication
+    ablyService.close();
+    console.debug('🔐 Closed existing Ably connection, setting new auth params...');
+
     ablyService.setAuthParams(chain, network, address);
     ablyService.setApi(walletBg.api);
-    console.log('📡 Connecting to Ably service...');
+    console.debug('📡 Connecting to Ably service...');
     ablyService.connect();
+
+    // Add small delay to allow connection to establish before subscribing
+    await new Promise(resolve => setTimeout(resolve, 100));
+    console.debug('🔐 Connection state after delay:', ablyService['client']?.connection?.state);
 
     promises.push(
       ablyService.subscribeToPrivateChannel(address, {
         onSync: async (msg: Ably.InboundMessage) => {
-          console.log('🔄 SYNC message received on private channel!', msg);
+          console.debug('🔄 SYNC message received on private channel!', msg);
           try {
             if (this.syncMutex.isLocked()) {
-              console.log('⏳ Sync mutex is locked, skipping');
+              console.debug('⏳ Sync mutex is locked, skipping');
               return;
             }
             this.syncMutex.runExclusive(async () => {
               LoadingState.setText('');
-              LoadingState.setConnected(true);
               LoadingState.setSyncing(true);
               const syncObject = JSON.parse(msg.data);
-              console.log('📊 Processing sync object:', syncObject);
+              console.debug('📊 Processing sync object:', syncObject);
               if (!ablyService.isTipProcessed(syncObject.block.hash)) {
                 ablyService.markTipAsProcessed(syncObject.block.hash);
               }
@@ -199,8 +217,11 @@ export class WalletManager {
           }
         },
         onMessage: async (msg: Ably.InboundMessage) => {
-          console.log('📬 General message received on private channel:', msg);
+          console.debug('📬 General message received on private channel:', msg);
         }
+      }).catch(error => {
+        console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+        // Continue wallet initialization even if Ably private channel fails
       })
     );
 
@@ -210,11 +231,11 @@ export class WalletManager {
         onTip: async (msg: Ably.InboundMessage) => {
           try {
             if (this.tipMutex.isLocked()) {
-              console.log('⏳ Tip mutex is locked, skipping');
+              console.debug('⏳ Tip mutex is locked, skipping');
               return;
             }
             const tip = JSON.parse(msg.data)?.data as Tip;
-            console.log('TIP', tip);
+            console.debug('TIP', tip);
             if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
               return;
             }
@@ -228,6 +249,9 @@ export class WalletManager {
             console.error(e);
           }
         }
+      }).catch(error => {
+        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
+        // Continue wallet initialization even if Ably group channel fails
       })
     );
 
@@ -242,9 +266,15 @@ export class WalletManager {
    * Logout current wallet and cleanup all resources
    */
   async logout(): Promise<void> {
-    console.log('WalletManager: Starting logout process');
+    console.debug('WalletManager: Starting logout process');
 
     try {
+      // Clear database cache for current wallet to prevent data leakage
+      if (this.currentWalletId !== null) {
+        console.debug('Clearing database cache for wallet:', this.currentWalletId);
+        clearDbCache(this.currentWalletId);
+      }
+
       // Close extension popups and cleanup subscriptions
       this.closeAllOtherExtensionPopups();
       // Clean up alarms
@@ -254,8 +284,16 @@ export class WalletManager {
       }
 
       // Clean up Ably service
-      ablyService.unsubscribeAll();
-      ablyService.close();
+      try {
+        if (ablyService && typeof ablyService.unsubscribeAll === 'function') {
+          ablyService.unsubscribeAll();
+        }
+        if (ablyService && typeof ablyService.close === 'function') {
+          ablyService.close();
+        }
+      } catch (ablyError) {
+        console.warn('Failed to cleanup Ably service during logout:', ablyError);
+      }
 
       // Send logout message to background
       try {
@@ -269,35 +307,56 @@ export class WalletManager {
 
       // Clear Chrome storage
       if (chrome?.storage) {
-        await Promise.all([
-          chrome.storage.local.remove(STORAGE.whitelisted),
-          chrome.storage.local.remove('loggedWallet'),
-          chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
-          chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
-        ]);
+        try {
+          await Promise.all([
+            chrome.storage.local.remove(STORAGE.whitelisted),
+            chrome.storage.local.remove('loggedWallet'),
+            chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
+            chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
+          ]);
+        } catch (storageError) {
+          console.warn('Failed to clear Chrome storage during logout:', storageError);
+        }
       }
 
       // Clear wallet store data
-      WalletStore.logout();
+      try {
+        WalletStore.logout();
+      } catch (storeError) {
+        console.warn('Failed to logout from wallet store:', storeError);
+      }
 
       // Reset service state
-      this.walletBg.unsubscribeAll();
+      try {
+        if (this.walletBg && typeof this.walletBg.unsubscribeAll === 'function') {
+          this.walletBg.unsubscribeAll();
+        }
+      } catch (walletBgError) {
+        console.warn('Failed to unsubscribe from walletBg during logout:', walletBgError);
+      }
       this.walletBg = null;
       this.currentWalletId = null;
 
       // Dispatch logout event
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('gero:logout', {
-          bubbles: true,
-          cancelable: true,
-          composed: false,
-        }));
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('gero:logout', {
+            bubbles: true,
+            cancelable: true,
+            composed: false,
+          }));
+        }
+      } catch (eventError) {
+        console.warn('Failed to dispatch logout event:', eventError);
       }
 
-      console.log('WalletManager: Logout completed successfully');
+      console.debug('WalletManager: Logout completed successfully');
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
+      if (this.currentWalletId !== null) {
+        clearDbCache(this.currentWalletId);
+      }
       this.walletBg?.unsubscribeAll();
       this.walletBg = null;
       this.currentWalletId = null;

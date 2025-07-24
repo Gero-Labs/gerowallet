@@ -10,12 +10,12 @@ import {
   updatePrivateKeyAndMnemonic as dbUpdatePrivateKeyAndMnemonic
 } from '@/db/gero-db';
 import { ERROR, WalletType } from '@/models/types';
-import { Wallet } from '@/models/wallet';
 import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
+import { encryptPrivateKey } from '@/chrome/serialization';
 
 export interface GeroStore {
   wallets: any;
@@ -157,7 +157,7 @@ export default {
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password
-        const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, newPassword);
+        const encryptedPrivateKey = encryptPrivateKey(rootKey, newPassword);
 
         // Handle mnemonic if it exists
         let encryptedMnemonic = null;

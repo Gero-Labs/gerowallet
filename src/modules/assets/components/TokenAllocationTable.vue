@@ -94,8 +94,6 @@
             :items-per-page="10"
             :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             :custom-sort="customSort"
-            @click:row="handleTokenRowClick"
-            :loading="loadingTokens"
           >
             <template v-slot:[`item.name`]="{ item }">
               <v-list-item dense>
@@ -336,7 +334,6 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs, onMounted, watch } from 'vue';
-import Sparkline from '@/modules/navigation/components/Sparkline.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -368,7 +365,6 @@ const sortOptions = ref<any>({
   by: 'allocation',
   desc: true
 })
-const loadingTokens = ref<boolean>(false);
 const filtersMenu = ref<boolean>(false);
 const collectiblesSortBy = ref<string>('name');
 const collectiblesSortDesc = ref<boolean>(false);
@@ -435,18 +431,6 @@ watch(() => config.value, (newConfig) => {
     hideUnverified.value = newConfig.hideUnverifiedTokens || false;
   }
 }, { immediate: true })
-
-// Show loading when wallet is logged in but tokens aren't loaded yet
-watch([() => loggedWallet.value, () => tokens.value], ([wallet, tokensData]) => {
-  if (wallet && (!tokensData || Object.keys(tokensData).length === 0)) {
-    loadingTokens.value = true;
-  } else if (wallet && tokensData && Object.keys(tokensData).length > 0) {
-    loadingTokens.value = false;
-  } else if (!wallet) {
-    loadingTokens.value = false;
-  }
-}, { immediate: true })
-
 
 const handleSwitchTab = (tab) => {
   currentTab.value = tab;

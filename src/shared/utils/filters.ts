@@ -73,7 +73,7 @@ const filters = {
     const seconds = Number(((millis % 60000) / 1000).toFixed(0));
     return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
   },
-  toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
+  toCurrency(value: number | string, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
     if (symbolPrefix == undefined) {
       symbolPrefix = '₳'
     }
@@ -160,6 +160,14 @@ const filters = {
 
 
     return bytes.toFixed(dp) + ' ' + units[u];
+  },
+  getColor(value: number) {
+    if (value > 100) {
+      value = 100
+    }
+    value = value / 100
+    const hue = ((1 - value) * 120).toString(10);
+    return ["hsl(", hue, ",100%,48%)"].join("");
   }
 };
 

@@ -36,8 +36,6 @@ import {
   TransactionOutputs, VoteDelegation, VotingProcedures,
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { Wallet } from '@/models/wallet';
-// import networks from '@/utils/networks';
 import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';
@@ -54,6 +52,7 @@ import {
   isSameArray, isScriptStakeAddress,
   toHexString,
 } from '@/shared/utils/converter';
+import { WalletBg } from '@/chrome/walletBg';
 Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -178,7 +177,7 @@ export default {
 
   async txToLedger(
     tx: FixedTransaction,
-    wallet: Wallet,
+    wallet: WalletBg,
     creds: Set<any>,
     index: number = 0,
     addresses: any,
@@ -187,7 +186,7 @@ export default {
   ): Promise<string> {
     const txBody = tx.body();
     console.log(txBody.to_json());
-    const address: Address = Address.from_bech32(wallet.baseAddress().toBech32());
+    const address: Address = Address.from_bech32(wallet.baseAddress);
     // const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = Array.from(creds).map(el => {
       return {

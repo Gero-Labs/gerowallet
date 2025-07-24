@@ -264,6 +264,7 @@ watch(
   font-size: 1rem;
   color: #ddd;
   margin-top: 0.5rem;
+  word-break: break-word;
 }
 
 .used-title {
