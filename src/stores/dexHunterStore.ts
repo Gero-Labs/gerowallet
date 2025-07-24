@@ -22,7 +22,7 @@ chrome.storage.local.get('dexHunterStore', (res) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['dexHunterStore']) {
     const newValue = changes['dexHunterStore'].newValue;
-    
+
     // DexHunter store contains global blockchain data (tokens, blacklist policies)
     // that doesn't change based on user transactions, so we can safely sync all updates
     Object.assign(dexHunterStore, newValue);
@@ -92,10 +92,12 @@ export default {
   async updatePrices(tokensUnits: string[]) {
     for (const unit of tokensUnits) {
       try {
-        const res = await dexHunterApi.mCap(unit);
-        if (res.status === 200) {
-          const { price, mcap } = res.data;
-          await persistTokenPatch(unit, { price, mcap });
+        if (unit !== 'lovelace') {
+          const res = await dexHunterApi.mCap(unit);
+          if (res.status === 200) {
+            const { price, mcap } = res.data;
+            await persistTokenPatch(unit, { price, mcap });
+          }
         }
       } catch (e) {
         console.warn(`failed to fetch ${unit}`, e);

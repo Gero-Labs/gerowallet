@@ -224,6 +224,7 @@ export class WalletBg {
 
     const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
     const addresses: Set<string> = new Set<string>();
+    addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
     for (const transaction of transactions) {
       for (const inp of transaction.body.inputs) {
@@ -348,7 +349,9 @@ export class WalletBg {
     WalletStore.setTokens(tokens);
     chrome.alarms.onAlarm.addListener(alarmListener);
     chrome.alarms.create('coinGeckoPrices', { delayInMinutes: 0, periodInMinutes: 1 });
-    if (networks.resolveSwapSupport(this.chain, this.network)) {
+    const isSwapSupported = networks.resolveSwapSupport(this.chain, this.network);
+    console.log('isSwapSupported', isSwapSupported);
+    if (isSwapSupported) {
       chrome.alarms.create('refreshDexHunterPrices', { delayInMinutes: 0, periodInMinutes: 5 });
       chrome.alarms.create('refreshXerberusRisks', { delayInMinutes: 0, periodInMinutes: 720 });
       chrome.alarms.create('refreshTokenHistory', { delayInMinutes: 0, periodInMinutes: 20 });

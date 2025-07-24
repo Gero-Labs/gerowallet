@@ -116,6 +116,16 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
+import midnightImage from '@/assets/Midnight.png'
+import logoStackedLight from '@/assets/logo-stacked-light.svg'
+import apexBgDashboard from '@/assets/apexBg.png'
+import apexImage from '@/assets/apex.png'
+import apexSvg from '@/assets/svg/ap3x.svg'
+import walletGeroApex from '@/assets/svg/walletGeroApex.svg'
+import debitCardBgImage from '@/assets/debitcardbg.png'
+import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
+import cashbackImage from '@/assets/cashback.png'
+import debitCardImage from '@/assets/geroCard.png'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -337,5 +347,15 @@ export default {
   cardanoSvg,
   clarityLogo,
   questionMark,
-  questionMarkDark
+  questionMarkDark,
+  midnightImage,
+  logoStackedLight,
+  apexBgDashboard,
+  apexImage,
+  apexSvg,
+  walletGeroApex,
+  debitCardBgImage,
+  cashbackCarouselImage,
+  cashbackImage,
+  debitCardImage
 }

@@ -264,13 +264,15 @@ export class TransactionsLoader extends BaseLoader {
                 };
               });
           }
+          console.log('setTransactions', transactions)
           WalletStore.setTransactions(transactions);
           await this.walletContext.setUtxosAndAddresses(transactions);
-          Loading.setLoadingTxs(false);
         } catch (e) {
           console.error(e);
           // Return an empty array on error instead of failing completely
           WalletStore.setTransactions([]);
+        } finally {
+          Loading.setLoadingTxs(false);
         }
       },
       (error: any) => {
