@@ -33,16 +33,7 @@ chrome.storage.local.get('networkStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['networkStore']) {
-    const newValue = changes['networkStore'].newValue;
-    
-    // Network store contains global blockchain data (assets, pools, dreps, epoch params)
-    // that represents the current state of the Cardano network, not user-specific data
-    // So we can safely sync all updates without size-based filtering
-    Object.assign(networkStore, newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<NetworkStore>) {
   const next = { ...networkStore, ...patch };

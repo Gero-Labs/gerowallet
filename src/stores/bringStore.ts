@@ -16,11 +16,7 @@ chrome.storage.local.get('bringStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['bringStore']) {
-    Object.assign(bringStore, changes['bringStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<BringStore>) {
   const next = { ...bringStore, ...patch };

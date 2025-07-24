@@ -346,6 +346,7 @@ export class WalletBg {
 
     // Set Tokens
     const tokens = Object.fromEntries(resolvedAssets.filter(([, resolved]) => Boolean(resolved.metadata)));
+    console.log('new tokens', tokens);
     WalletStore.setTokens(tokens);
     chrome.alarms.onAlarm.addListener(alarmListener);
     chrome.alarms.create('coinGeckoPrices', { delayInMinutes: 0, periodInMinutes: 1 });
@@ -1049,7 +1050,7 @@ export class WalletBg {
 
 export function alarmListener(alarm) {
   if (alarm.name === 'refreshDexHunterPrices') {
-    console.log('refreshDexHunterPrices', alarm)
+    console.log('new refreshDexHunterPrices', alarm)
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens))
   } else if (alarm.name === 'refreshXerberusRisks') {
     console.log('refreshXerberusRisks', alarm)

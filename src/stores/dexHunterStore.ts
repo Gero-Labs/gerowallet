@@ -19,15 +19,7 @@ chrome.storage.local.get('dexHunterStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['dexHunterStore']) {
-    const newValue = changes['dexHunterStore'].newValue;
-
-    // DexHunter store contains global blockchain data (tokens, blacklist policies)
-    // that doesn't change based on user transactions, so we can safely sync all updates
-    Object.assign(dexHunterStore, newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<DexHunterStore>) {
   const next = { ...dexHunterStore, ...patch };

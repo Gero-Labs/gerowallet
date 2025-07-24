@@ -15,11 +15,7 @@ chrome.storage.local.get('xerberusStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['xerberusStore']) {
-    Object.assign(xerberusStore, changes['xerberusStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<XerberusStore>) {
   const next = { ...xerberusStore, ...patch };

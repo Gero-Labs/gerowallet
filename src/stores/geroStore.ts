@@ -38,11 +38,7 @@ chrome.storage.local.get('geroStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['geroStore']) {
-    Object.assign(geroStore, changes['geroStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<GeroStore>) {
   const next = { ...geroStore, ...patch };
