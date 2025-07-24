@@ -259,15 +259,20 @@ watch(() => breakpoint.mobile,
 )
 
 async function submitLogout() {
-  await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.LOGOUT,
-    data: { },
-  }).then(() => {
-    // // Wait for next tick to ensure wallet store is cleared before navigation
-    vmProxy.$nextTick(() => {
-      router.push('/welcome')
-    })
-  });
+  try {
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGOUT,
+      data: { },
+    });
+    
+    // Use replace instead of push to avoid navigation guard conflicts
+    // and ensure we don't add to browser history during logout
+    await router.replace('/welcome');
+  } catch (error) {
+    console.error('Error during logout:', error);
+    // Force navigation to welcome even if logout fails
+    await router.replace('/welcome');
+  }
 }
 
 // Lifecycle

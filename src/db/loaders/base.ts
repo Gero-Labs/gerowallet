@@ -76,17 +76,10 @@ export abstract class BaseLoader implements ILoader {
 
 /**
  * Loader registry to manage all active loaders
+ * Each wallet gets its own registry instance to prevent conflicts
  */
 export class LoaderRegistry {
-  private static instance: LoaderRegistry;
   private loaders: Map<string, ILoader> = new Map();
-
-  static getInstance(): LoaderRegistry {
-    if (!LoaderRegistry.instance) {
-      LoaderRegistry.instance = new LoaderRegistry();
-    }
-    return LoaderRegistry.instance;
-  }
 
   register(key: string, loader: ILoader): void {
     this.loaders.set(key, loader);

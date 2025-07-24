@@ -2,10 +2,11 @@ import Vue from 'vue';
 import Vuetify from 'vuetify/lib';
 import { ClickOutside } from 'vuetify/lib/directives';
 import i18n from '@/plugins/i18n';
+import { themes } from '@/config/themes';
 
 Vue.use(Vuetify);
 
-export default new Vuetify({
+const vuetify = new Vuetify({
   directives: {
     ClickOutside
   },
@@ -22,9 +23,9 @@ export default new Vuetify({
     },
     themes: {
       dark: {
-        primary: '#2f9cac',
-        secondary: '#b0bec5',
-        accent: '#8c9eff',
+        primary: themes.cardano.primary,
+        secondary: themes.cardano.secondary,
+        accent: themes.cardano.accent,
         success: '#75E0A7',
         error: '#ff6464',
         geroTeal: '#00DFF3',
@@ -34,6 +35,31 @@ export default new Vuetify({
         appBarBackground: '#141414',
         cardBackground: '#0C0E12',
       },
+      light: {
+        primary: themes.cardano.primary,
+        secondary: themes.cardano.secondary,
+        accent: themes.cardano.accent,
+        success: '#75E0A7',
+        error: '#ff6464',
+        geroTeal: '#00DFF3',
+        background: '#fff',
+        contentBackground: '#fff',
+        navigationDrawerBackground: '#fff',
+        appBarBackground: '#f5f5f5',
+        cardBackground: '#fff',
+      },
     },
   },
 });
+
+// Function to update Vuetify theme colors dynamically
+export const updateVuetifyTheme = (isApex: boolean, isDark: boolean = true) => {
+  const themeColors = isApex ? themes.apex : themes.cardano;
+  const themeType = isDark ? 'dark' : 'light';
+  
+  vuetify.framework.theme.themes[themeType].primary = themeColors.primary;
+  vuetify.framework.theme.themes[themeType].secondary = themeColors.secondary;
+  vuetify.framework.theme.themes[themeType].accent = themeColors.accent;
+};
+
+export default vuetify;

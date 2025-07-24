@@ -269,7 +269,7 @@ onMounted(() => {
   }
 })
 </script>
-<style>
+<style scoped>
 .transactions-table {
   :is(tbody) {
     cursor: pointer;

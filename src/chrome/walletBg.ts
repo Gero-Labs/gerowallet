@@ -2,6 +2,7 @@ import Dexie, { DexieError } from 'dexie';
 import { Api } from '@/api/api';
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto'
+import { APIError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import {
@@ -14,7 +15,7 @@ import {
   BIP44_SCAN_SIZE, WalletTypePurpose, CoinTypes, ERROR,
 } from '@/models/types';
 import {
-  addrToSignWith,
+  addrToSignWith, decryptWithPassword,
   getAddress,
   getCcColdKey,
   getCcHotKey,
@@ -51,13 +52,35 @@ import {
 import { Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { DataSignError } from '@/chrome/config';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
-import { util } from '@cardano-sdk/core';
+import { Serialization, util } from '@cardano-sdk/core';
 import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import * as CryptoTS from 'crypto-ts';
-import { decrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
-
+import {
+  Address,
+  Certificate,
+  CertificateKind,
+  FixedTransaction,
+  RewardAddress,
+  StakeDeregistration, Transaction,
+  TransactionBody,
+  TransactionInput,
+  TransactionWitnessSet,
+} from '@emurgo/cardano-serialization-lib-browser';
+import {
+  addVkeys,
+  getOwnedCred,
+  hdPathToArray,
+} from '@/shared/utils/converter';
+import { convertToTxSchema } from '@/chrome/helper';
+import {
+  serializeCardanoJsSdkTx,
+  // deserializeCardanoJsSdkTx,
+  // computeTxHash,
+  // extractStakeCredentialsFromCertificates,
+  // createSignableTransaction
+} from '@/chrome/cardanoJsSdkCbor';
 
 let blockchainDb: Dexie = null;
 
@@ -397,11 +420,6 @@ export class WalletBg {
     return this.loaderFactory.load('transactions');
   }
 
-  public async disconnectDapp(id: number) {
-    const walletDB: Dexie = await this.getDb();
-    walletDB.table('connected_dapps').delete(id)
-  }
-
   async getLastSyncInfo() {
     return this.getDb()
       .then(async db => {
@@ -634,17 +652,6 @@ export class WalletBg {
     return getDrepKey(this.publicKey, 0)
   }
 
-  decryptWithPassword(password: string, privateKey): Buffer {
-    const passwordHex = Buffer.from(password).toString('hex');
-    let decryptedHex;
-    try {
-      decryptedHex = decrypt_with_password(passwordHex, privateKey);
-    } catch (err) {
-      throw new Error('Wrong Passphrase');
-    }
-    return Buffer.from(decryptedHex, 'hex');
-  }
-
   requestAccountKey(password: string, accountIndex: number): {
     accountKey: Bip32PrivateKey,
     paymentKey: Ed25519PrivateKey,
@@ -654,7 +661,7 @@ export class WalletBg {
     let accountKey: Bip32PrivateKey;
     try {
       const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
-      const buffer: Buffer = this.decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      const buffer: Buffer = decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
       accountKey = Bip32PrivateKey.fromBytes(buffer)
         .derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]);
     } catch (e) {
@@ -699,6 +706,196 @@ export class WalletBg {
 
     // Set the last sync info once everything is done
     await this.setLastSyncInfo(tip);
+  }
+
+  verifySpendingPassword(password: string) {
+    console.log('verifySpendingPassword', password);
+    try {
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Enhanced signTx method that supports both Cardano JS SDK and legacy Emurgo transactions
+   * @param txInput - Either a CBOR hex string (legacy) or Cardano.Tx object (Cardano JS SDK)
+   * @param partialSign - Whether this is a partial signing operation
+   * @param password - Wallet password for software wallets
+   * @param accountIndex - Account index for derivation
+   * @param utxos - UTXOs for reference
+   * @param addresses - Address mappings
+   * @param isUsb - USB connection flag for hardware wallets
+   * @returns Promise with witness set hex string
+   */
+  async signTx(txInput: string | Cardano.Tx, partialSign: boolean = false, password: string, accountIndex: number, utxos, addresses: string[], isUsb?: boolean): Promise<{ witnesses: string }> {
+    let txCbor: string;
+    let isCardanoJsSdk = false;
+
+    // Check if input is a Cardano JS SDK transaction or legacy CBOR hex
+    if (typeof txInput === 'string') {
+      // Legacy CBOR hex string
+      txCbor = txInput;
+    } else {
+      // Cardano JS SDK transaction object
+      isCardanoJsSdk = true;
+      txCbor = serializeCardanoJsSdkTx(txInput);
+    }
+
+    // Parse transaction using Emurgo library (needed for hardware wallet compatibility)
+    const rawTx: FixedTransaction = FixedTransaction.from_hex(txCbor);
+    const witnessSet: TransactionWitnessSet = rawTx.witness_set();
+    const txBody: TransactionBody = rawTx.body();
+    const baseAddress: Cardano.Address = Cardano.Address.fromBech32(this.baseAddress);
+    const stakeAddress: RewardAddress = RewardAddress.from_address(Address.from_bech32(this.stakeAddress));
+
+    const credList: Set<any> = new Set();
+    const accountData = {
+      account: {
+        pub: this.publicKey,
+        path: [purpose.hdwallet, 1815, accountIndex]
+      },
+      keys: {
+        payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
+        stake: [{
+          cred: Serialization.Credential.fromCore(Cardano.BaseAddress.fromAddress(baseAddress).getStakeCredential()).value().hash,
+          path: `m/${purpose.hdwallet}'/1815'/${accountIndex}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
+        }],
+        change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
+        script: [],
+        drep: [],
+        cc_cold: [],
+        cc_hot: []
+      }
+    };
+
+    // Analyze transaction inputs for required credentials
+    for (let i = 0; i < txBody.inputs().len(); i++) {
+      const input: TransactionInput = txBody.inputs().get(i);
+      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
+      const inputTxIndex = input.index();
+      const utxo = utxos.find((utxo) => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
+
+      if (utxo) {
+        const address: string = addresses[utxo.payment_addr.bech32];
+        credList.add(address);
+      }
+    }
+
+    // Enhanced certificate analysis for both legacy and Cardano JS SDK certificates
+    if (txBody.certs()) {
+      console.log('Processing certificates for signing');
+      for (let i = 0; i < txBody.certs().len(); i++) {
+        const certificate: Certificate = txBody.certs().get(i);
+        let keyHash: string;
+
+        // Handle different certificate types
+        if (certificate.kind() == CertificateKind.StakeRegistration) {
+          const stakeRegistration = certificate.as_stake_registration();
+          keyHash = stakeRegistration.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.StakeDeregistration) {
+          const stakeDeregistration: StakeDeregistration = certificate.as_stake_deregistration();
+          keyHash = stakeDeregistration.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.StakeDelegation) {
+          const stakeDelegation = certificate.as_stake_delegation();
+          keyHash = stakeDelegation.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.StakeRegistrationAndDelegation) {
+          const stakeRegistrationAndDelegation = certificate.as_stake_registration_and_delegation();
+          keyHash = stakeRegistrationAndDelegation.stake_credential().to_keyhash().to_hex();
+        } else if (certificate.kind() == CertificateKind.VoteDelegation) {
+          const voteDelegation = certificate.as_vote_delegation();
+          keyHash = voteDelegation.stake_credential().to_keyhash().to_hex();
+        }
+
+        if (keyHash && accountData.keys.stake[0].cred === keyHash) {
+          credList.add(accountData.keys.stake[0]);
+        }
+      }
+    }
+
+    // Check for withdrawals
+    if (txBody.withdrawals()) {
+      const bigNum = txBody.withdrawals().get(stakeAddress);
+      if (bigNum) {
+        credList.add(accountData.keys.stake[0]);
+      }
+    }
+
+    // Handle existing vkey witnesses
+    const vKeyHashes = new Set();
+    if (witnessSet?.vkeys()) {
+      for (let i = 0; i < witnessSet.vkeys().len(); i++) {
+        vKeyHashes.add(witnessSet.vkeys().get(i).vkey().public_key().hash().to_hex());
+      }
+    }
+
+    // Handle required signers
+    if (txBody.required_signers()) {
+      for (let i = 0; i < txBody.required_signers().len(); i++) {
+        const requiredKeyHash = txBody.required_signers().get(i);
+        const requiredVKeyHash = requiredKeyHash.to_hex();
+        if (!vKeyHashes.has(requiredVKeyHash)) {
+          credList.add(getOwnedCred([accountData.keys], requiredVKeyHash));
+        }
+      }
+    }
+
+    console.log(`Signing ${isCardanoJsSdk ? 'Cardano JS SDK' : 'legacy Emurgo'} transaction with ${credList.size} credentials`);
+
+    // Handle different wallet types
+    if (this.type === WalletType.Ledger) {
+      // Ledger signing logic would go here
+      // For now, return empty witnesses to indicate hardware wallet integration needed
+      return { witnesses: '' };
+    } else if (this.type === WalletType.Trezor) {
+      // Trezor signing logic would go here
+      return { witnesses: '' };
+    } else {
+      // Software wallet signing
+      console.log('Signing with Software Wallet...');
+      const bytes = CryptoTS.AES.decrypt(this.encryptedPrivateKey, password);
+      const decodedHash = decryptWithPassword(password, JSON.parse(bytes.toString(CryptoTS.enc.Utf8)));
+      password = null;
+
+      if (!decodedHash && partialSign === false) {
+        throw TxSignError.ProofGeneration;
+      }
+
+      const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
+      const txHash = rawTx.transaction_hash();
+
+      addVkeys(txHash, witnessSet, credList, prvRootKeyBech32);
+
+      return {
+        witnesses: witnessSet.to_hex()
+      };
+    }
+  }
+
+  async submitTx(tx: Transaction, utxos) {
+    const txCbor = tx.to_hex()
+    try {
+      const txId = await this.api.submitTx(txCbor);
+      const tx = convertToTxSchema(txId, txCbor, utxos, this.networkId())
+      this.setAccountTransactions([tx])
+        .catch(e => console.log(e))
+      return txId;
+    } catch (error) {
+      console.log(error)
+      if (error['response'].status === 400) {
+        throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      } else if (error['response'].status === 500) {
+        throw new Error(APIError.InternalError.info);
+      } else if (error['response'].status === 429) {
+        throw new Error(TxSendError.Refused.info);
+      } else if (error['response'].status === 425) {
+        throw new Error(ERROR.fullMempool);
+      } else {
+        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error['response'].data)));
+      }
+    }
   }
 
   async signData(address: Cardano.PaymentAddress | Cardano.RewardAccount | string, payload: string, password: string, accountIndex: number, isUsb: boolean) {

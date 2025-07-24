@@ -3,10 +3,12 @@ import { jsonToPlutusData } from '@/chrome/serialization';
 import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob, isNotNil } from '@cardano-sdk/util';
 import { TextDecoder } from 'web-encoding';
-import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
 import { CID } from 'multiformats/cid';
+import * as bip39 from 'bip39';
+import { Buffer } from 'buffer';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
@@ -548,4 +550,9 @@ export function get24hChange(data) {
     change,
     percentChange
   };
+}
+
+export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
+  const bip39entropy = bip39.mnemonicToEntropy(mnemonic);
+  return Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39entropy, 'hex'), '');
 }
