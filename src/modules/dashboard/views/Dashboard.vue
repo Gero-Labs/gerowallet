@@ -291,8 +291,8 @@ const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
-      adaData: [],
-      usdData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : []
+      adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
+      usdData: [],
     }
   }
   // For other chains, calculate from transactions
