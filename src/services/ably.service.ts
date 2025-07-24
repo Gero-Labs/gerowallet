@@ -25,28 +25,33 @@ class AblyService {
   private api: Api | null = null;
 
   constructor() {
+    console.debug('🏗️ Creating new Ably client instance');
     this.client = new Ably.Realtime({
       autoConnect: false,
       closeOnUnload: false,
       queueMessages: false,
       authCallback: (tokenParams, callback) => {
-        console.log('🔐 Ably auth callback called with params:', tokenParams);
+        console.debug('🔐 ================== AUTH CALLBACK TRIGGERED ==================');
+        console.debug('🔐 Ably auth callback called with params:', tokenParams);
+        console.debug('🔐 Auth params at callback time:', this.authParams);
+        console.debug('🔐 API instance at callback time:', !!this.api);
 
         if (!this.authParams) {
           console.error('❌ No auth params set');
           return callback('Ably: not yet authenticated', null);
         }
 
-        console.log('🔐 Fetching token with auth params:', this.authParams);
+        console.debug('🔐 Fetching token with auth params:', this.authParams);
 
         if (!this.api) {
           console.error('❌ API instance not set');
           return callback('API instance not initialized', null);
         }
 
+        console.debug('🌐 Making API call to /api/ably/token endpoint...');
         this.api.ablyToken(this.authParams.address)
           .then(res => {
-            console.log('✅ Token received successfully', res.data);
+            console.debug('✅ Token received successfully', res.data);
             // Handle both string and object responses from backend
             const tokenData = typeof res.data === 'string' ? res.data : res.data.token;
             callback(null, tokenData);
@@ -99,19 +104,36 @@ class AblyService {
     this.client.connection.on('closed', () => {
       console.info('❌ Ably connection closed');
     });
+
+    // Listen for all connection state changes
+    this.client.connection.on((connectionStateChange: Ably.ConnectionStateChange) => {
+      console.debug('🔄 Connection state changed:', {
+        previous: connectionStateChange.previous,
+        current: connectionStateChange.current,
+        reason: connectionStateChange.reason,
+        retryIn: connectionStateChange.retryIn
+      });
+    });
   }
 
   public connect(): void {
-    console.log('🔄 Attempting to connect to Ably...');
+    console.debug('🔄 Attempting to connect to Ably...');
+    console.debug('🔍 Auth params at connect time:', this.authParams);
+    console.debug('🔍 API instance at connect time:', !!this.api);
+    console.debug('🔍 Current connection state:', this.client.connection.state);
     this.client.connect();
   }
 
   public close(): void {
     try {
+      console.debug('🔄 Closing Ably connection...');
       this.client.connection?.close();
       this.client.close();
+      // Reset auth params to force re-authentication on next connect
+      this.authParams = null;
+      this.api = null;
     } catch (e) {
-      console.log(e);
+      console.debug(e);
     }
   }
 
@@ -128,14 +150,17 @@ class AblyService {
   ): Promise<void> {
     return new Promise((resolve) => {
       const privateChan = address;
-      console.log('🔐 Attempting to subscribe to private channel:', privateChan);
+      console.debug('🔐 Attempting to subscribe to private channel:', privateChan);
+      console.debug('🔐 Connection state before subscription:', this.client.connection.state);
 
       if (!this.subscribedChannels.has(privateChan)) {
+        console.debug('🔐 Getting channel for private subscription...');
         const channel: Ably.RealtimeChannel = this.client.channels.get(privateChan);
+        console.debug('🔐 Channel obtained, setting up subscription...');
 
         // Subscribe to messages (like group channel does)
         channel.subscribe(async (msg: Ably.InboundMessage) => {
-          console.log(`📨 RAW message received on private channel ${privateChan}:`, {
+          console.debug(`📨 RAW message received on private channel ${privateChan}:`, {
             name: msg.name,
             data: msg.data,
             timestamp: msg.timestamp,
@@ -146,13 +171,13 @@ class AblyService {
           // Handle specific message types
           switch (msg.name) {
             case 'SYNC':
-              console.log('🔄 Processing SYNC message');
+              console.debug('🔄 Processing SYNC message');
               if (handlers.onSync) {
                 await handlers.onSync(msg);
               }
               break;
             default:
-              console.log(`📬 Received message type: ${msg.name}`, msg.data);
+              console.debug(`📬 Received message type: ${msg.name}`, msg.data);
               if (handlers.onMessage) {
                 await handlers.onMessage(msg);
               }
@@ -161,11 +186,11 @@ class AblyService {
 
         // Add channel state listeners for debugging
         channel.on('attached', () => {
-          console.log(`✅ Private channel ${privateChan} attached successfully`);
+          console.debug(`✅ Private channel ${privateChan} attached successfully`);
         });
 
         channel.on('detached', () => {
-          console.log(`❌ Private channel ${privateChan} detached`);
+          console.debug(`❌ Private channel ${privateChan} detached`);
         });
 
         channel.on('failed', (error) => {
@@ -173,7 +198,7 @@ class AblyService {
         });
 
         this.subscribedChannels.set(privateChan, channel);
-        console.log(`📝 Subscribed to private channel: ${privateChan}`);
+        console.debug(`📝 Subscribed to private channel: ${privateChan}`);
       }
 
       // Resolve immediately like group channel does
@@ -197,13 +222,13 @@ class AblyService {
         channel.subscribe(async (msg: Ably.InboundMessage) => {
           switch (msg.name) {
             case 'TIP':
-              console.log('🔄 Processing TIP message');
+              console.debug('🔄 Processing TIP message');
               if (handlers.onTip) {
                 handlers.onTip(msg);
               }
               break;
             default:
-              console.log('▶ Group: ' + msg.name, msg.data);
+              console.debug('▶ Group: ' + msg.name, msg.data);
               if (handlers.onMessage) {
                 await handlers.onMessage(msg);
               }
@@ -211,7 +236,7 @@ class AblyService {
         });
 
         this.subscribedChannels.set(groupChan, channel);
-        console.log('Subscribed to group channel: ', groupChan);
+        console.debug('Subscribed to group channel: ', groupChan);
       }
       resolve();
     });
@@ -219,7 +244,7 @@ class AblyService {
 
   public async publishToSyncChannel(chain: string, network: string, data: any): Promise<void> {
     const syncChannel: string = `${chain.toUpperCase()}.${network.toUpperCase()}.SYNC`;
-    console.log('Syncing...');
+    console.debug('Syncing...');
     await this.client.channels.get(syncChannel).publish('SYNC', JSON.stringify(data));
   }
 

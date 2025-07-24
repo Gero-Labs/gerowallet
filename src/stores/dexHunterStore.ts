@@ -23,22 +23,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['dexHunterStore']) {
     const newValue = changes['dexHunterStore'].newValue;
     
-    // Prevent flickering by checking if incoming data is stale for various properties
-    const updatedProps = { ...newValue };
-    
-    // Check dexHunterTokens - don't overwrite if current state has more tokens
-    if (newValue.dexHunterTokens && dexHunterStore.dexHunterTokens && 
-        Object.keys(newValue.dexHunterTokens).length < Object.keys(dexHunterStore.dexHunterTokens).length) {
-      delete updatedProps.dexHunterTokens;
-    }
-    
-    // Check blacklistPolicies - don't overwrite if current state has more policies
-    if (newValue.blacklistPolicies && dexHunterStore.blacklistPolicies && 
-        newValue.blacklistPolicies.length < dexHunterStore.blacklistPolicies.length) {
-      delete updatedProps.blacklistPolicies;
-    }
-    
-    Object.assign(dexHunterStore, updatedProps);
+    // DexHunter store contains global blockchain data (tokens, blacklist policies)
+    // that doesn't change based on user transactions, so we can safely sync all updates
+    Object.assign(dexHunterStore, newValue);
   }
 });
 

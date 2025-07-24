@@ -155,11 +155,11 @@ export class EpochParamsLoader extends BaseLoader {
             maxValueSize: epochParams?.max_val_size || defaultEpochParams.max_val_size,
             collateralPercentage: epochParams?.collateral_percent,
             maxCollateralInputs: epochParams?.max_collateral_inputs,
-            costModels: new Map<Cardano.PlutusLanguageVersion, Cardano.CostModel>([
-              [Cardano.PlutusLanguageVersion.V1, Object.values(epochParams.cost_models.PlutusV1)],
-              [Cardano.PlutusLanguageVersion.V2, Object.values(epochParams.cost_models.PlutusV2)],
-              [Cardano.PlutusLanguageVersion.V3, Object.values(epochParams.cost_models.PlutusV3)],
-            ]),
+            costModels: epochParams?.cost_models ? new Map<Cardano.PlutusLanguageVersion, Cardano.CostModel>([
+              [Cardano.PlutusLanguageVersion.V1, Object.values(epochParams.cost_models.PlutusV1 || {})],
+              [Cardano.PlutusLanguageVersion.V2, Object.values(epochParams.cost_models.PlutusV2 || {})],
+              [Cardano.PlutusLanguageVersion.V3, Object.values(epochParams.cost_models.PlutusV3 || {})],
+            ]) : new Map(),
             prices: {
               memory: epochParams?.price_mem,
               steps: epochParams?.price_step
@@ -174,31 +174,31 @@ export class EpochParamsLoader extends BaseLoader {
             } as Cardano.ExUnits
           };
           const newProtocolParamsInBabbage = {
-            coinsPerUtxoByte: epochParams.coins_per_utxo_size
+            coinsPerUtxoByte: epochParams?.coins_per_utxo_size
           };
           const newProtocolParamsInConway = {
-            poolVotingThresholds: {
+            poolVotingThresholds: epochParams?.pvt_motion_no_confidence ? {
               motionNoConfidence: Cardano.FractionUtils.toFraction(epochParams.pvt_motion_no_confidence),
               committeeNormal: Cardano.FractionUtils.toFraction(epochParams.pvt_committee_normal),
               committeeNoConfidence: Cardano.FractionUtils.toFraction(epochParams.pvt_committee_no_confidence),
               hardForkInitiation: Cardano.FractionUtils.toFraction(epochParams.pvt_hard_fork_initiation),
               securityRelevantParamVotingThreshold: Cardano.FractionUtils.toFraction(epochParams.pvt_p_p_security_group),
-            } as Cardano.PoolVotingThresholds,
-            dRepVotingThresholds: {
+            } as Cardano.PoolVotingThresholds : undefined,
+            dRepVotingThresholds: epochParams?.dvt_update_to_constitution ? {
               updateConstitution: Cardano.FractionUtils.toFraction(epochParams.dvt_update_to_constitution),
               ppNetworkGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_network_group),
               ppEconomicGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_economic_group),
               ppTechnicalGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_technical_group),
               ppGovernanceGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_gov_group),
               treasuryWithdrawal: Cardano.FractionUtils.toFraction(epochParams.dvt_treasury_withdrawal),
-            } as Cardano.DelegateRepresentativeThresholds,
-            minCommitteeSize: epochParams.committee_min_size,
-            committeeTermLimit: Cardano.EpochNo(epochParams.committee_max_term_length),
-            governanceActionValidityPeriod: Cardano.EpochNo(epochParams.gov_action_lifetime),
-            governanceActionDeposit: epochParams.gov_action_deposit,
-            dRepDeposit: epochParams.drep_deposit,
-            dRepInactivityPeriod: Cardano.EpochNo(epochParams.drep_activity),
-            minFeeRefScriptCostPerByte: epochParams.min_fee_ref_script_cost_per_byte
+            } as Cardano.DelegateRepresentativeThresholds : undefined,
+            minCommitteeSize: epochParams?.committee_min_size,
+            committeeTermLimit: epochParams?.committee_max_term_length ? Cardano.EpochNo(epochParams.committee_max_term_length) : undefined,
+            governanceActionValidityPeriod: epochParams?.gov_action_lifetime ? Cardano.EpochNo(epochParams.gov_action_lifetime) : undefined,
+            governanceActionDeposit: epochParams?.gov_action_deposit,
+            dRepDeposit: epochParams?.drep_deposit,
+            dRepInactivityPeriod: epochParams?.drep_activity ? Cardano.EpochNo(epochParams.drep_activity) : undefined,
+            minFeeRefScriptCostPerByte: epochParams?.min_fee_ref_script_cost_per_byte
           };
           NetworkStore.setEpochParams({
             ...protocolParametersByron,
