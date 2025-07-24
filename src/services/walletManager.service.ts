@@ -89,7 +89,6 @@ export class WalletManager {
         this.currentWalletId = wallet.id;
 
         LoadingState.setText('Wallet ready');
-        LoadingState.setLoading(false);
 
         console.debug('Wallet login successful for wallet:', wallet.id);
         return walletBg;
@@ -101,6 +100,8 @@ export class WalletManager {
       console.error('Error during wallet login:', error);
       await this.logout();
       throw error;
+    } finally {
+      LoadingState.setLoading(false);
     }
   }
 
@@ -175,11 +176,11 @@ export class WalletManager {
       hasAuthParams: !!ablyService['authParams'],
       hasApi: !!ablyService['api']
     });
-    
+
     // Force close existing connection if any to ensure fresh authentication
     ablyService.close();
     console.debug('🔐 Closed existing Ably connection, setting new auth params...');
-    
+
     ablyService.setAuthParams(chain, network, address);
     ablyService.setApi(walletBg.api);
     console.debug('📡 Connecting to Ably service...');
@@ -200,7 +201,6 @@ export class WalletManager {
             }
             this.syncMutex.runExclusive(async () => {
               LoadingState.setText('');
-              LoadingState.setConnected(true);
               LoadingState.setSyncing(true);
               const syncObject = JSON.parse(msg.data);
               console.debug('📊 Processing sync object:', syncObject);
@@ -284,8 +284,16 @@ export class WalletManager {
       }
 
       // Clean up Ably service
-      ablyService.unsubscribeAll();
-      ablyService.close();
+      try {
+        if (ablyService && typeof ablyService.unsubscribeAll === 'function') {
+          ablyService.unsubscribeAll();
+        }
+        if (ablyService && typeof ablyService.close === 'function') {
+          ablyService.close();
+        }
+      } catch (ablyError) {
+        console.warn('Failed to cleanup Ably service during logout:', ablyError);
+      }
 
       // Send logout message to background
       try {
@@ -299,29 +307,47 @@ export class WalletManager {
 
       // Clear Chrome storage
       if (chrome?.storage) {
-        await Promise.all([
-          chrome.storage.local.remove(STORAGE.whitelisted),
-          chrome.storage.local.remove('loggedWallet'),
-          chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
-          chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
-        ]);
+        try {
+          await Promise.all([
+            chrome.storage.local.remove(STORAGE.whitelisted),
+            chrome.storage.local.remove('loggedWallet'),
+            chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
+            chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
+          ]);
+        } catch (storageError) {
+          console.warn('Failed to clear Chrome storage during logout:', storageError);
+        }
       }
 
       // Clear wallet store data
-      WalletStore.logout();
+      try {
+        WalletStore.logout();
+      } catch (storeError) {
+        console.warn('Failed to logout from wallet store:', storeError);
+      }
 
       // Reset service state
-      this.walletBg.unsubscribeAll();
+      try {
+        if (this.walletBg && typeof this.walletBg.unsubscribeAll === 'function') {
+          this.walletBg.unsubscribeAll();
+        }
+      } catch (walletBgError) {
+        console.warn('Failed to unsubscribe from walletBg during logout:', walletBgError);
+      }
       this.walletBg = null;
       this.currentWalletId = null;
 
       // Dispatch logout event
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('gero:logout', {
-          bubbles: true,
-          cancelable: true,
-          composed: false,
-        }));
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('gero:logout', {
+            bubbles: true,
+            cancelable: true,
+            composed: false,
+          }));
+        }
+      } catch (eventError) {
+        console.warn('Failed to dispatch logout event:', eventError);
       }
 
       console.debug('WalletManager: Logout completed successfully');
