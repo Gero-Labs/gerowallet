@@ -77,7 +77,7 @@
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
                     <h5>Saturation</h5>
-                    <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
+                    <v-progress-linear rounded :color="filters.getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
                       <template v-slot:default="{ value }">
                         <strong>{{ Math.ceil(value) }}%</strong>
                       </template>
@@ -178,7 +178,7 @@ import {
   StakeDeregistration,
   Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { getColor, toUTxO2 } from '@/shared/utils/converter';
+import { toUTxO2 } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/utils/networks';
@@ -330,7 +330,7 @@ const isNumeric = (n) => {
   return !isNaN(parseFloat(n)) && isFinite(n);
 }
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }

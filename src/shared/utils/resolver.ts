@@ -3,16 +3,18 @@ import { jsonToPlutusData } from '@/chrome/serialization';
 import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob, isNotNil } from '@cardano-sdk/util';
 import { TextDecoder } from 'web-encoding';
-import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
+import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
 import { CID } from 'multiformats/cid';
+import * as bip39 from 'bip39';
+import { Buffer } from 'buffer';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
-// For service worker, we'll provide fallback values instead of importing assets
+// Import assets from centralized location
 let greenSvg = '';
 let purpleSvg = '';
 let pinkSvg = '';
@@ -23,15 +25,20 @@ let errorImage = '';
 
 if (!isServiceWorker) {
   try {
-    greenSvg = require('@/assets/svg/green.svg').default || require('@/assets/svg/green.svg');
-    purpleSvg = require('@/assets/svg/purple.svg').default || require('@/assets/svg/purple.svg');
-    pinkSvg = require('@/assets/svg/pink.svg').default || require('@/assets/svg/pink.svg');
-    orangeSvg = require('@/assets/svg/orange.svg').default || require('@/assets/svg/orange.svg');
-    blueSvg = require('@/assets/svg/blue.svg').default || require('@/assets/svg/blue.svg');
-    greySvg = require('@/assets/svg/grey.svg').default || require('@/assets/svg/grey.svg');
-    errorImage = require('@/assets/img/1x1.png').default || require('@/assets/img/1x1.png');
+    // Use centralized assets instead of require
+    import('@/utils/assets').then(assets => {
+      greenSvg = assets.default.greenSvg;
+      purpleSvg = assets.default.purpleSvg;
+      pinkSvg = assets.default.pinkSvg;
+      orangeSvg = assets.default.orangeSvg;
+      blueSvg = assets.default.blueSvg;
+      greySvg = assets.default.greySvg;
+      errorImage = assets.default.errorImage;
+    }).catch(e => {
+      console.warn('Failed to load assets:', e);
+    });
   } catch (e) {
-    // Fallback if require fails
+    // Fallback if imports fail
     console.warn('Failed to load assets:', e);
   }
 }
@@ -548,4 +555,9 @@ export function get24hChange(data) {
     change,
     percentChange
   };
+}
+
+export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
+  const bip39entropy = bip39.mnemonicToEntropy(mnemonic);
+  return Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39entropy, 'hex'), '');
 }

@@ -36,7 +36,11 @@ export class SyncService {
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
-        await this.walletBg.restore(tip);
+        try {
+          await this.walletBg.restore(tip);
+        } finally {
+          LoadingState.setRestoring(false);
+        }
       } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const promises = [];
         promises.push(this.syncGenesis());
@@ -80,7 +84,7 @@ export class SyncService {
         });
       }
     } catch (err) {
-      console.log(err);
+      console.debug(err);
     }
   }
 
@@ -137,7 +141,7 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
-      console.log('setSync', syncObject);
+      console.debug('setSync', syncObject);
       NetworkStore.setTip({
         blockNo: syncObject.block.height,
         slot: syncObject.block.slot,
@@ -210,7 +214,7 @@ export class SyncService {
             await genesisTable.put({ id: 0, ...res.data });
             NetworkStore.setGenesis(res.data)
           } else {
-            console.log(res.status)
+            console.debug(res.status)
             console.warn(parseHttpError(res))
           }
         } catch (error) {
@@ -297,7 +301,7 @@ export class SyncService {
         return txsCborResults;
       }
     } catch (e) {
-      console.log(e);
+      console.debug(e);
     }
   }
 
@@ -365,11 +369,11 @@ export class SyncService {
     try {
       const res: AxiosResponse = await this.api.getAssetsInfo(units);
       if (res.status === 200 && res.data.length > 0) {
-        console.log(res.data);
+        console.debug(res.data);
         return res.data;
       }
     } catch (e) {
-      console.log(e);
+      console.debug(e);
     }
     return null;
   }
@@ -384,7 +388,7 @@ export class SyncService {
         return res;
       }
     } catch (e) {
-      console.log(e);
+      console.debug(e);
     }
     return null;
   }
@@ -399,7 +403,7 @@ export class SyncService {
         return res;
       }
     } catch (e) {
-      console.log(e);
+      console.debug(e);
     }
     return null;
   }

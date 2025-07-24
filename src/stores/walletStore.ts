@@ -53,61 +53,46 @@ export const walletStore = Vue.observable<WalletStore>({
   connectedDapps: []
 });
 
-chrome.storage.local.get('walletStore', (res) => {
-  const stored = res['walletStore']
-  if (stored) {
-    Object.assign(walletStore, stored);
-  }
-});
+// Promise-based storage hydration to prevent race conditions
+export const hydrateWalletStore = (): Promise<void> => {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('walletStore', (res) => {
+      const stored = res['walletStore']
+      if (stored) {
+        Object.assign(walletStore, stored);
+        console.log('Wallet store hydrated from Chrome storage');
+      }
+      resolve();
+    });
+  });
+};
+
+// Initialize hydration immediately but make it awaitable
+hydrateWalletStore();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['walletStore']) {
     const newValue = changes['walletStore'].newValue;
 
-    // Prevent flickering by checking if incoming data is stale for various properties
+    // Don't sync changes if we're logged out (no logged wallet) to prevent data leakage
+    if (!newValue.loggedWallet && walletStore.loggedWallet) {
+      // User is logging out, clear all data immediately
+      return;
+    }
+
+    // Don't sync changes during wallet switching to prevent cross-wallet contamination
+    if (newValue.loggedWallet && walletStore.loggedWallet && 
+        newValue.loggedWallet.id !== walletStore.loggedWallet.id) {
+      // Different wallet, don't sync to prevent data leakage
+      return;
+    }
+
+    // Only sync changes for the same wallet or initial hydration
     const updatedProps = { ...newValue };
 
-    // Check tokens - don't overwrite if current state has more tokens
-    if (newValue.tokens && walletStore.tokens &&
-        Object.keys(newValue.tokens).length < Object.keys(walletStore.tokens).length) {
-      delete updatedProps.tokens;
-    }
-
-    // Check collections - don't overwrite if current state has more collections
-    if (newValue.collections && walletStore.collections &&
-        Object.keys(newValue.collections).length < Object.keys(walletStore.collections).length) {
-      delete updatedProps.collections;
-    }
-
-    // Check transactions - don't overwrite if current state has more transactions
-    if (newValue.transactions && walletStore.transactions &&
-        newValue.transactions.length < walletStore.transactions.length) {
-      delete updatedProps.transactions;
-    }
-
-    // Check utxos - don't overwrite if current state has more utxos
-    if (newValue.utxos && walletStore.utxos &&
-        newValue.utxos.length < walletStore.utxos.length) {
-      delete updatedProps.utxos;
-    }
-
-    // Check rewards - don't overwrite if current state has more rewards
-    if (newValue.rewards && walletStore.rewards &&
-        newValue.rewards.length < walletStore.rewards.length) {
-      delete updatedProps.rewards;
-    }
-
-    // Check contacts - don't overwrite if current state has more contacts
-    if (newValue.contacts && walletStore.contacts &&
-        Object.keys(newValue.contacts).length < Object.keys(walletStore.contacts).length) {
-      delete updatedProps.contacts;
-    }
-
-    // Check connectedDapps - don't overwrite if current state has fewer dapps (user just removed one)
-    if (newValue.connectedDapps && walletStore.connectedDapps &&
-        newValue.connectedDapps.length > walletStore.connectedDapps.length) {
-      delete updatedProps.connectedDapps;
-    }
+    // For the same wallet, allow all updates to ensure accurate state
+    // The wallet isolation above prevents cross-wallet contamination
+    // so we can trust that same-wallet updates are legitimate
 
     Object.assign(walletStore, updatedProps);
   }
@@ -299,6 +284,21 @@ export default {
     this.setFiatRatesIntervalId(null);
     this.setRewards([]);
     this.setConnectedDapps([]);
+  },
+  clearForWalletSwitch() {
+    // Clear all wallet-specific data immediately during wallet switching
+    // This prevents cross-wallet data contamination
+    walletStore.account = null;
+    walletStore.transactions = [];
+    walletStore.utxos = [];
+    walletStore.collateral = null;
+    walletStore.keys = null;
+    walletStore.tokens = {};
+    walletStore.collections = {};
+    walletStore.rewards = [];
+    walletStore.contacts = {};
+    walletStore.connectedDapps = [];
+    // Note: loggedWallet and config are updated separately during login process
   },
   state: walletStore
 };

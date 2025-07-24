@@ -218,7 +218,7 @@ const props = defineProps({
     default: false,
   },
   drep: {
-    type: Object,
+    type: Object as () => any,
     default: () => {},
   },
   tx: {
@@ -263,7 +263,7 @@ const depositFee = computed(() => {
   if (props.tx?.body()?.inputs()) {
     for (let i = 0; i < props.tx?.body()?.inputs().len(); i++) {
       const input = props.tx?.body()?.inputs().get(i)
-      const utxo = utxos.value?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
+      const utxo = utxos.value?.find(((utxo: Cardano.Utxo) => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index()))
       if (utxo) {
         totalAdaOutput -= Number(utxo.value)
       }
@@ -401,23 +401,6 @@ const signDelegationTx = async () => {
   } else {
     await signAndReturnTx();
   }
-};
-
-const getColor = (value: number) => {
-  if (value > 100) {
-    value = 100
-  }
-  value = value / 100
-  //value from 0 to 1
-  const hue = ((1 - value) * 120).toString(10);
-  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-};
-
-const poolExtendedInfo = (pool: any) => {
-  if (pool && pool.pool_extended_info) {
-    return JSON.parse(pool.pool_extended_info);
-  }
-  return undefined
 };
 
 const fallbackImage = (e: any) => {

@@ -145,6 +145,7 @@ import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 
@@ -259,15 +260,47 @@ watch(() => breakpoint.mobile,
 )
 
 async function submitLogout() {
-  await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.LOGOUT,
-    data: { },
-  }).then(() => {
-    // // Wait for next tick to ensure wallet store is cleared before navigation
-    vmProxy.$nextTick(() => {
-      router.push('/welcome')
-    })
-  });
+  try {
+    // Clear all Chrome alarms
+    if (chrome.alarms) {
+      chrome.alarms.clearAll();
+      console.debug('All Chrome alarms cleared during logout');
+    }
+    
+    // Send logout message to background
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGOUT,
+      data: { },
+    });
+    
+    // Clear the wallet store immediately to allow navigation to welcome
+    WalletStore.logout();
+    
+    // Navigate to welcome page immediately since store is now cleared
+    router.replace('/welcome').catch(err => {
+      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
+      // Fallback: force page reload to welcome
+      window.location.hash = '#/welcome';
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    // Clear store and navigate even if logout message fails
+    try {
+      // Clear alarms even if other logout steps fail
+      if (chrome.alarms) {
+        chrome.alarms.clearAll();
+        console.debug('Chrome alarms cleared during error recovery');
+      }
+      WalletStore.logout();
+    } catch (storeError) {
+      console.warn('Failed to clear wallet store during logout:', storeError);
+    }
+    
+    router.replace('/welcome').catch(err => {
+      console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
+      window.location.hash = '#/welcome';
+    });
+  }
 }
 
 // Lifecycle
