@@ -23,12 +23,12 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Chart Controls -->
       <div class="chart-controls-section">
         <!-- Empty left side for spacing -->
         <div></div>
-        
+
         <!-- Right side controls group -->
         <div class="right-controls-group">
           <!-- Date Picker Tabs -->
@@ -43,7 +43,7 @@
             >
               <v-tab
                 v-for="(tabItem, index) in Object.values(tabs)"
-                :key="tabItem.value"
+                :key="`${tabItem.value}_${index}`"
                 style="font-size: 10px; letter-spacing: normal; min-width: 50px"
                 @click="handleTabClick(tabItem)"
                 :disabled="isDisabled(tabItem)"
@@ -51,7 +51,7 @@
               </v-tab>
             </v-tabs>
           </div>
-          
+
           <!-- Series Toggle Buttons (next to date picker) -->
           <!-- COMMENTED OUT: Dual-axis functionality
           <div class="series-toggle-buttons">
@@ -102,7 +102,6 @@
         <v-img
           :src="assets.walletSvg"
           alt="Wallet"
-          style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness-105%) contrast(104%)"
         ></v-img>
       </v-avatar>
       <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
@@ -180,7 +179,7 @@ const tabs = {
 
 // Computed properties
 const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || 
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
          loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
@@ -197,16 +196,8 @@ const primaryColor = computed(() => {
 });
 
 const shortenAddress = computed(() => {
-  return loggedWallet.value?.baseAddress ? 
+  return loggedWallet.value?.baseAddress ?
     filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
-});
-
-const adaPrice = computed(() => {
-  const priceValue = props.chartData[props.chartData.length - 1]?.[1];
-  if (lastPrice.value === -1 || !priceValue) {
-    return null;
-  }
-  return (lastPrice.value * priceValue);
 });
 
 // Portfolio value formatting with ADA/USD toggle
@@ -217,7 +208,7 @@ const formatPortfolioValue = (): string => {
     const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
     return filters.toCurrency(props.portfolioValueAda, false, 2, currency, '', true, 0);
   }
-  
+
   // Fallback with proper currency symbol
   const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
   return showUsd.value ? '$0.00' : `${currency}0`;
@@ -264,7 +255,7 @@ const toggleCurrency = (): void => {
 const formatAxisNumber = (value: number, currency: string = ''): string => {
   const absValue = Math.abs(value);
   let formattedValue: string;
-  
+
   if (absValue >= 1000000000) {
     formattedValue = (value / 1000000000).toFixed(1) + 'B';
   } else if (absValue >= 1000000) {
@@ -274,10 +265,10 @@ const formatAxisNumber = (value: number, currency: string = ''): string => {
   } else {
     formattedValue = value.toFixed(0);
   }
-  
+
   // Remove unnecessary .0 decimals
   formattedValue = formattedValue.replace(/\.0([KMB])$/, '$1');
-  
+
   return currency ? `${currency}${formattedValue}` : formattedValue;
 };
 
@@ -285,9 +276,9 @@ const formatAxisNumber = (value: number, currency: string = ''): string => {
 // Create simple single-axis chart series (ADA only)
 const createChartSeries = (chartData: any[]): any[] => {
   console.log('Creating simple ADA chart series:', chartData.length, 'points');
-  
+
   const series = [];
-  
+
   // Only show ADA data
   if (chartData.length > 0) {
     console.log('Adding ADA series with', chartData.length, 'points');
@@ -313,7 +304,7 @@ const createChartSeries = (chartData: any[]): any[] => {
       },
     });
   }
-  
+
   console.log('Total series created:', series.length);
   return series;
 };
@@ -325,9 +316,9 @@ const createChartSeries = (chartData: any[]): any[] => {
 //   console.log('USD chartDataUsd:', props.chartDataUsd.length, 'points');
 //   console.log('Sample ADA data point:', chartData[0]);
 //   console.log('Sample USD data point:', props.chartDataUsd[0]);
-//   
+//
 //   const series = [];
-//   
+//
 //   if (showAda.value && chartData.length > 0) {
 //     console.log('Adding ADA series with', chartData.length, 'points');
 //     series.push({
@@ -353,22 +344,22 @@ const createChartSeries = (chartData: any[]): any[] => {
 //       },
 //     });
 //   }
-//   
+//
 //   if (showUsd.value) {
 //     // Use dedicated USD data if available, otherwise calculate from ADA data
-//     const usdData = props.chartDataUsd.length > 0 
-//       ? props.chartDataUsd 
+//     const usdData = props.chartDataUsd.length > 0
+//       ? props.chartDataUsd
 //       : price.value?.lastPrice && chartData.length > 0
 //         ? chartData.map(point => [
 //             point[0], // timestamp
 //             point[1] * price.value.lastPrice // ADA value * current price (not historical)
 //           ])
 //         : [];
-//     
+//
 //     console.log('USD data source:', props.chartDataUsd.length > 0 ? 'props.chartDataUsd' : 'calculated from ADA');
 //     console.log('USD data length:', usdData.length);
 //     console.log('Sample USD data:', usdData[0]);
-//     
+//
 //     if (usdData.length > 0) {
 //       console.log('Adding USD series with', usdData.length, 'points');
 //       series.push({
@@ -395,8 +386,8 @@ const createChartSeries = (chartData: any[]): any[] => {
 //       });
 //     }
 //   }
-//   
-//   
+//
+//
 //   console.log('Total series created:', series.length);
 //   return series;
 // };
@@ -406,19 +397,19 @@ const loadChart = (newVal) => {
   if (!newVal.length) {
     return;
   }
-  
+
   // Use only ADA data
   const primaryData = newVal;
-  
+
   // Initial Y-axis will auto-scale, then be updated by time filtering
   const axisRange = null; // Let Highcharts auto-scale initially
-  
+
   // Ensure the chart container is visible before rendering
   const chartContainer = document.getElementById('highstock-chart');
   if (!chartContainer || chartContainer.style.display === 'none') {
     return;
   }
-  
+
   // Destroy existing chart instance before creating a new one
   if (chartInstance.value) {
     try {
@@ -428,7 +419,7 @@ const loadChart = (newVal) => {
     }
     chartInstance.value = null;
   }
-  
+
   // COMMENTED OUT: Dual-axis Y-axis update throttling
   // Create throttled version of Y-axis update for performance
   // let yAxisUpdateTimeout: NodeJS.Timeout | null = null;
@@ -441,7 +432,7 @@ const loadChart = (newVal) => {
   //     yAxisUpdateTimeout = null;
   //   }, 100); // Reduced frequency
   // };
-  
+
   const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
   const data = {
     accessibility: {
@@ -451,7 +442,7 @@ const loadChart = (newVal) => {
       useHTML: true,
       floating: true,
       align: "left",
-      text: generateTitleText(tabs.ALL),
+      text: '',
       style: {
         fontSize: "14px",
       },
@@ -509,7 +500,7 @@ const loadChart = (newVal) => {
       //       const seriesColor = point.color;
       //       const value = point.y;
       //       const seriesName = point.series.name;
-      //       const formattedValue = seriesName === 'ADA Balance' 
+      //       const formattedValue = seriesName === 'ADA Balance'
       //         ? filters.toCurrency(value, false, 2, currency, '', true, 0)
       //         : filters.toCurrency(value, false, 2, '$', '', true, 0);
       //       tooltipContent += `<span style="color:${seriesColor}">●</span> ${seriesName}: <b>${formattedValue}</b><br/>`;
@@ -666,7 +657,7 @@ const loadChart = (newVal) => {
     useUTC: true,
   };
   chartInstance.value = Highstock.stockChart("highstock-chart", data);
-  
+
   // Completely disable wheel events on chart container (reuse existing chartContainer variable)
   if (chartContainer) {
     chartContainer.addEventListener('wheel', (e) => {
@@ -710,10 +701,10 @@ const isDisabled = (tabItem) => {
 
 const handleTabClick = (tabItem) => {
   tab.value = tabItem;
-  
+
   // Save tab preference to localStorage
   savePortfolioTabSetting(tabItem.value);
-  
+
   let start = new Date();
   const end = new Date();
   if (tabItem.value === tabs.YEAR.value) {
@@ -745,7 +736,7 @@ const handleTabClick = (tabItem) => {
     end.getUTCMinutes(),
     end.getUTCSeconds()
   );
-  
+
   if (chartInstance.value?.xAxis) {
     console.log('Setting time range:', {
       start: new Date(startUTC).toLocaleDateString(),
@@ -753,19 +744,19 @@ const handleTabClick = (tabItem) => {
       hasChart: !!chartInstance.value,
       hasXAxis: !!chartInstance.value.xAxis[0]
     });
-    
+
     // Set time range first
     chartInstance.value.xAxis[0].setExtremes(startUTC, endUTC);
     console.log('Time range set, scheduling Y-axis update...');
-    
+
     // COMMENTED OUT: Dual-axis Y-axis range update
     // setTimeout(() => {
     //   console.log('Executing scheduled Y-axis update...');
     //   updateYAxisRange(startUTC, endUTC);
     // }, 50);
-    
+
     if (chartInstance.value?.title) {
-      chartInstance.value.title.update({ text: generateTitleText() });
+      chartInstance.value.title.update({ text: '' });
     }
   }
 };
@@ -774,29 +765,29 @@ const handleTabClick = (tabItem) => {
 // Optimized Y-axis range update
 // const updateYAxisRange = (startTime: number, endTime: number) => {
 //   if (!chartInstance.value || !chartInstance.value.yAxis) return;
-//   
+//
 //   // Early exit if no data
 //   if (!props.chartData.length && !props.chartDataUsd.length) return;
-//   
+//
 //   // Efficient binary search for time range filtering (assuming sorted data)
 //   const findDataInRange = (data: [number, number][]) => {
 //     if (!data.length) return [];
-//     
+//
 //     let start = 0;
 //     let end = data.length - 1;
-//     
+//
 //     // Find start index
 //     while (start < data.length && data[start][0] < startTime) start++;
-//     
+//
 //     // Find end index
 //     while (end >= 0 && data[end][0] > endTime) end--;
-//     
+//
 //     return data.slice(start, end + 1);
 //   };
-//   
+//
 //   const visibleAdaData = showAda.value ? findDataInRange(props.chartData) : [];
 //   const visibleUsdData = showUsd.value ? findDataInRange(props.chartDataUsd) : [];
-//   
+//
 //   // Calculate ranges efficiently
 //   if (showDualAxis.value && chartInstance.value.yAxis.length > 1) {
 //     // ADA axis (left)
@@ -813,7 +804,7 @@ const handleTabClick = (tabItem) => {
 //         false // Don't redraw yet
 //       );
 //     }
-//     
+//
 //     // USD axis (right)
 //     if (visibleUsdData.length > 0) {
 //       let usdMin = Infinity, usdMax = -Infinity;
@@ -832,13 +823,13 @@ const handleTabClick = (tabItem) => {
 //     // Single axis mode
 //     const allVisibleData = [...visibleAdaData, ...visibleUsdData];
 //     if (allVisibleData.length === 0) return;
-//     
+//
 //     let dataMin = Infinity, dataMax = -Infinity;
 //     for (const point of allVisibleData) {
 //       if (point[1] < dataMin) dataMin = point[1];
 //       if (point[1] > dataMax) dataMax = point[1];
 //     }
-//     
+//
 //     const padding = (dataMax - dataMin) * 0.05;
 //     chartInstance.value.yAxis[0].setExtremes(
 //       Math.max(0, dataMin - padding),
@@ -862,14 +853,14 @@ watch(price, (newVal) => {
 watch(() => props.chartData, (newChartData, oldChartData) => {
   console.log('Chart data changed:');
   console.log('New ADA data:', newChartData?.length || 0, 'points');
-  
+
   if (arraysEqual(newChartData, oldChartData)) {
     console.log('Data unchanged, skipping');
     return;
   }
   console.log('Loading chart with new data and applying', tab.value.value, 'filter');
   loadChart(newChartData);
-  
+
   // Apply the current time range filter after chart loads with new data
   if (newChartData?.length > 0) {
     setTimeout(() => {
@@ -884,7 +875,7 @@ watch(loggedWallet, () => {
   if (props.chartData.length > 0) {
     console.log('Wallet changed, reloading chart with', tab.value.value, 'filter');
     loadChart(props.chartData);
-    
+
     // Apply the current time range filter after wallet change
     setTimeout(() => {
       handleTabClick(tab.value);
@@ -903,7 +894,7 @@ onBeforeUnmount(() => {
 onMounted(() => {
   console.log('PortfolioChart mounted (single-axis mode)');
   console.log('chartData received:', props.chartData);
-  
+
   // Set correct initial tab index based on saved preference (default to 7D)
   const savedTab = loadPortfolioTabSetting();
   const tabValues = Object.values(tabs);
@@ -917,11 +908,11 @@ onMounted(() => {
     selectedTabIndex.value = weekIndex !== -1 ? weekIndex : 4;
     tab.value = tabs.WEEK;
   }
-  
+
   if (props.chartData.length > 0) {
     console.log('Loading chart with data and applying', tab.value.value, 'filter');
     loadChart(props.chartData);
-    
+
     // Apply the initial time range filter after chart loads
     setTimeout(() => {
       handleTabClick(tab.value);
@@ -1080,7 +1071,7 @@ onMounted(() => {
     flex-direction: column;
     gap: 12px;
   }
-  
+
   .chart-controls-section {
     position: relative;
     flex-direction: column;
@@ -1089,22 +1080,22 @@ onMounted(() => {
     left: 0;
     right: 0;
   }
-  
+
   .right-controls-group {
     flex-direction: column;
     gap: 6px;
   }
-  
+
   .toggle-btn.compact {
     min-width: 24px !important;
     height: 20px !important;
     font-size: 7px !important;
   }
-  
+
   .dual-axis-btn.compact {
     min-width: 22px !important;
   }
-  
+
   .portfolio-amount {
     font-size: 1.25rem;
   }
@@ -1116,7 +1107,7 @@ onMounted(() => {
     align-items: flex-start;
     gap: 8px;
   }
-  
+
   .portfolio-amount {
     font-size: 1.125rem;
   }

@@ -168,7 +168,7 @@ const router = instance?.proxy.$router;
 // Store refs
 const { loggedWallet, transactions, account } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { portfolio, portfolioTrendedValue, portfolioTrendedValueADA } = toRefs(tapToolsStore);
+const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
 
 const kaiserExLoading = ref(false);
 const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
@@ -291,7 +291,7 @@ const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
-      adaData: Array.isArray(portfolioTrendedValueADA.value) ? portfolioTrendedValueADA.value : [],
+      adaData: [],
       usdData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : []
     }
   }
