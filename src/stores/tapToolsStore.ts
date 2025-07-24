@@ -20,11 +20,7 @@ chrome.storage.local.get('tapToolsStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['tapToolsStore']) {
-    Object.assign(tapToolsStore, changes['tapToolsStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<TapToolsStore>) {
   const next = { ...tapToolsStore, ...patch };

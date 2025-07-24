@@ -15,11 +15,7 @@ chrome.storage.local.get('realFiStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['realFiStore']) {
-    Object.assign(realFiStore, changes['realFiStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<RealFiStore>) {
   const next = { ...realFiStore, ...patch };

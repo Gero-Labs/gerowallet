@@ -16,11 +16,7 @@ chrome.storage.local.get('coinGeckoStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['coinGeckoStore']) {
-    Object.assign(coinGeckoStore, changes['coinGeckoStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<CoinGeckoStore>) {
   const next = { ...coinGeckoStore, ...patch };
