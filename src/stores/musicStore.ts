@@ -37,11 +37,7 @@ chrome.storage.local.get('musicStore', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['musicStore']) {
-    Object.assign(musicStore, changes['musicStore'].newValue);
-  }
-});
+// Removed chrome.storage.onChanged listener to prevent data overwrite issues
 
 function persist(patch: Partial<MusicStore>) {
   const next = { ...musicStore, ...patch };

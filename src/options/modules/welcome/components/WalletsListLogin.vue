@@ -57,6 +57,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import loading from '@/stores/loading';
+import WalletStore from '@/stores/walletStore';
 
 const selectedWallet = ref<string | null>(null);
 
@@ -95,12 +96,25 @@ const submitLogin = async (walletId: string): Promise<void> => {
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
+    
+    // Wait briefly for chrome.storage.onChanged to sync the loggedWallet
+    await new Promise(resolve => setTimeout(resolve, 100));
+    console.debug('Wallet store after login:', !!WalletStore.state.loggedWallet);
+    
     const queryParams = vmProxy.$route.query;
+    console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
+    console.debug('🧭 Query params:', queryParams);
+    
     if (queryParams['redirect']) {
-      await vmProxy.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
+      const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
+      console.debug('🧭 Navigating to redirect path:', redirectPath);
+      await vmProxy.$router.push(redirectPath);
     } else {
+      console.debug('🧭 Navigating to home page: /');
       await vmProxy.$router.push("/");
     }
+    
+    console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);
   }

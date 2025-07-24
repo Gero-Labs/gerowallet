@@ -70,50 +70,72 @@ export const hydrateWalletStore = (): Promise<void> => {
 // Initialize hydration immediately but make it awaitable
 hydrateWalletStore();
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['walletStore']) {
-    const newValue = changes['walletStore'].newValue;
+// Selective chrome.storage.onChanged listener for critical cross-context sync
+// Only listen for specific keys that need background -> options sync
+const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections'];
 
-    // Don't sync changes if we're logged out (no logged wallet) to prevent data leakage
-    if (!newValue.loggedWallet && walletStore.loggedWallet) {
-      // User is logging out, clear all data immediately
-      return;
-    }
-
-    // Don't sync changes during wallet switching to prevent cross-wallet contamination
-    if (newValue.loggedWallet && walletStore.loggedWallet && 
-        newValue.loggedWallet.id !== walletStore.loggedWallet.id) {
-      // Different wallet, don't sync to prevent data leakage
-      return;
-    }
-
-    // Only sync changes for the same wallet or initial hydration
-    const updatedProps = { ...newValue };
-
-    // For the same wallet, allow all updates to ensure accurate state
-    // The wallet isolation above prevents cross-wallet contamination
-    // so we can trust that same-wallet updates are legitimate
-
-    Object.assign(walletStore, updatedProps);
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+  
+  const walletStoreChanges = changes['walletStore'];
+  if (!walletStoreChanges) return;
+  
+  const { newValue, oldValue } = walletStoreChanges;
+  if (!newValue) return;
+  
+  // Check if any of our sync keys changed
+  const hasRelevantChanges = SYNC_KEYS.some(key => {
+    const oldVal = oldValue?.[key];
+    const newVal = newValue[key];
+    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+  });
+  
+  if (hasRelevantChanges) {
+    console.debug('🔄 Cross-context sync: updating wallet store from background changes');
+    
+    // Only update the keys that actually changed to prevent overwrite issues
+    SYNC_KEYS.forEach(key => {
+      const oldVal = oldValue?.[key];
+      const newVal = newValue[key];
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        console.debug(`📝 Syncing ${key} from background`);
+        walletStore[key] = newVal;
+      }
+    });
   }
 });
 
 function persist(patch: Partial<WalletStore>) {
   const next = { ...walletStore, ...patch };
-  const nextString: string = JSON.stringify(next, (key, value) => {
-      if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
-      } else if (typeof value === 'bigint') {
-        return value.toString();
-      } else {
-        return value;
+  try {
+    const nextString: string = JSON.stringify(next, (key, value) => {
+        if (value instanceof Map) {
+          return Array.from(value.entries()).reduce((obj, [key, value]) => {
+            obj[key] = value;
+            return obj;
+          }, {});
+        } else if (typeof value === 'bigint') {
+          return value.toString();
+        } else {
+          return value;
+        }
       }
+    );
+    chrome.storage.local.set({ walletStore: JSON.parse(nextString) }, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Chrome storage error:', chrome.runtime.lastError);
+      } else {
+        console.debug('Successfully saved to Chrome storage, keys:', Object.keys(patch));
+      }
+    });
+  } catch (error) {
+    console.error('Persist failed for patch:', Object.keys(patch), error);
+    // Try to persist without the problematic patch
+    if (Object.keys(patch).length === 1) {
+      const key = Object.keys(patch)[0];
+      console.warn(`Skipping persist for ${key} due to serialization error`);
     }
-  )
-  chrome.storage.local.set({ walletStore: JSON.parse(nextString) });
+  }
 }
 
 export default {
@@ -154,6 +176,7 @@ export default {
     persist({ keys: keys });
   },
   setTokens(tokens: {}) {
+    console.debug('Setting tokens:', Object.keys(tokens).length, 'tokens');
     walletStore.tokens = tokens;
     persist({ tokens: tokens });
   },
@@ -272,6 +295,7 @@ export default {
     return !!whitelisted.find(el => origin.includes(el.domain));
   },
   logout() {
+    console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
     this.setLoggedWallet(null);
     this.setAccount(null);
     this.setTransactions([]);

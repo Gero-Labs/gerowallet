@@ -225,6 +225,7 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
+    console.log('submitLogin', walletId);
     // await store.setLogin(Number(walletId)); TODO google wallet
   } catch (error) {
     console.error(error);

@@ -241,7 +241,7 @@ const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any
 const currentPage = computed(() => vmProxy.$route)
 const { isSyncing, connected } = toRefs(loadingState);
-const { loggedWallet } = toRefs(walletStore);
+const { loggedWallet, tokens } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore)
@@ -255,14 +255,14 @@ const swapDialog = ref(false)
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value)
 
-// GERO ticker data
-const geroToken = computed(() => {
-  return walletStore.tokens["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
-})
-
 const geroPrice = computed(() => {
-  if (geroToken.value?.price) {
-    return geroToken.value.price.toFixed(6)
+  const geroToken = tokens.value["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
+  console.log('geroToken', geroToken)
+  if (!geroToken) {
+    // TODO Add Gero Token
+  }
+  if (geroToken?.price) {
+    return geroToken.price.toFixed(6)
   }
   return 'GERO'
 })

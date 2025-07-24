@@ -24,9 +24,36 @@ chrome.storage.local.get('loadingState', (res) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['loadingState']) {
-    Object.assign(loadingState, changes['loadingState'].newValue);
+const SYNC_KEYS = ['loading', 'text', 'isSyncing', 'isRestoring', 'connected', 'loadingTxs'];
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+
+  const loadingStoreChanges = changes['loadingState'];
+  if (!loadingStoreChanges) return;
+
+  const { newValue, oldValue } = loadingStoreChanges;
+  if (!newValue) return;
+
+  // Check if any of our sync keys changed
+  const hasRelevantChanges = SYNC_KEYS.some(key => {
+    const oldVal = oldValue?.[key];
+    const newVal = newValue[key];
+    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+  });
+
+  if (hasRelevantChanges) {
+    console.debug('🔄 Cross-context sync: updating wallet store from background changes');
+
+    // Only update the keys that actually changed to prevent overwrite issues
+    SYNC_KEYS.forEach(key => {
+      const oldVal = oldValue?.[key];
+      const newVal = newValue[key];
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        console.debug(`📝 Syncing ${key} from background`);
+        loadingState[key] = newVal;
+      }
+    });
   }
 });
 
