@@ -14,7 +14,6 @@
                 <v-img
                   :src="assets.walletSvg"
                   alt="Wallet"
-                  style="filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(66deg) brightness(105%) contrast(104%)"
                 ></v-img>
               </v-avatar>
               <span class="address-text">{{ shortenAddress }}</span>
@@ -169,7 +168,6 @@ const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const showUsd = ref(false); // Toggle state for showing USD in portfolio value
 
 const tabs = {
-  ALL: { value: "ALL", label: "ALL", vsLabel: "vs all time" },
   YEAR: { value: "YEAR", label: "12M", vsLabel: "vs last year" },
   QUARTER: { value: "QUARTER", label: "3M", vsLabel: "vs last quarter" },
   MONTH: { value: "MONTH", label: "30D", vsLabel: "vs last month" },
@@ -656,7 +654,7 @@ const loadChart = (newVal) => {
     series: createChartSeries(primaryData),
     useUTC: true,
   };
-  chartInstance.value = Highstock.stockChart("highstock-chart", data);
+  chartInstance.value = Highstock.stockChart("highstock-chart", data as any);
 
   // Completely disable wheel events on chart container (reuse existing chartContainer variable)
   if (chartContainer) {
@@ -983,7 +981,6 @@ onMounted(() => {
 .address-text {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.6);
-  font-family: 'Roboto Mono', monospace;
 }
 
 /* Chart Controls Section */
