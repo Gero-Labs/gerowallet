@@ -37,28 +37,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes['networkStore']) {
     const newValue = changes['networkStore'].newValue;
     
-    // Prevent flickering by checking if incoming data is stale for various properties
-    const updatedProps = { ...newValue };
-    
-    // Check assets - don't overwrite if current state has more assets
-    if (newValue.assets && networkStore.assets && 
-        Object.keys(newValue.assets).length < Object.keys(networkStore.assets).length) {
-      delete updatedProps.assets;
-    }
-    
-    // Check dreps - don't overwrite if current state has more dreps
-    if (newValue.dreps && networkStore.dreps && 
-        Object.keys(newValue.dreps).length < Object.keys(networkStore.dreps).length) {
-      delete updatedProps.dreps;
-    }
-    
-    // Check pools - don't overwrite if current state has more pools
-    if (newValue.pools && networkStore.pools && 
-        Object.keys(newValue.pools).length < Object.keys(networkStore.pools).length) {
-      delete updatedProps.pools;
-    }
-    
-    Object.assign(networkStore, updatedProps);
+    // Network store contains global blockchain data (assets, pools, dreps, epoch params)
+    // that represents the current state of the Cardano network, not user-specific data
+    // So we can safely sync all updates without size-based filtering
+    Object.assign(networkStore, newValue);
   }
 });
 

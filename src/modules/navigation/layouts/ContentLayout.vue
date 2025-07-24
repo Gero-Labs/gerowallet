@@ -1,14 +1,14 @@
 <template>
   <div>
     <v-app style="background: transparent !important;">
-      <v-main style="position: relative; z-index: 1; background: transparent !important;">
+      <v-main style="position: relative; z-index: 1; background: black !important;">
       <v-container class="pa-0" style="position: relative;">
         <!-- Background - Confined to dashboard working area -->
-        <div 
-          :class="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? 'apex-background-dashboard' : 'cardano-background-dashboard'" 
+        <div
+          :class="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? 'apex-background-dashboard' : 'cardano-background-dashboard'"
           :style="{ backgroundImage: `url(${loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR ? assets.apexBg : assets.cardanoBg})` }"
         ></div>
-        
+
         <v-layout :align-start="true">
           <NavigationDrawer v-model="drawer" />
           <v-sheet
@@ -27,9 +27,9 @@
               :justify-start="true"
               style="min-height: calc(100vh - 90px); flex-direction: column; background-color: transparent;"
             >
-              <v-app-bar 
-                flat 
-                color="transparent" 
+              <v-app-bar
+                flat
+                color="transparent"
                 style="max-height: 55px;"
               >
                 <v-app-bar-nav-icon
@@ -46,9 +46,9 @@
                 </div>
 
                 <v-spacer />
-                
+
                 <QuickActionsBox />
-                
+
                 <v-spacer />
 
                 <v-tooltip bottom content-class="network-tooltip">
@@ -74,11 +74,12 @@
                         :color="primaryColor"
                         background-color="transparent"
                         style="width: 50px;"
+                        striped
                       ></v-progress-linear>
 
                     </div>
                   </template>
-                  
+
                   <div class="network-tooltip-content">
                     <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
                     <div><strong>Last Sync:</strong> {{ tip?.time ? time.format(new Date(tip.time)) : 'N/A' }}</div>
@@ -218,8 +219,9 @@ import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialo
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue'
 import { Blockchain } from '@/models/types';
-import filters from '@/shared/utils/filters'
 import assets from '@/utils/assets'
+import { themes, iconFilters } from '@/config/themes'
+import { updateVuetifyTheme } from '@/plugins/vuetify'
 import { loadingState } from '@/stores/loading'
 import changeLogPlugin from '@/plugins/changeLog'
 import timePlugin from '@/plugins/time'
@@ -227,13 +229,13 @@ import WalletStore, { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
-import MusicStore, { musicStore } from '@/stores/musicStore';
+import { musicStore } from '@/stores/musicStore';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any
 const currentPage = computed(() => vmProxy.$route)
 const { isSyncing, connected } = toRefs(loadingState);
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore)
@@ -249,24 +251,19 @@ const isSwapDialogOpen = computed(() => swapDialog.value)
 
 // GERO ticker data
 const geroToken = computed(() => {
-  const resolvedAssets = walletStore.resolvedAssets || []
-  return resolvedAssets.find((asset: any) => 
-    asset.name?.toLowerCase().includes('gero') || 
-    asset.metadata?.ticker?.toLowerCase() === 'gero'
-  )
+  return walletStore.tokens["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
 })
 
 const geroPrice = computed(() => {
-  if (geroToken.value?.last_price) {
-    return geroToken.value.last_price.toFixed(6)
+  if (geroToken.value?.price) {
+    return geroToken.value.price.toFixed(6)
   }
   return 'GERO'
 })
 
 const primaryColor = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR 
-    ? '#dc753e' 
-    : '#00c7f3'
+  const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR
+  return isApex ? themes.apex.primary : themes.cardano.primary
 })
 
 function openSwapDialog() {
@@ -309,63 +306,17 @@ function closeDialog() {
 // Theme management - update colors when chain changes
 const updateThemeColors = () => {
   const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR
-  
-  if (isApex) {
-    // Apex Orange Theme
-    const orangeColors = {
-      primary: '#dc753e',
-      secondary: '#ff9f6b', 
-      accent: '#e67e22',
-      light: '#f39c12',
-      dark: '#d35400',
-      darker: '#a0522d',
-      muted: '#cd853f',
-      bright: '#ff8c42',
-      gradient1: '#ff7f50',
-      gradient2: '#ffa500'
-    }
-    
-    // Set CSS custom properties for Apex
-    document.documentElement.style.setProperty('--primary-color', orangeColors.primary)
-    document.documentElement.style.setProperty('--secondary-color', orangeColors.secondary)
-    document.documentElement.style.setProperty('--accent-color', orangeColors.accent)
-    document.documentElement.style.setProperty('--light-color', orangeColors.light)
-    document.documentElement.style.setProperty('--dark-color', orangeColors.dark)
-    document.documentElement.style.setProperty('--darker-color', orangeColors.darker)
-    document.documentElement.style.setProperty('--muted-color', orangeColors.muted)
-    document.documentElement.style.setProperty('--bright-color', orangeColors.bright)
-    document.documentElement.style.setProperty('--gradient1-color', orangeColors.gradient1)
-    document.documentElement.style.setProperty('--gradient2-color', orangeColors.gradient2)
-    document.documentElement.style.setProperty('--icon-filter', 'invert(64%) sepia(89%) saturate(1200%) hue-rotate(353deg) brightness(110%) contrast(95%)')
-    
-  } else {
-    // Cardano Teal Theme  
-    const tealColors = {
-      primary: '#00c7f3',
-      secondary: '#00ffd1',
-      accent: '#2f9cac', 
-      light: '#00DFF3',
-      dark: '#00BAAD',
-      darker: '#155B75',
-      muted: '#009DAB',
-      bright: '#00D1FF',
-      gradient1: '#00dff3',
-      gradient2: '#00fad5'
-    }
-    
-    // Set CSS custom properties for Cardano
-    document.documentElement.style.setProperty('--primary-color', tealColors.primary)
-    document.documentElement.style.setProperty('--secondary-color', tealColors.secondary)
-    document.documentElement.style.setProperty('--accent-color', tealColors.accent)
-    document.documentElement.style.setProperty('--light-color', tealColors.light)
-    document.documentElement.style.setProperty('--dark-color', tealColors.dark)
-    document.documentElement.style.setProperty('--darker-color', tealColors.darker)
-    document.documentElement.style.setProperty('--muted-color', tealColors.muted)
-    document.documentElement.style.setProperty('--bright-color', tealColors.bright)
-    document.documentElement.style.setProperty('--gradient1-color', tealColors.gradient1)
-    document.documentElement.style.setProperty('--gradient2-color', tealColors.gradient2)
-    document.documentElement.style.setProperty('--icon-filter', 'brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)')
-  }
+  const currentTheme = isApex ? themes.apex : themes.cardano
+  const currentFilter = isApex ? iconFilters.apex : iconFilters.cardano
+
+  // Update Vuetify theme
+  updateVuetifyTheme(isApex, true) // Always dark theme for now
+
+  // Set CSS custom properties
+  Object.entries(currentTheme).forEach(([key, value]) => {
+    document.documentElement.style.setProperty(`--${key}-color`, value)
+  })
+  document.documentElement.style.setProperty('--icon-filter', currentFilter)
 }
 
 // Watch for wallet chain changes
@@ -382,7 +333,7 @@ onMounted(async () => {
 })
 </script>
 
-<style>
+<style scoped lang="scss">
 /* Cardano Background - Confined to dashboard working area */
 .cardano-background-dashboard {
   position: absolute;
@@ -480,7 +431,7 @@ div.v-toolbar__content {
   background: rgba(255, 255, 255, 0.1) !important;
   backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 
+  box-shadow:
     0 8px 32px rgba(0, 199, 243, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
@@ -492,12 +443,12 @@ div.v-toolbar__content {
 }
 
 .epoch-progress-liquid-glass .v-progress-linear__determinate {
-  background: linear-gradient(90deg, 
-    rgba(0, 199, 243, 0.8) 0%, 
-    rgba(0, 199, 243, 1) 50%, 
+  background: linear-gradient(90deg,
+    rgba(0, 199, 243, 0.8) 0%,
+    rgba(0, 199, 243, 1) 50%,
     rgba(0, 199, 243, 0.8) 100%) !important;
   backdrop-filter: blur(10px);
-  box-shadow: 
+  box-shadow:
     0 0 20px rgba(0, 199, 243, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }

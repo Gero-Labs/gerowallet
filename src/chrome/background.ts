@@ -52,7 +52,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { convertToTxSchema } from '@/chrome/helper';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import WalletStore, { walletStore } from '@/stores/walletStore';
+import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletManager } from '@/services/walletManager.service';
 
 if (import.meta.hot) {
@@ -67,10 +68,16 @@ loadConfig().then(() => {
 })
 loadWallets().then(async () => {
   console.log('Wallets loaded')
+
+  // Wait for wallet store to be hydrated from Chrome storage
+  await hydrateWalletStore();
+  console.log('Wallet store hydrated, checking for logged wallet...');
+
   if (walletStore.loggedWallet) {
     console.log('Login in wallet: ', walletStore.loggedWallet.name);
-    await walletManager.setWallet(walletStore.loggedWallet);
+    await walletManager.login(walletStore.loggedWallet);
   } else {
+    console.log('No logged wallet found after hydration');
     Loading.setLoading(false)
   }
 });
@@ -1005,10 +1012,94 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
   }
 });
 
+app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
+  try {
+    console.log('verify spending password', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      const isValid = walletBg.verifySpendingPassword(request.data.password);
+      sendResponse({
+        id: request.id,
+        data: { isValid },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error verifying spending password:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
+  try {
+    console.log('sign tx', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      // Handle both legacy (tx object) and new (txCbor string) formats
+      let transaction;
+      if (request.data.txCbor) {
+        // New format: deserialize CBOR to Cardano.Tx object
+        console.log('Deserializing CBOR transaction:', request.data.txCbor);
+        transaction = deserializeCardanoJsSdkTx(request.data.txCbor);
+      } else if (request.data.tx) {
+        // Legacy format: use transaction object directly
+        console.log('Using legacy transaction object');
+        transaction = request.data.tx;
+      } else {
+        throw new Error('No transaction data provided (neither tx nor txCbor)');
+      }
+
+      const witnessResult = await walletBg.signTx(
+        transaction,
+        request.data.partialSign || false,
+        request.data.password,
+        request.data.accountIndex || 0,
+        request.data.utxos,
+        request.data.addresses,
+        request.data.isUsb
+      );
+      sendResponse({
+        id: request.id,
+        data: witnessResult,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
     console.log('login', request)
-    const walletBg = await walletManager.setWallet(request.data.wallet);
+    const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
       sendResponse({
         id: request.id,

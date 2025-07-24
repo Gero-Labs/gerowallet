@@ -13,6 +13,10 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
+import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import * as CryptoTS from 'crypto-ts';
+import cryptoRandomString from 'crypto-random-string';
+import { decrypt_with_password, encrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -624,4 +628,28 @@ export function keyHashFromAddress(address: string): Hash28ByteBase16 {
     // I want the application to not crush but don't care about the message
   }
   return undefined;
+}
+
+export function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): string {
+  const privateKey = encryptWithPassword(password, rootKey.bytes());
+  return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
+}
+
+export function encryptWithPassword(password, rootKeyBytes): string {
+  const passwordHex = Buffer.from(password).toString('hex');
+  const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
+  const salt = cryptoRandomString({ length: 2 * 32 });
+  const nonce = cryptoRandomString({ length: 2 * 12 });
+  return encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
+}
+
+export function decryptWithPassword(password: string, privateKey): Buffer {
+  const passwordHex = Buffer.from(password).toString('hex');
+  let decryptedHex;
+  try {
+    decryptedHex = decrypt_with_password(passwordHex, privateKey);
+  } catch (err) {
+    throw new Error('Wrong Passphrase');
+  }
+  return Buffer.from(decryptedHex, 'hex');
 }

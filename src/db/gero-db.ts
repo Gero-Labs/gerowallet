@@ -3,11 +3,12 @@ import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/
 import * as bip39 from 'bip39';
 import { encrypt } from '@/shared/utils/crypto';
 import * as Crypto from '@cardano-sdk/crypto';
-import { Wallet } from '@/models/wallet';
 import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
+import { encryptPrivateKey } from '@/chrome/serialization';
+import { resolvePrivateKey } from '@/shared/utils/resolver';
 
 let cachedDb: Dexie | null = null;
 
@@ -153,9 +154,9 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
     isRestore = false;
     mnemonic = bip39.generateMnemonic(256);
   }
-  const encryptedMnemonic = encrypt(mnemonic, password);
-  const rootKey: Crypto.Bip32PrivateKey = Wallet.resolvePrivateKey(mnemonic);
-  const encryptedPrivateKey = Wallet.encryptPrivateKey(rootKey, password);
+  const encryptedMnemonic: string = encrypt(mnemonic, password);
+  const rootKey: Crypto.Bip32PrivateKey = resolvePrivateKey(mnemonic);
+  const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
   const accountIndex = 0;
   const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
   const xpubHex: Crypto.Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
@@ -174,22 +175,20 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
   } else {
     order++;
   }
-  const wallet = new Wallet(null, name, icon, WalletType.Normal, theme, order, encryptedPrivateKey, publicKey,
-    new Date(), chain, network, null, encryptedMnemonic);
   const walletId = await db['wallets'].add({
-    name: wallet.name,
-    icon: wallet.icon,
-    type: wallet.type,
-    theme: wallet.theme,
-    order: wallet.order,
-    encryptedPrivateKey: wallet.encryptedPrivateKey,
-    encryptedMnemonic: wallet.encryptedMnemonic,
-    publicKey: wallet.publicKey,
-    passwordLastUpdate: wallet.passwordLastUpdate,
-    chain: wallet.chain,
-    network: wallet.network
+    name,
+    icon,
+    type: WalletType.Normal,
+    theme,
+    order,
+    encryptedPrivateKey,
+    encryptedMnemonic,
+    publicKey,
+    passwordLastUpdate: new Date(),
+    chain,
+    network
   });
-  await createNewWalletDb(walletId, !!wallet.encryptedMnemonic, isRestore);
+  await createNewWalletDb(walletId, !!encryptedMnemonic, isRestore);
   return walletId;
 }
 
@@ -221,22 +220,20 @@ export async function createNewGoogleWallet(name: string, icon: string, theme: s
   const parts = jwt.split(".");
   const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
   const userId = payload.email;
-  const wallet = new Wallet(null, name, icon, WalletType.Google, theme, order, null, null,
-    new Date(), chain, network, userId);
   const walletId = await db['wallets'].add({
-    name: wallet.name,
-    icon: wallet.icon,
-    type: wallet.type,
-    theme: wallet.theme,
-    order: wallet.order,
-    encryptedPrivateKey: wallet.encryptedPrivateKey,
-    publicKey: wallet.publicKey,
-    passwordLastUpdate: wallet.passwordLastUpdate,
-    chain: wallet.chain,
-    network: wallet.network,
-    userId: userId,
+    name,
+    icon,
+    type: WalletType.Google,
+    theme,
+    order,
+    encryptedPrivateKey: null,
+    publicKey: null,
+    passwordLastUpdate: new Date(),
+    chain,
+    network,
+    userId,
   });
-  await createNewWalletDb(walletId, !!wallet.encryptedMnemonic);
+  await createNewWalletDb(walletId, false);
   return walletId;
 }
 
@@ -281,19 +278,19 @@ export async function setWalletIcon(walletId: number, icon: string): Promise<voi
  * @param encryptedMnemonic - The new encrypted mnemonic (optional)
  */
 export async function updatePrivateKeyAndMnemonic(
-  walletId: number, 
-  encryptedPrivateKey: string, 
+  walletId: number,
+  encryptedPrivateKey: string,
   encryptedMnemonic?: string | null
 ): Promise<void> {
   const db: Dexie = await getDb();
-  const updateData: any = { 
+  const updateData: any = {
     encryptedPrivateKey,
     passwordLastUpdate: new Date()
   };
-  
+
   if (encryptedMnemonic !== undefined) {
     updateData.encryptedMnemonic = encryptedMnemonic;
   }
-  
+
   await db['wallets'].update(walletId, updateData);
 }

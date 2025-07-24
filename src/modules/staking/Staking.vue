@@ -127,7 +127,7 @@
                 {{ item.block_count.toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.live_saturation`]="{ item }">
-                <v-progress-linear rounded :color="getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
+                <v-progress-linear rounded :color="filters.getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
                   <template v-slot:default="{ value }">
                     <strong>{{ Math.ceil(value) }}%</strong>
                   </template>
@@ -216,7 +216,7 @@
                           <span style="font-size: 14px; color: white">Saturation</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-progress-linear height="20" rounded :value="pool.live_saturation" color="#333741">
+                          <v-progress-linear height="20" rounded striped :value="pool.live_saturation" :color="filters.getColor(pool.live_saturation)">
                             <span>{{ pool.live_saturation + '%' }}</span>
                           </v-progress-linear>
                         </v-col>
@@ -259,21 +259,14 @@
         </v-card>
       </v-col>
     </v-row>
-    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
+    <DelegateDialog v-if="txData" :isOpen="isDelegateDialogOpen" @close="closeDelegateDialog" :pool="selectedPool" :tx="txData"></DelegateDialog>
   </v-layout>
 </template>
 <script setup lang="ts">
 import { computed, ref, toRefs, watch, onMounted } from 'vue';
 import CopyButton from "@/shared/components/CopyButton.vue";
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import {
-  Certificate, Ed25519KeyHash,
-  Credential,
-  StakeDelegation,
-  Transaction, TransactionUnspentOutputs, TransactionWitnessSet, StakeRegistration,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { buildTx } from '@/shared/utils/builder';
-import { toUTxO2 } from '@/shared/utils/converter';
+import { Cardano } from '@cardano-sdk/core';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from "@/utils/networks";
 import assets from '@/utils/assets';
@@ -382,15 +375,6 @@ watch(search, (val) => {
   }
 })
 
-const getColor = (value) => {
-  if (value > 100) {
-    value = 100
-  }
-  value = value / 100
-  const hue = ((1 - value) * 120).toString(10);
-  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-}
-
 const delegateToGero = () => {
   if (loggedWallet.value) {
     const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
@@ -402,74 +386,78 @@ const delegateToGero = () => {
   }
 }
 
-const delegate = (row) => {
+function delegate(row: any) {
   console.log('delegate', row)
   selectedPool.value = row
 
-  // const inputResolver: Cardano.InputResolver = {
-  //   resolveInput: async (txIn) =>
-  //     Object.values(utxos.value).find(([hydratedTxIn]) => txIn.txId === hydratedTxIn.txId && txIn.index === hydratedTxIn.index)?.[1] || null
-  // };
-  //
-  // const txBuilder = new GenericTxBuilder({
-  //   txEvaluator: new GreedyTxEvaluator(() => Promise.resolve(epochParams.value)),
-  //   inputResolver,
-  //   witnesser: {
-  //     witness(transaction: Serialization.Transaction, context: SignTransactionContext, options?: WitnessOptions): Promise<WitnessedTx> {
-  //       return null
-  //     },
-  //     signData(props: Cip30SignDataRequest): Promise<Cip30DataSignature> {
-  //       return null;
-  //     }
-  //   },
-  //   txBuilderProviders: {
-  //     tip: () => Promise<Cardano.Tip>,
-  //     protocolParameters: () => Promise.resolve(epochParams.value),
-  //     genesisParameters: () => Promise<Cardano.CompactGenesis>;
-  //     rewardAccounts: () => Promise.resolve({
-  //       address: RewardAccount;
-  //       credentialStatus: StakeCredentialStatus;
-  //       dRepDelegatee?: DRepDelegatee;
-  //       rewardBalance: Lovelace;
-  //       deposit?: Lovelace;
-  //     }),
-  //     utxoAvailable: () => Promise.resolve(utxos),
-  //     addresses: {
-  //       get: () => Promise<GroupedAddress[]>;
-  //       add: (...addresses: GroupedAddress[]) => Promise<GroupedAddress[]>;
-  //     }
-  //   },
-  //   logger: dummyLogger,
-  // });
-  // txBuilder.delegateFirstStakeCredential({
-  //
-  // })
-  const certificates = [];
+  const certificates: Cardano.Certificate[] = [];
+
   console.log(getStakeKey(loggedWallet.value.publicKey, 0).hash().hex())
   console.log(selectedPool.value.pool_id_bech32)
   console.log(keys.value.stake[0].cred)
-  if (!account.value?.active) { // Register and Delegate
-    // const stakeRegistrationDelegation = new Serialization.StakeRegistrationDelegation({
-    //     type: Cardano.CredentialType.KeyHash,
-    //     hash: keys.value.stake[0].cred,
-    //   },
-    //   BigInt(epochParams.value.poolDeposit),
-    //   Cardano.PoolId.toKeyHash(selectedPool.value.pool_id_bech32)
-    // )
 
-    const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(keys.value.stake[0].cred))))
+  // Create stake credential from the key hash
+  const stakeCredential: Cardano.Credential = {
+    type: Cardano.CredentialType.KeyHash,
+    hash: keys.value.stake[0].cred
+  };
+
+  if (!account.value?.active) {
+    // Create stake registration certificate
+    const registrationCertificate: Cardano.StakeRegistrationCertificate = {
+      __typename: Cardano.CertificateType.StakeRegistration,
+      stakeCredential
+    };
     certificates.push(registrationCertificate);
   }
-  // Delegation Certificate
-  const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(keys.value.stake[0].cred)), Ed25519KeyHash.from_bech32(selectedPool.value.pool_id_bech32)));
+
+  // Create stake delegation certificate
+  const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+  const delegationCertificate: Cardano.StakeDelegationCertificate = {
+    __typename: Cardano.CertificateType.StakeDelegation,
+    stakeCredential,
+    poolId
+  };
   certificates.push(delegationCertificate);
-  // UTxOs
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
-  const txBody = buildTx(epochParams.value, undefined, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, certificates, [])
-  txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
-  console.log(txBody.to_json())
-  isDelegateDialogOpen.value = true
+
+  // Create change output - for delegation we typically send change back to our own address
+  const changeOutput: Cardano.TxOut = {
+    address: keys.value.payment[0].address, // Use first payment address for change
+    value: {
+      coins: BigInt(0), // Will be calculated properly during signing
+      assets: new Map()
+    }
+  };
+
+  // Build transaction body using Cardano JS SDK
+  const txBody: Cardano.TxBody = {
+    inputs: utxos.value.map((utxo: Cardano.Utxo) => utxo[0]),
+    outputs: [changeOutput],
+    fee: BigInt(200000), // Estimated fee (will be calculated properly by signing infrastructure)
+    validityInterval: {
+      invalidHereafter: Cardano.Slot(tip.value.slot + 3600) // 1 hour from now
+    },
+    certificates
+  };
+
+  // Serialize transaction for the dialog
+  const transaction: Cardano.Tx = {
+    id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
+    body: txBody,
+    witness: {
+      signatures: new Map()
+    }
+  };
+
+  txData.value = transaction;
+  console.log('Transaction built with Cardano JS SDK:', transaction);
+  isDelegateDialogOpen.value = true;
+}
+
+const closeDelegateDialog = () => {
+  isDelegateDialogOpen.value = false;
+  txData.value = null;
+  selectedPool.value = null;
 }
 
 const poolExtendedInfo = (pool: any) => {
@@ -483,7 +471,7 @@ onMounted(() => {
   // isPro.value =
 })
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }
