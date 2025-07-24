@@ -9,21 +9,21 @@
           <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
             <v-card outlined>
               <v-card-subtitle class="pb-0">{{ `Portfolio`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.totalValue, false, 2, '₳', "", true, 0)}}</v-card-title>
+              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.totalValue, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0)}}</v-card-title>
               <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.totalValue) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
             </v-card>
           </v-col>
           <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
             <v-card outlined>
               <v-card-subtitle class="pb-0">{{ `Assets`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.assetsValue, false, 2, '₳', "", true, 0) }}</v-card-title>
+              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.assetsValue, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0) }}</v-card-title>
               <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.assetsValue) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
             </v-card>
           </v-col>
           <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
             <v-card outlined>
               <v-card-subtitle class="pb-0">{{ `Collectibles`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.collectibles, false, 2, '₳', "", true, 0) }}</v-card-title>
+              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.collectibles, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0) }}</v-card-title>
               <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.collectibles) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
             </v-card>
           </v-col>
@@ -33,7 +33,12 @@
           <v-col cols="12" class="pa-2">
             <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
               <v-card-text>
-                <PortfolioChart :chart-data="computeChartData" />
+                <PortfolioChart
+                  :chart-data="computeChartData.adaData"
+                  :chart-data-usd="computeChartData.usdData"
+                  :portfolio-value-ada="computedValues.totalValue"
+                  :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                />
               </v-card-text>
             </v-card>
           </v-col>
@@ -62,7 +67,12 @@
       <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
           <v-card-text>
-            <PortfolioChart :chart-data="computeChartData" />
+            <PortfolioChart
+              :chart-data="computeChartData.adaData"
+              :chart-data-usd="computeChartData.usdData"
+              :portfolio-value-ada="computedValues.totalValue"
+              :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+            />
           </v-card-text>
         </v-card>
       </v-col>
@@ -146,6 +156,7 @@ import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
+import networks from '@/utils/networks';
 
 // Import carousel assets
 import assets from '@/utils/assets';
@@ -262,14 +273,29 @@ const computedValues = computed(() => {
       lpsValue += position.adaValue
     })
   }
+
+  // Fallback for chains without portfolio API support (like Apex)
+  if (!portfolio.value && account.value) {
+    if (account.value.controlled_amount && account.value.controlled_amount > 0) {
+      // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
+      assetsValue += account.value.controlled_amount / 1000000 // Convert to main unit (ADA/APEX)
+    }
+    // Add other asset values if they have USD/ADA pricing data
+  }
+
   const totalValue = assetsValue + collectibles + lpsValue
   return { totalValue, assetsValue, collectibles, lpsValue }
 })
 
 const computeChartData = computed(() => {
+  // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
-    return Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : []
+    return {
+      adaData: [],
+      usdData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : []
+    }
   }
+  // For other chains, calculate from transactions
   let graphData = undefined
   let currentBalance = 0
   if (transactions.value) {
@@ -279,7 +305,10 @@ const computeChartData = computed(() => {
       graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
     })
   }
-  return graphData || []
+  return {
+    adaData: graphData || [],
+    usdData: [] // No historical USD data for non-mainnet
+  }
 });
 
 // Carousel methods
