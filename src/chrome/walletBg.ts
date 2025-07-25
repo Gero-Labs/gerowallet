@@ -34,6 +34,7 @@ import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
 import XerberusStore from '@/stores/xerberusStore';
 import { resolveAsset, findCollectionDescription, findCollectionName, longestCommonStartingSubstring } from '@/shared/utils/resolver';
+import { getDb } from '@/db/wallet-db';
 import RealFiStore from '@/stores/realFiStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import CoinGeckoStore from '@/stores/coinGeckoStore';
@@ -963,21 +964,7 @@ export class WalletBg {
   }
 
   public async getDb(): Promise<Dexie> {
-    const dbName = 'wallet-' + this.id;
-    try {
-      const db: Dexie = new Dexie(dbName);
-      return await db.open();
-    } catch (error: DexieError | any) {
-      console.log(error)
-      if (error.name === 'NoSuchDatabaseError') {
-        const db: Dexie = new Dexie(dbName);
-        db.version(walletDBVersion).stores(walletDBSchema);
-        return db.open();
-      } else {
-        console.error('Error opening database:', error);
-        return null
-      }
-    }
+    return getDb(this.id);
   }
 
   public async getBlockchainDb(): Promise<Dexie> {
