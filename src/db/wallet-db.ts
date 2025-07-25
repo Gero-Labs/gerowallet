@@ -12,11 +12,12 @@ export async function getDb(id: number): Promise<Dexie> {
     
     try {
         const db: Dexie = new Dexie(dbName);
+        db.version(walletDBVersion).stores(walletDBSchema);
         await db.open();
         dbCache.set(dbName, db);
         return db;
     } catch (error: DexieError | any) {
-        console.log(error)
+        console.debug('Database error:', error)
         if (error.name === 'NoSuchDatabaseError') {
             const db: Dexie = new Dexie(dbName);
             db.version(walletDBVersion).stores(walletDBSchema);
