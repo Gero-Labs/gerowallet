@@ -283,7 +283,6 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 8px;
   overflow: visible;
-  max-height: 396px;
 }
 
 .carousel-wrapper .v-card__title {
