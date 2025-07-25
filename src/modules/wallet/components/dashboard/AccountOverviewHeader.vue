@@ -3,11 +3,11 @@
     <div class="header-content">
       <span class="header-title">Account Overview</span>
       <div class="header-actions">
-        <v-btn class="action-btn secondary-btn" variant="outlined" @click="$emit('topUp')">
+        <v-btn class="action-btn secondary-btn" variant="outlined" @click="showTopUpModal = true">
           <img src="@/modules/wallet/icons/currency-dollar.svg" alt="Top up" class="btn-icon" />
           Top up
         </v-btn>
-        <v-btn class="action-btn primary-btn" variant="outlined" @click="$emit('manageCard')">
+        <v-btn class="action-btn primary-btn" variant="outlined" @click="showManageCardModal = true">
           <img src="@/modules/wallet/icons/credit-card.svg" alt="Manage Card" class="btn-icon" />
           Manage Card
         </v-btn>
@@ -17,15 +17,24 @@
         </v-btn>
       </div>
     </div>
+    <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
+    <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
   </div>
 </template>
 
 <script setup lang="ts">
+import TopUpModal from './TopUpModal.vue';
+import ManageCardModal from './ManageCardModal.vue';
+import { ref } from 'vue';
+
 defineEmits<{
   topUp: [];
   manageCard: [];
   qrScan: [];
 }>();
+
+const showTopUpModal = ref(false);
+const showManageCardModal = ref(false);
 </script>
 
 <style lang="scss" scoped>
