@@ -5,7 +5,7 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined>
+        <v-card flat outlined class="liquid-glass">
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>

@@ -1,5 +1,8 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-tabs
       v-model="tab"
       centered
@@ -45,7 +48,10 @@
         <CardanoGovernance />
       </v-tab-item>
     </v-tabs-items>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import assets from '@/utils/assets';

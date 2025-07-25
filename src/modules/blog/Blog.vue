@@ -1,5 +1,8 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center" style="font-size: 32px">
       Blog Posts
     </v-card-title>
@@ -64,7 +67,10 @@
       <div ref="sentinel" style="height:1px; width:100%"></div>
       <v-progress-circular indeterminate v-show="loadingMore"></v-progress-circular>
     </v-card-actions>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from 'vue';

@@ -4,8 +4,8 @@
     :temporary="breakpoint.mobile"
     width="270"
     height="100vh"
-    style="min-width: 270px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
-    class="px-3"
+    style="min-width: 270px; min-height: 100%"
+    class="px-3 liquid-glass-nav-drawer"
     :absolute="breakpoint.mobile"
   >
     <!-- Prepend slot -->

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp:*)",
+      "Bash(diff:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:stackoverflow.com)"
+    ],
+    "deny": []
+  }
+}
