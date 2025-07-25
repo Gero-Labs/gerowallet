@@ -1,11 +1,14 @@
 <template>
-  <div id="tsac">
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <div id="tsac">
     <TransactionsCard
       ref="transactionsCard"
       @row-click="handleOnTransactionsRowClick"
       style=" width: 39%;"
     />
-    <v-card v-if="transactionInfo" style="overflow-y: auto; width: 60%;border:thin solid rgba(255, 255, 255, 0.12);height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);">
+    <v-card v-if="transactionInfo" class="liquid-glass" style="overflow-y: auto; width: 60%;height: fit-content; position: sticky; top: 64px; max-height: calc(100vh - 64px);">
       <TransactionDetails :transactionInfo="transactionInfo" />
     </v-card>
     <ReportDialog
@@ -13,7 +16,10 @@
       @close="isReportDialogOpen = false"
       :reportSite="reportSite"
     />
-  </div>
+        </div>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, getCurrentInstance } from 'vue';

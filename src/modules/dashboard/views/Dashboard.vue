@@ -7,7 +7,7 @@
         <!-- Chart row -->
         <v-row no-gutters>
           <v-col cols="12" class="pa-2">
-            <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+            <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
               <v-card-text>
                 <PortfolioChart
                   :chart-data="computeChartData.adaData"
@@ -48,7 +48,7 @@
     <!-- Separate chart row for non-Cardano wallets -->
     <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
       <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-text>
             <PortfolioChart
               :chart-data="computeChartData.adaData"
@@ -102,7 +102,7 @@
     <!-- KaiserEx Token Reception -->
     <v-row no-gutters>
       <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-        <v-card outlined>
+        <v-card outlined class="liquid-glass">
           <v-card-title>KaiserEx Token Reception</v-card-title>
           <v-card-text>
             <v-btn color="primary" @click="receiveKaiserExToken" :loading="kaiserExLoading">

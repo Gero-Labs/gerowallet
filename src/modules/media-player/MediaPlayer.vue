@@ -1,5 +1,8 @@
 <template>
-  <v-card flat outlined style="min-height: calc(100vh - 80px);">
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card flat outlined class="liquid-glass" style="min-height: calc(100vh - 80px);">
     <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
       <v-col cols="12" xl="6" lg="6" style="align-content: center;">
         <v-card flat class="pa-4 transparent" v-if="currentTrack">
@@ -65,7 +68,10 @@
         </v-card>
       </v-col>
     </v-row>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, toRefs } from 'vue';

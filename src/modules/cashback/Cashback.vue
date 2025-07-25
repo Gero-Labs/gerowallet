@@ -1,5 +1,8 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center" style="font-size: 32px">
       Cashback
     </v-card-title>
@@ -147,7 +150,10 @@
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
     <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath" :search-term="searchTerm"></RetailerDialog>
     <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, toRefs } from 'vue';

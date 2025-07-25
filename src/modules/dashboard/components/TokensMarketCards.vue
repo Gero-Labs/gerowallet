@@ -2,7 +2,7 @@
   <v-row no-gutters class="owned-tokens-market-cards">
     <!-- Top by Volume (from owned tokens) -->
     <v-col cols="12" lg="4" class="pr-2">
-      <v-card flat outlined class="compact-card volume-card" style="position: relative;">
+      <v-card flat outlined class="compact-card volume-card liquid-glass-compact" style="position: relative;">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">
@@ -72,7 +72,7 @@
 
     <!-- Top by Price Change (from owned tokens) -->
     <v-col cols="12" lg="4" class="px-2">
-      <v-card flat outlined class="compact-card gainers-card" style="position: relative;">
+      <v-card flat outlined class="compact-card gainers-card liquid-glass-compact" style="position: relative;">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">
@@ -149,7 +149,7 @@
 
     <!-- Top by Market Cap (from owned tokens) -->
     <v-col cols="12" lg="4" class="pl-2">
-      <v-card flat outlined class="compact-card mcap-card" style="position: relative;">
+      <v-card flat outlined class="compact-card mcap-card liquid-glass-compact" style="position: relative;">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">

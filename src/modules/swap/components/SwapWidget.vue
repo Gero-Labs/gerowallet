@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined max-width="450" class="mx-auto" style="background-color: #191919!important;">
+  <v-card flat outlined max-width="450" class="mx-auto liquid-glass-subtle">
     <v-card-text class="pa-0">
       <v-card flat class="transparent">
         <v-card-title>

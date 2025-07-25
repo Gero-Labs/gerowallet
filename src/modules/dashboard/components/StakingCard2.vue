@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined :loading="loadingTxs">
+  <v-card flat outlined class="liquid-glass" :loading="loadingTxs">
     <v-card-title>Staking</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
