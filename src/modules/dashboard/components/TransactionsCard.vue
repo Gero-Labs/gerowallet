@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="fill-height" :loading="loadingTxs">
+  <v-card outlined class="fill-height liquid-glass" :loading="loadingTxs">
     <v-card-title>
       Transactions
       <v-spacer />

@@ -175,7 +175,7 @@
                 :isOpen="currentDialog === dialogs.SETTINGS"
                 @close="closeDialog"
               />
-              <v-sheet class="transparent">
+              <v-sheet class="transparent pt-2">
                 <keep-alive>
                   <router-view />
                 </keep-alive>
@@ -353,7 +353,7 @@ onMounted(async () => {
   background-repeat: no-repeat;
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
   pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.4);
+  filter: brightness(0.7);
 }
 
 /* Apex background with same styling as Cardano */
@@ -369,7 +369,7 @@ onMounted(async () => {
   background-repeat: no-repeat;
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
   pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.4);
+  filter: brightness(0.7);
 }
 
 /* Force progress bar colors to use CSS variables with higher specificity */

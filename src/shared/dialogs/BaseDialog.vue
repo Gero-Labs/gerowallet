@@ -7,7 +7,7 @@
     overlay-color="#1f242f"
     overlay-opacity="0.7"
   >
-    <v-card class="pa-7" :min-height="minHeight" :max-height="height" style="background-color: #141414!important;" :disabled="loading">
+    <v-card class="pa-7 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>

@@ -1,0 +1,216 @@
+/* Global Liquid Glass Effects */
+
+/* Apply liquid glass effect to v-cards globally, excluding modals and dialogs */
+.v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+.theme--dark .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+}
+
+.v-card.v-card--flat:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+.v-card.v-card--outlined:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+.theme--dark .v-card.v-card--flat:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+.theme--dark .v-card.v-card--outlined:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+}
+
+/* Preserve manual liquid-glass class for backwards compatibility */
+.liquid-glass,
+.v-card.liquid-glass,
+.theme--dark .v-card.liquid-glass {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+}
+
+/* Subtle liquid glass effect for less prominent cards */
+.liquid-glass-subtle,
+.v-card.liquid-glass-subtle,
+.theme--dark .v-card.liquid-glass-subtle {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  background-image: none !important;
+  backdrop-filter: blur(18px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  isolation: isolate !important;
+}
+
+.v-card.liquid-glass-subtle.v-card--flat,
+.v-card.liquid-glass-subtle.v-card--outlined,
+.theme--dark .v-card.liquid-glass-subtle.v-card--flat,
+.theme--dark .v-card.liquid-glass-subtle.v-card--outlined {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(18px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.6) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+}
+
+/* Liquid glass for compact cards (like market data cards) */
+.liquid-glass-compact,
+.v-card.liquid-glass-compact,
+.theme--dark .v-card.liquid-glass-compact {
+  background-color: rgba(0, 0, 0, 0.32) !important;
+  background-image: none !important;
+  backdrop-filter: blur(16px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  isolation: isolate !important;
+}
+
+.v-card.liquid-glass-compact.v-card--flat,
+.v-card.liquid-glass-compact.v-card--outlined,
+.theme--dark .v-card.liquid-glass-compact.v-card--flat,
+.theme--dark .v-card.liquid-glass-compact.v-card--outlined {
+  background-color: rgba(0, 0, 0, 0.32) !important;
+  backdrop-filter: blur(16px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+}
+
+/* Override Vuetify's default box-shadow for non-modal cards */
+.v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Liquid glass effect for dialogs and modals */
+.liquid-glass-dialog {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(25px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 16px !important;
+  position: relative !important;
+  overflow: visible !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Liquid glass effect for navigation drawer */
+.liquid-glass-nav-drawer,
+.v-navigation-drawer.liquid-glass-nav-drawer,
+.theme--dark .v-navigation-drawer.liquid-glass-nav-drawer {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.6) !important;
+  border: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-style: none !important;
+  border-width: 0 !important;
+  border-color: transparent !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  isolation: isolate !important;
+}
+
+/* Gradient overlays for enhanced visual appeal */
+.liquid-glass-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  z-index: 1;
+}
+
+.liquid-glass-gradient::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  z-index: 1;
+}
+
+/* Additional Vuetify overrides for better compatibility */
+.v-card.liquid-glass .v-card__title,
+.v-card.liquid-glass-subtle .v-card__title,
+.v-card.liquid-glass-enhanced .v-card__title,
+.v-card.liquid-glass-compact .v-card__title {
+  background-color: transparent !important;
+}
+
+.v-card.liquid-glass .v-card__text,
+.v-card.liquid-glass-subtle .v-card__text,
+.v-card.liquid-glass-enhanced .v-card__text,
+.v-card.liquid-glass-compact .v-card__text {
+  background-color: transparent !important;
+}
+
+/* Force backdrop-filter support for non-modal cards */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+  .theme--dark .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+    backdrop-filter: blur(20px) saturate(1.8) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  }
+}
+
+/* Fallback for browsers without backdrop-filter support */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card),
+  .theme--dark .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card) {
+    background-color: rgba(12, 14, 18, 0.85) !important;
+  }
+}
+
+/* Remove only the border element from navigation drawer */
+.v-navigation-drawer__border,
+.liquid-glass-nav-drawer .v-navigation-drawer__border,
+.theme--dark .v-navigation-drawer__border,
+.theme--dark .liquid-glass-nav-drawer .v-navigation-drawer__border {
+  display: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .liquid-glass,
+  .liquid-glass-subtle,
+  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card).liquid-glass,
+  .v-card:not(.v-dialog__content .v-card):not(.v-menu__content .v-card):not(.v-overlay .v-card).liquid-glass-subtle {
+    border-radius: 8px !important;
+  }
+}

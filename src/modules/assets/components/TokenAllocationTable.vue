@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="no-gutters fill-height" :loading="loadingTxs">
+  <v-card outlined class="no-gutters fill-height liquid-glass" :loading="loadingTxs">
     <v-card-title>
       Token Allocation
       <v-spacer />
@@ -234,98 +234,158 @@
           </v-data-table>
         </v-tab-item>
         <v-tab-item>
-          <v-data-table
-            class="token-allocation-table transparent"
-            :headers="collectiblesHeaders"
-            :items="collectibles"
-            @click:row="handleOnRowClick"
-            :items-per-page="10"
-            :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-            :sort-by.sync="collectiblesSortBy"
-            :sort-desc.sync="collectiblesSortDesc"
-          >
-            <template v-slot:[`item.name`]="{ item }">
-              <v-list-item dense>
-                <v-list-item-action class="my-0">
-                  <v-badge
-                    overlap
-                    avatar
-                    color="transparent"
-                    :offset-y="37"
-                    v-if="item['isScam']"
+          <!-- NFT Gallery Container -->
+          <div class="nft-gallery-container">
+            
+            <!-- Gallery Controls -->
+            <div class="gallery-controls mb-4">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center gap-3">
+                  <v-text-field
+                    v-model="collectiblesSearch"
+                    dense
+                    outlined
+                    hide-details
+                    placeholder="Search collections..."
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    style="max-width: 280px;"
+                    class="collection-search"
+                  ></v-text-field>
+                </div>
+                
+                <div class="d-flex align-center gap-3">
+                  <v-select
+                    v-model="collectiblesSortBy"
+                    :items="sortOptionsDropdown"
+                    dense
+                    outlined
+                    hide-details
+                    style="max-width: 120px; font-size: 12px; margin-right: 12px;"
+                    class="sort-select-small"
+                  ></v-select>
+                  
+                  <span class="text-caption mr-2">Size:</span>
+                  <v-btn-toggle v-model="cardSizeMode" mandatory dense>
+                    <v-btn value="small" x-small>S</v-btn>
+                    <v-btn value="medium" x-small>M</v-btn>
+                    <v-btn value="large" x-small>L</v-btn>
+                  </v-btn-toggle>
+                </div>
+              </div>
+            </div>
+
+            <!-- Grid View -->
+            <div v-if="collectiblesViewMode === 'grid'" class="gallery-grid" :class="gridSizeClass">
+              <v-card 
+                v-for="collection in paginatedCollectibles" 
+                :key="collection.id || collection.name"
+                class="nft-collection-card liquid-glass-card"
+                @click="handleOnRowClick(collection)"
+              >
+                <!-- Image Container -->
+                <div class="card-image-container" :style="{ height: cardSize + 'px' }">
+                  <v-img 
+                    :src="collection.img" 
+                    :alt="collection.name"
+                    :aspect-ratio="1"
+                    class="collection-image"
+                    :gradient="collection.isScam ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%' : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'"
                   >
-                    <template v-slot:badge>
-                      <v-avatar color="transparent" tile size="20" >
-                        <v-icon small color="#F97066">
-                          mdi-alert-decagram
-                        </v-icon>
-                      </v-avatar>
-                    </template>
-                    <v-avatar size="32">
-                      <v-img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`" contain />
-                    </v-avatar>
-                  </v-badge>
-                  <v-avatar size="32" v-else>
-                    <img v-if="item['img']" :src="item['img']" :alt="`${item['name']} Logo`"
-                    />
+                    <!-- Overlay badges -->
+                    <div class="card-badges">
+                      <v-chip v-if="collection.isScam" small color="error">
+                        <v-icon left x-small>mdi-alert-decagram</v-icon>
+                        Scam
+                      </v-chip>
+                      <v-chip v-if="collection.verified" small color="primary">
+                        <v-icon left x-small>mdi-check-decagram</v-icon>
+                        Verified
+                      </v-chip>
+                    </div>
+                    
+                    <!-- Quantity badge -->
+                    <div class="quantity-badge">
+                      <v-chip small outlined class="quantity-chip">
+                        {{ Number(collection.quantity || 1).toLocaleString() }} items
+                      </v-chip>
+                    </div>
+                  </v-img>
+                </div>
+
+                <!-- Card Content with Liquid Glass Effect -->
+                <div class="card-content-overlay">
+                  <h3 class="collection-name-glass">{{ collection.name }}</h3>
+                </div>
+              </v-card>
+            </div>
+
+            <!-- Masonry Layout -->
+            <div v-if="collectiblesViewMode === 'masonry'" class="gallery-masonry">
+              <v-card 
+                v-for="collection in paginatedCollectibles" 
+                :key="collection.id || collection.name"
+                class="nft-collection-card masonry-item liquid-glass-card"
+                @click="handleOnRowClick(collection)"
+              >
+                <div class="card-image-container">
+                  <v-img 
+                    :src="collection.img" 
+                    :alt="collection.name"
+                    class="collection-image"
+                    contain
+                  >
+                    <div class="card-badges">
+                      <v-chip v-if="collection.isScam" small color="error">Scam</v-chip>
+                    </div>
+                    <div class="quantity-badge">
+                      <v-chip small outlined class="quantity-chip">{{ Number(collection.quantity || 1).toLocaleString() }} items</v-chip>
+                    </div>
+                  </v-img>
+                </div>
+                <div class="card-content-overlay">
+                  <h3 class="collection-name-glass">{{ collection.name }}</h3>
+                </div>
+              </v-card>
+            </div>
+
+            <!-- List View -->
+            <div v-if="collectiblesViewMode === 'list'" class="gallery-list">
+              <v-card 
+                v-for="collection in paginatedCollectibles" 
+                :key="collection.id || collection.name"
+                class="nft-collection-item liquid-glass-card mb-3"
+                @click="handleOnRowClick(collection)"
+              >
+                <div class="d-flex align-center pa-3">
+                  <v-avatar size="60" class="mr-4">
+                    <v-img :src="collection.img" :alt="collection.name" />
                   </v-avatar>
-                </v-list-item-action>
-                <v-list-item-content>
-                  <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{item.name}} <v-chip x-small v-if="item.isScam" class="ml-1" color="#F97066">Scam Token</v-chip>
-                  </v-list-item-title>
-                  <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                    {{ Array.isArray(item.description) ? item.description.join('') : item.description }}
-                  </v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </template>
-            <template v-slot:[`item.quantity`]="{ item }">
-              <span class="table-text">{{ Number(item.quantity).toLocaleString('en-US') }}</span>
-            </template>
-            <template v-slot:[`item.floor`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <div>-->
-<!--                <span class="table-text">${{ item.floor[0].toLocaleString() }}</span>-->
-<!--                <span class="table-text-opacity">Â{{ item.floor[1].toLocaleString() }}</span>-->
-<!--              </div>-->
-            </template>
-            <template v-slot:[`item.change`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <v-avatar tile size="20">-->
-<!--                <v-img-->
-<!--                  :src="-->
-<!--                    item.change >= 0-->
-<!--                      ? require('@/assets/svg/trend-up-01.svg')-->
-<!--                      : require('@/assets/svg/trend-down-01.svg')-->
-<!--                  "-->
-<!--                  alt="trend"-->
-<!--                ></v-img>-->
-<!--              </v-avatar>-->
-<!--              <span class="table-text" :style="item.change >= 0 ? { color: '#47CD89' } : { color: '#F97066' }">{{-->
-<!--                Math.abs(item.change * 100) + "%"-->
-<!--              }}</span>-->
-            </template>
-            <template v-slot:[`item.cost_basis`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.avg_price`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.pnl`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-            </template>
-            <template v-slot:[`item.allocation`]="{  }">
-              <v-chip outlined x-small color="#F97066">Soon</v-chip>
-<!--              <v-progress-linear-->
-<!--                class="progress-bar"-->
-<!--                height="8"-->
-<!--                :value="item.allocation"-->
-<!--                color="#00dff3"-->
-<!--              ></v-progress-linear>-->
-<!--              <span class="table-text">{{ item.allocation }}%</span>-->
-            </template>
-          </v-data-table>
+                  <div class="flex-grow-1">
+                    <h3 class="collection-name-glass mb-1">{{ collection.name }}</h3>
+                    <p class="text-caption mb-0">{{ Number(collection.quantity || 1).toLocaleString() }} items</p>
+                    <p v-if="collection.description" class="text-body-2 text--secondary mb-0">
+                      {{ Array.isArray(collection.description) ? collection.description.join('') : collection.description }}
+                    </p>
+                  </div>
+                  <div class="ml-3">
+                    <v-chip v-if="collection.isScam" small color="error">Scam</v-chip>
+                    <v-chip v-if="collection.verified" small color="primary">Verified</v-chip>
+                  </div>
+                </div>
+              </v-card>
+            </div>
+
+            <!-- Pagination for gallery views -->
+            <v-pagination
+              v-if="totalPages > 1"
+              v-model="collectiblesPage"
+              :length="totalPages"
+              :total-visible="7"
+              class="mt-4"
+            ></v-pagination>
+
+          </div>
         </v-tab-item>
       </v-tabs-items>
     </v-card-text>
@@ -392,6 +452,12 @@ const collectiblesHeaders = ref<any[]>([
   { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "150" },
 ]);
 const dialogData = ref<any>(null);
+
+// Advanced Gallery Features
+const collectiblesViewMode = ref<string>('grid'); // grid, masonry, list
+const cardSizeMode = ref<string>('small'); // small, medium, large
+const collectiblesSearch = ref<string>('');
+const collectiblesPage = ref<number>(1);
 
 const assetsSort = computed({
   get() {
@@ -606,7 +672,103 @@ const collectibles = computed(() => {
   return res
 })
 
+// Gallery computed properties
+const sortOptionsDropdown = computed(() => [
+  { text: 'Name (A-Z)', value: 'name' },
+  { text: 'Name (Z-A)', value: 'name_desc' },
+  { text: 'Quantity (High-Low)', value: 'quantity_desc' },
+  { text: 'Quantity (Low-High)', value: 'quantity' }
+])
 
+const cardSize = computed(() => {
+  switch (cardSizeMode.value) {
+    case 'small': return 140
+    case 'medium': return 200
+    case 'large': return 260
+    default: return 200
+  }
+})
+
+const gridSizeClass = computed(() => {
+  return `grid-${cardSizeMode.value}`
+})
+
+const dynamicItemsPerPage = computed(() => {
+  switch (cardSizeMode.value) {
+    case 'small': return 30
+    case 'medium': return 20
+    case 'large': return 12
+    default: return 20
+  }
+})
+
+const sortedCollectibles = computed(() => {
+  if (!collectibles.value) return []
+  
+  let sorted = [...collectibles.value]
+  
+  // Apply search filter first
+  if (collectiblesSearch.value) {
+    const searchTerm = collectiblesSearch.value.toLowerCase()
+    sorted = sorted.filter(collection => {
+      // Search in name
+      if (collection.name && collection.name.toLowerCase().includes(searchTerm)) {
+        return true
+      }
+      
+      // Search in description
+      if (collection.description) {
+        let descriptionText = ''
+        if (typeof collection.description === 'string') {
+          descriptionText = collection.description
+        } else if (Array.isArray(collection.description)) {
+          descriptionText = collection.description.join(' ')
+        }
+        if (descriptionText.toLowerCase().includes(searchTerm)) {
+          return true
+        }
+      }
+      
+      return false
+    })
+  }
+  
+  // Then apply sorting
+  switch (collectiblesSortBy.value) {
+    case 'name_desc':
+      sorted.sort((a, b) => b.name.localeCompare(a.name))
+      break
+    case 'quantity':
+      sorted.sort((a, b) => (a.quantity || 0) - (b.quantity || 0))
+      break
+    case 'quantity_desc':
+      sorted.sort((a, b) => (b.quantity || 0) - (a.quantity || 0))
+      break
+    default: // 'name'
+      sorted.sort((a, b) => a.name.localeCompare(b.name))
+  }
+  
+  return sorted
+})
+
+const paginatedCollectibles = computed(() => {
+  const start = (collectiblesPage.value - 1) * dynamicItemsPerPage.value
+  const end = start + dynamicItemsPerPage.value
+  return sortedCollectibles.value.slice(start, end)
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(sortedCollectibles.value.length / dynamicItemsPerPage.value)
+})
+
+// Watch for search and card size changes to reset pagination
+watch(cardSizeMode, () => {
+  collectiblesPage.value = 1
+})
+
+watch(collectiblesSearch, () => {
+  collectiblesPage.value = 1
+})
 
 onMounted(() => {
   sortOptions.value = assetsSort.value;
@@ -624,5 +786,265 @@ onMounted(() => {
 }
 .badge .v-badge__wrapper {
   margin: 0
+}
+
+/* NFT Gallery Liquid Glass Effects */
+.nft-gallery-container {
+  position: relative;
+  z-index: 1;
+}
+
+.liquid-glass-card,
+.v-card.liquid-glass-card {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-image: none !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease !important;
+  cursor: pointer !important;
+  overflow: hidden !important;
+}
+
+.liquid-glass-card:hover,
+.v-card.liquid-glass-card:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(15px) !important;
+  -webkit-backdrop-filter: blur(15px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+.nft-collection-card {
+  position: relative;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.card-image-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px 12px 0 0;
+}
+
+.collection-image {
+  transition: transform 0.3s ease;
+}
+
+.nft-collection-card:hover .collection-image {
+  transform: scale(1.05);
+}
+
+.card-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.quantity-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.quantity-chip {
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+}
+
+.card-content-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.collection-name-glass {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Gallery Grid Layouts */
+.gallery-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid-small {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.grid-medium {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+.grid-large {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+/* Masonry Layout */
+.gallery-masonry {
+  column-count: 4;
+  column-gap: 16px;
+}
+
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1200px) {
+  .gallery-masonry {
+    column-count: 3;
+  }
+}
+
+@media (max-width: 768px) {
+  .gallery-masonry {
+    column-count: 2;
+  }
+  .grid-small, .grid-medium, .grid-large {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-masonry {
+    column-count: 1;
+  }
+  .grid-small, .grid-medium, .grid-large {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* List View */
+.gallery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nft-collection-item {
+  border-radius: 12px;
+}
+
+/* Gallery Controls */
+.gallery-controls {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+}
+
+.collection-search .v-input__control,
+.sort-select .v-input__control {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.collection-search .v-input__control .v-input__slot,
+.sort-select .v-input__control .v-input__slot {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Ensure consistent smaller height for all gallery controls */
+.gallery-controls .v-text-field {
+  height: 32px !important;
+}
+
+.gallery-controls .v-text-field .v-input__control {
+  min-height: 32px !important;
+  height: 32px !important;
+}
+
+.gallery-controls .v-text-field .v-input__slot {
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+}
+
+.gallery-controls .v-text-field .v-input__prepend-inner {
+  align-self: center !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.gallery-controls .v-text-field .v-input__prepend-inner .v-input__icon {
+  height: 32px !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.gallery-controls .v-text-field .v-input__prepend-inner .v-icon {
+  font-size: 16px !important;
+}
+
+/* Smaller sort dropdown */
+.sort-select-small {
+  height: 24px !important;
+  font-size: 12px !important;
+}
+
+.sort-select-small .v-input__control {
+  min-height: 24px !important;
+  height: 24px !important;
+  font-size: 12px !important;
+}
+
+.sort-select-small .v-input__slot {
+  min-height: 24px !important;
+  height: 24px !important;
+  padding: 0 24px 0 8px !important; /* More space for text, less for arrow */
+  font-size: 12px !important;
+}
+
+.sort-select-small .v-select__selection {
+  font-size: 12px !important;
+  line-height: 24px !important;
+  max-width: calc(100% - 20px) !important; /* Allow text to use more space */
+}
+
+.sort-select-small .v-input__append-inner {
+  position: absolute !important;
+  right: 4px !important; /* Position arrow close to right border */
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 16px !important;
+}
+
+.sort-select-small .v-input__append-inner .v-input__icon {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 16px !important;
+}
+
+.sort-select-small .v-input__append-inner .v-icon {
+  font-size: 16px !important;
 }
 </style>

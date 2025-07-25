@@ -1,8 +1,9 @@
 <template>
-  <div>
-    <div>
-      <v-container fluid class="multisig-container">
-        <v-card outlined>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-container fluid class="multisig-container">
+        <v-card outlined class="liquid-glass">
           <v-card-title class="multisig-title">{{ $t('multisig.title') }}
             <v-spacer></v-spacer>
             <v-btn v-if="!multiSigAmountReached" color="white" outlined class="mx-2 text-caption text-capitalize"
@@ -133,22 +134,23 @@
             </v-data-table>
           </v-col>
         </v-row>
-      </v-container>
-    </div>
-    <CreateMultisigWalletDialog v-if="!multiSigAmountReached" :isOpen="showCreateMultisigDialog" @close="catchCloseDialog" />
-    <FundWallet 
-      :isOpen="showFundWallet" 
-      @close="catchCloseDialog" 
-      :recipientAddressProp="selectedAddress"
-      :isMultisig="true" 
-    />
-    <MultisigTransaction 
-      :isOpen="showNewMultisigTransaction" 
-      @close="catchCloseDialog" 
-      :recipientAddressProp="selectedAddress"
-      :isMultisig="true"
-    />
-  </div>
+        </v-container>
+      </v-col>
+    </v-row>
+  </v-layout>
+  <CreateMultisigWalletDialog v-if="!multiSigAmountReached" :isOpen="showCreateMultisigDialog" @close="catchCloseDialog" />
+  <FundWallet 
+    :isOpen="showFundWallet" 
+    @close="catchCloseDialog" 
+    :recipientAddressProp="selectedAddress"
+    :isMultisig="true" 
+  />
+  <MultisigTransaction 
+    :isOpen="showNewMultisigTransaction" 
+    @close="catchCloseDialog" 
+    :recipientAddressProp="selectedAddress"
+    :isMultisig="true"
+  />
 </template>
 
 <script setup lang="ts">
