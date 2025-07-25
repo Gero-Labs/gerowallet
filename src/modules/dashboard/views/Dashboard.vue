@@ -2,32 +2,8 @@
   <v-layout column>
     <!-- Combined row for Cardano with metrics + chart + carousel -->
     <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
-      <!-- Left side: Metrics and Chart stacked -->
+      <!-- Left side: Chart and Market Data stacked -->
       <v-col cols="12" xl="9" lg="9" md="12" sm="12">
-        <!-- Metrics row -->
-        <v-row no-gutters class="mb-2">
-          <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
-            <v-card outlined>
-              <v-card-subtitle class="pb-0">{{ `Portfolio`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.totalValue, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0)}}</v-card-title>
-              <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.totalValue) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
-            </v-card>
-          </v-col>
-          <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
-            <v-card outlined>
-              <v-card-subtitle class="pb-0">{{ `Assets`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.assetsValue, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0) }}</v-card-title>
-              <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.assetsValue) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
-            </v-card>
-          </v-col>
-          <v-col cols="12" xl="4" md="4" sm="4" xs="6" class="pa-2">
-            <v-card outlined>
-              <v-card-subtitle class="pb-0">{{ `Collectibles`}}</v-card-subtitle>
-              <v-card-title class="pt-0">{{ filters.toCurrency(computedValues.collectibles, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), "", true, 0) }}</v-card-title>
-              <v-card-subtitle v-if="price">{{ filters.toCurrency(Number(computedValues.collectibles) * price.lastPrice, false, 2, '$', '', true, 0)  }}</v-card-subtitle>
-            </v-card>
-          </v-col>
-        </v-row>
         <!-- Chart row -->
         <v-row no-gutters>
           <v-col cols="12" class="pa-2">
@@ -41,6 +17,13 @@
                 />
               </v-card-text>
             </v-card>
+          </v-col>
+        </v-row>
+        
+        <!-- Market Data Cards row -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <TokensMarketCards />
           </v-col>
         </v-row>
       </v-col>
@@ -151,6 +134,7 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
+import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
@@ -543,7 +527,12 @@ const receiveKaiserExToken = async () => {
   height: 100% !important;
 }
 
+.carousel-wrapper {
+  height: 100% !important;
+}
+
 .apex-carousel-wrapper {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
+  height: 100% !important;
 }
 </style>
