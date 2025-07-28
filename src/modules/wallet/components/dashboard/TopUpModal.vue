@@ -16,7 +16,7 @@
           />
 
           <!-- Third Card: Loading -->
-          <LoadingStep v-if="currentStep === 3" :duration="4000" @complete="handleLoadingComplete" />
+          <LoadingStep v-if="currentStep === 3" :duration="14000" @complete="handleLoadingComplete" />
 
           <!-- Fourth Card: Success -->
           <SuccessStep
@@ -70,7 +70,6 @@ const transactionId = ref('20023952');
 
 const closeModal = () => {
   emit('close');
-  // Reset to first step when closing
   currentStep.value = 1;
   password.value = '';
   amounts.value = {
@@ -93,12 +92,6 @@ const updateFeeOption = (newFeeOption: string) => {
 
 const handleTopUp = () => {
   if (currentStep.value === 1) {
-    // if (ada <= 0 || eur <= 0) {
-    //   console.log('Please enter valid amounts');
-    //   return;
-    // }
-
-    // Move to next step
     currentStep.value = 2;
   } else if (currentStep.value === 2) {
     if (!password.value) {
@@ -106,19 +99,16 @@ const handleTopUp = () => {
       return;
     }
 
-    // Handle final top up logic here
     console.log(`Final top up: ${amounts.value.adaAmount} ADA = ${amounts.value.eurAmount} EUR`);
     console.log(`Fee option: ${feeOption.value}`);
     console.log(`Password: ${password.value}`);
 
-    // Move to loading step
     currentStep.value = 3;
   }
 };
 
 const handleLoadingComplete = () => {
   console.log('Top up completed successfully!');
-  // Generate random transaction ID
   transactionId.value = Math.floor(Math.random() * 100000000).toString();
   currentStep.value = 4;
 };
