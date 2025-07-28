@@ -118,7 +118,7 @@
                   </v-list-item-avatar>
                   <v-list-item-content>
                     <v-list-item-title>{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
                       {{ resolvePoolDescription(item.pool_id) }}
                     </v-list-item-subtitle>
                   </v-list-item-content>
@@ -177,11 +177,6 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
-
-const props = defineProps({
-  chartData: Object,
-  project: Object,
-})
 
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore)
 const { pools, tip, epochParams } = toRefs(networkStore)

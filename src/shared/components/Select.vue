@@ -13,6 +13,7 @@
       @input="$emit('input', $event)"
       hide-details
       dense
+      attach
     >
       <template v-slot:item="{ item }">
         <v-avatar v-if="item.icon" size="20" class="mr-2">

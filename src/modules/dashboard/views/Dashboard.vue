@@ -19,7 +19,7 @@
             </v-card>
           </v-col>
         </v-row>
-        
+
         <!-- Market Data Cards row -->
         <v-row no-gutters>
           <v-col cols="12" class="pa-2">
@@ -32,15 +32,13 @@
       <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
         <FeatureCarousel
           :model-value="currentCarouselIndex"
-          @update:model-value="currentCarouselIndex = $event"
+          @update:modelValue="currentCarouselIndex = $event"
           :items="carouselItems"
           :paused="carouselPaused"
           :is-loading="isLoading"
           :show-progress-bar="true"
           carousel-class="feature-carousel dashboard-card feature-card-full-height"
           @item-click="handleCarouselClick"
-          @mouse-enter="pauseCarousel"
-          @mouse-leave="resumeCarousel"
         />
       </v-col>
     </v-row>
@@ -124,7 +122,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import { Blockchain, Network } from '@/models/types';
@@ -137,10 +135,8 @@ import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/componen
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
-import filters from '@/shared/utils/filters';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
-import networks from '@/utils/networks';
 
 // Import carousel assets
 import assets from '@/utils/assets';
@@ -294,15 +290,6 @@ const computeChartData = computed(() => {
     usdData: [] // No historical USD data for non-mainnet
   }
 });
-
-// Carousel methods
-const pauseCarousel = () => {
-  carouselPaused.value = true;
-};
-
-const resumeCarousel = () => {
-  carouselPaused.value = false;
-};
 
 // Apex carousel methods
 const pauseApexCarousel = () => {

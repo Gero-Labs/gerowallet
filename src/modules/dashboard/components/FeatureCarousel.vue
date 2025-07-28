@@ -6,10 +6,10 @@
     @mouseleave="handleMouseLeave"
   >
     <v-carousel
-      :model-value="modelValue"
-      @update:model-value="$emit('update:modelValue', $event)"
-      :cycle="!paused"
-      :interval="10000"
+      ref="carousel"
+      :value="modelValue"
+      @change="$emit('update:modelValue', $event)"
+      :cycle="false"
       height="100%"
       hide-delimiter-background
       show-arrows-on-hover
@@ -142,8 +142,7 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 const emit = defineEmits([
   'update:modelValue',
-  'item-click', 
-  'mouse-enter',
+  'item-click',
   'mouse-leave'
 ]);
 
@@ -152,14 +151,16 @@ const progressValue = ref(0);
 const carouselInterval = ref<ReturnType<typeof setInterval> | null>(null);
 const debitCardStyle = ref<any>({});
 const progressKey = ref(0);
+const isHovered = ref(false);
+const carousel = ref<any>(null);
 
 // Methods
 const handleMouseEnter = () => {
-  emit('mouse-enter');
+  isHovered.value = true;
 };
 
 const handleMouseLeave = () => {
-  emit('mouse-leave');
+  isHovered.value = false;
 };
 
 const handleItemClick = (item: CarouselItem) => {
@@ -219,31 +220,26 @@ const handleCardMouseLeave = () => {
   };
 };
 
-// Progress bar animation - synchronized with carousel
-const CAROUSEL_INTERVAL = 10000; // 10 seconds to match carousel interval
-const PROGRESS_UPDATE_RATE = 50; // Update every 50ms for smooth animation
-
-let animationStartTime = 0;
+// Custom progress bar animation
+const PROGRESS_UPDATE_RATE = 50; // Update every 50ms
+const PROGRESS_INCREMENT = 0.5; // 0.5% per 50ms = 10 seconds total (0.5 * 200 = 100%)
 
 const startProgressAnimation = () => {
   if (!props.showProgressBar) return;
 
-  progressValue.value = 0;
-  animationStartTime = Date.now();
-
   carouselInterval.value = setInterval(() => {
-    if (!props.paused) {
-      // Calculate progress based on actual elapsed time for better accuracy
-      const elapsed = Date.now() - animationStartTime;
-      const calculatedProgress = (elapsed / CAROUSEL_INTERVAL) * 100;
+    // Only increment if not paused and not hovered
+    if (!props.paused && !isHovered.value) {
+      progressValue.value += PROGRESS_INCREMENT;
 
-      if (calculatedProgress >= 100) {
-        // Force component recreation to avoid transition animation
-        progressKey.value++;
+      // When progress reaches 100%, change slide and reset
+      if (progressValue.value >= 100) {
+        const nextIndex = (props.modelValue + 1) % props.items.length;
+
+        // Emit the change and reset progress
+        emit('update:modelValue', nextIndex);
         progressValue.value = 0;
-        animationStartTime = Date.now();
-      } else {
-        progressValue.value = calculatedProgress;
+        progressKey.value++; // Force component recreation
       }
     }
   }, PROGRESS_UPDATE_RATE);
@@ -255,15 +251,6 @@ const stopProgressAnimation = () => {
     carouselInterval.value = null;
   }
 };
-
-// Watch for paused state changes
-watch(() => props.paused, (newPaused) => {
-  if (newPaused) {
-    stopProgressAnimation();
-  } else if (props.showProgressBar) {
-    startProgressAnimation();
-  }
-});
 
 // Lifecycle
 onMounted(() => {
@@ -283,6 +270,22 @@ onUnmounted(() => {
   height: 100%;
   border-radius: 8px;
   overflow: visible;
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  max-height: 422px;
+}
+
+.carousel-wrapper:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transform: scale(1.01);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .carousel-wrapper .v-card__title {
@@ -401,6 +404,7 @@ onUnmounted(() => {
   width: 200px;
   height: auto;
   border-radius: 12px;
+  animation: float 5s ease-in-out infinite;
 }
 
 .debit-card-glow {

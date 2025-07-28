@@ -1,6 +1,6 @@
 <template>
   <v-container class="pa-0" :style="{direction: $t('rtl') === 'true' ? 'rtl' : 'ltr', height: '100vh'}">
-    <v-card variant="flat" class="transparent-override pa-0 fill-height">
+    <v-card flat class="transparent-override pa-0 fill-height">
       <v-card-text class="pa-0 fill-height">
         <v-row class="fill-height" no-gutters>
           <v-col cols="12" lg="5" md="5" sm="5">

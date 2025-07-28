@@ -85,6 +85,7 @@
             hide-details
             return-object
             disabled
+            attach
           ></v-select>
         </v-col>
       </v-row>

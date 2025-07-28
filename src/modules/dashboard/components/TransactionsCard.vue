@@ -23,6 +23,7 @@
         :sort-by.sync="sortBy"
         :sort-desc.sync="sortDesc"
         dense @click:row="handleOnTransactionsRowClick"
+        :item-class="getRowClass"
       >
         <template v-slot:[`item.tx_timestamp`]="{ item }">
           <v-list-item two-line class="px-0">
@@ -77,7 +78,7 @@
 <!--          Show All Transactions-->
 <!--        </v-btn>-->
 <!--      </v-card-actions>-->
-    <TransactionDetailsDialog v-if="transactionInfo && state==='/'" :transactionInfo="transactionInfo" @close="handleTransactionModalClose"></TransactionDetailsDialog>
+    <TransactionDetailsDialog v-if="transactionInfo && state==='/' && !selectedTransaction" :transactionInfo="transactionInfo" @close="handleTransactionModalClose"></TransactionDetailsDialog>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -91,6 +92,13 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
+
+const props = defineProps({
+  selectedTransaction: {
+    type: Object,
+    default: null
+  }
+});
 
 const emit = defineEmits(['row-click'])
 
@@ -191,6 +199,13 @@ const getColor = (item) => {
   }
   return '';
 }
+
+const getRowClass = (item) => {
+  if (props.selectedTransaction && props.selectedTransaction.id === item.id) {
+    return 'selected-transaction';
+  }
+  return '';
+}
 </script>
 <style>
 .text-nowrap {
@@ -198,5 +213,20 @@ const getColor = (item) => {
 }
 .no-padding {
   padding: 0!important;
+}
+.selected-transaction {
+  background-color: rgba(33, 150, 243, 0.1) !important;
+  border-left: 3px solid #2196F3 !important;
+}
+.selected-transaction:hover {
+  background-color: rgba(33, 150, 243, 0.15) !important;
+}
+
+.transactions-table tbody tr {
+  cursor: pointer;
+}
+
+.transactions-table tbody tr:hover:not(.selected-transaction) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 </style>

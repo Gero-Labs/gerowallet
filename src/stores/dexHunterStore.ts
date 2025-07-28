@@ -19,7 +19,48 @@ chrome.storage.local.get('dexHunterStore', (res) => {
   }
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+const SYNC_KEYS = ['dexHunterTokens', 'blacklistPolicies'];
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+
+  const dexHunterStoreChanges = changes['dexHunterStore'];
+  if (!dexHunterStoreChanges) return;
+
+  const { newValue, oldValue } = dexHunterStoreChanges;
+  if (!newValue) return;
+
+  // Check if any of our sync keys changed
+  const hasRelevantChanges = SYNC_KEYS.some(key => {
+    const oldVal = oldValue?.[key];
+    const newVal = newValue[key];
+    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+  });
+
+  if (hasRelevantChanges) {
+    console.debug('🔄 Cross-context sync: updating dexHunter store from background changes');
+
+    // Only update the keys that actually changed to prevent overwrite issues
+    SYNC_KEYS.forEach(key => {
+      const oldVal = oldValue?.[key];
+      const newVal = newValue[key];
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        console.debug(`📝 Syncing ${key} from background`);
+        dexHunterStore[key] = newVal;
+      }
+    });
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes['dexHunterStore']) {
+    const newValue = changes['dexHunterStore'].newValue;
+
+    // DexHunter store contains global blockchain data (tokens, blacklist policies)
+    // that doesn't change based on user transactions, so we can safely sync all updates
+    Object.assign(dexHunterStore, newValue);
+  }
+});
 
 function persist(patch: Partial<DexHunterStore>) {
   const next = { ...dexHunterStore, ...patch };
