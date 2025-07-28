@@ -72,27 +72,27 @@ hydrateWalletStore();
 
 // Selective chrome.storage.onChanged listener for critical cross-context sync
 // Only listen for specific keys that need background -> options sync
-const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections'];
+const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards'];
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
-  
+
   const walletStoreChanges = changes['walletStore'];
   if (!walletStoreChanges) return;
-  
+
   const { newValue, oldValue } = walletStoreChanges;
   if (!newValue) return;
-  
+
   // Check if any of our sync keys changed
   const hasRelevantChanges = SYNC_KEYS.some(key => {
     const oldVal = oldValue?.[key];
     const newVal = newValue[key];
     return JSON.stringify(oldVal) !== JSON.stringify(newVal);
   });
-  
+
   if (hasRelevantChanges) {
     console.debug('🔄 Cross-context sync: updating wallet store from background changes');
-    
+
     // Only update the keys that actually changed to prevent overwrite issues
     SYNC_KEYS.forEach(key => {
       const oldVal = oldValue?.[key];

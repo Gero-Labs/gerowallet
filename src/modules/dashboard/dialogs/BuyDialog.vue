@@ -30,18 +30,38 @@
                 <v-row>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseBuy">
-                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="assets.buyAda">
-                        <h1 slot="header" style="line-height: 1;">Buy ADA</h1>
-                        <p slot="content">Use Credit Card or Other Payment Methods to Buy ADA</p>
-                      </parallax-card>
+                      <div 
+                        class="card-3d-wrapper" 
+                        :style="buyCardStyle"
+                        @mousemove="handleBuyCardMouseMove" 
+                        @mouseleave="handleBuyCardMouseLeave"
+                      >
+                        <parallax-card 
+                          style="margin-left: auto; margin-right: auto;" 
+                          :data-image="assets.buyAda"
+                        >
+                          <h1 slot="header" style="line-height: 1;">Buy ADA</h1>
+                          <p slot="content">Use Credit Card or Other Payment Methods to Buy ADA</p>
+                        </parallax-card>
+                      </div>
                     </v-card>
                   </v-col>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseSell">
-                      <parallax-card style="margin-left: auto; margin-right: auto;" :data-image="assets.sellAda">
-                        <h1 slot="header" style="line-height: 1;">Sell ADA</h1>
-                        <p slot="content">Choose from multiple methods to instantly convert your ADA to cash</p>
-                      </parallax-card>
+                      <div 
+                        class="card-3d-wrapper" 
+                        :style="sellCardStyle"
+                        @mousemove="handleSellCardMouseMove" 
+                        @mouseleave="handleSellCardMouseLeave"
+                      >
+                        <parallax-card 
+                          style="margin-left: auto; margin-right: auto;" 
+                          :data-image="assets.sellAda"
+                        >
+                          <h1 slot="header" style="line-height: 1;">Sell ADA</h1>
+                          <p slot="content">Choose from multiple methods to instantly convert your ADA to cash</p>
+                        </parallax-card>
+                      </div>
                     </v-card>
                   </v-col>
                 </v-row>
@@ -146,6 +166,10 @@ const method = ref<string | undefined>(undefined);
 const provider = ref<string | undefined>(undefined);
 const loading = ref(true);
 
+// 3D effect reactive refs
+const buyCardStyle = ref<any>({});
+const sellCardStyle = ref<any>({});
+
 const onIframeLoad = () => {
   loading.value = false;
 };
@@ -158,6 +182,58 @@ const chooseBuy = () => {
 const chooseSell = () => {
   method.value = methods.SELL;
   step.value++;
+};
+
+// 3D Card tilt effect handlers for Buy card
+const handleBuyCardMouseMove = (event: MouseEvent) => {
+  const card = event.currentTarget as HTMLElement;
+  const rect = card.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+
+  const rotateX = (y - centerY) / 10;
+  const rotateY = (centerX - x) / 10;
+
+  buyCardStyle.value = {
+    transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(10px)`,
+    transition: 'transform 0.1s ease-out'
+  };
+};
+
+const handleBuyCardMouseLeave = () => {
+  buyCardStyle.value = {
+    transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
+    transition: 'transform 0.3s ease-out'
+  };
+};
+
+// 3D Card tilt effect handlers for Sell card
+const handleSellCardMouseMove = (event: MouseEvent) => {
+  const card = event.currentTarget as HTMLElement;
+  const rect = card.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
+
+  const rotateX = (y - centerY) / 10;
+  const rotateY = (centerX - x) / 10;
+
+  sellCardStyle.value = {
+    transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(10px)`,
+    transition: 'transform 0.1s ease-out'
+  };
+};
+
+const handleSellCardMouseLeave = () => {
+  sellCardStyle.value = {
+    transform: 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0px)',
+    transition: 'transform 0.3s ease-out'
+  };
 };
 
 const chooseProvider = async (name: string) => {
@@ -211,5 +287,16 @@ watch(step, (newVal) => {
 }
 iframe html {
   background-color: transparent;
+}
+
+/* 3D Card Effect */
+.card-3d-wrapper {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease-out;
+}
+
+.card-3d-wrapper:hover {
+  transform-style: preserve-3d;
 }
 </style>

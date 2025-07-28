@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 400px; margin: auto">
+  <v-card class="transparent-override" flat style="max-width: 400px; margin: auto; box-shadow: unset!important;">
     <v-card-title class="justify-center" style="color: white; font-size: 32px;">
       {{ $t('welcome') }}
     </v-card-title>
@@ -75,7 +75,10 @@ interface Wallet {
 const { wallets } = toRefs(geroStore);
 
 const availableWallets = computed<Wallet[]>(() => {
-  return Object.values(wallets.value).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google);
+  return (Object.values(wallets.value) as Wallet[])
+    .filter((wallet: Wallet) => {
+      return networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google;
+    });
 });
 
 const resolveNetworkIcon = (item: Wallet): string => {
@@ -90,21 +93,21 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    const wallet = Object.values(wallets.value).filter(wallet => networks.resolveNetwork(wallet?.chain, wallet?.network)).find(wal => wal.id === walletId);
+    const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
 
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
-    
+
     // Wait briefly for chrome.storage.onChanged to sync the loggedWallet
     await new Promise(resolve => setTimeout(resolve, 100));
     console.debug('Wallet store after login:', !!WalletStore.state.loggedWallet);
-    
+
     const queryParams = vmProxy.$route.query;
     console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
     console.debug('🧭 Query params:', queryParams);
-    
+
     if (queryParams['redirect']) {
       const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
       console.debug('🧭 Navigating to redirect path:', redirectPath);
@@ -113,7 +116,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
       console.debug('🧭 Navigating to home page: /');
       await vmProxy.$router.push("/");
     }
-    
+
     console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);

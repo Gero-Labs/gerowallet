@@ -43,7 +43,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   });
 
   if (hasRelevantChanges) {
-    console.debug('🔄 Cross-context sync: updating wallet store from background changes');
+    console.debug('🔄 Cross-context sync: updating Loading store from background changes');
 
     // Only update the keys that actually changed to prevent overwrite issues
     SYNC_KEYS.forEach(key => {

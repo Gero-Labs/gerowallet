@@ -266,16 +266,16 @@ async function submitLogout() {
       chrome.alarms.clearAll();
       console.debug('All Chrome alarms cleared during logout');
     }
-    
+
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    
+
     // Clear the wallet store immediately to allow navigation to welcome
     WalletStore.logout();
-    
+
     // Navigate to welcome page immediately since store is now cleared
     router.replace('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);
@@ -295,7 +295,7 @@ async function submitLogout() {
     } catch (storeError) {
       console.warn('Failed to clear wallet store during logout:', storeError);
     }
-    
+
     router.replace('/welcome').catch(err => {
       console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';

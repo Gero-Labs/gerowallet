@@ -7,14 +7,14 @@
     overlay-color="#1f242f"
     overlay-opacity="0.7"
   >
-    <v-card class="pa-7 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
+    <v-card class="pa-5 liquid-glass-dialog" :min-height="minHeight" :max-height="height" :disabled="loading">
       <div class="rings-container">
         <div class="rings"></div>
         <div class="rings"></div>
         <div class="rings"></div>
         <div class="rings"></div>
       </div>
-      <v-card-title class="pa-0 px-3 pb-0">
+      <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
           <v-list-item-avatar v-if="img" size="54" tile>
             <v-img :src="img" contain></v-img>
@@ -105,8 +105,8 @@ const isDialogOpen = computed({
 <style scoped>
 .close-button {
   position: absolute;
-  top: 35px;
-  right: 35px;
+  top: 26px;
+  right: 20px;
   z-index: 1;
 }
 
