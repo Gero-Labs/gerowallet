@@ -6,7 +6,7 @@
         <KYCProgress :current-step="currentStep" />
 
         <!-- Step 1: Upload ID -->
-        <KYCStep1
+        <KYCStepFirst
           v-if="currentStep === 1"
           :uploaded-file="uploadedFile"
           :uploaded-file-url="uploadedFileUrl"
@@ -15,7 +15,7 @@
         />
 
         <!-- Step 2: Take Selfie -->
-        <KYCStep2
+        <KYCStepSecond
           v-if="currentStep === 2"
           :captured-photo="capturedPhoto"
           :is-camera-active="isCameraActive"
@@ -42,8 +42,8 @@ import { ref } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import KYCProgress from './KYCSteps/KYCProgress.vue';
-import KYCStep1 from './KYCSteps/KYCStep1.vue';
-import KYCStep2 from './KYCSteps/KYCStep2.vue';
+import KYCStepFirst from './KYCSteps/KYCStepFirst.vue';
+import KYCStepSecond from './KYCSteps/KYCStepSecond.vue';
 
 defineProps<{
   open: boolean;
