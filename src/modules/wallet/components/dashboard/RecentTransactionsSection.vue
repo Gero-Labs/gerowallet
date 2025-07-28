@@ -67,10 +67,10 @@
           <img src="@/modules/wallet/icons/arrow-left.svg" alt="Previous" class="btn-icon" />
           Previous
         </v-btn>
-        
+
         <div class="pagination-numbers">
-          <div 
-            v-for="page in visiblePages" 
+          <div
+            v-for="page in visiblePages"
             :key="page"
             class="page-number"
             :class="{ active: page === currentPage }"
@@ -79,7 +79,7 @@
             {{ page === '...' ? '...' : page }}
           </div>
         </div>
-        
+
         <v-btn
           variant="text"
           size="small"
@@ -163,7 +163,7 @@ const totalPages = ref(10);
 const visiblePages = computed(() => {
   const pages = [];
   const maxVisible = 7;
-  
+
   if (totalPages.value <= maxVisible) {
     for (let i = 1; i <= totalPages.value; i++) {
       pages.push(i);
@@ -191,7 +191,7 @@ const visiblePages = computed(() => {
       pages.push(totalPages.value);
     }
   }
-  
+
   return pages;
 });
 
@@ -384,13 +384,9 @@ const handlePageChange = (page: number) => {
                   height: 32px;
                   border: 1px solid $border-secondary;
                   border-radius: 4px;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-
                   img {
-                    width: 30px;
-                    height: 18px;
+                    width: 46px;
+                    height: 32px;
                   }
                 }
 
@@ -610,11 +606,6 @@ const handlePageChange = (page: number) => {
                   .card-icon {
                     width: 52px;
                     height: 36px;
-
-                    img {
-                      width: 34px;
-                      height: 20px;
-                    }
                   }
 
                   .card-details {

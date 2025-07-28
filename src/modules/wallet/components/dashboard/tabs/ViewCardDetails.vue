@@ -17,13 +17,8 @@
         <div class="input-full">
           <label class="input-label">Card number</label>
           <div class="card-number-input">
-            <div class="payment-method-icon">
-              <div class="mastercard-icon">
-                <div class="mastercard-left"></div>
-                <div class="mastercard-right"></div>
-                <div class="mastercard-middle"></div>
-              </div>
-            </div>
+            <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" />
+
             <span class="card-number-text">{{ formData.cardNumber }}</span>
           </div>
         </div>
@@ -161,52 +156,6 @@ const togglePinVisibility = () => {
   padding: $spacing-sm $spacing-sm $spacing-sm $spacing-sm;
 }
 
-.payment-method-icon {
-  width: 34px;
-  height: 24px;
-  background: #ffffff;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-sm;
-  @include flex-center;
-  flex-shrink: 0;
-}
-
-.mastercard-icon {
-  position: relative;
-  width: 22.36px;
-  height: 13.4px;
-}
-
-.mastercard-left {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 13.56px;
-  height: 13.4px;
-  background: #ed0006;
-  border-radius: 50%;
-}
-
-.mastercard-right {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 11.18px;
-  height: 13.4px;
-  background: linear-gradient(45deg, #f9a000 0%, #6d6dbb 100%);
-  border-radius: 50%;
-}
-
-.mastercard-middle {
-  position: absolute;
-  left: 8.8px;
-  top: 1.6px;
-  width: 4.76px;
-  height: 10.19px;
-  background: #ff5e00;
-  border-radius: 2px;
-}
-
 .card-number-text,
 .cvv-text,
 .pin-text {
@@ -234,4 +183,4 @@ const togglePinVisibility = () => {
     background: transparent !important;
   }
 }
-</style> 
+</style>
