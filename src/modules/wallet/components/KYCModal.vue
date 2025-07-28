@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import KYCProgress from './KYCSteps/KYCProgress.vue';

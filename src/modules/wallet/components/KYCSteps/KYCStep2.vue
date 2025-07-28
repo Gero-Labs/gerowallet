@@ -31,15 +31,7 @@
 
         <!-- Camera icon when not active -->
         <div v-else class="camera-icon" @click="startCamera()">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M10 4V16M4 10H16"
-              stroke="#CECFD2"
-              stroke-width="1.67"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <img src="@/modules/wallet/icons/camera.svg" alt="camera" />
         </div>
 
         <div class="camera-text">
@@ -49,10 +41,7 @@
 
         <!-- Capture button when camera is active -->
         <button v-if="isCameraActive" class="capture-btn" @click="capturePhoto">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="10" stroke="#FFFFFF" stroke-width="2" />
-            <circle cx="12" cy="12" r="6" fill="#FFFFFF" />
-          </svg>
+          <img src="@/modules/wallet/icons/capture.svg" alt="capture" />
         </button>
       </div>
 

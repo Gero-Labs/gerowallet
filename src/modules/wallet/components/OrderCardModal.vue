@@ -20,43 +20,19 @@
             <div class="check-items">
               <div class="check-item">
                 <div class="check-icon">
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M8.74992 14.0002L12.2499 17.5002L19.2499 10.5002M25.6666 14.0002C25.6666 20.4435 20.4432 25.6668 13.9999 25.6668C7.5566 25.6668 2.33325 20.4435 2.33325 14.0002C2.33325 7.55684 7.5566 2.3335 13.9999 2.3335C20.4432 2.3335 25.6666 7.55684 25.6666 14.0002Z"
-                      stroke="#00DFF3"
-                      stroke-width="2.33333"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
+                  <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
                 <span class="check-text">You will need your ID like passport, driving licence</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M8.74992 14.0002L12.2499 17.5002L19.2499 10.5002M25.6666 14.0002C25.6666 20.4435 20.4432 25.6668 13.9999 25.6668C7.5566 25.6668 2.33325 20.4435 2.33325 14.0002C2.33325 7.55684 7.5566 2.3335 13.9999 2.3335C20.4432 2.3335 25.6666 7.55684 25.6666 14.0002Z"
-                      stroke="#00DFF3"
-                      stroke-width="2.33333"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
+                  <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
                 <span class="check-text">Real-time face scan to match ID</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M8.74992 14.0002L12.2499 17.5002L19.2499 10.5002M25.6666 14.0002C25.6666 20.4435 20.4432 25.6668 13.9999 25.6668C7.5566 25.6668 2.33325 20.4435 2.33325 14.0002C2.33325 7.55684 7.5566 2.3335 13.9999 2.3335C20.4432 2.3335 25.6666 7.55684 25.6666 14.0002Z"
-                      stroke="#00DFF3"
-                      stroke-width="2.33333"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
+                  <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
                 <span class="check-text">Proof of Address like Utility bill, bank statement</span>
               </div>

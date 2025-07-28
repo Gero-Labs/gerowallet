@@ -4,7 +4,7 @@
     <div class="success-icon">
       <v-icon color="#47CD89" size="24">mdi-check-circle</v-icon>
     </div>
-    
+
     <!-- Title and Subtitle -->
     <div class="header-text">
       <h2 class="modal-title">Top-up Success</h2>
@@ -15,15 +15,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-
 // Props
 interface Props {
   transactionId?: string;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  transactionId: '20023952'
+withDefaults(defineProps<Props>(), {
+  transactionId: '20023952',
 });
 
 // Emits
@@ -90,4 +88,4 @@ const emit = defineEmits<{
   margin: 0;
   text-align: center;
 }
-</style> 
+</style>
