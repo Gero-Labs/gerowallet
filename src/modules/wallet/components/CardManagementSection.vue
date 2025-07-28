@@ -3,15 +3,7 @@
     <img src="@/modules/wallet/icons/card.svg" alt="card" />
     <div class="management-column-content">
       <div class="featured-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M13 2L3 14H12L11 22L21 10H12L13 2Z"
-            stroke="#36BFFA"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <img src="@/modules/wallet/icons/card-management.svg" alt="card-managment" />
       </div>
       <h3 class="management-heading">Manage Your Card in Seconds</h3>
       <p class="management-description">
@@ -41,7 +33,7 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
   gap: $spacing-4xl;
   width: 100%;
   padding: $spacing-3xl;
-  
+
   @include mobile {
     flex-direction: column;
     gap: $spacing-2xl;
@@ -54,7 +46,7 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
   width: 100%;
 
   .featured-icon {
-    width: 48px;      
+    width: 48px;
     height: 48px;
     background: #0b4a6f;
     border-radius: 50%;
@@ -64,11 +56,11 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
   .management-heading {
     @include heading-style($font-size-3xl);
   }
-  
+
   .management-description {
     @include body-text($font-size-base);
   }
-  
+
   .feature-list {
     @include flex-column;
     gap: $spacing-md;
