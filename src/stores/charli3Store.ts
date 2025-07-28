@@ -143,17 +143,41 @@ export default {
   clearExpiredLogos() {
     const now = Date.now();
     const twentyFourHours = 24 * 60 * 60 * 1000;
-    let hasExpired = false;
+    let hasChanged = false;
 
     for (const [key, entry] of Object.entries(charli3Store.logoCache)) {
+      // Remove expired entries
       if (now - entry.timestamp >= twentyFourHours) {
         delete charli3Store.logoCache[key];
-        hasExpired = true;
+        hasChanged = true;
+      }
+      // Remove invalid blob URLs (these cause ERR_FILE_NOT_FOUND errors)
+      else if (entry.url && entry.url.startsWith('blob:')) {
+        console.log(`Removing invalid blob URL for ${key}`);
+        delete charli3Store.logoCache[key];
+        hasChanged = true;
       }
     }
 
-    if (hasExpired) {
+    if (hasChanged) {
       persist({ logoCache: charli3Store.logoCache });
+    }
+  },
+
+  clearInvalidBlobUrls() {
+    let hasChanged = false;
+
+    for (const [key, entry] of Object.entries(charli3Store.logoCache)) {
+      if (entry.url && entry.url.startsWith('blob:')) {
+        console.log(`Clearing invalid blob URL for ${key}: ${entry.url}`);
+        delete charli3Store.logoCache[key];
+        hasChanged = true;
+      }
+    }
+
+    if (hasChanged) {
+      persist({ logoCache: charli3Store.logoCache });
+      console.log('Cleared all invalid blob URLs from cache');
     }
   },
 

@@ -7,7 +7,6 @@
   background-image: none !important;
   backdrop-filter: blur(20px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 12px !important;
   position: relative !important;
   overflow: hidden !important;
@@ -79,7 +78,6 @@
   background-image: none !important;
   backdrop-filter: blur(16px) saturate(1.5) !important;
   -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 8px !important;
   position: relative !important;
   overflow: hidden !important;
@@ -129,10 +127,8 @@
   border-left: none !important;
   border-top: none !important;
   border-bottom: none !important;
-  border-style: none !important;
   border-width: 0 !important;
   border-color: transparent !important;
-  position: relative !important;
   overflow: hidden !important;
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   isolation: isolate !important;

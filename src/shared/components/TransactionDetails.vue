@@ -1,15 +1,14 @@
 <template>
-  <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
-    <div style="text-align: right; position: absolute; right: 78px; top: 38px;">
-      <v-btn color="error" small outlined @click="isReportDialogOpen = true">
-        Report Transaction
-      </v-btn>
-    </div>
+  <v-card-text class="px-0 justify-center text-center" style="z-index: 1">
     <div class="transaction-info text-left pb-4">
-      <div>
+      <div style="display: flex">
         Transaction ID: <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${transactionInfo['id']}`" target="_blank">
         {{ filters.truncate(transactionInfo['id']) }}</a>
         <CopyButton x-small :value="transactionInfo['id']" class="ml-1" />
+        <v-spacer />
+        <v-btn color="error" x-small outlined @click="isReportDialogOpen = true">
+          Report Transaction
+        </v-btn>
       </div>
       <div>
         Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>

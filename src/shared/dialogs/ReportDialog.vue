@@ -66,6 +66,7 @@
               :rules="[rules.required()]"
               outlined
               dense
+              attach
             ></v-select>
             <v-textarea
               label="Description of the Scam"
@@ -241,7 +242,7 @@ const onFileChange = (file: File | null) => {
 
 const createImage = (file: File) => {
   const reader = new FileReader();
-  
+
   reader.onload = (e) => {
     imageUrl.value = e.target?.result as string;
   };

@@ -53,16 +53,6 @@ export interface Charli3CurrentStats {
   daily_volume: number
 }
 
-export interface Charli3StreamEvent {
-  block_time: number
-  pool_id: string
-  current_price: number
-  previous_price: number
-  current_tvl: number
-  previous_tvl: number
-  volume: number
-}
-
 class Charli3API {
   private baseURL = `${API_BASE_URL}/api/charli3`
   private lastCharli3Request = 0
@@ -116,7 +106,7 @@ class Charli3API {
     if (policy && pool) {
       throw new Error('Provide either policy or pool parameter, not both')
     }
-    
+
     const params = policy ? { policy } : { pool }
     const response = await axios.get(`${this.baseURL}/tokens/current`, { params })
     return response.data
@@ -124,13 +114,13 @@ class Charli3API {
 
   async getTokenLogo(token: string): Promise<string | null> {
     const cacheKey = `charli3_token_logo_${token}`
-    
+
     // Check store cache first
     const cached = charli3Store.getCachedLogo(cacheKey)
     if (cached) {
       return cached
     }
-    
+
     try {
       // Rate limiting protection
       const now = Date.now()
@@ -139,10 +129,10 @@ class Charli3API {
         const waitTime = this.charli3RequestInterval - timeSinceLastRequest
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
-      
+
       // Update last request time before making the request
       this.lastCharli3Request = Date.now()
-      
+
       const response = await axios.get(`${this.baseURL}/tokens/logo/${token}`, {
         timeout: 3000, // 3 second timeout for better performance
         responseType: 'blob', // Handle as blob to get proper image data
@@ -150,15 +140,20 @@ class Charli3API {
           'Accept': 'image/png, image/jpeg, image/gif, image/webp, */*'
         }
       })
-      
-      // Create object URL from blob
+
+      // Convert blob to data URL for better Chrome extension compatibility
       const blob = response.data
-      const objectUrl = URL.createObjectURL(blob)
-      
-      // Cache the object URL in the store
-      charli3Store.cacheTokenLogo(cacheKey, objectUrl)
-      
-      return objectUrl
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+
+      // Cache the data URL in the store
+      charli3Store.cacheTokenLogo(cacheKey, dataUrl)
+
+      return dataUrl
     } catch (error) {
       if (error.code === 'ECONNABORTED') {
         console.warn(`Token logo request timed out for ${token}`)
@@ -173,11 +168,6 @@ class Charli3API {
       }
       return null
     }
-  }
-
-  async streamTokens(poolIds: string[]): Promise<any> {
-    const response = await axios.post(`${this.baseURL}/tokens/stream`, poolIds)
-    return response.data
   }
 
   async getAggregateTokens(): Promise<any[]> {
@@ -208,7 +198,7 @@ class Charli3API {
     try {
       const aggregateTokens = await this.getAggregateTokens()
       const tokensWithRealTimeData = []
-      
+
       // Get real-time data for each token
       for (const token of aggregateTokens.slice(0, 30)) { // Limit to avoid too many requests
         try {
@@ -227,23 +217,23 @@ class Charli3API {
           continue
         }
       }
-      
+
       // Sort and get top performers
       const topVolume = tokensWithRealTimeData
         .filter(token => token.dailyVolume > 0)
         .sort((a, b) => (b.dailyVolume || 0) - (a.dailyVolume || 0))
         .slice(0, limit)
-      
+
       const topGainers = tokensWithRealTimeData
         .filter(token => token.dailyPriceChange > 0)
         .sort((a, b) => (b.dailyPriceChange || 0) - (a.dailyPriceChange || 0))
         .slice(0, limit)
-      
+
       const topTvl = tokensWithRealTimeData
         .filter(token => token.currentTvl > 0)
         .sort((a, b) => (b.currentTvl || 0) - (a.currentTvl || 0))
         .slice(0, limit)
-      
+
       return {
         topVolume,
         topGainers,

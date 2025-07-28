@@ -236,6 +236,7 @@ import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
+import { dexHunterStore } from '@/stores/dexHunterStore';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any
@@ -243,6 +244,7 @@ const currentPage = computed(() => vmProxy.$route)
 const { isSyncing, connected } = toRefs(loadingState);
 const { loggedWallet, tokens } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
+const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore)
 
@@ -256,8 +258,7 @@ const swapDialog = ref(false)
 const isSwapDialogOpen = computed(() => swapDialog.value)
 
 const geroPrice = computed(() => {
-  const geroToken = tokens.value["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
-  console.log('geroToken', geroToken)
+  const geroToken = dexHunterTokens.value["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
   if (!geroToken) {
     // TODO Add Gero Token
   }
