@@ -3,13 +3,16 @@
     <div class="form-container">
       <div class="form-row">
         <div class="input-full">
-          <label class="input-label">Name on card</label>
-          <v-text-field v-model="formData.nameOnCard" dense outlined class="form-input" hide-details />
+          <label class="input-label">Name on cardr</label>
+          <div class="card-number-input">
+            <span class="card-number-text">{{ formData.nameOnCard }}</span>
+          </div>
         </div>
-
         <div class="input-full small-input">
           <label class="input-label">Expiry</label>
-          <v-text-field v-model="formData.expiry" dense outlined class="form-input" hide-details />
+          <div class="cvv-input">
+            <span class="cvv-text">{{ formData.expiry }}</span>
+          </div>
         </div>
       </div>
 
@@ -17,7 +20,7 @@
         <div class="input-full">
           <label class="input-label">Card number</label>
           <div class="card-number-input">
-            <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" />
+            <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
 
             <span class="card-number-text">{{ formData.cardNumber }}</span>
           </div>
@@ -154,6 +157,11 @@ const togglePinVisibility = () => {
 
 .card-number-input {
   padding: $spacing-sm $spacing-sm $spacing-sm $spacing-sm;
+}
+
+.card-icon {
+  width: 24px;
+  height: 24px;
 }
 
 .card-number-text,
