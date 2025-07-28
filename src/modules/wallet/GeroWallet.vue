@@ -10,7 +10,7 @@ import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
 
-const status = ref('approved');
+const status = ref('pending');
 const section = ref(OrderCardSection);
 
 const setActiveStatus = () => {

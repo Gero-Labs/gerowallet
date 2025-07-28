@@ -198,8 +198,8 @@ const handleContactSupport = () => {
 }
 
 .featured-icon {
-  width: $spacing-2xl;
-  height: $spacing-2xl;
+  width: 48px;
+  height: 48px;
   background: rgba(0, 223, 243, 0.2);
   border-radius: 50%;
   display: flex;

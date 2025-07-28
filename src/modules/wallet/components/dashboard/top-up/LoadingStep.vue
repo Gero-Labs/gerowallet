@@ -4,13 +4,13 @@
     <div class="currency-icon">
       <v-icon color="#75E0A7" size="20">mdi-currency-usd</v-icon>
     </div>
-    
+
     <!-- Title and Subtitle -->
     <div class="header-text">
       <h2 class="modal-title">Loading your top up</h2>
       <p class="modal-subtitle">It should be done within 1-2 minutes</p>
     </div>
-    
+
     <!-- Loading Section -->
     <div class="loading-section">
       <div class="loading-container">
@@ -19,11 +19,29 @@
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: `${progress}%` }"></div>
             </div>
-            <div class="progress-icon" :style="{ left: `${Math.min(progress - 2, 100)}%` }">
-              <v-icon
-                size="20"
-                color="#00C7F3"
-              >mdi-currency-usd</v-icon>
+            <div class="progress-icon" :style="{ left: `${Math.min(progress, 100)}%` }">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M5 13.3334C5 15.1744 6.49238 16.6667 8.33333 16.6667H11.6667C13.5076 16.6667 15 15.1744 15 13.3334C15 11.4925 13.5076 10.0001 11.6667 10.0001H8.33333C6.49238 10.0001 5 8.5077 5 6.66675C5 4.8258 6.49238 3.33341 8.33333 3.33341H11.6667C13.5076 3.33341 15 4.8258 15 6.66675M10 1.66675V18.3334"
+                  stroke="url(#paint0_linear_5074_28698)"
+                  stroke-width="1.66667"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <defs>
+                  <linearGradient
+                    id="paint0_linear_5074_28698"
+                    x1="5"
+                    y1="1.66675"
+                    x2="15.5205"
+                    y2="1.79912"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop offset="0.39554" stop-color="#00C7F3" />
+                    <stop offset="1" stop-color="#00FFD1" />
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
           </div>
           <span class="progress-text">Progressing...</span>
@@ -58,10 +76,10 @@ const interval = ref<number | null>(null);
 const startProgress = () => {
   const step = 100 / (props.duration / 100); // Update every 100ms
   progress.value = 0;
-  
+
   interval.value = window.setInterval(() => {
     progress.value += step;
-    
+
     if (progress.value >= 100) {
       progress.value = 100;
       if (interval.value) {
@@ -177,16 +195,15 @@ onUnmounted(() => {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+  background: linear-gradient(135deg, $primary-cyan 0%, $primary-green 100%);
   border-radius: 4px;
   transition: width 0.1s ease;
 }
 
 .progress-icon {
   position: absolute;
-  top: 50%;
+  top: 53%;
   transform: translateY(-50%);
-  border-radius: 50%;
   z-index: 1;
   transition: left 0.1s ease;
 }
