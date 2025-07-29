@@ -1,5 +1,26 @@
 <template>
   <v-layout column>
+    
+    <!-- Show comprehensive empty state when wallet has no tokens -->
+    <template v-if="isWalletEmpty">
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <EmptyStateHero
+            :is-new-user="isNewUser"
+            :show-tutorial="isNewUser"
+            :should-backup="shouldBackup"
+            @buy-crypto="handleBuyCrypto"
+            @show-receive="handleShowReceive"
+            @open-learn="handleOpenLearn"
+            @start-tutorial="handleStartTutorial"
+            @backup-wallet="handleBackupWallet"
+          />
+        </v-col>
+      </v-row>
+    </template>
+    
+    <!-- Regular dashboard content when wallet has tokens -->
+    <template v-else>
     <!-- Combined row for Cardano with metrics + chart + carousel -->
     <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
       <!-- Left side: Chart and Market Data stacked -->
@@ -125,12 +146,18 @@
       :show="showClaimDialog"
       @close="showClaimDialog = false"
     />
+    
+    
+    
+    </template>
   </v-layout>
 </template>
 <script setup lang="ts">
 import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
+import EmptyStateHero from '../components/EmptyStateHero.vue';
+import EmptyStateMini from '../components/EmptyStateMini.vue';
 import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
@@ -142,9 +169,11 @@ import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
-import { walletStore } from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
+import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
+import networks from '@/utils/networks';
 
 // Import carousel assets
 import assets from '@/utils/assets';
@@ -154,7 +183,7 @@ const instance = getCurrentInstance();
 const router = instance?.proxy.$router;
 
 // Store refs
-const { loggedWallet, transactions, account } = toRefs(walletStore);
+const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
 
@@ -241,6 +270,23 @@ const isStakingEnabled = computed(() => {
   }
   return false;
 })
+
+// Empty state computeds
+const isWalletEmpty = computed(() => checkWalletEmpty(account.value, tokens.value));
+const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
+const currencySymbol = computed(() => 
+  networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)
+);
+const shouldBackup = computed(() => {
+  // Access config directly from reactive store for better reactivity
+  const config = walletStore.config;
+  return config && 'backup' in config && !config.backup;
+});
+
+// Background image for mini cards
+const backgroundImage = computed(() => {
+  return assets.emptyState;
+});
 
 const computedValues = computed(() => {
   let assetsValue = 0
@@ -501,6 +547,43 @@ const receiveKaiserExToken = async () => {
     kaiserExLoading.value = false;
   }
 };
+
+// Empty state handlers
+const handleBuyCrypto = () => {
+  console.log('Opening buy crypto dialog - emitting to parent');
+  instance?.proxy?.$emit('open-buy-dialog');
+};
+
+const handleShowReceive = () => {
+  console.log('Opening receive dialog - emitting to parent');
+  instance?.proxy?.$emit('open-receive-dialog');
+};
+
+const handleOpenLearn = () => {
+  console.log('Opening learning resources...');
+  // Could open a modal with tutorials or redirect to docs
+  window.open('https://docs.gerowallet.io', '_blank');
+};
+
+const handleStartTutorial = () => {
+  console.log('Starting interactive tutorial...');
+  // Implement interactive tutorial
+};
+
+const navigateToStaking = () => {
+  router?.push('/staking');
+};
+
+const handleBackupWallet = () => {
+  console.log('Backup wallet button clicked - emitting to parent');
+  // Emit event to parent component (ContentLayout) to open backup dialog
+  instance?.proxy?.$emit('open-backup-dialog');
+};
+
+const handleGeroCardClick = () => {
+  console.log('Gero Card clicked - Coming Soon feature');
+  // No action for "Coming Soon" feature
+};
 </script>
 <style scoped>
 .transactions-table {
@@ -529,5 +612,36 @@ const receiveKaiserExToken = async () => {
 .apex-carousel-wrapper {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
   height: 100% !important;
+}
+
+/* Mini card wrapper styles */
+.mini-card-wrapper {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mini-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.05) 50%, rgba(0, 0, 0, 0.1) 100%);
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.mini-card-wrapper .empty-state-mini {
+  position: relative;
+  z-index: 2;
+  background: transparent !important;
+}
+
+.mini-card-wrapper .v-btn {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
 }
 </style>

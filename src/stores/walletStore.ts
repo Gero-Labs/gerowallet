@@ -72,7 +72,7 @@ hydrateWalletStore();
 
 // Selective chrome.storage.onChanged listener for critical cross-context sync
 // Only listen for specific keys that need background -> options sync
-const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards'];
+const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards', 'config'];
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
