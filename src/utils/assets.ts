@@ -126,6 +126,7 @@ import debitCardBgImage from '@/assets/debitcardbg.png'
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
 import debitCardImage from '@/assets/geroCard.png'
+import emptyState from '@/assets/emptyState.png'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -357,5 +358,6 @@ export default {
   debitCardBgImage,
   cashbackCarouselImage,
   cashbackImage,
-  debitCardImage
+  debitCardImage,
+  emptyState
 }
