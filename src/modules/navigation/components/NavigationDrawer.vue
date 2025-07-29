@@ -59,7 +59,26 @@
               {{ item.title }}
             </v-list-item-title>
           </v-list-item-content>
-          <v-list-item-action v-if="item.new">
+          <!-- Mini Player Button for Media Player item -->
+          <v-list-item-action v-if="item.title === 'Media Player' && musicPlaylist?.length > 0">
+            <v-tooltip right>
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  x-small
+                  v-bind="attrs"
+                  v-on="on"
+                  @click.stop.prevent="toggleMiniPlayer"
+                  :color="context.shown ? 'primary' : ''"
+                >
+                  <v-icon size="16">mdi-play-box-multiple</v-icon>
+                </v-btn>
+              </template>
+              <span>Mini Player</span>
+            </v-tooltip>
+          </v-list-item-action>
+
+          <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
@@ -141,6 +160,7 @@
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
+import MusicStoreModule from '@/stores/musicStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
@@ -180,7 +200,7 @@ const router = vmProxy.$router
 // Reactive state
 const version = ref('')
 
-const { musicPlaylist } = toRefs(musicStore);
+const { musicPlaylist, context } = toRefs(musicStore);
 
 const { loggedWallet, transactions } = toRefs(walletStore);
 
@@ -258,6 +278,12 @@ watch(() => breakpoint.mobile,
     }
   }
 )
+
+// Methods
+function toggleMiniPlayer() {
+  console.log('Toggling mini player, current shown:', context.value.shown)
+  MusicStoreModule.setMediaPlayerShown(!context.value.shown)
+}
 
 async function submitLogout() {
   try {

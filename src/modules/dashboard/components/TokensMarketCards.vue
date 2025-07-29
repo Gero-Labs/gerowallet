@@ -3,6 +3,16 @@
     <!-- Top by Volume (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="pr-2">
       <v-card flat outlined class="compact-card volume-card liquid-glass-compact" style="position: relative;">
+        <!-- Coming Soon Overlay -->
+        <div class="coming-soon-overlay">
+          <div class="coming-soon-content">
+            <div class="market-data-label">Market Data</div>
+            <div class="coming-soon-text">COMING SOON</div>
+          </div>
+        </div>
+        
+        <!-- Blurred Content Container -->
+        <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">
@@ -67,12 +77,23 @@
             </div>
           </template>
         </v-card-text>
+        </div>
       </v-card>
     </v-col>
 
     <!-- Top by Price Change (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="px-2">
       <v-card flat outlined class="compact-card gainers-card liquid-glass-compact" style="position: relative;">
+        <!-- Coming Soon Overlay -->
+        <div class="coming-soon-overlay">
+          <div class="coming-soon-content">
+            <div class="market-data-label">Market Data</div>
+            <div class="coming-soon-text">COMING SOON</div>
+          </div>
+        </div>
+        
+        <!-- Blurred Content Container -->
+        <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">
@@ -144,12 +165,23 @@
             </div>
           </template>
         </v-card-text>
+        </div>
       </v-card>
     </v-col>
 
     <!-- Top by Market Cap (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="pl-2">
       <v-card flat outlined class="compact-card mcap-card liquid-glass-compact" style="position: relative;">
+        <!-- Coming Soon Overlay -->
+        <div class="coming-soon-overlay">
+          <div class="coming-soon-content">
+            <div class="market-data-label">Market Data</div>
+            <div class="coming-soon-text">COMING SOON</div>
+          </div>
+        </div>
+        
+        <!-- Blurred Content Container -->
+        <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
         <div v-if="lastRefreshTime" class="refresh-badge">
           <v-tooltip bottom content-class="refresh-tooltip">
@@ -214,6 +246,7 @@
             </div>
           </template>
         </v-card-text>
+        </div>
       </v-card>
     </v-col>
   </v-row>
@@ -222,7 +255,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import charli3Store from '@/stores/charli3Store'
-import Charli3API from '@/api/charli3-api'
+// import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
 import assts from '@/utils/assets'
 
 // Reactive state
@@ -246,19 +279,94 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
   }
 
   try {
-    // Use real-time data for better performance
-    const data = await Charli3API.getTopPerformersRealTime(10)
-    console.log('Market data:', data)
-    const processedData = {
-      topVolume: await processTokenData(data.topVolume, 'topVolume'),
-      topGainers: await processTokenData(data.topGainers, 'topGainers'),
-      topTvl: await processTokenData(data.topTvl, 'topTvl')
+    // Use mock data instead of API calls
+    const mockData = {
+      topVolume: [
+        {
+          ticker: 'ADA',
+          name: 'Cardano',
+          symbol: 'ADA',
+          dailyVolume: 125000000,
+          currentPrice: 0.58,
+          logoUrl: null
+        },
+        {
+          ticker: 'MIN',
+          name: 'Minswap',
+          symbol: 'MIN',
+          dailyVolume: 8500000,
+          currentPrice: 0.042,
+          logoUrl: null
+        },
+        {
+          ticker: 'SUNDAE',
+          name: 'SundaeSwap',
+          symbol: 'SUNDAE',
+          dailyVolume: 3200000,
+          currentPrice: 0.0089,
+          logoUrl: null
+        }
+      ],
+      topGainers: [
+        {
+          ticker: 'SNEK',
+          name: 'Snek',
+          symbol: 'SNEK',
+          dailyPriceChange: 24.5,
+          currentPrice: 0.00032,
+          logoUrl: null
+        },
+        {
+          ticker: 'HOSKY',
+          name: 'Hosky Token',
+          symbol: 'HOSKY',
+          dailyPriceChange: 18.2,
+          currentPrice: 0.0000012,
+          logoUrl: null
+        },
+        {
+          ticker: 'WMT',
+          name: 'World Mobile Token',
+          symbol: 'WMT',
+          dailyPriceChange: 12.8,
+          currentPrice: 0.21,
+          logoUrl: null
+        }
+      ],
+      topTvl: [
+        {
+          ticker: 'INDY',
+          name: 'Indigo Protocol',
+          symbol: 'INDY',
+          currentTvl: 48500000,
+          currentPrice: 1.82,
+          logoUrl: null
+        },
+        {
+          ticker: 'LQ',
+          name: 'Liqwid Finance',
+          symbol: 'LQ',
+          currentTvl: 35200000,
+          currentPrice: 2.45,
+          logoUrl: null
+        },
+        {
+          ticker: 'DJED',
+          name: 'Djed Stablecoin',
+          symbol: 'DJED',
+          currentTvl: 28900000,
+          currentPrice: 1.01,
+          logoUrl: null
+        }
+      ]
     }
 
-    charli3Store.setMarketData(processedData)
+    console.debug('Using mock market data:', mockData)
+    
+    charli3Store.setMarketData(mockData)
 
-    // Load logos in background for displayed tokens
-    loadLogosInBackground()
+    // Skip logo loading for mock data
+    // loadLogosInBackground()
 
   } catch (error) {
     console.error('Failed to load market data:', error)
@@ -710,5 +818,47 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+/* Card content blur container */
+.card-content-blur {
+  filter: blur(8px);
+  -webkit-filter: blur(8px);
+}
+
+/* Coming Soon Overlay */
+.coming-soon-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 8px;
+}
+
+.coming-soon-content {
+  text-align: center;
+}
+
+.market-data-label {
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.coming-soon-text {
+  color: #888888;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
 }
 </style>
