@@ -1,55 +1,10 @@
 <template>
   <!-- NFT Gallery Container -->
   <div class="nft-gallery-container">
-    <!-- Gallery Controls -->
-    <div class="gallery-controls mb-4">
-      <div class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center gap-3">
-          <v-text-field
-            v-model="collectiblesSearch"
-            dense
-            outlined
-            hide-details
-            placeholder="Search collections..."
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            style="max-width: 280px;"
-            class="collection-search"
-          ></v-text-field>
-        </div>
-
-        <div class="d-flex align-center gap-3">
-          <v-select
-            v-model="collectiblesSortBy"
-            :items="sortOptionsDropdown"
-            dense
-            outlined
-            hide-details
-            style="max-width: 158px; font-size: 12px; margin-right: 12px; min-height: 32px; max-height: 32px"
-            class="sort-select-small"
-            attach
-          ></v-select>
-
-          <v-btn-toggle class="mx-2" v-model="cardSizeMode" mandatory dense color="primary">
-            <v-btn value="small" x-small>S</v-btn>
-            <v-btn value="medium" x-small>M</v-btn>
-            <v-btn value="large" x-small>L</v-btn>
-          </v-btn-toggle>
-
-          <v-btn-toggle v-model="collectiblesViewMode" mandatory dense color="primary">
-            <v-btn value="grid" x-small>
-              <v-icon small>mdi-view-comfy</v-icon>
-            </v-btn>
-            <v-btn value="list" x-small>
-              <v-icon small>mdi-view-list</v-icon>
-            </v-btn>
-          </v-btn-toggle>
-        </div>
-      </div>
-    </div>
-
-    <!-- Grid View -->
-    <div v-if="collectiblesViewMode === 'grid'" class="gallery-grid px-3 pb-3" :class="gridSizeClass">
+    <!-- Fixed height container to match assets table -->
+    <div class="collectibles-fixed-container">
+      <!-- Grid View -->
+      <div class="gallery-grid px-3 pb-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
       <v-card
         v-for="collection in paginatedCollectibles"
         :key="collection.id || collection.name"
@@ -83,59 +38,40 @@
         <div class="card-content-overlay">
           <h3 class="collection-name-glass">{{ collection.name }}</h3>
         </div>
-      </v-card>
+        </v-card>
+      </div>
+
+      <!-- Pagination for gallery views -->
+      <div v-if="totalPages > 1" class="text-center mt-3">
+        <v-pagination
+          v-model="collectiblesPage"
+          :length="totalPages"
+          :total-visible="5"
+          circle
+          class="compact-pagination"
+        ></v-pagination>
+      </div>
     </div>
-
-    <!-- List View -->
-    <v-list v-if="collectiblesViewMode === 'list'" class="gallery-list">
-      <v-list-item
-        v-for="collection in paginatedCollectibles"
-        :key="collection.id || collection.name"
-        class="nft-collection-item liquid-glass-card mb-0"
-        @click="handleOnRowClick(collection)"
-      >
-        <v-list-item-avatar rounded :size="avatarSize">
-          <v-img :src="collection.img" :alt="collection.name" />
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title>{{ collection.name }}</v-list-item-title>
-          <v-list-item-subtitle v-if="collection.description" class="text-body-2 text--secondary mb-0">
-            {{ Number(collection.quantity || 1).toLocaleString() }} Items
-          </v-list-item-subtitle>
-          <v-list-item-subtitle>
-            {{ Array.isArray(collection.description) ? collection.description.join('') : collection.description }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-action>
-          <v-chip v-if="collection.isScam" small color="error">Scam</v-chip>
-        </v-list-item-action>
-      </v-list-item>
-    </v-list>
-
-    <!-- Pagination for gallery views -->
-    <v-pagination
-      v-if="totalPages > 1"
-      v-model="collectiblesPage"
-      :length="totalPages"
-      :total-visible="7"
-      class="mt-0"
-    ></v-pagination>
     <TokensDialog @close="closeDialog" :modalData="dialogData" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, watch } from 'vue';
+import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 
 // Props
 interface Props {
   hideScam?: boolean;
+  searchTerm?: string;
+  sortBy?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  hideScam: false
+  hideScam: false,
+  searchTerm: '',
+  sortBy: 'name'
 });
 
 // Emits
@@ -145,12 +81,9 @@ const emit = defineEmits(['rowClick']);
 const { collections } = toRefs(walletStore);
 
 // Advanced Gallery Features
-const collectiblesViewMode = ref<string>('grid'); // grid, masonry, list
-const cardSizeMode = ref<string>('small'); // small, medium, large
-const collectiblesSearch = ref<string>('');
 const collectiblesPage = ref<number>(1);
-const collectiblesSortBy = ref<string>('name');
 const dialogData = ref<any>(null);
+const screenWidth = ref<number>(window.innerWidth);
 
 // Methods
 const handleOnRowClick = (collection: any) => {
@@ -178,42 +111,43 @@ const sortOptionsDropdown = computed(() => [
 ]);
 
 const cardSize = computed(() => {
-  switch (cardSizeMode.value) {
-    case 'small': return 140
-    case 'medium': return 200
-    case 'large': return 260
-    default: return 200
+  if (screenWidth.value <= 480) {
+    return 90; // Very small screens
+  } else if (screenWidth.value <= 768) {
+    return 100; // Small screens  
+  } else if (screenWidth.value <= 1200) {
+    return 115; // Medium screens
+  } else {
+    return 126; // Large screens - 10% smaller than original 140px
   }
 });
 
-const avatarSize = computed(() => {
-  switch (cardSizeMode.value) {
-    case 'small': return 40
-    case 'medium': return 60
-    case 'large': return 80
-    default: return 60
-  }
-})
-
 const gridSizeClass = computed(() => {
-  return `grid-${cardSizeMode.value}`
+  if (screenWidth.value <= 480) {
+    return 'grid-4-cols'; // 4 columns for very small screens
+  } else if (screenWidth.value <= 768) {
+    return 'grid-5-cols'; // 5 columns for small screens
+  } else if (screenWidth.value <= 1200) {
+    return 'grid-5-cols'; // 5 columns for medium screens
+  } else {
+    return 'grid-6-cols'; // 6 columns for large screens
+  }
 });
 
 const dynamicItemsPerPage = computed(() => {
-  if (collectiblesViewMode.value === 'list') {
-    switch (cardSizeMode.value) {
-      case 'small': return 28
-      case 'medium': return 15
-      case 'large': return 8
-      default: return 20
-    }
+  // Always enforce exactly 2 rows maximum
+  if (screenWidth.value <= 480) {
+    // Very small screens: smaller cards allow more per row, 2 rows max = 8 items
+    return 8;
+  } else if (screenWidth.value <= 768) {
+    // Small screens: 5 items per row, 2 rows max = 10 items
+    return 10;
+  } else if (screenWidth.value <= 1200) {
+    // Medium screens: 5 items per row, 2 rows max = 10 items
+    return 10;
   } else {
-    switch (cardSizeMode.value) {
-      case 'small': return 14
-      case 'medium': return 10
-      case 'large': return 8
-      default: return 20
-    }
+    // Large screens: 6 items per row, 2 rows max = 12 items
+    return 12;
   }
 });
 
@@ -222,9 +156,9 @@ const sortedCollectibles = computed(() => {
 
   let sorted: any[] = [...collectibles.value]
 
-  // Apply a search filter first
-  if (collectiblesSearch.value) {
-    const searchTerm = collectiblesSearch.value.toLowerCase()
+  // Apply search filter using prop instead of local ref
+  if (props.searchTerm && props.searchTerm.trim()) {
+    const searchTerm = props.searchTerm.toLowerCase().trim()
     sorted = sorted.filter((collection: any) => {
       // Search in name
       if (collection.name && collection.name.toLowerCase().includes(searchTerm)) {
@@ -249,7 +183,7 @@ const sortedCollectibles = computed(() => {
   }
 
   // Then apply sorting
-  switch (collectiblesSortBy.value) {
+  switch (props.sortBy) {
     case 'name_desc':
       sorted.sort((a, b) => b.name.localeCompare(a.name))
       break
@@ -276,13 +210,24 @@ const totalPages = computed(() => {
   return Math.ceil(sortedCollectibles.value.length / dynamicItemsPerPage.value)
 });
 
-// Watch for search and card size changes to reset pagination
-watch(cardSizeMode, () => {
+// Watch for search changes to reset pagination
+watch(() => props.searchTerm, () => {
   collectiblesPage.value = 1
 });
 
-watch(collectiblesSearch, () => {
-  collectiblesPage.value = 1
+// Resize handler
+const handleResize = () => {
+  screenWidth.value = window.innerWidth;
+  collectiblesPage.value = 1; // Reset to page 1 when screen size changes
+};
+
+// Lifecycle hooks
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
 });
 </script>
 
@@ -291,6 +236,13 @@ watch(collectiblesSearch, () => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
+}
+
+/* Fixed height container to match assets table dimensions */
+.collectibles-fixed-container {
+  min-height: 350px; /* Match the fixed tab height */
+  display: flex;
+  flex-direction: column;
 }
 
 .liquid-glass-card,
@@ -402,8 +354,20 @@ watch(collectiblesSearch, () => {
   gap: 16px;
 }
 
+.grid-4-cols {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.grid-5-cols {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.grid-6-cols {
+  grid-template-columns: repeat(6, 1fr);
+}
+
 .grid-small {
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 126px), 1fr));
 }
 
 .grid-medium {
@@ -435,8 +399,8 @@ watch(collectiblesSearch, () => {
   .gallery-masonry {
     column-count: 2;
   }
-  .grid-small, .grid-medium, .grid-large {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  .gallery-grid {
+    gap: 12px; /* Smaller gap on mobile */
   }
 }
 
@@ -444,8 +408,8 @@ watch(collectiblesSearch, () => {
   .gallery-masonry {
     column-count: 1;
   }
-  .grid-small, .grid-medium, .grid-large {
-    grid-template-columns: 1fr;
+  .gallery-grid {
+    gap: 8px; /* Even smaller gap on very small screens */
   }
 }
 
@@ -503,6 +467,25 @@ watch(collectiblesSearch, () => {
 .nft-collection-card {
   position: relative;
   z-index: 1;
+}
+
+.compact-pagination >>> .v-pagination__item {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  font-size: 12px !important;
+  margin: 0 4px !important;
+}
+
+.compact-pagination >>> .v-pagination__navigation {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  margin: 0 8px !important;
+}
+
+.compact-pagination >>> .v-pagination__navigation .v-icon {
+  font-size: 16px !important;
 }
 </style>
 

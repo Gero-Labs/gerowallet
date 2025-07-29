@@ -1,5 +1,5 @@
 <template>
-  <div class="player" :style="context.minimized ? { width: '232px', borderRight: '1px solid #444444', borderTopRightRadius: '30px' } : {  }">
+  <div class="player" :style="context.minimized ? { width: '232px', borderRight: '1px solid rgba(255, 255, 255, 0.15)', borderTopRightRadius: '30px' } : {  }">
     <div v-if="currentTrack" class="player__inner">
       <CurrentTrack class="player__left" />
       <div class="player__center" v-show="!context.minimized">
@@ -45,10 +45,13 @@ const currentTrack = computed(() => {
   width: 100%
   height: 90px
   z-index: 2
-  background: #0f0f0f
-  border-top: 1px solid #444444
+  background-color: rgba(0, 0, 0, 0.4) !important
+  backdrop-filter: blur(20px) saturate(1.8) !important
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important
+  border-top: 1px solid rgba(255, 255, 255, 0.15) !important
   transition: all 0.3s
-  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important
+  isolation: isolate !important
 
   &__inner
     justify-content: space-between

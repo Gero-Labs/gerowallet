@@ -100,9 +100,15 @@ const submitLogin = async (walletId: string): Promise<void> => {
       data: { wallet },
     });
 
-    // Wait briefly for chrome.storage.onChanged to sync the loggedWallet
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for chrome.storage.onChanged to sync the loggedWallet across contexts
+    await new Promise(resolve => setTimeout(resolve, 300));
     console.debug('Wallet store after login:', !!WalletStore.state.loggedWallet);
+
+    // Double-check that wallet is actually logged in before navigation
+    if (!WalletStore.state.loggedWallet) {
+      console.warn('⚠️ Wallet not logged in after login attempt, retrying...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
 
     const queryParams = vmProxy.$route.query;
     console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);

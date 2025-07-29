@@ -268,8 +268,8 @@ onUnmounted(() => {
 .carousel-wrapper {
   position: relative;
   height: 100%;
-  border-radius: 8px;
-  overflow: visible;
+  border-radius: 12px;
+  overflow: hidden;
   background-color: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
