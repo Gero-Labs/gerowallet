@@ -344,7 +344,7 @@ onMounted(async () => {
 /* Cardano Background - Confined to dashboard working area */
 .cardano-background-dashboard {
   position: absolute;
-  top: -50%;
+  top: calc(-50% + 10px);
   left: 50%;
   width: 100vw;
   height: 100vh;
@@ -360,7 +360,7 @@ onMounted(async () => {
 /* Apex background with same styling as Cardano */
 .apex-background-dashboard {
   position: absolute;
-  top: -50%;
+  top: calc(-50% + 20px);
   left: 50%;
   width: 100vw;
   height: 100vh;
@@ -454,19 +454,24 @@ div.v-toolbar__content {
 }
 
 .network-tooltip {
-  padding: 8px 12px !important;
-  border-radius: 8px !important;
-  background-color: rgba(20, 20, 20, 0.95) !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
-  backdrop-filter: blur(8px) !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
 
   &.offline {
-    border: 1px solid rgba(243, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 100, 100, 0.3) !important;
+    box-shadow: 0 8px 32px rgba(255, 100, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   }
 }
 
 .network-tooltip-content {
   line-height: 1.3;
+  color: #ffffff !important;
 }
 
 .network-tooltip-content div {
@@ -475,6 +480,10 @@ div.v-toolbar__content {
 
 .network-tooltip-content div:last-child {
   margin-bottom: 0;
+}
+
+.network-tooltip-content strong {
+  color: #00c7f3 !important;
 }
 
 .v-dialog__content--active {

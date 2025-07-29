@@ -79,21 +79,27 @@
       </v-col>
     </v-row>
 
-    <!-- Token Allocation Table -->
+    <!-- Token Allocation Table and Swap Row -->
     <v-row no-gutters>
-      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
         <TokenAllocationTable />
+      </v-col>
+      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+        <SwapCard></SwapCard>
       </v-col>
     </v-row>
 
-    <!-- Staking and Transactions Row -->
+    <!-- Transactions and Staking Row + Cashback Column -->
     <v-row no-gutters>
-      <v-col cols="12" xl="8" lg="7" md="12" sm="12" class="pa-2" v-if="isStakingEnabled">
+      <v-col cols="12" xl="4" lg="4" md="12" sm="12" class="pa-2">
+        <TransactionsCard></TransactionsCard>
+      </v-col>
+      <v-col cols="12" xl="5" lg="5" md="12" sm="12" class="pa-2" v-if="isStakingEnabled">
         <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
-      <v-col cols="12" xl="4" lg="5" md="12" sm="12" class="pa-2">
-        <TransactionsCard></TransactionsCard>
+      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+        <CashbackCard></CashbackCard>
       </v-col>
     </v-row>
 
@@ -129,6 +135,8 @@ import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
+import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
+import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';

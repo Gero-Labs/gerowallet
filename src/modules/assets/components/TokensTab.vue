@@ -3,16 +3,30 @@
     dense
     class="transparent"
     :headers="headers"
-    :items="tokensList"
+    :items="paginatedTokens"
     :sort-by.sync="sortOptions.by"
     :sort-desc.sync="sortOptions.desc"
-    :items-per-page="5"
+    :items-per-page="-1"
+    hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :custom-sort="customSort"
   >
+    <template v-slot:body.append>
+      <tr v-if="tokensList.length > 5" class="no-hover">
+        <td :colspan="headers.length" class="text-center pa-0 ma-0">
+          <v-pagination
+            v-model="currentPage"
+            :length="Math.ceil(tokensList.length / 5)"
+            :total-visible="5"
+            circle
+            class="compact-pagination ma-0"
+          ></v-pagination>
+        </td>
+      </tr>
+    </template>
     <template v-slot:[`item.name`]="{ item }">
       <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0 mr-4">
+        <v-list-item-action class="my-0" style="margin-right: 16px !important;">
           <v-badge
             overlap
             avatar
@@ -43,14 +57,19 @@
         </v-list-item-action>
         <v-list-item-content>
           <v-list-item-title>
-            {{item.name}}
+            <v-tooltip top :open-delay="300" content-class="token-description-tooltip" v-if="item?.metadata?.description">
+              <template v-slot:activator="{ on, attrs }">
+                <span v-bind="attrs" v-on="on" class="token-name-hover">{{item.name}}</span>
+              </template>
+              <div class="token-description-content">
+                {{ item.metadata.description }}
+              </div>
+            </v-tooltip>
+            <span v-else>{{item.name}}</span>
             <v-avatar size="16" style="margin-top: -2px; margin-left: 2px;">
               <v-img width="32" style="margin: auto" v-if="item.risk && item.risk !== 'N/A'" :src="assets.resolveRisk(item.risk)" :alt="item.risk" />
             </v-avatar>
           </v-list-item-title>
-          <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-            {{item?.metadata?.description}}
-          </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
     </template>
@@ -76,7 +95,7 @@
           {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
         </v-tooltip>
       </span>
-      <div style="display: flex; justify-self: center" v-if="item.change !== undefined">
+      <div style="display: flex; justify-self: center; position: relative; top: 4px;" v-if="item.change !== undefined">
         <v-avatar tile size="12" class="mr-1" style="align-self: center;">
           <v-img
             :src="
@@ -141,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue';
+import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
@@ -159,12 +178,14 @@ interface Props {
   hideScam?: boolean;
   hideUnverified?: boolean;
   hideUnrated?: boolean;
+  searchTerm?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   hideScam: false,
   hideUnverified: false,
-  hideUnrated: false
+  hideUnrated: false,
+  searchTerm: ''
 });
 
 // Emits
@@ -188,6 +209,10 @@ const headers = ref<any[]>([
   { text: "Allocation", align: "center", sortable: true, value: "allocation", width: "130" },
 ]);
 
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = 5;
+
 // Computed for two-way binding with parent
 const sortOptions = computed({
   get() {
@@ -200,56 +225,90 @@ const sortOptions = computed({
 
 // Methods
 const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
-  if (!sortBy.length) return items;
-
-  return items.sort((a: any, b: any) => {
-    const sortKey = sortBy[0];
-    const compareA = a[sortKey];
-    const compareB = b[sortKey];
-    if (sortKey === 'risk') {
-      const riskOrder = {
-        'AAA': 1,
-        'AA': 2,
-        'A': 3,
-        'BBB': 4,
-        'BB': 5,
-        'B': 6,
-        'CCC': 7,
-        'CC': 8,
-        'C': 9,
-        'D': 10
-      };
-
-      const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
-      const rankB = riskOrder[compareB] || 11;
-
-      return sortDesc[0] ? rankA - rankB : rankB - rankA;
-    } else if (sortKey === 'quantity') {
-      const quantityA = Number(filters.toCurrency(a.quantity, false, 6, '', '', false, a.metadata?.decimals).replaceAll(',', ''))
-      const quantityB = Number(filters.toCurrency(b.quantity, false, 6, '', '', false, b.metadata?.decimals).replaceAll(',', ''))
-      return sortDesc[0] ? quantityB - quantityA : quantityA - quantityB;
-    } else {
-      // Explicit undefined checks:
-      if (compareA === undefined && compareB !== undefined) {
-        // A is undefined, B is defined -> A should go to bottom
-        return sortDesc[0] ? 1 : -1;
-      } else if (compareB === undefined && compareA !== undefined) {
-        // B is undefined, A is defined -> B should go to bottom
-        return sortDesc[0] ? -1 : 1;
-      } else if (compareA === undefined && compareB === undefined) {
-        // Both undefined, consider them equal
-        return 0;
+  // First, separate native tokens from others
+  const nativeTokens = items.filter(item => {
+    // Check if it's a native token (empty policy_id means native token)
+    if (item.policy_id === '') {
+      // For Cardano blockchain, pin ADA (Cardano)
+      if (loggedWallet.value?.chain === 'Cardano' && item.name === 'Cardano') {
+        return true;
       }
-
-      let result;
-      if (typeof compareA === 'string' && typeof compareB === 'string') {
-        result = compareA.localeCompare(compareB);
-      } else {
-        result = compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
+      // For Apex blockchains, pin AP3X (Apex Fusion)
+      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') 
+          && item.name === 'Apex Fusion') {
+        return true;
       }
-      return sortDesc[0] ? -result : result;
     }
+    return false;
   });
+
+  const otherTokens = items.filter(item => {
+    if (item.policy_id === '') {
+      if (loggedWallet.value?.chain === 'Cardano' && item.name === 'Cardano') {
+        return false;
+      }
+      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') 
+          && item.name === 'Apex Fusion') {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Sort the non-native tokens if sortBy is specified
+  if (sortBy.length) {
+    otherTokens.sort((a: any, b: any) => {
+      const sortKey = sortBy[0];
+      const compareA = a[sortKey];
+      const compareB = b[sortKey];
+      if (sortKey === 'risk') {
+        const riskOrder = {
+          'AAA': 1,
+          'AA': 2,
+          'A': 3,
+          'BBB': 4,
+          'BB': 5,
+          'B': 6,
+          'CCC': 7,
+          'CC': 8,
+          'C': 9,
+          'D': 10
+        };
+
+        const rankA = riskOrder[compareA] || 11; // Default for unknown ratings
+        const rankB = riskOrder[compareB] || 11;
+
+        return sortDesc[0] ? rankA - rankB : rankB - rankA;
+      } else if (sortKey === 'quantity') {
+        const quantityA = Number(filters.toCurrency(a.quantity, false, 6, '', '', false, a.metadata?.decimals).replaceAll(',', ''))
+        const quantityB = Number(filters.toCurrency(b.quantity, false, 6, '', '', false, b.metadata?.decimals).replaceAll(',', ''))
+        return sortDesc[0] ? quantityB - quantityA : quantityA - quantityB;
+      } else {
+        // Explicit undefined checks:
+        if (compareA === undefined && compareB !== undefined) {
+          // A is undefined, B is defined -> A should go to bottom
+          return sortDesc[0] ? 1 : -1;
+        } else if (compareB === undefined && compareA !== undefined) {
+          // B is undefined, A is defined -> B should go to bottom
+          return sortDesc[0] ? -1 : 1;
+        } else if (compareA === undefined && compareB === undefined) {
+          // Both undefined, consider them equal
+          return 0;
+        }
+
+        let result;
+        if (typeof compareA === 'string' && typeof compareB === 'string') {
+          result = compareA.localeCompare(compareB);
+        } else {
+          result = compareA < compareB ? -1 : compareA > compareB ? 1 : 0;
+        }
+        return sortDesc[0] ? -result : result;
+      }
+    });
+  }
+
+  // Always put native tokens first
+  return [...nativeTokens, ...otherTokens];
 };
 
 // Computed properties
@@ -283,6 +342,8 @@ const tokensList = computed(() => {
     }
     return token
   });
+  
+  // Apply filters
   res = res.filter(token => {
     if (props.hideScam && token.isScam) {
       return false;
@@ -290,9 +351,44 @@ const tokensList = computed(() => {
     if (props.hideUnverified && !token.verified) {
       return false;
     }
-    return !(props.hideUnrated && !token.risk);
+    if (props.hideUnrated && !token.risk) {
+      return false;
+    }
+    return true;
+  });
 
-  })
+  // Apply search filter
+  if (props.searchTerm && props.searchTerm.trim()) {
+    const searchTerm = props.searchTerm.toLowerCase().trim();
+    res = res.filter(token => {
+      const name = token.name?.toLowerCase() || '';
+      const ticker = token.metadata?.ticker?.toLowerCase() || '';
+      const description = token.metadata?.description?.toLowerCase() || '';
+      const unit = token.unit?.toLowerCase() || '';
+      
+      return name.includes(searchTerm) || 
+             ticker.includes(searchTerm) || 
+             description.includes(searchTerm) ||
+             unit.includes(searchTerm);
+    });
+  }
+  
+  // Pin ADA to the top for Cardano blockchain
+  if (loggedWallet.value?.chain === 'Cardano') {
+    const adaToken = res.find(token => 
+      token.policy_id === '' && 
+      (token.name === 'Cardano' || token.metadata?.ticker === 'ADA' || token.unit === 'lovelace')
+    );
+    
+    if (adaToken) {
+      const otherTokens = res.filter(token => 
+        !(token.policy_id === '' && 
+          (token.name === 'Cardano' || token.metadata?.ticker === 'ADA' || token.unit === 'lovelace'))
+      );
+      res = [adaToken, ...otherTokens];
+    }
+  }
+  
   return res;
 });
 
@@ -315,6 +411,20 @@ const totalAllocation = computed(() => {
   })
   return total
 });
+
+const paginatedTokens = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  
+  // tokensList already includes search filtering and will be sorted by the data table's customSort
+  // So we just need to paginate the already filtered results
+  return tokensList.value.slice(start, end);
+});
+
+// Watch for search term changes to reset pagination
+watch(() => props.searchTerm, () => {
+  currentPage.value = 1;
+});
 </script>
 
 <style scoped>
@@ -323,5 +433,88 @@ const totalAllocation = computed(() => {
   background-color: #333741;
   display: inline-block;
   margin-right: 10px;
+}
+
+.compact-pagination >>> .v-pagination__item {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  font-size: 12px !important;
+  margin: 0 4px !important;
+}
+
+.compact-pagination >>> .v-pagination__item .v-btn {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  min-height: 24px !important;
+  height: 24px !important;
+}
+
+.compact-pagination >>> .v-pagination__navigation {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  margin: 0 8px !important;
+}
+
+.compact-pagination >>> .v-pagination__navigation .v-btn {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  min-height: 24px !important;
+  height: 24px !important;
+}
+
+.compact-pagination >>> .v-pagination__navigation .v-icon {
+  font-size: 16px !important;
+}
+
+/* Remove hover effect and margins from pagination row */
+.no-hover:hover {
+  background-color: transparent !important;
+}
+
+.no-hover td {
+  padding: 0 !important;
+  margin: 0 !important;
+  position: relative;
+  top: 10px;
+}
+
+.compact-pagination.ma-0 {
+  margin: 0 !important;
+}
+
+/* Token Description Tooltip - Liquid Glass Effect */
+.token-description-tooltip {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  max-width: 300px !important;
+}
+
+.token-description-content {
+  color: #ffffff !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  font-weight: 400 !important;
+}
+
+.token-name-hover {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: opacity 0.2s ease;
+}
+
+.token-name-hover:hover {
+  opacity: 0.8;
 }
 </style>
