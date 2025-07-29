@@ -141,7 +141,7 @@
                   </v-avatar>
                 </v-btn>
               </v-app-bar>
-              <v-row no-gutters v-if="shouldBackup">
+              <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                 <v-col cols="12">
                   <v-alert
                     type="error"
@@ -177,7 +177,11 @@
               />
               <v-sheet class="transparent pt-2">
                 <keep-alive>
-                  <router-view />
+                  <router-view 
+                    @open-backup-dialog="handleOpenBackupDialog"
+                    @open-buy-dialog="handleOpenBuyDialog"
+                    @open-receive-dialog="handleOpenReceiveDialog"
+                  />
                 </keep-alive>
               </v-sheet>
             </v-layout>
@@ -210,6 +214,16 @@
       :isOpen="isSwapDialogOpen"
       @close="closeSwapDialog"
     />
+
+    <BuyDialog
+      :isOpen="buyDialog"
+      @close="buyDialog = false"
+    />
+
+    <ReceiveDialog
+      :isOpen="receiveDialog"
+      @close="receiveDialog = false"
+    />
     </v-app>
   </div>
 </template>
@@ -224,6 +238,8 @@ import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue'
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue'
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue'
+import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue'
+import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue'
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets'
 import { themes, iconFilters } from '@/config/themes'
@@ -242,7 +258,7 @@ const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any
 const currentPage = computed(() => vmProxy.$route)
 const { isSyncing, connected } = toRefs(loadingState);
-const { loggedWallet, tokens } = toRefs(walletStore);
+const { loggedWallet, tokens, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
@@ -253,6 +269,8 @@ const currentDialog  = ref<string|null>(null)
 const dialogs = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
 const swapDialog = ref(false)
+const buyDialog = ref(false)
+const receiveDialog = ref(false)
 
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value)
@@ -282,7 +300,15 @@ function closeSwapDialog() {
 }
 const time = timePlugin
 const changeLog  = changeLogPlugin
-const shouldBackup = computed(() => WalletStore.hasBackup() && !WalletStore.getBackup())
+const shouldBackup = computed(() => {
+  // Use reactive config from store for proper sync between empty and populated states
+  return config.value && 'backup' in config.value && !config.value.backup;
+})
+
+// Check if wallet is empty (no native tokens)
+const isWalletEmpty = computed(() => {
+  return !account.value || account.value.controlled_amount === 0;
+});
 const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0
 })
@@ -308,6 +334,21 @@ function closeChangeLogDialog() {
 }
 function closeDialog() {
   currentDialog.value = null
+}
+
+function handleOpenBackupDialog() {
+  console.log('Received backup dialog event from dashboard');
+  backupWalletDialog.value = true;
+}
+
+function handleOpenBuyDialog() {
+  console.log('Received buy dialog event from dashboard');
+  buyDialog.value = true;
+}
+
+function handleOpenReceiveDialog() {
+  console.log('Received receive dialog event from dashboard');
+  receiveDialog.value = true;
 }
 
 // Theme management - update colors when chain changes
