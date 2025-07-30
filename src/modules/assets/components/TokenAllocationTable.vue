@@ -268,12 +268,12 @@ const collectiblesSortOptions = computed(() => [
 // Simple breakpoint-based responsive detection
 const checkHeaderOverflow = () => {
   if (!headerRef.value) return;
-  
+
   const headerWidth = headerRef.value.offsetWidth;
-  
+
   // At 800px and below, switch to icons to prevent wrapping
-  const shouldUseIconMode = headerWidth <= 800;
-  
+  const shouldUseIconMode = headerWidth <= 788;
+
   if (useIconMode.value !== shouldUseIconMode) {
     useIconMode.value = shouldUseIconMode;
   }
@@ -292,7 +292,7 @@ onMounted(() => {
   hideScam.value = config.value?.hideScamTokens || false;
   hideUnrated.value = config.value?.hideUnratedTokens || false;
   hideUnverified.value = config.value?.hideUnverifiedTokens || false;
-  
+
   // Set up responsive tab detection
   window.addEventListener('resize', debouncedCheck);
   setTimeout(checkHeaderOverflow, 100);
@@ -436,14 +436,14 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
   .token-allocation-title {
     flex-wrap: wrap !important;
   }
-  
+
   .responsive-tabs {
     order: 3 !important;
     width: 100% !important;
     margin-left: 0 !important;
     margin-top: 8px !important;
   }
-  
+
   .top-level-search {
     order: 2 !important;
     margin-left: 0 !important;

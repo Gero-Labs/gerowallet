@@ -11,9 +11,9 @@
               <v-img :src="assets.giftSvg" contain></v-img>
             </v-list-item-avatar>
             <div class="cashback-content">
-              <div class="cashback-title">Ready to Claim</div>
+              <div class="cashback-title">Claim</div>
               <div class="cashback-amounts">
-                <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
+                <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "₳", "", false, 6) }}</div>
               </div>
             </div>
           </div>
@@ -36,8 +36,8 @@
         <div class="deals-carousel-container" v-if="randomDeals.length > 0">
           <!-- Top Row - Left to Right -->
           <div class="deals-carousel deals-carousel-ltr">
-            <div 
-              v-for="(deal, index) in duplicatedTopRow" 
+            <div
+              v-for="(deal, index) in duplicatedTopRow"
               :key="`top-${deal.id}-${index}`"
               class="deal-card"
             >
@@ -53,8 +53,8 @@
 
           <!-- Bottom Row - Right to Left -->
           <div class="deals-carousel deals-carousel-rtl">
-            <div 
-              v-for="(deal, index) in duplicatedBottomRow" 
+            <div
+              v-for="(deal, index) in duplicatedBottomRow"
               :key="`bottom-${deal.id}-${index}`"
               class="deal-card"
             >
@@ -69,7 +69,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Go Cashback Button -->
       <div class="cashback-button-container">
         <v-btn elevation="0" height="36" color="#0B141B" @click="navigateToCashback" :disabled="!supported" block>
@@ -212,7 +212,7 @@ const navigateToCashback = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: 
+  background:
     radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 30%),
     radial-gradient(circle at 70% 80%, rgba(0, 199, 243, 0.03) 0%, transparent 40%),
     radial-gradient(circle at 20% 70%, rgba(0, 250, 213, 0.03) 0%, transparent 35%),
