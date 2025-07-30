@@ -202,13 +202,11 @@ export const useCardStore = defineStore('card', {
       this.errors.auth = null;
 
       try {
-        const response = await axios.post(
-          `${import.meta.env['VITE_KAISEREX_API_URL'] || 'https://api.dev.kaiserex.cybro.cz'}/api/token`,
-          {
-            code,
-            codeVerifier,
-          }
-        );
+        const instance = this.getAxiosInstance();
+        const response = await instance.post('/api/token', {
+          code,
+          codeVerifier,
+        });
 
         const tokens: AuthTokens = response.data;
         this.accessToken = tokens.access_token;
@@ -229,12 +227,10 @@ export const useCardStore = defineStore('card', {
       if (!this.refreshToken) throw new Error('No refresh token available');
 
       try {
-        const response = await axios.post(
-          `${import.meta.env['VITE_KAISEREX_API_URL'] || 'https://api.dev.kaiserex.cybro.cz'}/api/token/refresh`,
-          {
-            refresh_token: this.refreshToken,
-          }
-        );
+        const instance = this.getAxiosInstance();
+        const response = await instance.post('/api/token/refresh', {
+          refresh_token: this.refreshToken,
+        });
 
         const tokens: AuthTokens = response.data;
         this.accessToken = tokens.access_token;
@@ -264,7 +260,7 @@ export const useCardStore = defineStore('card', {
     },
 
     // User methods
-    async fetchUserInfo(): Promise<UserInfo> {
+    async fetchUserInfo(): Promise<void> {
       this.loading.userInfo = true;
       this.errors.userInfo = null;
 
@@ -272,7 +268,6 @@ export const useCardStore = defineStore('card', {
         const instance = this.getAxiosInstance();
         const response = await instance.get('/api/user');
         this.userInfo = response.data;
-        return response.data;
       } catch (error) {
         this.errors.userInfo = error instanceof Error ? error.message : 'Failed to fetch user info';
         throw error;
@@ -281,7 +276,7 @@ export const useCardStore = defineStore('card', {
       }
     },
 
-    async fetchCardanoAddress(): Promise<CardanoAddress> {
+    async fetchCardanoAddress(): Promise<void> {
       this.loading.cardanoAddress = true;
       this.errors.cardanoAddress = null;
 
@@ -289,7 +284,6 @@ export const useCardStore = defineStore('card', {
         const instance = this.getAxiosInstance();
         const response = await instance.get('/api/cardano-address');
         this.cardanoAddress = response.data;
-        return response.data;
       } catch (error) {
         this.errors.cardanoAddress = error instanceof Error ? error.message : 'Failed to fetch Cardano address';
         throw error;
@@ -299,7 +293,7 @@ export const useCardStore = defineStore('card', {
     },
 
     // Card methods
-    async fetchCardData(): Promise<CardData> {
+    async fetchCardData(): Promise<void> {
       this.loading.cardData = true;
       this.errors.cardData = null;
 
@@ -307,7 +301,6 @@ export const useCardStore = defineStore('card', {
         const instance = this.getAxiosInstance();
         const response = await instance.get('/api/card');
         this.cardData = response.data;
-        return response.data;
       } catch (error) {
         this.errors.cardData = error instanceof Error ? error.message : 'Failed to fetch card data';
         throw error;
@@ -316,7 +309,7 @@ export const useCardStore = defineStore('card', {
       }
     },
 
-    async fetchCardNumber(): Promise<CardNumber> {
+    async fetchCardNumber(): Promise<void> {
       this.loading.cardNumber = true;
       this.errors.cardNumber = null;
 
@@ -324,7 +317,6 @@ export const useCardStore = defineStore('card', {
         const instance = this.getAxiosInstance();
         const response = await instance.get('/api/card/number');
         this.cardNumber = response.data;
-        return response.data;
       } catch (error) {
         this.errors.cardNumber = error instanceof Error ? error.message : 'Failed to fetch card number';
         throw error;
@@ -333,7 +325,7 @@ export const useCardStore = defineStore('card', {
       }
     },
 
-    async fetchCardBalance(): Promise<CardBalance> {
+    async fetchCardBalance(): Promise<void> {
       this.loading.cardBalance = true;
       this.errors.cardBalance = null;
 
@@ -341,7 +333,6 @@ export const useCardStore = defineStore('card', {
         const instance = this.getAxiosInstance();
         const response = await instance.get('/api/card/balance');
         this.cardBalance = response.data;
-        return response.data;
       } catch (error) {
         this.errors.cardBalance = error instanceof Error ? error.message : 'Failed to fetch card balance';
         throw error;
@@ -350,7 +341,7 @@ export const useCardStore = defineStore('card', {
       }
     },
 
-    async fetchCardHistory(params: HistoryParams = {}): Promise<HistoryResponse> {
+    async fetchCardHistory(params: HistoryParams = {}): Promise<void> {
       this.loading.cardHistory = true;
       this.errors.cardHistory = null;
 
@@ -366,7 +357,6 @@ export const useCardStore = defineStore('card', {
         const url = `/api/card/history${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
         const response = await instance.get(url);
         this.cardHistory = response.data;
-        return response.data;
       } catch (error) {
         this.errors.cardHistory = error instanceof Error ? error.message : 'Failed to fetch card history';
         throw error;
@@ -428,9 +418,5 @@ export const useCardStore = defineStore('card', {
         }
       }
     },
-  },
-
-  persist: {
-    paths: ['accessToken', 'refreshToken', 'tokenExpiry', 'userInfo', 'cardanoAddress', 'cardData', 'cardBalance'],
   },
 });
