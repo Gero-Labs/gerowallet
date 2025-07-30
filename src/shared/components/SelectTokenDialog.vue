@@ -11,19 +11,6 @@
       ></v-text-field>
     </v-card-title>
 
-    <v-card-title class="pa-0 px-2 pb-2" v-if="favoriteTokens.length">
-      <v-chip
-        v-for="(unit, index) in favoriteTokens"
-        :key="index"
-        class="pl-1 pr-2 mx-1 mb-1"
-      >
-        <v-avatar class="mr-1">
-          <v-img :src="resolveToken(unit)['img']" />
-        </v-avatar>
-        {{ resolveToken(unit)['ticker'] }}
-      </v-chip>
-    </v-card-title>
-
     <v-card-text class="pb-0 px-2">
       <v-virtual-scroll
         :bench="0"
@@ -52,7 +39,7 @@
                   <img
                     :src="item['img']"
                     :alt="`${item['ticker']} Logo`"
-                    @error="e => { e.target.onerror = null; e.target.src = item.fallback_img }"
+                    @error="e => handleImageError(e, item)"
                   />
                 </v-avatar>
               </v-badge>
@@ -60,7 +47,7 @@
                 <img
                   :src="item['img']"
                   :alt="`${item['ticker']} Logo`"
-                  @error="e => { e.target.onerror = null; e.target.src = item.fallback_img }"
+                  @error="e => handleImageError(e, item)"
                 />
               </v-avatar>
             </v-list-item-action>
@@ -77,15 +64,6 @@
                 {{ filters.toCurrency(item['balance'], false, 0, '', ' ' + item['ticker'], true, item['decimals']) }}
               </v-list-item-title>
             </v-list-item-content>
-            <v-list-item-action>
-              <v-btn
-                icon
-                @click.stop="toggleFavoriteToken(item)"
-                v-if="item['unit']"
-              >
-                <v-icon>{{ favoriteTokens.includes(item['unit']) ? 'mdi-star' : 'mdi-star-outline' }}</v-icon>
-              </v-btn>
-            </v-list-item-action>
           </v-list-item>
         </template>
       </v-virtual-scroll>
@@ -125,23 +103,13 @@ const props = withDefaults(defineProps<Props>(), {
   availableTokens: () => [],
 });
 
-const emit = defineEmits<{
-  close: [];
-  input: [token: any];
-}>();
+const emit = defineEmits(['close', 'input']);
 
 const { price } = toRefs(networkStore);
-const { pinnedTokens } = toRefs(walletStore);
 
 const search = ref('');
 const additional = ref<any[]>([]);
 const searchLoading = ref(false);
-
-const favoriteTokens = computed(() => {
-  return pinnedTokens.value.filter(unit =>
-    props.availableTokens.some(token => token['unit'] === unit)
-  );
-});
 
 const selectedToken = computed({
   get() {
@@ -187,18 +155,15 @@ const onChange = (item: any) => {
   emit('close');
 };
 
-const resolveToken = (unit: string) => {
-  return props.availableTokens.find(token => token['unit'] === unit);
-};
-
-const toggleFavoriteToken = (token: any) => {
-  // TODO: Implement without Pinia - functionality temporarily disabled
-  console.log('Toggle favorite token:', token);
-};
-
 onUnmounted(() => {
   debouncedSearch.cancel();
 });
+
+const handleImageError = (event: Event, item: any) => {
+  const target = event.target as HTMLImageElement;
+  target.onerror = null;
+  target.src = item.fallback_img;
+};
 </script>
 
 <style scoped>

@@ -48,7 +48,7 @@
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
-                  
+
                   <v-card style="background-color: #1a1a1a !important;">
                     <v-card-text class="pa-2">
                       <v-text-field
@@ -63,33 +63,33 @@
                         autofocus
                       ></v-text-field>
                     </v-card-text>
-                    
+
                     <v-divider></v-divider>
-                    
+
                     <v-list dense max-height="300" class="overflow-y-auto py-0" style="background-color: #1a1a1a !important;">
                       <v-list-item
-                        v-for="token in filteredTokenListA"
+                        v-for="token in availableTokens"
                         :key="token.unit"
                         @click="selectToken(token, 'A')"
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img 
-                            :src="token.img" 
+                          <v-img
+                            :src="token.img"
                             @error="(e) => e.target.src = assets.questionMarkDark"
                           ></v-img>
                         </v-list-item-avatar>
-                        
+
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" x-small color="primary" class="ml-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" outlined x-small color="primary" class="ml-1 px-1">Owned</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
                           </v-list-item-subtitle>
                         </v-list-item-content>
-                        
+
                         <v-list-item-action v-if="token.owned" class="my-0">
                           <v-list-item-action-text>
                             {{ formatBalance(token) }}
@@ -145,7 +145,7 @@
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
-                  
+
                   <v-card style="background-color: #1a1a1a !important;">
                     <v-card-text class="pa-2">
                       <v-text-field
@@ -160,9 +160,9 @@
                         autofocus
                       ></v-text-field>
                     </v-card-text>
-                    
+
                     <v-divider></v-divider>
-                    
+
                     <v-list dense max-height="300" class="overflow-y-auto py-0" style="background-color: #1a1a1a !important;">
                       <v-list-item
                         v-for="token in filteredTokenListB"
@@ -171,22 +171,22 @@
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img 
-                            :src="token.img" 
+                          <v-img
+                            :src="token.img"
                             @error="(e) => e.target.src = assets.questionMarkDark"
                           ></v-img>
                         </v-list-item-avatar>
-                        
+
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" x-small color="primary" class="ml-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" x-small color="primary" outlined class="ml-1">Owned</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
                           </v-list-item-subtitle>
                         </v-list-item-content>
-                        
+
                         <v-list-item-action v-if="token.owned" class="my-0">
                           <v-list-item-action-text>
                             {{ formatBalance(token) }}
@@ -231,10 +231,10 @@
     </v-card-text>
     <!-- Swap Button at Bottom -->
     <v-card-actions class="pa-3 pt-0">
-      <v-btn 
-        block 
-        height="36" 
-        class="geroButton" 
+      <v-btn
+        block
+        height="36"
+        class="geroButton"
         @click="handleSwap"
         :disabled="!canSwap"
         style="text-transform: capitalize;"
@@ -250,6 +250,10 @@ import { ref, computed, toRefs, getCurrentInstance, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
+import networks, { cardanoLogo } from '@/utils/networks';
+import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
+import dexHunterApi from '@/api/dexhunter-api';
+import filters from '@/shared/utils/filters';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -257,12 +261,10 @@ const router = instance?.proxy.$router;
 
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);
+const { dexHunterTokens } = toRefs(dexHunterStore);
 const { assets: networkAssets } = toRefs(networkStore);
 
 // Reactive data
-const swapType = ref('swap');
-const selectedTokenA = ref(null);
-const selectedTokenB = ref(null);
 const amountA = ref('');
 const amountB = ref('');
 const tokenMenuA = ref(false);
@@ -270,9 +272,66 @@ const tokenMenuB = ref(false);
 const tokenSearchA = ref('');
 const tokenSearchB = ref('');
 
+
+const isUpdating = ref<boolean>(false);
+const lastNonADATokenA = ref(null);
+const lastNonADATokenB = ref(null);
+const slippageRef = ref<string>('2');
+const settingsToggle = ref<boolean>(false);
+const swapType = ref<string>('swap');
+let selectedTokenA = ref({
+  name: 'Cardano',
+  ticker: 'ADA',
+  img: cardanoLogo,
+  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  balance: 0,
+  quantity: '0',
+  decimals: 6,
+  unit: '',
+  verified: true
+});
+
+let selectedTokenB = ref({
+  name: 'GERO',
+  ticker: 'GERO',
+  img: "https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp",
+  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  balance: 0,
+  quantity: '0',
+  decimals: 6,
+  unit: '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f',
+  verified: true
+})
+
+const price_ab = ref<number>(0);
+const price_ba = ref<number>(0);
+const price_ab2 = ref<number>(0);
+const price_ba2 = ref<number>(0);
+const total_output_without_slippage = ref<number>(0);
+const total_input_without_slippage = ref<number>(0);
+const estimation = ref({
+  net_price_reverse: 0,
+  total_output: 0,
+  deposits: 0,
+  batcher_fee: 0,
+  partner_fee: 0,
+});
+const splits = ref(undefined);
+const lastFunctionCalled = ref<string>('estimate');
+const intervalId = ref<any>(0);
+const loading = ref<boolean>(false);
+const swapOverviewToggle = ref<boolean>(false);
+const pairPriceToggle = ref<boolean>(false);
+const blacklisted_dexes = ref<any[]>([]);
+const search = ref(DexHunterStore.searchTokens);
+const poolError = ref<boolean>(false);
+const limit = ref<string>('0.0000000');
+const limitType = ref<string>('one');
+const limitSplit = ref<number>(1);
+
 // Computed properties
 const canSwap = computed(() => {
-  return selectedTokenA.value && selectedTokenB.value && 
+  return selectedTokenA.value && selectedTokenB.value &&
          selectedTokenA.value.unit !== selectedTokenB.value.unit &&
          amountA.value && Number(amountA.value) > 0;
 });
@@ -288,6 +347,47 @@ const swapButtonText = computed(() => {
     return 'Enter Amount';
   }
   return 'Swap';
+});
+
+const availableTokens = computed(() => {
+  if (!dexHunterTokens.value) {
+    return [];
+  }
+  const availableTokens = Object.values(dexHunterTokens.value)
+    .map((token: any) => {
+      const found: any = Object.values(tokens.value)?.find((t: any) => t.unit === token['unit']);
+      const res = {
+        ...token,
+        balance: found ? found.balance : 0,
+      };
+      if (found) {
+        if (selectedTokenB.value.unit === found.unit) {
+          selectedTokenB.value.balance = res.balance
+        } else if (selectedTokenA.value.unit === found.unit) {
+          selectedTokenA.value.balance = res.balance
+        }
+      }
+      return res
+    })
+    .sort((a, b) => {
+      //   const isPinnedA = pinnedTokens.includes(a['unit']);
+      //   const isPinnedB = pinnedTokens.includes(b['unit']);
+      //
+      //   // Prioritize pinned tokens
+      //   if (isPinnedA && !isPinnedB) return -1;
+      //   if (!isPinnedA && isPinnedB) return 1;
+      //
+      //   // If both are pinned, sort by name
+      //   if (isPinnedA && isPinnedB) {
+      //     return a['name'].localeCompare(b['name']);
+      //   }
+      //
+      //   // If none are pinned, sort by balance in descending order
+      return b.balance - a.balance;
+    });
+  const result = [nativeToken, ...availableTokens]
+  console.log('availableTokens', result)
+  return result;
 });
 
 // Methods
@@ -306,7 +406,7 @@ const switchPair = () => {
   const temp = selectedTokenA.value;
   selectedTokenA.value = selectedTokenB.value;
   selectedTokenB.value = temp;
-  
+
   const tempAmount = amountA.value;
   amountA.value = amountB.value;
   amountB.value = tempAmount;
@@ -333,46 +433,28 @@ const refreshPrices = () => {
 // Get all available tokens with ownership info
 const getAllTokens = () => {
   const tokenList = [];
-  
+
   // Add owned tokens first
   if (tokens.value) {
-    // Add ADA if owned
-    if (tokens.value['lovelace']) {
-      tokenList.push({
-        unit: 'lovelace',
-        ticker: 'ADA',
-        name: 'Cardano',
-        img: assets.adaTokenImage,
-        decimals: 6,
-        owned: true,
-        quantity: tokens.value['lovelace'].quantity || 0
-      });
-    }
-    
+    console.log('Tokens', tokens.value);
     // Add other owned tokens
     Object.entries(tokens.value).forEach(([unit, token]) => {
-      if (unit !== 'lovelace' && token.metadata?.ticker) {
+      const tok: any = token;
+      if (tok.metadata?.ticker) {
         tokenList.push({
           unit,
-          ticker: token.metadata.ticker,
-          name: token.metadata.name || token.metadata.ticker,
-          img: assets.resolveIcon(token.metadata.logo || token.metadata.image || token.metadata.icon) || assets.questionMarkDark,
-          decimals: token.decimals || 6,
+          ticker: tok.metadata.ticker,
+          name: tok.metadata.name || tok.metadata.ticker,
+          img: assets.resolveIcon(tok.metadata.logo || tok.metadata.image || tok.metadata.icon) || assets.questionMarkDark,
+          decimals: tok.decimals || 6,
           owned: true,
-          quantity: token.quantity || 0
+          quantity: tok.quantity || 0
         });
       }
     });
   }
-  
-  // Add popular tokens that are not owned (you can expand this list)
-  const popularTokens = [
-    { unit: 'min', ticker: 'MIN', name: 'Minswap', img: 'https://tokens.muesliswap.com/static/img/tokens/MIN.png' },
-    { unit: 'snek', ticker: 'SNEK', name: 'Snek', img: 'https://tokens.muesliswap.com/static/img/tokens/SNEK.png' },
-    { unit: 'wmt', ticker: 'WMT', name: 'World Mobile Token', img: 'https://tokens.muesliswap.com/static/img/tokens/WMT.png' }
-  ];
-  
-  popularTokens.forEach(token => {
+
+  Object.values(dexHunterTokens.value).forEach((token: any) => {
     if (!tokens.value || !tokens.value[token.unit]) {
       tokenList.push({
         ...token,
@@ -382,20 +464,20 @@ const getAllTokens = () => {
       });
     }
   });
-  
+
   return tokenList;
 };
 
 // Computed properties for filtered token lists
 const filteredTokenListA = computed(() => {
   const allTokens = getAllTokens();
-  
+
   if (!tokenSearchA.value) {
     return allTokens;
   }
-  
+
   const search = tokenSearchA.value.toLowerCase();
-  return allTokens.filter(token => 
+  return allTokens.filter(token =>
     token.ticker.toLowerCase().includes(search) ||
     token.name.toLowerCase().includes(search) ||
     token.unit.toLowerCase().includes(search)
@@ -404,13 +486,13 @@ const filteredTokenListA = computed(() => {
 
 const filteredTokenListB = computed(() => {
   const allTokens = getAllTokens();
-  
+
   if (!tokenSearchB.value) {
     return allTokens;
   }
-  
+
   const search = tokenSearchB.value.toLowerCase();
-  return allTokens.filter(token => 
+  return allTokens.filter(token =>
     token.ticker.toLowerCase().includes(search) ||
     token.name.toLowerCase().includes(search) ||
     token.unit.toLowerCase().includes(search)
@@ -437,48 +519,117 @@ const selectToken = (token, type) => {
   }
 };
 
-// Get a list of common tokens to cycle through
-const getCommonTokens = () => {
-  if (!tokens.value) return [];
-  
-  const tokenList = [];
-  
-  // Add ADA first
-  if (tokens.value['lovelace']) {
-    tokenList.push({
-      unit: 'lovelace',
-      ticker: 'ADA',
-      img: assets.adaTokenImage,
-      decimals: 6
-    });
+const performPeriodicEstimate = async () => {
+  // Add defensive checks for undefined tokens
+  if (!selectedTokenA.value || !selectedTokenB.value) {
+    console.warn('Tokens not properly initialized');
+    return;
   }
-  
-  // Add other tokens
-  Object.entries(tokens.value).forEach(([unit, token]) => {
-    if (unit !== 'lovelace' && token.metadata?.ticker) {
-      tokenList.push({
-        unit,
-        ticker: token.metadata.ticker,
-        img: assets.resolveIcon(token.metadata.logo || token.metadata.image || token.metadata.icon) || assets.questionMarkDark,
-        decimals: token.decimals || 6
-      });
+
+  if (lastFunctionCalled.value === 'estimate') {
+    const quantity = selectedTokenA.value.quantity || '0';
+    const amount = Number(quantity.toString().replaceAll(',', ''))
+    if (amount === 0) {
+      await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
+    } else {
+      await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
     }
+  } else if (lastFunctionCalled.value === 'reverseEstimate') {
+    const quantity = selectedTokenB.value.quantity || '0';
+    const amount = Number(quantity.toString().replaceAll(',', ''))
+    if (amount === 0) {
+      await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
+    } else {
+      await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
+    }
+  }
+}
+
+const estimate = (token_in, token_out, amount_in, update) => {
+  if (!loggedWallet.value) {
+    return
+  }
+  if (!token_in && !token_out) {
+    return
+  }
+  if (!amount_in) {
+    total_output_without_slippage.value = 0
+    return;
+  } else if (isNaN(amount_in)) {
+    return;
+  }
+  const slippage = slippageRef.value === 'unlimited' ? '-1' : Number(slippageRef.value).toString();
+  dexHunterApi.estimate(amount_in, token_in, token_out, Number(slippage), blacklisted_dexes.value).then(res => {
+    poolError.value = false;
+    const data = res.data;
+    price_ab.value = data.net_price_reverse;
+    price_ba.value = data.net_price;
+    if (update) {
+      total_output_without_slippage.value = data.total_output_without_slippage
+      splits.value = data.splits
+      estimation.value = data
+      if (swapType.value !== 'limit') {
+        selectedTokenB.value.quantity = filters.toCurrency(total_output_without_slippage.value, false, selectedTokenB.value.decimals, '', '', false, 0);
+      }
+    }
+  }).catch((_e) => {
+    poolError.value = true
   });
-  
-  return tokenList.slice(0, 10); // Limit to first 10 tokens
-};
+}
+
+const reverseEstimate = async (token_in, token_out, amount_out, update) => {
+  if (!loggedWallet.value) {
+    return
+  }
+  if (!token_in && !token_out) {
+    return
+  }
+  if (!amount_out) {
+    total_input_without_slippage.value = 0
+    return;
+  } else if (isNaN(amount_out)) {
+    return;
+  }
+  const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
+  try {
+    const res = await dexHunterApi.reverseEstimate(amount_out, token_in, token_out, slippage, blacklisted_dexes.value);
+    poolError.value = false
+    price_ab.value = res.net_price_reverse;
+    price_ba.value = res.net_price;
+    if (update) {
+      total_input_without_slippage.value = res.total_input_without_slippage
+      splits.value = res.splits
+      estimation.value = res
+      selectedTokenA.value.quantity = filters.toCurrency(total_input_without_slippage.value, false, selectedTokenA.value.decimals, '', '', false, 0);
+    }
+  } catch (e) {
+    poolError.value = true
+  }
+}
+
+const averagePrice = (token_in, token_out) => {
+  if (!loggedWallet.value) {
+    return
+  }
+  if (!token_in && !token_out) {
+    return
+  }
+  dexHunterApi.getAveragePrice(token_in, token_out).then(res => {
+    price_ab2.value = res.price_ab;
+    price_ba2.value = res.price_ba;
+    limit.value = structuredClone(price_ba2.value).toString()
+    console.log(limit.value)
+  }).catch(() => {
+    // console.log(e)
+  });
+}
 
 
 // Initialize with default tokens
-onMounted(() => {
-  const tokenList = getCommonTokens();
-  if (tokenList.length > 0) {
-    selectedTokenA.value = tokenList[0]; // ADA
-    if (tokenList.length > 1) {
-      selectedTokenB.value = tokenList[1]; // First other token
-    }
-  }
-});
+onMounted(async () => {
+  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
+  intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
+})
 </script>
 
 <style scoped>

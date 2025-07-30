@@ -66,7 +66,7 @@
               </div>
             </v-tooltip>
             <span v-else>{{item.name}}</span>
-            <v-avatar size="16" style="margin-top: -2px; margin-left: 2px;">
+            <v-avatar size="16" style="margin-top: -2px; margin-left: 4px!important;">
               <v-img width="32" style="margin: auto" v-if="item.risk && item.risk !== 'N/A'" :src="assets.resolveRisk(item.risk)" :alt="item.risk" />
             </v-avatar>
           </v-list-item-title>
@@ -234,7 +234,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
         return true;
       }
       // For Apex blockchains, pin AP3X (Apex Fusion)
-      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') 
+      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector')
           && item.name === 'Apex Fusion') {
         return true;
       }
@@ -247,7 +247,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
       if (loggedWallet.value?.chain === 'Cardano' && item.name === 'Cardano') {
         return false;
       }
-      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector') 
+      if ((loggedWallet.value?.chain === 'Apex Fusion Prime' || loggedWallet.value?.chain === 'Apex Fusion Vector')
           && item.name === 'Apex Fusion') {
         return false;
       }
@@ -342,7 +342,7 @@ const tokensList = computed(() => {
     }
     return token
   });
-  
+
   // Apply filters
   res = res.filter(token => {
     if (props.hideScam && token.isScam) {
@@ -365,30 +365,30 @@ const tokensList = computed(() => {
       const ticker = token.metadata?.ticker?.toLowerCase() || '';
       const description = token.metadata?.description?.toLowerCase() || '';
       const unit = token.unit?.toLowerCase() || '';
-      
-      return name.includes(searchTerm) || 
-             ticker.includes(searchTerm) || 
+
+      return name.includes(searchTerm) ||
+             ticker.includes(searchTerm) ||
              description.includes(searchTerm) ||
              unit.includes(searchTerm);
     });
   }
-  
+
   // Pin ADA to the top for Cardano blockchain
   if (loggedWallet.value?.chain === 'Cardano') {
-    const adaToken = res.find(token => 
-      token.policy_id === '' && 
+    const adaToken = res.find(token =>
+      token.policy_id === '' &&
       (token.name === 'Cardano' || token.metadata?.ticker === 'ADA' || token.unit === 'lovelace')
     );
-    
+
     if (adaToken) {
-      const otherTokens = res.filter(token => 
-        !(token.policy_id === '' && 
+      const otherTokens = res.filter(token =>
+        !(token.policy_id === '' &&
           (token.name === 'Cardano' || token.metadata?.ticker === 'ADA' || token.unit === 'lovelace'))
       );
       res = [adaToken, ...otherTokens];
     }
   }
-  
+
   return res;
 });
 
@@ -415,7 +415,7 @@ const totalAllocation = computed(() => {
 const paginatedTokens = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
-  
+
   // tokensList already includes search filtering and will be sorted by the data table's customSort
   // So we just need to paginate the already filtered results
   return tokensList.value.slice(start, end);

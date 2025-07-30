@@ -122,7 +122,7 @@
                   </td>
                   <td class="text-right">
                     <div style="color: #FF8E8E">
-                      <v-chip pill outlined color="#FF8E8E" style="margin: 2px">
+                      <v-chip pill class="pl-0" outlined color="#FF8E8E" style="margin: 2px!important;">
                         <v-avatar left>
                           <v-img :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)" contain>
                             <template v-slot:placeholder>
@@ -146,7 +146,7 @@
                     </div>
                     <div>
                       <template v-for="(asset, assetIndex) in txIOAssets(input)">
-                        <v-chip pill outlined color="#FF8E8E" :key="`input_${index}_asset_${assetIndex}`" style="margin: 2px;">
+                        <v-chip pill outlined color="#FF8E8E" class="pl-0" :key="`input_${index}_asset_${assetIndex}`" style="margin: 2px!important;">
                           <v-avatar v-if="asset.img" left>
                             <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
                               <template v-slot:placeholder>
@@ -199,7 +199,7 @@
                   </td>
                   <td class="text-right">
                     <div style="color: #00DFF3">
-                      <v-chip pill outlined color="#00DFF3" style="margin: 2px">
+                      <v-chip pill class="pl-0" outlined color="#00DFF3" style="margin: 2px!important;">
                         <v-avatar left>
                           <v-img :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)" contain>
                             <template v-slot:placeholder>
@@ -223,7 +223,7 @@
                     </div>
                     <div>
                       <template v-for="(asset, assetIndex) in txIOAssets(output)">
-                        <v-chip pill outlined color="#00DFF3" :key="`output${index}_asset_${assetIndex}`" style="margin: 2px;">
+                        <v-chip pill class="pl-0" outlined color="#00DFF3" :key="`output${index}_asset_${assetIndex}`" style="margin: 2px!important;">
                           <v-avatar v-if="asset.img" left>
                             <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
                               <template v-slot:placeholder>

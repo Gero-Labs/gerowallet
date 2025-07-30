@@ -1,8 +1,7 @@
 <template>
-  <v-card flat outlined max-width="420" class="mx-auto liquid-glass-subtle compact-swap-widget" style="background-color: #0C0E12 !important;">
+  <v-card flat outlined max-width="420" class="mx-auto liquid-glass-subtle compact-swap-widget">
     <v-card-text class="pa-0">
-      <v-card flat class="transparent">
-        <v-card-title class="pb-2 pt-3 px-3">
+        <v-card-title class="pb-0 pt-3 px-2">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
             <v-btn value="swap" x-small rounded>
               SWAP
@@ -23,7 +22,7 @@
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0 px-3 pt-3">
+        <v-card-text class="pb-0 px-2 pt-2">
           <div class="d-flex align-center justify-space-between mb-1 mt-1">
             <span style="color: #FDA29B; font-size: 12px; font-weight: 200;">Selling</span>
             <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
@@ -40,7 +39,7 @@
             class="mt-n3"
             background-color="#101828"
           />
-          <v-btn icon small class="my-2 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
+          <v-btn icon small class="my-1 z-index-5 geroButton" @click="switchPair" style="height: 24px; width: 24px; margin: 8px auto;">
             <v-icon small color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
           <div class="d-flex align-center justify-space-between mb-1 mt-n2">
@@ -156,10 +155,19 @@
           </div>
         </v-card-text>
         <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-3 mt-1 mb-0" />
-      </v-card>
+
     </v-card-text>
     <v-card-actions class="px-3 pt-2 pb-3">
-      <v-btn block rounded style="color: black!important; height: 38px;" class="geroButton rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">
+      <v-btn
+        block
+        rounded
+        small
+        style="color: black!important;"
+        class="geroButton rounded-6"
+        :disabled="isSwapDisabled || loading"
+        @click="prepareSwap"
+        :loading="loading"
+      >
         <span style="font-size: 13px; font-weight: 600;">{{ swapButtonText }}</span>
       </v-btn>
     </v-card-actions>
@@ -180,14 +188,14 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 
 const emit = defineEmits(['onSwap'])
 
-const { loggedWallet, resolvedAssets, pinnedTokens, baseAddress } = toRefs(walletStore);
+const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { utxos } = toRefs(walletStore);
@@ -242,7 +250,7 @@ const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
 const blacklisted_dexes = ref<any[]>([]);
-const search = ref(dexHunterStore.searchTokens);
+const search = ref(DexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<string>('one');
@@ -263,7 +271,7 @@ const swapButtonText = computed(() => {
 
 const isSwapDisabled = computed(() => {
   if (!selectedTokenA.value || !selectedTokenB.value) return true;
-  
+
   if (swapType.value === 'swap') {
     const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
     const quantityB = (selectedTokenB.value.quantity || '0').toString().replaceAll(',', '')
@@ -277,7 +285,7 @@ const isSwapDisabled = computed(() => {
 
 const isInsufficientBalance = computed(() => {
   if (!selectedTokenA.value) return false;
-  
+
   const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
   const decimals = selectedTokenA.value.decimals || 0;
   const balance = selectedTokenA.value.balance || 0;
@@ -290,7 +298,7 @@ const tokens = computed(() => {
   // Convert resolvedAssets object to array if it exists
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   return (
-    assetsArray.map(token => ({
+    assetsArray.map((token: any) => ({
       name: token.metadata.name,
       ticker: token.metadata.ticker,
       img: token.img,
@@ -312,7 +320,7 @@ const marketPriceDeltaPercentage = computed(() => {
 const nativeTokenComputed = computed(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
-  const token = assetsArray.find(token => token.ticker === currencyTicker);
+  const token: any = assetsArray.find((token: any) => token.ticker === currencyTicker);
   return token
     ? {
       name: token.metadata.name,
@@ -337,7 +345,7 @@ const nativeTokenComputed = computed(() => {
 })
 
 const availableTokens = computed(() => {
-  if (!dexHunterTokens) {
+  if (!dexHunterTokens.value) {
     return [];
   }
 
@@ -366,23 +374,24 @@ const availableTokens = computed(() => {
       return res
     })
     .sort((a, b) => {
-      const isPinnedA = pinnedTokens.includes(a['unit']);
-      const isPinnedB = pinnedTokens.includes(b['unit']);
-
-      // Prioritize pinned tokens
-      if (isPinnedA && !isPinnedB) return -1;
-      if (!isPinnedA && isPinnedB) return 1;
-
-      // If both are pinned, sort by name
-      if (isPinnedA && isPinnedB) {
-        return a['name'].localeCompare(b['name']);
-      }
-
-      // If none are pinned, sort by balance in descending order
+    //   const isPinnedA = pinnedTokens.includes(a['unit']);
+    //   const isPinnedB = pinnedTokens.includes(b['unit']);
+    //
+    //   // Prioritize pinned tokens
+    //   if (isPinnedA && !isPinnedB) return -1;
+    //   if (!isPinnedA && isPinnedB) return 1;
+    //
+    //   // If both are pinned, sort by name
+    //   if (isPinnedA && isPinnedB) {
+    //     return a['name'].localeCompare(b['name']);
+    //   }
+    //
+    //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-
-  return [nativeToken, ...availableTokens];
+  const result = [nativeToken, ...availableTokens]
+  console.log('availableTokens', result)
+  return result;
 });
 
 const calculateWeightedPriceImpact = computed(() => {
@@ -657,11 +666,11 @@ const prepareSwap = async () => {
   try {
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
-      swapRes = await dexHunterApi.swap(amount, baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
+      swapRes = await dexHunterApi.swap(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
     } else if (swapType.value === 'limit') {
       const toSplit = limitType.value === 'split'
       const multiples = toSplit ? limitSplit.value : 1
-      swapRes = await dexHunterApi.swapLimitBuild(amount, baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], 'GeroLabs', multiples, toSplit, Number(limit.value))
+      swapRes = await dexHunterApi.swapLimitBuild(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], 'GeroLabs', multiples, toSplit, Number(limit.value))
     }
     const txCbor = swapRes.cbor
     const partialSign = true
@@ -692,7 +701,7 @@ const prepareSwap = async () => {
   }
 }
 
-const submit = async (cborHex) => {
+const submit = async (cborHex: string) => {
   const txId = await loggedWallet.value.submitTx(Transaction.from_hex(cborHex), utxos);
   snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
   emit('onSwap')
@@ -717,14 +726,6 @@ onBeforeUnmount(() => {
 /* Compact swap widget styles */
 .compact-swap-widget {
   /* Reduce overall spacing */
-}
-
-.compact-swap-widget .v-card__title {
-  padding: 12px 12px 8px !important;
-}
-
-.compact-swap-widget .v-card__text {
-  padding: 8px 12px !important;
 }
 
 .compact-swap-widget .v-card__actions {

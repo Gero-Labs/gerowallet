@@ -14,7 +14,7 @@ export class PoolsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const blockchainDB = await this.getBlockchainDb();
-    
+
     return this.createSubscription(
       () => blockchainDB.table('pools').toArray(),
       (pools) => {
@@ -38,7 +38,7 @@ export class DRepsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const blockchainDB = await this.getBlockchainDb();
-    
+
     return this.createSubscription(
       () => blockchainDB.table('dreps').toArray(),
       (dreps) => {
@@ -62,7 +62,7 @@ export class AssetsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const blockchainDB = await this.getBlockchainDb();
-    
+
     return this.createSubscription(
       () => blockchainDB.table('assets').toArray(),
       (assets) => {
@@ -86,7 +86,7 @@ export class GenesisLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const blockchainDB = await this.getBlockchainDb();
-    
+
     return this.createSubscription(
       () => blockchainDB.table('genesis_info').where({ id: 0 }).first(),
       (genesis) => {
@@ -116,11 +116,11 @@ export class EpochParamsLoader extends BaseLoader {
 
   async load(): Promise<any> {
     const blockchainDB = await this.getBlockchainDb();
-    
+
     return this.createSubscription(
       () => blockchainDB.table('epoch_params').orderBy('epoch').last(),
       (epochParams: any) => {
-        console.log('🔍 Epoch params received:', epochParams);
+        console.debug('🔍 Epoch params received:', epochParams);
         let defaultEpochParams;
         if (!epochParams) {
           defaultEpochParams = networks.resolveNetwork(this.chain, this.network).protocolParams;
