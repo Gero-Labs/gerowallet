@@ -1,6 +1,6 @@
 <template>
   <v-layout column>
-    
+
     <!-- Show comprehensive empty state when wallet has no tokens -->
     <template v-if="isWalletEmpty">
       <v-row no-gutters>
@@ -18,7 +18,7 @@
         </v-col>
       </v-row>
     </template>
-    
+
     <!-- Regular dashboard content when wallet has tokens -->
     <template v-else>
     <!-- Combined row for Cardano with metrics + chart + carousel -->
@@ -106,14 +106,14 @@
         <TokenAllocationTable />
       </v-col>
       <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <SwapCard></SwapCard>
+        <SwapWidget />
       </v-col>
     </v-row>
 
     <!-- Transactions and Staking Row + Cashback Column -->
     <v-row no-gutters>
       <v-col cols="12" xl="4" lg="4" md="12" sm="12" class="pa-2">
-        <TransactionsCard></TransactionsCard>
+        <TransactionsCard style="min-height: 396px;"></TransactionsCard>
       </v-col>
       <v-col cols="12" xl="5" lg="5" md="12" sm="12" class="pa-2" v-if="isStakingEnabled">
         <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
@@ -124,40 +124,20 @@
       </v-col>
     </v-row>
 
-    <!-- KaiserEx Token Reception -->
-    <v-row no-gutters>
-      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-        <v-card outlined class="liquid-glass">
-          <v-card-title>KaiserEx Token Reception</v-card-title>
-          <v-card-text>
-            <v-btn color="primary" @click="receiveKaiserExToken" :loading="kaiserExLoading">
-              Receive Token from KaiserEx
-            </v-btn>
-            <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
-              {{ kaiserExMessage.text }}
-            </v-alert>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
-
     <!-- Claim Dialog -->
     <ClaimDialog
       :show="showClaimDialog"
       @close="showClaimDialog = false"
     />
-    
-    
-    
+
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
-import EmptyStateMini from '../components/EmptyStateMini.vue';
 import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
@@ -169,14 +149,14 @@ import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
-import WalletStore, { walletStore } from '@/stores/walletStore';
+import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
-import networks from '@/utils/networks';
 
 // Import carousel assets
 import assets from '@/utils/assets';
+import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -186,9 +166,6 @@ const router = instance?.proxy.$router;
 const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
-
-const kaiserExLoading = ref(false);
-const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
 const showClaimDialog = ref(false);
 
 // Carousel state
@@ -274,20 +251,11 @@ const isStakingEnabled = computed(() => {
 // Empty state computeds
 const isWalletEmpty = computed(() => checkWalletEmpty(account.value, tokens.value));
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
-const currencySymbol = computed(() => 
-  networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)
-);
 const shouldBackup = computed(() => {
   // Access config directly from reactive store for better reactivity
   const config = walletStore.config;
   return config && 'backup' in config && !config.backup;
 });
-
-// Background image for mini cards
-const backgroundImage = computed(() => {
-  return assets.emptyState;
-});
-
 const computedValues = computed(() => {
   let assetsValue = 0
   if (portfolio.value?.positionsFt) {
@@ -421,133 +389,6 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
-const loadKaiserExScript = () => {
-  if ((window as any).KaiserEx) return;
-
-  const KaiserEx: any = {};
-
-  KaiserEx.baseUrl = 'https://api.dev.kaiserex.cybro.cz';
-
-  KaiserEx.options = {
-    width: 800,
-    height: 600,
-    asWindow: true,
-  };
-
-  KaiserEx.loginUrl = function(codeChallenge: string) {
-    const params = new URLSearchParams({
-      redirect: window.location.href,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256'
-    });
-    return this.baseUrl + '/login?' + params.toString();
-  };
-
-  KaiserEx.base64urlEncode = function (str: ArrayBuffer) {
-    return btoa(String.fromCharCode(...new Uint8Array(str)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-  };
-
-  KaiserEx.generatePKCE = async function () {
-    const codeVerifier = [...crypto.getRandomValues(new Uint8Array(64))]
-      .map(x => ('0' + x.toString(16)).slice(-2)).join('');
-
-    const encoder = new TextEncoder();
-    const data = encoder.encode(codeVerifier);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    const codeChallenge = this.base64urlEncode(hash);
-
-    return { codeVerifier, codeChallenge };
-  };
-
-  KaiserEx.auth = async function (completeCallback?: any) {
-    if (completeCallback) this.completeCallback = completeCallback;
-    console.log('generatePKCE')
-    const { codeVerifier, codeChallenge } = await this.generatePKCE();
-    this.codeVerifier = codeVerifier;
-
-    console.log('Code verifier:', codeVerifier);
-    console.log('Code challenge:', codeChallenge);
-
-    let url = this.loginUrl(codeChallenge);
-    console.log('Generated URL:', url);
-
-    if (this.options.asWindow) {
-      this.KaiserExWindow = window.open(url, "oauthWindow", "width="+ this.options.width +",height="+ this.options.height);
-    } else {
-      this.KaiserExWindow = window.open(url, "oauthWindow");
-    }
-
-    window.addEventListener("message", this.oauthCodeMessageListener);
-
-    // Note: Cannot set onclose due to cross-origin restrictions
-    // The message listener will be cleaned up when the token is received
-  };
-
-  KaiserEx.oauthCodeMessageListener = async function(message: MessageEvent) {
-    console.log('Received message:', message);
-    if (message.origin !== KaiserEx.baseUrl) {
-      return;
-    }
-    if (message.data.type === "OAUTH_CODE") {
-      const code = message.data.code;
-      if (KaiserEx.KaiserExWindow) {
-        KaiserEx.KaiserExWindow.close();
-      }
-      window.removeEventListener("message", KaiserEx.oauthCodeMessageListener);
-      KaiserEx.issueToken(code);
-    }
-  };
-
-  KaiserEx.issueToken = function(code: string) {
-    let data = {
-      code,
-      codeVerifier: KaiserEx.codeVerifier,
-    };
-
-    fetch(KaiserEx.baseUrl + '/api/token', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-      .then(response => response.json())
-      .then(async (data) => {
-        if (KaiserEx.completeCallback) {
-          KaiserEx.completeCallback(data);
-        }
-      });
-  };
-
-  (window as any).KaiserEx = KaiserEx;
-};
-
-const receiveKaiserExToken = async () => {
-  kaiserExLoading.value = true;
-  kaiserExMessage.value = null;
-
-  try {
-    loadKaiserExScript();
-
-    const kaiserEx = (window as any).KaiserEx;
-    kaiserEx.completeCallback = (tokenData: any) => {
-      kaiserExMessage.value = {
-        type: 'success',
-        text: `Token received successfully! Token: ${tokenData.access_token}`
-      };
-      kaiserExLoading.value = false;
-    };
-
-    await kaiserEx.auth();
-  } catch (error) {
-    kaiserExMessage.value = {
-      type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
-    kaiserExLoading.value = false;
-  }
-};
-
 // Empty state handlers
 const handleBuyCrypto = () => {
   console.log('Opening buy crypto dialog - emitting to parent');
@@ -570,20 +411,12 @@ const handleStartTutorial = () => {
   // Implement interactive tutorial
 };
 
-const navigateToStaking = () => {
-  router?.push('/staking');
-};
-
 const handleBackupWallet = () => {
   console.log('Backup wallet button clicked - emitting to parent');
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
 
-const handleGeroCardClick = () => {
-  console.log('Gero Card clicked - Coming Soon feature');
-  // No action for "Coming Soon" feature
-};
 </script>
 <style scoped>
 .transactions-table {

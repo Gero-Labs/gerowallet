@@ -10,7 +10,7 @@
         flat
         solo
         hide-details
-        placeholder="Search transactions..."
+        placeholder="Search"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px;"
@@ -35,7 +35,7 @@
             <v-list-item-content>
               <v-list-item-title class="activity-title">
                 <span class="activity-text">{{ getStatus(item) }}</span>
-                <v-chip v-if="isWithdrawal(item)" x-small outlined class="px-1" color="blue">Withdrawal</v-chip>
+                <v-chip v-if="isWithdrawal(item)" x-small outlined class="px-1" color="blue" style="margin-left: 4px!important;">Withdrawal</v-chip>
                 <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
               </v-list-item-title>
               <v-list-item-subtitle class="activity-date">
@@ -75,11 +75,11 @@
           </div>
         </template>
         <template v-slot:body.append>
-          <tr v-if="transactions.length > 5" class="no-hover">
+          <tr v-if="transactions.length > itemsPerPage" class="no-hover">
             <td :colspan="activityHeaders.length" class="text-center pa-0 ma-0">
               <v-pagination
                 v-model="currentPage"
-                :length="Math.ceil(transactions.length / 5)"
+                :length="Math.ceil(transactions.length / itemsPerPage)"
                 :total-visible="5"
                 circle
                 class="compact-pagination ma-0"
@@ -143,20 +143,26 @@ const transactions = computed(() => {
     if (search.value) {
       return tx.id.toLowerCase().includes(search.value.toLowerCase()) ||
         tx.assets.some((asset: any) => {
-          return assets.value[asset.unit]?.metadata?.name?.toLowerCase().includes(search.value.toLowerCase()) ||
-            assets.value[asset.unit]?.metadata?.ticker?.toLowerCase().includes(search.value.toLowerCase())
+          const assetInfo = assets.value[asset.unit] as any;
+          return assetInfo?.metadata?.name?.toLowerCase().includes(search.value.toLowerCase()) ||
+            assetInfo?.metadata?.ticker?.toLowerCase().includes(search.value.toLowerCase())
         })
     }
     return tx
   })
-  
+
   // Sort by timestamp descending (most recent first)
   return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp)
 })
 
+const itemsPerPage = computed(() => {
+  // Show 10 transactions per page on /transactions route, 5 on dashboard
+  return state.value === '/transactions' ? 10 : 5;
+});
+
 const paginatedTransactions = computed(() => {
-  const start = (currentPage.value - 1) * 5;
-  const end = start + 5;
+  const start = (currentPage.value - 1) * itemsPerPage.value;
+  const end = start + itemsPerPage.value;
   return transactions.value.slice(start, end);
 });
 
@@ -306,7 +312,6 @@ const getRowClass = (item) => {
   font-size: 12px !important;
   line-height: 1.2 !important;
   min-height: 14px !important;
-  max-height: 14px !important;
   overflow: hidden !important;
   display: flex !important;
   align-items: center !important;
@@ -428,5 +433,6 @@ const getRowClass = (item) => {
 .compact-pagination.ma-0 {
   margin: 0 !important;
 }
+
 
 </style>

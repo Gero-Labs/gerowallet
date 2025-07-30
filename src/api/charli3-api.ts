@@ -1,6 +1,7 @@
 import axios from 'axios'
 import charli3Store from '@/stores/charli3Store'
 
+//@ts-ignore
 const API_BASE_URL = process.env.VUE_APP_API_URL || 'https://dev.gerowallet.io'
 
 // Based on actual Charli3 API specification
@@ -71,8 +72,8 @@ class Charli3API {
       })
       console.log('✅ Charli3 symbol_info response:', response.status, response.statusText);
       return response.data
-    } catch (error) {
-      console.error('❌ Charli3 symbol_info error:', error.message, error.response?.status, error.response?.statusText);
+    } catch (error: any) {
+      console.error('❌ Charli3 symbol_info error:', error instanceof Error ? error.message : 'Unknown error', error.response?.status, error.response?.statusText);
       console.error('📡 Error details:', error.response?.data);
       throw error;
     }
@@ -92,8 +93,8 @@ class Charli3API {
       })
       console.log('✅ Charli3 API response:', response.status, response.statusText);
       return response.data
-    } catch (error) {
-      console.error('❌ Charli3 API error:', error.message, error.response?.status, error.response?.statusText);
+    } catch (error: any) {
+      console.error('❌ Charli3 API error:', error instanceof Error ? error.message : 'Unknown error', error.response?.status, error.response?.statusText);
       console.error('📡 Error details:', error.response?.data);
       throw error;
     }
@@ -154,7 +155,7 @@ class Charli3API {
       charli3Store.cacheTokenLogo(cacheKey, dataUrl)
 
       return dataUrl
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'ECONNABORTED') {
         console.warn(`Token logo request timed out for ${token}`)
       } else if (error.response?.status === 404) {
@@ -164,7 +165,7 @@ class Charli3API {
         this.charli3RequestInterval = Math.min(this.charli3RequestInterval * 1.5, 10000) // Max 10 seconds
         console.warn(`Rate limited for token ${token}, increasing interval to ${this.charli3RequestInterval}ms`)
       } else {
-        console.warn(`Failed to fetch logo for ${token}:`, error.message)
+        console.warn(`Failed to fetch logo for ${token}:`, error instanceof Error ? error.message : 'Unknown error')
       }
       return null
     }

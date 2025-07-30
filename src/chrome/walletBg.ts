@@ -1,10 +1,10 @@
-import Dexie, { DexieError } from 'dexie';
+import Dexie from 'dexie';
 import { Api } from '@/api/api';
 import { Cardano } from '@cardano-sdk/core';
 import { Ed25519PublicKey, Hash28ByteBase16 } from '@cardano-sdk/crypto'
 import { APIError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
-import { blockChainDBSchema, blockChainDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
+import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
   ChainDerivations,
   Provider,
@@ -537,7 +537,7 @@ export class WalletBg {
     const epochParamsTable = blockchainDB.table('epoch_params');
     const key = Object.keys(epoch_params)[0];
     if (epochParamsTable) {
-      console.log('epoch_params', epoch_params);
+      console.debug('epoch_params', epoch_params);
       epochParamsTable.put({
         epoch: key,
         ...epoch_params[key],

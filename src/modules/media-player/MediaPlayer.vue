@@ -1,73 +1,73 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" class="pa-2">
+      <v-col cols="12" class="pa-0">
         <v-card flat outlined class="liquid-glass" style="min-height: calc(100vh - 80px);">
-    <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
-      <v-col cols="12" xl="6" lg="6" style="align-content: center;">
-        <v-card flat class="pa-4 transparent" v-if="currentTrack">
-          <v-card-text style="height: 433px; max-height: 433px;">
-            <video ref="videoPlayer" :loop="context?.isRepeat" playsinline :controls="currentTrack.mediaType.includes('video')" :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.mediaType.includes('video') ? '' : currentTrack.img"  />
-          </v-card-text>
-          <v-card-title class="justify-center" style="word-break: break-word">
-            {{`${currentTrack.artist} - ${currentTrack.title}` }}
-          </v-card-title>
-          <div class="text-center justify-center" v-if="!currentTrack.mediaType.includes('video')" >
-            <PlayerControls large />
-            <PlayerPlayback style="align-self: center;" />
-          </div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" xl="6" lg="6">
-        <v-card flat class="transparent">
-          <v-card-title>
-            <v-spacer></v-spacer>
-            <v-text-field
-              flat
-              v-model="search"
-              :search-input.sync="search"
-              placeholder="Search"
-              outlined
-              solo
-              dense
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-              style="max-width: 390px"
-            >
-            </v-text-field>
-          </v-card-title>
-          <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
-            <v-list nav dense style="width: 100%" class="transparent py-0">
-              <!-- Iterate over grouped playlist -->
-              <template v-for="(group, category) in groupedPlaylist">
-                <!-- Sticky header for each category -->
-                <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
-                <!-- Iterate over tracks in each category -->
-                <v-list-item
-                  v-for="(track, index) in group"
-                  :key="`${category}-${index}`"
-                  @click="selectTrack(track)"
-                  :class="{ 'current-playing': isCurrentTrack(track) }"
-                >
-                    <v-list-item-avatar>
-                      <v-img :src="track.img" contain></v-img>
-                    </v-list-item-avatar>
-                    <v-list-item-content>
-                      <v-list-item-title>{{ track.title }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
-                    </v-list-item-content>
-                    <v-spacer></v-spacer>
-                    <v-icon v-if="isCurrentTrack(track)" color="primary" small>
-                      {{ context?.isPlaying ? 'mdi-volume-high' : 'mdi-pause' }}
-                    </v-icon>
-                  </v-list-item>
-                </template>
-            </v-list>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+          <v-row no-gutters v-if="musicPlaylist?.length > 0" style="min-height: calc(-80px + 100vh)">
+            <v-col cols="12" xl="6" lg="6" style="align-content: center;">
+              <v-card flat class="pa-4 transparent" v-if="currentTrack" style="box-shadow: none!important;">
+                <v-card-text style="height: 433px; max-height: 433px;">
+                  <video ref="videoPlayer" :loop="context?.isRepeat" playsinline :controls="currentTrack.mediaType.includes('video')" :src="currentTrack.url" style="height: 400px; max-height: 400px;" :poster="currentTrack.mediaType.includes('video') ? '' : currentTrack.img"  />
+                </v-card-text>
+                <v-card-title class="justify-center" style="word-break: break-word">
+                  {{`${currentTrack.artist} - ${currentTrack.title}` }}
+                </v-card-title>
+                <div class="text-center justify-center" v-if="!currentTrack.mediaType.includes('video')" >
+                  <PlayerControls large />
+                  <PlayerPlayback style="align-self: center;" />
+                </div>
+              </v-card>
+            </v-col>
+            <v-col cols="12" xl="6" lg="6">
+              <v-card flat class="transparent" style="box-shadow: none!important;">
+                <v-card-title>
+                  <v-spacer></v-spacer>
+                  <v-text-field
+                    flat
+                    v-model="search"
+                    :search-input.sync="search"
+                    placeholder="Search"
+                    outlined
+                    solo
+                    dense
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    hide-details
+                    style="max-width: 390px"
+                  >
+                  </v-text-field>
+                </v-card-title>
+                <v-card-text style="overflow-y: auto; max-height: calc(100vh - 168px);; text-align: left;">
+                  <v-list nav dense style="width: 100%" class="transparent py-0">
+                    <!-- Iterate over grouped playlist -->
+                    <template v-for="(group, category) in groupedPlaylist">
+                      <!-- Sticky header for each category -->
+                      <v-subheader :key="category" class="sticky-header">{{ category }}</v-subheader>
+                      <!-- Iterate over tracks in each category -->
+                      <v-list-item
+                        v-for="(track, index) in group"
+                        :key="`${category}-${index}`"
+                        @click="selectTrack(track)"
+                        :class="{ 'current-playing': isCurrentTrack(track) }"
+                      >
+                          <v-list-item-avatar>
+                            <v-img :src="track.img" contain></v-img>
+                          </v-list-item-avatar>
+                          <v-list-item-content>
+                            <v-list-item-title>{{ track.title }}</v-list-item-title>
+                            <v-list-item-subtitle>{{ track.artist }}</v-list-item-subtitle>
+                          </v-list-item-content>
+                          <v-spacer></v-spacer>
+                          <v-icon v-if="isCurrentTrack(track)" color="primary" small>
+                            {{ context?.isPlaying ? 'mdi-volume-high' : 'mdi-pause' }}
+                          </v-icon>
+                        </v-list-item>
+                      </template>
+                  </v-list>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
         </v-card>
       </v-col>
     </v-row>
@@ -157,12 +157,12 @@ const calculateIndex = (index: number, category: string) => {
 
 const isCurrentTrack = (track: any) => {
   if (!currentTrack.value || !musicPlaylist.value) return false;
-  
+
   // Find the index of this track in the full playlist
-  const trackIndex = musicPlaylist.value.findIndex(t => 
+  const trackIndex = musicPlaylist.value.findIndex(t =>
     t.url === track.url && t.title === track.title && t.artist === track.artist
   );
-  
+
   return trackIndex === context.value.currentIndex;
 };
 

@@ -370,7 +370,7 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
 
   } catch (error) {
     console.error('Failed to load market data:', error)
-    charli3Store.setError('Failed to load market data')
+    charli3Store.setError(error instanceof Error ? error.message : 'Failed to load market data')
   } finally {
     if (!isBackgroundRefresh) {
       charli3Store.setLoading(false)
