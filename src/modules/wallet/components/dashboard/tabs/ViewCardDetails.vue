@@ -1,12 +1,16 @@
 <template>
   <div class="view-card-details">
-    <div class="form-container">
+    <div v-if="loading" class="loading-container">
+      <v-progress-circular indeterminate color="primary" size="32"></v-progress-circular>
+      <span class="loading-text">Loading card details...</span>
+    </div>
+    
+    <div v-else class="form-container">
       <div class="form-row">
         <div class="input-full">
           <label class="input-label">Name on card</label>
           <div class="card-number-input">
-            <span class="card-number-text">{{ cardStore.state.cardData?.pan || 'Loading...' }}</span>
-            <!-- Debug: {{ JSON.stringify(cardStore.state.cardData) }} -->
+            <span class="card-number-text">{{ cardData?.pan || 'Loading...' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
@@ -22,8 +26,7 @@
           <label class="input-label">Card number</label>
           <div class="card-number-input">
             <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-            <span class="card-number-text">{{ cardStore.state.cardNumber?.number || 'Loading...' }}</span>
-            <!-- Debug: {{ JSON.stringify(cardStore.state.cardNumber) }} -->
+            <span class="card-number-text">{{ cardNumber?.number || 'Loading...' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
@@ -53,8 +56,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import cardStore from '@/stores/modules/card';
+import { useStore } from '@/stores';
+import { mockCardData, mockCardNumber } from '@/models/card-mock';
+
+// Get main store for wallet access
+const store = useStore();
 
 // No need for storeToRefs with new format
 
@@ -64,6 +72,7 @@ console.log('ViewCardDetails - cardNumber:', cardStore.state.cardNumber);
 
 const showCvv = ref(false);
 const showPin = ref(false);
+const loading = ref(true);
 
 // Generate expiry date (in real app this would come from API)
 const expiryDate = computed(() => {
@@ -74,6 +83,15 @@ const expiryDate = computed(() => {
   return `${month} / ${year}`;
 });
 
+// Get card data with fallback to mock data
+const cardData = computed(() => {
+  return cardStore.state.cardData || mockCardData;
+});
+
+const cardNumber = computed(() => {
+  return cardStore.state.cardNumber || mockCardNumber;
+});
+
 const toggleCvvVisibility = () => {
   showCvv.value = !showCvv.value;
 };
@@ -81,6 +99,29 @@ const toggleCvvVisibility = () => {
 const togglePinVisibility = () => {
   showPin.value = !showPin.value;
 };
+
+// Initialize card data when component mounts
+onMounted(async () => {
+  try {
+    console.log('ViewCardDetails - Initializing card data...');
+    loading.value = true;
+    
+    const wallet = store.getWallet;
+    if (wallet) {
+      await cardStore.initialize(wallet);
+      console.log('ViewCardDetails - Card data initialized:', {
+        cardData: cardStore.state.cardData,
+        cardNumber: cardStore.state.cardNumber
+      });
+    } else {
+      console.warn('ViewCardDetails - No wallet available for initialization');
+    }
+  } catch (error) {
+    console.error('ViewCardDetails - Failed to initialize card data:', error);
+  } finally {
+    loading.value = false;
+  }
+});
 </script>
 
 <style lang="scss" scoped>
@@ -89,6 +130,20 @@ const togglePinVisibility = () => {
 
 .view-card-details {
   width: 100%;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-md;
+  padding: $spacing-xl;
+  
+  .loading-text {
+    @include body-text($font-size-base);
+    color: $text-secondary;
+  }
 }
 
 .form-container {
