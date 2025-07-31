@@ -7,16 +7,29 @@
           <img src="@/modules/wallet/icons/currency-dollar.svg" alt="Top up" class="btn-icon" />
           Top up
         </v-btn>
-        <v-btn class="action-btn primary-btn" variant="outlined" @click="showManageCardModal = true">
+        <v-btn class="action-btn primary-btn" variant="outlined" @click="handleManageCard">
           <img src="@/modules/wallet/icons/credit-card.svg" alt="Manage Card" class="btn-icon" />
           Manage Card
         </v-btn>
-        <v-btn class="action-btn primary-btn" variant="outlined" @click="$emit('qrScan')">
+        <v-btn class="action-btn primary-btn" variant="outlined">
           <img src="@/modules/wallet/icons/qr-code.svg" alt="QR Scan" class="btn-icon" />
           QR Scan
         </v-btn>
       </div>
     </div>
+    
+    <!-- Password Confirm Modal - только для Manage Card -->
+    <PasswordConfirmModal
+      :open="showPasswordModal"
+      :title="passwordModalTitle"
+      :subtitle="passwordModalSubtitle"
+      :confirm-button-text="passwordModalConfirmText"
+      :action="currentAction"
+      @close="closePasswordModal"
+      @confirm="handlePasswordConfirm"
+    />
+    
+    <!-- Original Modals -->
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
   </div>
@@ -25,16 +38,37 @@
 <script setup lang="ts">
 import TopUpModal from './TopUpModal.vue';
 import ManageCardModal from './ManageCardModal.vue';
+import PasswordConfirmModal from './PasswordConfirmModal.vue';
 import { ref } from 'vue';
-
-defineEmits<{
-  topUp: [];
-  manageCard: [];
-  qrScan: [];
-}>();
 
 const showTopUpModal = ref(false);
 const showManageCardModal = ref(false);
+const showPasswordModal = ref(false);
+const currentAction = ref('');
+const passwordModalTitle = ref('');
+const passwordModalSubtitle = ref('');
+const passwordModalConfirmText = ref('');
+
+const handleManageCard = () => {
+  currentAction.value = 'manage-card';
+  passwordModalTitle.value = 'Manage Card';
+  passwordModalSubtitle.value = 'Please enter your password to manage your card settings.';
+  passwordModalConfirmText.value = 'Continue';
+  showPasswordModal.value = true;
+};
+
+const closePasswordModal = () => {
+  showPasswordModal.value = false;
+  currentAction.value = '';
+};
+
+const handlePasswordConfirm = (password: string, action: string) => {
+  console.log('Password confirmed for action:', action, 'Password:', password);
+  
+  if (action === 'manage-card') {
+    showManageCardModal.value = true;
+  }
+};
 </script>
 
 <style lang="scss" scoped>
