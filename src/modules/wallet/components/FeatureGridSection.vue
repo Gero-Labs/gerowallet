@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import GradientButton from './GradientButton.vue';
 import FeatureCard from './FeatureCard.vue';
-import type { FeatureCardProps } from '../types';
+import type { FeatureCardProps } from '@/models/types';
 import OrderCardModal from './OrderCardModal.vue';
 import { ref } from 'vue';
 

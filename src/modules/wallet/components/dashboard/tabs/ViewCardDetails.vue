@@ -3,15 +3,16 @@
     <div class="form-container">
       <div class="form-row">
         <div class="input-full">
-          <label class="input-label">Name on cardr</label>
+          <label class="input-label">Name on card</label>
           <div class="card-number-input">
-            <span class="card-number-text">{{ formData.nameOnCard }}</span>
+            <span class="card-number-text">{{ cardStore.state.cardData?.pan || 'Loading...' }}</span>
+            <!-- Debug: {{ JSON.stringify(cardStore.state.cardData) }} -->
           </div>
         </div>
         <div class="input-full small-input">
           <label class="input-label">Expiry</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ formData.expiry }}</span>
+            <span class="cvv-text">{{ expiryDate }}</span>
           </div>
         </div>
       </div>
@@ -21,14 +22,14 @@
           <label class="input-label">Card number</label>
           <div class="card-number-input">
             <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-
-            <span class="card-number-text">{{ formData.cardNumber }}</span>
+            <span class="card-number-text">{{ cardStore.state.cardNumber?.number || 'Loading...' }}</span>
+            <!-- Debug: {{ JSON.stringify(cardStore.state.cardNumber) }} -->
           </div>
         </div>
         <div class="input-full small-input">
           <label class="input-label">CVV</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ formData.cvv }}</span>
+            <span class="cvv-text">{{ showCvv ? '123' : '•••' }}</span>
             <v-btn icon small class="eye-btn" @click="toggleCvvVisibility">
               <v-icon small>{{ showCvv ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -40,7 +41,7 @@
         <div class="pin-container">
           <label class="input-label">PIN</label>
           <div class="pin-input">
-            <span class="pin-text">{{ formData.pin }}</span>
+            <span class="pin-text">{{ showPin ? '1234' : '••••' }}</span>
             <v-btn icon small class="eye-btn" @click="togglePinVisibility">
               <v-icon small>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -52,27 +53,33 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { ref, computed } from 'vue';
+import cardStore from '@/stores/modules/card';
 
-const formData = reactive({
-  nameOnCard: 'Olivia Rhye',
-  expiry: '06 / 2025',
-  cardNumber: '1234 1234 1234 1234',
-  cvv: '•••',
-  pin: '••••',
-});
+// No need for storeToRefs with new format
+
+// Debug logging
+console.log('ViewCardDetails - cardData:', cardStore.state.cardData);
+console.log('ViewCardDetails - cardNumber:', cardStore.state.cardNumber);
 
 const showCvv = ref(false);
 const showPin = ref(false);
 
+// Generate expiry date (in real app this would come from API)
+const expiryDate = computed(() => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + 2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear().toString().slice(-2);
+  return `${month} / ${year}`;
+});
+
 const toggleCvvVisibility = () => {
   showCvv.value = !showCvv.value;
-  formData.cvv = showCvv.value ? '123' : '•••';
 };
 
 const togglePinVisibility = () => {
   showPin.value = !showPin.value;
-  formData.pin = showPin.value ? '1234' : '••••';
 };
 </script>
 

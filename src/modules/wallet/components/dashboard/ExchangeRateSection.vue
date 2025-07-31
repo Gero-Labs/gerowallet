@@ -32,7 +32,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { ExchangeRate } from '@/modules/wallet/types';
+import type { ExchangeRate } from '@/models/types';
 import arrowUp from '@/modules/wallet/icons/arrow-up.svg?url';
 import arrowDown from '@/modules/wallet/icons/arrow-down.svg?url';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';

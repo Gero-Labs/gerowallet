@@ -31,7 +31,7 @@
       <div class="tab-content">
         <ViewCardDetails v-if="activeTab === 'view'" />
         <BlockCard v-if="activeTab === 'block'" />
-        <OrderPhysicalCard v-if="activeTab === 'order'" />
+        <OrderPhysicalCard v-if="activeTab === 'order'" @close="closeDialog" />
       </div>
     </v-card>
   </v-dialog>

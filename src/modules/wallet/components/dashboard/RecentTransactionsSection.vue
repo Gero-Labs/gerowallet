@@ -3,7 +3,6 @@
     <div class="card-header">
       <h3 class="card-title">Recent Transactions</h3>
     </div>
-
     <div class="table-container">
       <table class="transactions-table">
         <thead>
@@ -17,7 +16,7 @@
         </thead>
 
         <tbody>
-          <tr v-for="transaction in transactions" :key="transaction.id" class="table-row">
+          <tr v-for="transaction in formattedTransactions" :key="transaction.id" class="table-row">
             <td class="table-cell date-cell">{{ transaction.date }}</td>
             <td class="table-cell transaction-cell">
               <div class="transaction-info">
@@ -70,13 +69,13 @@
 
         <div class="pagination-numbers">
           <div
-            v-for="page in visiblePages"
-            :key="page"
+            v-for="(page, index) in visiblePages"
+            :key="`page-${index}-${page}`"
             class="page-number"
-            :class="{ active: page === currentPage }"
+            :class="{ active: page === currentPage && typeof page === 'number' }"
             @click="handlePageChange(page)"
           >
-            {{ page === '...' ? '...' : page }}
+            {{ typeof page === 'string' ? '...' : page }}
           </div>
         </div>
 
@@ -97,71 +96,103 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { Transaction } from '@/modules/wallet/types';
+import type { CardTransactionHistory } from '@/models/card';
 
-const transactions = ref<Transaction[]>([
-  {
-    id: 1,
-    date: '22 Jan 2025',
-    name: 'Cardano Coffee',
-    avatarText: 'AC',
-    avatarClass: 'avatar-default',
-    amount: '- $4.50',
-    category: 'Food and dining',
-    categoryClass: 'category-pink',
-    categoryDotClass: 'dot-pink',
-  },
-  {
-    id: 2,
-    date: '22 Jan 2025',
-    name: 'Spotify',
-    avatarText: 'AC',
-    avatarClass: 'avatar-default',
-    amount: '- $17.99',
-    category: 'Subscriptions',
-    categoryClass: 'category-green',
-    categoryDotClass: 'dot-green',
-  },
-  {
-    id: 3,
-    date: '21 Jan 2025',
-    name: 'Twitch',
-    avatarText: 'AC',
-    avatarClass: 'avatar-default',
-    amount: '- $9.99',
-    category: 'Subscriptions',
-    categoryClass: 'category-green',
-    categoryDotClass: 'dot-green',
-  },
-  {
-    id: 4,
-    date: '18 Jan 2025',
-    name: 'Amazon',
-    avatarText: 'AC',
-    avatarClass: 'avatar-default',
-    amount: '- $69.00',
-    category: 'Ecommerce',
-    categoryClass: 'category-blue',
-    categoryDotClass: 'dot-blue',
-  },
-  {
-    id: 5,
-    date: '15 Jan 2025',
-    name: 'Steam',
-    avatarText: 'AC',
-    avatarClass: 'avatar-default',
-    amount: '- $9.99',
-    category: 'Entertainment',
-    categoryClass: 'category-red',
-    categoryDotClass: 'dot-red',
-  },
-]);
+interface Props {
+  transactions?: CardTransactionHistory[];
+}
+
+const props = defineProps<Props>();
+
+// Transform API transactions to UI format
+const formattedTransactions = computed(() => {
+  if (!props.transactions) return [];
+
+  return props.transactions.map((tx, index) => {
+    const date = new Date(tx.createTime);
+    const formattedDate = date.toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const amount = tx.debit
+      ? `- ${tx.amount.currencyCode}${tx.amount.amount.toFixed(2)}`
+      : `+ ${tx.amount.currencyCode}${tx.amount.amount.toFixed(2)}`;
+
+    // Extract merchant name from cardAcceptorNameAndLocation
+    const merchantName = tx.cardAcceptorNameAndLocation.split(' ')[0] || 'Unknown';
+
+    // Determine category based on MCC code
+    const category = getCategoryFromMCC(tx.mcc.code);
+    const categoryClass = getCategoryClass(category);
+    const categoryDotClass = getCategoryDotClass(category);
+
+    return {
+      id: index + 1,
+      date: formattedDate,
+      name: merchantName,
+      avatarText: merchantName.substring(0, 2).toUpperCase(),
+      avatarClass: 'avatar-default',
+      icon: undefined, // No icon for now
+      amount,
+      category,
+      categoryClass,
+      categoryDotClass,
+    };
+  });
+});
+
+// Helper functions
+const getCategoryFromMCC = (mccCode: string): string => {
+  const mccCategories: Record<string, string> = {
+    '4899': 'Subscriptions',
+    '5942': 'Ecommerce',
+    '5814': 'Food and dining',
+    '5411': 'Groceries',
+    '5541': 'Transportation',
+    '7011': 'Travel',
+    '8099': 'Entertainment',
+  };
+
+  return mccCategories[mccCode] || 'Other';
+};
+
+const getCategoryClass = (category: string): string => {
+  const categoryClasses: Record<string, string> = {
+    'Subscriptions': 'category-green',
+    'Ecommerce': 'category-blue',
+    'Food and dining': 'category-pink',
+    'Groceries': 'category-orange',
+    'Transportation': 'category-purple',
+    'Travel': 'category-cyan',
+    'Entertainment': 'category-red',
+    'Other': 'category-gray',
+  };
+
+  return categoryClasses[category] || 'category-gray';
+};
+
+const getCategoryDotClass = (category: string): string => {
+  const dotClasses: Record<string, string> = {
+    'Subscriptions': 'dot-green',
+    'Ecommerce': 'dot-blue',
+    'Food and dining': 'dot-pink',
+    'Groceries': 'dot-orange',
+    'Transportation': 'dot-purple',
+    'Travel': 'dot-cyan',
+    'Entertainment': 'dot-red',
+    'Other': 'dot-gray',
+  };
+
+  return dotClasses[category] || 'dot-gray';
+};
 
 const currentPage = ref(1);
 const totalPages = ref(10);
 
 const visiblePages = computed(() => {
-  const pages = [];
+  const pages: (number | string)[] = [];
   const maxVisible = 7;
 
   if (totalPages.value <= maxVisible) {
@@ -173,21 +204,21 @@ const visiblePages = computed(() => {
       for (let i = 1; i <= 5; i++) {
         pages.push(i);
       }
-      pages.push('...');
+      pages.push('ellipsis-1');
       pages.push(totalPages.value);
     } else if (currentPage.value >= totalPages.value - 3) {
       pages.push(1);
-      pages.push('...');
+      pages.push('ellipsis-2');
       for (let i = totalPages.value - 4; i <= totalPages.value; i++) {
         pages.push(i);
       }
     } else {
       pages.push(1);
-      pages.push('...');
+      pages.push('ellipsis-3');
       for (let i = currentPage.value - 1; i <= currentPage.value + 1; i++) {
         pages.push(i);
       }
-      pages.push('...');
+      pages.push('ellipsis-4');
       pages.push(totalPages.value);
     }
   }
@@ -195,9 +226,12 @@ const visiblePages = computed(() => {
   return pages;
 });
 
-const handlePageChange = (page: number) => {
-  currentPage.value = page;
-  console.log('Page changed to:', page);
+const handlePageChange = (page: number | string) => {
+  if (typeof page === 'number') {
+    currentPage.value = page;
+    console.log('Page changed to:', page);
+  }
+  // Ignore clicks on ellipsis
 };
 </script>
 

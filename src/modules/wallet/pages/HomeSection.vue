@@ -1,17 +1,21 @@
 <template>
   <div class="home-section">
     <!-- Account Overview Section -->
-    <WelcomeCard @top-up="handleTopUp" @manage-card="handleManageCard" @qr-scan="handleQrScan" />
-    <AccountOverviewHeader @top-up="$emit('topUp')" @manage-card="$emit('manageCard')" @qr-scan="$emit('qrScan')" />
+    <WelcomeCard :user-name="userName" />
+    <AccountOverviewHeader />
 
-    <BalanceCardsSection />
+    <BalanceCardsSection
+      :card-balance="cardBalanceFormatted"
+      :cardano-balance="cardanoBalanceFormatted"
+      :gero-earned="geroEarnedFormatted"
+    />
 
     <ChartSection @filter="handleFilter" />
 
     <!-- Two Column Layout -->
     <div class="dashboard-layout">
       <div class="left-column">
-        <RecentTransactionsSection />
+        <RecentTransactionsSection :transactions="cardHistoryRecords" />
       </div>
       <div class="right-column">
         <ExchangeRateSection />
@@ -22,6 +26,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from 'vue';
+import cardStore from '@/stores/modules/card';
+import { useMockCardData } from '@/models/card-example';
+import { useStore } from '@/stores';
 import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
@@ -30,20 +38,55 @@ import RecentTransactionsSection from '../components/dashboard/RecentTransaction
 import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 
-const handleTopUp = () => {
-  console.log('Top up clicked');
-  // Handle top up action
-};
+const store = useStore();
+const { initializeMockData } = useMockCardData();
 
-const handleManageCard = () => {
-  console.log('Manage card clicked');
-  // Handle manage card action
-};
+// Computed properties for formatted data
+const userName = computed(() => {
+  if (cardStore.state.userInfo?.email) {
+    return cardStore.state.userInfo.email.split('@')[0]; // Extract name from email
+  }
+  return 'User';
+});
 
-const handleQrScan = () => {
-  console.log('QR scan clicked');
-  // Handle QR scan action
-};
+const cardBalanceFormatted = computed(() => {
+  if (cardStore.state.cardBalance?.currentBalance) {
+    const amount = cardStore.state.cardBalance.currentBalance.amount;
+    const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
+    return `${currency}${amount.toFixed(2)}`;
+  }
+  return '€0.00';
+});
+
+const cardanoBalanceFormatted = computed(() => {
+  // This would come from Cardano wallet balance
+  return '₳0.00';
+});
+
+const geroEarnedFormatted = computed(() => {
+  // This would come from GERO rewards
+  return '0.00K';
+});
+
+const cardHistoryRecords = computed(() => {
+  return cardStore.state.cardHistory?.history.records || [];
+});
+
+// Initialize data
+onMounted(async () => {
+  console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
+  if (import.meta.env.DEV) {
+    // Use mock data in development
+    console.log('Initializing mock data...');
+    await initializeMockData();
+    console.log('Mock data initialized');
+  } else {
+    // Use real API in production
+    console.log('Initializing real API...');
+    await cardStore.initialize(store.getWallet);
+    console.log('Real API initialized');
+  }
+});
 
 const handleFilter = () => {
   console.log('Filter clicked');

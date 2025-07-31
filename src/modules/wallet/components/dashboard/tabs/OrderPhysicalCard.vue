@@ -10,7 +10,14 @@
         <div class="form-row">
           <div class="input-full">
             <label class="input-label">Name *</label>
-            <v-text-field v-model="formData.name" dense outlined class="form-input" hide-details />
+            <v-text-field
+              v-model="formData.name"
+              dense
+              outlined
+              class="form-input"
+              hide-details
+              :placeholder="userName || 'Enter your name'"
+            />
           </div>
         </div>
 
@@ -88,28 +95,38 @@
     </div>
 
     <div class="modal-actions">
-      <SecondaryButton text="Back" @click="goBack" />
+      <SecondaryButton text="Back" @click="$emit('close')" />
       <GradientButton text="Place Order" @click="placeOrder" :loading="loading" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { reactive, ref, computed } from 'vue';
+import cardStore from '@/stores/modules/card';
 import GradientButton from '../../GradientButton.vue';
 import SecondaryButton from '../../SecondaryButton.vue';
 
+const loading = ref(false);
+
+// Extract user name from email
+const userName = computed(() => {
+  if (cardStore.state.userInfo?.email) {
+    return cardStore.state.userInfo.email.split('@')[0];
+  }
+  return '';
+});
+
 const formData = reactive({
-  name: 'Olivia Rhye',
-  streetAddress: '100 Smith Street',
-  city: 'Collingwood',
-  state: 'VIC',
-  postalCode: '3066',
-  country: 'Australia',
+  name: userName.value,
+  streetAddress: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  country: '',
 });
 
 const countries = [
-  'Australia',
   'United States',
   'Canada',
   'United Kingdom',
@@ -125,23 +142,47 @@ const countries = [
   'Norway',
   'Denmark',
   'Finland',
+  'Poland',
+  'Czech Republic',
+  'Hungary',
+  'Slovakia',
+  'Slovenia',
+  'Croatia',
+  'Bulgaria',
+  'Romania',
+  'Greece',
+  'Portugal',
+  'Ireland',
+  'Luxembourg',
+  'Malta',
+  'Cyprus',
+  'Estonia',
+  'Latvia',
+  'Lithuania',
 ];
 
-const loading = ref(false);
-const selectedShipping = ref('express');
-
-const goBack = () => {
-  console.log('Go back');
-};
+const selectedShipping = ref('normal');
 
 const placeOrder = async () => {
   loading.value = true;
+  try {
+    // Here you would call the API to place the order
+    console.log('Placing order with data:', {
+      ...formData,
+      shipping: selectedShipping.value,
+      userEmail: cardStore.state.userInfo?.email,
+    });
 
-  await new Promise(resolve => setTimeout(resolve, 2000));
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
-  loading.value = false;
-
-  console.log('Order placed', formData, selectedShipping.value);
+    console.log('Order placed successfully');
+    // You could emit an event or navigate to success page
+  } catch (error) {
+    console.error('Failed to place order:', error);
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
@@ -249,16 +290,16 @@ const placeOrder = async () => {
   gap: $spacing-xl;
   width: 100%;
   max-width: 400px;
-}
 
-.state-input {
-  flex: 1;
-  max-width: 148px;
-}
+  .state-input {
+    flex: 1;
+    max-width: 148px;
+  }
 
-.postal-input {
-  flex: 1;
-  max-width: 148px;
+  .postal-input {
+    flex: 1;
+    max-width: 148px;
+  }
 }
 
 .country-select {
@@ -272,7 +313,7 @@ const placeOrder = async () => {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  
+
   img {
     width: 100%;
     height: 100%;
@@ -310,12 +351,12 @@ const placeOrder = async () => {
   background: $background-dark;
   cursor: pointer;
   transition: all 0.3s ease;
-  
+
   &.active {
     background: $background-secondary;
     border-color: $primary-cyan;
   }
-  
+
   &:hover {
     border-color: $border-primary;
   }
@@ -324,7 +365,7 @@ const placeOrder = async () => {
 .shipping-text {
   @include body-text($font-size-sm);
   color: $text-secondary;
-  
+
   .shipping-option.active & {
     color: $primary-cyan;
   }

@@ -2,8 +2,8 @@
   <div class="balance-cards">
     <BalanceCard
       title="Card Balance"
-      primary-value="€177.00"
-      secondary-value="₳69.42"
+      :primary-value="cardBalance"
+      :secondary-value="cardanoBalance"
     />
     <BalanceCard
       title="Total Deposit"
@@ -12,7 +12,7 @@
     />
     <BalanceCard
       title="$GERO Earned"
-      primary-value="113.65K"
+      :primary-value="geroEarned"
       secondary-value="₳69.42"
       :is-gero="true"
     />
@@ -21,6 +21,14 @@
 
 <script setup lang="ts">
 import BalanceCard from './BalanceCard.vue';
+
+interface Props {
+  cardBalance?: string;
+  cardanoBalance?: string;
+  geroEarned?: string;
+}
+
+defineProps<Props>();
 </script>
 
 <style lang="scss" scoped>

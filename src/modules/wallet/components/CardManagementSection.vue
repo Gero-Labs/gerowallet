@@ -2,9 +2,6 @@
   <div class="management-content">
     <img src="@/modules/wallet/icons/card.svg" alt="card" />
     <div class="management-column-content">
-      <div class="featured-icon">
-        <img src="@/modules/wallet/icons/card-management.svg" alt="card-managment" />
-      </div>
       <h3 class="management-heading">Manage Your Card in Seconds</h3>
       <p class="management-description">
         An all-in-one platform that helps you manage everything about <br />

@@ -10,8 +10,14 @@
       </div>
 
       <div class="action-section">
-        <v-btn color="error" class="block-btn" @click="showConfirmModal = true">
-          Block Card
+        <v-btn 
+          color="error" 
+          class="block-btn" 
+          :disabled="isCardBlocked"
+          :loading="loading"
+          @click="showConfirmModal = true"
+        >
+          {{ isCardBlocked ? 'Card Already Blocked' : 'Block Card' }}
         </v-btn>
       </div>
     </div>
@@ -30,14 +36,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import cardStore from '@/stores/modules/card';
 import BlockCardConfirmModal from '../BlockCardConfirmModal.vue';
 
 const showConfirmModal = ref(false);
+const loading = ref(false);
 
-const handleConfirmBlock = () => {
-  // Здесь можно добавить логику после подтверждения блокировки
-  console.log('Card blocked successfully');
+// Check if card is blocked based on state
+const isCardBlocked = computed(() => {
+  return cardStore.state.cardBalance?.state === 'BLOCKED';
+});
+
+const handleConfirmBlock = async () => {
+  loading.value = true;
+  try {
+    // Here you would call the API to block the card
+    console.log('Blocking card:', cardStore.state.cardNumber?.number);
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Update the card state (in real app this would come from API response)
+    if (cardStore.state.cardBalance) {
+      cardStore.state.cardBalance.state = 'BLOCKED';
+    }
+    
+    console.log('Card blocked successfully');
+  } catch (error) {
+    console.error('Failed to block card:', error);
+  } finally {
+    loading.value = false;
+    showConfirmModal.value = false;
+  }
 };
 </script>
 
