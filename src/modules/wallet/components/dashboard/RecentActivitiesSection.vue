@@ -28,7 +28,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { Activity } from '@/modules/wallet/types';
+import type { Activity } from '@/models/types';
 
 const activities = ref<Activity[]>([
   {

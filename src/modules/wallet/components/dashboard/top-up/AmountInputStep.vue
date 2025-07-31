@@ -45,7 +45,7 @@
       <!-- Switch Button -->
       <div class="switch-button">
         <v-btn icon class="switch-icon" @click="switchCurrencies">
-          <v-icon color="white" size="16">mdi-swap-vertical</v-icon>
+          <v-icon color="white" size="20">mdi-swap-vertical</v-icon>
         </v-btn>
       </div>
       

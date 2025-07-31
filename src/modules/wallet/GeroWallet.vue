@@ -1,20 +1,50 @@
 <template>
-  <div class="gero-wallet wallet-module">
+  <div class="gero-wallet">
     <component :is="section" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeMount } from 'vue';
+import { ref, onBeforeMount, computed } from 'vue';
+import cardStore from '@/stores/modules/card';
+import { useMockCardData } from '@/models/card-example';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
+import { useStore } from '@/stores';
 
-const status = ref('pending');
+const store = useStore();
+const { initializeMockData } = useMockCardData();
+
 const section = ref(OrderCardSection);
 
+// Determine status based on user data and card data
+const determineStatus = computed(() => {
+  // If no user info, show order card section
+  if (!cardStore.state.userInfo) {
+    return 'new';
+  }
+
+  // If user exists but no card data, show pending section
+  if (cardStore.state.userInfo && !cardStore.state.cardData) {
+    return 'pending';
+  }
+
+  // If user and card data exist, show home section
+  if (cardStore.state.userInfo && cardStore.state.cardData) {
+    return 'approved';
+  }
+
+  return 'new';
+});
+
 const setActiveStatus = () => {
-  switch (status.value) {
+  const currentStatus = determineStatus.value;
+  console.log('Current status:', currentStatus);
+  console.log('User info:', cardStore.state.userInfo);
+  console.log('Card data:', cardStore.state.cardData);
+
+  switch (currentStatus) {
     case 'new':
       section.value = OrderCardSection;
       break;
@@ -24,18 +54,37 @@ const setActiveStatus = () => {
     case 'approved':
       section.value = HomeSection;
       break;
+    default:
+      section.value = OrderCardSection;
   }
 };
 
-// watchEffect(() => {
-//   status.value =  localStorage.getItem('kycStatus') || 'new';
-//   console.log('status', status.value);
-//   setActiveStatus();
-// });
+onBeforeMount(async () => {
+  // Initialize mock data in development
+  if (import.meta.env.DEV) {
+    console.log('Initializing mock data in GeroWallet...');
+    await initializeMockData();
+  } else {
+    // Use real API in production
+    console.log('Initializing real API in GeroWallet...');
+    await cardStore.initialize(store.getWallet);
+  }
 
-onBeforeMount(() => {
+  // Set active status after data is loaded
   setActiveStatus();
 });
+
+// Watch for changes in user data and update status
+import { watch } from 'vue';
+
+watch(
+  [() => cardStore.state.userInfo, () => cardStore.state.cardData],
+  () => {
+    console.log('User data changed, updating status...');
+    setActiveStatus();
+  },
+  { deep: true }
+);
 </script>
 
 <style lang="scss" scoped>

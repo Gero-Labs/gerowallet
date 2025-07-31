@@ -3,19 +3,17 @@
     <div class="welcome-text">
       <span class="welcome-title">Welcome back, </span>
       <br />
-      <span class="welcome-subtitle">Adam</span>
+      <span class="welcome-subtitle">{{ userName }}</span>
     </div>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { defineEmits } from 'vue';
+interface Props {
+  userName?: string;
+}
 
-defineEmits<{
-  topUp: [];
-  manageCard: [];
-  qrScan: [];
-}>();
+defineProps<Props>();
 </script>
 
 <style lang="scss" scoped>
