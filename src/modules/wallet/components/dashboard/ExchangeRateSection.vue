@@ -33,8 +33,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type { ExchangeRate } from '@/models/types';
-import arrowUp from '@/modules/wallet/icons/arrow-up.svg?url';
-import arrowDown from '@/modules/wallet/icons/arrow-down.svg?url';
+import trendUpSvg from '@/assets/svg/trend-up-01.svg';
+import trendDownSvg from '@/assets/svg/trend-down-01.svg';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';
 import currencyDollar from '@/modules/wallet/icons/currency-dollar.svg?url';
 
@@ -47,7 +47,7 @@ const exchangeRates = ref<ExchangeRate[]>([
     icon: currencyEuro,
     change: '3%',
     trend: 'positive',
-    trendIcon: arrowUp,
+    trendIcon: trendUpSvg,
   },
   {
     id: 2,
@@ -56,8 +56,8 @@ const exchangeRates = ref<ExchangeRate[]>([
     currency: 'USD',
     icon: currencyDollar,
     change: '1.2%',
-    trend: 'positive',
-    trendIcon: arrowUp,
+    trend: 'negative',
+    trendIcon: trendDownSvg,
   },
 ]);
 

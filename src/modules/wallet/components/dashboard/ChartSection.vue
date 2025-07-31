@@ -4,10 +4,10 @@
       <div class="chart-title-section">
         <h3 class="chart-title">Balance over time</h3>
         <div class="chart-value-section">
-          <span class="chart-value">$177.00</span>
+          <span class="chart-value">€177.00</span>
           <div class="change-badge positive">
-            <img src="@/modules/wallet/icons/arrow-up.svg" alt="Trend" class="change-icon" />
-            <span class="change-text">2.4%</span>
+            <img src="@/assets/svg/trend-up-01.svg" alt="Trend" class="change-icon" />
+            <span class="change-text">+2.4%</span>
           </div>
         </div>
       </div>
@@ -50,7 +50,7 @@
             24 hours
           </v-btn>
         </div>
-        <v-btn class="filter-btn" variant="outlined" size="small" @click="$emit('filter')">
+        <v-btn class="filter-btn" variant="outlined" size="small">
           <img src="@/modules/wallet/icons/filter.svg" alt="Filter" class="btn-icon" />
           Filters
         </v-btn>
@@ -70,7 +70,6 @@ const activeTab = ref('12months');
 const chartContainer = ref<HTMLElement>();
 let chart: Highcharts.Chart | null = null;
 
-// Моковые данные для разных периодов
 const chartData = {
   '12months': [
     { name: 'Jan', y: 120 },
@@ -215,10 +214,6 @@ onMounted(() => {
 watch(activeTab, () => {
   updateChart();
 });
-
-defineEmits<{
-  filter: [];
-}>();
 </script>
 
 <style lang="scss" scoped>
