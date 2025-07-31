@@ -11,9 +11,9 @@ import { useMockCardData } from '@/models/card-example';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
-import { useStore } from '@/stores';
+import geroStore from '@/stores/geroStore';
 
-const store = useStore();
+const store = geroStore;
 const { initializeMockData } = useMockCardData();
 
 const section = ref(OrderCardSection);

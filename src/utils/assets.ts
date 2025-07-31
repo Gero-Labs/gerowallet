@@ -127,6 +127,7 @@ import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
 import debitCardImage from '@/assets/geroCard.png'
 import emptyState from '@/assets/emptyState.png'
+import card from '@/assets/svg/card.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -210,6 +211,7 @@ export default {
   withdrawalSvg,
   buyAda,
   sellAda,
+  card,
   detectCIDVersion(cidStr: string) {
     try {
       const cid = CID.parse(cidStr);
