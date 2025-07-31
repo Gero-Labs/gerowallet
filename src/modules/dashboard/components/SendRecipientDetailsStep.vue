@@ -22,7 +22,7 @@
               max-width="452"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="!valid">
+                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="!valid || loading || !paymentAddress">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
                       <v-icon small color="#00DFF3">
@@ -141,7 +141,7 @@
                 <v-card-text class="pa-0">
                   <v-data-table dense class="transparent token-allocation-table" :headers="contactsHeaders" :items="contacts ? Object.values(contacts) : []" hide-default-footer disable-pagination @click:row="selectContact" :header-props="{ 'sort-icon': 'mdi-menu-up' }">
                     <template v-slot:[`item.address`]="{ item }">
-                      {{ truncate(item.address) }}<CopyButton x-small :value="item.address" />
+                      {{ filters.truncate(item.address) }}<CopyButton x-small :value="item.address" />
                     </template>
                     <template v-slot:[`item.actions`]="{ item }">
                       <v-btn color="error" icon x-small @click="removeCont(item)">
@@ -223,157 +223,145 @@
     </div>
   </v-form>
 </template>
-
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue';
+import { ref, toRefs, watch } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";
-import { appWallet, useStore } from '@/stores';
 import { Blockchain, Network } from '@/models/types';
 import debounce from 'lodash/debounce';
-import { resolveAsset } from '@/shared/utils/resolver';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import filters from '@/shared/utils/filters';
 import adaHandleApi from '@/api/ada-handle.api';
-import { SendData, Asset, ContactItem, Contact } from '@/shared/models/tokens';
+import { walletStore } from '@/stores/walletStore';
+import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
+import assets from '@/utils/assets';
+import filters from '@/shared/utils/filters';
 
-// Props
 interface Props {
-  sendData: SendData;
+  sendData: any;
 }
 
 const props = defineProps<Props>();
+const emit = defineEmits(['updateRecipientAddress'])
 
-// Emits
-const emit = defineEmits<{
-  (e: 'updateRecipientAddress', value: string): void;
-}>();
+const { loggedWallet, contacts } = toRefs(walletStore)
 
-// Reactive data
 const valid = ref<boolean>(false);
 const paymentAddress = ref<string>('');
 const recipientAddress = ref<string>('');
-const resolved = ref<boolean | undefined>(undefined);
+const resolved = ref<boolean>(undefined);
 const loading = ref<boolean>(false);
 const contactsMenu = ref<boolean>(false);
 const saveContactMenu = ref<boolean>(false);
-const asset = ref<Asset | undefined>(undefined);
-
-const contact = reactive<Contact>({
+const asset = ref<any>(undefined);
+const contact = ref<any>({
   name: '',
   address: '',
   img: undefined
 });
-
-const contactsHeaders = ref([
+const contactsHeaders = ref<any[]>([
   { text: 'Name', value: 'name' },
   { text: 'Address', value: 'address' },
   { text: '', align: 'right', sortable: false, value: 'actions' },
 ]);
 
-// Store state
-const loggedWallet = computed(() => useStore().loggedWallet);
-const contacts = computed(() => walletConfigStore().contacts);
+const selectContact = (item) => {
+  recipientAddress.value = item.address
+  paymentAddress.value = item.address
+  emit('updateRecipientAddress', recipientAddress.value)
+  contactsMenu.value = false
+}
 
-// Store actions
-const { addOrUpdateContact, removeContact } = walletConfigStore();
-
-// Filter functions
-const truncate = filters.truncate;
-
-// Methods
-const selectContact = (item: ContactItem): void => {
-  recipientAddress.value = item.address;
-  paymentAddress.value = item.address;
-  emit('updateRecipientAddress', recipientAddress.value);
-  contactsMenu.value = false;
-};
-
-const saveContact = (): void => {
-  contact.name = '';
-  contact.address = '';
-  contact.img = undefined;
-  
-  let name: string;
-  const address = paymentAddress.value;
-  const img = asset.value ? asset.value.img : undefined;
-  
-  if (contacts.value && contacts.value[paymentAddress.value] == null) {
-    name = '';
+const saveContact = () => {
+  console.log('save contact')
+  contact.value = {}
+  let name
+  const address = paymentAddress.value
+  const img = asset.value?.img
+  if (contacts.value[paymentAddress.value] == null) {
+    name = ''
   } else {
-    name = contacts.value[paymentAddress.value]?.name || '';
+    name = contacts.value[paymentAddress.value].name
   }
-  
   if (!name && asset.value?.name) {
-    name = asset.value.name;
+    name = asset.value.name
   }
-  
-  contact.img = img;
-  contact.name = name;
-  contact.address = address;
-};
+  contact.value = {
+    img,
+    name,
+    address
+  }
+}
 
-const removeCont = (item?: ContactItem): void => {
+const resolveAddress = (val) => {
+  if (val && val.startsWith('$') && loggedWallet.value.network === Network.MAINNET && loggedWallet.value.chain === Blockchain.CARDANO) {
+    resolveAdaHandle(val)
+  } else {
+    resolved.value = undefined
+    paymentAddress.value = val
+    emit('updateRecipientAddress', val)
+  }
+}
+
+const removeCont = (item) => {
   if (item && item.address) {
-    removeContact(item.address);
-    contactsMenu.value = false;
+    delete contacts.value[item.address]
+    removeContact(loggedWallet.value.id, item.address)
+    contactsMenu.value = false
   } else {
-    removeContact(contact.address);
-    saveContactMenu.value = false;
+    delete contacts.value[contact.value.address]
+    removeContact(loggedWallet.value.id, contact.value.address)
+    saveContactMenu.value = false
   }
-};
+}
 
-const resolveAddress = (val: string): void => {
-  if (val && val.startsWith('$') && loggedWallet.value?.network === Network.MAINNET && loggedWallet.value?.chain === Blockchain.CARDANO) {
-    resolveAdaHandle(val);
-  } else {
-    resolved.value = undefined;
-    paymentAddress.value = val;
-    emit('updateRecipientAddress', val);
-  }
-};
-
-const resolveAdaHandle = debounce(async (val: string): Promise<void> => {
-  if (val.length === 1) {
-    resolved.value = false;
-    return;
-  }
-  
-  loading.value = true;
-  
-  try {
-    const res = await adaHandleApi.resolve(val.replace('$', ''));
-    
-    if (res.status === 200 && res.data?.resolved_addresses?.ada) {
-      const assetRes = await appWallet.api.getDetailedAssetsInfo(res.data.policy, res.data.hex);
-      asset.value = await resolveAsset(assetRes.data, assetRes.data);
-      paymentAddress.value = res.data.resolved_addresses.ada;
-      emit('updateRecipientAddress', res.data.resolved_addresses.ada);
-      resolved.value = true;
-    } else {
-      resolved.value = false;
+const resolveAdaHandle = debounce(async function(val) {
+    if (val.length === 1) {
+      resolved.value = false
+      return
     }
-  } catch (error) {
-    emit('updateRecipientAddress', '');
-    resolved.value = false;
-  } finally {
-    loading.value = false;
+    loading.value = true
+    adaHandleApi.resolve(val.replace('$','')).then(async res => {
+      console.log(res)
+      if (res.status === 200 && res.data?.resolved_addresses?.ada) {
+        const assetRes = {
+          unit: res.data.policy + res.data.hex,
+          img: res.data.image,
+          metadata: {
+            logo: res.data.image,
+          }
+        }
+        asset.value = {
+          name: res.data.name,
+          img: assets.resolveIcon(res.data.image),
+        }
+        paymentAddress.value = res.data.resolved_addresses.ada
+        emit('updateRecipientAddress', res.data.resolved_addresses.ada)
+        resolved.value = true
+      } else {
+        resolved.value = false
+      }
+    }).catch(() => {
+      emit('updateRecipientAddress', '')
+      resolved.value = false
+    }).finally(() => {
+      loading.value = false
+    })
+  }, 1000);
+
+watch(contact, (val) => {
+  console.log('contact', val)
+  if (contacts.value[val.address] == null || contacts.value[val.address].name != val.name) {
+    contacts.value[val.address] = val
+    addOrUpdateContact(loggedWallet.value.id, val)
   }
-}, 1000);
+}, { deep: true })
 
-// Watchers
-watch(contact, async (val) => {
-  await addOrUpdateContact(val);
-}, { deep: true });
-
-watch(() => props.sendData, (val) => {
+watch(props.sendData, (val) => {
   if (val && !val.recipientAddress) {
-    recipientAddress.value = '';
+    recipientAddress.value = ''
   }
-}, { deep: true });
+}, { deep: true })
 </script>
-
 <style>
 .send-recipient-details-container {
   display: flex;
@@ -396,6 +384,5 @@ watch(() => props.sendData, (val) => {
       resize: none;
     }
   }
-
 }
 </style>

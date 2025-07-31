@@ -52,7 +52,7 @@
             <div class="d-flex mb-3" v-if="reportTx">
               <v-label small class="white--text" style="align-content: center;">Transaction ID:</v-label>
               <div>
-                <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ reportTx | truncate }}</a>
+                <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               </div>
             </div>
@@ -66,6 +66,7 @@
               :rules="[rules.required()]"
               outlined
               dense
+              attach
             ></v-select>
             <v-textarea
               label="Description of the Scam"
@@ -132,7 +133,7 @@
             </p>
             <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">Transaction ID</v-label>
             <p class="d-flex" v-if="reportTx" style="align-items: center;">
-              <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ reportTx | truncate }}</a>
+              <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
@@ -165,7 +166,8 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch } from 'vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -176,139 +178,138 @@ import { ReportLabel, ReportType } from '@/models/cardano-shield-types';
 import snackbar from '@/plugins/snackbar';
 import { AxiosError } from 'axios';
 import assets from '@/utils/assets';
+import { WalletType } from '@/models/types';
 
-export default {
-  name: "ReportDialog",
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    reportSite: {
-      type: String
-    },
-    reportTx: {
-      type: String
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  components: {
-    CopyButton,
-    CustomStepper,
-    BaseDialog,
+  reportSite: {
+    type: String
   },
-  filters,
-  methods: {
-    onFileChange(file) {
-      const maxSize = 3 * 1024 * 1024; // 3 MB
-      if (file && file.size > maxSize) {
-        alert("File is too large. Maximum size is 3 MB.");
-        this.uploadFile = null;
-        return;
-      }
-      if (!file) {
-        this.uploadFile = null
-        this.imageUrl = ''
-        return;
-      }
-      this.uploadFile = file
-      this.createImage(file);
-    },
-    createImage(file) {
-      const reader = new FileReader();
+  reportTx: {
+    type: String
+  }
+});
 
-      reader.onload = e => {
-        this.imageUrl = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    },
-    nextStep() {
-      if (this.$refs.form.validate()) {
-        this.currentStep++;
-      }
-    },
-    prevStep() {
-      this.currentStep--;
-    },
-    clearForm() {
-      this.title = ''
-      this.description = ''
-      this.evidence = ''
-      this.label = 'Not Safe'
-      this.reference = null
-      this.currentStep = 1
-      this.imageUrl = ''
-      this.uploadFile = null
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.reset();
-      }
-      this.$refs.form.resetValidation();
-    },
-    async submitReport() {
-      this.loading = true
-      const reportType = this.reportTx ? ReportType.transaction : ReportType.web;
-      const reportTypeStr = reportType === ReportType.transaction ? "Transaction" : "Website"
-      const ref = this.reportTx ? this.reportTx : this.reportSite;
+const emit = defineEmits(['close']);
 
-      const formData = new FormData();
-      formData.append("title", reportTypeStr + " Report - " + ref);
-      formData.append("description", this.description);
-      formData.append("evidence", this.evidence);
-      formData.append("type", ReportType[reportType]);
-      formData.append("label", ReportLabel[this.label === 'Safe' ? ReportLabel.safe : ReportLabel.scam]); // Convert to backend-compatible format
+const { truncate } = filters;
 
-      if (this.uploadFile) {
-        formData.append("reference", this.uploadFile);
-      }
-      try {
-        await cardanoShieldApi.submitReport(formData)
-        this.$emit('close');
-        this.clearForm()
-        snackbar.fireSuccess('Report Submitted Successfully!')
-      } catch (e) {
-        if (e instanceof AxiosError && e.status === 409) {
-          snackbar.setError(reportTypeStr+' Already Reported!')
-        } else {
-          console.error(e)
-          snackbar.setError(e.message)
-        }
-      } finally {
-        this.loading = false
-      }
-    }
+const cardanoShieldLogo = assets.cardanoShieldLogo;
+const currentStep = ref(1);
+const imageUrl = ref('');
+const label = ref('Not Safe');
+const description = ref('');
+const evidence = ref('');
+const uploadFile = ref<File | null>(null);
+const labels = ['Not Safe', 'Safe'];
+const valid = ref(false);
+const loading = ref(false);
+const form = ref<any>(null);
+const fileInput = ref<any>(null);
+
+const steps = [
+  {
+    name: 'details',
+    label: 'Details',
   },
-  watch: {
-    isOpen(val) {
-      if (!val) {
-        this.$emit('close');
-      }
-    },
+  {
+    name: 'summary',
+    label: 'Summary',
   },
-  data() {
-    return {
-      cardanoShieldLogo: assets.cardanoShieldLogo,
-      rules,
-      currentStep: 1,
-      imageUrl: '',
-      label: 'Not Safe',
-      description: '',
-      evidence: '',
-      uploadFile: null,
-      labels: ['Not Safe', 'Safe'],
-      valid: false,
-      steps: [
-        {
-          name: 'details',
-          label: 'Details',
-        },
-        {
-          name: 'summary',
-          label: 'Summary',
-        },
-      ],
-      loading: false,
-    };
-  },
+];
+
+// Mock loggedWallet for the template - you might need to import actual store
+const loggedWallet = ref({ type: WalletType.Normal });
+
+const onFileChange = (file: File | null) => {
+  const maxSize = 3 * 1024 * 1024; // 3 MB
+  if (file && file.size > maxSize) {
+    alert("File is too large. Maximum size is 3 MB.");
+    uploadFile.value = null;
+    return;
+  }
+  if (!file) {
+    uploadFile.value = null;
+    imageUrl.value = '';
+    return;
+  }
+  uploadFile.value = file;
+  createImage(file);
 };
+
+const createImage = (file: File) => {
+  const reader = new FileReader();
+
+  reader.onload = (e) => {
+    imageUrl.value = e.target?.result as string;
+  };
+  reader.readAsDataURL(file);
+};
+
+const nextStep = () => {
+  if (form.value.validate()) {
+    currentStep.value++;
+  }
+};
+
+const prevStep = () => {
+  currentStep.value--;
+};
+
+const clearForm = () => {
+  description.value = '';
+  evidence.value = '';
+  label.value = 'Not Safe';
+  currentStep.value = 1;
+  imageUrl.value = '';
+  uploadFile.value = null;
+  if (fileInput.value) {
+    fileInput.value.reset();
+  }
+  form.value.resetValidation();
+};
+
+const submitReport = async () => {
+  loading.value = true;
+  const reportType = props.reportTx ? ReportType.transaction : ReportType.web;
+  const reportTypeStr = reportType === ReportType.transaction ? "Transaction" : "Website";
+  const ref = props.reportTx ? props.reportTx : props.reportSite;
+
+  const formData = new FormData();
+  formData.append("title", reportTypeStr + " Report - " + ref);
+  formData.append("description", description.value);
+  formData.append("evidence", evidence.value);
+  formData.append("type", ReportType[reportType]);
+  formData.append("label", ReportLabel[label.value === 'Safe' ? ReportLabel.safe : ReportLabel.scam]);
+
+  if (uploadFile.value) {
+    formData.append("reference", uploadFile.value);
+  }
+  try {
+    await cardanoShieldApi.submitReport(formData);
+    emit('close');
+    clearForm();
+    snackbar.fireSuccess('Report Submitted Successfully!');
+  } catch (e) {
+    if (e instanceof AxiosError && e.status === 409) {
+      snackbar.setError(reportTypeStr + ' Already Reported!');
+    } else {
+      console.error(e);
+      snackbar.setError((e as Error).message);
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+watch(() => props.isOpen, (val) => {
+  if (!val) {
+    emit('close');
+  }
+});
 </script>
 
 <style scoped>

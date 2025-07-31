@@ -1,13 +1,21 @@
-import { createApp } from 'vue'
-import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
-import App from './Sidepanel.vue'
-import { setupApp } from '~/logic/common-setup'
-import 'vuetify/styles'
+import '@mdi/font/css/materialdesignicons.css';
+import 'vuetify/dist/vuetify.min.css';
+import '../shared/styles/liquid-glass.css';
 
-const vuetify = createVuetify({ components, directives })
+import Vue from 'vue';
+import VueRouter from 'vue-router';
+import i18n from '../plugins/i18n';
+import vuetify from '../plugins/vuetify';
+import router from '../modules/navigation/router';
 
-const app = createApp(App).use(vuetify)
-setupApp(app)
-app.mount('#app')
+import App from './Sidepanel.vue';
+
+Vue.config.productionTip = false;
+Vue.use(VueRouter);
+
+new Vue({
+  vuetify,
+  i18n,
+  router,
+  render: h => h(App)
+}).$mount('#app');

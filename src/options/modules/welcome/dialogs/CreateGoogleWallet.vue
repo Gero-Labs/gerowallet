@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     title="Google Wallet Set Up"
-    :subtitle="network?.title"
+    :subtitle="props.network?.title"
     :is-open="props.isOpen"
     @close="$emit('close')"
     content-class="rounded-xxl dialogStyle"
@@ -108,26 +108,26 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Theme, WalletType } from '@/models/types';
-import { useStore } from '@/stores';
+import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
+import { Theme } from '@/models/types';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import db from '@/db';
-import { storeToRefs } from 'pinia';
+import GeroStore from '@/stores/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
-const store = useStore();
-const { network } = storeToRefs(store);
 
 interface NewWallet {
   name: string;
   icon: string;
+  theme: string;
   password: string;
   confirmPassword: string;
   termsChecked: boolean;
   recoverPasswordChecked: boolean;
+  chain: string;
+  network: any;
 }
 
 interface Props {
@@ -138,20 +138,15 @@ interface Props {
     idToken: string,
     accessToken: string,
   };
+  network: any;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits(['close']);
 
-interface WalletCreationMessage extends NewWallet {
-  type: string;
-  theme: string;
-  mnemonic?: string;
-  chain: string;
-  network: string;
-  [key: string]: string | boolean | number;
-}
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy.$router;
 
 const form = ref();
 const show1 = ref(false);
@@ -160,13 +155,16 @@ const valid = ref<boolean>(false);
 const creatingWalletLoader = ref(false);
 const persistent = ref(false);
 
-const newWallet = ref<NewWallet>({
+let newWallet = reactive<NewWallet>({
   name: '',
   icon: '',
+  theme: Theme.GERO,
   password: '',
   confirmPassword: '',
   termsChecked: false,
-  recoverPasswordChecked: false
+  recoverPasswordChecked: false,
+  chain: props.network?.chain,
+  network: props.network?.network
 });
 
 watch(() => props.isOpen, (newValue, _oldValue) => {
@@ -176,49 +174,57 @@ watch(() => props.isOpen, (newValue, _oldValue) => {
 })
 
 watch(() => props.googleAccount, (newValue, _oldValue) => {
-  newWallet.value.name = newValue['email']?.split('@')[0];
-  newWallet.value.icon = newValue['picture'];
+  newWallet.name = newValue['email']?.split('@')[0];
+  newWallet.icon = newValue['picture'];
 })
 
 onMounted(() => {
   if (props.googleAccount) {
-    newWallet.value.name = props.googleAccount['email']?.split('@')[0];
-    newWallet.value.icon = props.googleAccount['picture'];
+    newWallet.name = props.googleAccount['email']?.split('@')[0];
+    newWallet.icon = props.googleAccount['picture'];
   }
 })
 
-const vmProxy = getCurrentInstance()!.proxy as any
-
 const walletCreation = async (): Promise<void> => {
   creatingWalletLoader.value = true;
-  const wallet: WalletCreationMessage = {
-    ...newWallet.value,
-    type: WalletType.Google,
-    theme: Theme.GERO,
-    chain: store.network.blockchain,
-    network: store.network.network,
-  };
   try {
-    const walletId = await db.createNewGoogleWallet(
-      wallet.name, wallet.icon, wallet.theme, wallet.password, wallet.chain, wallet.network, props.tokens.idToken);
+    const wallet = await GeroStore.createNewGoogleWallet(
+      newWallet.name,
+      newWallet.icon,
+      newWallet.theme,
+      newWallet.password,
+      newWallet.chain,
+      newWallet.network,
+      props.tokens.idToken
+    );
     emit('close');
-    await store.login(walletId);
-    await vmProxy.$router.push('/');
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    }).then(() => {
+      nextTick(() => {
+        resetDialog();
+        router.push('/')
+      })
+    });
   } catch (error) {
-    console.log(error);
+    console.error('Error creating wallet:', error);
   } finally {
-    resetDialog();
+    creatingWalletLoader.value = false;
   }
 };
 
 const resetDialog = (): void => {
-  newWallet.value = {
+  newWallet = {
     name: '',
     icon: '',
+    theme: Theme.GERO,
     password: '',
     confirmPassword: '',
     termsChecked: false,
     recoverPasswordChecked: false,
+    chain: props.network?.chain,
+    network: props.network?.network
   };
   valid.value = false;
   creatingWalletLoader.value = false;
