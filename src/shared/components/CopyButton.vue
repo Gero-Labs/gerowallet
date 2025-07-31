@@ -9,79 +9,74 @@
     </v-icon>
   </v-btn>
 </template>
-<script>
-export default {
-  name: 'CopyButton',
-  props: {
-    value: {
-      type: String,
-      required: true,
-    },
-    xSmall: {
-      type: Boolean,
-      required: false,
-      default: false,
-    },
-    small: {
-      type: Boolean,
-      required: false,
-      default: false,
-    },
-    large: {
-      type: Boolean,
-      required: false,
-      default: false,
-    },
-    xLarge: {
-      type: Boolean,
-      required: false,
-      default: false,
-    },
-    color: {
-      type: String,
-      required: false,
-    },
-    title: {
-      type: String,
-      required: false,
-    },
-    avatar: {
-      type: Object | String,
-      required: false,
-    }
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+
+const props = defineProps({
+  value: {
+    type: String,
+    required: true,
   },
-  data() {
-    return {
-      icon: 'mdi-content-copy',
-      colorB: undefined,
-    }
+  xSmall: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
-  computed: {
-    size() {
-      if (this.xSmall) return 12
-      if (this.small) return 20
-      if (this.large) return 32
-      if (this.xLarge) return 40
-      return 24
-    }
+  small: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
-  methods: {
-    async copy() {
-      await navigator.clipboard.writeText(this.value)
-      this.icon = 'mdi-check'
-      this.colorB = 'green'
-      setTimeout(() => {
-        this.icon = 'mdi-content-copy'
-        this.colorB = this.color
-      }, 1000)
-    },
+  large: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
-  mounted() {
-    if (this.color) {
-      this.colorB = this.color
-    }
+  xLarge: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
-}
+  color: {
+    type: String,
+    required: false,
+  },
+  title: {
+    type: String,
+    required: false,
+  },
+  avatar: {
+    type: [Object, String],
+    required: false,
+  }
+});
+
+const icon = ref('mdi-content-copy');
+const colorB = ref<string | undefined>(undefined);
+
+const size = computed(() => {
+  if (props.xSmall) return 12
+  if (props.small) return 20
+  if (props.large) return 32
+  if (props.xLarge) return 40
+  return 24
+});
+
+const copy = async () => {
+  await navigator.clipboard.writeText(props.value)
+  icon.value = 'mdi-check'
+  colorB.value = 'green'
+  setTimeout(() => {
+    icon.value = 'mdi-content-copy'
+    colorB.value = props.color
+  }, 1000)
+};
+
+onMounted(() => {
+  if (props.color) {
+    colorB.value = props.color
+  }
+});
 </script>
 <style scoped>
 

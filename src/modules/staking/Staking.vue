@@ -5,11 +5,11 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined>
+        <v-card flat outlined class="liquid-glass">
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>
-                <v-list-item-title style="display: flex">
+                <v-list-item-title style="display: flex; overflow: visible;">
                   Available Stake Pools
                   <v-spacer></v-spacer>
                   <div style="display: flex;">
@@ -72,10 +72,10 @@
               <template v-slot:[`item.name`]="{ item }">
                 <v-list-item three-line style="min-height: 68px" class="px-0">
                   <v-list-item-avatar size="24" style="place-self: center;">
-                    <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="fallbackImage" eager></v-img>
+                    <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="assets.fallbackImage" eager></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
-                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
+                    <v-list-item-title style="display: -webkit-box; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
                       <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
                           <v-icon small>
@@ -89,7 +89,7 @@
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(item)?.info?.social?.twitter_handle" target="_blank">
                           <v-avatar tile size="14">
-                            <v-img :src="xLogo" alt="x"></v-img>
+                            <v-img :src="assets.xSvg" alt="x"></v-img>
                           </v-avatar>
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(item)?.info?.social?.youtube_handle" target="_blank">
@@ -99,19 +99,19 @@
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(item)?.info?.social?.discord_handle" target="_blank">
                           <v-avatar tile size="14">
-                            <v-img :src="discordLogo" width="14" height="14" alt="discord" contain></v-img>
+                            <v-img :src="assets.discordSvg" width="14" height="14" alt="discord" contain></v-img>
                           </v-avatar>
                         </v-btn>
                         <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(item)?.info?.social?.telegram_handle" target="_blank">
                           <v-avatar tile size="14">
-                            <v-img :src="telegramLogo" alt="x"></v-img>
+                            <v-img :src="assets.telegramSvg" alt="x"></v-img>
                           </v-avatar>
                         </v-btn>
                       </div>
                     </v-list-item-title>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" v-if="item.description">{{item.description}}</v-list-item-subtitle>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" class="mr-1">
-                      {{ item.pool_id_bech32 | truncate }}
+                    <v-list-item-subtitle style="display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" v-if="item.description">{{item.description}}</v-list-item-subtitle>
+                    <v-list-item-subtitle style="display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" class="mr-1">
+                      {{ filters.truncate(item.pool_id_bech32) }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
                   </v-list-item-content>
@@ -127,29 +127,29 @@
                 {{ item.block_count.toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.live_saturation`]="{ item }">
-                <v-progress-linear rounded :color="getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
+                <v-progress-linear rounded :color="filters.getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
                   <template v-slot:default="{ value }">
                     <strong>{{ Math.ceil(value) }}%</strong>
                   </template>
                 </v-progress-linear>
                 <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify;">
-                  <strong>{{ item.active_stake | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
+                  <strong>{{ filters.toCurrency(item.active_stake, false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
                   <strong v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                    {{ filters.toCurrency(Number(item.active_stake) - Number(item.live_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                   </strong>
                   <strong v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000" style="display: inline-flex; font-size: 10px">
                     <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                    {{ filters.toCurrency(Number(item.live_stake) - Number(item.active_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                   </strong>
                 </div>
               </template>
               <template v-slot:[`item.fixed_cost`]="{ item }">
-                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
+                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ filters.toCurrency(item.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
                   }}</span>
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
-                {{ item.pledge | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                {{ filters.toCurrency(item.pledge, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                 <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)">mdi-check</v-icon>
                 <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
               </template>
@@ -186,7 +186,7 @@
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(pool)?.info?.social?.twitter_handle" target="_blank">
                             <v-avatar tile size="14">
-                              <v-img :src="xLogo" alt="x"></v-img>
+                              <v-img :src="assets.xSvg" alt="x"></v-img>
                             </v-avatar>
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(pool)?.info?.social?.youtube_handle" target="_blank">
@@ -196,12 +196,12 @@
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(pool)?.info?.social?.discord_handle" target="_blank">
                             <v-avatar tile size="14">
-                              <v-img :src="discordLogo" alt="discord" width="14" height="14" contain></v-img>
+                              <v-img :src="assets.discordSvg" alt="discord" width="14" height="14" contain></v-img>
                             </v-avatar>
                           </v-btn>
                           <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(pool)?.info?.social?.telegram_handle" target="_blank">
                             <v-avatar tile size="14">
-                              <v-img :src="telegramLogo" alt="telegram"></v-img>
+                              <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
                             </v-avatar>
                           </v-btn>
                         </v-list-item-subtitle>
@@ -216,7 +216,7 @@
                           <span style="font-size: 14px; color: white">Saturation</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-progress-linear height="20" rounded :value="pool.live_saturation" color="#333741">
+                          <v-progress-linear height="20" rounded striped :value="pool.live_saturation" :color="filters.getColor(pool.live_saturation)">
                             <span>{{ pool.live_saturation + '%' }}</span>
                           </v-progress-linear>
                         </v-col>
@@ -227,7 +227,7 @@
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; " v-if="loggedWallet">
-                            {{ pool.pledge | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
+                            {{ filters.toCurrency(pool.pledge, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
                           </v-chip>
                         </v-col>
                       </v-row>
@@ -244,7 +244,7 @@
                           <span style="font-size: 14px; color: white">Fees</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
                         </v-col>
                       </v-row>
                     </v-card-text>
@@ -259,193 +259,219 @@
         </v-card>
       </v-col>
     </v-row>
-    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
+    <DelegateDialog v-if="txData" :isOpen="isDelegateDialogOpen" @close="closeDelegateDialog" :pool="selectedPool" :tx="txData"></DelegateDialog>
   </v-layout>
 </template>
-<script>
-import filters from "@/shared/utils/filters";
-import { appWallet, useStore } from '@/stores';
-import {mapActions, mapState} from "pinia";
+<script setup lang="ts">
+import { computed, ref, toRefs, watch, onMounted } from 'vue';
 import CopyButton from "@/shared/components/CopyButton.vue";
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import {
-  Certificate, Ed25519KeyHash,
-  Credential,
-  StakeDelegation,
-  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { buildTx } from '@/shared/utils/builder';
-import { toUTxO } from '@/shared/utils/converter';
+import { Cardano } from '@cardano-sdk/core';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from "@/utils/networks";
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import filters from '@/shared/utils/filters';
+import { getStakeKey } from '@/chrome/serialization';
+import { setWalletConfiguration } from '@/db/wallet-db';
 
-export default {
-  name: 'Staking',
-  components: { StakingCard, DelegateDialog, CopyButton},
-  computed: {
-    ...mapState(useStore, ['stakingProView']),
-    isPro: {
-      get() {
-        return this.stakingProView
-      },
-      set(val) {
-        this.setStakingProView(val)
+const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
+const { epochParams, pools, tip } = toRefs(networkStore);
+
+const page = ref<number>(1);
+const pageSize = ref<number>(12);
+const pageCount = ref<number>(0);
+const hideSaturated = ref<boolean>(true);
+const pledgeMet = ref<boolean>(true);
+const search = ref<string>('');
+const selectedPool = ref<any>(null);
+const txData = ref<any>(null);
+const isDelegateDialogOpen = ref<boolean>(false);
+
+const headers = computed(() => {
+  return [
+    {text: 'Name', sortable: true, align: 'left', value: 'name'},
+    {text: 'Delegators', sortable: true, align: 'center d-none d-lg-table-cell', value: 'live_delegators', width: 122 },
+    {text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
+    {text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
+    {
+      text: 'Saturation', sortable: true, align: 'center', value: 'live_saturation', width: 128, filter: value => {
+        if (!hideSaturated.value) return true
+        return value < 99
       }
     },
-    headers() {
-      return [
-        {text: 'Name', sortable: true, align: 'left', value: 'name'},
-        {text: 'Delegators', sortable: true, align: 'center d-none d-lg-table-cell', value: 'live_delegators', width: 122 },
-        {text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
-        {text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
-        {
-          text: 'Saturation', sortable: true, align: 'center', value: 'live_saturation', width: 128, filter: value => {
-            if (!this.hideSaturated) return true
-            return value < 99
-          }
-        },
-        {text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-        {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 84 }
-      ]
-    },
-    geroPoolExists() {
-      return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    geroPoolId() {
-      return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    delegatingToGero() {
-      if (this.account) {
-        return this.geroPoolId === this.account.pool_id
-      }
-      return false
-    },
-    ...mapState(useStore, ['pools', 'loggedWallet', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-    numPages() {
-      // calculate the number of pages we have
-      return Math.ceil(this.stakePools.length / this.pageSize);
-    },
-    stakePools() {
-      if (this.pools) {
-        let filteredPools = this.pools.filter(pool => pool.pool_status === 'registered')
-        if (this.search) {
-          filteredPools = filteredPools.filter(pool => (pool.ticker && pool.ticker.toLowerCase().includes(this.search.toLowerCase())) || (pool.name && pool.name.toLowerCase().includes(this.search.toLowerCase())))
-        }
-        if (this.pledgeMet) {
-          filteredPools = filteredPools.filter(pool => {
-            return Number(pool.pledge) <= Number(pool.live_pledge)
-          })
-        }
-        filteredPools.sort((a, b) => {
-          if (a.pool_id_bech32 === this.geroPoolId) return -1;
-          if (b.pool_id_bech32 === this.geroPoolId) return 1;
-          return 0;
-        });
-        return filteredPools
-      }
-      return []
-    },
-    pagedPools() {
-      // get the start index for your paged result set.
-      // The page number starts at 1 so the active item in the pagination is displayed properly.
-      // However for our calculation the page number must start at (n-1)
-      const startIndex = (this.page - 1) * this.pageSize;
+    {text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
+    {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 84 }
+  ]
+});
 
-      // create a copy of your assets list so we don't modify the original data set
-      const data = [...this.stakePools];
-
-      // only return the data for the current page using splice
-      return data.splice(startIndex, this.pageSize);
-    },
+let isPro = computed({
+  get: () => {
+    return config.value.stakingProView
   },
-  watch: {
-    search(val) {
-      if (val) {
-        this.page = 1
-      }
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['setStakingProView']),
-    getColor(value) {
-      if (value > 100) {
-        value = 100
-      }
-      value = value / 100
-      //value from 0 to 1
-      const hue = ((1 - value) * 120).toString(10);
-      return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-    },
-    delegateToGero() {
-      if (this.loggedWallet) {
-        const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-        const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-        if (!pool) {
-          console.log('Pool Not Found')
-          return;
-        }
-        this.delegate(pool)
-      }
-    },
-    delegate(row) {
-      console.log('delegate', row)
-      this.selectedPool = row
-      const wallet = appWallet;
-      // Registration Certificate
-      const certificates = [];
-      if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-        certificates.push(registrationCertificate);
-      }
-      // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
-      certificates.push(delegationCertificate);
-      // UTxOs
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.isDelegateDialogOpen = true
-    },
-    poolExtendedInfo(pool) {
-      if (pool && pool.pool_extended_info) {
-        return JSON.parse(pool.pool_extended_info);
-      }
-      return undefined
-    },
-    fallbackImage(e) {
-      if (e && e.target) {
-        e.target.src = this.errorImage
-      }
+  set: (val) => {
+    config.value.stakingProView = val
+    setWalletConfiguration(loggedWallet.value.id, 'stakingProView', val)
+  }
+})
+
+const geroPoolExists = computed(() => {
+  return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+})
+
+const geroPoolId = computed(() => {
+  return networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+});
+
+const delegatingToGero = computed(() => {
+  if (account.value) {
+    return geroPoolId.value === account.value.pool_id
+  }
+  return false
+});
+
+const stakePools = computed(() => {
+  if (pools.value) {
+    let filteredPools = Object.values(pools.value).filter((pool: any) => pool.pool_status === 'registered')
+    if (search.value) {
+      filteredPools = filteredPools.filter((pool: any) => (pool.ticker && pool.ticker.toLowerCase().includes(search.value.toLowerCase())) || (pool.name && pool.name.toLowerCase().includes(search.value.toLowerCase())))
     }
-  },
-  filters,
-  data: () => ({
-    filters,
-    blockchainDB: undefined,
-    page: 1,
-    pageSize: 12,
-    search: '',
-    hideSaturated: true,
-    pledgeMet: true,
-    pageCount: 0,
-    xLogo: assets.xSvg,
-    discordLogo: assets.discordSvg,
-    telegramLogo: assets.telegramSvg,
-    errorImage: assets.errorImage,
-    isDelegateDialogOpen: false,
-    selectedPool: undefined,
-    txData: undefined,
-    networks,
-    assets,
-  })
+    if (pledgeMet.value) {
+      filteredPools = filteredPools.filter((pool: any) => {
+        return Number(pool.pledge) <= Number(pool.live_pledge)
+      })
+    }
+    filteredPools.sort((a: any, b: any) => {
+      if (a.pool_id_bech32 === geroPoolId.value) return -1;
+      if (b.pool_id_bech32 === geroPoolId.value) return 1;
+      return 0;
+    });
+    return filteredPools
+  }
+  return []
+})
+
+const numPages = computed(() => {
+  return Math.ceil(stakePools.value.length / pageSize.value);
+})
+
+const pagedPools = computed<any[]>(() => {
+  // get the start index for your paged result set.
+  // The page number starts at 1 so the active item in the pagination is displayed properly.
+  // However for our calculation the page number must start at (n-1)
+  const startIndex = (page.value - 1) * pageSize.value;
+
+  // create a copy of your assets list so we don't modify the original data set
+  const data = [...stakePools.value];
+
+  // only return the data for the current page using splice
+  return data.splice(startIndex, pageSize.value);
+})
+
+watch(search, (val) => {
+  if (val) {
+    page.value = 1
+  }
+})
+
+const delegateToGero = () => {
+  if (loggedWallet.value) {
+    const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+    const pool = pools.value[poolId]
+    if (!pool) {
+      return;
+    }
+    delegate(pool)
+  }
 }
+
+function delegate(row: any) {
+  console.log('delegate', row)
+  selectedPool.value = row
+
+  const certificates: Cardano.Certificate[] = [];
+
+  console.log(getStakeKey(loggedWallet.value.publicKey, 0).hash().hex())
+  console.log(selectedPool.value.pool_id_bech32)
+  console.log(keys.value.stake[0].cred)
+
+  // Create stake credential from the key hash
+  const stakeCredential: Cardano.Credential = {
+    type: Cardano.CredentialType.KeyHash,
+    hash: keys.value.stake[0].cred
+  };
+
+  if (!account.value?.active) {
+    // Create stake registration certificate
+    const registrationCertificate: Cardano.StakeRegistrationCertificate = {
+      __typename: Cardano.CertificateType.StakeRegistration,
+      stakeCredential
+    };
+    certificates.push(registrationCertificate);
+  }
+
+  // Create stake delegation certificate
+  const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+  const delegationCertificate: Cardano.StakeDelegationCertificate = {
+    __typename: Cardano.CertificateType.StakeDelegation,
+    stakeCredential,
+    poolId
+  };
+  certificates.push(delegationCertificate);
+
+  // Create change output - for delegation we typically send change back to our own address
+  const changeOutput: Cardano.TxOut = {
+    address: keys.value.payment[0].address, // Use first payment address for change
+    value: {
+      coins: BigInt(0), // Will be calculated properly during signing
+      assets: new Map()
+    }
+  };
+
+  // Build transaction body using Cardano JS SDK
+  const txBody: Cardano.TxBody = {
+    inputs: utxos.value.map((utxo: Cardano.Utxo) => utxo[0]),
+    outputs: [changeOutput],
+    fee: BigInt(200000), // Estimated fee (will be calculated properly by signing infrastructure)
+    validityInterval: {
+      invalidHereafter: Cardano.Slot(tip.value.slot + 3600) // 1 hour from now
+    },
+    certificates
+  };
+
+  // Serialize transaction for the dialog
+  const transaction: Cardano.Tx = {
+    id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
+    body: txBody,
+    witness: {
+      signatures: new Map()
+    }
+  };
+
+  txData.value = transaction;
+  console.log('Transaction built with Cardano JS SDK:', transaction);
+  isDelegateDialogOpen.value = true;
+}
+
+const closeDelegateDialog = () => {
+  isDelegateDialogOpen.value = false;
+  txData.value = null;
+  selectedPool.value = null;
+}
+
+const poolExtendedInfo = (pool: any) => {
+  if (pool && pool.pool_extended_info) {
+    return JSON.parse(pool.pool_extended_info);
+  }
+  return undefined
+}
+
+onMounted(() => {
+  // isPro.value =
+})
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }

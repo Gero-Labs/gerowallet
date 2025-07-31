@@ -240,146 +240,182 @@
     </v-card>
   </v-dialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
 import * as bip39 from "bip39";
 import rules from "@/utils/rules";
-import {Theme} from "@/models/types"
-import db from "@/db";
-import { useStore } from "@/stores";
+import { Network, Theme } from '@/models/types';
 import MnemonicAutocomplete from "@/modules/welcome/components/MnemonicAutocomplete.vue";
 import assets from '@/utils/assets';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import GeroStore from '@/stores/geroStore';
 
-export default {
-  name: "RestoreWallet",
-  components: {MnemonicAutocomplete},
-  props: {
-    dialog: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  computed: {
-    seedToStr() {
-      return this.computedRecoverySeedPhrase.join(' ')
-    },
-    computedRecoverySeedPhrase() {
-      if (this.recoverySeedPhrase) {
-        return this.recoverySeedPhrase.filter((item, index) => item && index < this.recoverySeedPhraseLength)
-      }
-      return undefined
-    },
-    recoverySeedPhraseLength() {
-      return Number(this.seedPhraseLength)
-    },
-    dialogLocal: {
-      get() {
-        if (this.dialog) {
-          document.addEventListener( "keydown", this.onKeydown );
-        } else {
-          document.removeEventListener('keydown', this.onKeydown)
-        }
-        return this.dialog
-      },
-      set(value) {
-        this.$emit('dialogChange', value)
-      },
-    },
-    valid: {
-      get() {
-        if (this.computedRecoverySeedPhrase) {
-          return this.computedRecoverySeedPhrase.length === Number(this.seedPhraseLength) && bip39.validateMnemonic(this.computedRecoverySeedPhrase.join(' '))
-        }
-        return false
-      },
-      set(value) {}
-    },
-  },
-  methods: {
-    onKeydown(event) {
-      if ((event.code === "KeyV" && event.ctrlKey) || (event.code === "KeyV" && event.metaKey)) {
-        this.pasteFromClipboard()
-      }
-    },
-    focusNextCell(el) {
-      console.log('nextCell')
-      const currentCell = el.closest('.v-input');
-      const nextCell = currentCell.nextElementSibling;
-      if (nextCell) {
-        const nextAutocomplete = nextCell.querySelector('.v-autocomplete input');
-        if (nextAutocomplete) {
-          nextAutocomplete.focus();
-        }
-      }
-    },
-    async pasteFromClipboard() {
-      const text = await navigator.clipboard.readText();
-      this.recoverySeedPhrase = text.split(" ")
-      if ([12,15,24].includes(this.recoverySeedPhrase.length)) {
-        this.seedPhraseLength = this.recoverySeedPhrase.length+''
-      }
-    },
-    walletCreationStep1() {
-      if (this.$refs.form.validate()) {
-        this.step = 2
-        this.persistent = true
-      }
-    },
-    async walletCreationStep2() {
-      if (this.$refs.form2.validate()) {
-        this.creatingWalletLoader = true
-        try {
-          const network = this.store.getNetwork
-          const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, this.seedToStr, this.newWallet.password, network.blockchain, network.network)
-          this.dialogLocal = false
-          this.resetDialog()
-          await this.store.login(walletId)
-          await this.$router.push('/')
-          this.creatingWalletLoader = false
-        } catch (e) {
-          console.log(e)
-          this.creatingWalletLoader = false
-        }
-      }
-    },
-    resetDialog() {
-      this.newWallet = {
-        name: '',
-        password: '',
-        confirmPassword: '',
-        termsChecked: false,
-        recoverPasswordChecked: false,
-        recoverSeedChecked: false,
-      }
-      this.valid2 = false
-      this.creatingWalletLoader = false
-      this.recoverySeedPhrase = ['','','','','','','','','','','','','','','','','','','','','','','','']
-      this.persistent = false
-    }
-  },
-  data: () => ({
-    rules,
-    db,
-    step: 1,
-    show1: false,
-    show2: false,
-    newWallet: {
-      name: '',
-      icon: '',
-      password: '',
-      confirmPassword: '',
-      termsChecked: false,
-      recoverPasswordChecked: false,
-      recoverSeedChecked: false,
-    },
-    valid2: false,
-    creatingWalletLoader: false,
-    persistent: false,
-    store: useStore(),
-    seedPhraseLength: '24',
-    recoverySeedPhrase: ['','','','','','','','','','','','','','','','','','','','','','','',''],
-    assets,
-  })
+// Props
+interface Props {
+  dialog: boolean;
+  network: Network;
 }
+
+const props = withDefaults(defineProps<Props>(), {
+  dialog: false
+});
+
+// Emits
+const emit = defineEmits(['dialogChange']);
+
+// Vue instance
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy?.$router;
+
+// Template refs
+const form = ref<any>(null);
+const form2 = ref<any>(null);
+
+// Reactive data
+const step = ref<number>(1);
+const show1 = ref<boolean>(false);
+const show2 = ref<boolean>(false);
+const newWallet = ref({
+  name: '',
+  icon: '',
+  password: '',
+  confirmPassword: '',
+  termsChecked: false,
+  recoverPasswordChecked: false,
+  recoverSeedChecked: false,
+});
+const valid2 = ref<boolean>(false);
+const creatingWalletLoader = ref<boolean>(false);
+const persistent = ref<boolean>(false);
+const seedPhraseLength = ref<string>('24');
+const recoverySeedPhrase = ref<string[]>(['','','','','','','','','','','','','','','','','','','','','','','','']);
+
+// Computed properties
+const seedToStr = computed(() => {
+  return computedRecoverySeedPhrase.value.join(' ');
+});
+
+const computedRecoverySeedPhrase = computed(() => {
+  if (recoverySeedPhrase.value) {
+    return recoverySeedPhrase.value.filter((item, index) => item && index < recoverySeedPhraseLength.value);
+  }
+  return undefined;
+});
+
+const recoverySeedPhraseLength = computed(() => {
+  return Number(seedPhraseLength.value);
+});
+
+const dialogLocal = computed({
+  get() {
+    if (props.dialog) {
+      document.addEventListener("keydown", onKeydown);
+    } else {
+      document.removeEventListener('keydown', onKeydown);
+    }
+    return props.dialog;
+  },
+  set(value: boolean) {
+    emit('dialogChange', value);
+  },
+});
+
+const valid = computed({
+  get() {
+    if (computedRecoverySeedPhrase.value) {
+      return computedRecoverySeedPhrase.value.length === Number(seedPhraseLength.value) && bip39.validateMnemonic(computedRecoverySeedPhrase.value.join(' '));
+    }
+    return false;
+  },
+  set(_value: boolean) {}
+});
+
+// Methods
+const onKeydown = (event: KeyboardEvent) => {
+  if ((event.code === "KeyV" && event.ctrlKey) || (event.code === "KeyV" && event.metaKey)) {
+    pasteFromClipboard();
+  }
+};
+
+const focusNextCell = (el: HTMLElement) => {
+  console.log('nextCell');
+  const currentCell = el.closest('.v-input');
+  const nextCell = currentCell?.nextElementSibling;
+  if (nextCell) {
+    const nextAutocomplete = nextCell.querySelector('.v-autocomplete input') as HTMLInputElement;
+    if (nextAutocomplete) {
+      nextAutocomplete.focus();
+    }
+  }
+};
+
+const pasteFromClipboard = async () => {
+  const text = await navigator.clipboard.readText();
+  recoverySeedPhrase.value = text.split(" ");
+  if ([12,15,24].includes(recoverySeedPhrase.value.length)) {
+    seedPhraseLength.value = recoverySeedPhrase.value.length.toString();
+  }
+};
+
+const walletCreationStep1 = () => {
+  if (form.value?.validate()) {
+    step.value = 2;
+    persistent.value = true;
+  }
+};
+
+const walletCreationStep2 = async () => {
+  if (form2.value?.validate()) {
+    creatingWalletLoader.value = true;
+    try {
+      const wallet = await GeroStore.createNewWallet(
+        newWallet.value.name,
+        newWallet.value.icon,
+        Theme.GERO,
+        seedToStr.value,
+        newWallet.value.password,
+        props.network.blockchain,
+        props.network.network
+      );
+      dialogLocal.value = false;
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      }).then(() => {
+        vmProxy.$nextTick(() => {
+          resetDialog();
+          router.push('/')
+        })
+      });
+    } catch (error) {
+      console.error('Error creating wallet:', error);
+    } finally {
+      creatingWalletLoader.value = false;
+    }
+  }
+};
+
+const resetDialog = () => {
+  newWallet.value = {
+    name: '',
+    icon: '',
+    password: '',
+    confirmPassword: '',
+    termsChecked: false,
+    recoverPasswordChecked: false,
+    recoverSeedChecked: false,
+  };
+  valid2.value = false;
+  creatingWalletLoader.value = false;
+  recoverySeedPhrase.value = ['','','','','','','','','','','','','','','','','','','','','','','',''];
+  persistent.value = false;
+};
+
+// Lifecycle
+onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown);
+});
 </script>
 <style scoped>
 .v-dialog__content--active {

@@ -51,67 +51,63 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import time from '@/plugins/time'
+import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
 import packageJson from '@/../package.json';
 
-export default {
-  name: 'ChangeLogDialog',
-  components: { BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    persistent: {
-      type: Boolean,
-      default: true,
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  methods: {
-    normalizeVersion(version) {
-      // Helper to remove the leading 'v' if present
-      return version.startsWith('v') ? version.substring(1) : version;
-    },
-    compareVersions(versionA, versionB) {
-      // Normalize and split the version strings into parts
-      const [majorA, minorA, patchA] = this.normalizeVersion(versionA)
-        .split('.')
-        .map(num => parseInt(num, 10));
-      const [majorB, minorB, patchB] = this.normalizeVersion(versionB)
-        .split('.')
-        .map(num => parseInt(num, 10));
-
-      if (majorA !== majorB) return majorA - majorB;
-      if (minorA !== minorB) return minorA - minorB;
-
-      return patchA - patchB;
-    }
-  },
-  data: () => ({
-    loading: false,
-    panel: 0,
-    releases: [],
-    time,
-    currentVersion: packageJson.version,
-  }),
- async mounted() {
-    this.loading = true;
-    try {
-      const res = await cryptoApi.fetchReleases(0);
-      if (res.status === 200) {
-        let list = res.data.content;
-        list.sort((a, b) => this.compareVersions(b.tagName, a.tagName));
-        this.releases = list;
-      }
-    } catch (e) {
-      console.log(e);
-    }
-    this.loading = false;
+  persistent: {
+    type: Boolean,
+    default: true,
   }
+});
+
+const emit = defineEmits(['close']);
+
+const loading = ref(false);
+const panel = ref(0);
+const releases = ref<any[]>([]);
+const currentVersion = packageJson.version;
+
+const normalizeVersion = (version: string) => {
+  return version.startsWith('v') ? version.substring(1) : version;
 };
+
+const compareVersions = (versionA: string, versionB: string) => {
+  const [majorA, minorA, patchA] = normalizeVersion(versionA)
+    .split('.')
+    .map(num => parseInt(num, 10));
+  const [majorB, minorB, patchB] = normalizeVersion(versionB)
+    .split('.')
+    .map(num => parseInt(num, 10));
+
+  if (majorA !== majorB) return majorA - majorB;
+  if (minorA !== minorB) return minorA - minorB;
+
+  return patchA - patchB;
+};
+
+onMounted(async () => {
+  loading.value = true;
+  try {
+    const res = await cryptoApi.fetchReleases(0);
+    if (res.status === 200) {
+      let list = res.data.content;
+      list.sort((a: any, b: any) => compareVersions(b.tagName, a.tagName));
+      releases.value = list;
+    }
+  } catch (e) {
+    console.log(e);
+  }
+  loading.value = false;
+});
 </script>
 <style>
 .v-application--is-ltr .v-timeline--dense:not(.v-timeline--reverse)::before {

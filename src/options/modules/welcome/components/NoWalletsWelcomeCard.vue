@@ -92,20 +92,19 @@
 </template>
 <script setup lang="ts">
 import assets from '@/utils/assets';
-import { computed, ref } from 'vue';
-import { useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
+import { computed, ref, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+import networks from '@/utils/networks';
 
 const hoveredText = ref<string>('Buy / Sell Crypto')
 function onHover(text: string) {
   hoveredText.value = text
 }
 
-const store = useStore();
-const { network } = storeToRefs(store);
+const { loggedWallet } = toRefs(walletStore);
 
 const gradientClass = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (loggedWallet.value?.chain?.includes('Apex')) {
     return 'apex-gradient-text'
   }
   return 'gradient-text'

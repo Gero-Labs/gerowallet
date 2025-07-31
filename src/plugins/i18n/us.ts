@@ -16,5 +16,15 @@ export default {
   hardwareWallet: 'Hardware Wallet',
   hardwareWalletSubtitle: 'Connect your hardware wallet for enhanced security and manage your assets safely.',
   walletSetup: 'Wallet Setup',
-  signIn: 'Sign In'
+  signIn: 'Sign In',
+  multisig: {
+    title: 'Multisig Transactions',
+    description: 'A multisig transaction on Cardano is a transaction that requires multiple signatures from different parties to authorize spending from a shared address.',
+    createMultisigWallet: 'Create Multisig Wallet',
+    newMultisigTransaction: 'New Transaction',
+    selectMultisigToManage: 'Select Multisig to manage',
+    noWalletsToManage: 'No multisig wallets to manage',
+    showWalletDetails: 'Wallet Details',
+    fundWallet: 'Fund Wallet',
+  }
 };

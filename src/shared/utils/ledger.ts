@@ -15,7 +15,7 @@ import {
   TxOutputDestinationType,
   TxOutputFormat, TxRequiredSignerType, VoteOption, VoterType,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { ChainDerivations, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
+import { ChainDerivations, coin_type, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import {
@@ -36,9 +36,6 @@ import {
   TransactionOutputs, VoteDelegation, VotingProcedures,
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { Wallet } from '@/models/wallet';
-import networks from '@/utils/networks';
-import { appWallet } from '@/stores';
 import { Buffer } from 'buffer';
 import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import Transport from '@ledgerhq/hw-transport';
@@ -55,6 +52,7 @@ import {
   isSameArray, isScriptStakeAddress,
   toHexString,
 } from '@/shared/utils/converter';
+import { WalletBg } from '@/chrome/walletBg';
 Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -179,7 +177,7 @@ export default {
 
   async txToLedger(
     tx: FixedTransaction,
-    wallet: Wallet,
+    wallet: WalletBg,
     creds: Set<any>,
     index: number = 0,
     addresses: any,
@@ -188,8 +186,8 @@ export default {
   ): Promise<string> {
     const txBody = tx.body();
     console.log(txBody.to_json());
-    const address: Address = Address.from_bech32(wallet.baseAddress().toBech32());
-    const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
+    const address: Address = Address.from_bech32(wallet.baseAddress);
+    // const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = Array.from(creds).map(el => {
       return {
         cred: el.cred,
@@ -198,18 +196,18 @@ export default {
       }
     })
     const accountData = {
-      state: {
-        networkId: network.networkId
-      },
+      // state: {
+      //   networkId: network.networkId
+      // },
       account: {
         pub: wallet.publicKey,
-        path: [purpose.hdwallet, 1815, index]
+        path: [purpose.hdwallet, coin_type.cardano, index]
       },
       keys: {
         payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
         stake: [{
           cred: BaseAddress.from_address(address).stake_cred().to_keyhash().to_hex(),
-          path: `m/${purpose.hdwallet}'/1815'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
         }],
         change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
         script: [],
@@ -247,7 +245,7 @@ export default {
 
     const lTx = {
       network: {
-        protocolMagic: network.networkParams?.networkMagic,
+        // protocolMagic: network.networkParams?.networkMagic,
         networkId: 1,
       },
       inputs,
@@ -831,10 +829,10 @@ export default {
       const paymentCred = cred.paymentCred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
       let out;
       let format2 = TxOutputFormat.ARRAY_LEGACY;
-      let isBabbage = false
+      // let isBabbage = false
       if (output2.serialization_format() === CborContainerType.Map) {
         format2 = TxOutputFormat.MAP_BABBAGE;
-        isBabbage = true
+        // isBabbage = true
       }
       try {
         if (paymentCred) {
@@ -868,7 +866,7 @@ export default {
       let plutusScriptBytes
       if (outputJs.script_ref) {
         const cslPlutusScript = output2.script_ref();
-        const decodedPlutusScript = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
+        const decodedPlutusScript: any = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
         plutusScriptBytes = ((_a = decodedPlutusScript == null ? void 0 : decodedPlutusScript.value) == null ? void 0 : _a.value) ?? cslPlutusScript.to_bytes();
         let script = null;
         if (plutusScriptBytes) {

@@ -1,5 +1,8 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center" style="font-size: 32px">
       Cashback
     </v-card-title>
@@ -24,8 +27,8 @@
                   Ready to Claim
                 </v-list-item-title>
                 <v-list-item-subtitle style="display: flex; align-items: center;">
-                  <div class="highlight-text">{{ eligible ? (eligible.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ eligible ? Number(eligible.totalEstimatedUsd).toLocaleString('en-US', {maximumFractionDigits: 2}) : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
+                  <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? Number(eligible.totalEstimatedUsd).toLocaleString('en-US', {maximumFractionDigits: 2}) : 0, false, 2, '$', '', false, 0) }}</span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -40,8 +43,8 @@
                   Pending rewards
                 </v-list-item-title>
                 <v-list-item-subtitle style="display: flex; align-items: center;">
-                  <div class="secondary-text">{{ pending ? (pending.tokenAmount * 1000000) : 0 | toCurrency(false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ pending ? pending.totalEstimatedUsd : 0 | toCurrency(false, 2, '$', '', false, 0) }}</span>
+                  <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? pending.totalEstimatedUsd : 0, false, 2, '$', '', false, 0) }}</span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -140,157 +143,163 @@
         {{ supported ? '' : 'Unfortunately, Cashback isn\'t supported in your Country yet.'}}
         {{ loadingMore ? "Loading ..." : "" }}
       </v-card-title>
-      <v-card-title style="font-size: 14px" v-intersect="onIntersect" v-if="supported">
+      <v-card-title ref="intersectionTarget" style="font-size: 14px" v-if="supported">
         Powered By<v-btn color="primary" class="px-0 mx-0 ml-1" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
       </v-card-title>
     </v-card-actions>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
     <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath" :search-term="searchTerm"></RetailerDialog>
     <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { computed, ref, watch, onMounted, toRefs } from 'vue';
+import { useIntersectionObserver } from '@vueuse/core';
 import ViewRewardsDialog from '@/modules/cashback/dialogs/ViewRewardsDialog.vue';
-import {mapState} from "pinia";
 import filters from "@/shared/utils/filters";
 import RetailerDialog from '@/modules/cashback/dialogs/RetailerDialog.vue';
 import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
-import { bringStore } from '@/stores/modules/bring';
+import { bringStore } from '@/stores/bringStore';
 import cashbackApi from '@/api/cashback-api';
 import assets from '@/utils/assets';
 
-export default defineComponent({
-  name: 'Cashback.vue',
-  components: { HowItWorksDialog, RetailerDialog, ViewRewardsDialog},
-  computed: {
-    ...mapState(bringStore, ['bringCache']),
-    terms() {
-      return this.entries
-    },
-    selectedCategory() {
-      return this.categories.items[this.selectedCategoryIndex]
-    },
-    eligible() {
-      if (this.bringCache && this.bringCache?.data?.eligible?.length > 0) {
-        return this.bringCache.data.eligible[0]
-      }
-      return undefined
-    },
-    pending() {
-      if (this.bringCache && this.bringCache?.data?.totalPendings?.length > 0) {
-        return this.bringCache.data.totalPendings[0]
-      }
-      return undefined
-    },
-    deals() {
-      return Object.values(this.retailers)
-    }
-  },
-  watch: {
-    async isIntersecting(val) {
-      if (val) {
-        if (this.nextPage) {
-          this.loadingMore = true
-          const retailers = await cashbackApi.retailers(this.selectedCategory?.id, this.model, this.nextPage)
-          this.retailers = {...this.retailers, ...retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {}) }
-          this.nextPage = retailers.nextPageNumber
-          this.loadingMore = false
-        }
-      }
-    },
-    async model(val) {
-      this.isLoading = true
-      if (val) {
-        this.selectedCategoryIndex = null
-        const retailers = await cashbackApi.retailers(null, val)
-        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
-        this.nextPage = retailers.nextPageNumber
-        this.totalItems = retailers.totalItems
-      }
-      this.searchTerm = val
-      this.isLoading = false
-    },
-    async selectedCategory() {
-      this.model = ""
-      if (this.selectedCategory) {
-        const retailers = await cashbackApi.retailers(this.selectedCategory.id)
-        this.retailers = retailers.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailers.retailerIconBasePath+item.iconPath+retailers.iconQueryParam} }), {})
-        this.nextPage = retailers.nextPageNumber
-        this.generalTermsUrl = retailers.generalTermsUrl
-        this.retailerTermsBasePath = retailers.retailerTermsBasePath
-        this.totalItems = retailers.totalItems
-        this.isLoading = false
-      }
-    }
-  },
-  methods: {
-    onIntersect (entries, observer) {
-      this.isIntersecting = entries[0].isIntersecting
+const { bringCache } = toRefs(bringStore);
 
-    },
-    openRetailerDialog(retailer) {
-      this.retailer = retailer
-      this.isRetailerDialogOpen = true
-    },
-    closeRetailerDialog() {
-      this.isRetailerDialogOpen = false
-      this.retailer = null
-    },
-    customAutoCompleteFilter(item, queryText) {
-      if (!queryText) {
-        return false
-      }
-      return item.toLowerCase().startsWith(queryText.toLowerCase())
+const isIntersecting = ref(false);
+const selectedCategoryIndex = ref(0);
+const entries = ref([]);
+const intersectionTarget = ref<Element>();
+const searchTerms = ref([]);
+const model = ref(null);
+const categories = ref({
+  items: []
+});
+const chipLoading = ref(false);
+const isLoading = ref(false);
+const isLoading2 = ref(false);
+const loadingMore = ref(false);
+const retailers = ref({});
+const nextPage = ref(null);
+const isRewardsDialogOpen = ref(false);
+const isRetailerDialogOpen = ref(false);
+const isHowItWorksDialogOpen = ref(false);
+const retailer = ref(null);
+const generalTermsUrl = ref(null);
+const retailerTermsBasePath = ref(null);
+const totalItems = ref(null);
+const supported = ref(true);
+const searchTerm = ref('');
+
+const terms = computed(() => {
+  return entries.value;
+});
+
+const selectedCategory = computed(() => {
+  return categories.value.items[selectedCategoryIndex.value];
+});
+
+const eligible = computed(() => {
+  if (bringCache.value && bringCache.value?.data?.eligible?.length > 0) {
+    return bringCache.value.data.eligible[0];
+  }
+  return undefined;
+});
+
+const pending = computed(() => {
+  if (bringCache.value && bringCache.value?.data?.totalPendings?.length > 0) {
+    return bringCache.value.data.totalPendings[0];
+  }
+  return undefined;
+});
+
+const deals = computed(() => {
+  return Object.values(retailers.value);
+});
+
+watch(isIntersecting, async (val) => {
+  if (val) {
+    if (nextPage.value) {
+      loadingMore.value = true;
+      const retailersData = await cashbackApi.retailers(selectedCategory.value?.id, model.value, nextPage.value);
+      retailers.value = {...retailers.value, ...retailersData.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailersData.retailerIconBasePath+item.iconPath+retailersData.iconQueryParam} }), {}) };
+      nextPage.value = retailersData.nextPageNumber;
+      loadingMore.value = false;
     }
-  },
-  filters,
-  data() {
-    return {
-      isIntersecting: false,
-      selectedCategoryIndex: 0,
-      entries: [],
-      searchTerms: [],
-      model: null,
-      categories: {
-        items: []
-      },
-      chipLoading: false,
-      isLoading: false,
-      isLoading2: false,
-      loadingMore: false,
-      retailers: {},
-      nextPage: null,
-      isRewardsDialogOpen: false,
-      isRetailerDialogOpen: false,
-      isHowItWorksDialogOpen: false,
-      retailer: null,
-      generalTermsUrl: null,
-      retailerTermsBasePath: null,
-      totalItems: null,
-      supported: true,
-      searchTerm: '',
-      assets,
+  }
+});
+
+watch(model, async (val) => {
+  isLoading.value = true;
+  if (val) {
+    selectedCategoryIndex.value = null;
+    const retailersData = await cashbackApi.retailers(null, val);
+    retailers.value = retailersData.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailersData.retailerIconBasePath+item.iconPath+retailersData.iconQueryParam} }), {});
+    nextPage.value = retailersData.nextPageNumber;
+    totalItems.value = retailersData.totalItems;
+  }
+  searchTerm.value = val;
+  isLoading.value = false;
+});
+
+watch(selectedCategory, async () => {
+  model.value = "";
+  if (selectedCategory.value) {
+    const retailersData = await cashbackApi.retailers(selectedCategory.value.id);
+    retailers.value = retailersData.items.reduce((obj, item) => Object.assign(obj, { [item.id]: {...item,img: retailersData.retailerIconBasePath+item.iconPath+retailersData.iconQueryParam} }), {});
+    nextPage.value = retailersData.nextPageNumber;
+    generalTermsUrl.value = retailersData.generalTermsUrl;
+    retailerTermsBasePath.value = retailersData.retailerTermsBasePath;
+    totalItems.value = retailersData.totalItems;
+    isLoading.value = false;
+  }
+});
+
+// Set up intersection observer using VueUse
+useIntersectionObserver(intersectionTarget, ([{ isIntersecting: intersecting }]) => {
+  isIntersecting.value = intersecting;
+});
+
+const onIntersect = (entries: any, observer: any) => {
+  isIntersecting.value = entries[0].isIntersecting;
+};
+
+const openRetailerDialog = (retailerData: any) => {
+  retailer.value = retailerData;
+  isRetailerDialogOpen.value = true;
+};
+
+const closeRetailerDialog = () => {
+  isRetailerDialogOpen.value = false;
+  retailer.value = null;
+};
+
+const customAutoCompleteFilter = (item: string, queryText: string) => {
+  if (!queryText) {
+    return false;
+  }
+  return item.toLowerCase().startsWith(queryText.toLowerCase());
+};
+
+onMounted(async () => {
+  chipLoading.value = true;
+  isLoading.value = true;
+  try {
+    const isAvailable = await cashbackApi.checkAvailability();
+    if (isAvailable) {
+      const res = await cashbackApi.categoriesSearch();
+      categories.value.items = [{ iconSvg: "", id: null, name: "All Categories"}];
+      categories.value.items.push(...res.categories.items);
+      searchTerms.value = res.searchTerms.items;
+      chipLoading.value = false;
     }
-  },
-  async mounted() {
-    this.chipLoading = true
-    this.isLoading = true
-    try {
-      const isAvailable = await cashbackApi.checkAvailability()
-      if (isAvailable) {
-        const res = await cashbackApi.categoriesSearch()
-        this.categories.items = [{ iconSvg: "", id: null, name: "All Categories"}]
-        this.categories.items.push(...res.categories.items)
-        this.searchTerms = res.searchTerms.items
-        this.chipLoading = false
-      }
-    } catch (e) {
-      this.supported = false
-      this.chipLoading = false
-      this.isLoading = false
-    }
-  },
+  } catch (e) {
+    supported.value = false;
+    chipLoading.value = false;
+    isLoading.value = false;
+  }
 });
 </script>
 <style scoped>
