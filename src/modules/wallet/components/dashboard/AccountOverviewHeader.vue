@@ -18,7 +18,7 @@
       </div>
     </div>
     
-    <!-- Password Confirm Modal - только для Manage Card -->
+    <!-- Password Confirm Modal - only for Manage Card -->
     <PasswordConfirmModal
       :open="showPasswordModal"
       :title="passwordModalTitle"

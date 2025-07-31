@@ -90,12 +90,12 @@ const confirmBlock = async () => {
   
   loading.value = true;
   
-  // Имитация API вызова
+  // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 2000));
   
   loading.value = false;
   
-  // Здесь можно добавить логику подтверждения блокировки
+  // Add card blocking logic here
   console.log('Card blocked with password:', password.value);
   
   emit('confirm');
