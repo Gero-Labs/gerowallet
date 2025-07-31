@@ -4,7 +4,7 @@
       <v-progress-circular indeterminate color="primary" size="32"></v-progress-circular>
       <span class="loading-text">Loading card details...</span>
     </div>
-    
+
     <div v-else class="form-container">
       <div class="form-row">
         <div class="input-full">
@@ -57,18 +57,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import cardStore from '@/stores/modules/card';
-import { useStore } from '@/stores';
-import { mockCardData, mockCardNumber } from '@/models/card-mock';
-
-// Get main store for wallet access
-const store = useStore();
-
-// No need for storeToRefs with new format
+import { cardStore } from '../../../../../stores/modules/card';
+import geroStore from '../../../../../stores/geroStore';
+import { mockCardData, mockCardNumber } from '../../../../../models/card-mock';
 
 // Debug logging
-console.log('ViewCardDetails - cardData:', cardStore.state.cardData);
-console.log('ViewCardDetails - cardNumber:', cardStore.state.cardNumber);
+console.log('ViewCardDetails - cardData:', cardStore.cardData);
+console.log('ViewCardDetails - cardNumber:', cardStore.cardNumber);
 
 const showCvv = ref(false);
 const showPin = ref(false);
@@ -85,11 +80,11 @@ const expiryDate = computed(() => {
 
 // Get card data with fallback to mock data
 const cardData = computed(() => {
-  return cardStore.state.cardData || mockCardData;
+  return cardStore.cardData || mockCardData;
 });
 
 const cardNumber = computed(() => {
-  return cardStore.state.cardNumber || mockCardNumber;
+  return cardStore.cardNumber || mockCardNumber;
 });
 
 const toggleCvvVisibility = () => {
@@ -105,13 +100,14 @@ onMounted(async () => {
   try {
     console.log('ViewCardDetails - Initializing card data...');
     loading.value = true;
-    
-    const wallet = store.getWallet;
+
+    const wallet = geroStore.state.wallets;
     if (wallet) {
-      await cardStore.initialize(wallet);
+      // For now, just use mock data since the API is not ready
+      console.log('ViewCardDetails - Using mock data for development');
       console.log('ViewCardDetails - Card data initialized:', {
-        cardData: cardStore.state.cardData,
-        cardNumber: cardStore.state.cardNumber
+        cardData: cardStore.cardData,
+        cardNumber: cardStore.cardNumber,
       });
     } else {
       console.warn('ViewCardDetails - No wallet available for initialization');
@@ -139,7 +135,7 @@ onMounted(async () => {
   justify-content: center;
   gap: $spacing-md;
   padding: $spacing-xl;
-  
+
   .loading-text {
     @include body-text($font-size-base);
     color: $text-secondary;

@@ -1,11 +1,11 @@
 <template>
-  <v-card class="welcome-card" outlined>
+  <div class="welcome-container">
     <div class="welcome-text">
       <span class="welcome-title">Welcome back, </span>
       <br />
       <span class="welcome-subtitle">{{ userName }}</span>
     </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -20,14 +20,15 @@ defineProps<Props>();
 @import '../../styles/variables';
 @import '../../styles/mixins';
 
-.welcome-card {
-  border-radius: $border-radius-lg;
-  background-image: url('@/modules/wallet/icons/cardHomeBanner.svg');
+.welcome-container {
+  background-image: url('@/modules/wallet/icons/cardHomeBanner.svg') !important;
   background-repeat: no-repeat;
   height: 232px;
+  border-radius: $border-radius-lg;
   display: flex;
   align-items: center;
   padding: 44px;
+  width: 100%;
 }
 
 .welcome-title {

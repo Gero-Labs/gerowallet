@@ -29,7 +29,7 @@
 import { computed, onMounted } from 'vue';
 import cardStore from '@/stores/modules/card';
 import { useMockCardData } from '@/models/card-example';
-import { useStore } from '@/stores';
+import geroStore from '@/stores/geroStore';
 import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
@@ -38,7 +38,6 @@ import RecentTransactionsSection from '../components/dashboard/RecentTransaction
 import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 
-const store = useStore();
 const { initializeMockData } = useMockCardData();
 
 // Computed properties for formatted data
@@ -83,7 +82,7 @@ onMounted(async () => {
   } else {
     // Use real API in production
     console.log('Initializing real API...');
-    await cardStore.initialize(store.getWallet);
+    await cardStore.initialize(geroStore.state.wallets);
     console.log('Real API initialized');
   }
 });

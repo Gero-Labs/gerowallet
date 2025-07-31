@@ -19,6 +19,7 @@ import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
 import Transactions from '@/modules/transactions/Transactions.vue';
 import Blog from '@/modules/blog/Blog.vue';
 import MultiSig from '@/modules/multisig/views/MultiSig.vue';
+import Card from '@/modules/wallet/GeroCard.vue';
 import WalletStore from '@/stores/walletStore';
 
 const routes = [
@@ -164,6 +165,15 @@ const routes = [
     meta: {
       layout: ContentLayout,
       requiresAuth: false,
+    },
+  },
+  {
+    path: '/card',
+    name: 'card',
+    component: Card,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
     },
   },
   {
