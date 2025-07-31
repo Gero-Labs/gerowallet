@@ -26,12 +26,13 @@ const determineStatus = computed(() => {
   }
 
   // If user exists but no card data, show pending section
-  if (cardStore.state.userInfo && !cardStore.state.cardData) {
+  if ((cardStore.state.userInfo && !cardStore.state.cardData) || localStorage.getItem('kycStatus') === 'pending') {
     return 'pending';
   }
 
   // If user and card data exist, show home section
   if (cardStore.state.userInfo && cardStore.state.cardData) {
+    localStorage.removeItem('kycStatus');
     return 'approved';
   }
 
