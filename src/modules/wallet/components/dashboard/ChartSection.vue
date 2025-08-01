@@ -1,0 +1,373 @@
+<template>
+  <v-card class="chart-card" outlined>
+    <div class="chart-header">
+      <div class="chart-title-section">
+        <h3 class="chart-title">Balance over time</h3>
+        <div class="chart-value-section">
+          <span class="chart-value">€177.00</span>
+          <div class="change-badge positive">
+            <img src="@/assets/svg/trend-up-01.svg" alt="Trend" class="change-icon" />
+            <span class="change-text">+2.4%</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-controls">
+        <div class="time-tabs">
+          <v-btn
+            class="tab-btn"
+            :class="{ active: activeTab === '12months' }"
+            variant="text"
+            size="small"
+            @click="setActiveTab('12months')"
+          >
+            12 months
+          </v-btn>
+          <v-btn
+            class="tab-btn"
+            :class="{ active: activeTab === '30days' }"
+            variant="text"
+            size="small"
+            @click="setActiveTab('30days')"
+          >
+            30 days
+          </v-btn>
+          <v-btn
+            class="tab-btn"
+            :class="{ active: activeTab === '7days' }"
+            variant="text"
+            size="small"
+            @click="setActiveTab('7days')"
+          >
+            7 days
+          </v-btn>
+          <v-btn
+            class="tab-btn"
+            :class="{ active: activeTab === '24hours' }"
+            variant="text"
+            size="small"
+            @click="setActiveTab('24hours')"
+          >
+            24 hours
+          </v-btn>
+        </div>
+        <v-btn class="filter-btn" variant="outlined" size="small">
+          <img src="@/modules/wallet/icons/filter.svg" alt="Filter" class="btn-icon" />
+          Filters
+        </v-btn>
+      </div>
+    </div>
+    <div class="chart-container">
+      <div ref="chartContainer" class="highcharts-container"></div>
+    </div>
+  </v-card>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue';
+import Highcharts from 'highcharts';
+
+const activeTab = ref('12months');
+const chartContainer = ref<HTMLElement>();
+let chart: Highcharts.Chart | null = null;
+
+const chartData = {
+  '12months': [
+    { name: 'Jan', y: 120 },
+    { name: 'Feb', y: 135 },
+    { name: 'Mar', y: 110 },
+    { name: 'Apr', y: 145 },
+    { name: 'May', y: 160 },
+    { name: 'Jun', y: 140 },
+    { name: 'Jul', y: 155 },
+    { name: 'Aug', y: 170 },
+    { name: 'Sep', y: 165 },
+    { name: 'Oct', y: 180 },
+    { name: 'Nov', y: 175 },
+    { name: 'Dec', y: 177 },
+  ],
+  '30days': [
+    { name: 'Day 1', y: 150 },
+    { name: 'Day 5', y: 155 },
+    { name: 'Day 10', y: 160 },
+    { name: 'Day 15', y: 165 },
+    { name: 'Day 20', y: 170 },
+    { name: 'Day 25', y: 175 },
+    { name: 'Day 30', y: 177 },
+  ],
+  '7days': [
+    { name: 'Mon', y: 170 },
+    { name: 'Tue', y: 172 },
+    { name: 'Wed', y: 175 },
+    { name: 'Thu', y: 173 },
+    { name: 'Fri', y: 176 },
+    { name: 'Sat', y: 178 },
+    { name: 'Sun', y: 177 },
+  ],
+  '24hours': [
+    { name: '00:00', y: 175 },
+    { name: '04:00', y: 176 },
+    { name: '08:00', y: 177 },
+    { name: '12:00', y: 178 },
+    { name: '16:00', y: 177 },
+    { name: '20:00', y: 176 },
+    { name: '24:00', y: 177 },
+  ],
+};
+
+const setActiveTab = (tab: string) => {
+  activeTab.value = tab;
+  updateChart();
+};
+
+const updateChart = () => {
+  if (!chart) return;
+
+  const data = chartData[activeTab.value as keyof typeof chartData];
+  chart.series[0].setData(data);
+};
+
+const initChart = () => {
+  if (!chartContainer.value) return;
+
+  const options: Highcharts.Options = {
+    chart: {
+      type: 'line',
+      backgroundColor: 'transparent',
+      height: 190,
+      spacing: [0, 0, 0, 0],
+      style: {
+        fontFamily: 'Inter, sans-serif',
+      },
+    },
+    title: {
+      text: '',
+    },
+    xAxis: {
+      categories: chartData[activeTab.value as keyof typeof chartData].map(item => item.name),
+      lineColor: '#22262F',
+      tickColor: '#22262F',
+      labels: {
+        style: {
+          color: '#94979C',
+          fontSize: '12px',
+          fontWeight: '400',
+        },
+      },
+    },
+    yAxis: {
+      title: {
+        text: '',
+      },
+      gridLineColor: '#22262F',
+      labels: {
+        enabled: false,
+      },
+    },
+    legend: {
+      enabled: false,
+    },
+    plotOptions: {
+      line: {
+        color: '#2DF0F7',
+        lineWidth: 2,
+        marker: {
+          enabled: false,
+        },
+      },
+      area: {
+        fillColor: {
+          linearGradient: {
+            x1: 0,
+            y1: 0,
+            x2: 0,
+            y2: 1,
+          },
+          stops: [
+            [0, 'rgba(45, 240, 247, 0.1)'],
+            [1, 'rgba(45, 240, 247, 0)'],
+          ],
+        },
+      },
+    },
+    series: [
+      {
+        name: 'Balance',
+        data: chartData[activeTab.value as keyof typeof chartData],
+        type: 'line',
+      },
+    ],
+    credits: {
+      enabled: false,
+    },
+    tooltip: {
+      enabled: false,
+    },
+  };
+
+  chart = Highcharts.chart(chartContainer.value, options);
+};
+
+onMounted(() => {
+  initChart();
+});
+
+watch(activeTab, () => {
+  updateChart();
+});
+</script>
+
+<style lang="scss" scoped>
+@import '../../styles/variables';
+@import '../../styles/mixins';
+
+.chart-card {
+  background: $background-card;
+  border: 1px solid $border-secondary;
+  border-radius: $border-radius-md;
+  padding: $spacing-lg;
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: $spacing-lg;
+    margin-bottom: $spacing-2xl;
+  }
+
+  .chart-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-sm;
+  }
+
+  .chart-title {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-semibold;
+    font-size: $font-size-sm;
+    line-height: 1.43;
+    color: $text-muted;
+    margin: 0;
+  }
+
+  .chart-value-section {
+    display: flex;
+    align-items: center;
+    gap: $spacing-md;
+  }
+
+  .chart-value {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-semibold;
+    font-size: 30px;
+    line-height: 1.27;
+    color: $text-primary;
+  }
+
+  .change-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 6px;
+    border-radius: $border-radius-sm;
+    background: $background-card;
+    border: 1px solid $border-primary;
+
+    &.positive {
+      .change-icon {
+        width: 12px;
+        height: 12px;
+      }
+      .change-text {
+        color: $text-secondary;
+      }
+    }
+
+    .change-icon {
+      width: 12px;
+      height: 12px;
+    }
+
+    .change-text {
+      font-family: $font-family-primary;
+      font-weight: $font-weight-medium;
+      font-size: $font-size-sm;
+      line-height: 1.43;
+    }
+  }
+
+  .chart-controls {
+    display: flex;
+    gap: $spacing-md;
+    align-items: center;
+  }
+
+  .time-tabs {
+    display: flex;
+    gap: 2px;
+    background: $background-dark;
+    border: 1px solid $background-secondary;
+    border-radius: $border-radius-md;
+    padding: 2px;
+
+    .tab-btn {
+      padding: 8px 12px;
+      font-family: $font-family-primary;
+      font-weight: $font-weight-semibold;
+      font-size: $font-size-sm;
+      line-height: 1.43;
+      color: $text-muted;
+      text-transform: none;
+      border-radius: $border-radius-md;
+      min-width: auto;
+      height: 36px;
+      background: transparent;
+      border: none;
+
+      &.active {
+        background: $background-card;
+        border: 1px solid $border-primary;
+        color: $text-secondary;
+        box-shadow: $shadow-sm;
+      }
+
+      &:not(.active):hover {
+        background: lighten($background-dark, 2%);
+      }
+    }
+  }
+
+  .filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: $background-card;
+    border: 1px solid $border-primary;
+    border-radius: $border-radius-md;
+    font-family: $font-family-primary;
+    font-weight: $font-weight-semibold;
+    font-size: $font-size-sm;
+    line-height: 1.43;
+    color: $text-secondary;
+    text-transform: none;
+    box-shadow: $shadow-md;
+
+    .btn-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      margin-right: 6px;
+    }
+  }
+
+  .chart-container {
+    height: 190px;
+    position: relative;
+  }
+
+  .highcharts-container {
+    width: 100%;
+    height: 100%;
+  }
+}
+</style>
