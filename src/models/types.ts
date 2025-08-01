@@ -258,3 +258,70 @@ export {
   Currency,
   coin_type
 };
+
+// ============================================================================
+// WALLET UI TYPES - Component Props and Interfaces
+// ============================================================================
+
+// Component Props Types
+export interface ButtonProps {
+  text: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+}
+
+export interface FeatureCardProps {
+  icon: 'conversion' | 'global' | 'track';
+  title: string;
+  description: string;
+}
+
+export interface FeatureListItemProps {
+  text: string;
+  icon?: string;
+}
+
+export interface ModalProps {
+  open: boolean;
+  onClose?: () => void;
+}
+
+// Section Types
+export interface SectionProps {
+  className?: string;
+  children?: any;
+}
+
+// Legacy Transaction Type (for backward compatibility)
+export interface Transaction {
+  id: number;
+  date: string;
+  name: string;
+  avatarText?: string;
+  icon?: string;
+  amount: string;
+  category: string;
+  categoryClass: string;
+  categoryDotClass: string;
+}
+
+export interface ExchangeRate {
+  id: number;
+  pair: string;
+  value: string;
+  currency: string;
+  icon: string;
+  change: string;
+  trend: 'positive' | 'negative';
+  trendIcon: string;
+}
+
+export interface Activity {
+  id: number;
+  type: string;
+  cryptoAmount: string;
+  fiatAmount: string;
+  date: string;
+  status: string;
+}
