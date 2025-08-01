@@ -22,55 +22,22 @@
     </v-list-item>
   </div>
 </template>
-<script>
-import { mapState } from 'pinia';
+<script setup lang="ts">
+import { toRefs, computed, ref, onMounted } from 'vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
-import { musicStore } from '@/stores/modules/music';
+import { musicStore } from '@/stores/musicStore';
 
-export default {
-  name: "current-track",
-  components: { PlayerControls },
-  computed: {
-    ...mapState(musicStore, ['musicPlaylist', 'context']),
-    currentTrack() {
-      return this.musicPlaylist[this.context.currentIndex]
-    }
-  },
-  data() {
-    return {
-      currentTrackID: "",
-      isSavedTrack: false
-    };
-  },
-  methods: {
-    async checkSavedTrack(id) {
-      // try {
-        // const response = await api.spotify.library.checkUserSavedTracks(id);
-        // this.isSavedTrack = response.data[0];
-      // } catch (e) {
-      //   console.log(e);
-      // }
-    },
-    onTrackUpdate(id) {
-      this.checkSavedTrack(id);
-    }
-  },
+const { musicPlaylist, context } = toRefs(musicStore);
 
-  watch: {
-    playback() {
-      if (this.currentTrackID !== this.currentTrack.id) {
-        this.currentTrackID = this.currentTrack.id;
-      }
+const currentTrackID = ref<string>('');
 
-      this.checkSavedTrack(this.currentTrackID);
-    }
-  },
+const currentTrack = computed(() => {
+  return musicPlaylist.value[context.value.currentIndex]
+});
 
-  created() {
-    this.currentTrackID = this.currentTrack.id;
-    this.checkSavedTrack(this.currentTrackID);
-  }
-};
+onMounted(() => {
+  currentTrackID.value = currentTrack.value.id;
+})
 </script>
 <style>
 .marquee {

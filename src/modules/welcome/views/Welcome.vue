@@ -1,6 +1,6 @@
 <template>
   <v-container class="pa-0" :style="{direction: $t('rtl') === 'true' ? 'rtl' : 'ltr', height: '100vh'}">
-    <v-card variant="flat" class="transparent-override pa-0 fill-height">
+    <v-card flat class="transparent-override pa-0 fill-height">
       <v-card-text class="pa-0 fill-height">
         <v-row class="fill-height" no-gutters>
           <v-col cols="12" lg="5" md="5" sm="5">
@@ -26,7 +26,7 @@
                     }">&nbsp;Glass</span>
                   </div>
                   <span class="my-5" style="color: #94979c; font-size: 16px; white-space: nowrap;">Choose an option to get started</span>
-                  <NetworkSelector />
+                  <NetworkSelector @network-changed="onNetworkChanged" />
                   <v-btn
                     block
                     :class="['mt-3', isApex ? 'apexButton transition' : 'geroButton transition']"
@@ -48,13 +48,13 @@
                     base-color="white"
                     @click="googleLogin"
                     :loading="loadingGoogleLogin"
-                    :disabled="!network?.zkFoldSupport"
+                    :disabled="!selectedNetwork?.zkFoldSupport"
                   >
                     <v-avatar size="24" class="mr-2">
                       <v-img :src="assets.google" />
                     </v-avatar>
                     Google Sign In
-                    <v-chip color="primary" outlined x-small class="px-1 ml-2" v-if="!network?.zkFoldSupport">Soon</v-chip>
+                    <v-chip color="primary" outlined x-small class="px-1 ml-2" v-if="!selectedNetwork?.zkFoldSupport">Soon</v-chip>
                   </v-btn>
                   <div style="width: 100%; justify-content: left; display: flex; font-size: 10px; font-weight: 300; margin-top: 3px">
                     <span style="color: #5B5B5B">Powered by</span>
@@ -89,11 +89,11 @@
                 backgroundPositionY: '295px',
                 zIndex: 0,
               }" />
-              <div style="display: flex;" v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0" class="fill-height">
+              <div style="display: flex; justify-self: center;" v-if="!createOrImportSeedPhrase && Array.isArray(availableWallets) && availableWallets.length == 0" class="fill-height">
                 <NoWalletsWelcomeCard />
               </div>
               <div style="display: flex;" v-else-if="createOrImportSeedPhrase" class="fill-height">
-                <CreateOrImportSeedPhrase @back="disableCreateOrImportSeedPhrase" />
+                <CreateOrImportSeedPhrase @back="disableCreateOrImportSeedPhrase" :network="selectedNetwork" />
               </div>
               <div style="display: flex;" v-else class="fill-height">
                 <WalletsListLogin />
@@ -141,14 +141,19 @@
           </v-col>
         </v-row>
       </v-card-text>
-      <CreateGoogleWallet :isOpen="newGoogleWalletDialog" @close="newGoogleWalletDialog = false" :persistent="false" :google-account="profile" :tokens="{ accessToken, idToken}" />
+      <CreateGoogleWallet
+        :isOpen="newGoogleWalletDialog"
+        @close="newGoogleWalletDialog = false"
+        :persistent="false"
+        :google-account="profile"
+        :tokens="{ accessToken, idToken}"
+        :network="selectedNetwork"
+      />
     </v-card>
   </v-container>
 </template>
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
+import { ref, computed, getCurrentInstance, toRefs } from 'vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import PrivacyPolicyDialog from '@/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue';
@@ -162,14 +167,19 @@ import NetworkSelector from '@/options/modules/navigation/components/NetworkSele
 import CreateGoogleWallet from '@/options/modules/welcome/dialogs/CreateGoogleWallet.vue';
 import { Messaging } from '@/chrome/messaging';
 import db from '@/db';
+import { geroStore } from '@/stores/geroStore';
 
 const privacyPolicyDialog = ref(false);
 const changeLogDialog = ref(false);
 const newGoogleWalletDialog = ref(false);
-
-const store = useStore();
-const { wallets, network } = storeToRefs(store);
 const createOrImportSeedPhrase = ref<boolean>(false);
+const selectedNetwork = ref<any>(null);
+
+const { wallets } = toRefs(geroStore);
+
+const onNetworkChanged = (network: any) => {
+  selectedNetwork.value = network;
+};
 
 const enableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = true;
@@ -178,22 +188,11 @@ const disableCreateOrImportSeedPhrase = (): void => {
   createOrImportSeedPhrase.value = false;
 }
 
-type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
-
-interface Wallet {
-  id: string;
-  name: string;
-  chain: string;
-  network: string;
-  icon?: string;
-  type?: WalletTypeValue;
-}
-
 //@ts-ignore
 const version = ref<string>(APP_VERSION);
 
-const availableWallets = computed<Wallet[]>(() => {
-  return wallets.value.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google);
+const availableWallets = computed(() => {
+  return Object.values(wallets.value)?.filter((wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google);
 });
 
 const geroLogoApex = assets.geroDashboardApex;
@@ -201,7 +200,7 @@ const geroLogo = assets.geroDashboard;
 const isApex = ref(false);
 
 const logo = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (selectedNetwork.value?.blockchain?.includes('Apex')) {
     isApex.value = true;
     return geroLogoApex;
   }
@@ -210,7 +209,7 @@ const logo = computed(() => {
 });
 
 const welcomeBg = computed(() => {
-  if (network.value?.blockchain?.includes('Apex')) {
+  if (selectedNetwork.value?.blockchain?.includes('Apex')) {
     return assets.apexBg;
   }
   return assets.cardanoBg;
@@ -226,7 +225,8 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    await store.setLogin(Number(walletId));
+    console.log('submitLogin', walletId);
+    // await store.setLogin(Number(walletId)); TODO google wallet
   } catch (error) {
     console.error(error);
   }

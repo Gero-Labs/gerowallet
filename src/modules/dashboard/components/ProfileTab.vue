@@ -85,6 +85,7 @@
             hide-details
             return-object
             disabled
+            attach
           ></v-select>
         </v-col>
       </v-row>
@@ -145,86 +146,99 @@
     </v-layout>
   </v-tab-item>
 </template>
-<script>
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
 import rules from '@/utils/rules';
+import { walletStore } from '@/stores/walletStore';
+import { geroStore } from '@/stores/geroStore';
+import geroStoreDefault from '@/stores/geroStore';
+import WalletStore from '@/stores/walletStore';
 
-export default {
-  name: 'ProfileTab',
-  components: { EditableTextField },
-  computed: {
-    rules() {
-      return rules
-    },
-    ...mapState(useStore, ['loggedWallet', 'locale', 'wallets']),
-    otherWalletNames() {
-      return this.wallets.filter(wallet => wallet.name !== this.loggedWallet.name).map(wallet => wallet.name)
-    },
-    avatar() {
-      if (this.loggedWallet.icon.includes('http')) {
-        return this.loggedWallet.icon;
-      } else {
-        return assets.resolveIcon(this.loggedWallet.icon);
-      }
-    },
-  },
-  watch: {
-    loc(val) {
-      if (val) {
-        const iso = Object.values(this.languages).find(value => value.name === val).iso;
-        this.setLocale(iso);
-        this.$i18n.locale = iso;
-      }
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['setLocale', 'setWelcomeDone', 'setWalletName', 'setWalletIcon']),
-    invalidWalletNames() {
-      return (value) => !this.otherWalletNames.includes(value) || 'Wallet name already taken.';
-    },
-    existedWalletName() {
-      return (value) => value !== this.loggedWallet.name || '';
-    },
-    showGuide() {
-      this.$emit('close');
-      this.setWelcomeDone(false);
-    },
-    setLoggedWalletName(walletName) {
-      this.setWalletName(this.loggedWallet.id, walletName);
-    },
-    uploadPicture() {
-      this.$refs.fileInput.click();
-    },
-    onFileChange(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+// Define emits
+const emit = defineEmits(['close']);
 
-      const reader = new FileReader();
-      reader.onload = e => {
-        const picBase64 = e.target.result;
-        this.setWalletIcon(this.loggedWallet.id, picBase64);
-      };
-      reader.readAsDataURL(file);
-    },
-  },
-  data: () => ({
-    languages,
-    currencies: ['USD', 'AUD', 'CAD', 'EUR', 'GBP'],
-    selectedCurrency: 'USD',
-    walletName: '',
-    loc: undefined,
-    assets,
-  }),
-  created() {
-    console.log(this.loggedWallet.name)
-    this.walletName = this.loggedWallet.name;
-    this.loc = this.languages[this.locale].name;
+// Get store instance
+const { loggedWallet, config } = toRefs(walletStore);
+const { wallets } = toRefs(geroStore);
+
+// Access Vue instance for i18n
+const vmProxy = getCurrentInstance()!.proxy as any;
+
+// Reactive data
+const currencies = ref(['USD', 'AUD', 'CAD', 'EUR', 'GBP']);
+const selectedCurrency = ref('USD');
+const walletName = ref('');
+const loc = ref<string | undefined>(undefined);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+// Computed properties
+const otherWalletNames = computed(() => {
+  return Object.values(wallets.value).filter(wallet => wallet.name !== loggedWallet.value.name).map(wallet => wallet.name);
+});
+
+const avatar = computed(() => {
+  if (loggedWallet.value.icon.includes('http')) {
+    return loggedWallet.value.icon;
+  } else {
+    return assets.resolveIcon(loggedWallet.value.icon);
   }
+});
+
+// Validation functions
+const invalidWalletNames = () => {
+  return (value: string) => !otherWalletNames.value.includes(value) || 'Wallet name already taken.';
 };
+
+const existedWalletName = () => {
+  return (value: string) => value !== loggedWallet.value.name || '';
+};
+
+// Methods
+const showGuide = () => {
+  emit('close');
+  geroStoreDefault.setConfig({ welcomeDone: false });
+};
+
+const setLoggedWalletName = (newWalletName: string) => {
+  geroStoreDefault.setWalletName(loggedWallet.value.id, newWalletName);
+};
+
+const uploadPicture = () => {
+  fileInput.value?.click();
+};
+
+const onFileChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const picBase64 = e.target?.result as string;
+    geroStoreDefault.setWalletIcon(loggedWallet.value.id, picBase64);
+  };
+  reader.readAsDataURL(file);
+};
+
+// Watchers
+watch(loc, (val) => {
+  if (val) {
+    const iso = Object.values(languages).find(value => value.name === val)?.iso;
+    if (iso) {
+      WalletStore.setLocale(iso);
+      vmProxy.$i18n.locale = iso;
+    }
+  }
+});
+
+// Lifecycle
+onMounted(() => {
+  walletName.value = loggedWallet.value.name;
+  loc.value = languages[config.value.locale || 'us'].name;
+});
 </script>
 
 <style scoped>

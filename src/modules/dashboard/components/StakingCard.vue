@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined :loading="loadingTxs">
+  <v-card flat outlined class="liquid-glass" :loading="loadingTxs">
     <v-card-title>Staking</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
@@ -15,11 +15,11 @@
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Total</span>
-                    <h4 style="color: white" v-if="loggedWallet && account">{{ account.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
+                    <h4 style="color: white" v-if="loggedWallet && account">{{ filters.toCurrency(account.controlled_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
                     <span style="font-size: 12px">Rewards</span>
-                    <h4 style="color: white" v-if="account">{{ account.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
+                    <h4 style="color: white" v-if="account">{{ filters.toCurrency(account.withdrawable_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
                     <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
                       Withdraw
                     </v-btn>
@@ -62,7 +62,7 @@
                 <v-row no-gutters class="pt-2 pb-1">
                   <v-col cols="6" style="display: block;text-align: center;" v-if="account">
                     <h5>Pool Id</h5>
-                    <span style="color: white;">{{ account?.pool_id | truncate }}</span>
+                    <span style="color: white;">{{ filters.truncate(account?.pool_id) }}</span>
                     <CopyButton :value="account?.pool_id" x-small></CopyButton>
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;">
@@ -73,24 +73,24 @@
                 <v-row no-gutters>
                   <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
                     <h5>Fees</h5>
-                    <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+                    <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
                   </v-col>
                   <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
                     <h5>Saturation</h5>
-                    <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
+                    <v-progress-linear rounded :color="filters.getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
                       <template v-slot:default="{ value }">
                         <strong>{{ Math.ceil(value) }}%</strong>
                       </template>
                     </v-progress-linear>
                     <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
-                      <strong>{{ pool.active_stake | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
+                      <strong>{{ filters.toCurrency(pool.active_stake, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
                       <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                         <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                        {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                        {{ filters.toCurrency(Number(pool.active_stake) - Number(pool.live_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                       </strong>
                       <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
                         <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                        {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                        {{ filters.toCurrency(Number(pool.live_stake) - Number(pool.active_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                       </strong>
                     </div>
                   </v-col>
@@ -132,9 +132,8 @@
                     </template>
                     <template v-slot:[`item.amount`]="{ item }">
                 <span v-if="isNumeric(item.amount)"
-                      :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true)
-                  }}</span>
+                      :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
+                  {{ filters.toCurrency(item.amount, false, 6, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
                       <span v-else>{{ item.amount }}</span>
                     </template>
                     <template v-slot:[`item.change`]="{ item }">
@@ -167,13 +166,11 @@
     <WithdrawalDialog :is-open="withdrawalDialog" @close="withdrawalDialog = false" :tx="txData"></WithdrawalDialog>
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
+import { toRefs, computed } from 'vue'
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
-import { appWallet, useStore } from '@/stores';
 import CopyButton from "@/shared/components/CopyButton.vue";
-import {Network} from "@/models/types";
-import {mapState} from "pinia";
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import {
   Certificate,
@@ -181,173 +178,159 @@ import {
   StakeDeregistration,
   Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { getColor, toUTxO } from '@/shared/utils/converter';
+import { toUTxO2 } from '@/shared/utils/converter';
 import { buildTx } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/utils/networks';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { loadingState } from '@/stores/loading';
 
-export default {
-  components: {WithdrawalDialog, UnstakeDialog, CopyButton, RewardsChart},
-  props: {
-    chartData: {
-      type: Object,
-      default: () => {
-      },
-    },
-    project: {
-      type: Object,
-      default: () => {
-      },
-    },
-  },
-  computed: {
-    filters() {
-      return filters
-    },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'latestTip', 'baseAddress', 'stakeAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-    Network() {
-      return Network
-    },
-    pool() {
-      if (this.pools) {
-        return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)
+const props = defineProps({
+  chartData: Object,
+  project: Object,
+})
+
+const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore)
+const { pools, tip, epochParams } = toRefs(networkStore)
+const { loadingTxs } = toRefs(loadingState)
+
+const hideZero = ref<boolean>(false);
+const sortBy = ref<string>('epoch');
+const sortDesc = ref<boolean>(true);
+const stakingHeaders = ref<any>([
+  {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id'},
+  {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
+  {text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100},
+  {text: 'Change', align: 'start', sortable: true, value: 'change', width: 120},
+])
+const unstakeDialog = ref<boolean>(false);
+const withdrawalDialog = ref<boolean>(false);
+const txData = ref<any>(undefined);
+
+const pool = computed(() => {
+  if (pools.value) {
+    return pools.value[account.value.pool_id]
+  }
+  return null
+})
+
+const poolExtendedInfo = computed(() => {
+  if (pool.value) {
+    return JSON.parse(pool.value.pool_extended_info)
+  }
+  return null
+})
+
+const rewardsData = computed(() => {
+  console.log(rewards.value)
+  if (rewards.value && !hideZero.value) {
+    let rewardsCopy = JSON.parse(JSON.stringify(rewards.value))
+    if (rewardsCopy.length > 0) {
+      const min = rewardsCopy[0].epoch
+      for (let i = 0 ; i < rewardsCopy.length ; i ++) {
+        if (rewardsCopy[i] && rewardsCopy[i].epoch === i) continue;
+        rewardsCopy.splice(i, 0, Object.assign({}, rewardsCopy[i - 1], { epoch: i, amount: '0'}))
       }
-      return null
-    },
-    poolExtendedInfo() {
-      if (this.pool) {
-        return JSON.parse(this.pool.pool_extended_info)
-      }
-      return null
-    },
-    rewardsData() {
-      if (this.rewards && !this.hideZero) {
-        let rewardsCopy = JSON.parse(JSON.stringify(this.rewards)).sort((a,b) => a.epoch - b.epoch)
-        if (rewardsCopy.length > 0) {
-          const min = rewardsCopy[0].epoch
-          for (let i = 0 ; i < rewardsCopy.length ; i ++) {
-            if (rewardsCopy[i] && rewardsCopy[i].epoch === i) continue;
-            rewardsCopy.splice(i, 0, Object.assign({}, rewardsCopy[i - 1], { epoch: i, amount: '0'}))
-          }
-          return rewardsCopy.slice(min)
-        }
-      }
-      return this.rewards
-    },
-    rewardsChartData() {
-      const obj = {}
-      if (this.rewardsData) {
-        this.rewardsData.slice(-10).forEach(value => {
-          obj[value.epoch] = Number(value.amount) / 1000000
-        })
-      }
-      return obj
-    },
-  },
-  data() {
-    return {
-      networks,
-      hideZero: false,
-      sortBy: 'epoch',
-      sortDesc: true,
-      stakingHeaders: [
-        {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id'},
-        {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
-        {text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100},
-        {text: 'Change', align: 'start', sortable: true, value: 'change', width: 120},
-      ],
-      blockchainDB: undefined,
-      unstakeDialog: false,
-      withdrawalDialog: false,
-      txData: undefined,
-      assets,
-    }
-  },
-  filters,
-  methods: {
-    getColor,
-    withdraw() {
-      // Withdrawals
-      const withdrawals = []
-      if (this.account?.withdrawable_amount && Number(this.account.withdrawable_amount) > 0) {
-        withdrawals.push({
-          address: this.stakeAddress,
-          amount: this.account.withdrawable_amount
-        })
-      }
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], withdrawals)
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.withdrawalDialog = true
-    },
-    unstake() {
-      const certificates = [];
-      if (this.account?.active) {
-        // DeRegistration Certificate
-        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(appWallet.stakeKey().hash().hex()))))
-        certificates.push(deRegistrationCertificate);
-        // Withdrawals
-        const withdrawals = []
-        if (this.account?.withdrawable_amount && Number(this.account.withdrawable_amount) > 0) {
-          withdrawals.push({
-            address: this.stakeAddress,
-            amount: this.account.withdrawable_amount
-          })
-        }
-        const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-        this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-        const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)
-        this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-        console.log(txBody.to_json())
-        this.unstakeDialog = true
-      }
-    },
-    change(item) {
-      const index = this.rewardsData.indexOf(item)
-      if (this.rewardsData[index-1]) {
-        let previous = this.rewardsData[index-1]
-        if (previous) {
-          if (previous.amount === 0) {
-            return 0
-          }
-          return Number(item.amount) - Number(previous.amount)
-        }
-      }
-      return 0
-    },
-    resolvePoolIcon(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return JSON.parse(pool.pool_extended_info)?.info?.url_png_icon_64x64
-      }
-      return ''
-    },
-    resolvePoolName(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return `[${pool.ticker}] ${pool.name}`
-      }
-      return 'N/A'
-    },
-    resolvePoolDescription(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return pool.description
-      }
-      return ''
-    },
-    isNumeric(n) {
-      return !isNaN(parseFloat(n)) && isFinite(n);
+      return rewardsCopy.slice(min)
     }
   }
+  return rewards.value
+})
+
+const rewardsChartData = computed(() => {
+  const obj = {}
+  if (rewardsData.value) {
+    rewardsData.value.slice(-10).forEach(value => {
+      obj[value.epoch] = Number(value.amount) / 1000000
+    })
+  }
+  return obj
+})
+
+const withdraw = () => {
+  const withdrawals = []
+  if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+    withdrawals.push({
+      address: loggedWallet.value.stakeAddress,
+      amount: account.value.withdrawable_amount
+    })
+  }
+  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
+  const txBody = buildTx(epochParams.value, undefined, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, [], withdrawals)
+  txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
+  console.log(txBody.to_json())
+  withdrawalDialog.value = true
+}
+
+const unstake = () => {
+  const certificates = [];
+  if (account.value?.active) {
+    // DeRegistration Certificate
+    const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(keys.value.stake[0].cred))))
+    certificates.push(deRegistrationCertificate);
+    // Withdrawals
+    const withdrawals = []
+    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+      withdrawals.push({
+        address: loggedWallet.value.stakeAddress,
+        amount: account.value.withdrawable_amount
+      })
+    }
+    const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+    utxos.value?.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
+    const txBody = buildTx(epochParams.value, undefined, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, certificates, withdrawals)
+    txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
+    console.log(txBody.to_json())
+    unstakeDialog.value = true
+  }
+}
+
+const change = (item) => {
+  const index = rewardsData.value.indexOf(item)
+  if (rewardsData.value[index-1]) {
+    let previous = rewardsData.value[index-1]
+    if (previous) {
+      if (previous.amount === 0) {
+        return 0
+      }
+      return Number(item.amount) - Number(previous.amount)
+    }
+  }
+  return 0
+}
+
+const resolvePoolIcon = (poolId) => {
+  const pool = pools.value[poolId]
+  if (pool) {
+    return JSON.parse(pool.pool_extended_info)?.info?.url_png_icon_64x64
+  }
+  return ''
+}
+
+const resolvePoolName = (poolId) => {
+  const pool = pools.value[poolId]
+  if (pool) {
+    return `[${pool.ticker}] ${pool.name}`
+  }
+  return 'N/A'
+}
+
+const resolvePoolDescription = (poolId) => {
+  const pool = pools.value[poolId]
+  if (pool) {
+    return pool.description
+  }
+  return ''
+}
+
+const isNumeric = (n) => {
+  return !isNaN(parseFloat(n)) && isFinite(n);
 }
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }

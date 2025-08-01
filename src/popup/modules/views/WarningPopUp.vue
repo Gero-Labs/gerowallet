@@ -43,45 +43,42 @@
     </PopupHeader>
   </v-form>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, onMounted, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 
-export default {
-  name: 'WarningPopUp',
-  components: { PopupHeader },
-  data() {
-    return {
-      valid: false,
-      checkbox1: false,
-      checkbox2: false,
-      suspiciousUrl: null,
-      controller: Messaging.createInternalController()
-    };
-  },
-  async created() {
-    const queryParams = this.$route.query;
-    if (Object.keys(queryParams).length > 0) {
-      this.suspicious_url = queryParams['website'];
-    } else {
-      console.warn('No website query parameter found');
-    }
-  },
-  methods: {
-    async proceed() {
-      await this.controller.returnData({ data: 'proceed', error: {} })
-      window.close();
-    },
-    async safety() {
-      await this.controller.returnData({ data: 'safety', error: {} })
-      window.close();
-    },
-    async reportSite() {
-      await this.controller.returnData({ data: 'report', error: {} })
-      window.close();
-    },
-  },
+const valid = ref(false);
+const checkbox1 = ref(false);
+const checkbox2 = ref(false);
+const suspiciousUrl = ref<string | null>(null);
+const controller = Messaging.createInternalController();
+
+const proceed = async () => {
+  await controller.returnData({ data: 'proceed', error: {} });
+  window.close();
 };
+
+const safety = async () => {
+  await controller.returnData({ data: 'safety', error: {} });
+  window.close();
+};
+
+const reportSite = async () => {
+  await controller.returnData({ data: 'report', error: {} });
+  window.close();
+};
+
+const vmProxy = getCurrentInstance()!.proxy as any
+
+onMounted(async () => {
+  const queryParams = vmProxy.$route.query;
+  if (Object.keys(queryParams).length > 0) {
+    suspiciousUrl.value = queryParams['website'] as string;
+  } else {
+    console.warn('No website query parameter found');
+  }
+});
 </script>
 <style scoped>
 .sub-title {

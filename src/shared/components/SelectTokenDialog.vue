@@ -7,31 +7,19 @@
         outlined
         prepend-inner-icon="mdi-magnify"
         @input="onSearchInput"
+        :loading="searchLoading"
       ></v-text-field>
     </v-card-title>
 
-    <v-card-title class="pa-0 px-2 pb-2" v-if="favoriteTokens.length">
-      <v-chip
-        v-for="(unit, index) in favoriteTokens"
-        :key="index"
-        class="pl-1 pr-2 mx-1 mb-1"
-      >
-        <v-avatar class="mr-1">
-          <v-img :src="resolveToken(unit)['img']" />
-        </v-avatar>
-        {{ resolveToken(unit)['ticker'] }}
-      </v-chip>
-    </v-card-title>
-
     <v-card-text class="pb-0 px-2">
-      <v-list nav dense class="pa-0 transparent">
-        <v-list-item-group v-model="selectedToken" mandatory>
-          <v-list-item
-            v-for="(item, index) in filteredTokens"
-            :key="index"
-            :value="item"
-            @click="onChange"
-          >
+      <v-virtual-scroll
+        :bench="0"
+        :items="filteredTokens"
+        height="300"
+        item-height="64"
+      >
+        <template v-slot:default="{ item }">
+          <v-list-item :key="item.name" @click="onChange(item)">
             <v-list-item-action>
               <v-badge
                 overlap
@@ -51,6 +39,7 @@
                   <img
                     :src="item['img']"
                     :alt="`${item['ticker']} Logo`"
+                    @error="e => handleImageError(e, item)"
                   />
                 </v-avatar>
               </v-badge>
@@ -58,6 +47,7 @@
                 <img
                   :src="item['img']"
                   :alt="`${item['ticker']} Logo`"
+                  @error="e => handleImageError(e, item)"
                 />
               </v-avatar>
             </v-list-item-action>
@@ -71,105 +61,109 @@
             </v-list-item-content>
             <v-list-item-content class="text-right" v-if="item['balance']">
               <v-list-item-title>
-                {{ item['balance'] | toCurrency(false, 0, '', ' ' + item['ticker'], false, item['decimals']) }}
+                {{ filters.toCurrency(item['balance'], false, 0, '', ' ' + item['ticker'], true, item['decimals']) }}
               </v-list-item-title>
-              <v-list-item-subtitle>
-                {{ item['balance'] }}
-              </v-list-item-subtitle>
             </v-list-item-content>
-            <v-list-item-action>
-              <v-btn
-                icon
-                @click.stop="toggleFavoriteToken(item)"
-                v-if="item['unit']"
-              >
-                <v-icon>{{ favoriteTokens.includes(item['unit']) ? 'mdi-star' : 'mdi-star-outline' }}</v-icon>
-              </v-btn>
-            </v-list-item-action>
           </v-list-item>
-        </v-list-item-group>
-      </v-list>
+        </template>
+      </v-virtual-scroll>
+
+<!--      <v-list nav dense class="pa-0 transparent">-->
+<!--        <v-list-item-group v-model="selectedToken" mandatory>-->
+<!--          <v-list-item-->
+<!--            v-for="(item, index) in filteredTokens"-->
+<!--            :key="index"-->
+<!--            :value="item"-->
+<!--            @click="onChange"-->
+<!--          >-->
+<!--            -->
+<!--          </v-list-item>-->
+<!--        </v-list-item-group>-->
+<!--      </v-list>-->
     </v-card-text>
   </BaseDialog>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { ref, computed, onUnmounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
-export default defineComponent({
-  name: 'SelectTokenDialog',
-  components: { BaseDialog },
-  props: {
-    value: {
-      type: Object,
-    },
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    availableTokens: {
-      type: Array,
-    },
+interface Props {
+  value?: any;
+  isOpen?: boolean;
+  availableTokens?: any[];
+  searchMechanism?: Function;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  isOpen: false,
+  availableTokens: () => [],
+});
+
+const emit = defineEmits(['close', 'input']);
+
+const { price } = toRefs(networkStore);
+
+const search = ref('');
+const additional = ref<any[]>([]);
+const searchLoading = ref(false);
+
+const selectedToken = computed({
+  get() {
+    return props.value;
   },
-  filters,
-  data() {
-    return {
-      search: '',
-    };
-  },
-  computed: {
-    ...mapState(useStore, ['price', 'pinnedTokens']),
-    debouncedSearch() {
-      return debounce(this.performSearch, 300);
-    },
-    favoriteTokens() {
-      return this.pinnedTokens.filter(unit =>
-        this.availableTokens.some(token => token['unit'] === unit)
-      );
-    },
-    selectedToken: {
-      get() {
-        return this.value;
-      },
-      set(newToken) {
-        if (newToken && this.availableTokens.length > 0) {
-          this.$emit('input', newToken);
-        }
-      },
-    },
-    filteredTokens() {
-      const lowerCaseSearch = this.search.toLowerCase();
-      return this.availableTokens.filter(
-        token =>
-          token['name'].toLowerCase().includes(lowerCaseSearch) ||
-          token['ticker'].toLowerCase().includes(lowerCaseSearch) ||
-          token['policy_id'].toLowerCase().includes(lowerCaseSearch)
-      );
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['toggleFavoriteToken']),
-    onSearchInput() {
-      this.debouncedSearch();
-    },
-    performSearch() {
-      this.filteredTokens; // Trigger filtering
-    },
-    onChange() {
-      this.$emit('close');
-    },
-    resolveToken(unit) {
-      return this.availableTokens.find(token => token['unit'] === unit);
-    },
-  },
-  unmounted() {
-    this.debouncedSearch.cancel();
+  set(newToken) {
+    if (newToken && props.availableTokens.length > 0) {
+      emit('input', newToken);
+    }
   },
 });
+
+const filteredTokens = computed(() => {
+  const lowerCaseSearch = search.value.toLowerCase();
+  return [...props.availableTokens, ...additional.value].filter(
+    token =>
+      token['name']?.toLowerCase().includes(lowerCaseSearch) ||
+      token['ticker']?.toLowerCase().includes(lowerCaseSearch) ||
+      token['policy_id']?.toLowerCase().includes(lowerCaseSearch)
+  );
+});
+
+const performSearch = async () => {
+  searchLoading.value = true;
+  if (props.searchMechanism) {
+    try {
+      additional.value = await props.searchMechanism(search.value.toLowerCase());
+    } catch (e) {
+      console.log(e);
+    }
+  }
+  searchLoading.value = false;
+};
+
+const debouncedSearch = debounce(performSearch, 300);
+
+const onSearchInput = () => {
+  debouncedSearch();
+};
+
+const onChange = (item: any) => {
+  selectedToken.value = item;
+  emit('close');
+};
+
+onUnmounted(() => {
+  debouncedSearch.cancel();
+});
+
+const handleImageError = (event: Event, item: any) => {
+  const target = event.target as HTMLImageElement;
+  target.onerror = null;
+  target.src = item.fallback_img;
+};
 </script>
 
 <style scoped>

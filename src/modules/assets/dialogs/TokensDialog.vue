@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')"
+  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="handleClose"
               :img="tokensData ? tokensData[0].img : null"
               :title="modalData ? `${modalData.name} (${Number(modalData.quantity).toLocaleString('en-US')})` : ''"
               :subtitle="description" :subtitle2="tokensData ? tokensData[0].policy_id : ''" :width="696" :min-height="646" :height="646">
@@ -21,79 +21,71 @@
             </v-card>
           </v-col>
         </v-row>
-      <AssetDetails :asset="pickedToken" v-else />
+      <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
       <v-btn text elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">Back</v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
-import filters from '@/shared/utils/filters';
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
 
-export default {
-  name: "tokensDialog",
-  components: { AssetDetails,  BaseDialog },
-  props: {
-    modalData: {
-      type: Object,
-      default: null,
-    },
+const props = defineProps({
+  modalData: {
+    type: Object as () => any,
+    default: null,
   },
-  watch: {
-    isDialogVisible(val) {
-      if (val) {
-        this.pickedToken = null
-      }
+});
+
+const emit = defineEmits(['close']);
+
+const pickedToken = ref(null);
+const assetDetailsRef = ref<InstanceType<typeof AssetDetails> | null>(null);
+
+const description = computed(() => {
+  let desc = '';
+  if (props.modalData) {
+    if (Array.isArray(props.modalData.description)) {
+      desc = props.modalData.description.join(" ");
+    } else {
+      desc = props.modalData.description;
     }
-  },
-  filters,
-  computed: {
-    description() {
-      let description = ''
-      if (this.modalData) {
-        if (Array.isArray(this.modalData.description)) {
-          description = this.modalData.description.join(" ")
-        } else {
-          description = this.modalData.description
-        }
-      }
-      return description
-    },
-    tokensData() {
-      return this.modalData?.items
-    },
-    displayedTokens() {
-      return this.tokensData;
-    },
-    isDialogVisible: {
-      get() {
-        return !!this.modalData;
-      },
-    },
-    page: {
-      get() {
-        return 1;
-      },
-      set(value) {
-        console.log(value);
-      },
-    },
-  },
-  data: () => ({
-    pickedToken: null,
-  }),
-  methods: {
-    handleTokenClick(token) {
-      this.pickedToken = token;
-    },
-    handleBreadcrumbClick() {
-      this.pickedToken = null;
-    },
-  },
+  }
+  return desc;
+});
+
+const tokensData = computed(() => {
+  return props.modalData?.items;
+});
+
+const displayedTokens = computed(() => {
+  return tokensData.value;
+});
+
+const isDialogVisible = computed(() => {
+  return !!props.modalData;
+});
+
+const handleTokenClick = (token: any) => {
+  pickedToken.value = token;
 };
+
+const handleClose = () => {
+  // Stop any playing media before closing
+  if (assetDetailsRef.value && assetDetailsRef.value.stopMedia) {
+    assetDetailsRef.value.stopMedia();
+  }
+  emit('close');
+};
+
+watch(isDialogVisible, (val) => {
+  if (val) {
+    pickedToken.value = null;
+  }
+});
 </script>
 <style scoped>
 .close-button {
