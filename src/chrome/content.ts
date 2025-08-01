@@ -38,12 +38,12 @@ function shouldInject() {
 
 async function injectBring() {
   await bringInitContentScript({
+    switchWallet: false,
     text: 'lower',
     getWalletAddress,
     promptLogin,
     walletAddressListeners: ['gero:login', 'gero:logout'],
     theme: 'dark',
-    switchWallet: false,
     darkTheme: {
       // font
       fontUrl: 'https://fonts.googleapis.com/css2?family=Inter&display=swap',
@@ -136,7 +136,7 @@ async function injectBring() {
       activateTitleBoldFS: '--activate-title-bold-f-s',
       activateTitleBoldFW: '--activate-title-bold-f-w',
       activateTitleBoldFC: '--activate-title-bold-f-c',
-    },
+    }
   });
 }
 

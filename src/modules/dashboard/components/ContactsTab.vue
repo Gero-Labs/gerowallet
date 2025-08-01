@@ -99,7 +99,7 @@
         </v-toolbar>
       </template>
       <template v-slot:[`item.address`]="{ item }">
-        {{ item.address | shortenStringWithEllipsis(24) }}<CopyButton x-small :value="item.address" />
+        {{ filters.shortenStringWithEllipsis(item.address, 24) }}<CopyButton x-small :value="item.address" />
       </template>
       <template v-slot:[`item.actions`]="{ item }">
         <v-icon
@@ -119,97 +119,110 @@
     </v-data-table>
   </v-tab-item>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import rules from '@/utils/rules';
-import { Network } from '@/models/types';
-import { mapActions, mapState } from 'pinia';
-import { useStore } from '@/stores';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/stores/walletStore';
+import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 
-export default {
-  name: 'ContactsTab',
-  components: { CopyButton },
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    ...mapState(walletConfigStore, ['contacts']),
-    Network() {
-      return Network
-    },
-    formTitle() {
-      return this.editedAddress === null ? 'New Contact' : 'Edit Contact'
-    },
-  },
-  data: () => ({
-    valid: false,
-    rules,
-    dialog: false,
-    dialogDelete: false,
-    headers: [
-      { text: 'Name', value: 'name', width: '20%' },
-      {text: 'Address', value: 'address', width: '75%'},
-      {text: 'Actions', value: 'actions', sortable: false, width: '5%'},
-    ],
-    editedItem: {
-      name: '',
-      address: '',
-    },
-    defaultItem: {
-      name: '',
-      address: '',
-    },
-  }),
-  filters,
-  watch: {
-    dialog(val) {
-      val || this.close()
-    },
-    dialogDelete(val) {
-      val || this.closeDelete()
-    },
-  },
-  methods: {
-    ...mapActions(walletConfigStore, ['addOrUpdateContact', 'removeContact']),
-    editItem(item) {
-      console.log(item)
-      this.editedAddress = item.address
-      this.editedItem = this.contacts[item.address]
-      this.dialog = true
-    },
-    deleteItem(item) {
-      this.editedAddress = item.address
-      this.editedItem = this.contacts[item.address]
-      this.dialogDelete = true
-    },
-    deleteItemConfirm() {
-      this.removeContact(this.editedAddress)
-      this.closeDelete()
-    },
-    close() {
-      this.dialog = false
-      this.$nextTick(() => {
-        if (this.defaultItem) {
-          this.editedItem = Object.assign({}, this.defaultItem)
-          this.editedAddress = null
-        }
-      })
-    },
-    closeDelete() {
-      this.dialogDelete = false
-      this.$nextTick(() => {
-        if (this.defaultItem) {
-          this.editedItem = Object.assign({}, this.defaultItem)
-          this.editedAddress = null
-        }
-      })
-    },
-    save() {
-      this.addOrUpdateContact(this.editedItem, this.editedAddress)
-      this.close()
-    }
-  },
-}
+// Get reactive store properties
+const { loggedWallet, contacts } = toRefs(walletStore);
+
+// Reactive data
+const valid = ref<boolean>(false);
+const dialog = ref<boolean>(false);
+const dialogDelete = ref<boolean>(false);
+const editedAddress = ref<string | null>(null);
+
+const headers = ref([
+  { text: 'Name', value: 'name', width: '20%' },
+  { text: 'Address', value: 'address', width: '75%' },
+  { text: 'Actions', value: 'actions', sortable: false, width: '5%' },
+]);
+
+const editedItem = ref({
+  name: '',
+  address: '',
+});
+
+const defaultItem = {
+  name: '',
+  address: '',
+};
+
+// Computed properties (contacts is now directly from store)
+
+const formTitle = computed(() => {
+  return editedAddress.value === null ? 'New Contact' : 'Edit Contact';
+});
+
+// Watchers
+watch(dialog, (val) => {
+  val || close();
+});
+
+watch(dialogDelete, (val) => {
+  val || closeDelete();
+});
+
+// Methods
+const editItem = (item: any) => {
+  console.log(item);
+  editedAddress.value = item.address;
+  editedItem.value = { ...contacts.value[item.address] };
+  dialog.value = true;
+};
+
+const deleteItem = (item: any) => {
+  editedAddress.value = item.address;
+  editedItem.value = { ...contacts.value[item.address] };
+  dialogDelete.value = true;
+};
+
+const deleteItemConfirm = () => {
+  if (editedAddress.value) {
+    // Remove contact directly from store and database
+    delete contacts.value[editedAddress.value];
+    removeContact(loggedWallet.value.id, editedAddress.value);
+  }
+  closeDelete();
+};
+
+const close = () => {
+  dialog.value = false;
+  nextTick(() => {
+    editedItem.value = { ...defaultItem };
+    editedAddress.value = null;
+  });
+};
+
+const closeDelete = () => {
+  dialogDelete.value = false;
+  nextTick(() => {
+    editedItem.value = { ...defaultItem };
+    editedAddress.value = null;
+  });
+};
+
+const save = () => {
+  // If editing existing contact and address changed, remove old entry
+  if (editedAddress.value && editedAddress.value !== editedItem.value.address) {
+    delete contacts.value[editedAddress.value];
+    removeContact(loggedWallet.value.id, editedAddress.value);
+  }
+  
+  // Add/update contact directly in store
+  const contactData = {
+    name: editedItem.value.name,
+    address: editedItem.value.address,
+  };
+  
+  contacts.value[editedItem.value.address] = contactData;
+  addOrUpdateContact(loggedWallet.value.id, contactData);
+  close();
+};
 </script>
 
 <style scoped>

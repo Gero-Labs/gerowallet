@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    title="Receive ADA"
-    subtitle="Share your address or scan the QR code to receive ADA safely."
+    title="My Wallet Addresses"
+    subtitle=""
     :min-height="300"
     :height="600"
   >
@@ -15,7 +15,8 @@
       >
         <v-tab>Payment</v-tab>
         <v-tab>Reward</v-tab>
-        <v-tab>DRep</v-tab>
+        <v-tab>DRep 105</v-tab>
+        <v-tab>DRep 129</v-tab>
       </v-tabs>
       <v-tabs-items v-model="tab" class="transparent">
         <v-tab-item eager v-for="(item, i) in tabs" :key="i">
@@ -23,7 +24,7 @@
             <v-list-item-avatar size="160" rounded>
               <div
                 class="qr-container"
-                :ref="el => qrContainers[i].value = el"
+                :ref="el => setQrContainerRef(el, i)"
               ></div>
             </v-list-item-avatar>
             <v-list-item-content class="pl-4">
@@ -35,72 +36,119 @@
               >
                 {{ filters.truncate(item.value) }}
               </span>
-                <CopyButton :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
+                <CopyButton class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
               </div>
-              <p class="path-text">{{ item.path }}</p>
+              <p class="path-text">HD Path: {{ item.path }}</p>
+              <p class="path-text">Cred: {{ filters.truncate(item.cred) }}<CopyButton class="ml-1" :value="item.cred" x-small /></p>
               <p class="info-text">{{ item.info }}</p>
             </v-list-item-content>
           </v-list-item>
         </v-tab-item>
       </v-tabs-items>
     </v-card-title>
-    <v-card-title class="py-0 px-3">Used Addresses</v-card-title>
-    <v-card-text class="px-3 pb-0">
-      <v-data-table
-        :headers="usedHeaders"
-        :items="usedAddresses"
-        hide-default-footer
-        hide-default-header
-        disable-pagination
-      >
-        <template #item.address="{ item }">
-          <v-list-item class="py-0">
-            <v-list-item-content>
-              <v-list-item-title>
-                {{ filters.shortenStringWithEllipsis(item.address, 40) }}
-                <CopyButton x-small :value="item.address" />
-              </v-list-item-title>
-              <v-list-item-subtitle>
-                <span style="color: white">HD Path: </span>{{ item.path }}
-              </v-list-item-subtitle>
-              <v-list-item-subtitle>
-                <span style="color: white">Cred: </span>{{ filters.shortenStringWithEllipsis(item.cred, 40) }}
-                <CopyButton x-small :value="item.cred" />
-              </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-        </template>
-      </v-data-table>
+    <v-card-text class="px-3 pb-3">
+      <v-expansion-panels v-model="expandedPanels" multiple class="accordion-container">
+        <v-expansion-panel style="background-color: #1e273ab3; border-radius: 8px;">
+          <v-expansion-panel-header>
+            <div class="header-container">
+              <div class="icon-container">
+                <v-icon color="#333741">mdi-wallet-outline</v-icon>
+              </div>
+              <h3>Used Addresses ({{ usedAddresses.length }})</h3>
+              <v-spacer />
+              <v-switch
+                inset
+                class="my-0 mr-2"
+                v-model="showInternal"
+                dense
+                hide-details
+                label="Show Internal"
+                @click.stop
+              />
+            </div>
+          </v-expansion-panel-header>
+          <v-expansion-panel-content class="content-container">
+            <v-card flat class="transparent">
+              <v-card-text class="px-0 pt-2">
+                <v-simple-table dense style="background-color: transparent">
+                  <thead>
+                    <tr>
+                      <th class="text-left grey--text">Address</th>
+                      <th class="text-left grey--text">Path</th>
+                      <th class="text-center grey--text">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in usedAddresses" :key="index">
+                      <td class="text-left">
+                        <div class="d-flex align-center">
+                          <span class="address-cell">{{ filters.shortenStringWithEllipsis(item.address, 40) }}</span>
+                          <CopyButton x-small :value="item.address" class="ml-1" />
+                        </div>
+                        <div class="d-flex align-center mt-1">
+                          <span class="caption grey--text">Cred: {{ filters.truncate(item.cred) }}</span>
+                          <CopyButton x-small :value="item.cred" class="ml-1" />
+                        </div>
+                      </td>
+                      <td class="text-left">
+                        <span class="path-cell">{{ item.path }}</span>
+                      </td>
+                      <td class="text-center">
+                        <v-chip 
+                          x-small 
+                          outlined 
+                          :color="item.internal ? 'orange' : 'primary'"
+                        >
+                          {{ item.internal ? 'Internal' : 'External' }}
+                        </v-chip>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-simple-table>
+                <div v-if="usedAddresses.length === 0" class="text-center py-4 grey--text">
+                  No used addresses found
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-expansion-panel-content>
+        </v-expansion-panel>
+      </v-expansion-panels>
     </v-card-text>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, toRefs, computed } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
-import { useStore } from '@/stores';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
-import { governanceStore } from '@/stores/modules/governance';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/stores/walletStore';
+import networks from '@/utils/networks';
 
 const props = defineProps<{ isOpen: boolean }>();
 const emit = defineEmits(['close']);
 
-const store = useStore();
-const governanceStore1 = governanceStore();
-const walletConfigStore1 = walletConfigStore();
+const { loggedWallet, keys } = toRefs(walletStore);
+
+const showInternal = ref<boolean>(false);
+const expandedPanels = ref<number[]>([]);
 
 // current tab index
 const tab = ref(0);
 
 // refs for the QR code container elements
-const qrContainers = [ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null)];
+const qrContainers = [ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null)];
 // hold QRCodeStyling instances
 const qrcodes: (QRCodeStyling | null)[] = [null, null, null];
 let copyButtonRefs = {};
+
+const setQrContainerRef = (el: Element | null, index: number) => {
+  if (el && qrContainers[index]) {
+    qrContainers[index].value = el as HTMLElement;
+  }
+}
 
 const setCopyButtonRef = (el, address) => {
   if (!copyButtonRefs) {
@@ -118,40 +166,61 @@ const triggerCopy = (address) => {
   }
 }
 
-// tab definitions
-const tabs = [
-  {
-    label: 'Payment Address',
-    value: store.baseAddress,
-    path: 'm/1852\'/1815\'/0\'/0/0',
-    info: 'Generate new address after each use for privacy.',
-  },
-  {
-    label: 'Reward (Stake) Address',
-    value: store.stakeAddress,
-    path: 'm/1852\'/1815\'/0\'/2/0',
-    info: 'Use this to claim staking rewards.',
-  },
-  {
-    label: 'Delegated Rep (DRep) ID',
-    value: governanceStore1.drepId,
-    path: 'm/1852\'/1815\'/0\'/3/0',
-    info: 'Share to delegate your stake securely.',
-  },
-];
+const tabs = computed(() => {
+  if (!keys.value) {
+    return []
+  }
+  return [
+    {
+      label: 'Payment Address',
+      value: keys.value.payment[0].address,
+      path: keys.value.payment[0].path,
+      cred: keys.value.payment[0].cred,
+      info: `Share your payment address or scan the QR code to receive ${networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)} safely.`,
+    },
+    {
+      label: 'Reward (Stake) Address',
+      value: keys.value.stake[0].address,
+      path: keys.value.stake[0].path,
+      cred: keys.value.stake[0].cred,
+      info: 'Use this to claim staking rewards.',
+    },
+    {
+      label: 'Delegated Representative ID (CIP-105)',
+      value: keys.value.drep105[0].address,
+      path: keys.value.drep105[0].path,
+      cred: keys.value.drep105[0].cred,
+      info: 'Used to Participate in Cardano Governance Actions.',
+    },
+    {
+      label: 'Delegated Representative ID (CIP-129)',
+      value: keys.value.drep129[0].address,
+      path: keys.value.drep129[0].path,
+      cred: keys.value.drep129[0].cred,
+      info: 'Used to Participate in Cardano Governance Actions.',
+    },
+  ]
+})
 
 // table for used addresses
 const usedHeaders = [{ text: 'Address', value: 'address', align: 'left' }];
-const usedAddresses = ref<any[]>([]);
 
-function updateUsed() {
-  const all = walletConfigStore1.addresses || {};
-  usedAddresses.value = Object.values(all).filter(a => a.address !== store.baseAddress);
-}
-
-function copyAddress(addr: string) {
-  navigator.clipboard.writeText(addr);
-}
+const usedAddresses = computed(() => {
+  const results = []
+  if (!keys.value) {
+    return results
+  }
+  results.push(...keys.value.payment.filter(a => a.used));
+  if (showInternal.value) {
+    results.push(...keys.value.change.filter(a => a.used).map(el => {
+      return {
+        ...el,
+        internal: true,
+      }
+    }));
+  }
+  return results
+})
 
 // whenever the dialog opens, initialize or update all QR codes
 watch(
@@ -160,7 +229,7 @@ watch(
     if (!open) return;
     await nextTick();
 
-    tabs.forEach((tabItem, i) => {
+    tabs.value.forEach((tabItem, i) => {
       // create QR instance if missing
       if (!qrcodes[i]) {
         qrcodes[i] = new QRCodeStyling({
@@ -187,8 +256,6 @@ watch(
         qrcodes[i]!.append(el);
       }
     });
-
-    updateUsed();
   },
   { immediate: true },
 );
@@ -224,6 +291,7 @@ watch(
   font-size: 1rem;
   color: #ddd;
   margin-top: 0.5rem;
+  word-break: break-word;
 }
 
 .used-title {
@@ -234,5 +302,88 @@ watch(
 .cred-text {
   font-size: 0.9rem;
   color: #ccc;
+}
+
+/* Collapsible panel styles */
+.accordion-container {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.accordion-container .v-expansion-panel {
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.accordion-container .v-expansion-panel:hover {
+  border-color: rgba(0, 223, 243, 0.3);
+  box-shadow: 0 0 10px rgba(0, 223, 243, 0.1);
+}
+
+.accordion-container .v-expansion-panel--active {
+  border-color: rgba(0, 223, 243, 0.5);
+  box-shadow: 0 0 15px rgba(0, 223, 243, 0.2);
+}
+
+.header-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.icon-container {
+  background-color: rgba(0, 223, 243, 0.1);
+  border-radius: 50%;
+  padding: 8px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-container .v-icon {
+  color: #00dff3 !important;
+}
+
+.content-container {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.address-cell {
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.path-cell {
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: #bbb;
+}
+
+/* Override expansion panel chevron color */
+.v-expansion-panel-header__icon .v-icon {
+  color: #00dff3 !important;
+}
+
+/* Style the table headers */
+.v-data-table thead th {
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Style the switch inside the header */
+.v-expansion-panel-header .v-input--switch {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.v-expansion-panel-header .v-input--switch .v-label {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 </style>

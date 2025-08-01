@@ -31,7 +31,7 @@
               Net Price
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['net_price'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['net_price'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -39,7 +39,7 @@
               Min. Receive
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ estimation['total_output'] | toCurrency(false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['total_output'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
 <!--          <v-col cols="12" xl="4" lg="4" md="4">-->
@@ -69,7 +69,7 @@
         </v-row>
         <v-divider class="mt-1"></v-divider>
       </v-card-title>
-      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 125px)">
+      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 200px)">
         <v-row no-gutters>
           <v-col cols="6" v-for="(dex,index) in dexes" :key="index" style="height: 38px">
             <v-list-item class="px-2" dense>
@@ -89,7 +89,7 @@
               </v-list-item-action>
               <v-list-item-content>
                 <v-list-item-title class="text-left" style="font-size: 10px;" :style="dex.amount === 0 ? { color: 'grey'} : dex['priceImpact'] > 3 ? { color: '#FEC84B' } : {}">
-                  {{ dex.amount | toCurrency(false, 2, '', ` ${tokenA['ticker']}`, true, 0)}}
+                  {{ filters.toCurrency(dex.amount, false, 2, '', ` ${tokenA['ticker']}`, true, 0)}}
                 </v-list-item-title>
                 <v-list-item-subtitle>
                   <v-progress-linear height="8" color="#88919e" :value="dex.percentage"></v-progress-linear>
@@ -102,98 +102,87 @@
     </v-card>
   </v-overlay>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { ref, computed, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
-import { mapState } from 'pinia';
-import { useStore} from '@/stores';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/stores/walletStore';
 
-export default defineComponent({
-  name: 'SwapOverviewOverlay',
-  props: {
-    value: {
-      type: Boolean,
-    },
-    tokenA: {
-      type: Object,
-    },
-    tokenB: {
-      type: Object,
-    },
-    slippage: {
-      type: String,
-    },
-    estimation: {
-      type: Object
-    }
-  },
-  computed: {
-    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos']),
-    dexes() {
-      if (this.estimation && this.estimation['splits']) {
-        const template = JSON.parse(JSON.stringify(this.dexesTemplate))
-        let totalAmount = 0
-        this.estimation['splits'].forEach(split => {
-          totalAmount += split.amount_in
-        })
-        this.estimation['splits'].forEach(split => {
-          const dex = template.find(dex => dex.name === split.dex)
-          if (dex) {
-            dex.amount += split.amount_in
-            dex.priceImpact = split.price_impact
-            dex.percentage = dex.amount / totalAmount * 100
-          }
-        })
-        return template
-      } else {
-        return this.dexesTemplate
-      }
-    }
-  },
-  filters,
-  methods: {
-    toggleExclude(dexName) {
-      if (!this.excluded.includes(dexName)) {
-        if (this.excluded.length != this.dexes.length - 1) {
-          this.excluded.push(dexName)
-        }
-      } else {
-        const index = this.excluded.indexOf(dexName)
-        if (index > -1) {
-          this.excluded.splice(index, 1)
-        }
-      }
-      this.$emit('excludedChange', this.excluded)
-    },
-    closeOverlay() {
-      this.$emit('input', false);
-    },
-  },
-  data: () => ({
-    dexesTemplate: [
-      { name: 'SPLASH', img: 'https://storage.googleapis.com/dexhunter-images/public/splashlogo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'MINSWAPV2', img: 'https://minswap.org/_next/static/media/minswap-v2-logo.25f219f1.svg', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'SUNDAESWAPV3', img: 'https://storage.googleapis.com/dexhunter-images/public/sundaev3.webp', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'AXO', img: 'https://storage.googleapis.com/dexhunter-images/public/axo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'VYFI', img: 'https://storage.googleapis.com/dexhunter-images/public/vyfi.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'WINGRIDER', img: 'https://storage.googleapis.com/dexhunter-images/public/wingriders.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'SPECTRUM', img: 'https://storage.googleapis.com/dexhunter-images/public/spectrum.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'MINSWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/minswap.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'SUNDAESWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/sundae.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'CERRASWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/cerralogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'SATURN', img: 'https://storage.googleapis.com/dexhunter-images/public/saturn.jpg', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'GENIUS', img: 'https://storage.googleapis.com/dexhunter-images/public/geniusyield.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
-      { name: 'MUESLISWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/mueslilogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
-    ],
-    excluded: [],
-    swapData: {
-      bonusOutput: 'Direct Swap',
-      netPriceReverse: 0
-    }
-  }),
+interface Props {
+  value?: boolean;
+  tokenA?: any;
+  tokenB?: any;
+  slippage?: string;
+  estimation?: any;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  input: [value: boolean];
+  excludedChange: [excluded: string[]];
+}>();
+
+const dexesTemplate = ref([
+  { name: 'SPLASH', img: 'https://storage.googleapis.com/dexhunter-images/public/splashlogo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'MINSWAPV2', img: 'https://minswap.org/_next/static/media/minswap-v2-logo.25f219f1.svg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'SUNDAESWAPV3', img: 'https://storage.googleapis.com/dexhunter-images/public/sundaev3.webp', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'AXO', img: 'https://storage.googleapis.com/dexhunter-images/public/axo.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'VYFI', img: 'https://storage.googleapis.com/dexhunter-images/public/vyfi.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'WINGRIDER', img: 'https://storage.googleapis.com/dexhunter-images/public/wingriders.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'SPECTRUM', img: 'https://storage.googleapis.com/dexhunter-images/public/spectrum.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'MINSWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/minswap.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'SUNDAESWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/sundae.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'CERRASWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/cerralogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'SATURN', img: 'https://storage.googleapis.com/dexhunter-images/public/saturn.jpg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'GENIUS', img: 'https://storage.googleapis.com/dexhunter-images/public/geniusyield.jpeg', amount: 0, priceImpact: 0, percentage: 0 },
+  { name: 'MUESLISWAP', img: 'https://storage.googleapis.com/dexhunter-images/public/mueslilogodh.png', amount: 0, priceImpact: 0, percentage: 0 },
+]);
+
+const excluded = ref<string[]>([]);
+
+const swapData = ref({
+  bonusOutput: 'Direct Swap',
+  netPriceReverse: 0
 });
+
+const dexes = computed(() => {
+  if (props.estimation && props.estimation['splits']) {
+    const template = JSON.parse(JSON.stringify(dexesTemplate.value));
+    let totalAmount = 0;
+    props.estimation['splits'].forEach((split: any) => {
+      totalAmount += split.amount_in;
+    });
+    props.estimation['splits'].forEach((split: any) => {
+      const dex = template.find((dex: any) => dex.name === split.dex);
+      if (dex) {
+        dex.amount += split.amount_in;
+        dex.priceImpact = split.price_impact;
+        dex.percentage = dex.amount / totalAmount * 100;
+      }
+    });
+    return template;
+  } else {
+    return dexesTemplate.value;
+  }
+});
+
+const toggleExclude = (dexName: string) => {
+  if (!excluded.value.includes(dexName)) {
+    if (excluded.value.length != dexes.value.length - 1) {
+      excluded.value.push(dexName);
+    }
+  } else {
+    const index = excluded.value.indexOf(dexName);
+    if (index > -1) {
+      excluded.value.splice(index, 1);
+    }
+  }
+  emit('excludedChange', excluded.value);
+};
+
+const closeOverlay = () => {
+  emit('input', false);
+};
 </script>
 <style scoped>
 .v-list-item__content {

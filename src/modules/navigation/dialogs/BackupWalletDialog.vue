@@ -231,13 +231,14 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
-import { appWallet } from '@/stores';
 import { decrypt } from '@/shared/utils/crypto';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import snackbar from '@/plugins/snackbar';
+import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 
 interface Props {
   isOpen: boolean;
@@ -245,6 +246,8 @@ interface Props {
 const props = defineProps<Props>();
 
 const emit = defineEmits(['close']);
+
+const { loggedWallet, config } = toRefs(walletStore);
 
 const persistent = ref<boolean>(false);
 const step = ref<number>(1);
@@ -330,11 +333,11 @@ const backupWalletStep1 = (): void => {
     seedPhrase.value = bip39.generateMnemonic(256).split(' ');
   }
 }
-const walletConfig = walletConfigStore()
 
 const backupWalletStep2 = (): void => {
   if (vmProxy.$refs.form.validate()) {
-    walletConfig.setBackup(true)
+    // Set backup status using walletStore setBackup function
+    WalletStore.setBackup(true);
     emit('close')
     resetDialog()
     nextTick(() => {
@@ -387,7 +390,7 @@ const randomReplace = (array: string[], count: number) => {
 const decryptMnemonic = async (): Promise<void> => {
   if (vmProxy.$refs.formUnlock.validate()) {
     try {
-      const decryptedMnemonic = decrypt(appWallet.encryptedMnemonic, password.value)
+      const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value)
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
         throw new Error('Invalid Password')
       }

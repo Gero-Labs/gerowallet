@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
+  <BaseDialog :isOpen="isOpen" @close="emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
               :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
@@ -44,8 +44,7 @@
           ></AssetsToSendStep>
         </v-stepper-content>
         <v-stepper-content step="3">
-          <SummaryStep ref="summary" :sendData="sendData" :tx-data="txData" @next="signAndSubmitTx"
-                       @prev="prevStep"></SummaryStep>
+          <SummaryStep ref="summary" :sendData="sendData" :tx-data="txData" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
         </v-stepper-content>
       </CustomStepper>
       <v-overlay
@@ -86,18 +85,18 @@
           </v-card-subtitle>
           <v-card-text class="text-center">
             <div class="qr-scanner" v-show="isInit">
-              <QrcodeStream @decode="onDecode" @init="onInit">
-                <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>
-                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>
-                </div>
-              </QrcodeStream>
+<!--              <QrcodeStream @decode="onDecode" @init="onInit">-->
+<!--                <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
+<!--                  <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
+<!--                </div>-->
+<!--              </QrcodeStream>-->
             </div>
             <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
               <v-progress-circular size="150" indeterminate></v-progress-circular>
@@ -161,7 +160,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <USBBluetoothSwitch v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -169,7 +168,7 @@
         <v-btn
           text
           @click="prevStep"
-          v-if="this.currentStep > 1"
+          v-if="currentStep > 1"
           class="mr-2"
           :disabled="txSubmitLoading"
         >
@@ -180,23 +179,21 @@
           @click="nextStep"
           :disabled="!isValid || txSubmitLoading"
           :loading="txSubmitLoading"
-        >{{ this.currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
+        >{{ currentStep === 3 ? 'Sign and Confirm ' : 'Continue ' }}
           <v-icon style="color: black!important;" small v-if="currentStep !==3" class="ml-1">mdi-arrow-right</v-icon>
         </v-btn>
       </div>
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import { appWallet, useStore } from '@/stores';
-import { mapState } from 'pinia';
-import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
+import { assetsToValue, parseAddress, toUTxO, toUTxO2 } from '@/shared/utils/converter';
+import { buildTx as buildTx2 } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import {
@@ -208,402 +205,390 @@ import {
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import Vue from 'vue';
+import Vue, { toRefs, onMounted, computed, ref, watch } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
-import { QrcodeStream } from "vue-qrcode-reader";
-// import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
+// import { QrcodeStream } from "vue-qrcode-reader";
 import { UREncoder } from '@keystonehq/keystone-sdk';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { isPaymentAddress, isPaymentAddressOrHandle } from '@/chrome/serialization';
-import { calculateTokenShortage } from '@/shared/utils/tokens';
+import { isPaymentAddress } from '@/chrome/serialization';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
-export default {
-  name: 'SendDialog',
-  components: { QrcodeStream, USBBluetoothSwitch, BaseDialog, CustomStepper, SendRecipientDetailsStep, AssetsToSendStep, SummaryStep },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
+interface Props {
+  isOpen: boolean;
+}
+
+const props = defineProps<Props>();
+const emit = defineEmits(['close']);
+
+const { loggedWallet, utxos, tokens: resolvedAssets } = toRefs(walletStore)
+const { tip, epochParams } = toRefs(networkStore)
+
+const currentStep = ref<number>(1);
+const sendData = ref<any>({
+  selectedTokens: [],
+  selectedCollectibles: [],
+  recipientAddress: '',
+  selectedWallet: {},
+  minAda: 0,
+  adaShortage: 0
+});
+const txValid = ref<boolean>(false);
+const spendingPassword = ref<string>('');
+const steps = ref<any[]>([
+  {
+    name: 'recipientDetails',
+    label: 'Recipient Details',
   },
-  computed: {
-    WalletType() {
-      return WalletType
-    },
-    networks() {
-      return networks
-    },
-    ...mapState(useStore, ['loggedWallet', 'resolvedAssets', 'baseAddress', 'latestTip', 'pinnedTokens']),
-    ...mapState(walletConfigStore, ['utxos', 'addresses']),
-    tokens() {
-      if (this.resolvedAssets) {
-        const tokens = this.resolvedAssets.map(token => {
-          return {
-            ...token,
-            name: token.metadata.name,
-            ticker: token.metadata.ticker,
-            img: token.img,
-            quantity: "0",
-            balance: token.quantity,
-            decimals: token.metadata.decimals,
-            unit: token.unit
-          }
-        })
-        tokens.sort((a,b) => {
-          if (a.ticker === networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)) {
-            return -1
-          }
-          return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker)
-        })
-        return tokens
+  {
+    name: 'assetsToSend',
+    label: 'Assets to Send',
+  },
+  {
+    name: 'summary',
+    label: 'Summary',
+  },
+]);
+const tooltip = ref<any>({
+  enabled: false,
+  text: 'Wrong Spending Password!',
+});
+const txBody = ref<any>(undefined);
+const txData = ref<any>(undefined);
+const txSubmitLoading = ref<boolean>(false);
+const show1 = ref<boolean>(false);
+const isBT = ref<boolean>(false);
+const overlay = ref<boolean>(false);
+const type = ref<string>('');
+const cbor = ref<string>('');
+const keystoneScan = ref<boolean>(false);
+const isInit = ref<boolean>(false);
+
+const tokens = computed(() => {
+  if (resolvedAssets.value) {
+    const tokens = Object.values(resolvedAssets.value).map(token => {
+      return {
+        ...token,
+        name: token.metadata.name,
+        ticker: token.metadata.ticker,
+        img: token.img,
+        quantity: "0",
+        balance: token.quantity,
+        decimals: token.metadata.decimals,
+        unit: token.unit
       }
-      return []
-    },
-    isValid() {
-      if (this.currentStep === 1) {
-        const fn = rules.recipientRules(this.loggedWallet?.chain, this.loggedWallet?.network);
-        return fn(this.sendData.recipientAddress) !== 'Invalid Payment Address'
+    })
+    tokens.sort((a,b) => {
+      if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+        return -1
       }
-      if (this.currentStep === 2) {
-        if (!this.txValid) {
-          return false;
-        }
-        // calculate the total shortage of the selected tokens
-        const totalShortage = this.sendData.selectedTokens
-                                          .map(
-                                            token => {
-                                              return calculateTokenShortage(token)
-                                            }
-                                          )
-                                          .reduce((acc, quantity) => acc + quantity, 0);
-        if (Math.abs(totalShortage) > 0) {
-          return false;
-        }
-        const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
-        return !(hasZeroQuantity(this.sendData.selectedTokens) || hasZeroQuantity(this.sendData.selectedCollectibles));
-      }
-      if (this.currentStep === 3) {
-        if (this.loggedWallet?.type === WalletType.Normal) {
-          return !!this.spendingPassword;
-        } else {
-          return true
-        }
-      }
+      // return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker) TODO
+    })
+    return tokens
+  }
+  return []
+})
+
+const isValid = computed(() => {
+  if (currentStep.value === 1) {
+    const fn = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
+    return fn(sendData.value.recipientAddress) !== 'Invalid Payment Address'
+  }
+  if (currentStep.value === 2) {
+    console.log('step2')
+    if (!txValid.value) {
       return false;
-    },
-  },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.resetData();
-      }
-    },
-    sendData: {
-      handler(val, oldVal) {
-        try {
-          if (!val.recipientAddress) {
-            return;
-          }
-          this.buildTx(this.sendData.selectedTokens)
-          this.txValid = true
-        } catch(e) {
-          console.error(e)
-          if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-            const match = e.match(/minimum UTXO value (\d+)/);
-            const number = match ? parseInt(match[1], 10) : null;
-            this.sendData.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-          } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-            const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-            const number = parseInt(match[2], 10) - parseInt(match[1], 10)
-            this.sendData.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-          }
-          this.txValid = false
-        }
-      },
-      deep: true,
     }
-  },
-  data: () => ({
-    steps: [
-      {
-        name: 'recipientDetails',
-        label: 'Recipient Details',
-      },
-      {
-        name: 'assetsToSend',
-        label: 'Assets to Send',
-      },
-      {
-        name: 'summary',
-        label: 'Summary',
-      },
-    ],
-    currentStep: 1,
-    tooltip: {
-      enabled: false,
-      text: 'Wrong Spending Password!',
-    },
-    txBody: undefined,
-    txData: undefined,
-    txSubmitLoading: false,
-    spendingPassword: '',
-    show1: false,
-    rules,
-    sendData: {
-      selectedTokens: [],
-      selectedCollectibles: [],
-      recipientAddress: '',
-      selectedWallet: {},
-      minAda: 0,
-      adaShortage: 0
-    },
-    txValid: false,
-    isBT: false,
-    overlay: false,
-    type: undefined,
-    cbor: undefined,
-    keystoneScan: false,
-    isInit: false,
-  }),
-  methods: {
-    backScan() {
-      if (this.keystoneScan) {
-        this.keystoneScan = false
-        this.isInit = false
-      } else {
-        this.overlay = false
-      }
-    },
-    async onDecode(result) {
-      console.log(result)
-      const signature = parseSignature(result);
+    const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
+    return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles));
+  }
+  if (currentStep.value === 3) {
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      return !!spendingPassword.value;
+    } else {
+      return true
+    }
+  }
+  return false;
+})
+
+const resetData = () => {
+  show1.value = false
+  keystoneScan.value = false
+  isInit.value = false
+  overlay.value = false
+  spendingPassword.value = ''
+  currentStep.value = 1;
+  txSubmitLoading.value = false
+  txBody.value = undefined
+  txData.value = undefined
+  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
+  const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
+  if (foundAsset) {
+    foundAsset.verified = true
+  }
+  sendData.value = {
+    selectedTokens: [foundAsset],
+    selectedCollectibles: [],
+    recipientAddress: '',
+    selectedWallet: loggedWallet.value,
+  };
+  console.log(sendData.value)
+}
+
+const backScan = () => {
+  if (keystoneScan.value) {
+    keystoneScan.value = false
+    isInit.value = false
+  } else {
+    overlay.value = false
+  }
+}
+
+const onDecode = async (result) => {
+  console.log(result)
+  const signature = parseSignature(result);
+  const signedTx = Transaction.new(
+    txBody.value,
+    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+    undefined // TODO Transaction metadata
+  );
+  console.log(signedTx.to_json())
+  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
+  console.log(txId)
+  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
+  emit('close')
+}
+
+const onInit = (promise) => {
+  promise.then(() => {
+    isInit.value = true
+    console.log("Camera initialized successfully");
+  }).catch((error) => {
+    console.error("Camera initialization failed:", error);
+  });
+}
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+}
+
+async function signAndSubmitTx() {
+  const signAndReturnTx = async () => {
+    txSubmitLoading.value = true
+    try {
+      const txCbor = txData.value.to_hex()
+      const partialSign = false
+      const response = await loggedWallet.value.signTx(
+        txCbor,
+        partialSign,
+        spendingPassword.value,
+        0,
+        utxos.value,
+        addresses.value, //TODO
+        !isBT.value
+      );
       const signedTx = Transaction.new(
-        this.txBody,
-        TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+        txBody.value,
+        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
         undefined // TODO Transaction metadata
       );
       console.log(signedTx.to_json())
-      const txId = await appWallet.submitTx(signedTx, this.utxos);
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId)
       snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-      this.$emit('close')
-    },
-    onInit(promise) {
-      promise.then(() => {
-        this.isInit = true
-        console.log("Camera initialized successfully");
-      }).catch((error) => {
-        console.error("Camera initialization failed:", error);
-      });
-    },
-    enableToolTip() {
-      this.tooltip.enabled = true;
-      setTimeout(() => {
-        this.tooltip.enabled = false;
-      }, 3000);
-    },
-    async signAndSubmitTx() {
-      const signAndReturnTx = async () => {
-        this.txSubmitLoading = true
-        try {
-          const txCbor = this.txData.to_hex()
-          const partialSign = false
-          const response = await appWallet.signTx(
-            txCbor,
-            partialSign,
-            this.spendingPassword,
-            0,
-            this.utxos,
-            this.addresses,
-            !this.isBT
-          );
-          const signedTx = Transaction.new(
-            this.txBody,
-            TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-            undefined // TODO Transaction metadata
-          );
-          console.log(signedTx.to_json())
-          const txId = await appWallet.submitTx(signedTx, this.utxos);
-          console.log(txId)
-          snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-          this.$emit('close')
-        } catch (e) {
-          snackbar.setError(e)
-          console.error(e);
-        }
-        this.txSubmitLoading = false
-      };
-      if (appWallet?.type === WalletType.Normal) {
-        if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-          await signAndReturnTx();
-        } else {
-          this.enableToolTip();
-        }
-      } else if (appWallet?.type === WalletType.Keystone) {
-        if (this.qrCode) {
-          this.qrCode = null; // Clear the QRCode instance
-          if (this.$refs.qrCode)
-            this.$refs.qrCode.innerHTML = '';
-        }
-
-        const ur = createKeystoneSignRequest(this.txData, this.loggedWallet, this.utxos, this.addresses)
-        this.type = ur.type
-        this.cbor = Buffer.from(ur.cbor).toString('hex')
-        qrCodeOptions(UREncoder.encodeSinglePart(ur), 430)
-        console.log('')
-        this.overlay = true
-        this.qrCode = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-        Vue.nextTick(() => {
-          this.qrCode.append(this.$refs.qrCode);
-        });
-        console.log('qrCode')
-      } else {
-        await signAndReturnTx();
-      }
-    },
-    buildTx(sendTokens) {
-      if (!this.sendData.recipientAddress || !isPaymentAddress(this.sendData.recipientAddress)) {
-        return
-      }
-      const recipientAddress = this.sendData.recipientAddress;
-      const tokens = [];
-      if (sendTokens.length > 0) {
-        sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
-          if (token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)) {
-            tokens.push({
-              unit: 'lovelace',
-              quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-            });
-          } else {
-            tokens.push({
-              unit: token.unit,
-              quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-            });
-          }
-        });
-      }
-      if (this.sendData.selectedCollectibles.length > 0) {
-        this.sendData.selectedCollectibles.forEach(collectible => {
-          tokens.push({
-            unit: collectible.unit,
-            quantity: collectible.toSendQuantity.toString(),
-          });
-        });
-      }
-      const outputs = TransactionOutputs.new();
-      outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      try {
-        this.txBody = buildTx(this.sendData.selectedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], []);
-        this.sendData.minAda = 0
-        this.sendData.adaShortage = 0
-        this.txValid = true
-        this.txData = Transaction.new(this.txBody, TransactionWitnessSet.new())
-      } catch (e) {
-        console.log(e)
-        throw e
-      }
-    },
-    nextStep() {
-      if (this.currentStep <= this.steps.length) {
-        if (this.currentStep === 1) {
-          this.currentStep++;
-        } else if (this.currentStep === 2) {
-          this.$refs.summary.scanTx(this.txData);
-          this.currentStep++;
-        } else if (this.currentStep === 3) {
-          this.signAndSubmitTx();
-        }
-      }
-    },
-    prevStep() {
-      if (this.currentStep > 1) {
-        this.currentStep--;
-      }
-    },
-    updateRecipientAddress(address) {
-      this.sendData.recipientAddress = address;
-    },
-    selectCollectible(collectible) {
-      if (this.sendData.selectedCollectibles[collectible.name]) {
-        this.$delete(this.sendData.selectedCollectibles, collectible.name);
-      } else {
-        this.$set(this.sendData.selectedCollectibles, collectible.name, collectible);
-      }
-    },
-    setMax(index) {
-      const sendTokensCopy = JSON.parse(JSON.stringify(this.sendData.selectedTokens));
-      const selectedToken = sendTokensCopy[index];
-
-      if (selectedToken.decimals) {
-        selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
-      } else {
-        selectedToken.quantity = Number(selectedToken.balance);
-      }
-      this.tryBuildMaxTx(sendTokensCopy, index);
-    },
-    tryBuildMaxTx(tokens, index) {
-      try {
-        this.buildTx(tokens)
-      } catch (e) {
-        if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-          const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-          const maxBalance = Number(match[2]) - Number(match[3])
-          this.sendData.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-        } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-          const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
-          console.log(match)
-          const adaMinBalance = match[2]
-          const nativeToken = this.sendData.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network))
-          if (nativeToken) {
-            nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-            this.sendData.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
-          }
-        } else {
-          console.log(e)
-        }
-      }
-    },
-    resetData() {
-      this.show1 = false
-      this.keystoneScan = false
-      this.isInit = false
-      this.overlay = false
-      this.spendingPassword = ''
-      this.currentStep = 1;
-      this.txSubmitLoading = false
-      this.txBody = undefined
-      this.txData = undefined
-      const currencyTicker = networks.resolveCurrencyTicker(appWallet.chain, appWallet.network)
-      const foundAsset = this.tokens.find(token => token.ticker === currencyTicker)
-      if (foundAsset) {
-        foundAsset.verified = true
-      }
-      this.sendData = {
-        selectedTokens: [foundAsset],
-        selectedCollectibles: [],
-        recipientAddress: '',
-        selectedWallet: this.loggedWallet,
-      };
-      console.log(this.sendData)
-    },
-  },
-  mounted() {
-    if (this.resolvedAssets) {
-      const nativeTicker = networks.resolveCurrencyTicker(this.loggedWallet.chain, this.loggedWallet.network)
-      const adaAssetFound = this.resolvedAssets.find(asset => asset.metadata.ticker === nativeTicker);
-      if (adaAssetFound) {
-        this.sendData.selectedTokens = [adaAssetFound];
-      }
+      emit('close');
+    } catch (e) {
+      snackbar.setError(e)
+      console.error(e);
     }
-  },
-};
-</script>
+    txSubmitLoading.value = false
+  };
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
+      await signAndReturnTx();
+    } else {
+      enableToolTip();
+    }
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
+    if (qrCode.value) {
+      qrCode.value = null; // Clear the QRCode instance
+      if (vmProxy.$refs.qrCode)
+        vmProxy.$refs.qrCode.innerHTML = '';
+    }
 
+    const ur = createKeystoneSignRequest(txData.value, loggedWallet.value, utxos.value, addresses.value)
+    type.value = ur.type
+    cbor.value = Buffer.from(ur.cbor).toString('hex')
+    qrCodeOptions(UREncoder.encodeSinglePart(ur), 430)
+    console.log('')
+    overlay.value = true
+    qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
+    Vue.nextTick(() => {
+      qrCode.value.append(vmProxy.$refs.qrCode);
+    });
+    console.log('qrCode')
+  } else {
+    await signAndReturnTx();
+  }
+}
+
+function buildTx(sendTokens) {
+  if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
+    return
+  }
+  const recipientAddress = sendData.value.recipientAddress;
+  const tokens = [];
+  if (sendTokens.length > 0) {
+    sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
+      if (token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)) {
+        tokens.push({
+          unit: 'lovelace',
+          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+        });
+      } else {
+        tokens.push({
+          unit: token.unit,
+          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
+        });
+      }
+    });
+  }
+  if (sendData.value.selectedCollectibles.length > 0) {
+    sendData.value.selectedCollectibles.forEach(collectible => {
+      tokens.push({
+        unit: collectible.unit,
+        quantity: collectible.toSendQuantity.toString(),
+      });
+    });
+  }
+  const outputs = TransactionOutputs.new();
+  outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
+  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
+  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
+  try {
+    txBody.value = buildTx2(epochParams.value, outputs, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, [], []);
+    sendData.value.minAda = 0
+    sendData.value.adaShortage = 0
+    txValid.value = true
+    txData.value = Transaction.new(txBody.value, TransactionWitnessSet.new())
+  } catch (e) {
+    console.log(e)
+    throw e
+  }
+}
+
+const vmProxy = getCurrentInstance()!.proxy as any
+
+function nextStep() {
+  if (currentStep.value <= steps.value.length) {
+    if (currentStep.value === 1) {
+      currentStep.value++;
+    } else if (currentStep.value === 2) {
+      vmProxy.$refs.summary.scanTx(txData.value);
+      currentStep.value++;
+    } else if (currentStep.value === 3) {
+      signAndSubmitTx();
+    }
+  }
+}
+
+function prevStep() {
+  if (currentStep.value > 1) {
+    currentStep.value--;
+  }
+}
+
+function updateRecipientAddress(address) {
+  sendData.value.recipientAddress = address;
+}
+
+function selectCollectible(collectible) {
+  if (sendData.value.selectedCollectibles[collectible.name]) {
+    vmProxy.$delete(sendData.value.selectedCollectibles, collectible.name);
+  } else {
+    vmProxy.$set(sendData.value.selectedCollectibles, collectible.name, collectible);
+  }
+}
+
+function setMax(index) {
+  const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
+  const selectedToken = sendTokensCopy[index];
+
+  if (selectedToken.decimals) {
+    selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
+  } else {
+    selectedToken.quantity = Number(selectedToken.balance);
+  }
+  tryBuildMaxTx(sendTokensCopy, index);
+}
+
+function tryBuildMaxTx(tokens, index) {
+  try {
+    buildTx(tokens)
+  } catch (e) {
+    if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      const maxBalance = Number(match[2]) - Number(match[3])
+      sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
+    } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
+      const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
+      console.log(match)
+      const adaMinBalance = match[2]
+      const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network))
+      if (nativeToken) {
+        nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
+        sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
+      }
+    } else {
+      console.log(e)
+    }
+  }
+}
+
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    resetData();
+  }
+})
+
+watch(sendData, (val) => {
+  try {
+    console.log('build tx')
+    if (!val.recipientAddress) {
+      return;
+    }
+    buildTx(val.selectedTokens)
+    txValid.value = true
+  } catch(e) {
+    console.error(e)
+    if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
+      const match = e.match(/minimum UTXO value (\d+)/);
+      const number = match ? parseInt(match[1], 10) : null;
+      sendData.value.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
+    } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
+      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      const number = parseInt(match[2], 10) - parseInt(match[1], 10)
+      sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
+    }
+    txValid.value = false
+  }
+}, { deep: true })
+
+onMounted(() => {
+  if (resolvedAssets.value) {
+    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
+    const adaAssetFound = Object.values(resolvedAssets.value).find(asset => asset.metadata.ticker === nativeTicker);
+    if (adaAssetFound) {
+      sendData.value.selectedTokens = [adaAssetFound];
+    }
+  }
+})
+</script>
 <style scoped>
 .titles {
   align-items: center;

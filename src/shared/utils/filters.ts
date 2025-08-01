@@ -19,8 +19,8 @@ const formatMax2Decimals = new Intl.NumberFormat('en-US', {
 })
 
 const filters = {
-  truncate(value: string) {
-    if (!value || value.length <= 16) return 'N/A';
+  truncate(value: string): any {
+    if (!value || value.length <= 16) return value;
     const separator = '...';
     const sepLen = separator.length;
     const charsToShow = 16 - sepLen;
@@ -47,8 +47,8 @@ const filters = {
     }
     return src
   },
-  shortenStringWithEllipsis(str, maxLength) {
-    if (!str) {
+  shortenStringWithEllipsis(str: string, maxLength: number) {
+    if (!str || typeof str !== 'string') {
       return str
     }
     // Check if the string length is less than or equal to the maximum length
@@ -73,7 +73,7 @@ const filters = {
     const seconds = Number(((millis % 60000) / 1000).toFixed(0));
     return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
   },
-  toCurrency(value: number, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
+  toCurrency(value: number | string, signs?: boolean, decimalPlaces?: number, symbolPrefix?: string, symbolSuffix?: string, human?: boolean, decimals?: number) {
     if (symbolPrefix == undefined) {
       symbolPrefix = '₳'
     }
@@ -160,6 +160,14 @@ const filters = {
 
 
     return bytes.toFixed(dp) + ' ' + units[u];
+  },
+  getColor(value: number) {
+    if (value > 100) {
+      value = 100
+    }
+    value = value / 100
+    const hue = ((1 - value) * 120).toString(10);
+    return ["hsl(", hue, ",100%,48%)"].join("");
   }
 };
 

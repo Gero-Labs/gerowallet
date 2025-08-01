@@ -75,10 +75,11 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { getCurrentInstance, nextTick, ref, watch } from 'vue';
+import { getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import rules from '@/utils/rules';
-import { useStore } from '@/stores';
+import geroStoreDefault from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 
 interface Props {
@@ -107,12 +108,12 @@ watch(() => props.isOpen, (newValue, _oldValue) => {
   }
 });
 
-const store = useStore();
+const { loggedWallet } = toRefs(walletStore);
 
 const updateSpendingPassword = async (): Promise<void> => {
   if (vmProxy.$refs.form.validate()) {
     try {
-      await store.updateSpendingPassword(store.loggedWallet.id, currentPassword.value, newPassword.value, spendingPasswordType.value)
+      await geroStoreDefault.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value, spendingPasswordType.value)
       snackbar.fireSuccess("Spending password successfully changed.")
       emit('close')
     } catch (e) {

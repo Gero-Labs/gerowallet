@@ -21,19 +21,19 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4><strong>{{ withdrawals | toCurrency }}</strong></h4>
+            <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>Deposit Fee Return</h4>
-            <h4><strong>{{ depositFee | toCurrency }}</strong></h4>
+            <h4><strong>{{ toCurrency(depositFee) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
-            <h4><strong>{{ Number(tx.body().fee().to_str()) | toCurrency }}</strong></h4>
+            <h4><strong>{{ toCurrency(Number(tx.body().fee().to_str())) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Total</h4>
-            <h4><strong>{{ (withdrawals+depositFee-Number(tx.body().fee().to_str())) | toCurrency }}</strong></h4>
+            <h4><strong>{{ toCurrency(withdrawals+depositFee-Number(tx.body().fee().to_str())) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
             <v-tooltip
@@ -68,7 +68,7 @@
             </v-tooltip>
             <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
@@ -80,157 +80,149 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
-import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
 import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
 import snackbar from '@/plugins/snackbar';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/stores/walletStore';
 
-export default {
-  name: 'UnstakeDialog',
-  components: { USBBluetoothSwitch, BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    tx: {
-      type: Transaction,
-      default: () => {},
-    }
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.spendingPassword = ''
-        if (this.$refs.form) {
-          this.$refs.form.resetValidation()
-        }
+  tx: {
+    type: Transaction,
+    default: () => {},
+  }
+});
+
+const emit = defineEmits(['close']);
+
+const { toCurrency } = filters;
+const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+
+const loading = ref(false);
+const spendingPassword = ref('');
+const showPassword = ref(false);
+const tooltip = ref({
+  enabled: false,
+  text: 'Wrong Spending Password!',
+});
+const valid = ref(false);
+const passwordRules = ref([rules.required()]);
+const isBT = ref(false);
+const form = ref<any>(null);
+
+const withdrawals = computed(() => {
+  let withdrawalsAmount = 0;
+  if (props.tx?.body()?.withdrawals()?.keys()) {
+    for (let i = 0; i < props.tx.body().withdrawals().keys().len(); i++) {
+      const rewardAddress = props.tx.body().withdrawals().keys().get(i);
+      if (rewardAddress.to_address().to_bech32() === loggedWallet.value?.stakeAddress.value) {
+        withdrawalsAmount += Number(props.tx.body().withdrawals().get(rewardAddress).to_str());
       }
-    },
-    spendingPassword(val) {
-      this.passwordRules = [
-        rules.required()
-      ]
     }
-  },
-  computed: {
-    WalletType() {
-      return WalletType
-    },
-    ...mapState(useStore, ['loggedWallet', 'stakeAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'addresses', 'account']),
-    withdrawals() {
-      let withdrawals = 0
-      if (this.tx?.body()?.withdrawals()?.keys()) {
-        for (let i = 0 ; i < this.tx.body().withdrawals().keys().len() ; i++) {
-          const rewardAddress = this.tx.body().withdrawals().keys().get(i);
-          if (rewardAddress.to_address().to_bech32() === this.stakeAddress) {
-            withdrawals += Number(this.tx.body().withdrawals().get(rewardAddress).to_str())
-          }
-        }
+  }
+  return withdrawalsAmount;
+});
+
+const depositFee = computed(() => {
+  let depositFeeAmount = 0;
+  const totalAdaBalance = BigNum.from_str(account.value.controlled_amount.toString());
+  let totalAdaOutput = 0;
+  if (props.tx?.body()?.inputs()) {
+    for (let i = 0; i < props.tx?.body()?.inputs().len(); i++) {
+      const input = props.tx?.body()?.inputs().get(i);
+      const utxo = utxos.value?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index());
+      if (utxo) {
+        totalAdaOutput -= Number(utxo.value);
       }
-      return withdrawals;
-    },
-    depositFee() {
-      let depositFee = 0;
-      const totalAdaBalance = BigNum.from_str(this.account.controlled_amount.toString())
-      let totalAdaOutput = 0
-      if (this.tx?.body()?.inputs()) {
-        for (let i = 0; i < this.tx?.body()?.inputs().len(); i++) {
-          const input = this.tx?.body()?.inputs().get(i)
-          const utxo = this.utxos?.find(utxo => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index())
-          if (utxo) {
-            totalAdaOutput -= Number(utxo.value)
-          }
-        }
-      }
-      if (this.tx?.body()?.outputs()) {
-        for (let i = 0; i < this.tx?.body()?.outputs().len(); i++) {
-          const output = this.tx?.body()?.outputs().get(i)
-          totalAdaOutput += Number(output.amount().coin().to_str())
-        }
-        depositFee = totalAdaOutput + Number(this.tx.body().fee().to_str()) - this.withdrawals
-        return depositFee;
-      }
-      return 0
-    },
-    cols() {
-      return 3
     }
-  },
-  methods: {
-    enableToolTip() {
-      this.tooltip.enabled = true;
-      setTimeout(() => {
-        this.tooltip.enabled = false;
-      }, 3000);
-    },
-    async signUnStakeTx() {
-      const signAndReturnTx = async () => {
-        this.loading = true
-        try {
-          const txCbor = this.tx.to_hex()
-          const partialSign = false
-          const response = await appWallet.signTx(
-            txCbor,
-            partialSign,
-            this.spendingPassword,
-            0,
-            this.utxos,
-            this.addresses,
-            !this.isBT
-          );
-          const signedTx = Transaction.new(
-            this.tx.body(),
-            TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-            undefined // TODO Transaction metadata
-          );
-          const txId = await appWallet.submitTx(signedTx, this.utxos);
-          console.log(txId)
-          snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`)
-          this.$emit('close')
-        } catch (e) {
-          snackbar.setError(e)
-          console.log(e);
-        }
-        this.loading = false
-      };
-      if (appWallet?.type === WalletType.Normal) {
-        if (this.$refs.form.validate()) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
-        }
-      } else {
+  }
+  if (props.tx?.body()?.outputs()) {
+    for (let i = 0; i < props.tx?.body()?.outputs().len(); i++) {
+      const output = props.tx?.body()?.outputs().get(i);
+      totalAdaOutput += Number(output.amount().coin().to_str());
+    }
+    depositFeeAmount = totalAdaOutput + Number(props.tx.body().fee().to_str()) - withdrawals.value;
+    return depositFeeAmount;
+  }
+  return 0;
+});
+
+const cols = computed(() => {
+  return 3;
+});
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+};
+
+const signUnStakeTx = async () => {
+  const signAndReturnTx = async () => {
+    loading.value = true;
+    try {
+      const txCbor = props.tx.to_hex();
+      const partialSign = false;
+      const response = await loggedWallet.value.signTx(
+        txCbor,
+        partialSign,
+        spendingPassword.value,
+        0,
+        utxos.value,
+        addresses.value,
+        !isBT.value
+      );
+      const signedTx = Transaction.new(
+        props.tx.body(),
+        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
+        undefined // TODO Transaction metadata
+      );
+      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
+      console.log(txId);
+      snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${txId}`);
+      emit('close');
+    } catch (e) {
+      snackbar.setError(e);
+      console.log(e);
+    }
+    loading.value = false;
+  };
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    if (form.value.validate()) {
+      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
         await signAndReturnTx();
+      } else {
+        enableToolTip();
       }
-    },
-  },
-  filters,
-  data: () => ({
-    loading: false,
-    spendingPassword: '',
-    showPassword: false,
-    tooltip: {
-      enabled: false,
-      text: 'Wrong Spending Password!',
-    },
-    valid: false,
-    passwordRules: [
-      rules.required()
-    ],
-    isBT: false,
-  }),
-}
+    }
+  } else {
+    await signAndReturnTx();
+  }
+};
+
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    spendingPassword.value = '';
+    if (form.value) {
+      form.value.resetValidation();
+    }
+  }
+});
+
+watch(spendingPassword, () => {
+  passwordRules.value = [rules.required()];
+});
+
 </script>
 <style scoped>
 
