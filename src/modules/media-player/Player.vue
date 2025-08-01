@@ -1,5 +1,5 @@
 <template>
-  <div class="player" :style="context.minimized ? { width: '232px', borderRight: '1px solid #444444', borderTopRightRadius: '30px' } : {  }">
+  <div class="player" :style="context.minimized ? { width: '232px', borderRight: '1px solid rgba(255, 255, 255, 0.15)', borderTopRightRadius: '30px' } : {  }">
     <div v-if="currentTrack" class="player__inner">
       <CurrentTrack class="player__left" />
       <div class="player__center" v-show="!context.minimized">
@@ -8,15 +8,15 @@
       </div>
 
       <div style="flex: none; align-self: start;" v-show="!context.minimized">
-        <v-btn icon x-small color="white" @click="setMinimized">
+        <v-btn icon x-small color="white" @click="MusicStore.setMinimized">
           <v-icon x-small>mdi-window-minimize</v-icon>
         </v-btn>
-        <v-btn icon x-small color="white" class="mr-2" @click="setMediaPlayerShown(!context.shown)">
+        <v-btn icon x-small color="white" class="mr-2" @click="MusicStore.setMediaPlayerShown(!context.shown)">
           <v-icon x-small>mdi-window-close</v-icon>
         </v-btn>
       </div>
       <div v-show="context.minimized" class="ml-2">
-        <v-btn small icon text plain large color="white" @click="setMaximized">
+        <v-btn small icon text plain large color="white" @click="MusicStore.setMaximized">
           <v-icon small>
             mdi-chevron-double-right
           </v-icon>
@@ -25,30 +25,18 @@
     </div>
   </div>
 </template>
-<script>
+<script setup lang="ts">
+import { toRefs, computed } from 'vue';
 import CurrentTrack from '@/modules/media-player/components/CurrentTrack.vue';
 import PlayerControls from '@/modules/media-player/components/PlayerControls.vue';
 import PlayerPlayback from '@/modules/media-player/components/PlayerPlayback.vue';
-import { mapActions, mapState } from 'pinia';
-import { musicStore } from '@/stores/modules/music';
+import MusicStore, { musicStore } from '@/stores/musicStore';
 
-export default {
-  name: "player",
-  components: {
-    CurrentTrack,
-    PlayerControls,
-    PlayerPlayback,
-  },
-  computed: {
-    ...mapState(musicStore, ['musicPlaylist', 'context']),
-    currentTrack() {
-      return this.musicPlaylist[this.context.currentIndex]
-    }
-  },
-  methods: {
-    ...mapActions(musicStore, ['setMinimized', 'setMaximized', 'setMediaPlayerShown']),
-  }
-};
+const { musicPlaylist, context } = toRefs(musicStore);
+
+const currentTrack = computed(() => {
+  return musicPlaylist.value[context.value.currentIndex]
+});
 </script>
 <style scoped lang="sass">
 .player
@@ -57,10 +45,13 @@ export default {
   width: 100%
   height: 90px
   z-index: 2
-  background: #0f0f0f
-  border-top: 1px solid #444444
+  background-color: rgba(0, 0, 0, 0.4) !important
+  backdrop-filter: blur(20px) saturate(1.8) !important
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important
+  border-top: 1px solid rgba(255, 255, 255, 0.15) !important
   transition: all 0.3s
-  box-shadow: rgba(0, 0, 0, 0.1) 0 4px 12px
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important
+  isolation: isolate !important
 
   &__inner
     justify-content: space-between

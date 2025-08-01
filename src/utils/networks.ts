@@ -32,6 +32,7 @@ export default {
       geroPool: 'pool12yscr8j3zs34ewxrwlk0p2w5uvgcnrzywpp78ddjsj8kxd530f9',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: true,
+      stakingSupport: true,
       governanceSupport: true,
       daoSupport: true,
       transactionSupport:true,
@@ -68,6 +69,7 @@ export default {
       },
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
+      stakingSupport: true,
       governanceSupport: false,
       daoSupport: false,
       transactionSupport:true,
@@ -105,6 +107,7 @@ export default {
       geroPool: 'pool13k76f7tt46psnhp75cwnfg5dtkjvwq64fg53tp2zthnzqyge58k',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
+      stakingSupport: true,
       governanceSupport: false,
       daoSupport: false,
       transactionSupport:true,
@@ -129,6 +132,7 @@ export default {
       currencyImage: apexLogo,
       defaultProvider: Provider.BLOCKFROST,
       cashbackSupport: false,
+      stakingSupport: false,
       governanceSupport: false,
       daoSupport: false,
       transactionSupport:true,
@@ -184,6 +188,12 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.cashbackSupport
+  },
+  resolveStakingSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.stakingSupport
   },
   resolveGovernanceSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

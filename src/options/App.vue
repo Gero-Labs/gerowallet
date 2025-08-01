@@ -3,11 +3,11 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
-    <v-overlay v-show="loading || isRestoring || loadingTxs" opacity="0.9" style="text-align: center;">
+    <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
+      {{ `Loading: ${loading}, isRestoring: ${isRestoring}` }}
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
-        <v-card-text style="color: white" v-if="text">{{ text }}</v-card-text>
         <v-progress-linear
             buffer-value="0"
             color="primary"
@@ -16,6 +16,7 @@
             value="0"
             style="color: cyan; width: 100px; text-align: center"
         ></v-progress-linear>
+        <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
     <v-snackbar
@@ -31,29 +32,19 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, computed, toRefs } from 'vue'
-import { useStore } from "@/stores";
+import { ref, computed, toRefs } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
-import networks from '@/utils/networks';
-import { loadingState } from '@/plugins/loading';
+import { loadingState } from '@/stores/loading';
 
 const { loading, isRestoring, text } = toRefs(loadingState);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
 
-const store = useStore();
-
-const loadingTxs = computed(() => store.loadingTxs);
-const network = computed(() => store.network);
-const setNetwork = store.setNetwork;
-
-onMounted(() => {
-  if (!network) {
-    setNetwork(networks.networks[0])
-  }
-})
+const isLoading = computed(() => {
+  return loading.value || isRestoring.value;
+});
 </script>
 <style lang="scss">
 .v-application {
@@ -96,5 +87,12 @@ onMounted(() => {
   border: 1px solid #404040;
   font-size: 10px !important;
   opacity: 0.9 !important;
+}
+.v-text-field--outlined.no-margin-append-outer .v-input__append-outer {
+  margin: 0 0 0 4px !important;
+}
+
+.v-text-field--outlined.no-margin-append-outer .v-input__append-inner {
+  margin: 0 !important;
 }
 </style>

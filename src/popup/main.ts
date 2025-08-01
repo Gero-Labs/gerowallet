@@ -5,6 +5,7 @@ import { createVuetify } from 'vuetify'
 import App from './Popup.vue'
 import { setupApp } from '~/logic/common-setup'
 import 'vuetify/styles'
+import '../shared/styles/liquid-glass.css'
 
 const vuetify = createVuetify({
   components,

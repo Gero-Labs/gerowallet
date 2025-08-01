@@ -1,4 +1,4 @@
-export const TARGET = 'gero-wallet';
+export const TARGET = 'gerowallet';
 export const SENDER = {
   extension: 'extension',
   webpage: 'webpage',

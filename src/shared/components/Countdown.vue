@@ -3,7 +3,7 @@
     <span v-if="isCompleted">Completed</span>
     <ul class="vuejs-countdown" v-else>
       <li v-if="days > 0" style="width: 42px">
-        <p class="digit">{{ days | twoDigits }}</p>
+        <p class="digit">{{ twoDigits(days) }}</p>
         <p class="text">{{ days > 1 ? 'days' : 'day' }}</p>
       </li>
       <li v-if="days > 0">
@@ -11,7 +11,7 @@
         <p class="text">&nbsp;</p>
       </li>
       <li style="width: 42px">
-        <p class="digit">{{ hours | twoDigits }}</p>
+        <p class="digit">{{ twoDigits(hours) }}</p>
         <p class="text">{{ hours > 1 ? 'hours' : 'hour' }}</p>
       </li>
       <li>
@@ -19,7 +19,7 @@
         <p class="text">&nbsp;</p>
       </li>
       <li style="width: 42px">
-        <p class="digit">{{ minutes | twoDigits }}</p>
+        <p class="digit">{{ twoDigits(minutes) }}</p>
         <p class="text">min</p>
       </li>
       <li>
@@ -27,98 +27,96 @@
         <p class="text">&nbsp;</p>
       </li>
       <li style="width: 42px">
-        <p class="digit">{{ seconds | twoDigits }}</p>
+        <p class="digit">{{ twoDigits(seconds) }}</p>
         <p class="text">Sec</p>
       </li>
     </ul>
   </div>
 </template>
 
-<script>
-let interval = null;
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
-export default {
-  name: 'Countdown',
-  props: {
-    deadline: {
-      type: Date
-    },
-    end: {
-      type: Date
-    },
-    stop: {
-      type: Boolean
-    }
+const props = defineProps({
+  deadline: {
+    type: Date
   },
-  data() {
-    return {
-      now: Math.trunc((new Date()).getTime() / 1000),
-      date: null,
-      diff: 0
-    }
+  end: {
+    type: Date
   },
-  created() {
-    if (!this.deadline && !this.end) {
-      throw new Error("Missing props 'deadline' or 'end'");
-    }
-    if (this.endTime.getTime() === 0) {
-      return
-    }
-    this.date = Math.trunc(this.endTime.getTime() / 1000);
-    if (!this.date) {
-      throw new Error("Invalid props value, correct the 'deadline' or 'end'");
-    }
+  stop: {
+    type: Boolean
+  }
+});
 
-    interval = setInterval(() => {
-      this.now = Math.trunc((new Date()).getTime() / 1000);
-    }, 1000);
-  },
-  computed: {
-    isCompleted() {
-      return (new Date()).getTime() - this.endTime > 0
-    },
-    endTime() {
-      return this.deadline ? this.deadline : this.end;
-    },
+const now = ref(Math.trunc((new Date()).getTime() / 1000));
+const date = ref<number | null>(null);
+const diff = ref(0);
+let interval: NodeJS.Timeout | null = null;
 
-    seconds() {
-      return Math.trunc(this.diff) % 60
-    },
+const endTime = computed(() => {
+  return props.deadline ? props.deadline : props.end;
+});
 
-    minutes() {
-      return Math.trunc(this.diff / 60) % 60
-    },
+const isCompleted = computed(() => {
+  return (new Date()).getTime() - endTime.value! > 0
+});
 
-    hours() {
-      return Math.trunc(this.diff / 60 / 60) % 24
-    },
+const seconds = computed(() => {
+  return Math.trunc(diff.value) % 60
+});
 
-    days() {
-      return Math.trunc(this.diff / 60 / 60 / 24)
+const minutes = computed(() => {
+  return Math.trunc(diff.value / 60) % 60
+});
+
+const hours = computed(() => {
+  return Math.trunc(diff.value / 60 / 60) % 24
+});
+
+const days = computed(() => {
+  return Math.trunc(diff.value / 60 / 60 / 24)
+});
+
+const twoDigits = (value: number) => {
+  if (value.toString().length <= 1) {
+    return '0' + value.toString()
+  }
+  return value.toString()
+};
+
+watch(now, (value) => {
+  diff.value = date.value! - now.value;
+  if (diff.value <= 0 || props.stop) {
+    diff.value = 0;
+    if (interval) {
+      clearInterval(interval);
     }
-  },
-  watch: {
-    now(value) {
-      this.diff = this.date - this.now;
-      if(this.diff <= 0 || this.stop){
-        this.diff = 0;
-        // Remove interval
-        clearInterval(interval);
-      }
-    }
-  },
-  filters: {
-    twoDigits(value) {
-      if ( value.toString().length <= 1 ) {
-        return '0'+value.toString()
-      }
-      return value.toString()
-    }
-  },
-  destroyed() {
+  }
+});
+
+onMounted(() => {
+  if (!props.deadline && !props.end) {
+    throw new Error("Missing props 'deadline' or 'end'");
+  }
+  if (endTime.value!.getTime() === 0) {
+    return
+  }
+  date.value = Math.trunc(endTime.value!.getTime() / 1000);
+  if (!date.value) {
+    throw new Error("Invalid props value, correct the 'deadline' or 'end'");
+  }
+
+  interval = setInterval(() => {
+    now.value = Math.trunc((new Date()).getTime() / 1000);
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (interval) {
     clearInterval(interval);
   }
-}
+});
 </script>
 <style>
 .vuejs-countdown {

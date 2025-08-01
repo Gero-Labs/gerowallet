@@ -1,9 +1,12 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center" style="font-size: 32px">
       Blog Posts
     </v-card-title>
-    <v-card-text>
+    <v-card-text class="pb-0">
       <v-row>
         <v-col cols="12" xl="8" lg="8" md="8">
 
@@ -60,101 +63,106 @@
         </v-col>
       </v-row>
     </v-card-text>
-    <v-card-actions v-intersect="onIntersect" class="text-center justify-center">
-      <v-progress-circular indeterminate v-show="loadingMore" class="py-10"></v-progress-circular>
+    <v-card-actions class="text-center justify-center pb-4" style="flex-flow: column;">
+      <div ref="sentinel" style="height:1px; width:100%"></div>
+      <v-progress-circular indeterminate v-show="loadingMore"></v-progress-circular>
     </v-card-actions>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
-<script lang="ts">
-import { defineComponent } from 'vue';
-import { useStore } from '@/stores';
+<script setup lang="ts">
+import { onMounted, ref, watch, computed } from 'vue';
+import { useIntersectionObserver } from '@vueuse/core';
+import wixApi from '@/api/wix.api';
 
-export default defineComponent({
-  name: 'Blog',
-  watch: {
-    async isIntersecting(val) {
-      if (val) {
-        if (this.nextPage) {
-          this.loadingMore = true
-          await this.loadPosts()
-          this.loadingMore = false
-        }
-      }
+const sentinel = ref<HTMLElement | null>(null);
+const isIntersecting = ref<boolean>(false);
+const nextPage = ref<string>('');
+const loadingMore = ref<boolean>(false);
+const isLoading = ref<boolean>(false);
+const posts = ref<any>({});
+const api = ref<any>(undefined);
+const search = ref<string>('');
+
+const { stop } = useIntersectionObserver(
+  sentinel,
+  ([entry]) => { isIntersecting.value = entry.isIntersecting; },
+  { threshold: 0.1 },
+);
+
+const loadPosts = async () => {
+  try {
+    let response: any
+    if (nextPage.value) {
+      response = await wixApi.getBlogPosts(10, nextPage.value)
+    } else {
+      response = await wixApi.getBlogPosts(10)
     }
-  },
-  computed: {
-    blogPosts() {
-      if (this.search) {
-        return Object.values(this.posts).filter((post: any) => post.title.includes(this.search) || post.excerpt.includes(this.search))
-      }
-      return Object.values(this.posts)
+    if (response.status !== 200) {
+      console.warn(response)
+      return;
     }
-  },
-  methods: {
-    onIntersect(entries, observer) {
-      this.isIntersecting = entries[0].isIntersecting
-    },
-    async loadPosts() {
-      let response
-      if (this.nextPage) {
-        response = await this.api.getBlogPosts(10, this.nextPage)
-      } else {
-        response = await this.api.getBlogPosts(10)
-      }
-      const posts = response.posts.reduce(function(map, el) {
-        map[el.id] = el
-        return map;
-      }, {})
-      const statsPromises = []
-      Object.values(posts).forEach((post: any) => {
-        statsPromises.push(this.api.getPostMetrics(post.id).then(res => {
-          posts[post.id].metrics = res.metrics
-        }))
-      })
-      if (statsPromises.length > 0) {
-        await Promise.all(statsPromises)
-      }
-      this.nextPage = response.metaData.cursor || null
-      this.posts = {
-        ...this.posts,
-        ...posts
-      }
-    },
-    getImage(post) {
-      if (post.coverMedia?.image) {
-        return post.coverMedia?.image?.url
-      } else if (post.media) {
-        if (post.media.wixMedia) {
-          return post.media.wixMedia?.image?.url
-        } else if (post.media.embedMedia) {
-          return post.media?.embedMedia?.thumbnail?.url
-        }
-      }
-      return undefined
+    const postsMap = response.data.posts.reduce(function(map, el) {
+      map[el.id] = el
+      return map;
+    }, {})
+    const statsPromises = []
+    Object.values(postsMap).forEach((post: any) => {
+      statsPromises.push(wixApi.getPostMetrics(post.id).then(res => {
+        postsMap[post.id].metrics = res.data.metrics
+      }))
+    })
+    if (statsPromises.length > 0) {
+      await Promise.all(statsPromises)
     }
-  },
-  data() {
-    return {
-      isIntersecting: false,
-      nextPage: null,
-      loadingMore: false,
-      isLoading: false,
-      posts: {} as any,
-      stats: {},
-      api: undefined,
-      search: '',
+    nextPage.value = response.data.metaData.cursor || null
+    posts.value = {
+      ...posts.value,
+      ...postsMap
     }
-  },
-  async mounted() {
-    try {
-      this.api = useStore().getWallet.api
-      this.isLoading = true
-      await this.loadPosts()
-    } catch (e) {
-      console.error(e)
-    } finally {
-      this.isLoading = false
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+const getImage = (post: any) => {
+  if (post.coverMedia?.image) {
+    return post.coverMedia?.image?.url
+  } else if (post.media) {
+    if (post.media.wixMedia) {
+      return post.media.wixMedia?.image?.url
+    } else if (post.media.embedMedia) {
+      return post.media?.embedMedia?.thumbnail?.url
     }
+  }
+  return undefined
+}
+
+const blogPosts = computed(() => {
+  if (search.value) {
+    return Object.values(posts.value).filter((post: any) => post.title.toLowerCase().includes(search.value) || post.excerpt.toLowerCase().includes(search.value))
+  }
+  return Object.values(posts.value)
+});
+
+watch(isIntersecting, async val => {
+  if (val && nextPage.value) {
+    loadingMore.value = true;
+    await loadPosts();
+    loadingMore.value = false;
+  }
+});
+
+onMounted(async () => {
+  try {
+    isLoading.value = true
+    await loadPosts();
+  } catch (e) {
+    console.error(e)
+  } finally {
+    isLoading.value = false
   }
 });
 </script>

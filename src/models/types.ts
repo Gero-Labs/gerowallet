@@ -19,6 +19,10 @@ const purpose = {
   voting: 1694,
 };
 
+const coin_type = {
+  cardano: 1815,
+}
+
 const CoreAddressTypes = {
   CARDANO_LEGACY: 0,
   CARDANO_BASE: 1,
@@ -47,14 +51,10 @@ const WalletTypePurpose = {
 };
 
 const CoinTypes = {
-  CARDANO: HARDENED + 1815, // HARD_DERIVATION_START + 1815;
+  CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
 };
 
-/**
- * Defined by bip44
- * https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#address-gap-limit
- */
 const BIP44_SCAN_SIZE = 20;
 
 const ChainDerivations = {
@@ -62,6 +62,8 @@ const ChainDerivations = {
   INTERNAL: 1,
   CHIMERIC_ACCOUNT: 2,
   DREP: 3,
+  CONSTITUTIONAL_COMMITTEE_COLD: 4,
+  CONSTITUTIONAL_COMMITTEE_HOT: 5,
 };
 
 enum Provider {
@@ -200,14 +202,24 @@ export type UTxO = {
   payment_addr: {
     bech32: string;
   }
-  asset_list: [
+  asset_list: {
     policy_id: string,
     asset_name: string,
     quantity: string
-  ],
+  }[],
+  reference_script: {
+    hash: string,
+    size: number,
+    type: string,
+    bytes: string,
+    value: any
+  },
+  stake_addr: string,
   datum_hash: string,
-  inline_datum: string,
-  reference_script: string,
+  inline_datum: {
+    bytes: string,
+    value: any
+  },
   value: string
 }
 
@@ -243,5 +255,73 @@ export {
   Blockchain,
   Network,
   ERROR,
-  Currency
+  Currency,
+  coin_type
 };
+
+// ============================================================================
+// WALLET UI TYPES - Component Props and Interfaces
+// ============================================================================
+
+// Component Props Types
+export interface ButtonProps {
+  text: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+}
+
+export interface FeatureCardProps {
+  icon: 'conversion' | 'global' | 'track';
+  title: string;
+  description: string;
+}
+
+export interface FeatureListItemProps {
+  text: string;
+  icon?: string;
+}
+
+export interface ModalProps {
+  open: boolean;
+  onClose?: () => void;
+}
+
+// Section Types
+export interface SectionProps {
+  className?: string;
+  children?: any;
+}
+
+// Legacy Transaction Type (for backward compatibility)
+export interface Transaction {
+  id: number;
+  date: string;
+  name: string;
+  avatarText?: string;
+  icon?: string;
+  amount: string;
+  category: string;
+  categoryClass: string;
+  categoryDotClass: string;
+}
+
+export interface ExchangeRate {
+  id: number;
+  pair: string;
+  value: string;
+  currency: string;
+  icon: string;
+  change: string;
+  trend: 'positive' | 'negative';
+  trendIcon: string;
+}
+
+export interface Activity {
+  id: number;
+  type: string;
+  cryptoAmount: string;
+  fiatAmount: string;
+  date: string;
+  status: string;
+}

@@ -18,37 +18,35 @@ import {
   TransactionUnspentOutputs,
   UnitInterval,
   Value, Withdrawals,
-
 } from '@emurgo/cardano-serialization-lib-browser';
-import networks from '@/utils/networks';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
+import { Cardano } from '@cardano-sdk/core';
 
 export const buildRewardAddress = (networkId, stakeKeyHash) => {
   return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));
 };
 
-export function getTransactionBuilder(chain: string, network: string): TransactionBuilder {
-  const pp = networks.resolveNetwork(chain, network).protocolParams;
-
+export function getTransactionBuilder(pp: Cardano.ProtocolParameters): TransactionBuilder {
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()
-    .fee_algo(LinearFee.new(BigNum.from_str(pp.min_fee_a.toString()), BigNum.from_str(pp.min_fee_b.toString())))
-    .pool_deposit(BigNum.from_str(pp.pool_deposit))
-    .key_deposit(BigNum.from_str(pp.key_deposit))
-    .max_value_size(pp.max_val_size)
-    .max_tx_size(pp.max_tx_size)
-    .coins_per_utxo_byte(BigNum.from_str(pp.coins_per_utxo_size))
-    .ex_unit_prices(ExUnitPrices.new(UnitInterval.new(BigNum.from_str('577'), BigNum.from_str('10000')), UnitInterval.new(BigNum.from_str('721'), BigNum.from_str('10000000'))))
+    .fee_algo(LinearFee.new(BigNum.from_str(pp.minFeeCoefficient.toString()), BigNum.from_str(pp.minFeeConstant.toString())))
+    .pool_deposit(BigNum.from_str(pp.poolDeposit.toString()))
+    .key_deposit(BigNum.from_str(pp.stakeKeyDeposit.toString()))
+    .max_value_size(pp.maxValueSize)
+    .max_tx_size(pp.maxTxSize)
+    .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte.toString()))
+    .ex_unit_prices(ExUnitPrices.new(UnitInterval.new(BigNum.from_str((pp.prices.memory*10000).toString()), BigNum.from_str('10000')), UnitInterval.new(BigNum.from_str((pp.prices.steps*10000000).toString()), BigNum.from_str('10000000'))))
+    .ref_script_coins_per_byte(UnitInterval.new(BigNum.from_str(pp.minFeeRefScriptCostPerByte.toString()), BigNum.from_str('1')))
     .prefer_pure_change(true)
     .build());
 }
 
-export function buildTx(senderWallet, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = [], metadata = undefined): TransactionBody {
+export function buildTx(protocolParams: Cardano.ProtocolParameters, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = [], metadata = undefined): TransactionBody {
   if (!changeAddress) {
     console.log('Change Address', changeAddress)
     return null;
   }
-  const txBuilder = getTransactionBuilder(senderWallet.chain, senderWallet.network);
+  const txBuilder = getTransactionBuilder(protocolParams);
 
   const hasMetadata = !(metadata == null || metadata === undefined);
 
@@ -156,17 +154,17 @@ function outputHasAssets(outputs: TransactionOutputs) {
   return false;
 }
 
-export function cardanoValueFromRemoteFormat(utxo) {
-  const cardanoValue = Value.new(BigNum.from_str(utxo.value));
-  if (!utxo.asset_list || utxo.asset_list.length === 0) {
+export function cardanoValueFromRemoteFormat(utxo: Cardano.Utxo) {
+  const cardanoValue: Value = Value.new(BigNum.from_str(utxo[1].value.coins.toString()));
+  if (!utxo[1].value.assets || utxo[1].value.assets.size === 0) {
     return cardanoValue;
   }
-  const assets = MultiAsset.new();
-  utxo.asset_list.forEach(asset => {
-    const policyId = ScriptHash.from_bytes(Buffer.from(asset.policy_id, 'hex'));
-    const assetName = AssetName.new(Buffer.from(asset.asset_name || '', 'hex'));
-    const quantity = BigNum.from_str(asset.quantity);
-    const policyContent = assets.get(policyId) ?? Assets.new();
+  const assets: MultiAsset = MultiAsset.new();
+  Object.entries(utxo[1].value.assets).forEach((entry: [Cardano.AssetId, string]) => {
+    const policyId: ScriptHash = ScriptHash.from_hex(Cardano.AssetId.getPolicyId(entry[0]));
+    const assetName: AssetName = AssetName.new(Buffer.from(Cardano.AssetId.getAssetName(entry[0]) || '', 'hex'));
+    const quantity: BigNum = BigNum.from_str(entry[1]);
+    const policyContent: Assets = assets.get(policyId) ?? Assets.new();
     policyContent.insert(assetName, quantity);
     assets.insert(policyId, policyContent);
   });

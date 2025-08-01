@@ -1,0 +1,129 @@
+@import '../../styles/variables';
+@import '../../styles/mixins';
+
+// Feature Card
+.feature-card {
+  padding: $spacing-2xl;
+  @include flex-column;
+  gap: $spacing-lg;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: $shadow-lg;
+  }
+  
+  .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: $border-radius-md;
+    @include flex-center;
+    background: $primary-gradient;
+    margin-bottom: $spacing-md;
+  }
+  
+  .card-title {
+    @include text-style($font-size-lg, $font-weight-semibold);
+    margin-bottom: $spacing-sm;
+  }
+  
+  .card-description {
+    @include body-text($font-size-sm);
+    line-height: $line-height-loose;
+  }
+}
+
+// Feature List Item
+.feature-list-item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-lg;
+  padding: $spacing-lg;
+  border-radius: $border-radius-lg;
+  background: $background-card;
+  border: 1px solid $border-secondary;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    border-color: $primary-cyan;
+    background: rgba($primary-cyan, 0.05);
+  }
+  
+  .item-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: $border-radius-sm;
+    @include flex-center;
+    background: $background-secondary;
+    flex-shrink: 0;
+  }
+  
+  .item-content {
+    flex: 1;
+    
+    .item-title {
+      @include text-style($font-size-base, $font-weight-semibold);
+      margin-bottom: $spacing-xs;
+    }
+    
+    .item-description {
+      @include body-text($font-size-sm);
+    }
+  }
+}
+
+// Order Card Modal
+.order-card-modal {
+  .modal-content {
+    @include flex-column;
+    gap: $spacing-2xl;
+  }
+  
+  .card-preview {
+    padding: $spacing-2xl;
+    text-align: center;
+    
+    .card-image {
+      width: 100%;
+      max-width: 300px;
+      height: auto;
+      margin-bottom: $spacing-lg;
+    }
+    
+    .card-title {
+      @include heading-style($font-size-xl);
+      margin-bottom: $spacing-sm;
+    }
+    
+    .card-description {
+      @include body-text($font-size-base);
+      margin-bottom: $spacing-lg;
+    }
+  }
+  
+  .card-benefits {
+    @include flex-column;
+    gap: $spacing-md;
+    
+    .benefit-item {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      
+      .benefit-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        @include flex-center;
+        background: $primary-green;
+        color: $background-dark;
+        font-size: $font-size-xs;
+        font-weight: $font-weight-bold;
+      }
+      
+      .benefit-text {
+        @include body-text($font-size-sm);
+      }
+    }
+  }
+} 

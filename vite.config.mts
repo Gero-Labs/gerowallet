@@ -18,9 +18,12 @@ export const sharedConfig: UserConfig = {
     alias: {
       '@/': `${r('src')}/`,
       buffer: 'buffer',
-      '@emurgo/cardano-serialization-lib-nodejs':
-        '@emurgo/cardano-serialization-lib-browser',
-      'lodash': 'lodash-es'
+      '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
+      'lodash': 'lodash-es',
+      'cbor': r('src/shims/cbor.js'),
+      stream: r('src/shims/stream.js'),
+      util: 'util',
+      'pbkdf2': 'pbkdf2/browser.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
@@ -29,6 +32,7 @@ export const sharedConfig: UserConfig = {
     __DEV__: isDev,
     __NAME__: JSON.stringify(packageJson.name),
     APP_VERSION: JSON.stringify(packageJson.version),
+    'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
     Vue(),
@@ -42,25 +46,31 @@ export const sharedConfig: UserConfig = {
       version: 2.7,
     }),
     wasm(), // Enable WebAssembly support
-    topLevelAwait({
-      promiseExportName: '__tla',
-      promiseImportName: i => `__tla_${i}`,
-    }),
+    // topLevelAwait(), // Temporarily disabled due to array length error
     nodePolyfills({
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
+      include: ['crypto', 'buffer', 'events', 'pbkdf2', 'stream', 'util', 'os', 'path'],
     }),
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
       dts: r('src/auto-imports.d.ts'),
     }),
+    {
+      name: 'cbor-fix-dev',
+      resolveId(id, importer) {
+        if (id === 'cbor') {
+          return r('src/shims/cbor.js');
+        }
+      }
+    },
   ],
   optimizeDeps: {
-    include: ['vue', '@vueuse/core', 'webextension-polyfill', 'buffer'],
-    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser'],
+    include: ['vue', '@vueuse/core', 'webextension-polyfill', 'buffer', '@cardano-sdk/crypto', 'readable-stream', 'util', 'pbkdf2'],
+    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
     esbuildOptions: {
       plugins: [],
     }
@@ -68,7 +78,7 @@ export const sharedConfig: UserConfig = {
   worker: {
     plugins: [
       wasm(),
-      topLevelAwait()
+      // topLevelAwait() // Temporarily disabled
     ]
   },
 };
@@ -114,6 +124,14 @@ export default defineConfig(({ command }) => {
             ],
             hook: 'writeBundle',
           }),
+          {
+            name: 'cbor-fix',
+            resolveId(id, importer) {
+              if (id === 'cbor') {
+                return r('src/shims/cbor.js');
+              }
+            }
+          }
         ]
       },
     },

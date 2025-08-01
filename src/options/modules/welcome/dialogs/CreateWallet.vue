@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     title="Create New Wallet"
-    :subtitle="network.title"
+    :subtitle="props.network.title"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="isOpen"
@@ -145,89 +145,110 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { computed, ref, reactive, nextTick, getCurrentInstance } from 'vue';
 import rules from "@/utils/rules";
-import {Theme} from "@/models/types"
-import db from "@/db";
-import { useStore } from "@/stores";
-import { mapActions, mapState } from 'pinia';
+import { Theme } from "@/models/types";
 import assets from '@/utils/assets';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GeroStore from '@/stores/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
-export default {
-  name: "CreateWallet",
-  components: { BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    },
-    persistent: {
-      type: Boolean,
-      default: false,
-    },
+interface Props {
+  isOpen: boolean;
+  persistent: boolean;
+  network: any;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  isOpen: false,
+  persistent: false,
+});
+
+const emit = defineEmits(['close']);
+
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy?.$router;
+
+const form = ref<any>(null);
+const show1 = ref(false);
+const show2 = ref(false);
+const valid = ref(false);
+const creatingWalletLoader = ref(false);
+
+const newWallet = reactive({
+  name: '',
+  icon: 'green',
+  password: '',
+  confirmPassword: '',
+  termsChecked: false,
+  recoverPasswordChecked: false,
+});
+
+const isDisabled = computed(() => {
+  return !valid.value || creatingWalletLoader.value;
+});
+
+const dialogLocal = computed({
+  get() {
+    return props.isOpen;
   },
-  computed: {
-    ...mapState(useStore, ['network']),
-    isDisabled() {
-      return !this.valid || this.creatingWalletLoader
-    },
-    dialogLocal: {
-      get() {
-        return this.dialog
-      },
-      set(value) {
-        if (!value) {
-          this.$emit('close')
-          this.resetDialog()
-        }
-      },
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['login']),
-    async walletCreationStep() {
-      this.creatingWalletLoader = true
-      const walletId = await db.createNewWallet(this.newWallet.name, this.newWallet.icon, Theme.GERO, null, this.newWallet.password, this.network.blockchain, this.network.network)
-      this.dialogLocal = false
-      this.resetDialog()
-      await this.login(walletId)
-      await this.$router.push('/')
-    },
-    resetDialog() {
-      this.newWallet = {
-        name: '',
-        password: '',
-        confirmPassword: '',
-        termsChecked: false,
-        recoverPasswordChecked: false,
-      }
-      this.valid = false
-      this.creatingWalletLoader = false
-      console.log('resetDialog')
-      this.$nextTick(() => {
-        this.$refs.form.resetValidation()
-      })
+  set(value: boolean) {
+    if (!value) {
+      emit('close');
+      resetDialog();
     }
   },
-  data: () => ({
-    rules,
-    db,
-    show1: false,
-    show2: false,
-    newWallet: {
-      name: '',
-      icon: '',
-      password: '',
-      confirmPassword: '',
-      termsChecked: false,
-      recoverPasswordChecked: false,
-    },
-    valid: false,
-    creatingWalletLoader: false,
-    assets,
-  }),
-}
+});
+
+const walletCreationStep = async () => {
+  creatingWalletLoader.value = true;
+  try {
+    const wallet = await GeroStore.createNewWallet(
+      newWallet.name,
+      newWallet.icon,
+      Theme.GERO,
+      null,
+      newWallet.password,
+      props.network.blockchain,
+      props.network.network
+    );
+    dialogLocal.value = false;
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    }).then(() => {
+      vmProxy.$nextTick(() => {
+        resetDialog();
+        router.push('/')
+      })
+    });
+  } catch (error) {
+    console.error('Error creating wallet:', error);
+  } finally {
+    creatingWalletLoader.value = false;
+  }
+};
+
+const resetDialog = () => {
+  Object.assign(newWallet, {
+    name: '',
+    icon: 'green',
+    password: '',
+    confirmPassword: '',
+    termsChecked: false,
+    recoverPasswordChecked: false,
+  });
+  valid.value = false;
+  creatingWalletLoader.value = false;
+  console.log('resetDialog');
+  nextTick(() => {
+    if (form.value) {
+      form.value.resetValidation();
+    }
+  });
+};
 </script>
 <style scoped>
 .v-dialog__content--active {

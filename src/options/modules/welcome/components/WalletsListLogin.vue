@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 400px; margin: auto">
+  <v-card class="transparent-override" flat style="max-width: 400px; margin: auto; box-shadow: unset!important;">
     <v-card-title class="justify-center" style="color: white; font-size: 32px;">
       {{ $t('welcome') }}
     </v-card-title>
@@ -51,11 +51,13 @@
 <script setup lang="ts">
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
-import { computed, ref } from 'vue';
+import { computed, ref, toRefs, getCurrentInstance } from 'vue';
 import networks from '@/utils/networks';
-import { useStore } from '@/stores';
-import { storeToRefs } from 'pinia';
-const store = useStore();
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { geroStore } from '@/stores/geroStore';
+import loading from '@/stores/loading';
+import WalletStore from '@/stores/walletStore';
 
 const selectedWallet = ref<string | null>(null);
 
@@ -70,10 +72,13 @@ interface Wallet {
   type?: WalletTypeValue;
 }
 
-const { wallets } = storeToRefs(store);
+const { wallets } = toRefs(geroStore);
 
 const availableWallets = computed<Wallet[]>(() => {
-  return wallets.value.filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google);
+  return (Object.values(wallets.value) as Wallet[])
+    .filter((wallet: Wallet) => {
+      return networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google;
+    });
 });
 
 const resolveNetworkIcon = (item: Wallet): string => {
@@ -88,16 +93,39 @@ const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    await store.setLogin(Number(walletId));
+    const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
+
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
+
+    // Wait for chrome.storage.onChanged to sync the loggedWallet across contexts
+    await new Promise(resolve => setTimeout(resolve, 300));
+    console.debug('Wallet store after login:', !!WalletStore.state.loggedWallet);
+
+    // Double-check that wallet is actually logged in before navigation
+    if (!WalletStore.state.loggedWallet) {
+      console.warn('⚠️ Wallet not logged in after login attempt, retrying...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    const queryParams = vmProxy.$route.query;
+    console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
+    console.debug('🧭 Query params:', queryParams);
+
+    if (queryParams['redirect']) {
+      const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
+      console.debug('🧭 Navigating to redirect path:', redirectPath);
+      await vmProxy.$router.push(redirectPath);
+    } else {
+      console.debug('🧭 Navigating to home page: /');
+      await vmProxy.$router.push("/");
+    }
+
+    console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);
-  }
-  const queryParams = vmProxy.$route.query;
-  console.log(queryParams);
-  if (queryParams['redirect']) {
-    await vmProxy.$router.push(decodeURIComponent(queryParams['redirect'].toString()));
-  } else {
-    await vmProxy.$router.push("/");
   }
 };
 </script>

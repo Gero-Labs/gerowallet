@@ -85,60 +85,50 @@
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, toRefs } from 'vue';
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
 import BuyDialog from "@/modules/dashboard/dialogs/BuyDialog.vue";
-import { useStore } from '@/stores';
 import SendDialog from "../dialogs/SendDialog.vue";
-import {mapState} from "pinia";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
 
-export default {
-  name: "QuickActions",
-  components: {
-    BuyDialog,
-    SwapDialog,
-    ReceiveDialog,
-    SendDialog,
+const props = defineProps({
+  utxos: {
+    type: Array,
+    default: () => [],
   },
-  props: {
-    utxos: {
-      type: Array,
-      default: () => [],
-    },
-  },
-  computed: {
-    ...mapState(useStore, ['loggedWallet', 'baseAddress']),
-    isBuyDisabled() {
-      if (this.loggedWallet) {
-        return !networks.resolveBuySupported(this.loggedWallet?.chain, this.loggedWallet?.network)
-      }
-      return true
-    },
-    isSwapDisabled() {
-      if (this.loggedWallet) {
-        return !networks.resolveSwapSupport(this.loggedWallet?.chain, this.loggedWallet?.network)
-      }
-      return true
-    },
-  },
-  methods: {
-    closeDialog() {
-      this.currentDialog = null;
-    },
-  },
-  data: () => ({
-    currentDialog: null,
-    dialogs: {
-      SEND: "SEND",
-      RECEIVE: "RECEIVE",
-      SWAP: "SWAP",
-      BUY: "BUY",
-    },
-    assets,
-  }),
+});
+
+const { loggedWallet } = toRefs(walletStore);
+
+const currentDialog = ref<string | null>(null);
+
+const dialogs = {
+  SEND: "SEND",
+  RECEIVE: "RECEIVE",
+  SWAP: "SWAP",
+  BUY: "BUY",
+};
+
+const isBuyDisabled = computed(() => {
+  if (loggedWallet.value) {
+    return !networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network)
+  }
+  return true
+});
+
+const isSwapDisabled = computed(() => {
+  if (loggedWallet.value) {
+    return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network)
+  }
+  return true
+});
+
+const closeDialog = () => {
+  currentDialog.value = null;
 };
 </script>
 <style scoped></style>
