@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import cashbackApi from '@/api/cashback-api';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface BringStore {
   bringCache: any;
@@ -9,16 +10,25 @@ export const bringStore = Vue.observable<BringStore>({
   bringCache: undefined,
 });
 
-chrome.storage.local.get('bringStore', (res) => {
-  const stored = res['bringStore']
-  if (stored) {
-    Object.assign(bringStore, stored);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['bringCache'];
+
+// Hydrate from storage on initialization
+hydrateStore('bringStore', bringStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(bringStore, {
+  storeName: 'bringStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 BringStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<BringStore>) {
+async function persist(patch: Partial<BringStore>): Promise<void> {
   const next = { ...bringStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {
@@ -32,8 +42,8 @@ function persist(patch: Partial<BringStore>) {
         return value;
       }
     }
-  )
-  chrome.storage.local.set({ bringStore: JSON.parse(nextString) });
+  );
+  await smartPersist('bringStore', JSON.parse(nextString));
 }
 
 export default {

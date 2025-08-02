@@ -297,6 +297,7 @@ const computeChartData = computed(() => {
       usdData: [],
     }
   }
+  console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
   let graphData = undefined
   let currentBalance = 0

@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface NetworkStore {
   assets: any;
@@ -27,17 +28,27 @@ export const networkStore = Vue.observable<NetworkStore>({
   genesis: null,
 });
 
-chrome.storage.local.get('networkStore', (res) => {
-  if (res['networkStore']) {
-    Object.assign(networkStore, res['networkStore']);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['assets', 'dreps', 'pools', 'epochParams', 'tip', 'price', 'tickerStatisticsIntervalId', 'genesis'];
+
+// Hydrate from storage on initialization
+hydrateStore('networkStore', networkStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(networkStore, {
+  storeName: 'networkStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 NetworkStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<NetworkStore>) {
+async function persist(patch: Partial<NetworkStore>): Promise<void> {
   const next = { ...networkStore, ...patch };
-  chrome.storage.local.set({ networkStore: next });
+  await smartPersist('networkStore', next);
 }
 
 export default {
