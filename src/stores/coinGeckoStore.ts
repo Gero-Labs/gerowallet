@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import coinGeckoApi from '@/api/coinGecko.api';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface CoinGeckoStore {
   cache: Record<string, any>;
@@ -9,16 +10,25 @@ export const coinGeckoStore: CoinGeckoStore = Vue.observable<CoinGeckoStore>({
   cache: {}
 });
 
-chrome.storage.local.get('coinGeckoStore', (res) => {
-  const stored = res['coinGeckoStore']
-  if (stored) {
-    Object.assign(coinGeckoStore, stored);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['cache'];
+
+// Hydrate from storage on initialization
+hydrateStore('coinGeckoStore', coinGeckoStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(coinGeckoStore, {
+  storeName: 'coinGeckoStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 CoinGeckoStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<CoinGeckoStore>) {
+async function persist(patch: Partial<CoinGeckoStore>): Promise<void> {
   const next = { ...coinGeckoStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {
@@ -32,8 +42,8 @@ function persist(patch: Partial<CoinGeckoStore>) {
         return value;
       }
     }
-  )
-  chrome.storage.local.set({ coinGeckoStore: JSON.parse(nextString) });
+  );
+  await smartPersist('coinGeckoStore', JSON.parse(nextString));
 }
 
 export default {

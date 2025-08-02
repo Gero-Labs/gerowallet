@@ -1,14 +1,14 @@
 <template>
-  <v-card 
-    flat 
-    class="empty-state-hero liquid-glass" 
-    :style="{ 
+  <v-card
+    flat
+    class="empty-state-hero liquid-glass"
+    :style="{
       minHeight: '400px',
       position: 'relative',
       overflow: 'hidden'
     }"
   >
-    
+
     <!-- Content container -->
     <v-card-text class="hero-content">
       <!-- Welcome message -->
@@ -16,7 +16,7 @@
         <h1 class="hero-title">
           {{ isNewUser ? 'Welcome to Gero Wallet!' : 'Your wallet is empty' }}
         </h1>
-        
+
         <p class="hero-subtitle">
           {{ subtitle }}
         </p>
@@ -27,9 +27,9 @@
         <v-card class="backup-card liquid-glass-subtle">
           <v-card-text class="pa-4 pb-3">
             <div class="d-flex align-center mb-3">
-              <v-icon 
-                :color="isBackupComplete ? 'success' : primaryColor" 
-                class="mr-3" 
+              <v-icon
+                :color="isBackupComplete ? 'success' : primaryColor"
+                class="mr-3"
                 size="32"
               >
                 {{ isBackupComplete ? 'mdi-shield-check-outline' : 'mdi-shield-check' }}
@@ -39,28 +39,28 @@
                   {{ isBackupComplete ? 'Wallet Secured' : 'Secure Your Wallet' }}
                 </h3>
                 <p class="backup-subtitle mb-0">
-                  {{ isBackupComplete 
-                    ? 'Your seed phrase has been safely backed up' 
-                    : 'Back up your seed phrase to protect your funds' 
+                  {{ isBackupComplete
+                    ? 'Your seed phrase has been safely backed up'
+                    : 'Back up your seed phrase to protect your funds'
                   }}
                 </p>
               </div>
             </div>
-            
+
             <!-- Show different content based on backup status -->
             <template v-if="!isBackupComplete">
-              <v-alert 
-                type="info" 
-                text 
+              <v-alert
+                type="error"
+                text
                 class="mb-3 backup-alert"
               >
-                Your 24-word seed phrase is the only way to recover your wallet. 
+                Your 24-word seed phrase is the only way to recover your wallet.
                 Store it securely offline.
               </v-alert>
-              
+
               <div class="text-center">
-                <v-btn 
-                  :color="primaryColor" 
+                <v-btn
+                  :color="primaryColor"
                   @click="$emit('backup-wallet')"
                   class="backup-btn"
                 >
@@ -72,12 +72,12 @@
                 </p>
               </div>
             </template>
-            
+
             <!-- Completed state -->
             <template v-else>
-              <v-alert 
-                type="success" 
-                text 
+              <v-alert
+                type="success"
+                text
                 class="mb-0 backup-alert"
                 :icon="false"
               >
@@ -92,9 +92,9 @@
       <!-- Feature cards with spanning background -->
       <v-row class="mt-8 feature-cards-grid" justify="center">
         <!-- Card 1: Buy Crypto (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
+        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex && !isTestnet">
           <div class="feature-card-container buy-card-emphasized">
-            <div 
+            <div
               class="feature-card-background card-1"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -121,11 +121,11 @@
             </div>
           </div>
         </v-col>
-        
+
         <!-- Card 2: Receive -->
         <v-col cols="12" sm="6" md="4" lg="2">
           <div class="feature-card-container">
-            <div 
+            <div
               class="feature-card-background card-2"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -143,11 +143,11 @@
                   <h3 class="feature-title">Receive</h3>
                   <p class="feature-description">Share your address</p>
                 </div>
-                <v-chip 
+                <v-chip
                   v-if="walletAddress"
-                  small 
-                  :color="copiedFeedback ? 'success' : primaryColor" 
-                  text-color="white" 
+                  small
+                  :color="copiedFeedback ? 'success' : primaryColor"
+                  text-color="white"
                   @click.stop="copyToClipboard"
                 >
                   <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
@@ -157,11 +157,11 @@
             </div>
           </div>
         </v-col>
-        
+
         <!-- Card 3: Learn -->
         <v-col cols="12" sm="6" md="4" lg="2">
           <div class="feature-card-container">
-            <div 
+            <div
               class="feature-card-background card-3"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -186,11 +186,11 @@
             </div>
           </div>
         </v-col>
-        
+
         <!-- Card 4: Gero Card (only for Cardano) -->
         <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
           <div class="feature-card-container">
-            <div 
+            <div
               class="feature-card-background card-4"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -215,11 +215,11 @@
             </div>
           </div>
         </v-col>
-        
+
         <!-- Card 4/5: Staking Rewards -->
         <v-col cols="12" sm="6" md="4" lg="2">
           <div class="feature-card-container">
-            <div 
+            <div
               class="feature-card-background card-5"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -244,11 +244,11 @@
             </div>
           </div>
         </v-col>
-        
+
         <!-- Card 5/6: Cashback (only for Cardano) -->
         <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
           <div class="feature-card-container">
-            <div 
+            <div
               class="feature-card-background card-6"
               :style="{
                 backgroundImage: `url(${featureBackgroundImage})`,
@@ -277,9 +277,9 @@
 
       <!-- Sample data option for exploration -->
       <div class="text-center mt-6" v-if="isDevelopment">
-        <v-btn 
-          text 
-          small 
+        <v-btn
+          text
+          small
           @click="$emit('load-sample-data')"
           class="sample-data-btn"
         >
@@ -291,9 +291,9 @@
 
     <!-- Animated background elements -->
     <div class="floating-elements">
-      <div 
-        v-for="i in 5" 
-        :key="i" 
+      <div
+        v-for="i in 5"
+        :key="i"
         class="floating-circle"
         :style="{
           width: `${Math.random() * 100 + 50}px`,
@@ -310,7 +310,7 @@
 <script setup lang="ts">
 import { computed, toRefs, ref, getCurrentInstance } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain } from '@/models/types';
+import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 
@@ -332,7 +332,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits([
   'buy-crypto',
-  'show-receive', 
+  'show-receive',
   'open-learn',
   'start-tutorial',
   'load-sample-data',
@@ -346,9 +346,13 @@ const currencySymbol = computed(() => {
 });
 
 const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || 
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
          loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
+
+const isTestnet = computed(() => {
+  return loggedWallet.value?.network !== Network.MAINNET;
+})
 
 const primaryColor = computed(() => {
   return isApex.value ? '#dc753e' : '#00c7f3';
@@ -393,11 +397,11 @@ const copiedFeedback = ref(false);
 
 const copyToClipboard = async () => {
   if (!walletAddress.value) return;
-  
+
   try {
     await navigator.clipboard.writeText(walletAddress.value);
     copiedFeedback.value = true;
-    
+
     // Reset feedback after 2 seconds
     setTimeout(() => {
       copiedFeedback.value = false;
@@ -411,7 +415,7 @@ const copyToClipboard = async () => {
     textArea.select();
     document.execCommand('copy');
     document.body.removeChild(textArea);
-    
+
     copiedFeedback.value = true;
     setTimeout(() => {
       copiedFeedback.value = false;
@@ -650,7 +654,7 @@ const navigateToCashback = () => {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  
+
   /* Liquid glass effect */
   backdrop-filter: blur(20px) saturate(1.8);
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
@@ -769,15 +773,15 @@ const navigateToCashback = () => {
   .hero-title {
     font-size: 2rem !important;
   }
-  
+
   .hero-content {
     padding: 32px 16px !important;
   }
-  
+
   .action-card {
     min-height: 180px;
   }
-  
+
   .feature-card-wrapper {
     min-height: 180px;
   }

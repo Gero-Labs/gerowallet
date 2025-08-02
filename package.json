@@ -42,7 +42,6 @@
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
     "@emurgo/cardano-serialization-lib-browser": "^12.1.0",
     "@emurgo/cip14-js": "^3.0.1",
-    "@esbuild/win32-x64": "^0.25.8",
     "@keystonehq/keystone-sdk": "^0.8.0",
     "@ledgerhq/hw-transport-web-ble": "^6.29.2",
     "@ledgerhq/hw-transport-webusb": "^6.29.2",

@@ -273,10 +273,7 @@ const formatAxisNumber = (value: number, currency: string = ''): string => {
 // COMMENTED OUT: Dual-axis chart series creation
 // Create simple single-axis chart series (ADA only)
 const createChartSeries = (chartData: any[]): any[] => {
-
-
   const series = [];
-
   // Only show ADA data
   if (chartData.length > 0) {
     series.push({

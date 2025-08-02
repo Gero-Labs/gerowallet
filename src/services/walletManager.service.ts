@@ -2,8 +2,6 @@ import { WalletBg } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore from '@/stores/walletStore';
 import { STORAGE } from '@/chrome/config';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import zkFoldApi from '@/api/zk-fold.api';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
@@ -170,11 +168,21 @@ export class WalletManager {
       isEnterpriseAddress: walletBg.isEnterpriseAddress()
     });
 
-    console.debug('🔐 Setting up Ably service:', { chain, network, address });
+    console.debug('🔐 Setting up Ably service for wallet switch:', { 
+      walletId: walletBg.id,
+      chain, 
+      network, 
+      address,
+      baseAddress: walletBg.baseAddress,
+      stakeAddress: walletBg.stakeAddress
+    });
     console.debug('🔐 Ably service current state before setup:', {
       connectionState: ablyService['client']?.connection?.state,
       hasAuthParams: !!ablyService['authParams'],
-      hasApi: !!ablyService['api']
+      currentAuthParams: ablyService['authParams'],
+      hasApi: !!ablyService['api'],
+      apiChain: ablyService['api']?.chain,
+      apiNetwork: ablyService['api']?.network
     });
 
     // Force close existing connection if any to ensure fresh authentication
@@ -183,12 +191,32 @@ export class WalletManager {
 
     ablyService.setAuthParams(chain, network, address);
     ablyService.setApi(walletBg.api);
+    console.debug('📡 New API instance details:', {
+      chain: walletBg.api.chain,
+      network: walletBg.api.network,
+      provider: walletBg.api.provider
+    });
     console.debug('📡 Connecting to Ably service...');
     ablyService.connect();
 
-    // Add small delay to allow connection to establish before subscribing
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait longer for authentication to complete before subscribing
+    // This ensures the auth callback has time to fetch a fresh token
+    await new Promise(resolve => setTimeout(resolve, 2000));
     console.debug('🔐 Connection state after delay:', ablyService['client']?.connection?.state);
+    
+    // Additional check - wait for connection to be established
+    const maxWaitTime = 10000; // 10 seconds max
+    const startTime = Date.now();
+    while (ablyService['client']?.connection?.state !== 'connected' && (Date.now() - startTime) < maxWaitTime) {
+      console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    if (ablyService['client']?.connection?.state !== 'connected') {
+      console.warn('⚠️ Ably connection not established after timeout, proceeding anyway');
+    } else {
+      console.debug('✅ Ably connection established, proceeding with subscriptions');
+    }
 
     promises.push(
       ablyService.subscribeToPrivateChannel(address, {
@@ -290,20 +318,14 @@ export class WalletManager {
         }
         if (ablyService && typeof ablyService.close === 'function') {
           ablyService.close();
+          console.log('Ably service closed successfully');
         }
       } catch (ablyError) {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
       }
 
-      // Send logout message to background
-      try {
-        await Messaging.sendToBackgroundFromOptions({
-          method: MessageTypes.LOGOUT,
-          data: {},
-        });
-      } catch (error) {
-        console.warn('Failed to send logout message to background (non-critical):', error instanceof Error ? error.message : error);
-      }
+      // Note: Don't send logout message to background since this method
+      // is already called FROM the background logout handler
 
       // Clear Chrome storage
       if (chrome?.storage) {
@@ -387,13 +409,6 @@ export class WalletManager {
    */
   getCurrentWalletId(): number | null {
     return this.currentWalletId;
-  }
-
-  /**
-   * Clear and cleanup current wallet instance (legacy method)
-   */
-  async clearWallet(): Promise<void> {
-    await this.logout();
   }
 
   /**

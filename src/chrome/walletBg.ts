@@ -347,12 +347,15 @@ export class WalletBg {
 
     // Set Tokens
     const tokens = Object.fromEntries(resolvedAssets.filter(([, resolved]) => Boolean(resolved.metadata)));
-    console.log('new tokens', tokens);
+
     WalletStore.setTokens(tokens);
     chrome.alarms.onAlarm.addListener(alarmListener);
     chrome.alarms.create('coinGeckoPrices', { delayInMinutes: 0, periodInMinutes: 1 });
     const isSwapSupported = networks.resolveSwapSupport(this.chain, this.network);
-    console.log('isSwapSupported', isSwapSupported);
+    const isStakingSupported = networks.resolveStakingSupport(this.chain, this.network);
+    if (!this.isEnterpriseAddress() && isStakingSupported) {
+      chrome.alarms.create('refreshStakingPools', { delayInMinutes: 0, periodInMinutes: 240 });
+    }
     if (isSwapSupported) {
       chrome.alarms.create('refreshDexHunterPrices', { delayInMinutes: 0, periodInMinutes: 5 });
       chrome.alarms.create('refreshXerberusRisks', { delayInMinutes: 0, periodInMinutes: 720 });
@@ -464,6 +467,14 @@ export class WalletBg {
       .catch(err => {
         console.debug(`Failed to open database: ${err.stack || err}`);
       });
+  }
+
+  getControlledAmount() {
+    let controlledAmount: bigint = 0n;
+    WalletStore.state.utxos.forEach((utxo: Cardano.Utxo) => {
+      controlledAmount += utxo[1].value.coins
+    })
+    return controlledAmount;
   }
 
   async setAccountInfo(accountInfo): Promise<any> {
@@ -1036,25 +1047,27 @@ export class WalletBg {
 }
 
 export function alarmListener(alarm) {
-  if (alarm.name === 'refreshDexHunterPrices') {
-    console.log('new refreshDexHunterPrices', alarm)
+  if (alarm.name === 'refreshStakingPools') {
+    console.debug('refreshStakingPools');
+  } else if (alarm.name === 'refreshDexHunterPrices') {
+    console.debug('new refreshDexHunterPrices', alarm)
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens))
   } else if (alarm.name === 'refreshXerberusRisks') {
-    console.log('refreshXerberusRisks', alarm)
+    console.debug('refreshXerberusRisks', alarm)
     XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint))
   } else if (alarm.name === 'refreshTokenHistory') {
-    console.log('refreshTokenHistory', alarm)
+    console.debug('refreshTokenHistory', alarm)
     RealFiStore.updateTokenHistory(Object.values(WalletStore.state.tokens).map((token: any) => token.unit))
   } else if (alarm.name.includes('portfolio')) {
-    console.log('portfolio', alarm);
+    console.debug('portfolio', alarm);
     const stakeAddress = alarm.name.split('|')[1]
     TapToolsStore.loadPortfolio(stakeAddress)
   } else if (alarm.name.includes('trendedPortfolio')) {
-    console.log('portfolioTrended', alarm);
+    console.debug('portfolioTrended', alarm);
     const stakeAddress = alarm.name.split('|')[1]
     TapToolsStore.loadPortfolioTrendedValue(stakeAddress)
   } else if (alarm.name === 'coinGeckoPrices') {
-    console.log('coinGeckoPrices', alarm)
+    console.debug('coinGeckoPrices', alarm)
     CoinGeckoStore.updatePrices();
   }
 }

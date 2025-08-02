@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 
 interface WhitelistedEntry {
@@ -53,59 +54,30 @@ export const walletStore = Vue.observable<WalletStore>({
   connectedDapps: []
 });
 
-// Promise-based storage hydration to prevent race conditions
-export const hydrateWalletStore = (): Promise<void> => {
-  return new Promise((resolve) => {
-    chrome.storage.local.get('walletStore', (res) => {
-      const stored = res['walletStore']
-      if (stored) {
-        Object.assign(walletStore, stored);
-        console.log('Wallet store hydrated from Chrome storage');
-      }
-      resolve();
-    });
-  });
-};
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards', 'config', 'keys', 'contacts', 'connectedDapps', 'collateral'];
 
-// Initialize hydration immediately but make it awaitable
-hydrateWalletStore();
+// Hydrate from storage on initialization
+hydrateStore('walletStore', walletStore);
 
-// Selective chrome.storage.onChanged listener for critical cross-context sync
-// Only listen for specific keys that need background -> options sync
-const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards', 'config'];
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local') return;
-
-  const walletStoreChanges = changes['walletStore'];
-  if (!walletStoreChanges) return;
-
-  const { newValue, oldValue } = walletStoreChanges;
-  if (!newValue) return;
-
-  // Check if any of our sync keys changed
-  const hasRelevantChanges = SYNC_KEYS.some(key => {
-    const oldVal = oldValue?.[key];
-    const newVal = newValue[key];
-    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
-  });
-
-  if (hasRelevantChanges) {
-    console.debug('🔄 Cross-context sync: updating wallet store from background changes');
-
-    // Only update the keys that actually changed to prevent overwrite issues
-    SYNC_KEYS.forEach(key => {
-      const oldVal = oldValue?.[key];
-      const newVal = newValue[key];
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        console.debug(`📝 Syncing ${key} from background`);
-        walletStore[key] = newVal;
-      }
-    });
-  }
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(walletStore, {
+  storeName: 'walletStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 WalletStore'
 });
 
-function persist(patch: Partial<WalletStore>) {
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
+
+// Promise-based storage hydration for backward compatibility
+export const hydrateWalletStore = (): Promise<void> => {
+  return hydrateStore('walletStore', walletStore);
+};
+
+async function persist(patch: Partial<WalletStore>): Promise<void> {
   const next = { ...walletStore, ...patch };
   try {
     const nextString: string = JSON.stringify(next, (key, value) => {
@@ -121,13 +93,7 @@ function persist(patch: Partial<WalletStore>) {
         }
       }
     );
-    chrome.storage.local.set({ walletStore: JSON.parse(nextString) }, () => {
-      if (chrome.runtime.lastError) {
-        console.error('Chrome storage error:', chrome.runtime.lastError);
-      } else {
-        console.debug('Successfully saved to Chrome storage, keys:', Object.keys(patch));
-      }
-    });
+    await smartPersist('walletStore', JSON.parse(nextString));
   } catch (error) {
     console.error('Persist failed for patch:', Object.keys(patch), error);
     // Try to persist without the problematic patch
@@ -308,6 +274,7 @@ export default {
     this.setFiatRatesIntervalId(null);
     this.setRewards([]);
     this.setConnectedDapps([]);
+    chrome.alarms.clearAll();
   },
   clearForWalletSwitch() {
     // Clear all wallet-specific data immediately during wallet switching

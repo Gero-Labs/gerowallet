@@ -100,15 +100,22 @@ const submitLogin = async (walletId: string): Promise<void> => {
       data: { wallet },
     });
 
-    // Wait for chrome.storage.onChanged to sync the loggedWallet across contexts
-    await new Promise(resolve => setTimeout(resolve, 300));
-    console.debug('Wallet store after login:', !!WalletStore.state.loggedWallet);
-
-    // Double-check that wallet is actually logged in before navigation
-    if (!WalletStore.state.loggedWallet) {
-      console.warn('⚠️ Wallet not logged in after login attempt, retrying...');
-      await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for storage synchronization to complete before navigation
+    // Poll for loggedWallet to be set (indicating login is complete)
+    const maxWaitTime = 5000; // 5 seconds max wait
+    const pollInterval = 50; // 50ms intervals
+    const startTime = Date.now();
+    
+    while (!WalletStore.state.loggedWallet && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
+    
+    if (!WalletStore.state.loggedWallet) {
+      console.error('❌ Login failed: Wallet not found in store after timeout');
+      return;
+    }
+    
+    console.debug('✅ Login synchronized, wallet logged in:', !!WalletStore.state.loggedWallet);
 
     const queryParams = vmProxy.$route.query;
     console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
