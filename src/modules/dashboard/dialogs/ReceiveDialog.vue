@@ -94,9 +94,9 @@
                         <span class="path-cell">{{ item.path }}</span>
                       </td>
                       <td class="text-center">
-                        <v-chip 
-                          x-small 
-                          outlined 
+                        <v-chip
+                          x-small
+                          outlined
                           :color="item.internal ? 'orange' : 'primary'"
                         >
                           {{ item.internal ? 'Internal' : 'External' }}
@@ -200,10 +200,7 @@ const tabs = computed(() => {
       info: 'Used to Participate in Cardano Governance Actions.',
     },
   ]
-})
-
-// table for used addresses
-const usedHeaders = [{ text: 'Address', value: 'address', align: 'left' }];
+});
 
 const usedAddresses = computed(() => {
   const results = []
@@ -219,6 +216,7 @@ const usedAddresses = computed(() => {
       }
     }));
   }
+  console.log('results', results)
   return results
 })
 

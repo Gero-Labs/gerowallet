@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { getArtists } from '@/shared/utils/converter';
 import { Howl } from 'howler';
 import { resolveIcon } from '@/shared/utils/resolver';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface MusicStore {
   musicPlaylist: any;
@@ -27,21 +28,32 @@ export const musicStore = Vue.observable<MusicStore>({
   }
 });
 
-chrome.storage.local.get('musicStore', (res) => {
-  if (res['musicStore']) {
-    Object.assign(musicStore, res['musicStore']);
-    // Reset audio-specific states that can't be restored from storage
-    musicStore.context.audio = undefined;
-    musicStore.context.isPlaying = false;
-    musicStore.context.seek = 0;
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['musicPlaylist', 'context'];
+
+// Hydrate from storage on initialization with custom logic for audio states
+hydrateStore('musicStore', musicStore).then(() => {
+  // Reset audio-specific states that can't be restored from storage
+  musicStore.context.audio = undefined;
+  musicStore.context.isPlaying = false;
+  musicStore.context.seek = 0;
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(musicStore, {
+  storeName: 'musicStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 MusicStore'
+});
 
-function persist(patch: Partial<MusicStore>) {
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
+
+async function persist(patch: Partial<MusicStore>): Promise<void> {
   const next = { ...musicStore, ...patch };
-  chrome.storage.local.set({ musicStore: next });
+  await smartPersist('musicStore', next);
 }
 
 const MusicStoreModule = {

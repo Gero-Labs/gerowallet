@@ -240,7 +240,7 @@ const items = computed((): NavigationItemUnion[] => {
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true, new: true },
-    { title: 'Credit Card', icon: assts.card, link: '/card', enabled: true },
+    { title: 'Credit Card', icon: assts.card, link: '/card', soon: true },
     { header: 'Activities & Rewards', enabled: true },
     { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
     { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
@@ -287,41 +287,33 @@ function toggleMiniPlayer() {
 
 async function submitLogout() {
   try {
-    // Clear all Chrome alarms
-    if (chrome.alarms) {
-      chrome.alarms.clearAll();
-      console.debug('All Chrome alarms cleared during logout');
-    }
-
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
-
-    // Clear the wallet store immediately to allow navigation to welcome
-    WalletStore.logout();
-
-    // Navigate to welcome page immediately since store is now cleared
-    router.replace('/welcome').catch(err => {
+    
+    // Wait for store synchronization to complete before navigation
+    // Poll for loggedWallet to be cleared (indicating logout is complete)
+    const maxWaitTime = 3000; // 3 seconds max wait
+    const pollInterval = 50; // 50ms intervals
+    const startTime = Date.now();
+    
+    while (loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+    
+    console.debug('🚪 Store logout synchronized, navigating to welcome');
+    
+    // Navigate to welcome page after store is cleared
+    router.push('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);
       // Fallback: force page reload to welcome
       window.location.hash = '#/welcome';
     });
   } catch (error) {
     console.error('Error during logout:', error);
-    // Clear store and navigate even if logout message fails
-    try {
-      // Clear alarms even if other logout steps fail
-      if (chrome.alarms) {
-        chrome.alarms.clearAll();
-        console.debug('Chrome alarms cleared during error recovery');
-      }
-      WalletStore.logout();
-    } catch (storeError) {
-      console.warn('Failed to clear wallet store during logout:', storeError);
-    }
-
+    // Force navigation even on error
     router.replace('/welcome').catch(err => {
       console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';

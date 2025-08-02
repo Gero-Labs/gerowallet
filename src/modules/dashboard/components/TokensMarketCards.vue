@@ -10,7 +10,7 @@
             <div class="coming-soon-text">COMING SOON</div>
           </div>
         </div>
-        
+
         <!-- Blurred Content Container -->
         <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
@@ -91,7 +91,7 @@
             <div class="coming-soon-text">COMING SOON</div>
           </div>
         </div>
-        
+
         <!-- Blurred Content Container -->
         <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
@@ -179,7 +179,7 @@
             <div class="coming-soon-text">COMING SOON</div>
           </div>
         </div>
-        
+
         <!-- Blurred Content Container -->
         <div class="card-content-blur">
         <!-- Last refresh timestamp badge -->
@@ -253,15 +253,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import charli3Store from '@/stores/charli3Store'
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import charli3Store from '@/stores/charli3Store';
 // import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
-import assts from '@/utils/assets'
+import assts from '@/utils/assets';
 
 // Reactive state
 const marketDataInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const countdownInterval = ref<ReturnType<typeof setInterval> | null>(null)
-const logoLoadingQueue = ref<any[]>([])
 const logoLoadingActive = ref(false)
 
 // Computed properties
@@ -362,7 +361,7 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
     }
 
     console.debug('Using mock market data:', mockData)
-    
+
     charli3Store.setMarketData(mockData)
 
     // Skip logo loading for mock data
@@ -511,8 +510,7 @@ const getTokenLogoFromAPI = async (token: any) => {
   // Try Charli3 API for logo
   if (token.currency) {
     const fullAssetId = token.currency
-    const logoUrl = await Charli3API.getTokenLogo(fullAssetId)
-    return logoUrl
+    return await Charli3API.getTokenLogo(fullAssetId)
   }
 
   return null
@@ -548,7 +546,11 @@ const getChangeColor = (change: number) => {
 
 const formatFullRefreshTime = () => {
   if (!lastRefreshTime.value) return ''
-  return lastRefreshTime.value.toLocaleTimeString()
+  // Handle both Date objects and ISO strings from storage
+  const date = lastRefreshTime.value instanceof Date
+    ? lastRefreshTime.value
+    : new Date(lastRefreshTime.value)
+  return date.toLocaleTimeString()
 }
 
 const formatNextRefreshTime = () => {

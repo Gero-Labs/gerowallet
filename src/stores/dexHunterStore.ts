@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface DexHunterStore {
   dexHunterTokens: {};
@@ -13,58 +14,27 @@ export const dexHunterStore = Vue.observable<DexHunterStore>({
   blacklistPolicies: [],
 });
 
-chrome.storage.local.get('dexHunterStore', (res) => {
-  if (res['dexHunterStore']) {
-    Object.assign(dexHunterStore, res['dexHunterStore']);
-  }
-});
-
+// Initialize store with centralized storage sync
 const SYNC_KEYS = ['dexHunterTokens', 'blacklistPolicies'];
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local') return;
+// Hydrate from storage on initialization
+hydrateStore('dexHunterStore', dexHunterStore);
 
-  const dexHunterStoreChanges = changes['dexHunterStore'];
-  if (!dexHunterStoreChanges) return;
-
-  const { newValue, oldValue } = dexHunterStoreChanges;
-  if (!newValue) return;
-
-  // Check if any of our sync keys changed
-  const hasRelevantChanges = SYNC_KEYS.some(key => {
-    const oldVal = oldValue?.[key];
-    const newVal = newValue[key];
-    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
-  });
-
-  if (hasRelevantChanges) {
-    console.debug('🔄 Cross-context sync: updating dexHunter store from background changes');
-
-    // Only update the keys that actually changed to prevent overwrite issues
-    SYNC_KEYS.forEach(key => {
-      const oldVal = oldValue?.[key];
-      const newVal = newValue[key];
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        console.debug(`📝 Syncing ${key} from background`);
-        dexHunterStore[key] = newVal;
-      }
-    });
-  }
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(dexHunterStore, {
+  storeName: 'dexHunterStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 DexHunterStore'
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['dexHunterStore']) {
-    const newValue = changes['dexHunterStore'].newValue;
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-    // DexHunter store contains global blockchain data (tokens, blacklist policies)
-    // that doesn't change based on user transactions, so we can safely sync all updates
-    Object.assign(dexHunterStore, newValue);
-  }
-});
-
-function persist(patch: Partial<DexHunterStore>) {
+async function persist(patch: Partial<DexHunterStore>): Promise<void> {
   const next = { ...dexHunterStore, ...patch };
-  chrome.storage.local.set({ dexHunterStore: next });
+  await smartPersist('dexHunterStore', next);
 }
 
 async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {

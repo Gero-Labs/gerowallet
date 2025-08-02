@@ -8,7 +8,7 @@ self.addEventListener('unhandledrejection', (event) => {
     event.preventDefault(); // Prevent the unhandled rejection from being logged as an error
     return;
   }
-  
+
   // For other unhandled rejections, log but don't prevent (so we can still see real issues)
   console.warn('Unhandled promise rejection:', event.reason);
 });
@@ -1142,7 +1142,7 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
   try {
-    await walletManager.clearWallet();
+    await walletManager.logout();
     sendResponse({
       id: request.id,
       data: { success: true },

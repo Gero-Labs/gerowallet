@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import realfiApi from '@/api/realfi-api';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface RealFiStore {
   tokens: {};
@@ -9,17 +10,27 @@ export const realFiStore = Vue.observable<RealFiStore>({
   tokens: {},
 });
 
-chrome.storage.local.get('realFiStore', (res) => {
-  if (res['realFiStore']) {
-    Object.assign(realFiStore, res['realFiStore']);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['tokens'];
+
+// Hydrate from storage on initialization
+hydrateStore('realFiStore', realFiStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(realFiStore, {
+  storeName: 'realFiStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 RealFiStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<RealFiStore>) {
+async function persist(patch: Partial<RealFiStore>): Promise<void> {
   const next = { ...realFiStore, ...patch };
-  chrome.storage.local.set({ realFiStore: next });
+  await smartPersist('realFiStore', next);
 }
 
 async function persistTokenPatch(unit: string, patch: { data: any[]; }): Promise<void> {

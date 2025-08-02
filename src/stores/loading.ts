@@ -1,4 +1,5 @@
 import Vue from 'vue';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface LoadingState {
   loading: boolean;
@@ -18,48 +19,27 @@ export const loadingState = Vue.observable<LoadingState>({
   loadingTxs: false,
 });
 
-chrome.storage.local.get('loadingState', (res) => {
-  if (res['loadingState']) {
-    Object.assign(loadingState, res['loadingState']);
-  }
-});
-
+// Initialize store with centralized storage sync
 const SYNC_KEYS = ['loading', 'text', 'isSyncing', 'isRestoring', 'connected', 'loadingTxs'];
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local') return;
+// Hydrate from storage on initialization
+hydrateStore('loadingState', loadingState);
 
-  const loadingStoreChanges = changes['loadingState'];
-  if (!loadingStoreChanges) return;
-
-  const { newValue, oldValue } = loadingStoreChanges;
-  if (!newValue) return;
-
-  // Check if any of our sync keys changed
-  const hasRelevantChanges = SYNC_KEYS.some(key => {
-    const oldVal = oldValue?.[key];
-    const newVal = newValue[key];
-    return JSON.stringify(oldVal) !== JSON.stringify(newVal);
-  });
-
-  if (hasRelevantChanges) {
-    console.debug('🔄 Cross-context sync: updating Loading store from background changes');
-
-    // Only update the keys that actually changed to prevent overwrite issues
-    SYNC_KEYS.forEach(key => {
-      const oldVal = oldValue?.[key];
-      const newVal = newValue[key];
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        console.debug(`📝 Syncing ${key} from background`);
-        loadingState[key] = newVal;
-      }
-    });
-  }
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(loadingState, {
+  storeName: 'loadingState',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 LoadingStore'
 });
 
-function persist(patch: Partial<LoadingState>) {
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
+
+async function persist(patch: Partial<LoadingState>): Promise<void> {
   const next = { ...loadingState, ...patch };
-  chrome.storage.local.set({ loadingState: next });
+  await smartPersist('loadingState', next);
 }
 
 export default {
