@@ -1,4 +1,3 @@
-import { Blockchain, Network } from '@/models/types';
 import networks from '@/utils/networks';
 
 export interface EmptyStateConfig {
@@ -18,13 +17,11 @@ export interface EmptyStateConfig {
 
 export const getEmptyStateConfig = (
   component: string,
-  chain?: Blockchain,
-  network?: Network
+  chain?: string,
+  network?: string
 ): EmptyStateConfig => {
   const currencySymbol = networks.resolveCurrencySymbol(chain, network);
   const currencyTicker = networks.resolveCurrencyTicker(chain, network);
-  const isMainnet = network === Network.MAINNET;
-  
   const configs: Record<string, EmptyStateConfig> = {
     portfolio: {
       icon: 'mdi-chart-line',
@@ -36,7 +33,7 @@ export const getEmptyStateConfig = (
         action: 'get-tokens'
       }
     },
-    
+
     transactions: {
       icon: 'mdi-swap-horizontal-circle-outline',
       title: 'No Transactions Yet',
@@ -51,7 +48,7 @@ export const getEmptyStateConfig = (
         action: 'receive-tokens'
       }
     },
-    
+
     tokens: {
       icon: 'mdi-coins',
       title: 'No Tokens Found',
@@ -66,7 +63,7 @@ export const getEmptyStateConfig = (
         action: 'receive-tokens'
       }
     },
-    
+
     staking: {
       icon: 'mdi-cash-clock',
       title: 'Ready to Earn Rewards',
@@ -81,7 +78,7 @@ export const getEmptyStateConfig = (
         action: 'learn-staking'
       }
     },
-    
+
     swap: {
       icon: 'mdi-swap-horizontal',
       title: 'Token Swapping',
@@ -96,7 +93,7 @@ export const getEmptyStateConfig = (
         action: 'learn-dex'
       }
     },
-    
+
     nfts: {
       icon: 'mdi-image-multiple-outline',
       title: 'No NFTs Yet',
@@ -107,7 +104,7 @@ export const getEmptyStateConfig = (
         action: 'explore-nfts'
       }
     },
-    
+
     defi: {
       icon: 'mdi-finance',
       title: 'DeFi Opportunities Await',
@@ -118,7 +115,7 @@ export const getEmptyStateConfig = (
         action: 'explore-defi'
       }
     },
-    
+
     cashback: {
       icon: 'mdi-cash-refund',
       title: 'Cashback Ready',
@@ -129,7 +126,7 @@ export const getEmptyStateConfig = (
         action: 'browse-cashback'
       }
     },
-    
+
     // Specific empty state for pie chart
     pieChart: {
       icon: 'mdi-chart-pie',
@@ -141,7 +138,7 @@ export const getEmptyStateConfig = (
         action: 'add-tokens'
       }
     },
-    
+
     // Market data when no tokens
     marketData: {
       icon: 'mdi-trending-up',
@@ -154,7 +151,7 @@ export const getEmptyStateConfig = (
       }
     }
   };
-  
+
   return configs[component] || {
     icon: 'mdi-information-outline',
     title: 'No Data Available',
@@ -171,7 +168,7 @@ export const isWalletEmpty = (account: any, tokens: any): boolean => {
 
 // Helper to determine if user is completely new
 export const isNewUser = (transactions: any[], account: any): boolean => {
-  return (!transactions || transactions.length === 0) && 
+  return (!transactions || transactions.length === 0) &&
          (!account || !account.active);
 };
 
@@ -185,7 +182,7 @@ export const getHelpTips = (component: string, isNew: boolean): string[] => {
       'Join the community to learn more about the ecosystem'
     ];
   }
-  
+
   const tips: Record<string, string[]> = {
     portfolio: [
       'Your portfolio tracks your total balance over time',
@@ -203,6 +200,6 @@ export const getHelpTips = (component: string, isNew: boolean): string[] => {
       'Set slippage tolerance for better control'
     ]
   };
-  
+
   return tips[component] || [];
 };

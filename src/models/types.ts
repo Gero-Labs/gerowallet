@@ -325,3 +325,50 @@ export interface Activity {
   date: string;
   status: string;
 }
+
+export interface Keys {
+  ccCold: {
+    cred: string;
+    path: string;
+  }[];
+  ccHot: {
+    cred: string;
+    path: string;
+  }[];
+  change: {
+    address: string;
+    cred: string;
+    path: string;
+    used: boolean;
+  }[];
+  drep105: {
+    address: string;
+    cred: string;
+    path: string;
+  }[];
+  "drep129": {
+    address: string;
+    cred: string;
+    path: string;
+  }[];
+  "payment": {
+    address: string;
+    cred: string;
+    path: string;
+    used: boolean;
+  }[];
+  "script": {
+    address: string;
+    cred: string;
+    path: string;
+    used: boolean;
+  }[];
+  "stake": {
+    address: string;
+    cred: string;
+    path: string;
+    used: boolean;
+  }[];
+}
+
+

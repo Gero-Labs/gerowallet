@@ -4,7 +4,6 @@ import { Tip, Blockchain, Provider } from '@/models/types';
 import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
 import ablyService from '@/services/ably.service';
-import networks from '@/utils/networks';
 import { chunkArray } from 'array-chunk-by-size';
 import { Serialization } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
@@ -45,12 +44,8 @@ export class SyncService {
         const promises = [];
         promises.push(this.syncGenesis());
         if (!this.walletBg.isEnterpriseAddress()) {
-          if (networks.resolveStakingSupport(this.walletBg.chain, this.walletBg.network)) {
-            promises.push(this.syncTable(1)); // Sync Staking Pools
-          }
-          if (networks.resolveGovernanceSupport(this.walletBg.chain, this.walletBg.network)) {
-            promises.push(this.syncTable(2)); // Sync DReps
-          }
+          // Note: Staking pools sync moved to alarm-based refresh (every 4 hours)
+          // Note: DReps sync moved to alarm-based refresh (every 4.5 hours)
         }
         if (promises.length > 0) {
           await Promise.all(promises);
@@ -150,52 +145,6 @@ export class SyncService {
         epoch: syncObject.block.epoch,
         epoch_slot: syncObject.block.epoch_slot,
       });
-    }
-  }
-
-  /**
-   * Sync specific blockchain table (pools or DReps)
-   * @param tableId - Table identifier (1 for pools, 2 for DReps)
-   */
-  async syncTable(tableId): Promise<void> {
-    if (this.walletBg.chain == Blockchain.CARDANO || this.walletBg.chain == Blockchain.APEX_PRIME) {
-      const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
-      const syncTable = blockchainDB.table('sync');
-      const lastSyncArray = await syncTable.toArray();
-      const currentTime = new Date();
-      const sync = lastSyncArray?.find(element => element.id == tableId)
-      if (!sync) {
-        await this.setSyncTable(blockchainDB, syncTable, tableId);
-      } else {
-        const lastSyncTime = new Date(sync.time);
-        const hoursSinceLastSync = (currentTime.getTime() - lastSyncTime.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceLastSync >= 4) {
-          await this.setSyncTable(blockchainDB, syncTable, tableId);
-        }
-      }
-    }
-  }
-
-  /**
-   * Set sync table data for pools or DReps
-   * @param blockchainDB - Blockchain database instance
-   * @param syncTable - Sync table record
-   * @param tableId - Table identifier
-   */
-  async setSyncTable(blockchainDB: Dexie, syncTable, tableId: number) {
-    let res;
-    let table;
-    if (tableId == 1) {
-      res = await this.getStakingPools();
-      table = 'pools'
-    } else if (tableId == 2) {
-      res = await this.getDReps();
-      table = 'dreps'
-    }
-    if (res) {
-      blockchainDB.table(table).bulkPut(res);
-      const syncTablesTable = blockchainDB.table('sync');
-      syncTablesTable.put({ id: tableId, time: new Date().getTime() });
     }
   }
 
