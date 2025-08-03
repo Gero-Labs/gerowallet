@@ -10,7 +10,6 @@ import {
   updatePrivateKeyAndMnemonic as dbUpdatePrivateKeyAndMnemonic
 } from '@/db/gero-db';
 import { ERROR, WalletType } from '@/models/types';
-import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
@@ -157,9 +156,8 @@ export default {
     if (wallet.type === WalletType.Normal) {
       try {
         // Decrypt current private key
-        const bytes = CryptoTS.AES.decrypt(wallet.encryptedPrivateKey, currentPassword);
-        const decryptedBytes = JSON.parse(bytes.toString(CryptoTS.enc.Utf8));
-        const buffer: Buffer = Buffer.from(decryptedBytes);
+        const decrypted = decrypt(wallet.encryptedPrivateKey, currentPassword);
+        const buffer: Buffer = Buffer.from(JSON.parse(decrypted));
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password

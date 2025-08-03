@@ -164,12 +164,30 @@ export function extractStakeCredentialsFromCertificates(
 export function serializeWitness(witness: Cardano.Witness): string {
   try {
     console.log('Serializing witness:', witness);
+    console.log('Witness signatures map size:', witness.signatures?.size);
+    
+    // Debug: Log each signature entry
+    if (witness.signatures) {
+      console.log('Witness signatures entries:');
+      witness.signatures.forEach((sig, key) => {
+        console.log(`- Key: ${key}, Sig: ${sig.substring(0, 20)}...`);
+      });
+    }
     
     // Use Cardano JS SDK's built-in serialization
     const serializedWitness = Serialization.TransactionWitnessSet.fromCore(witness);
     return serializedWitness.toCbor();
   } catch (error) {
     console.error('Error serializing witness to CBOR:', error);
+    console.error('Witness structure:', JSON.stringify(witness, (key, value) => {
+      if (value instanceof Map) {
+        return {
+          dataType: 'Map',
+          entries: Array.from(value.entries())
+        };
+      }
+      return value;
+    }, 2));
     throw new Error(`Failed to serialize witness: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -189,5 +207,89 @@ export function deserializeWitness(witnessHex: string): Cardano.Witness {
   } catch (error) {
     console.error('Error deserializing CBOR to witness:', error);
     throw new Error(`Failed to deserialize witness: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Browser-compatible transaction construction utilities
+ * Alternative to @cardano-sdk/tx-construction that works in browser environments
+ */
+export class BrowserTxConstruction {
+  /**
+   * Calculate minimum transaction fee using linear fee formula
+   * @param tx - The Cardano JS SDK transaction
+   * @param resolvedInputs - Array of input UTXOs
+   * @param protocolParams - Protocol parameters with fee coefficients
+   * @returns Minimum fee in lovelace as BigInt
+   */
+  static minFee(tx: Cardano.Tx, resolvedInputs: Cardano.Utxo[], protocolParams: any): bigint {
+    try {
+      // Linear fee calculation: fee = a * size + b
+      const minFeeA = BigInt(protocolParams.minFeeCoefficient);
+      const minFeeB = BigInt(protocolParams.minFeeConstant);
+      
+      // Estimate transaction size based on inputs, outputs, and certificates
+      // These are conservative estimates based on CBOR encoding sizes
+      const inputsSize = tx.body.inputs.length * 180; // ~180 bytes per input
+      const outputsSize = tx.body.outputs.length * 50;  // ~50 bytes per output  
+      const certificatesSize = (tx.body.certificates?.length || 0) * 50; // ~50 bytes per certificate
+      const baseSize = 300; // Base transaction overhead (includes headers, etc.)
+      
+      const estimatedSize = BigInt(baseSize + inputsSize + outputsSize + certificatesSize);
+      
+      const calculatedFee = minFeeB + (minFeeA * estimatedSize);
+      
+      console.debug('Fee calculation:', {
+        minFeeA: minFeeA.toString(),
+        minFeeB: minFeeB.toString(), 
+        estimatedSize: estimatedSize.toString(),
+        calculatedFee: calculatedFee.toString()
+      });
+      
+      return calculatedFee;
+    } catch (error) {
+      console.error('Error calculating minimum fee:', error);
+      // Fallback to a reasonable default fee for delegation transactions
+      return BigInt(200000); // 0.2 ADA
+    }
+  }
+
+  /**
+   * Calculate minimum ADA required for a UTXO based on protocol parameters
+   * @param output - The transaction output
+   * @param coinsPerUtxoByte - Cost per UTXO byte from protocol parameters
+   * @returns Minimum ADA required as BigInt
+   */
+  static minAdaRequired(output: Cardano.TxOut, coinsPerUtxoByte: bigint): bigint {
+    try {
+      // Calculate minimum ADA required for a UTXO based on its size
+      // This is a simplified version based on typical UTXO sizes
+      const baseUtxoSize = 160; // Base UTXO size in bytes (address + value)
+      const addressSize = output.address.length / 2; // Address is hex, so divide by 2 for bytes
+      const assetSize = output.value.assets?.size ? (output.value.assets.size * 50) : 0; // ~50 bytes per asset
+      
+      // Additional overhead for CBOR encoding
+      const encodingOverhead = 20;
+      
+      const totalSize = BigInt(baseUtxoSize + addressSize + assetSize + encodingOverhead);
+      const minAda = totalSize * coinsPerUtxoByte;
+      
+      console.debug('MinAda calculation:', {
+        address: output.address,
+        addressSize,
+        assetSize,
+        totalSize: totalSize.toString(),
+        coinsPerUtxoByte: coinsPerUtxoByte.toString(),
+        minAda: minAda.toString()
+      });
+      
+      // Ensure minimum is at least 1 ADA
+      const minimumAda = BigInt(1000000); // 1 ADA in lovelace
+      return minAda > minimumAda ? minAda : minimumAda;
+    } catch (error) {
+      console.error('Error calculating minimum ADA required:', error);
+      // Fallback to 1 ADA minimum
+      return BigInt(1000000);
+    }
   }
 }

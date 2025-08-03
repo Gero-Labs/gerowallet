@@ -232,6 +232,12 @@ const items = computed((): NavigationItemUnion[] => {
       Cardano.AddressType.EnterpriseScript
   }
 
+  // Check if any Activities & Rewards items are enabled
+  const isClaimRewardsEnabled = false;
+  const isCashbackEnabled = networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+  const isReferralEnabled = false;
+  const hasActivitiesRewardsItems = isClaimRewardsEnabled || isCashbackEnabled || isReferralEnabled;
+
   return [
     { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
     { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
@@ -239,12 +245,12 @@ const items = computed((): NavigationItemUnion[] => {
     { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true, new: true },
+    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', soon: true },
     { title: 'Credit Card', icon: assts.card, link: '/card', soon: true },
-    { header: 'Activities & Rewards', enabled: true },
-    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
-    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true },
+    { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
+    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
+    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
+    { title: 'Referral', icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: 'Media', enabled: musicPlaylist.value?.length > 0 },
@@ -292,19 +298,19 @@ async function submitLogout() {
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    
+
     // Wait for store synchronization to complete before navigation
     // Poll for loggedWallet to be cleared (indicating logout is complete)
     const maxWaitTime = 3000; // 3 seconds max wait
     const pollInterval = 50; // 50ms intervals
     const startTime = Date.now();
-    
+
     while (loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
-    
+
     console.debug('🚪 Store logout synchronized, navigating to welcome');
-    
+
     // Navigate to welcome page after store is cleared
     router.push('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);

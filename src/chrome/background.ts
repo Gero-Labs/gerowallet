@@ -1109,6 +1109,65 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   }
 });
 
+app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
+  try {
+    console.log('submit tx', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      // Handle different transaction input formats
+      let txInput;
+      if (request.data.txCbor && request.data.witnessHex) {
+        // Combine transaction CBOR with witness
+        const { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } = await import('@/chrome/cardanoJsSdkCbor');
+        const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
+        const witness = deserializeWitness(request.data.witnessHex);
+        
+        const signedTx = {
+          ...tx,
+          witness: witness
+        };
+        
+        txInput = serializeCardanoJsSdkTx(signedTx);
+      } else if (request.data.txCbor) {
+        // CBOR hex string format (already signed)
+        txInput = request.data.txCbor;
+      } else if (request.data.tx) {
+        // Legacy Transaction object or Cardano.Tx object
+        txInput = request.data.tx;
+      } else {
+        throw new Error('No transaction data provided (neither tx nor txCbor)');
+      }
+
+      const txId = await walletBg.submitTx(
+        txInput,
+        request.data.utxos || []
+      );
+
+      sendResponse({
+        id: request.id,
+        data: { txId: txId },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error submitting transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
     console.log('login', request)

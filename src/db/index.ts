@@ -7,6 +7,82 @@ import {
 } from '@/db/schema';
 
 let db: Dexie = null
+const blockchainDbCache: Map<string, Dexie> = new Map();
+
+export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
+  const dbName = `${chain}_${network}`;
+  
+  if (blockchainDbCache.has(dbName)) {
+    return blockchainDbCache.get(dbName)!;
+  }
+  
+  try {
+    const db: Dexie = new Dexie(dbName);
+    db.version(blockChainDBVersion).stores(blockChainDBSchema);
+    await db.open();
+    blockchainDbCache.set(dbName, db);
+    return db;
+  } catch (error: DexieError | any) {
+    console.debug('Blockchain database error:', error)
+    if (error.name === 'NoSuchDatabaseError') {
+      const db: Dexie = new Dexie(dbName);
+      db.version(blockChainDBVersion).stores(blockChainDBSchema);
+      await db.open();
+      blockchainDbCache.set(dbName, db);
+      return db;
+    } else {
+      console.error('Error opening blockchain database:', error);
+      return null
+    }
+  }
+}
+
+export function clearBlockchainDbCache(chain: string, network: string) {
+  const dbName = `${chain}_${network}`;
+  const db = blockchainDbCache.get(dbName);
+  if (db) {
+    db.close();
+    blockchainDbCache.delete(dbName);
+  }
+}
+
+/**
+ * Set staking pools data in blockchain database
+ * Used by alarm-based refresh mechanism
+ */
+export async function setStakingPools(chain: string, network: string, stakingPoolsData: any[]): Promise<void> {
+  const blockchainDB = await getBlockchainDb(chain, network);
+  if (!blockchainDB) {
+    throw new Error('Failed to get blockchain database');
+  }
+
+  if (stakingPoolsData && stakingPoolsData.length > 0) {
+    const poolsTable = blockchainDB.table('pools');
+    await poolsTable.bulkPut(stakingPoolsData);
+    console.debug(`✅ Staking pools stored in database (${stakingPoolsData.length} pools)`);
+  } else {
+    console.warn('⚠️ No staking pools data to store');
+  }
+}
+
+/**
+ * Set DReps data in blockchain database
+ * Used by alarm-based refresh mechanism
+ */
+export async function setDReps(chain: string, network: string, drepsData: any[]): Promise<void> {
+  const blockchainDB = await getBlockchainDb(chain, network);
+  if (!blockchainDB) {
+    throw new Error('Failed to get blockchain database');
+  }
+
+  if (drepsData && drepsData.length > 0) {
+    const drepsTable = blockchainDB.table('dreps');
+    await drepsTable.bulkPut(drepsData);
+    console.debug(`✅ DReps stored in database (${drepsData.length} DReps)`);
+  } else {
+    console.warn('⚠️ No DReps data to store');
+  }
+}
 
 export default {
   async getAllWallets() {
