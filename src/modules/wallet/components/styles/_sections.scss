@@ -1,0 +1,147 @@
+@import '../../styles/variables';
+@import '../../styles/mixins';
+
+// Hero Section
+.hero-section {
+  @include flex-column;
+  @include flex-center;
+  text-align: center;
+  padding: $spacing-4xl 0;
+  
+  .hero-title {
+    @include heading-style($font-size-3xl);
+    margin-bottom: $spacing-lg;
+    
+    @include mobile {
+      font-size: $font-size-2xl;
+    }
+  }
+  
+  .hero-subtitle {
+    @include body-text($font-size-xl);
+    margin-bottom: $spacing-3xl;
+    max-width: 600px;
+  }
+}
+
+// Feature Grid Section
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: $spacing-2xl;
+  padding: $spacing-4xl 0;
+  
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: $spacing-xl;
+  }
+}
+
+// Feature List Section
+.feature-list {
+  @include flex-column;
+  gap: $spacing-xl;
+  padding: $spacing-4xl 0;
+}
+
+// Card Management Section
+.card-management {
+  @include flex-column;
+  gap: $spacing-2xl;
+  padding: $spacing-4xl 0;
+  
+  .management-header {
+    @include flex-column;
+    align-items: center;
+    text-align: center;
+    
+    .management-title {
+      @include heading-style($font-size-2xl);
+      margin-bottom: $spacing-md;
+    }
+    
+    .management-description {
+      @include body-text($font-size-lg);
+      max-width: 500px;
+    }
+  }
+}
+
+// Application Status Section
+.application-status {
+  @include flex-column;
+  gap: $spacing-2xl;
+  padding: $spacing-4xl 0;
+  
+  .status-header {
+    @include flex-column;
+    align-items: center;
+    text-align: center;
+    
+    .status-title {
+      @include heading-style($font-size-2xl);
+      margin-bottom: $spacing-md;
+    }
+    
+    .status-description {
+      @include body-text($font-size-lg);
+      max-width: 500px;
+    }
+  }
+  
+  .status-timeline {
+    @include flex-column;
+    gap: $spacing-lg;
+    
+    .timeline-item {
+      display: flex;
+      align-items: center;
+      gap: $spacing-lg;
+      padding: $spacing-lg;
+      border-radius: $border-radius-lg;
+      background: $background-card;
+      border: 1px solid $border-secondary;
+      
+      &.completed {
+        border-color: $primary-green;
+        background: rgba($primary-green, 0.05);
+      }
+      
+      &.current {
+        border-color: $primary-cyan;
+        background: rgba($primary-cyan, 0.05);
+      }
+      
+      .timeline-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        @include flex-center;
+        background: $background-secondary;
+        
+        &.completed {
+          background: $primary-green;
+          color: white;
+        }
+        
+        &.current {
+          background: $primary-cyan;
+          color: white;
+        }
+      }
+      
+      .timeline-content {
+        flex: 1;
+        
+        .timeline-title {
+          @include text-style($font-size-lg, $font-weight-semibold);
+          margin-bottom: $spacing-xs;
+        }
+        
+        .timeline-description {
+          @include body-text($font-size-sm);
+        }
+      }
+    }
+  }
+} 

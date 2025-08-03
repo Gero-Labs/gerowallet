@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="$emit('close')"
+  <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="handleClose"
               :img="tokensData ? tokensData[0].img : null"
               :title="modalData ? `${modalData.name} (${Number(modalData.quantity).toLocaleString('en-US')})` : ''"
               :subtitle="description" :subtitle2="tokensData ? tokensData[0].policy_id : ''" :width="696" :min-height="646" :height="646">
@@ -21,7 +21,7 @@
             </v-card>
           </v-col>
         </v-row>
-      <AssetDetails :asset="pickedToken" v-else />
+      <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
       <v-btn text elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">Back</v-btn>
@@ -35,7 +35,7 @@ import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
 
 const props = defineProps({
   modalData: {
-    type: Object,
+    type: Object as () => any,
     default: null,
   },
 });
@@ -43,6 +43,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const pickedToken = ref(null);
+const assetDetailsRef = ref<InstanceType<typeof AssetDetails> | null>(null);
 
 const description = computed(() => {
   let desc = '';
@@ -68,21 +69,16 @@ const isDialogVisible = computed(() => {
   return !!props.modalData;
 });
 
-const page = computed({
-  get() {
-    return 1;
-  },
-  set(value) {
-    console.log(value);
-  },
-});
-
 const handleTokenClick = (token: any) => {
   pickedToken.value = token;
 };
 
-const handleBreadcrumbClick = () => {
-  pickedToken.value = null;
+const handleClose = () => {
+  // Stop any playing media before closing
+  if (assetDetailsRef.value && assetDetailsRef.value.stopMedia) {
+    assetDetailsRef.value.stopMedia();
+  }
+  emit('close');
 };
 
 watch(isDialogVisible, (val) => {

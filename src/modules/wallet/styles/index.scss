@@ -1,0 +1,14 @@
+// Wallet Module Styles
+@import './variables';
+@import './mixins';
+@import './utilities';
+
+// Global wallet styles
+.wallet-module {
+  color: $text-primary;
+  font-family: $font-family-primary;
+  line-height: $line-height-relaxed;
+}
+
+// Component-specific styles will be imported here
+@import '../components/styles/index'; 

@@ -1,0 +1,57 @@
+@import '../../styles/variables';
+@import '../../styles/mixins';
+
+// Gradient Button
+.gradient-button {
+  @include gradient-button;
+  @include button-size;
+  width: 100%;
+  
+  @include mobile {
+    @include button-size($spacing-sm, $spacing-md, $font-size-sm);
+  }
+}
+
+// Secondary Button
+.secondary-button {
+  @include secondary-button;
+  @include button-size;
+  width: 100%;
+  
+  @include mobile {
+    @include button-size($spacing-sm, $spacing-md, $font-size-sm);
+  }
+}
+
+// New Tag Badge
+.new-tag {
+  display: inline-block;
+  background: #053321;
+  color: #75E0A7;
+  font-family: $font-family-primary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  line-height: $line-height-normal;
+  padding: $spacing-xs $spacing-md;
+  border-radius: $border-radius-full;
+  border: 1px solid #085D3A;
+  margin-bottom: $spacing-2xl;
+  text-align: center;
+}
+
+// Button Groups
+.button-group {
+  display: flex;
+  gap: $spacing-md;
+  width: 100%;
+  
+  .gradient-button,
+  .secondary-button {
+    flex: 1;
+  }
+  
+  @include mobile {
+    flex-direction: column;
+    gap: $spacing-sm;
+  }
+} 

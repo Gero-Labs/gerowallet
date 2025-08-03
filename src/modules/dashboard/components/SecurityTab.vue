@@ -79,7 +79,7 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="loggedWallet.type === WalletType.Normal" @click="changePasswordDialog = true">
+      <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal" @click="changePasswordDialog = true">
         <v-list-item-avatar class="my-0">
           <v-icon>
             mdi-shield-key-outline

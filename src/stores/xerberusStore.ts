@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import xerberusApi from '@/api/xerberus.api';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface XerberusStore {
   risks: object;
@@ -9,17 +10,27 @@ export const xerberusStore = Vue.observable<XerberusStore>({
   risks: {},
 });
 
-chrome.storage.local.get('xerberusStore', (res) => {
-  if (res['xerberusStore']) {
-    Object.assign(xerberusStore, res['xerberusStore']);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['risks'];
+
+// Hydrate from storage on initialization
+hydrateStore('xerberusStore', xerberusStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(xerberusStore, {
+  storeName: 'xerberusStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 XerberusStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<XerberusStore>) {
+async function persist(patch: Partial<XerberusStore>): Promise<void> {
   const next = { ...xerberusStore, ...patch };
-  chrome.storage.local.set({ xerberusStore: next });
+  await smartPersist('xerberusStore', next);
 }
 
 async function persistTokenPatch(fingerprint: string, patch: { risk: string; }): Promise<void> {

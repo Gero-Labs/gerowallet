@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import tapToolsApi from '@/api/tap-tools-api';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface TapToolsStore {
   portfolio: any;
@@ -14,17 +15,27 @@ export const tapToolsStore = Vue.observable<TapToolsStore>({
   tokens: {}
 });
 
-chrome.storage.local.get('tapToolsStore', (res) => {
-  if (res['tapToolsStore']) {
-    Object.assign(tapToolsStore, res['tapToolsStore']);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['portfolio', 'portfolioTrendedValue', 'tokens'];
+
+// Hydrate from storage on initialization
+hydrateStore('tapToolsStore', tapToolsStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(tapToolsStore, {
+  storeName: 'tapToolsStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 TapToolsStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<TapToolsStore>) {
+async function persist(patch: Partial<TapToolsStore>): Promise<void> {
   const next = { ...tapToolsStore, ...patch };
-  chrome.storage.local.set({ tapToolsStore: next });
+  await smartPersist('tapToolsStore', next);
 }
 
 // async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {

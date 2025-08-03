@@ -54,10 +54,12 @@
                 v-else-if="isAudio(files[selectedFile].mediaType)" controls loop
                 :src="assets.resolveIcon(files[selectedFile].src)"
                 style="width: 100%; top: 50%"
+                ref="audioElement"
               ></audio>
               <video
                 v-else-if="isVideo(files[selectedFile].mediaType)" controls loop
                 :src="assets.resolveIcon(files[selectedFile].src)" class="videoClass"
+                ref="videoElement"
               ></video>
             </v-card-text>
             <v-card-text>
@@ -110,7 +112,7 @@ import filters from '@/shared/utils/filters';
 
 const props = defineProps({
   asset: {
-    type: Object,
+    type: Object as () => any,
     default: () => {
     },
   },
@@ -136,17 +138,9 @@ const editedAsset = ref<any>({
 });
 const additional_attributes = ref<any>([]);
 const tab = ref(null);
-const loading = ref(false);
 const selectedFile = ref(null);
-
-const properties = computed(() => {
-  const properties = []
-  if (editedAsset.value && metadata.value) {
-    // const returnedObject = rarities.computeRarity(this.metadata[721][this.editedAsset.policy_id][this.editedAsset.asset_name], false)
-    // properties.push(...Object.keys(returnedObject))
-  }
-  return properties
-});
+const audioElement = ref<HTMLAudioElement | null>(null);
+const videoElement = ref<HTMLVideoElement | null>(null);
 
 const metadata = computed(() => {
   return props.asset.onchain_metadata
@@ -197,6 +191,21 @@ function isVideo(mediaType) {
   return (mediaType === 'video/webm' || mediaType === 'video/mp4' || mediaType === 'video/h264' || mediaType === 'video/quicktime' || mediaType === 'video/raw')
 }
 
+function stopMedia() {
+  if (audioElement.value && !audioElement.value.paused) {
+    audioElement.value.pause();
+    audioElement.value.currentTime = 0;
+  }
+  if (videoElement.value && !videoElement.value.paused) {
+    videoElement.value.pause();
+    videoElement.value.currentTime = 0;
+  }
+}
+
+defineExpose({
+  stopMedia
+});
+
 watch(tab, () => {
   forceReRender()
 })
@@ -205,7 +214,7 @@ watch(props.asset, (val) => {
   editedAsset.value = {...val}
 })
 
-watch(additional_attributes, (newVal) => {
+watch(additional_attributes, (newVal: any[]) => {
   const additionalAttributes = {}
   newVal.forEach(element => {
     additionalAttributes[element.name] = element.value

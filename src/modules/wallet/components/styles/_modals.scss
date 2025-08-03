@@ -1,0 +1,145 @@
+@import '../../styles/variables';
+@import '../../styles/mixins';
+
+// Modal Base Styles
+.modal-card {
+  @include modal-card;
+  max-width: 584px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.modal-content {
+  padding: $spacing-3xl;
+  
+  @include mobile {
+    padding: $spacing-xl;
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-2xl;
+  
+  .modal-title {
+    @include heading-style($font-size-2xl);
+    margin: 0;
+  }
+  
+  .close-button {
+    background: none;
+    border: none;
+    color: $text-muted;
+    cursor: pointer;
+    padding: $spacing-xs;
+    border-radius: $border-radius-sm;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      color: $text-primary;
+      background: $background-secondary;
+    }
+  }
+}
+
+.modal-body {
+  margin-bottom: $spacing-2xl;
+}
+
+.modal-footer {
+  display: flex;
+  gap: $spacing-md;
+  
+  @include mobile {
+    flex-direction: column;
+  }
+}
+
+// KYC Modal Specific Styles
+.kyc-modal {
+  .modal-content {
+    padding: 0;
+  }
+  
+  .kyc-steps {
+    display: flex;
+    margin-bottom: $spacing-2xl;
+    
+    .step {
+      flex: 1;
+      text-align: center;
+      padding: $spacing-md;
+      border-bottom: 2px solid $border-secondary;
+      color: $text-muted;
+      font-weight: $font-weight-medium;
+      
+      &.active {
+        border-bottom-color: $primary-cyan;
+        color: $primary-cyan;
+      }
+      
+      &.completed {
+        border-bottom-color: $primary-green;
+        color: $primary-green;
+      }
+    }
+  }
+  
+  .step-content {
+    padding: $spacing-3xl;
+    
+    @include mobile {
+      padding: $spacing-xl;
+    }
+  }
+  
+  .file-upload-area {
+    border: 2px dashed $border-primary;
+    border-radius: $border-radius-lg;
+    padding: $spacing-3xl;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      border-color: $primary-cyan;
+      background: rgba($primary-cyan, 0.05);
+    }
+    
+    &.dragover {
+      border-color: $primary-green;
+      background: rgba($primary-green, 0.1);
+    }
+  }
+  
+  .camera-preview {
+    position: relative;
+    border-radius: $border-radius-lg;
+    overflow: hidden;
+    background: $background-secondary;
+    
+    video {
+      width: 100%;
+      height: 300px;
+      object-fit: cover;
+    }
+    
+    .camera-controls {
+      position: absolute;
+      bottom: $spacing-lg;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: $spacing-md;
+    }
+  }
+  
+  .captured-photo {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    border-radius: $border-radius-lg;
+  }
+} 

@@ -10,12 +10,12 @@ import {
   updatePrivateKeyAndMnemonic as dbUpdatePrivateKeyAndMnemonic
 } from '@/db/gero-db';
 import { ERROR, WalletType } from '@/models/types';
-import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
 import { encryptPrivateKey } from '@/chrome/serialization';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface GeroStore {
   wallets: any;
@@ -31,16 +31,25 @@ export const geroStore: GeroStore =  Vue.observable<GeroStore>({
   },
 });
 
-chrome.storage.local.get('geroStore', (res) => {
-  const stored = res['geroStore']
-  if (stored) {
-    Object.assign(geroStore, stored);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['wallets', 'network', 'config'];
+
+// Hydrate from storage on initialization
+hydrateStore('geroStore', geroStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(geroStore, {
+  storeName: 'geroStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 GeroStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<GeroStore>) {
+async function persist(patch: Partial<GeroStore>): Promise<void> {
   const next = { ...geroStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {
@@ -54,8 +63,8 @@ function persist(patch: Partial<GeroStore>) {
         return value;
       }
     }
-  )
-  chrome.storage.local.set({ geroStore: JSON.parse(nextString) });
+  );
+  await smartPersist('geroStore', JSON.parse(nextString));
 }
 
 export default {
@@ -147,9 +156,8 @@ export default {
     if (wallet.type === WalletType.Normal) {
       try {
         // Decrypt current private key
-        const bytes = CryptoTS.AES.decrypt(wallet.encryptedPrivateKey, currentPassword);
-        const decryptedBytes = JSON.parse(bytes.toString(CryptoTS.enc.Utf8));
-        const buffer: Buffer = Buffer.from(decryptedBytes);
+        const decrypted = decrypt(wallet.encryptedPrivateKey, currentPassword);
+        const buffer: Buffer = Buffer.from(JSON.parse(decrypted));
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password

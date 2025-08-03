@@ -1,4 +1,5 @@
 import Vue from 'vue';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface MarketToken {
   symbol: string;
@@ -44,35 +45,25 @@ export const charli3Store = Vue.observable<Charli3Store>({
   error: null
 });
 
-// Chrome storage integration
-chrome.storage.local.get('charli3Store', (res) => {
-  const stored = res['charli3Store'];
-  if (stored) {
-    // Restore market data and logo cache
-    Object.assign(charli3Store, {
-      marketData: stored.marketData || charli3Store.marketData,
-      logoCache: stored.logoCache || {},
-      lastRefreshTime: stored.lastRefreshTime ? new Date(stored.lastRefreshTime) : null,
-      loading: false,
-      error: null
-    });
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['marketData', 'logoCache', 'lastRefreshTime', 'error'];
+
+// Hydrate from storage on initialization
+hydrateStore('charli3Store', charli3Store);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(charli3Store, {
+  storeName: 'charli3Store',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 Charli3Store'
 });
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes['charli3Store']) {
-    const newValue = changes['charli3Store'].newValue;
-    if (newValue) {
-      Object.assign(charli3Store, {
-        marketData: newValue.marketData || charli3Store.marketData,
-        logoCache: newValue.logoCache || {},
-        lastRefreshTime: newValue.lastRefreshTime ? new Date(newValue.lastRefreshTime) : null
-      });
-    }
-  }
-});
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<Charli3Store>) {
+async function persist(patch: Partial<Charli3Store>): Promise<void> {
   const next = { 
     ...charli3Store, 
     ...patch,
@@ -87,7 +78,7 @@ function persist(patch: Partial<Charli3Store>) {
     return value;
   });
   
-  chrome.storage.local.set({ charli3Store: JSON.parse(nextString) });
+  await smartPersist('charli3Store', JSON.parse(nextString));
 }
 
 export default {
@@ -143,17 +134,41 @@ export default {
   clearExpiredLogos() {
     const now = Date.now();
     const twentyFourHours = 24 * 60 * 60 * 1000;
-    let hasExpired = false;
+    let hasChanged = false;
 
     for (const [key, entry] of Object.entries(charli3Store.logoCache)) {
+      // Remove expired entries
       if (now - entry.timestamp >= twentyFourHours) {
         delete charli3Store.logoCache[key];
-        hasExpired = true;
+        hasChanged = true;
+      }
+      // Remove invalid blob URLs (these cause ERR_FILE_NOT_FOUND errors)
+      else if (entry.url && entry.url.startsWith('blob:')) {
+        console.log(`Removing invalid blob URL for ${key}`);
+        delete charli3Store.logoCache[key];
+        hasChanged = true;
       }
     }
 
-    if (hasExpired) {
+    if (hasChanged) {
       persist({ logoCache: charli3Store.logoCache });
+    }
+  },
+
+  clearInvalidBlobUrls() {
+    let hasChanged = false;
+
+    for (const [key, entry] of Object.entries(charli3Store.logoCache)) {
+      if (entry.url && entry.url.startsWith('blob:')) {
+        console.log(`Clearing invalid blob URL for ${key}: ${entry.url}`);
+        delete charli3Store.logoCache[key];
+        hasChanged = true;
+      }
+    }
+
+    if (hasChanged) {
+      persist({ logoCache: charli3Store.logoCache });
+      console.log('Cleared all invalid blob URLs from cache');
     }
   },
 
@@ -177,13 +192,21 @@ export default {
 
   isDataStale(): boolean {
     if (!charli3Store.lastRefreshTime) return true;
+    // Handle both Date objects and ISO strings from storage
+    const lastRefresh = charli3Store.lastRefreshTime instanceof Date 
+      ? charli3Store.lastRefreshTime 
+      : new Date(charli3Store.lastRefreshTime);
     const fiveMinutes = 5 * 60 * 1000;
-    return Date.now() - charli3Store.lastRefreshTime.getTime() > fiveMinutes;
+    return Date.now() - lastRefresh.getTime() > fiveMinutes;
   },
 
   getNextRefreshTime(): Date | null {
     if (!charli3Store.lastRefreshTime) return null;
-    return new Date(charli3Store.lastRefreshTime.getTime() + 5 * 60 * 1000);
+    // Handle both Date objects and ISO strings from storage
+    const lastRefresh = charli3Store.lastRefreshTime instanceof Date 
+      ? charli3Store.lastRefreshTime 
+      : new Date(charli3Store.lastRefreshTime);
+    return new Date(lastRefresh.getTime() + 5 * 60 * 1000);
   },
 
   state: charli3Store

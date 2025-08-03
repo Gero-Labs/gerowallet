@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="card-container justify-center">
+  <v-card outlined class="card-container justify-center liquid-glass">
     <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
