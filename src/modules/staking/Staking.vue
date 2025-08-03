@@ -5,7 +5,7 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined>
+        <v-card flat outlined class="liquid-glass">
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>
@@ -71,7 +71,7 @@
                           hide-default-footer class="poolsTable transparent" @click:row="delegate">
               <template v-slot:[`item.name`]="{ item }">
                 <v-list-item three-line style="min-height: 68px" class="px-0">
-                  <v-list-item-avatar size="24" style="place-self: center;">
+                  <v-list-item-avatar size="24" style="place-self: center; margin-right: 8px!important;">
                     <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="assets.fallbackImage" eager></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
@@ -267,13 +267,14 @@ import { computed, ref, toRefs, watch, onMounted } from 'vue';
 import CopyButton from "@/shared/components/CopyButton.vue";
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
+import * as InputSelection from '@cardano-sdk/input-selection';
+import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from "@/utils/networks";
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import filters from '@/shared/utils/filters';
-import { getStakeKey } from '@/chrome/serialization';
 import { setWalletConfiguration } from '@/db/wallet-db';
 
 const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
@@ -302,7 +303,7 @@ const headers = computed(() => {
       }
     },
     {text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-    {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 84 }
+    {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 }
   ]
 });
 
@@ -332,9 +333,10 @@ const delegatingToGero = computed(() => {
 });
 
 const stakePools = computed(() => {
-  if (pools.value) {
-    let filteredPools = Object.values(pools.value).filter((pool: any) => pool.pool_status === 'registered')
-    if (search.value) {
+  const poolsCopy = structuredClone(pools.value)
+  if (poolsCopy) {
+    let filteredPools = Object.values(poolsCopy).filter((pool: any) => pool.pool_status === 'registered')
+    if (poolsCopy) {
       filteredPools = filteredPools.filter((pool: any) => (pool.ticker && pool.ticker.toLowerCase().includes(search.value.toLowerCase())) || (pool.name && pool.name.toLowerCase().includes(search.value.toLowerCase())))
     }
     if (pledgeMet.value) {
@@ -386,72 +388,185 @@ const delegateToGero = () => {
   }
 }
 
-function delegate(row: any) {
-  console.log('delegate', row)
+async function delegate(row: any) {
   selectedPool.value = row
 
-  const certificates: Cardano.Certificate[] = [];
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
 
-  console.log(getStakeKey(loggedWallet.value.publicKey, 0).hash().hex())
-  console.log(selectedPool.value.pool_id_bech32)
-  console.log(keys.value.stake[0].cred)
+    const certificates: Cardano.Certificate[] = [];
 
-  // Create stake credential from the key hash
-  const stakeCredential: Cardano.Credential = {
-    type: Cardano.CredentialType.KeyHash,
-    hash: keys.value.stake[0].cred
-  };
-
-  if (!account.value?.active) {
-    // Create stake registration certificate
-    const registrationCertificate: Cardano.StakeRegistrationCertificate = {
-      __typename: Cardano.CertificateType.StakeRegistration,
-      stakeCredential
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred
     };
-    certificates.push(registrationCertificate);
+
+    const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+    let certificate;
+    if (!account.value?.active) {
+      // Need to register stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.StakeRegistrationDelegation,
+        stakeCredential,
+        poolId,
+        deposit: stakeKeyDepositLovelace
+      };
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.StakeDelegation,
+        stakeCredential,
+        poolId
+      };
+    }
+    certificates.push(certificate);
+
+    // Calculate required amounts - ensure all BigInt operations
+    const depositRequired = !account.value?.active ? stakeKeyDepositLovelace : BigInt(0);
+
+    // Create change address resolver for input selection - use wallet's main address
+    const changeAddressResolver: InputSelection.ChangeAddressResolver = {
+      resolve: async (selectionSkeleton: InputSelection.SelectionSkeleton) => {
+        // Calculate change amount
+        const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
+        const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
+        const implicitCost = depositRequired + selectionSkeleton.fee;
+        const changeAmount = totalInput - totalOutput - implicitCost;
+
+        if (changeAmount <= BigInt(0)) {
+          return []; // No change needed
+        }
+
+        // Create change output to wallet's main address
+        const changeOutput: Cardano.TxOut = {
+          address: keys.value.payment[0].address, // Use wallet's main address
+          value: {
+            coins: changeAmount,
+            assets: new Map()
+          }
+        };
+
+        return [changeOutput];
+      }
+    };
+
+    // Use Cardano JS SDK input selection
+    const selector = InputSelection.roundRobinRandomImprove({
+      changeAddressResolver
+    });
+
+    // Create protocol parameters for fee calculation
+    const protocolParams: InputSelection.ProtocolParametersForInputSelection = {
+      coinsPerUtxoByte: epochParams.value.coinsPerUtxoByte,
+      maxTxSize: epochParams.value.maxTxSize,
+      maxValueSize: epochParams.value.maxValueSize,
+      minFeeCoefficient: epochParams.value.minFeeCoefficient,
+      minFeeConstant: epochParams.value.minFeeConstant,
+      prices: epochParams.value.prices,
+      minFeeRefScriptCostPerByte: epochParams.value.minFeeRefScriptCostPerByte
+    };
+
+    // Create constraints using SDK fee calculation
+    const constraints: InputSelection.SelectionConstraints = {
+      computeMinimumCost: async (selectionSkeleton) => {
+        // Build a temporary transaction to calculate accurate fees
+        const tempTxBody: Cardano.TxBody = {
+          inputs: Array.from(selectionSkeleton.inputs).map(utxo => utxo[0]),
+          outputs: Array.from(selectionSkeleton.outputs),
+          fee: BigInt(0), // Will be calculated
+          certificates
+        };
+
+        const tempTx: Cardano.Tx = {
+          id: Cardano.TransactionId('0'.repeat(64)),
+          body: tempTxBody,
+          witness: { signatures: new Map() }
+        };
+
+        // Calculate minimum fee using browser-compatible SDK
+        const calculatedFee = BrowserTxConstruction.minFee(tempTx, Array.from(selectionSkeleton.inputs), protocolParams);
+
+        return {
+          fee: calculatedFee
+        };
+      },
+      tokenBundleSizeExceedsLimit: () => false,
+      computeMinimumCoinQuantity: (output) => BrowserTxConstruction.minAdaRequired(output, BigInt(protocolParams.coinsPerUtxoByte)),
+      computeSelectionLimit: async () => 20
+    };
+
+    // Convert UTXOs to a proper format with BigInt values
+    const formattedUtxos: Cardano.Utxo[] = utxos.value.map((utxo: any) => [
+      utxo[0], // TxIn remains the same
+      {
+        ...utxo[1], // TxOut
+        value: {
+          coins: BigInt(utxo[1].value.coins), // Ensure BigInt
+          assets: utxo[1].value.assets || new Map()
+        }
+      }
+    ]);
+
+    // Convert arrays to Sets for input selection
+    const utxoSet = new Set(formattedUtxos);
+
+    // For delegation transactions, we don't need dummy outputs
+    // The deposit will be handled via implicitValue parameter
+    const outputsSet = new Set<Cardano.TxOut>();
+
+    // Handle deposit as implicit coin for input selection
+    const implicitValue: InputSelection.ImplicitValue = {
+      coin: depositRequired > BigInt(0) ? {
+        deposit: depositRequired
+      } : undefined
+    };
+
+    // Perform input selection with implicit value for deposits
+    const selectionResult = await selector.select({
+      preSelectedUtxo: new Set(), // No pre-selected UTXOs
+      utxo: utxoSet,
+      outputs: outputsSet,
+      constraints,
+      implicitValue
+    });
+
+    // Build final transaction body - exclude fake outputs, only include change
+    const finalOutputs = selectionResult.selection.change.length > 0 ? selectionResult.selection.change : [];
+
+    const txBody: Cardano.TxBody = {
+      inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
+      outputs: finalOutputs, // Only change outputs, no fake outputs
+      fee: selectionResult.selection.fee,
+      validityInterval: {
+        invalidHereafter: Cardano.Slot(Number(tip.value.slot) + 3600) // 1 hour from now
+      },
+      certificates
+    };
+
+    // Create a final transaction
+    const transaction: Cardano.Tx = {
+      id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
+      body: txBody,
+      witness: {
+        signatures: new Map()
+      }
+    };
+
+    txData.value = transaction;
+    isDelegateDialogOpen.value = true;
+
+  } catch (error) {
+    console.error('Error building delegation transaction:', error);
+    // You might want to show an error message to the user here
   }
-
-  // Create stake delegation certificate
-  const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
-  const delegationCertificate: Cardano.StakeDelegationCertificate = {
-    __typename: Cardano.CertificateType.StakeDelegation,
-    stakeCredential,
-    poolId
-  };
-  certificates.push(delegationCertificate);
-
-  // Create change output - for delegation we typically send change back to our own address
-  const changeOutput: Cardano.TxOut = {
-    address: keys.value.payment[0].address, // Use first payment address for change
-    value: {
-      coins: BigInt(0), // Will be calculated properly during signing
-      assets: new Map()
-    }
-  };
-
-  // Build transaction body using Cardano JS SDK
-  const txBody: Cardano.TxBody = {
-    inputs: utxos.value.map((utxo: Cardano.Utxo) => utxo[0]),
-    outputs: [changeOutput],
-    fee: BigInt(200000), // Estimated fee (will be calculated properly by signing infrastructure)
-    validityInterval: {
-      invalidHereafter: Cardano.Slot(tip.value.slot + 3600) // 1 hour from now
-    },
-    certificates
-  };
-
-  // Serialize transaction for the dialog
-  const transaction: Cardano.Tx = {
-    id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
-    body: txBody,
-    witness: {
-      signatures: new Map()
-    }
-  };
-
-  txData.value = transaction;
-  console.log('Transaction built with Cardano JS SDK:', transaction);
-  isDelegateDialogOpen.value = true;
 }
 
 const closeDelegateDialog = () => {

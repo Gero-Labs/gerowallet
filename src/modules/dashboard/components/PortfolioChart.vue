@@ -273,13 +273,9 @@ const formatAxisNumber = (value: number, currency: string = ''): string => {
 // COMMENTED OUT: Dual-axis chart series creation
 // Create simple single-axis chart series (ADA only)
 const createChartSeries = (chartData: any[]): any[] => {
-  console.log('Creating simple ADA chart series:', chartData.length, 'points');
-
   const series = [];
-
   // Only show ADA data
   if (chartData.length > 0) {
-    console.log('Adding ADA series with', chartData.length, 'points');
     series.push({
       type: "areaspline",
       name: "Portfolio Balance",
@@ -736,16 +732,8 @@ const handleTabClick = (tabItem) => {
   );
 
   if (chartInstance.value?.xAxis) {
-    console.log('Setting time range:', {
-      start: new Date(startUTC).toLocaleDateString(),
-      end: new Date(endUTC).toLocaleDateString(),
-      hasChart: !!chartInstance.value,
-      hasXAxis: !!chartInstance.value.xAxis[0]
-    });
-
     // Set time range first
     chartInstance.value.xAxis[0].setExtremes(startUTC, endUTC);
-    console.log('Time range set, scheduling Y-axis update...');
 
     // COMMENTED OUT: Dual-axis Y-axis range update
     // setTimeout(() => {
@@ -849,14 +837,9 @@ watch(price, (newVal) => {
 // COMMENTED OUT: Dual-axis chart data watching
 // Simple single chart data watching (ADA only)
 watch(() => props.chartData, (newChartData, oldChartData) => {
-  console.log('Chart data changed:');
-  console.log('New ADA data:', newChartData?.length || 0, 'points');
-
   if (arraysEqual(newChartData, oldChartData)) {
-    console.log('Data unchanged, skipping');
     return;
   }
-  console.log('Loading chart with new data and applying', tab.value.value, 'filter');
   loadChart(newChartData);
 
   // Apply the current time range filter after chart loads with new data
@@ -871,7 +854,6 @@ watch(() => props.chartData, (newChartData, oldChartData) => {
 // Simple wallet watching for single chart
 watch(loggedWallet, () => {
   if (props.chartData.length > 0) {
-    console.log('Wallet changed, reloading chart with', tab.value.value, 'filter');
     loadChart(props.chartData);
 
     // Apply the current time range filter after wallet change
@@ -890,9 +872,6 @@ onBeforeUnmount(() => {
 // COMMENTED OUT: Dual-axis onMounted
 // Simple single-axis chart mounting
 onMounted(() => {
-  console.log('PortfolioChart mounted (single-axis mode)');
-  console.log('chartData received:', props.chartData);
-
   // Set correct initial tab index based on saved preference (default to 7D)
   const savedTab = loadPortfolioTabSetting();
   const tabValues = Object.values(tabs);
@@ -908,7 +887,6 @@ onMounted(() => {
   }
 
   if (props.chartData.length > 0) {
-    console.log('Loading chart with data and applying', tab.value.value, 'filter');
     loadChart(props.chartData);
 
     // Apply the initial time range filter after chart loads

@@ -1,5 +1,12 @@
 <template>
-  <BaseDialog :isOpen="!!transactionInfo" @close="$emit('close')" title="Transaction Details" :min-height="600" :height="600">
+  <BaseDialog
+    :isOpen="!!transactionInfo"
+    @close="$emit('close')"
+    title="Transaction Details"
+    :min-height="600"
+    :height="600"
+    :persistent="false"
+  >
     <TransactionDetails :transaction-info="transactionInfo"></TransactionDetails>
   </BaseDialog>
 </template>

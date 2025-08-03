@@ -141,7 +141,7 @@
                   </v-avatar>
                 </v-btn>
               </v-app-bar>
-              <v-row no-gutters v-if="shouldBackup">
+              <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                 <v-col cols="12">
                   <v-alert
                     type="error"
@@ -175,9 +175,13 @@
                 :isOpen="currentDialog === dialogs.SETTINGS"
                 @close="closeDialog"
               />
-              <v-sheet class="transparent">
+              <v-sheet class="transparent pt-2">
                 <keep-alive>
-                  <router-view />
+                  <router-view 
+                    @open-backup-dialog="handleOpenBackupDialog"
+                    @open-buy-dialog="handleOpenBuyDialog"
+                    @open-receive-dialog="handleOpenReceiveDialog"
+                  />
                 </keep-alive>
               </v-sheet>
             </v-layout>
@@ -210,6 +214,16 @@
       :isOpen="isSwapDialogOpen"
       @close="closeSwapDialog"
     />
+
+    <BuyDialog
+      :isOpen="buyDialog"
+      @close="buyDialog = false"
+    />
+
+    <ReceiveDialog
+      :isOpen="receiveDialog"
+      @close="receiveDialog = false"
+    />
     </v-app>
   </div>
 </template>
@@ -224,6 +238,8 @@ import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue'
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue'
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue'
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue'
+import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue'
+import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue'
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets'
 import { themes, iconFilters } from '@/config/themes'
@@ -236,13 +252,15 @@ import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
+import { dexHunterStore } from '@/stores/dexHunterStore';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any
 const currentPage = computed(() => vmProxy.$route)
 const { isSyncing, connected } = toRefs(loadingState);
-const { loggedWallet, tokens } = toRefs(walletStore);
+const { loggedWallet, tokens, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
+const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore)
 
@@ -251,13 +269,14 @@ const currentDialog  = ref<string|null>(null)
 const dialogs = { SETTINGS: 'SETTINGS' }
 const backupWalletDialog = ref(false)
 const swapDialog = ref(false)
+const buyDialog = ref(false)
+const receiveDialog = ref(false)
 
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value)
 
 const geroPrice = computed(() => {
-  const geroToken = tokens.value["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
-  console.log('geroToken', geroToken)
+  const geroToken = dexHunterTokens.value["10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f"]
   if (!geroToken) {
     // TODO Add Gero Token
   }
@@ -281,7 +300,15 @@ function closeSwapDialog() {
 }
 const time = timePlugin
 const changeLog  = changeLogPlugin
-const shouldBackup = computed(() => WalletStore.hasBackup() && !WalletStore.getBackup())
+const shouldBackup = computed(() => {
+  // Use reactive config from store for proper sync between empty and populated states
+  return config.value && 'backup' in config.value && !config.value.backup;
+})
+
+// Check if wallet is empty (no native tokens)
+const isWalletEmpty = computed(() => {
+  return !account.value || account.value.controlled_amount === 0;
+});
 const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0
 })
@@ -307,6 +334,21 @@ function closeChangeLogDialog() {
 }
 function closeDialog() {
   currentDialog.value = null
+}
+
+function handleOpenBackupDialog() {
+  console.log('Received backup dialog event from dashboard');
+  backupWalletDialog.value = true;
+}
+
+function handleOpenBuyDialog() {
+  console.log('Received buy dialog event from dashboard');
+  buyDialog.value = true;
+}
+
+function handleOpenReceiveDialog() {
+  console.log('Received receive dialog event from dashboard');
+  receiveDialog.value = true;
 }
 
 // Theme management - update colors when chain changes
@@ -343,7 +385,7 @@ onMounted(async () => {
 /* Cardano Background - Confined to dashboard working area */
 .cardano-background-dashboard {
   position: absolute;
-  top: -50%;
+  top: calc(-50% + 10px);
   left: 50%;
   width: 100vw;
   height: 100vh;
@@ -353,13 +395,13 @@ onMounted(async () => {
   background-repeat: no-repeat;
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
   pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.4);
+  filter: brightness(0.7);
 }
 
 /* Apex background with same styling as Cardano */
 .apex-background-dashboard {
   position: absolute;
-  top: -50%;
+  top: calc(-50% + 20px);
   left: 50%;
   width: 100vw;
   height: 100vh;
@@ -369,7 +411,7 @@ onMounted(async () => {
   background-repeat: no-repeat;
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
   pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.4);
+  filter: brightness(0.7);
 }
 
 /* Force progress bar colors to use CSS variables with higher specificity */
@@ -453,19 +495,24 @@ div.v-toolbar__content {
 }
 
 .network-tooltip {
-  padding: 8px 12px !important;
-  border-radius: 8px !important;
-  background-color: rgba(20, 20, 20, 0.95) !important;
-  border: 1px solid rgba(0, 199, 243, 0.3) !important;
-  backdrop-filter: blur(8px) !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
 
   &.offline {
-    border: 1px solid rgba(243, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 100, 100, 0.3) !important;
+    box-shadow: 0 8px 32px rgba(255, 100, 100, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   }
 }
 
 .network-tooltip-content {
   line-height: 1.3;
+  color: #ffffff !important;
 }
 
 .network-tooltip-content div {
@@ -474,6 +521,10 @@ div.v-toolbar__content {
 
 .network-tooltip-content div:last-child {
   margin-bottom: 0;
+}
+
+.network-tooltip-content strong {
+  color: #00c7f3 !important;
 }
 
 .v-dialog__content--active {

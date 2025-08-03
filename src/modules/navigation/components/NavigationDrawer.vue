@@ -4,8 +4,8 @@
     :temporary="breakpoint.mobile"
     width="270"
     height="100vh"
-    style="min-width: 270px; min-height: 100%; border-right: 1px solid rgba(128,128,128,0.15)"
-    class="px-3"
+    style="min-width: 270px; min-height: 100%"
+    class="px-3 liquid-glass-nav-drawer"
     :absolute="breakpoint.mobile"
   >
     <!-- Prepend slot -->
@@ -59,7 +59,26 @@
               {{ item.title }}
             </v-list-item-title>
           </v-list-item-content>
-          <v-list-item-action v-if="item.new">
+          <!-- Mini Player Button for Media Player item -->
+          <v-list-item-action v-if="item.title === 'Media Player' && musicPlaylist?.length > 0">
+            <v-tooltip right>
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  x-small
+                  v-bind="attrs"
+                  v-on="on"
+                  @click.stop.prevent="toggleMiniPlayer"
+                  :color="context.shown ? 'primary' : ''"
+                >
+                  <v-icon size="16">mdi-play-box-multiple</v-icon>
+                </v-btn>
+              </template>
+              <span>Mini Player</span>
+            </v-tooltip>
+          </v-list-item-action>
+
+          <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
@@ -141,6 +160,7 @@
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
+import MusicStoreModule from '@/stores/musicStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
@@ -180,7 +200,7 @@ const router = vmProxy.$router
 // Reactive state
 const version = ref('')
 
-const { musicPlaylist } = toRefs(musicStore);
+const { musicPlaylist, context } = toRefs(musicStore);
 
 const { loggedWallet, transactions } = toRefs(walletStore);
 
@@ -212,6 +232,12 @@ const items = computed((): NavigationItemUnion[] => {
       Cardano.AddressType.EnterpriseScript
   }
 
+  // Check if any Activities & Rewards items are enabled
+  const isClaimRewardsEnabled = false;
+  const isCashbackEnabled = networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+  const isReferralEnabled = false;
+  const hasActivitiesRewardsItems = isClaimRewardsEnabled || isCashbackEnabled || isReferralEnabled;
+
   return [
     { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
     { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
@@ -219,12 +245,12 @@ const items = computed((): NavigationItemUnion[] => {
     { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: true, new: true },
-    { header: 'Activities & Rewards', enabled: true },
-    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: false },
-    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: networks.resolveCashbackSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', soon: true },
-    // { header: 'Financial Hub' },
+    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', soon: true },
+    { title: 'Credit Card', icon: assts.card, link: '/card', soon: true },
+    { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
+    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
+    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
+    { title: 'Referral', icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: 'Media', enabled: musicPlaylist.value?.length > 0 },
@@ -259,43 +285,41 @@ watch(() => breakpoint.mobile,
   }
 )
 
+// Methods
+function toggleMiniPlayer() {
+  console.log('Toggling mini player, current shown:', context.value.shown)
+  MusicStoreModule.setMediaPlayerShown(!context.value.shown)
+}
+
 async function submitLogout() {
   try {
-    // Clear all Chrome alarms
-    if (chrome.alarms) {
-      chrome.alarms.clearAll();
-      console.debug('All Chrome alarms cleared during logout');
-    }
-    
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    
-    // Clear the wallet store immediately to allow navigation to welcome
-    WalletStore.logout();
-    
-    // Navigate to welcome page immediately since store is now cleared
-    router.replace('/welcome').catch(err => {
+
+    // Wait for store synchronization to complete before navigation
+    // Poll for loggedWallet to be cleared (indicating logout is complete)
+    const maxWaitTime = 3000; // 3 seconds max wait
+    const pollInterval = 50; // 50ms intervals
+    const startTime = Date.now();
+
+    while (loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    console.debug('🚪 Store logout synchronized, navigating to welcome');
+
+    // Navigate to welcome page after store is cleared
+    router.push('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);
       // Fallback: force page reload to welcome
       window.location.hash = '#/welcome';
     });
   } catch (error) {
     console.error('Error during logout:', error);
-    // Clear store and navigate even if logout message fails
-    try {
-      // Clear alarms even if other logout steps fail
-      if (chrome.alarms) {
-        chrome.alarms.clearAll();
-        console.debug('Chrome alarms cleared during error recovery');
-      }
-      WalletStore.logout();
-    } catch (storeError) {
-      console.warn('Failed to clear wallet store during logout:', storeError);
-    }
-    
+    // Force navigation even on error
     router.replace('/welcome').catch(err => {
       console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';

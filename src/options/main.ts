@@ -1,5 +1,6 @@
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
+import '../shared/styles/liquid-glass.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';

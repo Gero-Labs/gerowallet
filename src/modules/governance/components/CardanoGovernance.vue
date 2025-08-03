@@ -1,5 +1,8 @@
 <template>
-  <v-card class="transparent" flat>
+  <v-layout>
+    <v-row no-gutters>
+      <v-col cols="12" class="pa-2">
+        <v-card class="transparent" flat>
     <v-card-title class="justify-center text-center pb-8 text-h3">
       Cardano Governance
     </v-card-title>
@@ -12,7 +15,7 @@
       <v-row no-gutters>
         <!-- Left Column -->
         <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-          <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly">
+          <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass">
             <v-card-text class="pa-2 current-delegation-card">
               <div class="white--text font-weight-semibold text-subtitle-2">
                 Current Delegation
@@ -62,7 +65,7 @@
         </v-col>
         <!-- Right Column -->
         <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-          <v-card outlined flat class="pa-0 fill-height">
+          <v-card outlined flat class="pa-0 fill-height liquid-glass">
             <v-card-title class="text-subtitle-2">
               <a class="white--text" href="https://gov.tools/" target="_blank">
                 Cardano Governance Tool<v-icon class="ml-1" small>mdi-open-in-new</v-icon>
@@ -117,7 +120,7 @@
           </v-card>
         </v-col>
         <v-col cols="12" class="px-2">
-          <v-card outlined flat class="pa-0 fill-height">
+          <v-card outlined flat class="pa-0 fill-height liquid-glass">
             <v-card-title>Delegated Representatives (DReps)
               <v-spacer></v-spacer>
               <v-text-field
@@ -179,7 +182,10 @@
       </v-row>
     </v-card-text>
     <DRepDelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :drep="selectedDRep" :tx="txData"></DRepDelegateDialog>
-  </v-card>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-layout>
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs, onMounted } from 'vue';

@@ -414,14 +414,24 @@ const signDelegationTx = async () => {
         throw new Error(witnessResult.data.error);
       }
 
-      // For now, demonstrate successful signing
-      snackbar.fireSuccess('Delegation transaction signed with Cardano JS SDK!')
       console.log('Signed transaction witness:', witnessResult.data.witnesses);
 
-      // In a complete implementation, we would submit the signed transaction
-      // const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-      // snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
+      // Submit the transaction with original CBOR and witness
+      // Let the background script combine them properly
+      const submitResult = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SUBMIT_TX,
+        data: {
+          txCbor: txCbor,
+          witnessHex: witnessResult.data.witnesses,
+          utxos: utxos.value
+        }
+      }) as { data: { txId?: string; error?: string } };
 
+      if (submitResult.data.error) {
+        throw new Error(submitResult.data.error);
+      }
+
+      snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`)
       emit('close')
     } catch (e) {
       console.error('Error signing delegation transaction:', e);

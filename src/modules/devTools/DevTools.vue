@@ -2,7 +2,7 @@
   <v-layout>
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Tx Cbor Hex to JSON Converter
           </v-card-title>
@@ -24,7 +24,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             WitnsessSet Cbor Hex to JSON Converter
           </v-card-title>
@@ -46,7 +46,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Address Cbor Hex to Bech32
           </v-card-title>
@@ -68,7 +68,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Address Bech32 to Hex
           </v-card-title>
@@ -90,7 +90,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             String to Hex
           </v-card-title>
@@ -112,7 +112,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Utxo Cbor to Json
           </v-card-title>
@@ -134,7 +134,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between">
+        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Lovelace to Value
           </v-card-title>
