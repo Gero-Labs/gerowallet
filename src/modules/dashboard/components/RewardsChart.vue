@@ -36,7 +36,7 @@ const chartOptions = computed(() => {
       }
     },
     chart: {
-      type: 'column',
+      type: 'line',
       backgroundColor: 'transparent',
       height: 155,
       style: {
@@ -55,6 +55,22 @@ const chartOptions = computed(() => {
     },
     credits: {
       enabled: false,
+    },
+    tooltip: {
+      positioner: function (labelWidth, labelHeight, point) {
+        return {
+          x: point.plotX + this.chart.plotLeft - labelWidth / 2,
+          y: point.plotY + this.chart.plotTop - labelHeight - 10
+        };
+      },
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      borderColor: '#00DFF3',
+      borderRadius: 8,
+      borderWidth: 1,
+      style: {
+        color: '#fff',
+        fontSize: '12px'
+      }
     },
     xAxis: {
       crosshair: true,
@@ -88,6 +104,14 @@ const chartOptions = computed(() => {
       {
         name: 'Rewards',
         data: Object.values(props.chartData),
+        color: '#00DFF3',
+        lineWidth: 2,
+        marker: {
+          radius: 2,
+          fillColor: '#00DFF3',
+          lineColor: '#00DFF3',
+          lineWidth: 1
+        }
       },
     ],
     useUTC: true,
@@ -99,7 +123,8 @@ const chartOptions = computed(() => {
   stroke-width: 1px;
   stroke: #282828;
 }
-.highcharts-column-series path.highcharts-point {
-  stroke: none;
+.highcharts-line-series .highcharts-point,
+.highcharts-line-series .highcharts-graph {
+  stroke-width: 2px;
 }
 </style>

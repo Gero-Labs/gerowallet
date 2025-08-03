@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
+import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
 
 export interface DexHunterStore {
   dexHunterTokens: {};
@@ -13,17 +14,27 @@ export const dexHunterStore = Vue.observable<DexHunterStore>({
   blacklistPolicies: [],
 });
 
-chrome.storage.local.get('dexHunterStore', (res) => {
-  if (res['dexHunterStore']) {
-    Object.assign(dexHunterStore, res['dexHunterStore']);
-  }
+// Initialize store with centralized storage sync
+const SYNC_KEYS = ['dexHunterTokens', 'blacklistPolicies'];
+
+// Hydrate from storage on initialization
+hydrateStore('dexHunterStore', dexHunterStore);
+
+// Set up centralized storage sync
+const unsubscribe = createStorageSync(dexHunterStore, {
+  storeName: 'dexHunterStore',
+  syncKeys: SYNC_KEYS,
+  debugPrefix: '🔄 DexHunterStore'
 });
 
-// Removed chrome.storage.onChanged listener to prevent data overwrite issues
+// Clean up on unload (for contexts that support it)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', unsubscribe);
+}
 
-function persist(patch: Partial<DexHunterStore>) {
+async function persist(patch: Partial<DexHunterStore>): Promise<void> {
   const next = { ...dexHunterStore, ...patch };
-  chrome.storage.local.set({ dexHunterStore: next });
+  await smartPersist('dexHunterStore', next);
 }
 
 async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {

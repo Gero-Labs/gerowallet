@@ -1,77 +1,86 @@
 <template>
-  <v-card flat outlined max-width="450" class="mx-auto" style="background-color: #191919!important;">
+  <v-card flat outlined max-width="420" class="mx-auto liquid-glass-subtle compact-swap-widget">
     <v-card-text class="pa-0">
-      <v-card flat class="transparent">
-        <v-card-title>
-          <v-btn-toggle mandatory active-class="geroButton" v-model="swapType">
-            <v-btn value="swap" small rounded>
+        <v-card-title class="pb-0 pt-3 px-2">
+          <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
+            <v-btn value="swap" x-small rounded>
               SWAP
             </v-btn>
-            <v-btn value="limit" small rounded>
+            <v-btn value="limit" x-small rounded>
               LIMIT
             </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
-          <v-btn icon small>
-            <v-icon small>mdi-reload</v-icon>
+          <v-btn icon x-small>
+            <v-icon x-small>mdi-reload</v-icon>
           </v-btn>
-          <v-btn-toggle v-model="settingsToggle">
-            <v-btn small rounded :value="true">
-              <v-icon color="red" small v-if="slippageRef === 'unlimited'">mdi-infinity</v-icon>
-              <span v-else>{{ slippageDisplay }}</span>
-              <v-icon small class="ml-1">mdi-cog</v-icon>
+          <v-btn-toggle v-model="settingsToggle" dense>
+            <v-btn x-small rounded :value="true">
+              <v-icon color="red" x-small v-if="slippageRef === 'unlimited'">mdi-infinity</v-icon>
+              <span v-else style="font-size: 11px">{{ slippageDisplay }}</span>
+              <v-icon x-small class="ml-1">mdi-cog</v-icon>
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0">
+        <v-card-text class="pb-0 px-2 pt-2">
+          <div class="d-flex align-center justify-space-between mb-1 mt-1">
+            <span style="color: #FDA29B; font-size: 12px; font-weight: 200;">Selling</span>
+            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
+          </div>
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            title="Selling"
+            title=""
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
             :search="search"
+            class="mt-n3"
+            background-color="#101828"
           />
-          <v-btn outlined icon color="#00DFF3" class="mt-2 z-index-5" @click="switchPair">
-            <v-icon color="#00DFF3">mdi-chevron-double-down</v-icon>
+          <v-btn icon small class="my-1 z-index-5 geroButton" @click="switchPair" style="height: 24px; width: 24px; margin: 8px auto;">
+            <v-icon small color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
+          <div class="d-flex align-center justify-space-between mb-1 mt-n2">
+            <span style="color: #75E0A7; font-size: 12px; font-weight: 200;">Buying</span>
+            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
+          </div>
           <TokenSelector
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            title="Buying"
+            title=""
             titleColor="#75E0A7"
-            background-color="transparent"
+            background-color="#161B26"
             :max-button-enabled="false"
-            class="mt-n4"
+            class="mt-n3"
             :price="getPrice(selectedTokenB)"
             :price-impact="calculateWeightedPriceImpact"
             @change="tokenBQuantityChange"
             :search="search"
           />
-          <div class="text-left" v-if="swapType === 'swap'" style="display: flex;">
-            <v-btn text plain class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
+          <div class="text-left mt-2" v-if="swapType === 'swap'" style="display: flex;">
+            <v-btn text plain x-small class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
               <v-avatar
                 color="primary"
                 :style="{ animationDuration: '1.5s' }"
                 class="mr-1 v-avatar--metronome"
-                size="12"
+                size="10"
               />
-              {{ pairPrice }}
+              <span style="font-size: 11px">{{ pairPrice }}</span>
             </v-btn>
             <v-spacer></v-spacer>
-            <v-btn text plain color="primary" class="px-0 no-opacity" :ripple="false" @click="swapOverviewToggle = true" style="letter-spacing: normal">
-              Details
-              <v-icon small class="ml-1">mdi-chevron-down</v-icon>
+            <v-btn text plain x-small color="primary" class="px-0 no-opacity" :ripple="false" @click="swapOverviewToggle = true" style="letter-spacing: normal">
+              <span style="font-size: 11px">Details</span>
+              <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
             </v-btn>
           </div>
-          <v-card style="border-radius: 10px;" flat class="transparent" v-else>
-            <v-card-text class="px-2">
-              <div class="text-left" style="font-size: 12px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
+          <v-card style="border-radius: 8px;" flat class="transparent" v-else>
+            <v-card-text class="pa-2">
+              <div class="text-left" style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
                 <div>
-                  <span class="pr-1">Limit Price</span>
+                  <span class="pr-1" style="font-weight: 600;">Limit Price</span>
                   <span
                     v-if="marketPriceDeltaPercentage.toFixed(2) !== '-0.00' && marketPriceDeltaPercentage.toFixed(2) !== '0.00'"
                     :style="{
@@ -145,12 +154,21 @@
             <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
           </div>
         </v-card-text>
-        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 10px" class="ma-2 mb-0" />
-      </v-card>
+        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-3 mt-1 mb-0" />
+
     </v-card-text>
-    <v-card-actions class="mx-2 pt-0 mb-2">
-      <v-btn large block rounded style="color: black!important;" class="geroButton rounded-10" :disabled="isSwapDisabled || loading" @click="prepareSwap" :loading="loading">
-        {{ swapButtonText }}
+    <v-card-actions class="px-3 pt-2 pb-3">
+      <v-btn
+        block
+        rounded
+        small
+        style="color: black!important;"
+        class="geroButton rounded-6"
+        :disabled="isSwapDisabled || loading"
+        @click="prepareSwap"
+        :loading="loading"
+      >
+        <span style="font-size: 13px; font-weight: 600;">{{ swapButtonText }}</span>
       </v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
@@ -170,14 +188,14 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 
 const emit = defineEmits(['onSwap'])
 
-const { loggedWallet, resolvedAssets, pinnedTokens, baseAddress } = toRefs(walletStore);
+const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { utxos } = toRefs(walletStore);
@@ -232,7 +250,7 @@ const loading = ref<boolean>(false);
 const swapOverviewToggle = ref<boolean>(false);
 const pairPriceToggle = ref<boolean>(false);
 const blacklisted_dexes = ref<any[]>([]);
-const search = ref(dexHunterStore.searchTokens);
+const search = ref(DexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);
 const limit = ref<string>('0.0000000');
 const limitType = ref<string>('one');
@@ -252,26 +270,35 @@ const swapButtonText = computed(() => {
 })
 
 const isSwapDisabled = computed(() => {
+  if (!selectedTokenA.value || !selectedTokenB.value) return true;
+
   if (swapType.value === 'swap') {
-    const quantityA = selectedTokenA.value.quantity.replaceAll(',','')
-    const quantityB = selectedTokenB.value.quantity.replaceAll(',', '')
+    const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
+    const quantityB = (selectedTokenB.value.quantity || '0').toString().replaceAll(',', '')
     return quantityA === '0' || quantityB === '0' || isNaN(Number(quantityA)) || isNaN(Number(quantityB)) || isInsufficientBalance.value
   } else if (swapType.value === 'limit') {
-    return isInsufficientBalance.value || Number(selectedTokenA.value['quantity'].replaceAll(',', '')) === 0 || Number(limit.value).toFixed(7) === price_ba2.value.toFixed(7)
+    const quantity = (selectedTokenA.value.quantity || '0').toString().replaceAll(',', '')
+    return isInsufficientBalance.value || Number(quantity) === 0 || Number(limit.value).toFixed(7) === price_ba2.value.toFixed(7)
   }
   return true;
 })
 
 const isInsufficientBalance = computed(() => {
-  const quantityA = selectedTokenA.value.quantity.replaceAll(',','')
-  const b = filters.toCurrency(selectedTokenA.value.balance, false, selectedTokenA.value.decimals, '', '', false, selectedTokenA.value.decimals).replaceAll(',', '')
+  if (!selectedTokenA.value) return false;
+
+  const quantityA = (selectedTokenA.value.quantity || '0').toString().replaceAll(',','')
+  const decimals = selectedTokenA.value.decimals || 0;
+  const balance = selectedTokenA.value.balance || 0;
+  const b = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '')
   const balanceA = Number(b)
   return Number(quantityA) > balanceA
 })
 
 const tokens = computed(() => {
+  // Convert resolvedAssets object to array if it exists
+  const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   return (
-    resolvedAssets?.map(token => ({
+    assetsArray.map((token: any) => ({
       name: token.metadata.name,
       ticker: token.metadata.ticker,
       img: token.img,
@@ -291,8 +318,9 @@ const marketPriceDeltaPercentage = computed(() => {
 })
 
 const nativeTokenComputed = computed(() => {
-  const currencyTicker = networks.resolveCurrencyTicker(appWallet?.chain, appWallet?.network);
-  const token = resolvedAssets?.find(token => token.ticker === currencyTicker);
+  const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+  const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
+  const token: any = assetsArray.find((token: any) => token.ticker === currencyTicker);
   return token
     ? {
       name: token.metadata.name,
@@ -317,7 +345,7 @@ const nativeTokenComputed = computed(() => {
 })
 
 const availableTokens = computed(() => {
-  if (!dexHunterTokens) {
+  if (!dexHunterTokens.value) {
     return [];
   }
 
@@ -346,23 +374,24 @@ const availableTokens = computed(() => {
       return res
     })
     .sort((a, b) => {
-      const isPinnedA = pinnedTokens.includes(a['unit']);
-      const isPinnedB = pinnedTokens.includes(b['unit']);
-
-      // Prioritize pinned tokens
-      if (isPinnedA && !isPinnedB) return -1;
-      if (!isPinnedA && isPinnedB) return 1;
-
-      // If both are pinned, sort by name
-      if (isPinnedA && isPinnedB) {
-        return a['name'].localeCompare(b['name']);
-      }
-
-      // If none are pinned, sort by balance in descending order
+    //   const isPinnedA = pinnedTokens.includes(a['unit']);
+    //   const isPinnedB = pinnedTokens.includes(b['unit']);
+    //
+    //   // Prioritize pinned tokens
+    //   if (isPinnedA && !isPinnedB) return -1;
+    //   if (!isPinnedA && isPinnedB) return 1;
+    //
+    //   // If both are pinned, sort by name
+    //   if (isPinnedA && isPinnedB) {
+    //     return a['name'].localeCompare(b['name']);
+    //   }
+    //
+    //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-
-  return [nativeToken, ...availableTokens];
+  const result = [nativeToken, ...availableTokens]
+  console.log('availableTokens', result)
+  return result;
 });
 
 const calculateWeightedPriceImpact = computed(() => {
@@ -502,10 +531,19 @@ const debouncedEstimateTokenB = debounce((val) => {
 
 
 const getPrice = (token) => {
-  if (!token) return '';
+  if (!token || !token.quantity) return '';
   const multiplier = token.ticker === 'ADA' ? 1 : price_ba.value;
+  const quantity = (token.quantity || '0').toString().replaceAll(',', '');
+  const lastPrice = price.value?.lastPrice || 0;
 
-  return (Number(token.quantity.replaceAll(',', '')) * multiplier * price.lastPrice).toLocaleString('en-US');
+  return (Number(quantity) * multiplier * lastPrice).toLocaleString('en-US');
+}
+
+const getTokenBalance = (token) => {
+  if (!token) return '0';
+  const balance = token.balance || 0;
+  const decimals = token.decimals || 0;
+  return filters.toCurrency(balance, false, 2, '', '', true, decimals);
 }
 
 const setSlippage = (val) => {
@@ -517,7 +555,7 @@ const switchPair = () => {
 }
 
 const estimate = (token_in, token_out, amount_in, update) => {
-  if (!appWallet) {
+  if (!loggedWallet.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -549,7 +587,7 @@ const estimate = (token_in, token_out, amount_in, update) => {
 }
 
 const reverseEstimate = async (token_in, token_out, amount_out, update) => {
-  if (!appWallet) {
+  if (!loggedWallet.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -579,7 +617,7 @@ const reverseEstimate = async (token_in, token_out, amount_out, update) => {
 }
 
 const averagePrice = (token_in, token_out) => {
-  if (!appWallet) {
+  if (!loggedWallet.value) {
     return
   }
   if (!token_in && !token_out) {
@@ -596,15 +634,23 @@ const averagePrice = (token_in, token_out) => {
 }
 
 const performPeriodicEstimate = async () => {
+  // Add defensive checks for undefined tokens
+  if (!selectedTokenA.value || !selectedTokenB.value) {
+    console.warn('Tokens not properly initialized');
+    return;
+  }
+
   if (lastFunctionCalled.value === 'estimate') {
-    const amount = Number(selectedTokenA.value.quantity.replaceAll(',', ''))
+    const quantity = selectedTokenA.value.quantity || '0';
+    const amount = Number(quantity.toString().replaceAll(',', ''))
     if (amount === 0) {
       await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
     } else {
       await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
     }
   } else if (lastFunctionCalled.value === 'reverseEstimate') {
-    const amount = Number(selectedTokenB.value.quantity.replaceAll(',', ''))
+    const quantity = selectedTokenB.value.quantity || '0';
+    const amount = Number(quantity.toString().replaceAll(',', ''))
     if (amount === 0) {
       await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
     } else {
@@ -620,11 +666,11 @@ const prepareSwap = async () => {
   try {
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
-      swapRes = await dexHunterApi.swap(amount, baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
+      swapRes = await dexHunterApi.swap(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)
     } else if (swapType.value === 'limit') {
       const toSplit = limitType.value === 'split'
       const multiples = toSplit ? limitSplit.value : 1
-      swapRes = await dexHunterApi.swapLimitBuild(amount, baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], 'GeroLabs', multiples, toSplit, Number(limit.value))
+      swapRes = await dexHunterApi.swapLimitBuild(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], 'GeroLabs', multiples, toSplit, Number(limit.value))
     }
     const txCbor = swapRes.cbor
     const partialSign = true
@@ -655,8 +701,8 @@ const prepareSwap = async () => {
   }
 }
 
-const submit = async (cborHex) => {
-  const txId = await appWallet.submitTx(Transaction.from_hex(cborHex), utxos);
+const submit = async (cborHex: string) => {
+  const txId = await loggedWallet.value.submitTx(Transaction.from_hex(cborHex), utxos);
   snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
   emit('onSwap')
   console.log(txId)
@@ -677,5 +723,141 @@ onBeforeUnmount(() => {
 })
 </script>
 <style scoped>
+/* Compact swap widget styles */
+.compact-swap-widget {
+  /* Reduce overall spacing */
+}
+
+.compact-swap-widget .v-card__actions {
+  padding: 8px 12px 12px !important;
+}
+
+/* Make token selector more compact */
+.compact-swap-widget >>> .card-container {
+  padding: 4px 16px 4px 8px !important;
+  box-shadow: none !important;
+  min-height: auto !important;
+  background-color: #101828 !important;
+  background: #101828 !important;
+  border: 1px solid #1F242F !important;
+}
+
+.compact-swap-widget >>> .card-container.v-card {
+  background-color: #101828 !important;
+  background: #101828 !important;
+}
+
+/* Hide the token name subtitle */
+.compact-swap-widget >>> .v-list-item__subtitle {
+  display: none !important;
+}
+
+/* Hide the balance subtitle inside the token selector */
+.compact-swap-widget >>> .card-container .v-card__subtitle {
+  display: none !important;
+}
+
+/* Reduce token icon size */
+.compact-swap-widget >>> .card-container .v-avatar {
+  height: 32px !important;
+  width: 32px !important;
+}
+
+/* Keep metronome avatar small */
+.compact-swap-widget .v-avatar--metronome {
+  height: 10px !important;
+  width: 10px !important;
+}
+
+/* Adjust verification badge for smaller icons */
+.compact-swap-widget >>> .v-badge__badge {
+  height: 24px !important;
+  width: 8px !important;
+  min-width: 16px !important;
+}
+
+.compact-swap-widget >>> .v-badge__badge .v-avatar {
+  height: 16px !important;
+  width: 16px !important;
+}
+
+.compact-swap-widget >>> .v-badge__badge .v-icon {
+  font-size: 12px !important;
+}
+
+.compact-swap-widget >>> .v-list-item__content {
+  padding: 2px 0 !important;
+}
+
+.compact-swap-widget >>> .v-list-item {
+  min-height: auto !important;
+  padding: 4px 0 !important;
+}
+
+.compact-swap-widget >>> .v-input__control {
+  min-height: 36px !important;
+}
+
+.compact-swap-widget >>> .v-text-field__details {
+  display: none !important;
+}
+
+/* Reduce button sizes */
+.compact-swap-widget .v-btn--x-small {
+  height: 24px !important;
+  min-width: 32px !important;
+  padding: 0 8px !important;
+}
+
+.compact-swap-widget .v-btn--small {
+  height: 28px !important;
+  padding: 0 12px !important;
+}
+
+/* Compact the limit order section */
+.compact-swap-widget .v-btn.px-1 {
+  min-width: 36px !important;
+  padding: 0 4px !important;
+}
+
+/* Reduce icon sizes */
+.compact-swap-widget .v-icon--x-small {
+  font-size: 16px !important;
+}
+
+.compact-swap-widget .v-icon--small {
+  font-size: 18px !important;
+}
+
+/* Compact expansion panels */
+.compact-swap-widget >>> .v-expansion-panel-content__wrap {
+  padding: 8px 12px !important;
+}
+
+/* Make number inputs more compact */
+.compact-swap-widget >>> input[type="number"] {
+  padding: 4px 8px !important;
+}
+
+/* Reduce margin between elements */
+.compact-swap-widget .mt-2 {
+  margin-top: 4px !important;
+}
+
+.compact-swap-widget .my-1 {
+  margin-top: 4px !important;
+  margin-bottom: 4px !important;
+}
+
+.compact-swap-widget .mt-n3 {
+  margin-top: -12px !important;
+}
+
+/* Keep aspect ratio for swap button between tokens */
+.compact-swap-widget .z-index-5 {
+  z-index: 5;
+  margin: 12px auto 0 auto !important;
+  display: block !important;
+}
 
 </style>

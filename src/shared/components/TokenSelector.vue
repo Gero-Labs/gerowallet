@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent" flat v-if="selectedToken">
+  <v-card class="transparent" flat v-if="selectedToken" style="box-shadow: unset!important; background-color: transparent!important; backdrop-filter: unset!important;">
     <v-card-text style="display: flex; flex-direction: column" class="pa-0">
       <v-row no-gutters class="pb-1" v-if="!bottomTitle">
         <v-col cols="12" style="display: flex; align-items: center;">
@@ -10,7 +10,11 @@
         </v-col>
       </v-row>
       <div style="display: flex; align-items: center;">
-        <v-card class="card-container px-2 py-1" outlined :style="{backgroundColor: backgroundColor+'!important' }">
+        <v-card class="card-container px-2 py-1" outlined :style="{
+          backgroundColor: backgroundColor+'!important',
+          paddingTop: '0!important',
+          paddingBottom: '0!important',
+        }">
           <!--        <v-card-subtitle class="text-right pb-0 pt-2">Balance: {{ selectedToken.balance | toCurrency(false,2,'', true, selectedToken.decimals) }}</v-card-subtitle>-->
           <v-card-subtitle class="pa-0 text-right" style="margin-bottom: -10px">
             Balance: {{ balance }}
@@ -19,7 +23,7 @@
             <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left;">
               <v-list-item-content class="py-0">
                 <v-list-item-title class="ma-0">
-                  <span v-if="tokenLock" style="font-size: 22px">
+                  <span v-if="tokenLock" style="font-size: 18px">
                     <v-badge
                       overlap
                       avatar
@@ -35,22 +39,22 @@
                           </v-icon>
                         </v-avatar>
                       </template>
-                      <v-avatar size="40">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }" />
+                      <v-avatar size="30">
+                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                       </v-avatar>
                     </v-badge>
-                    <v-avatar size="40" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }" />
+                    <v-avatar size="30" v-else class="mr-1">
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                     </v-avatar>
                     {{ selectedToken.ticker }}
                   </span>
                   <v-btn
                     v-else
-                    x-large
+                    large
                     text
                     plain
                     :ripple="false"
-                    style="font-size: 22px; letter-spacing: normal"
+                    style="font-size: 18px; letter-spacing: normal"
                     class="pa-0"
                     @click="selectTokenDialog = true"
                   >
@@ -69,12 +73,12 @@
                           </v-icon>
                         </v-avatar>
                       </template>
-                      <v-avatar size="40">
-                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }"/>
+                      <v-avatar size="30">
+                        <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError"/>
                       </v-avatar>
                     </v-badge>
-                    <v-avatar size="40" v-else class="mr-1">
-                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="e => { e.target.onerror = null; e.target.src = selectedToken.fallback_img }"/>
+                    <v-avatar size="30" v-else class="mr-1">
+                      <img :src="selectedToken.img" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError"/>
                     </v-avatar>
                     {{ selectedToken.ticker }}
                     <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small>mdi-chevron-down</v-icon>
@@ -227,7 +231,7 @@ const { loggedWallet } = toRefs(walletStore)
 const selectTokenDialog = ref<boolean>(false);
 const amount = ref('');
 
-const selectedToken = computed({
+const selectedToken: any = computed({
   get() {
     return props.value;
   },
@@ -245,10 +249,10 @@ const balance = computed(() => {
 
 const errors = computed(() => {
   const errors = []
-  if (adaShortage.value !== 0) {
-    errors.push(`Insufficient Funds. Shortage: ${filters.toCurrency(adaShortage.value, false, 3, '', ' '+selectedToken.value.ticker, true, 0)}`)
-  } else if (selectedToken.value.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) && minimum.value > selectedToken.value.quantity) {
-    errors.push(`Min. Required: ${minimum.value +" " + selectedToken.value.ticker}`)
+  if (props.adaShortage !== 0) {
+    errors.push(`Insufficient Funds. Shortage: ${filters.toCurrency(props.adaShortage, false, 3, '', ' '+selectedToken.value.ticker, true, 0)}`)
+  } else if (selectedToken.value.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) && props.minimum > selectedToken.value.quantity) {
+    errors.push(`Min. Required: ${props.minimum +" " + selectedToken.value.ticker}`)
   }
   return errors
 })
@@ -269,6 +273,11 @@ function removeTokenSelector() {
 watch(props.value, (val) => {
   selectedToken.value = val;
 })
+
+function handleImageError(event) {
+  event.target.onerror = null;
+  event.target.src = selectedToken.value.fallback_img;
+}
 </script>
 <style scoped>
 .card-container {
@@ -288,7 +297,7 @@ watch(props.value, (val) => {
 }
 
 .large-input >>> input {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 500;
   padding: 0;
 }

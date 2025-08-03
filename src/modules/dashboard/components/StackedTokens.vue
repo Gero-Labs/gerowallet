@@ -2,15 +2,16 @@
   <div class="stackedTokens" style="max-width: 132px">
     <v-btn
       icon
-      height="40"
-      width="40"
+      :height="props.tokenSize"
+      :width="props.tokenSize"
       v-for="(token, index) in collect"
       :key="index"
       :class="`stackedToken_${index}`"
+      :style="index > 0 ? { marginLeft: `-${Math.floor(props.tokenSize * 0.625)}px` } : {}"
       @click="print(token)"
     >
       <v-avatar
-        size="40"
+        :size="props.tokenSize"
         :color="token.img ? '' : 'black'"
       >
         <v-img v-if="token.img" :src="assts.resolveIcon(token.img)" :alt="token.asset_name"></v-img>
@@ -19,30 +20,33 @@
     </v-btn>
     <v-btn
       icon
-      height="40"
-      width="40"
+      :height="props.tokenSize"
+      :width="props.tokenSize"
       v-if="residue > 0"
-      style="margin-left: -25px"
+      :style="{ marginLeft: `-${Math.floor(props.tokenSize * 0.625)}px` }"
     >
       <v-avatar
-        size="40"
+        :size="props.tokenSize"
         color="black"
       >
-        <span class="white--text">{{'+' + residue}}</span>
+        <span class="white--text" :style="{ fontSize: `${Math.floor(props.tokenSize * 0.3)}px` }">{{'+' + residue}}</span>
       </v-avatar>
     </v-btn>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, withDefaults } from 'vue';
 import { resolveAsset } from '@/shared/utils/resolver';
 import assts from '@/utils/assets';
 
 interface Props {
   tokens: Array<any>
+  tokenSize?: number
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  tokenSize: 40
+})
 
 const collect = ref([])
 
@@ -89,10 +93,5 @@ onMounted(async () => {
 </script>
 
 <style>
-.stackedToken_1,
-.stackedToken_2,
-.stackedToken_3,
-.stackedToken_4 {
-  margin-left: -25px;
-}
+/* Dynamic stacking is now handled inline via props */
 </style>
