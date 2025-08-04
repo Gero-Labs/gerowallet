@@ -31,7 +31,7 @@
               Net Price
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ filters.toCurrency(estimation['net_price'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['net_price'] || 0, false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
           <v-col cols="12" xl="4" lg="4" md="4">
@@ -39,7 +39,7 @@
               Min. Receive
             </v-card-title>
             <v-card-subtitle style="font-size: 12px; word-break: break-word" class="text-left pa-0">
-              {{ filters.toCurrency(estimation['total_output'], false, 2, '', ' '+tokenB['ticker'], false, 0) }}
+              {{ filters.toCurrency(estimation['total_output'] || 0, false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
 <!--          <v-col cols="12" xl="4" lg="4" md="4">-->
@@ -67,7 +67,6 @@
 <!--            </v-card-subtitle>-->
 <!--          </v-col>-->
         </v-row>
-        <v-divider class="mt-1"></v-divider>
       </v-card-title>
       <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 200px)">
         <v-row no-gutters>
