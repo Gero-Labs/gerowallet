@@ -149,7 +149,7 @@
                     <v-list-item-avatar rounded size="28">
                       <v-img v-if="item.image" :src="item.image" contain></v-img>
                     </v-list-item-avatar>
-                    <v-list-item-content>
+                    <v-list-item-content style="padding-left: 12px!important;">
                       <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">
                         <span style="font-size: 16px">{{ item.name }}</span>
                         <template v-for="(link, index) in item.links">

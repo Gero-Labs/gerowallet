@@ -102,7 +102,7 @@
                     </v-btn>
                   </template>
                   <v-card outlined rounded min-width="250">
-                    <v-card-title class="pa-2">
+                    <v-card-title class="pa-2 text-h6">
                       Notifications
                       <v-spacer></v-spacer>
                       <v-btn small icon>
