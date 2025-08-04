@@ -795,7 +795,7 @@ onBeforeUnmount(() => {
 }
 
 .compact-swap-widget >>> .v-input__control {
-  min-height: 36px !important;
+  min-height: 32px !important;
 }
 
 .compact-swap-widget >>> .v-text-field__details {
