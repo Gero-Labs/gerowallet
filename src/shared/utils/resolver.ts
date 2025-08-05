@@ -206,7 +206,7 @@ const tryConvertPlutusMapToUtf8Record = (map: Cardano.PlutusMap): Partial<Record
 
 export const asString = (value: unknown) => (typeof value === 'string' ? value : undefined);
 
-const tryCoerce = <T>(value: string | Cardano.PlutusData | undefined, ctor: (v: string) => T): T | undefined => {
+const tryCoerce = <T,>(value: string | Cardano.PlutusData | undefined, ctor: (v: string) => T): T | undefined => {
   if (typeof value !== 'string')
     return undefined;
   try {
