@@ -99,20 +99,27 @@ export const sharedConfig: UserConfig = {
       'blake2b',
       'crypto-ts',
     ],
-    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
+    exclude: [
+      'vue-demi', 
+      '@emurgo/cardano-serialization-lib-browser', 
+      'cbor'
+    ],
     esbuildOptions: {
       plugins: [],
       target: 'es2020',
       minify: false,
-      treeShaking: true,
+      treeShaking: false, // Disable for speed
       platform: 'browser',
+      dropLabels: [], // Don't drop any labels
+      ignoreAnnotations: true, // Ignore pure annotations for speed
       format: 'esm',
       loader: {
         '.js': 'jsx',
         '.ts': 'tsx',
       },
     },
-    force: true,
+    force: false, // Enable caching
+    holdUntilCrawlEnd: false, // Don't wait for all files
   },
   worker: {
     plugins: [
@@ -132,14 +139,19 @@ export const sharedConfig: UserConfig = {
   esbuild: {
     target: 'es2022',
     keepNames: isDev,
-    minifyIdentifiers: !isDev,
-    minifySyntax: !isDev,
-    minifyWhitespace: !isDev,
-    treeShaking: true,
-    drop: isDev ? [] : ['console', 'debugger'],
+    minifyIdentifiers: false, // Disable for speed
+    minifySyntax: false, // Disable for speed  
+    minifyWhitespace: false, // Disable for speed
+    treeShaking: false, // Disable for speed
+    drop: [], // Don't drop anything for speed
   },
   build: {
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined, // Disable manual chunking for faster builds
+      }
+    }
   },
 };
 
@@ -160,63 +172,46 @@ export default defineConfig(({ command }) => {
       }
     },
     build: {
-      minify: isDev ? false : 'esbuild',
+      minify: false, // Disable minification for speed
       target: 'es2022',
       watch: isDev ? {} : undefined,
       outDir: r('extension'),
       assetsDir: 'assets',
       emptyOutDir: false,
-      sourcemap: isDev ? false : false,
-      cssCodeSplit: true,
-      chunkSizeWarningLimit: 3000,
+      sourcemap: false, // Always disable sourcemaps
+      cssCodeSplit: false, // Disable CSS splitting for speed
+      chunkSizeWarningLimit: 10000, // Increase limit to avoid warnings
       reportCompressedSize: false,
+      assetsInlineLimit: 0, // Don't inline any assets
+      copyPublicDir: false, // Skip copying public directory
+      assetsDir: 'assets',
       rollupOptions: {
-        maxParallelFileOps: 20,
+        maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
-        treeshake: {
-          preset: 'recommended',
-          moduleSideEffects: false,
-        },
+        treeshake: false, // Disable for faster builds
         input: {
           options: r('src/options/index.html'),
         },
         output: {
-          manualChunks: (id) => {
-            if (id.includes('@cardano-sdk') || id.includes('@emurgo') || id.includes('cardano')) {
-              return 'cardano-vendor';
-            }
-            if (id.includes('vue') || id.includes('@vue')) {
-              return 'vue-vendor';
-            }
-            if (id.includes('vuetify')) {
-              return 'ui-vendor';
-            }
-            if (id.includes('lodash') || id.includes('axios') || id.includes('dexie')) {
-              return 'utils-vendor';
-            }
-            if (id.includes('highcharts')) {
-              return 'charts-vendor';
-            }
-            if (id.includes('crypto') || id.includes('blake') || id.includes('bip39')) {
-              return 'crypto-utils';
-            }
-            if (id.includes('node_modules')) {
-              return 'vendor';
-            }
-            return undefined;
-          },
           chunkFileNames: 'js/[name].[hash].js',
           assetFileNames: 'assets/[name].[hash][extname]',
-          compact: true,
-          minifyInternalExports: true,
+          compact: false, // Disable for faster builds
+          minifyInternalExports: false, // Disable for faster builds
         },
         plugins: [
           copy({
             targets: [
               { src: 'src/assets/public/*', dest: 'extension/public' },
               { src: 'src/assets/notifications/*', dest: 'extension/public' },
+              // Skip large images for faster build
+              { 
+                src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*', 
+                dest: 'extension/assets' 
+              },
             ],
             hook: 'writeBundle',
+            copySync: false, // Async copying
+            flatten: false,
           }) as any,
           {
             name: 'cbor-fix',
