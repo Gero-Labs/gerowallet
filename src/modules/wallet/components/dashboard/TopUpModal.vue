@@ -4,7 +4,7 @@
       <v-card class="modal-card">
         <div class="modal-content">
           <!-- First Card: Amount Input -->
-          <AmountInputStep v-if="currentStep === 1" :model-value="amounts" @update:model-value="updateAmounts" />
+          <AmountInputStep v-if="currentStep === 1" :model-value="amounts" @update:modelValue="updateAmounts" />
 
           <!-- Second Card: Fee & Order Summary -->
           <SummaryStep
@@ -49,6 +49,7 @@ import AmountInputStep from './top-up/AmountInputStep.vue';
 import SummaryStep from './top-up/SummaryStep.vue';
 import LoadingStep from './top-up/LoadingStep.vue';
 import SuccessStep from './top-up/SuccessStep.vue';
+import cardStore from '@/stores/modules/card';
 
 defineProps<{
   open: boolean;
@@ -68,6 +69,12 @@ const password = ref('');
 const feeOption = ref('ADA');
 const transactionId = ref('20023952');
 
+// Store amounts for the transaction (persists during loading)
+const transactionAmounts = ref({
+  adaAmount: '',
+  eurAmount: '',
+});
+
 const closeModal = () => {
   emit('close');
   currentStep.value = 1;
@@ -76,10 +83,18 @@ const closeModal = () => {
     adaAmount: '',
     eurAmount: '',
   };
+  transactionAmounts.value = {
+    adaAmount: '',
+    eurAmount: '',
+  };
 };
 
 const updateAmounts = (newAmounts: { adaAmount: string; eurAmount: string }) => {
+  console.log('💰 updateAmounts called with:', newAmounts);
   amounts.value = newAmounts;
+  console.log('💰 amounts.value updated to:', JSON.stringify(amounts.value));
+  console.log('💰 amounts.value.adaAmount:', amounts.value.adaAmount);
+  console.log('💰 amounts.value.eurAmount:', amounts.value.eurAmount);
 };
 
 const updatePassword = (newPassword: string) => {
@@ -91,25 +106,63 @@ const updateFeeOption = (newFeeOption: string) => {
 };
 
 const handleTopUp = () => {
+  console.log(`🔄 handleTopUp called, currentStep: ${currentStep.value}`);
+  console.log(`📊 Current amounts:`, JSON.stringify(amounts.value));
+  console.log(`📊 amounts.adaAmount: ${amounts.value.adaAmount}, amounts.eurAmount: ${amounts.value.eurAmount}`);
+  
   if (currentStep.value === 1) {
+    console.log('📈 Moving from step 1 to step 2');
     currentStep.value = 2;
   } else if (currentStep.value === 2) {
+    console.log('📈 Moving from step 2 to step 3 (loading)');
+    
     if (!password.value) {
-      console.log('Please enter password');
+      console.log('❌ Please enter password');
       return;
     }
 
+    // Store transaction amounts before starting loading
+    transactionAmounts.value = {
+      adaAmount: amounts.value.adaAmount,
+      eurAmount: amounts.value.eurAmount,
+    };
+
+    console.log(`💾 STORING amounts:`, transactionAmounts.value);
+    console.log(`📝 Original amounts before storing:`, amounts.value);
     console.log(`Final top up: ${amounts.value.adaAmount} ADA = ${amounts.value.eurAmount} EUR`);
     console.log(`Fee option: ${feeOption.value}`);
-    console.log(`Password: ${password.value}`);
 
     currentStep.value = 3;
   }
 };
 
 const handleLoadingComplete = () => {
-  console.log('Top up completed successfully!');
+  console.log('🎉 UPDATED CODE: Top up completed successfully!');
   transactionId.value = Math.floor(Math.random() * 100000000).toString();
+  
+  // Update card balance and add transaction using stored amounts
+  const adaAmt = parseFloat(transactionAmounts.value.adaAmount) || 0;
+  const eurAmt = parseFloat(transactionAmounts.value.eurAmount) || 0;
+  
+  console.log('🔄 UPDATED: Using stored transaction amounts:', { adaAmt, eurAmt });
+  console.log('📝 Stored transactionAmounts.value:', transactionAmounts.value);
+  
+  if (adaAmt > 0 && eurAmt > 0) {
+    // Update card balance
+    cardStore.updateCardBalance(eurAmt);
+    
+    // Add transaction to history
+    cardStore.addTopUpTransaction(adaAmt, eurAmt, transactionId.value);
+    
+    // Add activity to recent activities
+    cardStore.addTopUpActivity(adaAmt, eurAmt);
+    
+    console.log(`✅ Balance updated: +€${eurAmt}, Transaction added: ${transactionId.value}, Activity added`);
+  } else {
+    console.error('❌ UPDATED: Invalid stored amounts:', { adaAmt, eurAmt });
+    console.error('🔍 Debug transactionAmounts:', transactionAmounts.value);
+  }
+  
   currentStep.value = 4;
 };
 
