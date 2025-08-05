@@ -4,10 +4,10 @@
       <div class="chart-title-section">
         <h3 class="chart-title">Balance over time</h3>
         <div class="chart-value-section">
-          <span class="chart-value">€550</span>
+          <span class="chart-value">€{{ currentBalance }}</span>
           <div class="change-badge positive">
             <img src="@/assets/svg/trend-up-01.svg" alt="Trend" class="change-icon" />
-            <span class="change-text">+2.4%</span>
+            <span class="change-text">+{{ balanceChangePercentage }}%</span>
           </div>
         </div>
       </div>
@@ -61,46 +61,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import Highcharts from 'highcharts';
+import cardStore from '@/stores/modules/card';
 
 const activeTab = ref('12months');
 const chartContainer = ref<HTMLElement>();
 let chart: Highcharts.Chart | null = null;
 
-const chartData = ref({
-  '12months': [
-    { name: 'Jan', y: 120 },
-    { name: 'Feb', y: 135 },
-    { name: 'Mar', y: 110 },
-    { name: 'Apr', y: 145 },
-    { name: 'May', y: 160 },
-    { name: 'Jun', y: 140 },
-    { name: 'Jul', y: 155 },
-    { name: 'Aug', y: 170 },
-    { name: 'Sep', y: 165 },
-    { name: 'Oct', y: 180 },
-    { name: 'Nov', y: 175 },
-    { name: 'Dec', y: 177 },
-  ],
-  '30days': [
-    { name: 'Day 1', y: 150 },
-    { name: 'Day 5', y: 155 },
-    { name: 'Day 10', y: 160 },
-    { name: 'Day 15', y: 165 },
-    { name: 'Day 20', y: 170 },
-    { name: 'Day 25', y: 175 },
-    { name: 'Day 30', y: 177 },
-  ],
-  '7days': [
-    { name: 'Mon', y: 170 },
-    { name: 'Tue', y: 172 },
-    { name: 'Wed', y: 175 },
-    { name: 'Thu', y: 173 },
-    { name: 'Fri', y: 176 },
-    { name: 'Sat', y: 178 },
-    { name: 'Sun', y: 177 },
-  ],
+// Base historical data (starting point before top-ups)
+const baseBalance = 550;
+
+// Current balance from card store
+const currentBalance = computed(() => {
+  if (cardStore.state.cardBalance?.currentBalance) {
+    return cardStore.state.cardBalance.currentBalance.amount.toFixed(0);
+  }
+  return baseBalance.toString();
+});
+
+// Calculate balance change percentage
+const balanceChangePercentage = computed(() => {
+  const current = parseFloat(currentBalance.value);
+  const change = ((current - baseBalance) / baseBalance) * 100;
+  return change.toFixed(1);
+});
+
+// Dynamic chart data that updates with current balance
+const chartData = computed(() => {
+  const current = parseFloat(currentBalance.value);
+  
+  return {
+    '12months': [
+      { name: 'Jan', y: 120 },
+      { name: 'Feb', y: 135 },
+      { name: 'Mar', y: 110 },
+      { name: 'Apr', y: 145 },
+      { name: 'May', y: 160 },
+      { name: 'Jun', y: 140 },
+      { name: 'Jul', y: 155 },
+      { name: 'Aug', y: 170 },
+      { name: 'Sep', y: 165 },
+      { name: 'Oct', y: 180 },
+      { name: 'Nov', y: 175 },
+      { name: 'Now', y: current },
+    ],
+    '30days': [
+      { name: 'Day 1', y: 150 },
+      { name: 'Day 5', y: 155 },
+      { name: 'Day 10', y: 160 },
+      { name: 'Day 15', y: 165 },
+      { name: 'Day 20', y: 170 },
+      { name: 'Day 25', y: 175 },
+      { name: 'Now', y: current },
+    ],
+    '7days': [
+      { name: 'Mon', y: 170 },
+      { name: 'Tue', y: 172 },
+      { name: 'Wed', y: 175 },
+      { name: 'Thu', y: 173 },
+      { name: 'Fri', y: 176 },
+      { name: 'Sat', y: 178 },
+      { name: 'Now', y: current },
+    ],
+  };
 });
 
 const setActiveTab = (tab: string) => {
@@ -111,7 +135,11 @@ const setActiveTab = (tab: string) => {
 const updateChart = () => {
   if (!chart) return;
 
-  const data = chartData.value[activeTab.value as keyof typeof chartData];
+  const data = chartData.value[activeTab.value as keyof typeof chartData.value];
+  const categories = data.map(item => item.name);
+  
+  // Update both data and categories
+  chart.xAxis[0].setCategories(categories);
   chart.series[0].setData(data);
 };
 
@@ -132,7 +160,7 @@ const initChart = () => {
       text: '',
     },
     xAxis: {
-      categories: chartData.value[activeTab.value as keyof typeof chartData].map(item => item.name),
+      categories: chartData.value[activeTab.value as keyof typeof chartData.value].map(item => item.name),
       lineColor: '#22262F',
       tickColor: '#22262F',
       labels: {
@@ -181,7 +209,7 @@ const initChart = () => {
     series: [
       {
         name: 'Balance',
-        data: chartData.value[activeTab.value as keyof typeof chartData],
+        data: chartData.value[activeTab.value as keyof typeof chartData.value],
         type: 'line',
       },
     ],
@@ -189,7 +217,19 @@ const initChart = () => {
       enabled: false,
     },
     tooltip: {
-      enabled: false,
+      enabled: true,
+      backgroundColor: '#1A1D24',
+      borderColor: '#22262F',
+      borderRadius: 8,
+      borderWidth: 1,
+      style: {
+        color: '#FFFFFF',
+        fontSize: '12px',
+        fontFamily: 'Inter, sans-serif',
+      },
+      formatter: function() {
+        return `<b>${this.x}</b><br/>Balance: €${this.y}`;
+      },
     },
   };
 
@@ -201,6 +241,12 @@ onMounted(() => {
 });
 
 watch(activeTab, () => {
+  updateChart();
+});
+
+// Watch for balance changes and update chart
+watch(() => cardStore.state.cardBalance?.currentBalance?.amount, () => {
+  console.log('📊 Chart: Balance changed, updating chart with new balance:', currentBalance.value);
   updateChart();
 });
 </script>
