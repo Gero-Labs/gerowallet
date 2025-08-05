@@ -4,7 +4,7 @@
       <span class="header-title">Account Overview</span>
       <div class="header-actions">
         <v-btn class="action-btn secondary-btn" variant="outlined" @click="showTopUpModal = true">
-          <img src="@/modules/wallet/icons/currency-dollar.svg" alt="Top up" class="btn-icon" />
+          <img src="@/modules/wallet/icons/currency-euro.svg" alt="Top up" class="btn-icon" />
           Top up
         </v-btn>
         <v-btn class="action-btn primary-btn" variant="outlined" @click="handleManageCard">
