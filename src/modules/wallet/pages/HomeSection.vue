@@ -69,7 +69,7 @@ const geroEarnedFormatted = computed(() => {
 
 const totalDepositFormatted = computed(() => {
   // This would come from Cardano wallet balance
-  return '₳1692.31';
+  return '1692.31';
 });
 
 const cardHistoryRecords = computed(() => {

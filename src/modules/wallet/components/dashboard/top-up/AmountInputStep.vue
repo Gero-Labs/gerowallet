@@ -1,14 +1,9 @@
 <template>
   <div class="amount-input-step">
-    <!-- Currency Icon -->
-    <div class="currency-icon">
-      <v-icon color="#75E0A7" size="20">mdi-currency-usd</v-icon>
-    </div>
-
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Top up your credit card balance</h2>
-      <p class="modal-subtitle">Transfer your ADA to Euro with real-time exchange rate</p>
+      <h2 class="modal-title">Top up your Gero card balance</h2>
+      <p class="modal-subtitle">Swap your ADA to Euro with real-time exchange rate</p>
     </div>
 
     <!-- Exchange Rate Table -->
@@ -21,6 +16,12 @@
         <span class="rate-equals">=</span>
         <span class="rate-value">€0.65 EUR</span>
       </div>
+    </div>
+
+    <!-- Wallet Balance -->
+    <div class="wallet-balance">
+      <span class="balance-label">Your ADA Balance:</span>
+      <span class="balance-value">₳{{ adaBalance }}</span>
     </div>
 
     <!-- Amount Input Section -->
@@ -75,6 +76,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import walletStore from '@/stores/walletStore';
 
 // Props
 interface Props {
@@ -101,6 +103,16 @@ const activeInput = ref<'first' | 'second' | null>(null);
 
 // Exchange rate
 const EXCHANGE_RATE = 0.65;
+
+// Computed property for ADA balance
+const adaBalance = computed(() => {
+  if (walletStore.state.account?.controlled_amount) {
+    // Convert lovelaces to ADA (1 ADA = 1,000,000 lovelaces)
+    const ada = Number(walletStore.state.account.controlled_amount) / 1_000_000;
+    return ada.toFixed(2);
+  }
+  return '0.00';
+});
 
 // Computed values for inputs based on switch state
 const firstInputValue = computed({
@@ -201,7 +213,7 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   padding: $spacing-2xl $spacing-2xl $spacing-md;
 }
 
@@ -283,6 +295,34 @@ watch(
   font-size: 14px;
   line-height: 1.43;
   color: $text-primary;
+}
+
+.wallet-balance {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  justify-content: center;
+  padding: $spacing-sm $spacing-md;
+  background: #0c111d;
+  border: 1px solid #1f242f;
+  border-radius: $border-radius-md;
+  width: fit-content;
+}
+
+.balance-label {
+  font-family: Inter;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #cecfd2;
+}
+
+.balance-value {
+  font-family: Inter;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #75E0A7;
 }
 
 .amount-section {
