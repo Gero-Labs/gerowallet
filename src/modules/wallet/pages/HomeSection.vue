@@ -1,23 +1,22 @@
 <template>
   <div class="home-section">
     <!-- Account Overview Section -->
-    <WelcomeCard :user-name="userName" />
+    <!-- <WelcomeCard :user-name="userName" /> -->
+    <HeroSection />
     <AccountOverviewHeader />
 
     <BalanceCardsSection
       :card-balance="cardBalanceFormatted"
       :cardano-balance="cardanoBalanceFormatted"
       :gero-earned="geroEarnedFormatted"
+      :total-deposit="totalDepositFormatted"
     />
-
-    <ChartSection @filter="handleFilter" />
-
-    <!-- Two Column Layout -->
     <div class="dashboard-layout">
       <div class="left-column">
         <RecentTransactionsSection :transactions="cardHistoryRecords" />
       </div>
       <div class="right-column">
+        <ChartSection @filter="handleFilter" />
         <ExchangeRateSection />
         <RecentActivitiesSection />
       </div>
@@ -37,6 +36,7 @@ import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
+import HeroSection from '../components/HeroSection.vue';
 
 const { initializeMockData } = useMockCardData();
 
@@ -52,19 +52,24 @@ const cardBalanceFormatted = computed(() => {
   if (cardStore.state.cardBalance?.currentBalance) {
     const amount = cardStore.state.cardBalance.currentBalance.amount;
     const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
-    return `${currency}${amount.toFixed(2)}`;
+    return `${amount.toFixed(2)}`;
   }
   return '€0.00';
 });
 
 const cardanoBalanceFormatted = computed(() => {
   // This would come from Cardano wallet balance
-  return '₳0.00';
+  return '₳846.15';
 });
 
 const geroEarnedFormatted = computed(() => {
   // This would come from GERO rewards
   return '0.00K';
+});
+
+const totalDepositFormatted = computed(() => {
+  // This would come from Cardano wallet balance
+  return '₳1692.31';
 });
 
 const cardHistoryRecords = computed(() => {
@@ -112,14 +117,14 @@ const handleFilter = () => {
 
   .left-column {
     flex: 1;
-    width: 100%;
+    width: calc(66% - 8px);
   }
 
   .right-column {
     display: flex;
     flex-direction: column;
     gap: $spacing-lg;
-    width: 357px;
+    width: calc(33% - 8px);
     flex-shrink: 0;
   }
 }
@@ -130,6 +135,9 @@ const handleFilter = () => {
     gap: $spacing-lg;
 
     .right-column {
+      width: 100%;
+    }
+    .left-column {
       width: 100%;
     }
   }

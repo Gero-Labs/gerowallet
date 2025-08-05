@@ -5,12 +5,12 @@
       <h3 class="management-heading">Manage Your Card in Seconds</h3>
       <p class="management-description">
         An all-in-one platform that helps you manage everything about <br />
-        your credit card account
+        your Gero Card account
       </p>
       <div class="feature-list">
-        <FeatureListItem text="Approved within 24 hours" icon="check" />
-        <FeatureListItem text="Apple Pay or Google Pay compatible" icon="check" />
-        <FeatureListItem text="Physical card to you—anywhere, at no extra cost." icon="check" />
+        <FeatureListItem text="Enjoy 6 months of ZERO FEES" icon="check" />
+        <FeatureListItem text="0% monthly & issuance fees" icon="check" />
+        <FeatureListItem text="0% fees on ADA-to-euro conversions and spending." icon="check" />
       </div>
     </div>
   </div>
@@ -40,7 +40,6 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
 .management-column-content {
   @include flex-column;
   gap: $spacing-lg;
-  width: 100%;
 
   .featured-icon {
     width: 48px;
