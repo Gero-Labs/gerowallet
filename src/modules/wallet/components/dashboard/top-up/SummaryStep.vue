@@ -1,10 +1,5 @@
 <template>
   <div class="summary-step">
-    <!-- Currency Icon -->
-    <div class="currency-icon">
-      <v-icon color="#75E0A7" size="20">mdi-currency-usd</v-icon>
-    </div>
-
     <!-- Title and Subtitle -->
     <div class="header-text">
       <h2 class="modal-title">Fee & Order Summary</h2>
@@ -20,6 +15,18 @@
         <span class="rate-value">₳1 ADA</span>
         <span class="rate-equals">=</span>
         <span class="rate-value">€0.65 EUR</span>
+      </div>
+    </div>
+
+    <!-- GERO Info -->
+    <div class="gero-info-container">
+      <div class="gero-info-row">
+        <span class="gero-info-label">Your $GERO Balance:</span>
+        <span class="gero-info-value">{{ geroBalance }} GERO</span>
+      </div>
+      <div class="gero-info-row">
+        <span class="gero-info-label">Your Tier:</span>
+        <span class="gero-tier-badge" :class="geroTier.toLowerCase()">{{ geroTier }}</span>
       </div>
     </div>
 
@@ -65,14 +72,14 @@
 
           <div class="transfer-row">
             <span class="transfer-label">Transfer Fee</span>
-            <span class="fee-amount">₳1.23 ADA</span>
+            <span class="fee-amount">{{ selectedFeeOption === 'GERO' ? '₳0.00 ADA' : '₳1.23 ADA' }}</span>
           </div>
 
           <div class="divider"></div>
 
           <div class="transfer-row">
             <span class="transfer-label">Total Spend</span>
-            <span class="total-amount">₳{{ (parseFloat(adaAmount || '1000') + 1.23).toFixed(2) }} ADA</span>
+            <span class="total-amount">₳{{ (parseFloat(adaAmount || '1000') + (selectedFeeOption === 'GERO' ? 0 : 1.23)).toFixed(2) }} ADA</span>
           </div>
         </div>
       </div>
@@ -80,7 +87,7 @@
       <!-- You Receive Section -->
       <div class="summary-container">
         <div class="transfer-row">
-          <span class="transfer-label">You receive exactly</span>
+          <span class="transfer-label">Card will receive exactly</span>
           <span class="receive-amount">€{{ eurAmount || '654.03' }} EUR</span>
         </div>
       </div>
@@ -95,7 +102,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
+import walletStore from '@/stores/walletStore';
 
 // Props
 interface Props {
@@ -113,7 +121,40 @@ const emit = defineEmits<{
 
 // Reactive data
 const password = ref('');
-const selectedFeeOption = ref('ADA');
+const selectedFeeOption = ref('GERO');
+
+// Computed properties for GERO token info
+const geroBalance = computed(() => {
+  // Look for GERO token in the tokens object
+  const tokens = walletStore.state.tokens;
+  if (tokens) {
+    // Find GERO token by checking metadata ticker
+    for (const [unit, token] of Object.entries(tokens)) {
+      const tok: any = token;
+      if (tok.metadata?.ticker === 'GERO' || tok.metadata?.name === 'GERO') {
+        // Convert from smallest unit to display unit (assuming 6 decimals)
+        const balance = Number(tok.quantity || 0) / 1_000_000;
+        return balance.toFixed(2);
+      }
+    }
+  }
+  return '0.00';
+});
+
+// Determine GERO tier based on balance
+const geroTier = computed(() => {
+  const balance = parseFloat(geroBalance.value);
+  
+  // Force Gold tier for now since user has GERO tokens
+  // TODO: Implement proper tier calculation based on actual requirements
+  if (balance > 0) return 'Gold';
+  
+  // Tier thresholds (example values - adjust as needed)
+  // if (balance >= 10000) return 'Gold';
+  // if (balance >= 5000) return 'Silver';
+  // if (balance >= 1000) return 'Bronze';
+  return 'None';
+});
 
 // Watch for password changes
 const updatePassword = (value: string) => {
@@ -139,7 +180,7 @@ watch(selectedFeeOption, updateFeeOption);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   padding: $spacing-2xl $spacing-2xl $spacing-md;
 }
 
@@ -221,6 +262,72 @@ watch(selectedFeeOption, updateFeeOption);
   font-size: 14px;
   line-height: 1.43;
   color: $text-primary;
+}
+
+// GERO Info Styles
+.gero-info-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: $spacing-sm $spacing-md;
+  background: #0c111d;
+  border: 1px solid #1f242f;
+  border-radius: $border-radius-md;
+  width: fit-content;
+}
+
+.gero-info-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  justify-content: space-between;
+  min-width: 250px;
+}
+
+.gero-info-label {
+  font-family: Inter;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #cecfd2;
+}
+
+.gero-info-value {
+  font-family: Inter;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #75E0A7;
+}
+
+.gero-tier-badge {
+  font-family: Inter;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.43;
+  padding: 4px 12px;
+  border-radius: 16px;
+  text-transform: uppercase;
+  
+  &.gold {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #000;
+  }
+  
+  &.silver {
+    background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%);
+    color: #000;
+  }
+  
+  &.bronze {
+    background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%);
+    color: #FFF;
+  }
+  
+  &.none {
+    background: #333741;
+    color: #cecfd2;
+  }
 }
 
 // Summary Section Styles
