@@ -1,25 +1,31 @@
 import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
 
-import Welcome from '@/modules/welcome/views/Welcome.vue';
+// Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
-import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
-import Staking from "@/modules/staking/Staking.vue";
-import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
-import DappSignData from '@/popup/modules/views/DappSignData.vue';
-import SignTx from '@/popup/modules/views/SignTx.vue';
-import Cashback from "@/modules/cashback/Cashback.vue";
-import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
-import Swap from '@/modules/swap/Swap.vue';
+
+// Critical components loaded immediately
+import Welcome from '@/modules/welcome/views/Welcome.vue';
+import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import Login from '@/popup/modules/views/Login.vue';
-import DevTools from '@/modules/devTools/DevTools.vue';
-import Governance from '@/modules/governance/Governance.vue';
-import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
-import Transactions from '@/modules/transactions/Transactions.vue';
-import Blog from '@/modules/blog/Blog.vue';
-import MultiSig from '@/modules/multisig/views/MultiSig.vue';
-import Card from '@/modules/wallet/GeroCard.vue';
+
+// Lazy loading for other components (saves ~5MB initial load)
+const Staking = () => import("@/modules/staking/Staking.vue");
+const DappConnect = () => import("@/popup/modules/views/DappConnect.vue");
+const DappSignData = () => import('@/popup/modules/views/DappSignData.vue');
+const SignTx = () => import('@/popup/modules/views/SignTx.vue');
+const Cashback = () => import("@/modules/cashback/Cashback.vue");
+const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
+const Swap = () => import('@/modules/swap/Swap.vue');
+const DevTools = () => import('@/modules/devTools/DevTools.vue');
+const Governance = () => import('@/modules/governance/Governance.vue');
+const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
+const Transactions = () => import('@/modules/transactions/Transactions.vue');
+const Blog = () => import('@/modules/blog/Blog.vue');
+const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue');
+const Card = () => import('@/modules/wallet/GeroCard.vue');
+
 import WalletStore from '@/stores/walletStore';
 
 const routes = [

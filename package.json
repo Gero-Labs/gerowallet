@@ -5,14 +5,14 @@
   "private": true,
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
-    "dev": "npm run clear && cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=8192' run-p dev:*",
+    "dev": "npm run clear && cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=16384 --max-semi-space-size=512' run-p dev:*",
     "dev-firefox": "npm run clear && cross-env NODE_ENV=development EXTENSION=firefox run-p dev:*",
     "dev:prepare": "esno scripts/prepare.ts",
     "dev:background": "npm run build:background -- --mode development",
     "dev:content": "npm run build:content -- --mode development",
     "dev:inject": "npm run build:inject -- --mode development",
     "dev:web": "vite --mode development",
-    "build": "npm run clear && cross-env NODE_ENV=production run-s \"build:background -- --mode production\" \"build:content -- --mode production\" \"build:inject -- --mode production\" \"build:web -- --mode production\" && npm run build:prepare",
+    "build": "npm run clear && cross-env NODE_ENV=production NODE_OPTIONS='--max-old-space-size=16384 --max-semi-space-size=512' run-p \"build:background -- --mode production\" \"build:content -- --mode production\" \"build:inject -- --mode production\" \"build:web -- --mode production\" && npm run build:prepare",
     "build:beta": "npm run clear && cross-env NODE_ENV=production run-s \"build:background -- --mode beta\" \"build:content -- --mode beta\" \"build:inject -- --mode beta\" \"build:web -- --mode beta\" && npm run build:prepare:beta",
     "build:prepare": "npx cross-env NODE_ENV=production dotenv -e .env.production -- esno scripts/prepare.ts",
     "build:prepare:beta": "npx cross-env NODE_ENV=production dotenv -e .env.beta -- esno scripts/prepare.ts",
@@ -25,6 +25,7 @@
     "pack:zip:beta": "rimraf extension/*.zip && jszip-cli add extension/* -o ./extension/Gero-v${npm_package_version}-Beta.zip",
     "pack:crx": "crx pack extension -o ./extension.crx",
     "pack:xpi": "cross-env WEB_EXT_ARTIFACTS_DIR=./ web-ext build --source-dir ./extension --filename extension.xpi --overwrite-dest",
+
     "start:chromium": "web-ext run --source-dir ./extension --target=chromium",
     "start:firefox": "web-ext run --source-dir ./extension --target=firefox-desktop",
     "clear": "rimraf --glob extension/assets extension/background extension/content extension/index.html extension/manifest.json",
@@ -122,6 +123,9 @@
     "eslint-plugin-vue": "^8.1.1",
     "esno": "^4.8.0",
     "fs-extra": "^11.3.0",
+    "imagemin-pngquant": "^10.0.0",
+    "imagemin-svgo": "^11.0.1",
+    "imagemin-webp": "^8.0.0",
     "kolorist": "^1.8.0",
     "mini-css-extract-plugin": "^2.9.0",
     "npm-run-all": "^4.1.5",
@@ -136,6 +140,8 @@
     "unplugin-auto-import": "^0.18.3",
     "unplugin-vue-components": "^0.25.2",
     "vite": "^4.5.5",
+    "vite-bundle-analyzer": "^1.1.0",
+    "vite-plugin-imagemin": "^0.6.1",
     "vite-plugin-node-polyfills": "^0.22.0",
     "vite-plugin-node-stdlib-browser": "^0.2.1",
     "vite-plugin-top-level-await": "^1.4.4",
@@ -145,7 +151,8 @@
     "vue-loader": "^17.4.2",
     "vue-template-compiler": "^2.7.16",
     "vuetify-loader": "^1.9.2",
-    "webextension-polyfill": "^0.12.0"
+    "webextension-polyfill": "^0.12.0",
+    "webpack-bundle-analyzer": "^4.10.2"
   },
   "browserslist": [
     "> 1%",
