@@ -3,7 +3,7 @@
     <div class="card-header">
       <h3 class="card-title">Recent Activities</h3>
     </div>
-    
+
     <div class="activities-list">
       <div class="activity-item" v-for="activity in activities" :key="activity.id">
         <div class="activity-content">
@@ -37,7 +37,7 @@ const activities = ref<Activity[]>([
     cryptoAmount: '₳200',
     fiatAmount: '+€130.00',
     date: '03/05/2025',
-    status: 'Completed'
+    status: 'Completed',
   },
   {
     id: 2,
@@ -45,8 +45,8 @@ const activities = ref<Activity[]>([
     cryptoAmount: '₳200',
     fiatAmount: '+€130.00',
     date: '03/05/2025',
-    status: 'Completed'
-  }
+    status: 'Completed',
+  },
 ]);
 </script>
 
@@ -145,7 +145,7 @@ const activities = ref<Activity[]>([
               font-weight: $font-weight-medium;
               font-size: $font-size-xs;
               line-height: 1.33;
-              color: #4CA30D;
+              color: #4ca30d;
               text-align: right;
             }
           }
@@ -154,4 +154,4 @@ const activities = ref<Activity[]>([
     }
   }
 }
-</style> 
+</style>

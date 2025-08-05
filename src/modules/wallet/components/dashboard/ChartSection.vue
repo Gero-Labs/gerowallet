@@ -4,7 +4,7 @@
       <div class="chart-title-section">
         <h3 class="chart-title">Balance over time</h3>
         <div class="chart-value-section">
-          <span class="chart-value">€177.00</span>
+          <span class="chart-value">€550</span>
           <div class="change-badge positive">
             <img src="@/assets/svg/trend-up-01.svg" alt="Trend" class="change-icon" />
             <span class="change-text">+2.4%</span>
@@ -12,50 +12,48 @@
         </div>
       </div>
       <div class="chart-controls">
-        <div class="time-tabs">
-          <v-btn
-            class="tab-btn"
-            :class="{ active: activeTab === '12months' }"
-            variant="text"
-            size="small"
-            @click="setActiveTab('12months')"
-          >
-            12 months
-          </v-btn>
-          <v-btn
-            class="tab-btn"
-            :class="{ active: activeTab === '30days' }"
-            variant="text"
-            size="small"
-            @click="setActiveTab('30days')"
-          >
-            30 days
-          </v-btn>
-          <v-btn
-            class="tab-btn"
-            :class="{ active: activeTab === '7days' }"
-            variant="text"
-            size="small"
-            @click="setActiveTab('7days')"
-          >
-            7 days
-          </v-btn>
-          <v-btn
-            class="tab-btn"
-            :class="{ active: activeTab === '24hours' }"
-            variant="text"
-            size="small"
-            @click="setActiveTab('24hours')"
-          >
-            24 hours
-          </v-btn>
-        </div>
-        <v-btn class="filter-btn" variant="outlined" size="small">
-          <img src="@/modules/wallet/icons/filter.svg" alt="Filter" class="btn-icon" />
-          Filters
-        </v-btn>
+        <v-menu offset-y :close-on-content-click="false">
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn class="filter-btn" variant="outlined" size="small" v-bind="attrs" v-on="on">
+              <img src="@/modules/wallet/icons/filter.svg" alt="Filter" class="btn-icon" />
+              Date
+            </v-btn>
+          </template>
+          <v-card outlined class="liquid-glass">
+            <div class="time-tabs">
+              <v-btn
+                class="tab-btn"
+                :class="{ active: activeTab === '12months' }"
+                variant="text"
+                size="small"
+                @click="setActiveTab('12months')"
+              >
+                12M
+              </v-btn>
+              <v-btn
+                class="tab-btn"
+                :class="{ active: activeTab === '30days' }"
+                variant="text"
+                size="small"
+                @click="setActiveTab('30days')"
+              >
+                30D
+              </v-btn>
+              <v-btn
+                class="tab-btn"
+                :class="{ active: activeTab === '7days' }"
+                variant="text"
+                size="small"
+                @click="setActiveTab('7days')"
+              >
+                7D
+              </v-btn>
+            </div>
+          </v-card>
+        </v-menu>
       </div>
     </div>
+
     <div class="chart-container">
       <div ref="chartContainer" class="highcharts-container"></div>
     </div>
@@ -70,7 +68,7 @@ const activeTab = ref('12months');
 const chartContainer = ref<HTMLElement>();
 let chart: Highcharts.Chart | null = null;
 
-const chartData = {
+const chartData = ref({
   '12months': [
     { name: 'Jan', y: 120 },
     { name: 'Feb', y: 135 },
@@ -103,16 +101,7 @@ const chartData = {
     { name: 'Sat', y: 178 },
     { name: 'Sun', y: 177 },
   ],
-  '24hours': [
-    { name: '00:00', y: 175 },
-    { name: '04:00', y: 176 },
-    { name: '08:00', y: 177 },
-    { name: '12:00', y: 178 },
-    { name: '16:00', y: 177 },
-    { name: '20:00', y: 176 },
-    { name: '24:00', y: 177 },
-  ],
-};
+});
 
 const setActiveTab = (tab: string) => {
   activeTab.value = tab;
@@ -122,7 +111,7 @@ const setActiveTab = (tab: string) => {
 const updateChart = () => {
   if (!chart) return;
 
-  const data = chartData[activeTab.value as keyof typeof chartData];
+  const data = chartData.value[activeTab.value as keyof typeof chartData];
   chart.series[0].setData(data);
 };
 
@@ -143,7 +132,7 @@ const initChart = () => {
       text: '',
     },
     xAxis: {
-      categories: chartData[activeTab.value as keyof typeof chartData].map(item => item.name),
+      categories: chartData.value[activeTab.value as keyof typeof chartData].map(item => item.name),
       lineColor: '#22262F',
       tickColor: '#22262F',
       labels: {
@@ -192,7 +181,7 @@ const initChart = () => {
     series: [
       {
         name: 'Balance',
-        data: chartData[activeTab.value as keyof typeof chartData],
+        data: chartData.value[activeTab.value as keyof typeof chartData],
         type: 'line',
       },
     ],
@@ -225,7 +214,6 @@ watch(activeTab, () => {
   border: 1px solid $border-secondary;
   border-radius: $border-radius-md;
   padding: $spacing-lg;
-
   .chart-header {
     display: flex;
     justify-content: space-between;
@@ -296,44 +284,8 @@ watch(activeTab, () => {
   }
 
   .chart-controls {
-    display: flex;
-    gap: $spacing-md;
+    gap: 0;
     align-items: center;
-  }
-
-  .time-tabs {
-    display: flex;
-    gap: 2px;
-    background: $background-dark;
-    border: 1px solid $background-secondary;
-    border-radius: $border-radius-md;
-    padding: 2px;
-
-    .tab-btn {
-      padding: 8px 12px;
-      font-family: $font-family-primary;
-      font-weight: $font-weight-semibold;
-      font-size: $font-size-sm;
-      line-height: 1.43;
-      color: $text-muted;
-      text-transform: none;
-      border-radius: $border-radius-md;
-      min-width: auto;
-      height: 36px;
-      background: transparent;
-      border: none;
-
-      &.active {
-        background: $background-card;
-        border: 1px solid $border-primary;
-        color: $text-secondary;
-        box-shadow: $shadow-sm;
-      }
-
-      &:not(.active):hover {
-        background: lighten($background-dark, 2%);
-      }
-    }
   }
 
   .filter-btn {
@@ -368,6 +320,46 @@ watch(activeTab, () => {
   .highcharts-container {
     width: 100%;
     height: 100%;
+  }
+}
+
+.liquid-glass {
+  border-radius: 16px;
+  width: 100%;
+  padding: 16px;
+  .time-tabs {
+    display: flex;
+    gap: 2px;
+    background: $background-dark;
+    border: 1px solid $background-secondary;
+    border-radius: $border-radius-md;
+    padding: 2px;
+
+    .tab-btn {
+      padding: 8px 12px;
+      font-family: $font-family-primary;
+      font-weight: $font-weight-semibold;
+      font-size: $font-size-sm;
+      line-height: 1.43;
+      color: $text-muted;
+      text-transform: none;
+      border-radius: $border-radius-md;
+      min-width: auto;
+      height: 36px;
+      background: transparent;
+      border: none;
+
+      &.active {
+        background: $background-card;
+        border: 1px solid $border-primary;
+        color: $text-secondary;
+        box-shadow: $shadow-sm;
+      }
+
+      &:not(.active):hover {
+        background: lighten($background-dark, 2%);
+      }
+    }
   }
 }
 </style>

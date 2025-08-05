@@ -11,9 +11,9 @@
 
           <div class="modal-header">
             <div class="header-content">
-              <h2 class="modal-title">Get Started with Gero Credit Card</h2>
+              <h2 class="modal-title">Get Started with Gero Crypto Card</h2>
               <p class="modal-subtitle">
-                You'll be redirected to our banking partner's secure portal to complete verification.
+                You’ll be redirected to our banking partner’s secure portal to complete verification.
               </p>
             </div>
 

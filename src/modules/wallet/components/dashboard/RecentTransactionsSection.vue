@@ -20,10 +20,10 @@
             <td class="table-cell date-cell">{{ transaction.date }}</td>
             <td class="table-cell transaction-cell">
               <div class="transaction-info">
-                <div class="avatar" :class="transaction.avatarClass">
+                <!-- <div class="avatar" :class="transaction.avatarClass">
                   <img v-if="transaction.icon" :src="transaction.icon" :alt="transaction.name" />
                   <span v-else class="avatar-text">{{ transaction.avatarText }}</span>
-                </div>
+                </div> -->
                 <span class="transaction-name">{{ transaction.name }}</span>
               </div>
             </td>
@@ -121,7 +121,7 @@ const formattedTransactions = computed(() => {
       : `+ ${tx.amount.currencyCode}${tx.amount.amount.toFixed(2)}`;
 
     // Extract merchant name from cardAcceptorNameAndLocation
-    const merchantName = tx.cardAcceptorNameAndLocation.split(' ')[0] || 'Unknown';
+    const merchantName = tx.narrative.description.split(' ')[0] || 'Unknown';
 
     // Determine category based on MCC code
     const category = getCategoryFromMCC(tx.mcc.code);
@@ -266,7 +266,6 @@ const handlePageChange = (page: number | string) => {
     .transactions-table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 800px;
 
       thead {
         tr {
@@ -278,7 +277,7 @@ const handlePageChange = (page: number | string) => {
             font-size: $font-size-xs;
             line-height: 1.5;
             color: $text-muted;
-            text-align: left;
+            text-align: left !important;
             padding: 12px 24px 12px 0;
             border: none;
             background: transparent;
@@ -298,6 +297,7 @@ const handlePageChange = (page: number | string) => {
             padding: 16px 24px 16px 0;
             border: none;
             vertical-align: middle;
+            text-align: left !important;
 
             &.date-cell {
               font-family: $font-family-primary;
@@ -392,6 +392,18 @@ const handlePageChange = (page: number | string) => {
                   }
 
                   &.dot-red {
+                    background: #fecdca;
+                  }
+                  &.dot-orange {
+                    background: #ff9f00;
+                  }
+                  &.dot-purple {
+                    background: #9c27b0;
+                  }
+                  &.dot-cyan {
+                    background: #00bcd4;
+                  }
+                  &.dot-gray {
                     background: #fecdca;
                   }
                 }
@@ -683,7 +695,7 @@ const handlePageChange = (page: number | string) => {
                   flex-direction: column;
                   align-items: flex-start;
                   gap: $spacing-sm;
-                  text-align: center;
+                  text-align: left !important;
 
                   .avatar {
                     align-self: center;
