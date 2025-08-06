@@ -11,6 +11,7 @@ import ablyService from '@/services/ably.service';
 import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
+import MusicStore from '@/stores/musicStore';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -168,10 +169,10 @@ export class WalletManager {
       isEnterpriseAddress: walletBg.isEnterpriseAddress()
     });
 
-    console.debug('🔐 Setting up Ably service for wallet switch:', { 
+    console.debug('🔐 Setting up Ably service for wallet switch:', {
       walletId: walletBg.id,
-      chain, 
-      network, 
+      chain,
+      network,
       address,
       baseAddress: walletBg.baseAddress,
       stakeAddress: walletBg.stakeAddress
@@ -203,7 +204,7 @@ export class WalletManager {
     // This ensures the auth callback has time to fetch a fresh token
     await new Promise(resolve => setTimeout(resolve, 2000));
     console.debug('🔐 Connection state after delay:', ablyService['client']?.connection?.state);
-    
+
     // Additional check - wait for connection to be established
     const maxWaitTime = 10000; // 10 seconds max
     const startTime = Date.now();
@@ -211,7 +212,7 @@ export class WalletManager {
       console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
+
     if (ablyService['client']?.connection?.state !== 'connected') {
       console.warn('⚠️ Ably connection not established after timeout, proceeding anyway');
     } else {
@@ -344,6 +345,7 @@ export class WalletManager {
       // Clear wallet store data
       try {
         WalletStore.logout();
+        await MusicStore.logout();
       } catch (storeError) {
         console.warn('Failed to logout from wallet store:', storeError);
       }
@@ -383,6 +385,7 @@ export class WalletManager {
       this.walletBg = null;
       this.currentWalletId = null;
       WalletStore.logout();
+      await MusicStore.logout();
     }
   }
 

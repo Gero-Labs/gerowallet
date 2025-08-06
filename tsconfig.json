@@ -35,7 +35,6 @@
     "module": "ESNext",
     "types": [
       "chrome",
-      "unplugin-fonts/client",
       "vite/client"
     ],
     "paths": {
