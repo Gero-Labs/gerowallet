@@ -14,7 +14,7 @@ export default defineConfig({
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   build: {
-    target: 'esnext',
+    target: 'es2022',
     assetsDir: '.',
     watch: isDev
       ? {}
