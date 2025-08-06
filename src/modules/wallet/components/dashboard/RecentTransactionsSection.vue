@@ -153,6 +153,7 @@ const getCategoryFromMCC = (mccCode: string): string => {
     '5541': 'Transportation',
     '7011': 'Travel',
     '8099': 'Entertainment',
+    '6012': 'Top-up', // Financial Institution - for ADA top-ups
   };
 
   return mccCategories[mccCode] || 'Other';
@@ -167,6 +168,7 @@ const getCategoryClass = (category: string): string => {
     'Transportation': 'category-purple',
     'Travel': 'category-cyan',
     'Entertainment': 'category-red',
+    'Top-up': 'category-green', // Green for positive/credit transactions
     'Other': 'category-gray',
   };
 
@@ -182,6 +184,7 @@ const getCategoryDotClass = (category: string): string => {
     'Transportation': 'dot-purple',
     'Travel': 'dot-cyan',
     'Entertainment': 'dot-red',
+    'Top-up': 'dot-green', // Green dot for top-up transactions
     'Other': 'dot-gray',
   };
 

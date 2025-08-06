@@ -7,9 +7,10 @@
 
     <BalanceCardsSection
       :card-balance="cardBalanceFormatted"
-      :cardano-balance="cardanoBalanceFormatted"
+      :card-balance-ada="cardBalanceAda"
       :gero-earned="geroEarnedFormatted"
       :total-deposit="totalDepositFormatted"
+      :total-deposit-ada="totalDepositAda"
     />
     <div class="dashboard-layout">
       <div class="left-column">
@@ -40,6 +41,9 @@ import HeroSection from '../components/HeroSection.vue';
 
 const { initializeMockData } = useMockCardData();
 
+// ADA to EUR conversion rate (hardcoded)
+const ADA_TO_EUR_RATE = 0.65;
+
 // Computed properties for formatted data
 const userName = computed(() => {
   if (cardStore.state.userInfo?.email) {
@@ -57,9 +61,14 @@ const cardBalanceFormatted = computed(() => {
   return '€0.00';
 });
 
-const cardanoBalanceFormatted = computed(() => {
-  // This would come from Cardano wallet balance
-  return '₳846.15';
+const cardBalanceAda = computed(() => {
+  // Calculate ADA equivalent of card balance
+  if (cardStore.state.cardBalance?.currentBalance) {
+    const eurAmount = cardStore.state.cardBalance.currentBalance.amount;
+    const adaAmount = eurAmount / ADA_TO_EUR_RATE;
+    return `₳${adaAmount.toFixed(2)}`;
+  }
+  return '₳0.00';
 });
 
 const geroEarnedFormatted = computed(() => {
@@ -68,17 +77,35 @@ const geroEarnedFormatted = computed(() => {
 });
 
 const totalDepositFormatted = computed(() => {
-  // This would come from Cardano wallet balance
-  return '1692.31';
+  // Start with the original hardcoded value and add new deposits
+  const baseAmount = 1692.31;
+  const additionalDeposits = cardStore.state.totalDeposits || 0;
+  return (baseAmount + additionalDeposits).toFixed(2);
+});
+
+const totalDepositAda = computed(() => {
+  // Calculate ADA equivalent of total deposits
+  const baseAmount = 1692.31;
+  const additionalDeposits = cardStore.state.totalDeposits || 0;
+  const totalEur = baseAmount + additionalDeposits;
+  const adaAmount = totalEur / ADA_TO_EUR_RATE;
+  return `₳${adaAmount.toFixed(2)}`;
 });
 
 const cardHistoryRecords = computed(() => {
-  return cardStore.state.cardHistory?.history.records || [];
+  const records = cardStore.state.cardHistory?.history.records || [];
+  console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
+  if (records.length > 0) {
+    console.log('🏠 First record:', records[0]);
+  }
+  return records;
 });
 
 // Initialize data
 onMounted(async () => {
   console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
+  console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
+  
   if (import.meta.env.DEV) {
     // Use mock data in development
     console.log('Initializing mock data...');
@@ -90,6 +117,8 @@ onMounted(async () => {
     await cardStore.initialize(geroStore.state.wallets);
     console.log('Real API initialized');
   }
+  
+  console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);
 });
 
 const handleFilter = () => {
