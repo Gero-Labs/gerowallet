@@ -57,7 +57,7 @@
                    :disabled="automaticSlippage == 'on' || unlimitedSlippage == 'on'">
               5
             </v-btn>
-            <v-btn rounded :value="-1" class="py-1 px-0" style="border-color: black!important; height: 36px"
+            <v-btn rounded :value="-1" class="py-1 px-0" style="border-color: black!important; overflow: hidden; height: 36px"
                    :disabled="automaticSlippage == 'on' || slippageToleranceType == 'auto' || unlimitedSlippage == 'on'">
               <v-text-field
                 v-model="customSlippageTolerance"
@@ -66,8 +66,8 @@
                 dense
                 solo
                 hide-details
-                height="35"
-                style="border-top-left-radius: 0; border-bottom-left-radius: 0; height: 36px; border: 1px solid black; font-size: 11px;"
+                height="32"
+                style="border-top-left-radius: 0; border-bottom-left-radius: 0; height: 34px; border: 1px solid black; font-size: 11px;"
                 type="number"
                 hide-spin-buttons
                 :min="0"

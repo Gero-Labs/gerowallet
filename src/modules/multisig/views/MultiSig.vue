@@ -4,151 +4,202 @@
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <v-container fluid class="multisig-container">
-          <v-card outlined class="liquid-glass">
-            <v-card-title class="multisig-title">{{ $t('multisig.title') }}
-              <v-spacer></v-spacer>
-              <v-btn v-if="!multiSigAmountReached" color="white" outlined class="mx-2 text-caption text-capitalize"
-                @click="showCreateMultisigDialog = true">
-                <v-icon small left>
-                  mdi-plus-circle
-                </v-icon>
-                {{ $t('multisig.createMultisigWallet') }}
-              </v-btn>
-              <v-card-subtitle v-else class="multisig-description">
-                {{ `You're reached your limit(${MAX_MULTISIG_WALLETS_PER_USER}) of multisig wallets` }}
-              </v-card-subtitle>
-              <v-btn v-show="Object.keys(getMultiSigWallet).length != 0" color="#CCC" outlined
-                class="mx-2 text-caption text-capitalize" @click="showNewMultisigTransaction = true">
-                <v-icon small left>
-                  mdi-plus-circle
-                </v-icon>
-                {{ $t('multisig.newMultisigTransaction') }}
-              </v-btn>
-            </v-card-title>
-            <v-card-subtitle class="multisig-description">{{ $t('multisig.description') }}</v-card-subtitle>
-            <v-card-text>
-              <v-row no-gutters>
-                <v-col cols="12">
-                  <v-row class="align-end">
-                    <v-col cols="4">
-                      {{ $t('multisig.selectMultisigToManage') }}
-                      <v-select class="mt-2" dense
-                        :label="!showMultisigWallets ? $t('multisig.noWalletsToManage') : (getMultiSigWallet ? '' : $t('multisig.selectMultisigToManage'))"
-                        :disabled="!showMultisigWallets" v-model="getMultiSigWallet"
-                        prepend-inner-icon="mdi-account-multiple-outline" :items="getMultiSigWallets" item-text="name"
-                        item-value="paymentAddress" outlined hide-details @change="onSelectedWallet"></v-select>
-                    </v-col>
-                    <v-col cols="auto">
-                      <!-- <v-btn v-show="getMultiSigWallet" color="#CCC" outlined class="text-caption text-capitalize"
+            <v-card outlined class="liquid-glass">
+              <v-card-title class="multisig-title">
+                <span>{{ $t('multisig.title') }}</span>
+                <v-spacer></v-spacer>
+                <v-btn
+                  v-if="!multiSigAmountReached"
+                  small
+                  outlined
+                  color="#00DFF3"
+                  class="mx-2 text-caption text-capitalize"
+                  @click="showCreateMultisigDialog = true"
+                >
+                  <v-icon small left> mdi-plus-circle </v-icon>
+                  {{ $t('multisig.createMultisigWallet') }}
+                </v-btn>
+                <v-card-subtitle v-else class="multisig-description">
+                  {{ `You're reached your limit(${MAX_MULTISIG_WALLETS_PER_USER}) of multisig wallets` }}
+                </v-card-subtitle>
+                <v-btn
+                  v-show="Object.keys(getMultiSigWallet).length != 0"
+                  color="#CCC"
+                  outlined
+                  class="mx-2 text-caption text-capitalize"
+                  @click="showNewMultisigTransaction = true"
+                >
+                  <v-icon small left> mdi-plus-circle </v-icon>
+                  {{ $t('multisig.newMultisigTransaction') }}
+                </v-btn>
+              </v-card-title>
+              <v-card-subtitle class="multisig-description">{{ $t('multisig.description') }}</v-card-subtitle>
+              <v-card-text>
+                <v-row no-gutters>
+                  <v-col cols="12">
+                    <v-row class="align-end">
+                      <v-col cols="4">
+                        {{ $t('multisig.selectMultisigToManage') }}
+                        <v-select
+                          class="mt-2"
+                          dense
+                          :label="
+                            !showMultisigWallets
+                              ? $t('multisig.noWalletsToManage')
+                              : getMultiSigWallet
+                              ? ''
+                              : $t('multisig.selectMultisigToManage')
+                          "
+                          :disabled="!showMultisigWallets"
+                          v-model="getMultiSigWallet"
+                          prepend-inner-icon="mdi-account-multiple-outline"
+                          :items="getMultiSigWallets"
+                          item-text="name"
+                          item-value="paymentAddress"
+                          outlined
+                          hide-details
+                          @change="onSelectedWallet"
+                        ></v-select>
+                      </v-col>
+                      <v-col cols="auto">
+                        <!-- <v-btn v-show="getMultiSigWallet" color="#CCC" outlined class="text-caption text-capitalize"
                           @click="showCreateMultisigDialog = true">
                           <v-avatar dense tile size="20" class="mr-2 custom-icon">
                               <img :src="svgAssets.detailsSvg" />
                           </v-avatar>
                           {{ $t('multisig.showWalletDetails') }}
                       </v-btn> -->
+                      </v-col>
+                      <v-col cols="auto">
+                        <v-btn
+                          v-show="Object.keys(getMultiSigWallet).length != 0"
+                          color="#CCC"
+                          outlined
+                          class="text-caption text-capitalize"
+                          @click="showFundWallet = true"
+                        >
+                          <v-avatar dense tile size="20" class="mr-2 custom-icon">
+                            <img :src="assets.depositSvg" />
+                          </v-avatar>
+                          {{ $t('multisig.fundWallet') }}
+                        </v-btn>
+                      </v-col>
+                    </v-row>
+                    <v-row>
+                      <v-col cols="12">
+                        {{ 'Wallet Address: ' }}
+                        {{ filters.shortenStringWithEllipsis(getMultiSigWallet.paymentAddress, 14) }}
+                        <CopyButton
+                          ref="copyAddress"
+                          x-small
+                          :value="getMultiSigWallet.paymentAddress"
+                          v-if="getMultiSigWallet.paymentAddress"
+                        >
+                        </CopyButton>
+                      </v-col>
+                    </v-row>
+                    <v-row>
+                      <v-col cols="2.4" v-for="info in walletInfo" :key="info.title">
+                        <v-card :disabled="!showMultisigWallets" dense rounded="lg" outlined>
+                          <v-list-item>
+                            <v-list-item-avatar dense tile size="30" class="custom-icon">
+                              <v-img :src="info.icon" alt="" contain />
+                            </v-list-item-avatar>
+                            <v-list-item-content>
+                              <v-list-item-title>
+                                {{ info.title }}
+                              </v-list-item-title>
+                              <v-list-item-subtitle style="color: white">
+                                {{ filters.toCurrency(info.value, false, 2, '₳', '', true, 2) }}
+                              </v-list-item-subtitle>
+                            </v-list-item-content>
+                          </v-list-item>
+                        </v-card>
+                      </v-col>
+                    </v-row>
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
+            <v-row class="mt-4">
+              <v-col cols="9">
+                <v-text-field
+                  v-model="search"
+                  append-icon="mdi-magnify"
+                  label="Search"
+                  single-line
+                  hide-details
+                  outlined
+                  dense
+                />
+              </v-col>
+              <v-col cols="3" class="text-center align-center justify-center">
+                <v-btn outlined color="#CCC" @click="selectDates" class="mt-1 text-caption text-capitalize">
+                  <v-icon small left>mdi-calendar</v-icon>
+                  Select Dates
+                </v-btn>
+                &nbsp;
+                <v-btn outlined color="#CCC" @click="applyFilters" class="mt-1 text-caption text-capitalize">
+                  <v-icon small left>mdi-filter</v-icon>
+                  Apply Filters
+                </v-btn>
+              </v-col>
+            </v-row>
 
-                    </v-col>
-                    <v-col cols="auto">
-                      <v-btn v-show="Object.keys(getMultiSigWallet).length != 0" color="#CCC" outlined
-                        class="text-caption text-capitalize" @click="showFundWallet = true">
-                        <v-avatar dense tile size="20" class="mr-2 custom-icon">
-                          <img :src="assets.depositSvg" />
-                        </v-avatar>
-                        {{ $t('multisig.fundWallet') }}
-                      </v-btn>
-                    </v-col>
-                  </v-row>
-                  <v-row>
-                    <v-col cols="12">
-                      {{ 'Wallet Address: ' }}
-                      {{ filters.shortenStringWithEllipsis(getMultiSigWallet.paymentAddress, 14) }}
-                      <CopyButton ref="copyAddress" x-small :value="getMultiSigWallet.paymentAddress" v-if="getMultiSigWallet.paymentAddress">
-                      </CopyButton>
-                    </v-col>
-                  </v-row>
-                  <v-row>
-                    <v-col cols="2.4" v-for="info in walletInfo" :key="info.title">
-                      <v-card :disabled="!showMultisigWallets" dense rounded="lg" outlined>
-                        <v-list-item>
-                          <v-list-item-avatar dense tile size="30" class="custom-icon">
-                            <v-img :src="info.icon" alt="" contain />
-                          </v-list-item-avatar>
-                          <v-list-item-content>
-                            <v-list-item-title>
-                              {{ info.title }}
-                            </v-list-item-title>
-                            <v-list-item-subtitle style="color: white">
-                              {{ filters.toCurrency(info.value, false, 2, '₳', '', true, 2) }}
-                            </v-list-item-subtitle>
-                          </v-list-item-content>
-                        </v-list-item>
-                      </v-card>
-                    </v-col>
-                  </v-row>
-                </v-col>
-              </v-row>
-            </v-card-text>
-          </v-card>
-          <v-row class="mt-4">
-            <v-col cols="9">
-              <v-text-field v-model="search" append-icon="mdi-magnify" label="Search" single-line hide-details outlined
-                dense />
-            </v-col>
-            <v-col cols="3" class="text-center align-center justify-center">
-              <v-btn outlined color="#CCC" @click="selectDates" class="mt-1 text-caption text-capitalize">
-                <v-icon small left>mdi-calendar</v-icon>
-                Select Dates
-              </v-btn>
-              &nbsp;
-              <v-btn outlined color="#CCC" @click="applyFilters" class="mt-1 text-caption text-capitalize">
-                <v-icon small left>mdi-filter</v-icon>
-                Apply Filters
-              </v-btn>
-            </v-col>
-          </v-row>
-
-          <v-row class="mt-4">
-            <v-col cols="12">
-              <v-data-table :headers="headers" :items="multisigWalletTransactions" :items-per-page="10"
-                class="multisig-table" :loading="loading" loading-text="Loading transactions..."
-                no-data="No pending multisig transactions" :search="search" hide-default-footer>
-                <template v-slot:[`item.id`]="{ item }">
-                  <a style="color: white" class="mr-1">{{ filters.shortenStringWithEllipsis(item.tx_hash, 14) }}</a>
-                  <CopyButton ref="copyAddress" x-small :value="item.tx_hash" v-if="item.tx_hash"></CopyButton>
-                </template>
-                <template v-slot:[`item.date`]="{ item }">
-                  {{ new Date(item.time * 1000).toLocaleDateString() }}
-                </template>
-                <template v-slot:[`item.amount`]="{ item }">
-                  {{ item.sentAmount ? item.sentAmount : item.receivedAmount }}
-                </template>
-                <template v-slot:[`item.status`]="{ item }">
-                  {{ item.status }}
-                </template>
-                <template v-slot:[`item.actions`]="{ item }">
-                  <v-btn v-if="item.status === 'Pending'" small outlined color="#CCC" @click="signTransaction(item)">
-                    <v-icon small left>mdi-check</v-icon>
-                    Sign
-                  </v-btn>
-                  <span v-else> - </span>
-                </template>
-              </v-data-table>
-            </v-col>
-          </v-row>
+            <v-row class="mt-4">
+              <v-col cols="12">
+                <v-data-table
+                  :headers="headers"
+                  :items="multisigWalletTransactions"
+                  :items-per-page="10"
+                  class="multisig-table"
+                  :loading="loading"
+                  loading-text="Loading transactions..."
+                  no-data="No pending multisig transactions"
+                  :search="search"
+                  hide-default-footer
+                >
+                  <template v-slot:[`item.id`]="{ item }">
+                    <a style="color: white" class="mr-1">{{ filters.shortenStringWithEllipsis(item.tx_hash, 14) }}</a>
+                    <CopyButton ref="copyAddress" x-small :value="item.tx_hash" v-if="item.tx_hash"></CopyButton>
+                  </template>
+                  <template v-slot:[`item.date`]="{ item }">
+                    {{ new Date(item.time * 1000).toLocaleDateString() }}
+                  </template>
+                  <template v-slot:[`item.amount`]="{ item }">
+                    {{ item.sentAmount ? item.sentAmount : item.receivedAmount }}
+                  </template>
+                  <template v-slot:[`item.status`]="{ item }">
+                    {{ item.status }}
+                  </template>
+                  <template v-slot:[`item.actions`]="{ item }">
+                    <v-btn v-if="item.status === 'Pending'" small outlined color="#CCC" @click="signTransaction(item)">
+                      <v-icon small left>mdi-check</v-icon>
+                      Sign
+                    </v-btn>
+                    <span v-else> - </span>
+                  </template>
+                </v-data-table>
+              </v-col>
+            </v-row>
           </v-container>
         </v-col>
       </v-row>
     </v-layout>
-    <CreateMultisigWalletDialog v-if="!multiSigAmountReached" :isOpen="showCreateMultisigDialog" @close="catchCloseDialog" />
-    <FundWallet 
-      :isOpen="showFundWallet" 
-      @close="catchCloseDialog" 
-      :recipientAddressProp="selectedAddress"
-      :isMultisig="true" 
+    <CreateMultisigWalletDialog
+      v-if="!multiSigAmountReached"
+      :isOpen="showCreateMultisigDialog"
+      @close="catchCloseDialog"
     />
-    <MultisigTransaction 
-      :isOpen="showNewMultisigTransaction" 
-      @close="catchCloseDialog" 
+    <FundWallet
+      :isOpen="showFundWallet"
+      @close="catchCloseDialog"
+      :recipientAddressProp="selectedAddress"
+      :isMultisig="true"
+    />
+    <MultisigTransaction
+      :isOpen="showNewMultisigTransaction"
+      @close="catchCloseDialog"
       :recipientAddressProp="selectedAddress"
       :isMultisig="true"
     />
@@ -206,7 +257,13 @@ const showMultisigWallets = computed(() => {
 
 const walletInfo = computed<WalletInfo[]>(() => {
   // const { currentBalance, total, paid, pending, expired } = multisigStoreInstance.calculatedTransactions;
-  const { currentBalance, total, paid, pending, expired } = { currentBalance: 0, total: 0, paid: 0, pending: 0, expired: 0 };
+  const { currentBalance, total, paid, pending, expired } = {
+    currentBalance: 0,
+    total: 0,
+    paid: 0,
+    pending: 0,
+    expired: 0,
+  };
   return [
     {
       icon: assets.multisigDollar,
@@ -267,8 +324,6 @@ const checkMultiSigAmount = async () => {
 onMounted(async () => {
   await checkMultiSigAmount();
 });
-
-
 
 // Methods
 const initialLoad = async (): Promise<void> => {

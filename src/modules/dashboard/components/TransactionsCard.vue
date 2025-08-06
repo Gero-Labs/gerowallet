@@ -36,6 +36,7 @@
               <v-list-item-title class="activity-title">
                 <span class="activity-text">{{ getStatus(item) }}</span>
                 <v-chip v-if="isWithdrawal(item)" x-small outlined class="px-1" color="blue" style="margin-left: 4px!important;">Withdrawal</v-chip>
+                <v-chip v-if="isStakeRegistration(item)" x-small outlined class="px-1" color="red" style="margin-left: 4px!important;">Stake Registration</v-chip>
                 <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
               </v-list-item-title>
               <v-list-item-subtitle class="activity-date">
@@ -186,9 +187,7 @@ const getStatus = (item) => {
   if (item.body?.certificates?.length > 0) {
     item.body.certificates.forEach((certificate: Cardano.Certificate) => {
       switch (certificate.__typename) {
-        case Cardano.CertificateType.StakeRegistration:
-          statuses.push('Stake Registration')
-          break;
+        case Cardano.CertificateType.StakeRegistrationDelegation:
         case Cardano.CertificateType.StakeDelegation:
           const pool = pools.value[certificate.poolId];
           if (pool) {
@@ -224,6 +223,10 @@ const getStatus = (item) => {
 
 const isWithdrawal = (item) => {
   return item.body?.withdrawals?.length > 0 && loggedWallet.value?.stakeAddress && item.body.withdrawals.some(withdrawal => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
+}
+
+const isStakeRegistration = (item) => {
+  return item.body?.certificates?.length > 0 && item.body.certificates.some(certificate => certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation || certificate.__typename === Cardano.CertificateType.StakeRegistration)
 }
 
 const getColor = (item) => {
@@ -322,7 +325,6 @@ const getRowClass = (item) => {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
-  max-width: 100px !important;
   display: inline-block !important;
 }
 
