@@ -162,10 +162,12 @@ const handleFirstInput = () => {
   
   isUpdatingFromFirst.value = false;
 
-  emit('update:modelValue', {
+  const emitData = {
     adaAmount: adaAmount.value,
     eurAmount: eurAmount.value,
-  });
+  };
+  console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
+  emit('update:modelValue', emitData);
 };
 
 const handleSecondInput = () => {
@@ -184,10 +186,12 @@ const handleSecondInput = () => {
   
   isUpdatingFromSecond.value = false;
 
-  emit('update:modelValue', {
+  const emitData = {
     adaAmount: adaAmount.value,
     eurAmount: eurAmount.value,
-  });
+  };
+  console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
+  emit('update:modelValue', emitData);
 };
 
 const switchCurrencies = () => {
