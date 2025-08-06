@@ -157,14 +157,23 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
     })
   }
   const reference_inputs: Cardano.TxIn[] = tx.body.referenceInputs ? tx.body.referenceInputs : []
-  const withdrawals: Cardano.Withdrawal[] = tx.body.withdrawals ? tx.body.withdrawals : []
+  const withdrawals: any[] = []
+  if (tx.body.withdrawals) {
+    tx.body.withdrawals.forEach((amount, rewardAddress) => {
+      withdrawals.push({
+        address: rewardAddress,
+        amount: amount.toString()
+      });
+    });
+  }
   return {
+    id: txId, // Add required id field for database key path
     absolute_slot: 0,
     assets_minted,
     block_hash: '',
     block_height: 0,
-    // certificates,
-    // deposit: "0",
+    certificates,
+    deposit: "0",
     fee: tx.body.fee.toString(),
     inputs,
     invalid_after: "",
