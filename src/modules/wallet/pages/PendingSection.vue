@@ -5,7 +5,13 @@
       <div class="soon-content">
         <AccountOverviewHeader />
 
-        <BalanceCardsSection :card-balance="'0'" :cardano-balance="'0'" :gero-earned="'0'" :total-deposit="'0'" />
+        <BalanceCardsSection 
+          :card-balance="'0'" 
+          :card-balance-ada="'₳0.00'" 
+          :gero-earned="'0'" 
+          :total-deposit="'0'" 
+          :total-deposit-ada="'₳0.00'" 
+        />
         <div class="dashboard-layout">
           <div class="left-column">
             <RecentTransactionsSection :transactions="[]" />
@@ -17,7 +23,24 @@
           </div>
         </div>
       </div>
-      <h2 class="error-message">Account overview will be available once your card has been issued</h2>
+
+      <!-- Prominent Pending State Overlay -->
+      <div class="pending-overlay">
+        <div class="pending-content">
+          <div class="pending-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="#2DF0F7" stroke-width="2" fill="none"/>
+              <path d="M12 6v6l4 2" stroke="#2DF0F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2 class="pending-title">Account Overview Pending</h2>
+          <p class="pending-description">Your account overview will be available once your card has been issued and activated.</p>
+          <div class="pending-status">
+            <div class="status-indicator"></div>
+            <span class="status-text">Processing your application...</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- <HeroSection />
@@ -27,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
 import HeroSection from '@/modules/wallet/components/HeroSection.vue';
 import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
@@ -53,35 +77,21 @@ const cardHistoryRecords = computed(() => {
   gap: 32px;
   position: relative;
 }
-.error-message {
-  position: absolute;
-  color: #ff7777;
-  padding: 10px;
-  display: none;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-medium;
-  line-height: $line-height-normal;
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  top: 75%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  &:hover {
-    display: block;
-  }
-}
+// Removed old error-message styles
 .soon {
   display: flex;
   flex-direction: column;
   gap: 32px;
   width: 100%;
   .soon-content {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    filter: blur(8px);
+    pointer-events: none;
+    user-select: none;
 
     .left-column {
       flex: 1;
@@ -96,13 +106,102 @@ const cardHistoryRecords = computed(() => {
       flex-shrink: 0;
     }
   }
-  &:hover {
-    .soon-content {
-      filter: blur(4px);
+}
+
+// Pending State Overlay Styles
+.pending-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  background: rgba(12, 17, 29, 0.95);
+  border: 1px solid #2DF0F7;
+  border-radius: 16px;
+  padding: 48px 32px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(45, 240, 247, 0.1);
+  width: 90%;
+  max-width: 500px;
+
+  .pending-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 24px;
+  }
+
+  .pending-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(45, 240, 247, 0.1);
+    margin-bottom: 8px;
+
+    svg {
+      filter: drop-shadow(0 0 8px rgba(45, 240, 247, 0.3));
     }
-    .error-message {
-      display: block;
+  }
+
+  .pending-title {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-bold;
+    font-size: 28px;
+    line-height: 1.2;
+    color: #FFFFFF;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .pending-description {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-medium;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #CECFD2;
+    margin: 0;
+    max-width: 400px;
+  }
+
+  .pending-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(45, 240, 247, 0.05);
+    border: 1px solid rgba(45, 240, 247, 0.2);
+    border-radius: 8px;
+    margin-top: 8px;
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2DF0F7;
+      animation: pulse 2s infinite;
     }
+
+    .status-text {
+      font-family: $font-family-primary;
+      font-weight: $font-weight-medium;
+      font-size: 14px;
+      color: #2DF0F7;
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
   }
 }
 
