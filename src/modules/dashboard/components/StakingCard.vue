@@ -167,19 +167,13 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { toRefs, computed } from 'vue'
+import { toRefs, computed, ref } from 'vue'
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
 import CopyButton from "@/shared/components/CopyButton.vue";
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
-import {
-  Certificate,
-  Credential, Ed25519KeyHash,
-  StakeDeregistration,
-  Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { toUTxO2 } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
+import { Cardano } from '@cardano-sdk/core';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
@@ -249,42 +243,88 @@ const rewardsChartData = computed(() => {
   return obj
 })
 
-const withdraw = () => {
-  const withdrawals = []
-  if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
-    withdrawals.push({
-      address: loggedWallet.value.stakeAddress,
-      amount: account.value.withdrawable_amount
-    })
-  }
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
-  const txBody = buildTx(epochParams.value, undefined, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, [], withdrawals)
-  txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
-  console.log(txBody.to_json())
-  withdrawalDialog.value = true
-}
-
-const unstake = () => {
-  const certificates = [];
-  if (account.value?.active) {
-    // DeRegistration Certificate
-    const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(keys.value.stake[0].cred))))
-    certificates.push(deRegistrationCertificate);
-    // Withdrawals
-    const withdrawals = []
+const withdraw = async () => {
+  try {
+    // Prepare withdrawals if there are any rewards
+    const withdrawals = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
       withdrawals.push({
         address: loggedWallet.value.stakeAddress,
-        amount: account.value.withdrawable_amount
-      })
+        amount: account.value.withdrawable_amount.toString()
+      });
     }
-    const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-    utxos.value?.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
-    const txBody = buildTx(epochParams.value, undefined, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, certificates, withdrawals)
-    txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
-    console.log(txBody.to_json())
-    unstakeDialog.value = true
+
+    // Use the generic transaction builder for withdrawal-only transaction
+    txData.value = await buildCardanoTransaction({
+      withdrawals,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value
+    });
+
+    withdrawalDialog.value = true;
+  } catch (error) {
+    console.error('Error building withdrawal transaction:', error);
+  }
+}
+
+const unstake = async () => {
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
+
+    // Check if stake key is registered
+    if (!account.value?.active) {
+      throw new Error('Cannot unstake: stake key is not registered');
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred
+    };
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+    // Create deregistration certificate
+    const certificate: Cardano.Certificate = {
+      __typename: Cardano.CertificateType.StakeDeregistration,
+      stakeCredential,
+      deposit: stakeKeyDepositLovelace
+    };
+    certificates.push(certificate);
+
+    // Prepare withdrawals if there are any rewards
+    const withdrawals = [];
+    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+      withdrawals.push({
+        address: loggedWallet.value.stakeAddress,
+        amount: account.value.withdrawable_amount.toString()
+      });
+    }
+
+    // Use the generic transaction builder
+    // For unstaking, deposit is returned (negative implicit coin)
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      withdrawals,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin: -stakeKeyDepositLovelace // Deposit is returned
+    });
+    unstakeDialog.value = true;
+
+  } catch (error) {
+    console.error('Error building unstake transaction:', error);
+    // You might want to show an error message to the user here
   }
 }
 

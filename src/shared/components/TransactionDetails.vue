@@ -975,4 +975,7 @@ tbody {
     background-color: transparent !important;
   }
 }
+.v-application--is-ltr .v-chip--pill .v-avatar--left {
+  margin-left: 0;
+}
 </style>
