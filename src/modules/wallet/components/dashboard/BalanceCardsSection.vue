@@ -1,21 +1,8 @@
 <template>
   <div class="balance-cards">
-    <BalanceCard
-      title="Card Balance"
-      :primary-value="cardBalance"
-      :secondary-value="cardanoBalance"
-    />
-    <BalanceCard
-      title="Total Deposit"
-      primary-value="$569.00"
-      secondary-value="₳469.00"
-    />
-    <BalanceCard
-      title="$GERO Earned"
-      :primary-value="geroEarned"
-      secondary-value="₳69.42"
-      :is-gero="true"
-    />
+    <BalanceCard title="Card Balance" :primary-value="`€${cardBalance}`" :secondary-value="`${cardanoBalance}`" />
+    <BalanceCard title="Total Deposit" :primary-value="`€${totalDeposit}`" :secondary-value="`${cardanoBalance}`" />
+    <BalanceCard title="€GERO Tier" primary-value="GOLD" secondary-value="0% Fees on all services" :is-gero="true" />
   </div>
 </template>
 
@@ -26,6 +13,7 @@ interface Props {
   cardBalance?: string;
   cardanoBalance?: string;
   geroEarned?: string;
+  totalDeposit?: string;
 }
 
 defineProps<Props>();
@@ -46,4 +34,4 @@ defineProps<Props>();
     grid-template-columns: 1fr;
   }
 }
-</style> 
+</style>

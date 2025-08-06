@@ -4,20 +4,16 @@
       <span class="header-title">Account Overview</span>
       <div class="header-actions">
         <v-btn class="action-btn secondary-btn" variant="outlined" @click="showTopUpModal = true">
-          <img src="@/modules/wallet/icons/currency-dollar.svg" alt="Top up" class="btn-icon" />
+          <img src="@/modules/wallet/icons/currency-euro.svg" alt="Top up" class="btn-icon" />
           Top up
         </v-btn>
         <v-btn class="action-btn primary-btn" variant="outlined" @click="handleManageCard">
           <img src="@/modules/wallet/icons/credit-card.svg" alt="Manage Card" class="btn-icon" />
           Manage Card
         </v-btn>
-        <v-btn class="action-btn primary-btn" variant="outlined">
-          <img src="@/modules/wallet/icons/qr-code.svg" alt="QR Scan" class="btn-icon" />
-          QR Scan
-        </v-btn>
       </div>
     </div>
-    
+
     <!-- Password Confirm Modal - only for Manage Card -->
     <PasswordConfirmModal
       :open="showPasswordModal"
@@ -28,7 +24,7 @@
       @close="closePasswordModal"
       @confirm="handlePasswordConfirm"
     />
-    
+
     <!-- Original Modals -->
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
@@ -64,7 +60,7 @@ const closePasswordModal = () => {
 
 const handlePasswordConfirm = (password: string, action: string) => {
   console.log('Password confirmed for action:', action, 'Password:', password);
-  
+
   if (action === 'manage-card') {
     showManageCardModal.value = true;
   }
@@ -112,7 +108,7 @@ const handlePasswordConfirm = (password: string, action: string) => {
     color: $text-primary;
     border-radius: $border-radius-md;
     background: $background-card;
-    border: 1px solid $primary-cyan;
+    border: 1px solid $primary-cyan !important;
     box-shadow: $shadow-button;
 
     &:hover {
