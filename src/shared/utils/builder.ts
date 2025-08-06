@@ -11,21 +11,28 @@ import {
   MultiAsset,
   RewardAddress,
   ScriptHash,
-  Credential, TransactionBody,
+  TransactionBody,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
   TransactionOutputs,
   TransactionUnspentOutputs,
   UnitInterval,
-  Value, Withdrawals,
+  Value,
+  Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import { DEFAULT_TTL, Withdrawal } from '@/models/types';
 import { Cardano } from '@cardano-sdk/core';
-
-export const buildRewardAddress = (networkId, stakeKeyHash) => {
-  return RewardAddress.new(networkId, Credential.from_keyhash(stakeKeyHash));
-};
+import {
+  InputSelector,
+  ChangeAddressResolver,
+  SelectionSkeleton,
+  roundRobinRandomImprove,
+  ImplicitValue,
+  SelectionConstraints,
+  ProtocolParametersForInputSelection
+} from '@cardano-sdk/input-selection';
+const { BrowserTxConstruction } = await import('@/chrome/cardanoJsSdkCbor');
 
 export function getTransactionBuilder(pp: Cardano.ProtocolParameters): TransactionBuilder {
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()
@@ -242,5 +249,189 @@ export function getPayAndReceiveTokens(diff) {
     }
   }
   return { payTokens, receiveTokens };
+}
+
+/**
+ * Generic transaction builder using Cardano JS SDK
+ * Supports any transaction with certificates, withdrawals, and outputs
+ */
+export async function buildCardanoTransaction({
+  certificates = [],
+  withdrawals = [],
+  outputs = [],
+  utxos,
+  epochParams,
+  changeAddress,
+  tip,
+  implicitCoin = BigInt(0)
+}: {
+  certificates?: Cardano.Certificate[];
+  withdrawals?: Array<{ address: string; amount: string }>;
+  outputs?: Cardano.TxOut[];
+  utxos: Cardano.Utxo[];
+  epochParams: any;
+  changeAddress: string;
+  tip: any;
+  implicitCoin?: bigint; // For deposits (positive) or deposit returns (negative)
+}): Promise<Cardano.Tx> {
+  // Check if we have epoch parameters
+  if (!epochParams) {
+    throw new Error('Epoch parameters not available');
+  }
+
+  // Create a change address resolver for input selection
+  const changeAddressResolver: ChangeAddressResolver = {
+    resolve: async (selectionSkeleton: SelectionSkeleton) => {
+      // Calculate change amount
+      const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
+      const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
+      const implicitCost = implicitCoin + selectionSkeleton.fee;
+      const changeAmount = totalInput - totalOutput - implicitCost;
+
+      if (changeAmount <= BigInt(0)) {
+        return []; // No change needed
+      }
+
+      // Create change output to a specified address
+      const changeOutput: Cardano.TxOut = {
+        address: changeAddress as Cardano.PaymentAddress,
+        value: {
+          coins: changeAmount,
+          assets: new Map()
+        }
+      };
+
+      return [changeOutput];
+    }
+  };
+
+  // Use Cardano JS SDK input selection
+  const selector: InputSelector = roundRobinRandomImprove({
+    changeAddressResolver
+  });
+
+  // Create protocol parameters for fee calculation
+  const protocolParams: ProtocolParametersForInputSelection = {
+    coinsPerUtxoByte: epochParams.coinsPerUtxoByte,
+    maxTxSize: epochParams.maxTxSize,
+    maxValueSize: epochParams.maxValueSize,
+    minFeeCoefficient: epochParams.minFeeCoefficient,
+    minFeeConstant: epochParams.minFeeConstant,
+    prices: epochParams.prices,
+    minFeeRefScriptCostPerByte: epochParams.minFeeRefScriptCostPerByte
+  };
+
+  // Create constraints using SDK fee calculation
+  const constraints: SelectionConstraints = {
+    computeMinimumCost: async (selectionSkeleton: SelectionSkeleton) => {
+      // Build a temporary transaction to calculate accurate fees
+      const tempTxBody: Cardano.TxBody = {
+        inputs: Array.from(selectionSkeleton.inputs).map(utxo => utxo[0]),
+        outputs: Array.from(selectionSkeleton.outputs),
+        fee: BigInt(0), // Will be calculated
+        certificates: certificates.length > 0 ? certificates : undefined
+      };
+
+      // Add withdrawals if any
+      if (withdrawals.length > 0) {
+        const withdrawalMap = new Map<Cardano.RewardAccount, Cardano.Lovelace>();
+        withdrawals.forEach(withdrawal => {
+          withdrawalMap.set(
+            withdrawal.address as Cardano.RewardAccount,
+            BigInt(withdrawal.amount) as Cardano.Lovelace
+          );
+        });
+        tempTxBody.withdrawals = withdrawalMap;
+      }
+
+      const tempTx: Cardano.Tx = {
+        id: Cardano.TransactionId('0'.repeat(64)),
+        body: tempTxBody,
+        witness: { signatures: new Map() }
+      };
+
+      // Calculate minimum fee using browser-compatible SDK
+      const calculatedFee = BrowserTxConstruction.minFee(tempTx, Array.from(selectionSkeleton.inputs), protocolParams);
+
+      return {
+        fee: calculatedFee
+      };
+    },
+    tokenBundleSizeExceedsLimit: () => false,
+    computeMinimumCoinQuantity: (output) => BrowserTxConstruction.minAdaRequired(output, BigInt(protocolParams.coinsPerUtxoByte)),
+    computeSelectionLimit: async () => 20
+  };
+
+  // Convert UTXOs to proper format with BigInt values
+  const formattedUtxos: Cardano.Utxo[] = utxos.map((utxo: any) => [
+    utxo[0], // TxIn remains the same
+    {
+      ...utxo[1], // TxOut
+      value: {
+        coins: BigInt(utxo[1].value.coins), // Ensure BigInt
+        assets: utxo[1].value.assets || new Map()
+      }
+    }
+  ]);
+
+  // Convert arrays to Sets for input selection
+  const utxoSet = new Set(formattedUtxos);
+  const outputsSet = new Set<Cardano.TxOut>(outputs);
+
+  // Handle deposit/return as an implicit coin for input selection
+  const implicitValue: ImplicitValue = {
+    coin: implicitCoin !== BigInt(0) ? {
+      // For deposits (positive): we need to pay a deposit (reduces available funds)
+      // For deposit returns (negative): we get a deposit back (increases available funds)
+      deposit: implicitCoin
+    } : undefined
+  };
+
+  // Perform input selection with implicit value for deposits
+  const selectionResult = await selector.select({
+    preSelectedUtxo: new Set(),
+    utxo: utxoSet,
+    outputs: outputsSet,
+    constraints,
+    implicitValue
+  });
+
+  // Build the final transaction body - include both requested outputs and change outputs
+  const finalOutputs = [...outputs, ...selectionResult.selection.change];
+
+  const txBody: Cardano.TxBody = {
+    inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
+    outputs: finalOutputs,
+    fee: selectionResult.selection.fee,
+    validityInterval: {
+      invalidHereafter: Cardano.Slot(Number(tip.slot) + 3600) // 1 hour from now
+    }
+  };
+
+  // Add certificates if provided
+  if (certificates.length > 0) {
+    txBody.certificates = certificates;
+  }
+
+  // Add withdrawals if provided
+  if (withdrawals.length > 0) {
+    const withdrawalMap = new Map<Cardano.RewardAccount, Cardano.Lovelace>();
+    withdrawals.forEach(withdrawal => {
+      withdrawalMap.set(
+        withdrawal.address as Cardano.RewardAccount,
+        BigInt(withdrawal.amount) as Cardano.Lovelace
+      );
+    });
+    txBody.withdrawals = withdrawalMap;
+  }
+
+  // Create a final transaction
+  return {
+    id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
+    body: txBody,
+    witness: {
+      signatures: new Map()
+    }
+  };
 }
 

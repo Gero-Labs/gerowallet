@@ -263,19 +263,18 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, watch, onMounted } from 'vue';
-import CopyButton from "@/shared/components/CopyButton.vue";
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
-import * as InputSelection from '@cardano-sdk/input-selection';
-import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
-import networks from "@/utils/networks";
+import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
 const { epochParams, pools, tip } = toRefs(networkStore);
@@ -411,14 +410,17 @@ async function delegate(row: any) {
     const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
 
     let certificate;
+    let implicitCoin = BigInt(0);
+
     if (!account.value?.active) {
-      // Need to register stake key first, then delegate
+      // Need to register a stake key first, then delegate
       certificate = {
         __typename: Cardano.CertificateType.StakeRegistrationDelegation,
         stakeCredential,
         poolId,
         deposit: stakeKeyDepositLovelace
       };
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
     } else {
       // Just delegate, no registration needed
       certificate = {
@@ -429,138 +431,15 @@ async function delegate(row: any) {
     }
     certificates.push(certificate);
 
-    // Calculate required amounts - ensure all BigInt operations
-    const depositRequired = !account.value?.active ? stakeKeyDepositLovelace : BigInt(0);
-
-    // Create change address resolver for input selection - use wallet's main address
-    const changeAddressResolver: InputSelection.ChangeAddressResolver = {
-      resolve: async (selectionSkeleton: InputSelection.SelectionSkeleton) => {
-        // Calculate change amount
-        const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
-        const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
-        const implicitCost = depositRequired + selectionSkeleton.fee;
-        const changeAmount = totalInput - totalOutput - implicitCost;
-
-        if (changeAmount <= BigInt(0)) {
-          return []; // No change needed
-        }
-
-        // Create change output to wallet's main address
-        const changeOutput: Cardano.TxOut = {
-          address: keys.value.payment[0].address, // Use wallet's main address
-          value: {
-            coins: changeAmount,
-            assets: new Map()
-          }
-        };
-
-        return [changeOutput];
-      }
-    };
-
-    // Use Cardano JS SDK input selection
-    const selector = InputSelection.roundRobinRandomImprove({
-      changeAddressResolver
+    // Use the generic transaction builder
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin
     });
-
-    // Create protocol parameters for fee calculation
-    const protocolParams: InputSelection.ProtocolParametersForInputSelection = {
-      coinsPerUtxoByte: epochParams.value.coinsPerUtxoByte,
-      maxTxSize: epochParams.value.maxTxSize,
-      maxValueSize: epochParams.value.maxValueSize,
-      minFeeCoefficient: epochParams.value.minFeeCoefficient,
-      minFeeConstant: epochParams.value.minFeeConstant,
-      prices: epochParams.value.prices,
-      minFeeRefScriptCostPerByte: epochParams.value.minFeeRefScriptCostPerByte
-    };
-
-    // Create constraints using SDK fee calculation
-    const constraints: InputSelection.SelectionConstraints = {
-      computeMinimumCost: async (selectionSkeleton) => {
-        // Build a temporary transaction to calculate accurate fees
-        const tempTxBody: Cardano.TxBody = {
-          inputs: Array.from(selectionSkeleton.inputs).map(utxo => utxo[0]),
-          outputs: Array.from(selectionSkeleton.outputs),
-          fee: BigInt(0), // Will be calculated
-          certificates
-        };
-
-        const tempTx: Cardano.Tx = {
-          id: Cardano.TransactionId('0'.repeat(64)),
-          body: tempTxBody,
-          witness: { signatures: new Map() }
-        };
-
-        // Calculate minimum fee using browser-compatible SDK
-        const calculatedFee = BrowserTxConstruction.minFee(tempTx, Array.from(selectionSkeleton.inputs), protocolParams);
-
-        return {
-          fee: calculatedFee
-        };
-      },
-      tokenBundleSizeExceedsLimit: () => false,
-      computeMinimumCoinQuantity: (output) => BrowserTxConstruction.minAdaRequired(output, BigInt(protocolParams.coinsPerUtxoByte)),
-      computeSelectionLimit: async () => 20
-    };
-
-    // Convert UTXOs to a proper format with BigInt values
-    const formattedUtxos: Cardano.Utxo[] = utxos.value.map((utxo: any) => [
-      utxo[0], // TxIn remains the same
-      {
-        ...utxo[1], // TxOut
-        value: {
-          coins: BigInt(utxo[1].value.coins), // Ensure BigInt
-          assets: utxo[1].value.assets || new Map()
-        }
-      }
-    ]);
-
-    // Convert arrays to Sets for input selection
-    const utxoSet = new Set(formattedUtxos);
-
-    // For delegation transactions, we don't need dummy outputs
-    // The deposit will be handled via implicitValue parameter
-    const outputsSet = new Set<Cardano.TxOut>();
-
-    // Handle deposit as implicit coin for input selection
-    const implicitValue: InputSelection.ImplicitValue = {
-      coin: depositRequired > BigInt(0) ? {
-        deposit: depositRequired
-      } : undefined
-    };
-
-    // Perform input selection with implicit value for deposits
-    const selectionResult = await selector.select({
-      preSelectedUtxo: new Set(), // No pre-selected UTXOs
-      utxo: utxoSet,
-      outputs: outputsSet,
-      constraints,
-      implicitValue
-    });
-
-    // Build final transaction body - exclude fake outputs, only include change
-    const finalOutputs = selectionResult.selection.change.length > 0 ? selectionResult.selection.change : [];
-
-    const txBody: Cardano.TxBody = {
-      inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
-      outputs: finalOutputs, // Only change outputs, no fake outputs
-      fee: selectionResult.selection.fee,
-      validityInterval: {
-        invalidHereafter: Cardano.Slot(Number(tip.value.slot) + 3600) // 1 hour from now
-      },
-      certificates
-    };
-
-    // Create a final transaction
-    const transaction: Cardano.Tx = {
-      id: Cardano.TransactionId('0'.repeat(64)), // Temporary ID
-      body: txBody,
-      witness: {
-        signatures: new Map()
-      }
-    };
-
-    txData.value = transaction;
     isDelegateDialogOpen.value = true;
 
   } catch (error) {
