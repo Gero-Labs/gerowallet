@@ -200,6 +200,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
 
+  // Prevent redirect loops: if we're already being redirected to welcome, just allow it
+  if (isWelcome && from.path === '/') {
+    return next();
+  }
+
   if (needsAuth && !isLoggedIn) {
     // not logged in → send to /welcome (with optional redirect)
     let redirectTo = '/welcome';
@@ -209,7 +214,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next({ path: redirectTo });
   }
   if (isWelcome && isLoggedIn) {
-    // already logged in → don’t show welcome again
+    // already logged in → don't show welcome again
     return next({ path: '/' });
   }
   next();
