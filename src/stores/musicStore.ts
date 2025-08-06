@@ -3,6 +3,7 @@ import { getArtists } from '@/shared/utils/converter';
 import { Howl } from 'howler';
 import { resolveIcon } from '@/shared/utils/resolver';
 import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { walletStore } from '@/stores/walletStore';
 
 export interface MusicStore {
   musicPlaylist: any;
@@ -30,6 +31,57 @@ export const musicStore = Vue.observable<MusicStore>({
 
 // Initialize store with centralized storage sync
 const SYNC_KEYS = ['musicPlaylist', 'context'];
+
+// Function to clear music store data immediately
+function clearMusicStoreImmediately() {
+  console.debug('MusicStore: Clearing immediately for wallet change');
+  
+  // Stop any playing audio
+  if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
+    musicStore.context.audio.stop();
+  }
+  if (musicStore.context.audio && typeof musicStore.context.audio.unload === 'function') {
+    musicStore.context.audio.unload();
+  }
+  
+  // Clear the store data immediately (this will trigger UI updates)
+  musicStore.musicPlaylist = undefined;
+  musicStore.context = {
+    img: undefined,
+    isPlaying: false,
+    isRepeat: false,
+    isShuffle: false,
+    currentIndex: 0,
+    audio: undefined,
+    paused: true,
+    volume: 100,
+    position: 0,
+    seek: 0,
+    duration: undefined,
+    minimized: false,
+    shown: false,
+  };
+}
+
+// Watch for wallet changes and clear immediately
+new Vue({
+  computed: {
+    currentWalletId() {
+      return walletStore.loggedWallet?.id || null;
+    }
+  },
+  watch: {
+    currentWalletId: {
+      handler(newWalletId, oldWalletId) {
+        if (oldWalletId !== null && newWalletId !== oldWalletId) {
+          console.debug('MusicStore: Wallet changed from', oldWalletId, 'to', newWalletId);
+          clearMusicStoreImmediately();
+        }
+      },
+      immediate: true
+    }
+  }
+});
 
 // Hydrate from storage on initialization with custom logic for audio states
 hydrateStore('musicStore', musicStore).then(() => {
@@ -101,6 +153,10 @@ const MusicStoreModule = {
     musicStore.musicPlaylist = musicPlaylist;
     persist({ musicPlaylist: musicPlaylist });
   },
+  setContext(context) {
+    musicStore.context = context;
+    persist({ context: context });
+  },
   setMinimized() {
     musicStore.context.minimized = true
     persist({ context: musicStore.context })
@@ -144,7 +200,7 @@ const MusicStoreModule = {
         onplay: () => {
           // Sync the playing state
           musicStore.context.isPlaying = true;
-          
+
           // Display the duration.
           musicStore.context.duration = musicStore.context.audio.duration();
 
@@ -191,20 +247,20 @@ const MusicStoreModule = {
     // Store if music was playing
     const wasPlaying = musicStore.context.isPlaying;
     console.log('nextTrack called, wasPlaying:', wasPlaying);
-    
+
     // Stop current audio
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
     }
-    
+
     if (musicStore.context.isShuffle) {
       musicStore.context.currentIndex = Math.floor(Math.random() * musicStore.musicPlaylist.length);
     } else {
       musicStore.context.currentIndex = (musicStore.context.currentIndex + 1) % musicStore.musicPlaylist.length;
     }
-    
+
     console.log('New track index:', musicStore.context.currentIndex);
-    
+
     // Always play the new track if music was playing
     if (wasPlaying) {
       console.log('Calling playTrack because music was playing');
@@ -218,14 +274,14 @@ const MusicStoreModule = {
   prevTrack() {
     // Store if music was playing
     const wasPlaying = musicStore.context.isPlaying;
-    
+
     // Stop current audio
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
     }
-    
+
     musicStore.context.currentIndex = (musicStore.context.currentIndex - 1 + musicStore.musicPlaylist.length) % musicStore.musicPlaylist.length;
-    
+
     // Always play the new track if music was playing
     if (wasPlaying) {
       MusicStoreModule.playTrack();
@@ -257,19 +313,19 @@ const MusicStoreModule = {
       console.warn('No track selected');
       return;
     }
-    
+
     // Initialize audio if it doesn't exist or isn't a proper Howl instance
     if (!musicStore.context.audio || typeof musicStore.context.audio.pause !== 'function' || typeof musicStore.context.audio.play !== 'function') {
       console.log('Initializing audio for current track');
       MusicStoreModule.initializeSound();
     }
-    
+
     // Double check after initialization
     if (!musicStore.context.audio || typeof musicStore.context.audio.pause !== 'function' || typeof musicStore.context.audio.play !== 'function') {
       console.warn('Audio initialization failed');
       return;
     }
-    
+
     if (musicStore.context.isPlaying) {
       musicStore.context.audio.pause();
       musicStore.context.isPlaying = false;
@@ -282,6 +338,45 @@ const MusicStoreModule = {
     if (musicStore.context.audio) {
       musicStore.context.volume = val
       musicStore.context.audio.volume(val / 100)
+    }
+  },
+  async logout() {
+    console.log('MusicStore: Logout Called');
+    
+    // Stop any playing audio
+    if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
+      musicStore.context.audio.stop();
+    }
+    if (musicStore.context.audio && typeof musicStore.context.audio.unload === 'function') {
+      musicStore.context.audio.unload();
+    }
+    
+    // Clear the store data
+    this.setMusicPlaylist(undefined);
+    this.setContext({
+      img: undefined,
+      isPlaying: false,
+      isRepeat: false,
+      isShuffle: false,
+      currentIndex: 0,
+      audio: undefined,
+      paused: true,
+      volume: 100,
+      position: 0,
+      seek: 0,
+      duration: undefined,
+      minimized: false,
+      shown: false,
+    });
+    
+    // Clear from Chrome storage to prevent rehydration with old data
+    if (chrome?.storage?.local) {
+      try {
+        await chrome.storage.local.remove('musicStore');
+        console.debug('MusicStore: Cleared from Chrome storage');
+      } catch (error) {
+        console.error('MusicStore: Failed to clear from Chrome storage:', error);
+      }
     }
   },
   state: musicStore

@@ -1,5 +1,7 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake" :loading="loading"
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake"
+              :loading="loading"
+              :min-height="639"
               :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)} to a stake pool.`">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert
@@ -31,14 +33,26 @@
           <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage"/>
         </v-list-item-avatar>
       </v-list-item>
-      <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString('en-US') }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ filters.toCurrency(pool.live_stake, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
-      <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
-      <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
+      <v-layout>
+        <v-row no-gutters>
+          <v-col cols="12" md="6" sm="6">
+            <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString('en-US') }}</v-card-title>
+            <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
+          </v-col>
+          <v-col cols="12" md="6" sm="6">
+            <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
+            <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
+          </v-col>
+          <v-col cols="12" md="6" sm="6">
+            <v-card-title class="pt-0" style="color: white">{{ filters.toCurrency(pool.live_stake, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</v-card-title>
+            <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
+          </v-col>
+          <v-col cols="12" md="6" sm="6">
+            <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
+            <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
+          </v-col>
+        </v-row>
+      </v-layout>
       <v-card-title class="pt-0" style="color: white">
         <v-progress-linear rounded :color="filters.getColor(pool.live_saturation)" height="32" :value="pool.live_saturation" striped>
           <template v-slot:default="{ value }">
@@ -52,27 +66,63 @@
       <v-form ref="formRef" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
-            <h4>Delegation Amt.
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
+            <h4>
+              <v-tooltip bottom>
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Delegation Amt.</span>
+                </template>
+                <div>
+                  <div>Total amount of ADA from your wallet</div>
+                  <div>that will be delegated to the stake pool.</div>
+                  <div>This includes all available balance.</div>
+                </div>
+              </v-tooltip>
             </h4>
             <h4><strong>{{ filters.toCurrency(account.controlled_amount, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Epoch Yield
-              <v-btn x-small icon>
-                <v-icon small>mdi-information-outline</v-icon>
-              </v-btn>
+            <h4>
+              <v-tooltip bottom>
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Epoch Yield</span>
+                </template>
+                <div>
+                  <div>Estimated rewards you'll earn per epoch</div>
+                  <div>(~5 days) based on the pool's ROS</div>
+                  <div>(Return on Stake) rate and your delegation amount.</div>
+                </div>
+              </v-tooltip>
             </h4>
             <h4>~<strong>{{ filters.toCurrency(account?.controlled_amount * pool.ros/100/73, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>Deposit Fee</h4>
+            <h4>
+              <v-tooltip bottom>
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Deposit Fee</span>
+                </template>
+                <div>
+                  <div>One-time deposit required to register</div>
+                  <div>your stake credential on the Cardano network.</div>
+                  <div>This deposit is refundable when you deregister.</div>
+                </div>
+              </v-tooltip>
+            </h4>
             <h4><strong>{{ filters.toCurrency(depositFee, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Tx Fee</h4>
+            <h4>
+              <v-tooltip bottom>
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Tx Fee</span>
+                </template>
+                <div>
+                  <div>Network fee required to process</div>
+                  <div>this delegation transaction on</div>
+                  <div>the Cardano blockchain.</div>
+                </div>
+              </v-tooltip>
+            </h4>
             <h4><strong>{{ filters.toCurrency(tx?.body?.fee?.toString() || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
@@ -95,11 +145,11 @@
                   :rules="passwordRules"
                   hide-details
                   required
-                  :disabled="loading"
+                  :disabled="loading || isSubmit"
                   @keydown.enter.prevent="signDelegationTx"
                 >
                   <template v-slot:append>
-                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
+                    <v-icon @click="showPassword = !showPassword" tabindex="-1" :disabled="isSubmit">
                       {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
                     </v-icon>
                   </template>
@@ -113,7 +163,7 @@
               </v-card-subtitle>
             </div>
             <v-btn color="primary" elevation="0" @click="signDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Delegate
+              {{ isSubmit ? 'Submit' : 'Delegate' }}
             </v-btn>
           </v-col>
         </v-row>
@@ -218,7 +268,6 @@ import { WalletType } from '@/models/types';
 // import QRCodeStyling from 'qr-code-styling';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
-// import { walletManager } from '@/services/walletManager.service'; // Unused import
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import filters from '@/shared/utils/filters';
@@ -241,7 +290,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+const { loggedWallet, utxos, keys, account, config } = toRefs(walletStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -253,6 +302,9 @@ const tooltip = ref({
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
+const txCbor = ref<string>('');
+const txWitnesses = ref(null);
+const isSubmit = ref(false);
 // TODO: Keystone hardware wallet state - currently disabled
 // const overlay = ref(false);
 // const type = ref<string | undefined>(undefined);
@@ -275,6 +327,7 @@ watch(() => props.isOpen, (val) => {
 watch(spendingPassword, () => {
   passwordRules.value = [rules.required()]
 });
+
 const depositFee = computed(() => {
   if (!props.tx?.body) return 0;
 
@@ -298,13 +351,11 @@ const depositFee = computed(() => {
       totalAdaOutput += Number(output.value.coins);
     }
   }
-
-  // Check if this is a registration (has deposit)
-  const hasRegistrationCert = props.tx.body.certificates?.some(
-    cert => cert.__typename === Cardano.CertificateType.StakeRegistration
+  const registrationCert = props.tx.body.certificates?.find(
+    cert => cert.__typename === Cardano.CertificateType.StakeRegistration || cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
   );
 
-  return hasRegistrationCert ? Number(props.tx.body.fee) : 0;
+  return registrationCert ? Number(registrationCert?.deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -371,97 +422,124 @@ const enableToolTip = () => {
   }, 3000);
 };
 
-const signDelegationTx = async () => {
-  const signAndReturnTx = async () => {
-    loading.value = true
-    try {
-      console.log('Signing Cardano JS SDK delegation transaction');
-      console.log('Transaction:', props.tx);
+const signTx = async (): Promise<boolean> => {
+  loading.value = true
+  try {
+    console.log('Signing Cardano JS SDK delegation transaction');
+    console.log('Transaction:', props.tx);
 
-      // First verify password via background message
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+    // First, verify password via a background message
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
 
-      if (!passwordVerification.data.isValid) {
-        enableToolTip();
-        loading.value = false;
-        return;
-      }
-
-      // Serialize the Cardano.Tx to CBOR for Chrome messaging
-      const txCbor = serializeCardanoJsSdkTx(props.tx);
-      console.log('Serialized transaction CBOR:', txCbor);
-
-      // Sign the transaction via background message
-      const witnessResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: {
-          txCbor: txCbor, // Pass serialized CBOR instead of the object
-          partialSign: false,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          utxos: utxos.value,
-          addresses: keys.value, // Address mappings
-          isUsb: false
-        }
-      }) as { data: { witnesses?: any; error?: string } };
-
-      console.log('Transaction signed successfully:', witnessResult);
-
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      console.log('Signed transaction witness:', witnessResult.data.witnesses);
-
-      // Submit the transaction with original CBOR and witness
-      // Let the background script combine them properly
-      const submitResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SUBMIT_TX,
-        data: {
-          txCbor: txCbor,
-          witnessHex: witnessResult.data.witnesses,
-          utxos: utxos.value
-        }
-      }) as { data: { txId?: string; error?: string } };
-
-      if (submitResult.data.error) {
-        throw new Error(submitResult.data.error);
-      }
-
-      snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`)
-      emit('close')
-    } catch (e) {
-      console.error('Error signing delegation transaction:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      loading.value = false;
+      return;
     }
+
+    // Serialize the Cardano.Tx to CBOR for Chrome messaging
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    console.log('Serialized transaction CBOR:', txCbor.value);
+
+    // Sign the transaction via background message
+    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: {
+        txCbor: txCbor.value, // Pass serialized CBOR instead of the object
+        partialSign: false,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        utxos: utxos.value,
+        addresses: keys.value, // Address mappings
+        isUsb: false
+      }
+    }) as { data: { witnesses?: any; error?: string } };
+
+    console.log('Transaction signed successfully:', witnessResult);
+
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
+    }
+
+    console.log('Signed transaction witness:', witnessResult.data.witnesses);
+    txWitnesses.value = witnessResult.data.witnesses;
+    return true;
+  } catch (e) {
+    console.error('Error signing delegation transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    return false;
+  } finally {
     loading.value = false
-  };
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    if (formRef.value.validate()) {
-      await signAndReturnTx();
+  }
+};
+
+const submitTx = async () => {
+  try {
+    loading.value = true
+    console.log('Submitting Cardano JS SDK delegation transaction');
+    const submitResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor.value,
+        witnessHex: txWitnesses.value,
+        utxos: utxos.value
+      }
+    }) as { data: { txId?: string; error?: string } };
+
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
     }
-  // TODO: Keystone hardware wallet signing flow - currently disabled
-  // This would generate a QR code for the Keystone device to scan and sign
-  // } else if (loggedWallet.value?.type === WalletType.Keystone) {
-  //   if (qrCode.value) {
-  //     qrCode.value = null;
-  //     if (qrCodeRef.value)
-  //       qrCodeRef.value.innerHTML = '';
-  //   }
-  //
-  //   const ur = createKeystoneSignRequest(props.tx, loggedWallet.value, utxos.value, keys.value)
-  //   type.value = ur.type
-  //   cbor.value = Buffer.from(ur.cbor).toString('hex')
-  //   qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-  //   overlay.value = true
-  //   nextTick(() => {
-  //     qrCode.value.append(qrCodeRef.value);
-  //   });
+
+    snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`)
+    emit('close')
+  } catch (e) {
+    console.error('Error submitting delegation transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+  } finally {
+    loading.value = false
+    isSubmit.value = false
+  }
+}
+
+const signDelegationTx = async () => {
+  if (isSubmit.value) {
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      await submitTx();
+    }
   } else {
-    await signAndReturnTx();
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      if (formRef.value.validate()) {
+        const isValid: boolean = await signTx();
+        if (!isValid) {
+          return;
+        }
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
+          isSubmit.value = true;
+        }
+      }
+      // TODO: Keystone hardware wallet signing flow - currently disabled
+      // This would generate a QR code for the Keystone device to scan and sign
+      // } else if (loggedWallet.value?.type === WalletType.Keystone) {
+      //   if (qrCode.value) {
+      //     qrCode.value = null;
+      //     if (qrCodeRef.value)
+      //       qrCodeRef.value.innerHTML = '';
+      //   }
+      //
+      //   const ur = createKeystoneSignRequest(props.tx, loggedWallet.value, utxos.value, keys.value)
+      //   type.value = ur.type
+      //   cbor.value = Buffer.from(ur.cbor).toString('hex')
+      //   qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
+      //   overlay.value = true
+      //   nextTick(() => {
+      //     qrCode.value.append(qrCodeRef.value);
+      //   });
+    }
   }
 };
 
@@ -478,5 +556,15 @@ const fallbackImage = (e: Event): void => {
 };
 </script>
 <style scoped>
+.underline-tooltip {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: opacity 0.2s ease;
+}
 
+.underline-tooltip:hover {
+  opacity: 0.8;
+}
 </style>

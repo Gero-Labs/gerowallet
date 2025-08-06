@@ -308,7 +308,7 @@ onUnmounted(() => {
 // Watch for content changes that might affect header width
 watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 </script>
-<style>
+<style scoped>
 .badge .v-badge__wrapper {
   margin: 0
 }
@@ -331,13 +331,6 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
   line-height: 1 !important;
   font-size: 14px !important;
   overflow: hidden !important;
-}
-
-.v-data-table.v-data-table tbody tr td * {
-  line-height: 1 !important;
-  margin: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
 }
 
 .top-level-search.v-text-field {
@@ -396,9 +389,6 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
   margin-top: 4px !important;
 }
 
-</style>
-
-<style>
 /* Liquid glass styling for the main filters dialog */
 .liquid-glass-dialog.v-card {
   background-color: rgba(0, 0, 0, 0.4) !important;

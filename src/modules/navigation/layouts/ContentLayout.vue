@@ -40,7 +40,6 @@
                 column
                 class="no-gutters px-4 transparent"
                 :justify-start="true"
-                style="min-height: calc(100vh - 90px); flex-direction: column; background-color: transparent"
               >
                 <v-app-bar flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
