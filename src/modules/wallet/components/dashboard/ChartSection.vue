@@ -74,6 +74,10 @@ const baseBalance = 550;
 
 // Current balance from card store
 const currentBalance = computed(() => {
+  // If no card data (pending state), show 0
+  if (!cardStore.state.cardData) {
+    return '0';
+  }
   if (cardStore.state.cardBalance?.currentBalance) {
     return cardStore.state.cardBalance.currentBalance.amount.toFixed(0);
   }
@@ -90,6 +94,24 @@ const balanceChangePercentage = computed(() => {
 // Dynamic chart data that updates with current balance
 const chartData = computed(() => {
   const current = parseFloat(currentBalance.value);
+  
+  // If in pending state (no card data), show all zeros
+  if (!cardStore.state.cardData) {
+    return {
+      '12months': Array.from({ length: 12 }, (_, i) => ({ 
+        name: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i], 
+        y: 0 
+      })),
+      '30days': Array.from({ length: 7 }, (_, i) => ({ 
+        name: `Day ${(i + 1) * 5}`, 
+        y: 0 
+      })),
+      '7days': Array.from({ length: 7 }, (_, i) => ({ 
+        name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i], 
+        y: 0 
+      })),
+    };
+  }
   
   return {
     '12months': [
