@@ -1,11 +1,7 @@
 <template>
   <section class="call-to-action-section">
-    <div class="new-tag">New</div>
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
-    <p class="cta-description">
-      Your digital assets, now swipe-ready. Use your crypto like cash—anywhere <br />
-      Mastercard is accepted.
-    </p>
+    <p class="cta-description">Your digital assets, now swipe-ready. Use your crypto like cash</p>
     <GradientButton text="Order your card today" @click="handleOrderCard" />
     <OrderCardModal :open="showModal" @close="showModal = false" />
   </section>

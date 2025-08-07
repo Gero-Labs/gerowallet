@@ -3,9 +3,9 @@
     <div class="card-header">
       <h3 class="card-title">Recent Activities</h3>
     </div>
-    
-    <div class="activities-list">
-      <div class="activity-item" v-for="activity in activities" :key="activity.id">
+
+    <div class="activities-list" :key="activities.length">
+      <div class="activity-item" v-for="activity in activities" :key="`activity-${activity.id}-${activity.date}`">
         <div class="activity-content">
           <div class="activity-main">
             <div class="activity-type">{{ activity.type }}</div>
@@ -23,31 +23,35 @@
         </div>
       </div>
     </div>
+
+    <div class="see-all-section">
+      <span class="see-all-text">see all</span>
+    </div>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
+import cardStore from '@/stores/modules/card';
 import type { Activity } from '@/models/types';
 
-const activities = ref<Activity[]>([
-  {
-    id: 1,
-    type: 'Top-up',
-    cryptoAmount: '₳200',
-    fiatAmount: '+€130.00',
-    date: '03/05/2025',
-    status: 'Completed'
-  },
-  {
-    id: 2,
-    type: 'Top-up',
-    cryptoAmount: '₳200',
-    fiatAmount: '+€130.00',
-    date: '03/05/2025',
-    status: 'Completed'
-  }
-]);
+const activities = computed(() => {
+  // Force reactivity by accessing the store directly
+  const storeActivities = [...(cardStore.state.activities || [])];
+  console.log('🎯 RecentActivitiesSection computed triggered!');
+  console.log('🎯 cardStore.state:', cardStore.state);
+  console.log('🎯 cardStore.state.activities:', cardStore.state.activities);
+  console.log('🎯 activities length:', storeActivities.length);
+  
+  // Only show the last 3 activities
+  const recentActivities = storeActivities.slice(0, 3);
+  
+  recentActivities.forEach((activity, index) => {
+    console.log(`🎯 Activity ${index}:`, activity);
+  });
+  
+  return recentActivities;
+});
 </script>
 
 <style lang="scss" scoped>
@@ -145,7 +149,7 @@ const activities = ref<Activity[]>([
               font-weight: $font-weight-medium;
               font-size: $font-size-xs;
               line-height: 1.33;
-              color: #4CA30D;
+              color: #4ca30d;
               text-align: right;
             }
           }
@@ -153,5 +157,25 @@ const activities = ref<Activity[]>([
       }
     }
   }
+
+  .see-all-section {
+    margin-top: $spacing-lg;
+    display: flex;
+    justify-content: center;
+
+    .see-all-text {
+      font-family: $font-family-primary;
+      font-weight: $font-weight-medium;
+      font-size: $font-size-sm;
+      line-height: 1.43;
+      color: $text-muted;
+      cursor: pointer;
+      text-decoration: none;
+
+      &:hover {
+        color: $text-secondary;
+      }
+    }
+  }
 }
-</style> 
+</style>

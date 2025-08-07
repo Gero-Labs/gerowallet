@@ -12,7 +12,7 @@ export const pbkdf2 = pbkdf2Async;
 // Create pbkdf2 module interface
 const pbkdf2Module = {
   pbkdf2: pbkdf2Async,
-  pbkdf2Sync: pbkdf2SyncImpl
+  pbkdf2Sync: pbkdf2SyncImpl,
 };
 
 // Default export

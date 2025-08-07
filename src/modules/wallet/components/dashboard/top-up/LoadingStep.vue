@@ -23,7 +23,22 @@
               <img src="@/modules/wallet/icons/progress-dollar.svg" alt="progress-dollar" />
             </div>
           </div>
-          <span class="progress-text">Progressing...</span>
+        </div>
+        
+        <!-- Sliding Step Text Below Progress Bar -->
+        <div class="step-text-container">
+          <div class="step-text-wrapper">
+            <transition-group name="slide-step" tag="div" class="step-transitions">
+              <div 
+                v-for="(step, index) in visibleSteps" 
+                :key="`step-${index}-${step.id}`"
+                class="sliding-step"
+              >
+                {{ step.text }}
+              </div>
+            </transition-group>
+          </div>
+        </div>
         </div>
       </div>
     </div>
@@ -50,21 +65,113 @@ const emit = defineEmits<{
 // Reactive data
 const progress = ref(0);
 const interval = ref<number | null>(null);
+const currentStep = ref(0);
 
-// Start progress animation
+// Processing steps with realistic timings
+const steps = [
+  { text: 'Preparing ADA transaction...', duration: 2000 }, // 0-14%
+  { text: 'Sending ADA to exchange wallet...', duration: 4000 }, // 14-43%
+  { text: 'Confirming ADA transaction on blockchain...', duration: 3000 }, // 43-65%
+  { text: 'Converting ADA to EUR at current rate...', duration: 2500 }, // 65-83%
+  { text: 'Transferring EUR to your Gero Card...', duration: 2000 }, // 83-97%
+  { text: 'Updating card balance...', duration: 500 } // 97-100%
+];
+
+const visibleSteps = ref([
+  { 
+    id: 0, 
+    text: steps[0].text, 
+    status: 'active'
+  }
+]);
+
+// Helper function to update step transitions
+const updateStepTransition = (newStepIndex: number) => {
+  // Immediately replace the current step with the new one
+  // This creates a smooth sliding transition without color changes
+  if (newStepIndex < steps.length) {
+    visibleSteps.value = [{
+      id: newStepIndex,
+      text: steps[newStepIndex].text,
+      status: 'active'
+    }];
+  }
+};
+
+// Start progress animation with realistic steps
 const startProgress = () => {
-  const step = 100 / (props.duration / 100); // Update every 100ms
   progress.value = 0;
+  currentStep.value = 0;
+  
+  // Reset visible steps
+  visibleSteps.value = [{
+    id: 0,
+    text: steps[0].text,
+    status: 'active'
+  }];
+  
+  let elapsedTime = 0;
+  let currentStepProgress = 0;
+  
+  // Calculate total duration and progress breakpoints
+  const totalDuration = steps.reduce((sum, step) => sum + step.duration, 0);
+  let cumulativeProgress = 0;
+  const progressBreakpoints = steps.map(step => {
+    cumulativeProgress += (step.duration / totalDuration) * 100;
+    return cumulativeProgress;
+  });
+  
+  console.log('Total duration:', totalDuration, 'Progress breakpoints:', progressBreakpoints);
 
   interval.value = window.setInterval(() => {
-    progress.value += step;
+    elapsedTime += 100;
+    currentStepProgress += 100;
+    
+    // Check if current step is complete
+    if (currentStepProgress >= steps[currentStep.value].duration) {
+      // Move to next step
+      if (currentStep.value < steps.length - 1) {
+        currentStep.value++;
+        updateStepTransition(currentStep.value);
+        currentStepProgress = 0;
+      } else {
+        // Final step is complete, force progress to 100% and complete
+        console.log('Final step completed, forcing completion...');
+        progress.value = 100;
+        if (interval.value) {
+          clearInterval(interval.value);
+        }
+        setTimeout(() => {
+          console.log('Emitting complete event from final step');
+          emit('complete');
+        }, 200);
+        return; // Exit the interval early
+      }
+    }
+    
+    // Calculate overall progress
+    const stepProgress = Math.min(currentStepProgress / steps[currentStep.value].duration, 1);
+    const baseProgress = currentStep.value > 0 ? progressBreakpoints[currentStep.value - 1] : 0;
+    const stepRange = progressBreakpoints[currentStep.value] - baseProgress;
+    progress.value = Math.min(baseProgress + (stepProgress * stepRange), 100);
+    
+    // Debug logging for final step
+    if (currentStep.value === steps.length - 1) {
+      console.log(`Final step progress: ${stepProgress.toFixed(2)}, currentStepProgress: ${currentStepProgress}, duration: ${steps[currentStep.value].duration}, overall progress: ${progress.value.toFixed(2)}`);
+    }
 
     if (progress.value >= 100) {
       progress.value = 100;
+      console.log('Progress reached 100%, completing...');
       if (interval.value) {
         clearInterval(interval.value);
       }
-      emit('complete');
+      
+      // Add small delay before completing to show final step
+      setTimeout(() => {
+        console.log('Emitting complete event');
+        emit('complete');
+      }, 500);
     }
   }, 100);
 };
@@ -152,7 +259,7 @@ onUnmounted(() => {
   display: flex;
   gap: $spacing-md;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
 }
 
 .progress-wrapper {
@@ -193,5 +300,99 @@ onUnmounted(() => {
   font-size: 16px;
   line-height: 1.25;
   color: $text-primary;
+}
+
+// Sliding Step Text Styles
+.step-text-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+}
+
+.step-text-wrapper {
+  position: relative;
+  overflow: hidden;
+  height: 40px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-transitions {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.sliding-step {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  font-family: Inter;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.25;
+  color: $text-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+}
+
+// Slide transition styles
+.slide-step-enter-active {
+  transition: all 0.4s ease-out;
+}
+
+.slide-step-enter-from {
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+.slide-step-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.slide-step-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.slide-step-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+
+// Move transition for when items change positions
+.slide-step-move {
+  transition: transform 0.5s ease;
+}
+
+// Enhanced fade-out animation for leaving text
+@keyframes fadeUpAndOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.7;
+    transform: translateY(-30%);
+  }
+  60% {
+    opacity: 0.3;
+    transform: translateY(-60%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+.slide-step-leave-active {
+  animation: fadeUpAndOut 0.4s ease-out forwards;
 }
 </style>
