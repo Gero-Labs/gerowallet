@@ -51,6 +51,7 @@
 import assets from '@/utils/assets';
 import DAO from '@/modules/governance/components/DAO.vue';
 import CardanoGovernance from '@/modules/governance/components/CardanoGovernance.vue';
+import { ref } from 'vue';
 
 const tab = ref(1)
 </script>
