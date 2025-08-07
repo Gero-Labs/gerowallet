@@ -95,6 +95,18 @@ const ERROR = {
   submit: 'submit',
 };
 
+export interface PaginationMeta {
+  page: number;
+  total_items: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
 export type Cardano = {
   [key: string]: {
     name: string;

@@ -1,6 +1,6 @@
 import axios, {AxiosError, AxiosInstance} from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import {Blockchain, Network, Proof, Provider} from '@/models/types';
+import {Blockchain, Network, Proof, Provider, PaginatedResponse} from '@/models/types';
 
 export class Api {
   public chain: string;
@@ -118,16 +118,30 @@ export class Api {
     }
   }
 
-  async getAllPools() {
+  async getAllPools(params: any = {}): Promise<PaginatedResponse<any>> {
     try {
+      const queryParams = new URLSearchParams({
+        chain: this.chain,
+        network: this.network,
+        ...params
+      });
+
       const { data, status } = await this.axiosInstance.get(
-        `/api/pools/all?chain=${this.chain}&network=${this.network}`
+        `/api/pools/all?${queryParams.toString()}`
       );
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return {
+          items: [],
+          meta: {
+            page: params.page || 1,
+            total_items: 0,
+            per_page: params.per_page || 20,
+            total_pages: 0
+          }
+        };
       }
       throw parseHttpError(error);
     }
