@@ -2,6 +2,8 @@
 // CARD TYPES - KaiserEx API Integration
 // ============================================================================
 
+import type { Activity } from './types';
+
 // Auth Types
 export interface AuthTokens {
   token_type: string;
@@ -125,6 +127,8 @@ export interface CardState {
   cardNumber: CardNumber | null;
   cardBalance: CardBalance | null;
   cardHistory: HistoryResponse | null;
+  totalDeposits: number;
+  activities: Activity[];
 
   // Loading states
   loading: CardLoadingState;

@@ -269,6 +269,9 @@ const swapDialog = ref(false);
 const buyDialog = ref(false);
 const receiveDialog = ref(false);
 
+// Background image loading state for performance optimization
+const backgroundImageLoaded = ref(false)
+
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value);
 
@@ -377,10 +380,35 @@ watch(
   { immediate: true }
 );
 
+// Preload background image for better LCP performance
+const preloadBackgroundImage = () => {
+  const currentChain = loggedWallet.value?.chain
+  const imageUrl = currentChain === Blockchain.APEX_PRIME || currentChain === Blockchain.APEX_VECTOR
+    ? assets.apexBg
+    : assets.cardanoBg
+
+  const img = new Image()
+  img.onload = () => {
+    backgroundImageLoaded.value = true
+  }
+  img.onerror = () => {
+    // Fallback: show background anyway after a timeout
+    setTimeout(() => {
+      backgroundImageLoaded.value = true
+    }, 100)
+  }
+  img.src = imageUrl
+}
+
 // Lifecycle
 onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
+
+  // Preload background image after critical content
+  requestIdleCallback(() => {
+    preloadBackgroundImage()
+  }, { timeout: 2000 })
 });
 </script>
 
@@ -399,6 +427,12 @@ onMounted(async () => {
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+
+  &[style*="url("] {
+    opacity: 1;
+  }
 }
 
 /* Apex background with same styling as Cardano */
@@ -415,6 +449,12 @@ onMounted(async () => {
   transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Same transforms as Cardano */
   pointer-events: none; /* Allow clicks through */
   filter: brightness(0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+
+  &[style*="url("] {
+    opacity: 1;
+  }
 }
 
 /* Force progress bar colors to use CSS variables with higher specificity */

@@ -126,6 +126,7 @@ import debitCardBgImage from '@/assets/debitcardbg.png'
 import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
 import cashbackImage from '@/assets/cashback.png'
 import debitCardImage from '@/assets/geroCard.png'
+import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
 
@@ -361,5 +362,6 @@ export default {
   cashbackCarouselImage,
   cashbackImage,
   debitCardImage,
+  frontCardNoMcx2,
   emptyState
 }

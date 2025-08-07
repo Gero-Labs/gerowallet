@@ -1,23 +1,23 @@
 <template>
   <div class="home-section">
     <!-- Account Overview Section -->
-    <WelcomeCard :user-name="userName" />
+    <!-- <WelcomeCard :user-name="userName" /> -->
+    <HeroSection />
     <AccountOverviewHeader />
 
     <BalanceCardsSection
       :card-balance="cardBalanceFormatted"
-      :cardano-balance="cardanoBalanceFormatted"
+      :card-balance-ada="cardBalanceAda"
       :gero-earned="geroEarnedFormatted"
+      :total-deposit="totalDepositFormatted"
+      :total-deposit-ada="totalDepositAda"
     />
-
-    <ChartSection @filter="handleFilter" />
-
-    <!-- Two Column Layout -->
     <div class="dashboard-layout">
       <div class="left-column">
         <RecentTransactionsSection :transactions="cardHistoryRecords" />
       </div>
       <div class="right-column">
+        <ChartSection @filter="handleFilter" />
         <ExchangeRateSection />
         <RecentActivitiesSection />
       </div>
@@ -37,8 +37,12 @@ import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
+import HeroSection from '../components/HeroSection.vue';
 
 const { initializeMockData } = useMockCardData();
+
+// ADA to EUR conversion rate (hardcoded)
+const ADA_TO_EUR_RATE = 0.65;
 
 // Computed properties for formatted data
 const userName = computed(() => {
@@ -52,13 +56,18 @@ const cardBalanceFormatted = computed(() => {
   if (cardStore.state.cardBalance?.currentBalance) {
     const amount = cardStore.state.cardBalance.currentBalance.amount;
     const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
-    return `${currency}${amount.toFixed(2)}`;
+    return `${amount.toFixed(2)}`;
   }
   return '€0.00';
 });
 
-const cardanoBalanceFormatted = computed(() => {
-  // This would come from Cardano wallet balance
+const cardBalanceAda = computed(() => {
+  // Calculate ADA equivalent of card balance
+  if (cardStore.state.cardBalance?.currentBalance) {
+    const eurAmount = cardStore.state.cardBalance.currentBalance.amount;
+    const adaAmount = eurAmount / ADA_TO_EUR_RATE;
+    return `₳${adaAmount.toFixed(2)}`;
+  }
   return '₳0.00';
 });
 
@@ -67,13 +76,36 @@ const geroEarnedFormatted = computed(() => {
   return '0.00K';
 });
 
+const totalDepositFormatted = computed(() => {
+  // Start with the original hardcoded value and add new deposits
+  const baseAmount = 1692.31;
+  const additionalDeposits = cardStore.state.totalDeposits || 0;
+  return (baseAmount + additionalDeposits).toFixed(2);
+});
+
+const totalDepositAda = computed(() => {
+  // Calculate ADA equivalent of total deposits
+  const baseAmount = 1692.31;
+  const additionalDeposits = cardStore.state.totalDeposits || 0;
+  const totalEur = baseAmount + additionalDeposits;
+  const adaAmount = totalEur / ADA_TO_EUR_RATE;
+  return `₳${adaAmount.toFixed(2)}`;
+});
+
 const cardHistoryRecords = computed(() => {
-  return cardStore.state.cardHistory?.history.records || [];
+  const records = cardStore.state.cardHistory?.history.records || [];
+  console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
+  if (records.length > 0) {
+    console.log('🏠 First record:', records[0]);
+  }
+  return records;
 });
 
 // Initialize data
 onMounted(async () => {
   console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
+  console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
+  
   if (import.meta.env.DEV) {
     // Use mock data in development
     console.log('Initializing mock data...');
@@ -85,6 +117,8 @@ onMounted(async () => {
     await cardStore.initialize(geroStore.state.wallets);
     console.log('Real API initialized');
   }
+  
+  console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);
 });
 
 const handleFilter = () => {
@@ -112,14 +146,14 @@ const handleFilter = () => {
 
   .left-column {
     flex: 1;
-    width: 100%;
+    width: calc(66% - 8px);
   }
 
   .right-column {
     display: flex;
     flex-direction: column;
     gap: $spacing-lg;
-    width: 357px;
+    width: calc(33% - 8px);
     flex-shrink: 0;
   }
 }
@@ -130,6 +164,9 @@ const handleFilter = () => {
     gap: $spacing-lg;
 
     .right-column {
+      width: 100%;
+    }
+    .left-column {
       width: 100%;
     }
   }
