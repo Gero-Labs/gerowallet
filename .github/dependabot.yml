@@ -1,0 +1,48 @@
+# Dependabot configuration for Gero Wallet
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    # Group all non-major updates into a single PR
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Assign reviewers and labels
+    reviewers:
+      - "dudiedri"  # Update with actual GitHub usernames
+    labels:
+      - "dependencies"
+      - "automated"
+    # Allow only direct updates, no increase in transitive dependencies
+    allow:
+      - dependency-type: "direct"
+    # Security updates should be created immediately
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    
+  # Enable GitHub Actions updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    labels:
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
