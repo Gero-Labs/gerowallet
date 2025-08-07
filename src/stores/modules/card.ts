@@ -1,5 +1,6 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState } from '@/models/card';
+import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory } from '@/models/card';
+import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 
@@ -18,6 +19,25 @@ export const cardStore = Vue.observable<CardState>({
   cardNumber: null,
   cardBalance: null,
   cardHistory: null,
+  totalDeposits: 0,
+  activities: [
+    {
+      id: 1,
+      type: 'Top-up',
+      cryptoAmount: '₳200',
+      fiatAmount: '+€130.00',
+      date: '03/05/2025',
+      status: 'Completed',
+    },
+    {
+      id: 2,
+      type: 'Top-up',
+      cryptoAmount: '₳200',
+      fiatAmount: '+€130.00',
+      date: '03/05/2025',
+      status: 'Completed',
+    },
+  ],
 
   // Loading states
   loading: {
@@ -129,6 +149,8 @@ const cardStoreInstance = {
     cardStore.cardNumber = null;
     cardStore.cardBalance = null;
     cardStore.cardHistory = null;
+    cardStore.totalDeposits = 0;
+    cardStore.activities = [];
 
     persist({
       accessToken: cardStore.accessToken,
@@ -140,6 +162,8 @@ const cardStoreInstance = {
       cardNumber: cardStore.cardNumber,
       cardBalance: cardStore.cardBalance,
       cardHistory: cardStore.cardHistory,
+      totalDeposits: cardStore.totalDeposits,
+      activities: cardStore.activities,
     });
 
     await clearStoredTokens();
@@ -266,6 +290,8 @@ export default {
     cardStore.cardNumber = null;
     cardStore.cardBalance = null;
     cardStore.cardHistory = null;
+    cardStore.totalDeposits = 0;
+    cardStore.activities = [];
 
     persist({
       accessToken: cardStore.accessToken,
@@ -277,6 +303,8 @@ export default {
       cardNumber: cardStore.cardNumber,
       cardBalance: cardStore.cardBalance,
       cardHistory: cardStore.cardHistory,
+      totalDeposits: cardStore.totalDeposits,
+      activities: cardStore.activities,
     });
 
     await clearStoredTokens();
@@ -447,6 +475,94 @@ export default {
         console.error('Failed to initialize card store:', error);
       }
     }
+  },
+
+  // Top-up methods
+  updateCardBalance(additionalAmount: number): void {
+    if (cardStore.cardBalance) {
+      cardStore.cardBalance.currentBalance.amount += additionalAmount;
+      cardStore.totalDeposits += additionalAmount;
+      persist({ cardBalance: cardStore.cardBalance, totalDeposits: cardStore.totalDeposits });
+    }
+  },
+
+  addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string): void {
+    if (!cardStore.cardHistory) {
+      cardStore.cardHistory = {
+        history: {
+          meta: { page: 1, records: 0, totalRecords: 0 },
+          records: []
+        }
+      };
+    }
+
+    const newTransaction: CardTransactionHistory = {
+      reference: transactionId,
+      amount: {
+        amount: eurAmount,
+        currencyCode: 'EUR'
+      },
+      createTime: new Date().toISOString(),
+      settlementDate: new Date().toISOString(),
+      exchangeRate: eurAmount / adaAmount, // ADA to EUR rate
+      actionCode: 'APPROVE',
+      processingName: 'ADA Top-up',
+      authorizationCode: `AUTH${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
+      cardAcceptorTerminalId: 'GERO001',
+      cardAcceptorId: 'GEROWALLET',
+      cardAcceptorNameAndLocation: 'Gero Wallet Top-up Service',
+      acquireCountryCode: 'US',
+      mcc: {
+        code: '6012',
+        description: 'Financial Institution'
+      },
+      reversedAmount: {
+        amount: 0,
+        currencyCode: 'EUR'
+      },
+      narrative: {
+        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`
+      },
+      debit: false, // Credit transaction (adding money)
+      state: 'SETTLED'
+    };
+
+    // Add to beginning of transactions array
+    cardStore.cardHistory.history.records.unshift(newTransaction);
+    cardStore.cardHistory.history.meta.records += 1;
+    cardStore.cardHistory.history.meta.totalRecords += 1;
+    
+    console.log('💳 Transaction added to cardStore.cardHistory');
+    console.log('💳 Total records now:', cardStore.cardHistory.history.meta.totalRecords);
+    console.log('💳 First record:', cardStore.cardHistory.history.records[0]);
+    
+    persist({ cardHistory: cardStore.cardHistory });
+  },
+
+  addTopUpActivity(adaAmount: number, eurAmount: number): void {
+    const newActivity: Activity = {
+      id: Date.now(), // Use timestamp as unique ID
+      type: 'Top-up',
+      cryptoAmount: `₳${adaAmount.toFixed(0)}`,
+      fiatAmount: `+€${eurAmount.toFixed(2)}`,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }),
+      status: 'Completed',
+    };
+
+    // Add to beginning of activities array using Vue.set for reactivity
+    const newActivities = [newActivity, ...cardStore.activities];
+    Vue.set(cardStore, 'activities', newActivities);
+    
+    console.log('🎯 Activity added to cardStore.activities');
+    console.log('🎯 Total activities now:', cardStore.activities.length);
+    console.log('🎯 First activity:', cardStore.activities[0]);
+    console.log('🎯 All activities:', cardStore.activities);
+    
+    persist({ activities: cardStore.activities });
   },
 
   // State getter for compatibility

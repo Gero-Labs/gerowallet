@@ -9,27 +9,18 @@
         :description="feature.description"
       />
     </div>
-    <div class="bottom-cta">
-      <GradientButton text="Order your card today" @click="handleOrderCard" />
-    </div>
-    <OrderCardModal :open="showModal" @close="showModal = false" />
   </section>
 </template>
 
 <script setup lang="ts">
-import GradientButton from './GradientButton.vue';
 import FeatureCard from './FeatureCard.vue';
 import type { FeatureCardProps } from '@/models/types';
-import OrderCardModal from './OrderCardModal.vue';
-import { ref } from 'vue';
-
-const showModal = ref(false);
 
 const features: FeatureCardProps[] = [
   {
     icon: 'conversion',
     title: 'Real-Time Conversion',
-    description: 'Your crypto is instantly converted to fiat at the moment of purchase—no delays, no manual swaps.',
+    description: 'Your crypto is instantly converted to fiat at the moment of top-up.',
   },
   {
     icon: 'global',
@@ -39,13 +30,9 @@ const features: FeatureCardProps[] = [
   {
     icon: 'track',
     title: 'Track & Manage Easily',
-    description: 'Monitor balances, spending, and top-ups—all in one sleek wallet app.',
+    description: 'Monitor balances, spending, and top-upsall in one sleek wallet app.',
   },
 ];
-
-const handleOrderCard = () => {
-  showModal.value = true;
-};
 </script>
 
 <style lang="scss" scoped>

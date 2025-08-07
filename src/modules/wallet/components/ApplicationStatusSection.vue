@@ -45,6 +45,7 @@ const handleContactSupport = () => {
 .status-content {
   display: flex;
   align-items: center;
+  justify-content: space-around;
   gap: $spacing-2xl;
   padding: $spacing-2xl 0;
 }

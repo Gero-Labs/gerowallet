@@ -42,22 +42,12 @@ const exchangeRates = ref<ExchangeRate[]>([
   {
     id: 1,
     pair: 'ADA/EUR',
-    value: '0.42',
+    value: '0.65',
     currency: 'EUR',
     icon: currencyEuro,
     change: '3%',
     trend: 'positive',
     trendIcon: trendUpSvg,
-  },
-  {
-    id: 2,
-    pair: 'ADA/USD',
-    value: '0.45',
-    currency: 'USD',
-    icon: currencyDollar,
-    change: '1.2%',
-    trend: 'negative',
-    trendIcon: trendDownSvg,
   },
 ]);
 

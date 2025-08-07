@@ -21,14 +21,15 @@ defineProps<Props>();
 @import '../../styles/mixins';
 
 .welcome-container {
-  background-image: url('@/modules/wallet/icons/cardHomeBanner.svg') !important;
+  background-image: url('@/modules/wallet/icons/cardBanner.svg') !important;
   background-repeat: no-repeat;
-  height: 232px;
+  height: 273px;
   border-radius: $border-radius-lg;
   display: flex;
   align-items: center;
   padding: 44px;
   width: 100%;
+  background-size: cover;
 }
 
 .welcome-title {
