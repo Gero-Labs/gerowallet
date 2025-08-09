@@ -28,7 +28,7 @@
     <!-- Navigation items -->
     <v-list nav dense>
       <template v-for="(item, index) in items" >
-        <v-subheader v-if="item.header && item.enabled" style="font-weight: 800" :key="index">
+        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 800; height: 18px;" :key="index">
           {{ item.header }}
         </v-subheader>
 
@@ -396,17 +396,5 @@ onMounted(() => {
   width: 100%;
   position: relative;
   z-index: 1;
-
-  &:before {
-    content: '';
-    display: block;
-    width: 100%;
-    height: 1px;
-    background: #0C0E12;
-    position: absolute;
-    top: 50%;
-    left: 0;
-    z-index: -1;
-  }
 }
 </style>

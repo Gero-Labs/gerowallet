@@ -268,6 +268,7 @@ onUnmounted(() => {
 .carousel-wrapper {
   position: relative;
   height: 100%;
+  min-height: 422px;
   border-radius: 12px;
   overflow: hidden;
   background-color: rgba(255, 255, 255, 0.05);
@@ -291,6 +292,26 @@ onUnmounted(() => {
 .carousel-wrapper .v-card__title {
   text-align: center !important;
   justify-content: center !important;
+}
+
+/* Ensure v-carousel maintains consistent height during transitions */
+.carousel-wrapper .v-carousel,
+.carousel-wrapper .v-carousel .v-window,
+.carousel-wrapper .v-carousel .v-window__container,
+.carousel-wrapper .v-carousel-item {
+  height: 100% !important;
+  min-height: 422px !important;
+}
+
+/* Prevent height flickering during transitions */
+.carousel-wrapper .v-window__container {
+  display: flex !important;
+}
+
+.carousel-wrapper .v-window-item {
+  flex: 0 0 100% !important;
+  height: 100% !important;
+  min-height: 422px !important;
 }
 
 .carousel-behind-overlay {

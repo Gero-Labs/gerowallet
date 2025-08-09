@@ -1,7 +1,6 @@
 <template>
   <div
     class="transparent"
-    flat
     v-if="selectedToken"
     style="box-shadow: unset !important; background-color: transparent !important; backdrop-filter: unset !important"
   >
@@ -48,7 +47,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="45"
+                      :offset-y="34"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -80,7 +79,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="45"
+                      :offset-y="34"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -180,7 +179,7 @@
                 <v-list-item-subtitle
                   class="light-text"
                   :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}"
-                  v-else-if="!isNaN(price.replaceAll(',', ''))"
+                  v-else-if="!isNaN(Number(price.replaceAll(',', '')))"
                 >
                   {{ '~$' + price
                   }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B"
@@ -355,6 +354,7 @@ function handleImageError(event) {
 </script>
 <style scoped>
 .card-container {
+  width: 100%;
   border-radius: 10px !important;
   border-color: #00dff3 !important;
   box-shadow: 0 0 0 5px #00dff32a !important;

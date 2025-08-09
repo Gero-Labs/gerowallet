@@ -9,6 +9,7 @@ import { Serialization } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
+import type * as Cardano from '@cardano-sdk/core/dist/cjs/Cardano';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -43,15 +44,12 @@ export class SyncService {
       } else if (!lastSyncInfo || tip.height > lastSyncInfo['height']) {
         const promises = [];
         promises.push(this.syncGenesis());
-        if (!this.walletBg.isEnterpriseAddress()) {
-          // Note: Staking pools sync moved to alarm-based refresh (every 4 hours)
-          // Note: DReps sync moved to alarm-based refresh (every 4.5 hours)
-        }
         if (promises.length > 0) {
           await Promise.all(promises);
         }
         const prevAccountInfo = await this.walletBg.getAccountInfo();
-        const from = !lastSyncInfo ? 0 : lastSyncInfo['height']
+        const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
+        const from = latestTxBlockHeight || 0
         let address: string;
         if (this.walletBg.isEnterpriseAddress()) {
           address = this.walletBg.baseAddress;
@@ -64,7 +62,6 @@ export class SyncService {
 
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
         console.debug("Epoch: ", epoch) // TODO new Epoch Animation
-
         await ablyService.publishToSyncChannel(this.walletBg.chain, this.walletBg.network, {
           chain: this.walletBg.chain,
           network: this.walletBg.network,
@@ -229,7 +226,7 @@ export class SyncService {
           promises.push(this.api.getTransactionsCbor(smallerArray).then(txCborsResult => {
             if (txCborsResult.status == 200) {
               return txCborsResult.data.map(txCbor => {
-                const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+                const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
                 return {
                   utxo: txCbor.utxo,
                   block_hash: txCbor.block_hash,
@@ -355,6 +352,43 @@ export class SyncService {
       console.debug(e);
     }
     return null;
+  }
+
+  /**
+   * Get the block height of the latest transaction
+   * @returns The latest transaction's block height, or 0 if no transactions exist
+   */
+  async getLatestTransactionBlockHeight(): Promise<number> {
+    try {
+      const db = await this.walletBg.getDb();
+      const transactionsTable = db.table('transactions');
+
+      if (!transactionsTable) {
+        console.debug('No transactions table found');
+        return 0;
+      }
+
+      // Get all transactions and find the one with the highest block_height
+      const transactions = await transactionsTable.toArray();
+
+      if (!transactions || transactions.length === 0) {
+        console.debug('No transactions found');
+        return 0;
+      }
+
+      // Find the transaction with the maximum block_height
+      const latestTx = transactions.reduce((latest, current) => {
+        return (current.block_height || 0) > (latest.block_height || 0) ? current : latest;
+      });
+
+      const blockHeight = latestTx.block_height || 0;
+      console.debug(`Latest transaction block height: ${blockHeight}`);
+      return blockHeight;
+
+    } catch (e) {
+      console.debug('Error getting latest transaction block height:', e);
+      return 0;
+    }
   }
 }
 

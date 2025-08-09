@@ -66,7 +66,7 @@
 
     <!-- Separate chart row for non-Cardano wallets -->
     <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
-      <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
         <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-text>
             <PortfolioChart
@@ -78,7 +78,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+      <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
         <AssetsPieChart />
       </v-col>
 
@@ -100,28 +100,28 @@
       </v-col>
     </v-row>
 
-    <!-- Token Allocation Table and Swap Row -->
+    <!-- Token Allocation Table Row -->
     <v-row no-gutters>
-      <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
+      <v-col cols="12" class="pa-2">
         <TokenAllocationTable />
-      </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <SwapWidget />
       </v-col>
     </v-row>
 
-    <!-- Transactions and Staking Row + Cashback Column -->
+    <!-- Transactions and Staking Row + Swap Widget Column -->
     <v-row no-gutters>
-      <v-col cols="12" xl="4" lg="4" md="12" sm="12" class="pa-2">
+      <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
         <TransactionsCard style="min-height: 396px;"></TransactionsCard>
       </v-col>
-      <v-col cols="12" xl="5" lg="5" md="12" sm="12" class="pa-2" v-if="isStakingEnabled">
+      <v-col cols="12" :xl="isSwapEnabled ? 5 : 6" :lg="isSwapEnabled ? 5 : 6" md="6" sm="12" class="pa-2" v-if="isStakingEnabled">
         <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
         <NoTokensCard v-else></NoTokensCard>
       </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <CashbackCard></CashbackCard>
+      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
+        <SwapWidget class="fill-height" />
       </v-col>
+      <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+        <CashbackCard></CashbackCard>
+      </v-col> -->
     </v-row>
 
     <!-- Claim Dialog -->
@@ -142,8 +142,8 @@ import { Blockchain, Network } from '@/models/types';
 import AssetsPieChart from '@/modules/assets/components/AssetsPieChart.vue';
 import TokenAllocationTable from '@/modules/assets/components/TokenAllocationTable.vue';
 import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
-import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
-import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
+// import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
+// import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
 import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
@@ -157,6 +157,7 @@ import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '..
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+import networks from '@/utils/networks';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -248,7 +249,11 @@ const isStakingEnabled = computed(() => {
   return false;
 })
 
-// Empty state computeds
+const isSwapEnabled = computed(() => {
+  return networks.resolveSwapSupport(loggedWallet.value.chain, loggedWallet.value.network);
+});
+
+// Empty state computed
 const isWalletEmpty = computed(() => checkWalletEmpty(account.value, tokens.value));
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
@@ -256,6 +261,7 @@ const shouldBackup = computed(() => {
   const config = walletStore.config;
   return config && 'backup' in config && !config.backup;
 });
+
 const computedValues = computed(() => {
   let assetsValue = 0
   if (portfolio.value?.positionsFt) {
@@ -277,7 +283,8 @@ const computedValues = computed(() => {
   }
 
   // Fallback for chains without portfolio API support (like Apex)
-  if (!portfolio.value && account.value) {
+  console.log('')
+  if (account.value) {
     if (account.value.controlled_amount && account.value.controlled_amount > 0) {
       // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
       assetsValue += account.value.controlled_amount / 1000000 // Convert to main unit (ADA/APEX)

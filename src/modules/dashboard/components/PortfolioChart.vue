@@ -10,14 +10,7 @@
               {{ formatPortfolioValue() }}
             </div>
             <div class="address-section" v-if="shortenAddress">
-              <v-avatar size="16" class="mr-1">
-                <v-img
-                  :src="assets.walletSvg"
-                  alt="Wallet"
-                ></v-img>
-              </v-avatar>
-              <span class="address-text">{{ shortenAddress }}</span>
-              <CopyButton :value="loggedWallet?.baseAddress || ''" x-small />
+              <CopyButton :avatar="assets.walletSvg" :title="shortenAddress"  :value="loggedWallet?.baseAddress || ''" x-small />
             </div>
           </div>
         </div>

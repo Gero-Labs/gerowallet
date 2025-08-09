@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import xerberusApi from '@/api/xerberus.api';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface XerberusStore {
   risks: object;
@@ -29,11 +29,27 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<XerberusStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 XerberusStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...xerberusStore, ...patch };
   await smartPersist('xerberusStore', next);
 }
 
 async function persistTokenPatch(fingerprint: string, patch: { risk: string; }): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 XerberusStore persistTokenPatch skipped from ${context} context for:`, fingerprint);
+    return;
+  }
+
   const result = await chrome.storage.local.get('xerberusStore');
   const saved: XerberusStore = result['xerberusStore'] || { risks: {} };
   const risksCopy = { ...saved.risks };

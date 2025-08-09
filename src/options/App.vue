@@ -95,4 +95,16 @@ const isLoading = computed(() => {
 .v-text-field--outlined.no-margin-append-outer .v-input__append-inner {
   margin: 0 !important;
 }
+
+.custom-tooltip {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  max-width: 300px !important;
+}
 </style>
