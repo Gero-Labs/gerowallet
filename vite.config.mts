@@ -79,13 +79,13 @@ export const sharedConfig: UserConfig = {
   ],
   optimizeDeps: {
     include: [
-      'vue', 
-      '@vueuse/core', 
-      'webextension-polyfill', 
-      'buffer', 
-      '@cardano-sdk/crypto', 
-      'readable-stream', 
-      'util', 
+      'vue',
+      '@vueuse/core',
+      'webextension-polyfill',
+      'buffer',
+      '@cardano-sdk/crypto',
+      'readable-stream',
+      'util',
       'pbkdf2',
       'lodash-es',
       'axios',
@@ -100,8 +100,8 @@ export const sharedConfig: UserConfig = {
       'crypto-ts',
     ],
     exclude: [
-      'vue-demi', 
-      '@emurgo/cardano-serialization-lib-browser', 
+      'vue-demi',
+      '@emurgo/cardano-serialization-lib-browser',
       'cbor'
     ],
     esbuildOptions: {
@@ -140,7 +140,7 @@ export const sharedConfig: UserConfig = {
     target: 'es2022',
     keepNames: isDev,
     minifyIdentifiers: false, // Disable for speed
-    minifySyntax: false, // Disable for speed  
+    minifySyntax: false, // Disable for speed
     minifyWhitespace: false, // Disable for speed
     treeShaking: false, // Disable for speed
     drop: [], // Don't drop anything for speed
@@ -184,7 +184,6 @@ export default defineConfig(({ command }) => {
       reportCompressedSize: false,
       assetsInlineLimit: 0, // Don't inline any assets
       copyPublicDir: false, // Skip copying public directory
-      assetsDir: 'assets',
       rollupOptions: {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
@@ -204,9 +203,9 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/public/*', dest: 'extension/public' },
               { src: 'src/assets/notifications/*', dest: 'extension/public' },
               // Skip large images for faster build
-              { 
-                src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*', 
-                dest: 'extension/assets' 
+              {
+                src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
+                dest: 'extension/assets'
               },
             ],
             hook: 'writeBundle',

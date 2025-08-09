@@ -57,7 +57,7 @@
         </v-list-item-action>
         <v-list-item-content>
           <v-list-item-title>
-            <v-tooltip top :open-delay="300" content-class="token-description-tooltip" v-if="item?.metadata?.description">
+            <v-tooltip top :open-delay="300" content-class="custom-tooltip" v-if="item?.metadata?.description">
               <template v-slot:activator="{ on, attrs }">
                 <span v-bind="attrs" v-on="on" class="token-name-hover">{{item.name}}</span>
               </template>
@@ -74,7 +74,7 @@
       </v-list-item>
     </template>
     <template v-slot:[`item.quantity`]="{ item }">
-      <v-tooltip top :open-delay="500">
+      <v-tooltip top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
             {{ filters.toCurrency(item.quantity, false, 3, '', '', true, item.metadata?.decimals) }}
@@ -84,44 +84,50 @@
       </v-tooltip>
     </template>
     <template v-slot:[`item.price`]="{ item }">
-      <span v-if="!item.price">N/A</span>
-      <span v-else>
-        <v-tooltip top :open-delay="500">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(item.price, false, 4, '$', '', true, 0) }}
+      <v-list-item two-line class="px-0" style="min-height: unset">
+        <v-list-item-content class="pa-0">
+          <v-list-item-title style="font-size: 0.875rem; margin-bottom: 0;">
+            <span v-if="!item.price">N/A</span>
+            <span v-else>
+              <v-tooltip top :open-delay="500" content-class="custom-tooltip">
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on">
+                    {{ filters.toCurrency(item.price, false, 4, '$', '', true, 0) }}
+                  </span>
+                </template>
+                {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
+              </v-tooltip>
             </span>
-          </template>
-          {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
-        </v-tooltip>
-      </span>
-      <div style="display: flex; justify-self: center; position: relative; top: 4px;" v-if="item.change !== undefined">
-        <v-avatar tile size="12" class="mr-1" style="align-self: center;">
-          <v-img
-            :src="
-              item.change === 0
-                ? assets.arrowRightSvg
-                : item.change > 0
-                ? assets.trendUpSvg
-                : assets.trendDownSvg
-            "
-            alt="trend"
-          ></v-img>
-        </v-avatar>
-        <span
-          :style="{
-            color: item.change === 0 ? '#A3A3A3' : item.change > 0 ? '#47CD89' : '#F97066',
-            fontSize: '10px',
-          }"
-        >
-          {{ Math.abs(item.change).toFixed(2) + "%" }}
-        </span>
-      </div>
+          </v-list-item-title>
+          <v-list-item-subtitle class="px-0" v-if="item.change !== undefined">
+            <v-avatar tile size="12" class="mr-1" style="align-self: center;">
+              <v-img
+                :src="
+                  item.change === 0
+                    ? assets.arrowRightSvg
+                    : item.change > 0
+                    ? assets.trendUpSvg
+                    : assets.trendDownSvg
+                "
+                    alt="trend"
+                  ></v-img>
+                </v-avatar>
+                <span
+                  :style="{
+                    color: item.change === 0 ? '#A3A3A3' : item.change > 0 ? '#47CD89' : '#F97066',
+                    fontSize: '10px',
+                  }"
+                >
+              {{ Math.abs(item.change).toFixed(2) + "%" }}
+            </span>
+          </v-list-item-subtitle>
+        </v-list-item-content>
+      </v-list-item>
     </template>
     <template v-slot:[`item.value`]="{ item }">
       <span v-if="!item.price">N/A</span>
       <span v-else>
-         <v-tooltip top :open-delay="500">
+         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
               {{ filters.toCurrency(item.value, false, 3, '$', '', true, 0) }}
@@ -132,7 +138,7 @@
       </span>
     </template>
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip top :open-delay="500" v-if="item.mcap">
+      <v-tooltip top :open-delay="500" v-if="item.mcap" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
             {{ filters.toCurrency(Number(item.mcap), false, 2, '$', '', true, 0) }}
@@ -479,24 +485,11 @@ watch(() => props.searchTerm, () => {
   padding: 0 !important;
   margin: 0 !important;
   position: relative;
-  top: 10px;
+  height: 44px !important;
 }
 
 .compact-pagination.ma-0 {
   margin: 0 !important;
-}
-
-/* Token Description Tooltip - Liquid Glass Effect */
-.token-description-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-  padding: 12px 16px !important;
-  max-width: 300px !important;
 }
 
 .token-description-content {

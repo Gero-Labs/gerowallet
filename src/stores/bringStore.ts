@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import cashbackApi from '@/api/cashback-api';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface BringStore {
   bringCache: any;
@@ -29,6 +29,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<BringStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 BringStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...bringStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {

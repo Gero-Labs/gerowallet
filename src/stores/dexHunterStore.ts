@@ -2,7 +2,7 @@ import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface DexHunterStore {
   dexHunterTokens: {};
@@ -33,11 +33,27 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<DexHunterStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 DexHunterStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...dexHunterStore, ...patch };
   await smartPersist('dexHunterStore', next);
 }
 
 async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 DexHunterStore persistTokenPatch skipped from ${context} context for:`, unit);
+    return;
+  }
+
   const result = await chrome.storage.local.get('dexHunterStore');
   const saved: DexHunterStore = result['dexHunterStore'] || { dexHunterTokens: {}, blacklistPolicies: [] };
   const tokensCopy = { ...saved.dexHunterTokens };

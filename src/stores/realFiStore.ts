@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import realfiApi from '@/api/realfi-api';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface RealFiStore {
   tokens: {};
@@ -29,11 +29,27 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<RealFiStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 RealFiStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...realFiStore, ...patch };
   await smartPersist('realFiStore', next);
 }
 
 async function persistTokenPatch(unit: string, patch: { data: any[]; }): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 RealFiStore persistTokenPatch skipped from ${context} context for:`, unit);
+    return;
+  }
+
   const result = await chrome.storage.local.get('realFiStore');
   const saved: RealFiStore = result['realFiStore'] || { tokens: {} };
   const tokensCopy = { ...saved.tokens };

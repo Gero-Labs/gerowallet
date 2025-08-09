@@ -31,13 +31,10 @@
         :item-class="getRowClass"
       >
         <template v-slot:[`item.tx_timestamp`]="{ item }">
-          <v-list-item two-line class="px-0 py-1">
-            <v-list-item-content>
+          <v-list-item two-line class="px-0 py-1" style="height: 55px;">
+            <v-list-item-content class="px-0 py-1">
               <v-list-item-title class="activity-title">
                 <span class="activity-text">{{ getStatus(item) }}</span>
-                <v-chip v-if="isWithdrawal(item)" x-small outlined class="px-1" color="blue" style="margin-left: 4px!important;">Withdrawal</v-chip>
-                <v-chip v-if="isStakeRegistration(item)" x-small outlined class="px-1" color="red" style="margin-left: 4px!important;">Stake Registration</v-chip>
-                <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
               </v-list-item-title>
               <v-list-item-subtitle class="activity-date">
                 <v-tooltip top>
@@ -55,6 +52,11 @@
                   </span>
                 </v-tooltip>
               </v-list-item-subtitle>
+              <v-list-item-subtitle>
+                <v-chip v-if="isStakeRegistration(item)" x-small outlined class="px-1" color="red" style="margin-right: 4px!important;">Stake Registration</v-chip>
+                <v-chip v-if="isWithdrawal(item)" x-small outlined class="px-1" color="blue" style="margin-right: 4px!important;">Withdrawal</v-chip>
+                <v-chip outlined class="px-1" x-small color="#FEC84B" style="margin-left: 1px; margin-bottom: 1px" v-if="item.pending">Pending</v-chip>
+              </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
         </template>
@@ -62,12 +64,17 @@
           <StackedTokens
             :tokens="item.assets"
             :style="item.status === 'Pending' ? { opacity: '0.5' } : {}"
-            :token-size="16"
+            :token-size="30"
           ></StackedTokens>
         </template>
         <template v-slot:[`item.amount`]="{ item }">
           <div v-if="loggedWallet" style="display: flex; flex-direction: column; align-items: center;">
-            <div :style="{ color: getColor(item), fontSize: '14px', paddingBottom: '4px' }">
+            <div :style="{
+              color: getColor(item),
+              fontSize: '14px',
+              paddingBottom: '4px',
+              textWrap: 'nowrap'
+            }">
               {{ filters.toCurrency(item.ada, true, 0, networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network), "", false) }}
             </div>
             <div style="font-size: 12px; color: #C4C4C4;">
@@ -226,7 +233,7 @@ const isWithdrawal = (item) => {
 }
 
 const isStakeRegistration = (item) => {
-  return item.body?.certificates?.length > 0 && item.body.certificates.some(certificate => certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation || certificate.__typename === Cardano.CertificateType.StakeRegistration)
+  return item.body?.certificates?.length > 0 && item.body.certificates.some(certificate => certificate.__typename === Cardano.CertificateType.StakeRegistration || certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation)
 }
 
 const getColor = (item) => {
@@ -247,7 +254,7 @@ const getRowClass = (item) => {
   return '';
 }
 </script>
-<style>
+<style scoped>
 .text-nowrap {
   text-wrap: nowrap;
 }
@@ -290,7 +297,6 @@ const getRowClass = (item) => {
 }
 
 .transactions-table tbody tr td .v-list-item__content {
-  padding: 4px 12px !important;
   text-align: center !important;
 }
 
@@ -436,5 +442,40 @@ const getRowClass = (item) => {
   margin: 0 !important;
 }
 
+.top-level-search.v-text-field {
+  background: transparent !important;
+}
 
+.top-level-search >>> .v-input__slot {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.top-level-search >>> .v-input__control {
+  background: transparent !important;
+}
+
+.top-level-search >>> .v-text-field__slot {
+  background: transparent !important;
+}
+
+.top-level-search >>> .v-input__slot:before {
+  border: none !important;
+}
+
+.top-level-search >>> .v-input__slot:after {
+  border: none !important;
+}
+
+.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
+  background: transparent !important;
+}
+
+@media (max-width: 600px) {
+  .top-level-search {
+    order: 2 !important;
+    margin-left: 0 !important;
+    flex: 1 1 auto !important;
+  }
+}
 </style>

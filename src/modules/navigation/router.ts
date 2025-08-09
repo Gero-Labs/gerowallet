@@ -5,7 +5,7 @@ import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
 
-// Critical components loaded immediately
+// Critical parts loaded immediately
 import Welcome from '@/modules/welcome/views/Welcome.vue';
 import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import Login from '@/popup/modules/views/Login.vue';

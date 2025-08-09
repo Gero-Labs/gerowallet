@@ -7,6 +7,7 @@ import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
+import TapToolsStore from '@/stores/tapToolsStore';
 import ablyService from '@/services/ably.service';
 import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
@@ -60,6 +61,7 @@ export class WalletManager {
 
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
+        TapToolsStore.clear();
 
         const walletBg: WalletBg = new WalletBg(wallet);
         WalletStore.setLoggedWallet({
@@ -222,17 +224,17 @@ export class WalletManager {
     promises.push(
       ablyService.subscribeToPrivateChannel(address, {
         onSync: async (msg: Ably.InboundMessage) => {
-          console.debug('🔄 SYNC message received on private channel!', msg);
+          console.debug('SYNC::🔄 SYNC message received on private channel!', msg);
           try {
             if (this.syncMutex.isLocked()) {
-              console.debug('⏳ Sync mutex is locked, skipping');
+              console.debug('SYNC::⏳ Sync mutex is locked, skipping');
               return;
             }
             this.syncMutex.runExclusive(async () => {
               LoadingState.setText('');
               LoadingState.setSyncing(true);
               const syncObject = JSON.parse(msg.data);
-              console.debug('📊 Processing sync object:', syncObject);
+              console.debug('SYNC::📊 Processing sync object:', syncObject);
               if (!ablyService.isTipProcessed(syncObject.block.hash)) {
                 ablyService.markTipAsProcessed(syncObject.block.hash);
               }
@@ -240,16 +242,16 @@ export class WalletManager {
               LoadingState.setSyncing(false);
             });
           } catch (e) {
-            console.error('❌ Error processing sync message:', e);
+            console.error('SYNC::❌ Error processing sync message:', e);
           } finally {
             LoadingState.setRestoring(false);
           }
         },
         onMessage: async (msg: Ably.InboundMessage) => {
-          console.debug('📬 General message received on private channel:', msg);
+          console.debug('SYNC::📬 General message received on private channel:', msg);
         }
       }).catch(error => {
-        console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+        console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
         // Continue wallet initialization even if Ably private channel fails
       })
     );
@@ -269,7 +271,7 @@ export class WalletManager {
               return;
             }
             this.tipMutex.runExclusive(() => {
-              walletBg.sync(tip);
+              walletBg.syncService.sync(tip);
             })
               .catch(err => {
                 console.error('TIP processing failed', err);
@@ -345,6 +347,7 @@ export class WalletManager {
       // Clear wallet store data
       try {
         WalletStore.logout();
+        TapToolsStore.clear();
         await MusicStore.logout();
       } catch (storeError) {
         console.warn('Failed to logout from wallet store:', storeError);
@@ -385,6 +388,7 @@ export class WalletManager {
       this.walletBg = null;
       this.currentWalletId = null;
       WalletStore.logout();
+      TapToolsStore.clear();
       await MusicStore.logout();
     }
   }
