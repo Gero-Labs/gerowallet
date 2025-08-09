@@ -9,7 +9,10 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
   const tx: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
   const inputs: any[] = [];
   tx.body.inputs.forEach((input: Cardano.TxIn) => {
-    const utxo = utxos.find(utxo => utxo.tx_hash === input.txId && utxo.tx_index === input.index)
+    // UTXOs in Cardano JS SDK format: [TxIn, TxOut]
+    const utxo = utxos.find(utxo => 
+      utxo[0] && utxo[0].txId === input.txId && utxo[0].index === input.index
+    )
     if (utxo) {
       inputs.push(utxo)
     }
@@ -168,26 +171,43 @@ export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], ne
   }
   return {
     id: txId, // Add required id field for database key path
+    tx_hash: txId,
     absolute_slot: 0,
-    assets_minted,
     block_hash: '',
     block_height: 0,
+    tx_size: 0,
+    tx_timestamp: (new Date()).getTime() / 1000,
+    epoch_no: 0,
+    cbor: txCbor,
+    pending: true,
+    isValid: true,
+    // Add Cardano JS SDK structure that setUtxosAndAddresses expects
+    body: {
+      inputs: tx.body.inputs,
+      outputs: tx.body.outputs,
+      fee: tx.body.fee,
+      certificates: tx.body.certificates,
+      withdrawals: tx.body.withdrawals,
+      mint: tx.body.mint,
+      referenceInputs: tx.body.referenceInputs,
+      validityInterval: tx.body.validityInterval
+    },
+    witness: tx.witness,
+    auxiliaryData: tx.auxiliaryData,
+    // Keep legacy flat structure for backward compatibility
+    assets_minted,
     certificates,
     deposit: "0",
     fee: tx.body.fee.toString(),
     inputs,
-    invalid_after: "",
-    invalid_before: '',
+    invalid_after: tx.body.validityInterval?.invalidHereafter?.toString() || "",
+    invalid_before: tx.body.validityInterval?.invalidBefore?.toString() || '',
     metadata: tx.auxiliaryData?.blob,
     native_scripts,
     outputs,
     plutus_scripts,
     reference_inputs,
     total_output: totalOutput.toString(),
-    tx_hash: txId,
-    tx_size: 0,
-    tx_timestamp: (new Date()).getTime() / 1000,
-    withdrawals,
-    pending: true
+    withdrawals
   }
 }

@@ -6,7 +6,7 @@
       flat
       hide-details
       v-model="formattedValue"
-      maxlength="16"
+      maxlength="21"
       @input="handleInput"
       :class="[
         'currency-text-field',

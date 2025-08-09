@@ -61,7 +61,7 @@ import { Buffer } from 'buffer';
 import cbor from 'cbor';
 import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { Cardano, util } from '@cardano-sdk/core';
+import { Cardano, util, Serialization } from '@cardano-sdk/core';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -946,3 +946,159 @@ export const jsonToNativeScript = (json) => {
     throw new Error("Unknown script type: " + json.type);
   }
 };
+
+/**
+ * Creates legacy UTXO structure from Cardano JS SDK transaction format
+ * This is needed for TransactionDetails component compatibility and transaction calculations
+ * @param tx - Transaction with Cardano JS SDK body structure
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Legacy UTXO structure with inputs and outputs
+ */
+export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
+  const inputs: any[] = [];
+  const outputs: any[] = [];
+
+  // Convert inputs from Cardano JS SDK format to legacy format
+  // For inputs, we need to find the actual UTXO values from our UTXO set
+  if (tx.body?.inputs) {
+    tx.body.inputs.forEach((input: any) => {
+      // Try to find the corresponding UTXO from provided UTXOs
+      const utxo = utxos.find((utxo: any) => 
+        utxo[0].txId === input.txId && utxo[0].index === input.index
+      );
+      
+      let address = '';
+      let amount: any[] = [];
+      
+      if (utxo) {
+        // Use the actual UTXO data
+        address = utxo[1].address;
+        amount = [{
+          unit: 'lovelace',
+          quantity: Number(utxo[1].value.coins)
+        }];
+        
+        if (utxo[1].value.assets && utxo[1].value.assets.size > 0) {
+          utxo[1].value.assets.forEach((quantity: bigint, assetId: string) => {
+            amount.push({
+              unit: assetId,
+              quantity: Number(quantity)
+            });
+          });
+        }
+      }
+      
+      inputs.push({
+        tx_hash: input.txId,
+        output_index: input.index,
+        address: address,
+        amount: amount
+      });
+    });
+  }
+
+  // Convert outputs from Cardano JS SDK format to legacy format
+  if (tx.body?.outputs) {
+    tx.body.outputs.forEach((output: any, index: number) => {
+      const amount: any[] = [{
+        unit: 'lovelace',
+        quantity: Number(output.value.coins)
+      }];
+
+      // Convert assets map to array format
+      if (output.value.assets && output.value.assets.size > 0) {
+        output.value.assets.forEach((quantity: bigint, assetId: string) => {
+          amount.push({
+            unit: assetId,
+            quantity: Number(quantity)
+          });
+        });
+      }
+
+      outputs.push({
+        output_index: index,
+        address: output.address,
+        amount: amount
+      });
+    });
+  }
+
+  return {
+    inputs,
+    outputs
+  };
+}
+
+/**
+ * Converts transactions to database schema format
+ * Handles various transaction formats including Cardano JS SDK and legacy formats
+ * @param txs - Array of transactions to convert
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Array of converted transactions ready for database storage
+ */
+export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[]): any[] {
+  return txs.map(tx => {
+    // Check if this is already a properly formatted transaction with utxo data
+    if (tx.id && tx.utxo) {
+      return tx;
+    }
+
+    // If transaction has id and Cardano JS SDK structure but no utxo, create utxo structure
+    if (tx.id && tx.body && !tx.utxo) {
+      return {
+        ...tx,
+        utxo: createUtxoStructure(tx, utxos)
+      };
+    }
+
+    // Check if this is a transaction from sync with deserialized body
+    if (tx.body && tx.cbor) {
+      // Transaction is already deserialized from sync process
+      // Just need to ensure it has the id field
+      const txId = tx.tx_hash || tx.id;
+      return {
+        ...tx,
+        id: txId
+      };
+    }
+
+    // Check if this is a raw transaction with CBOR that needs full conversion
+    if (tx.cbor && !tx.body) {
+      try {
+        // Use the already imported Serialization from the top of the file
+        // Deserialize the transaction
+        const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
+        const txId = tx.tx_hash || Serialization.Transaction.fromCore(txDeserialized).getId();
+
+        // Return the transaction in the expected database format
+        return {
+          id: txId,
+          tx_hash: txId,
+          block_hash: tx.block_hash || '',
+          block_height: tx.block_height || 0,
+          absolute_slot: tx.absolute_slot || 0,
+          tx_timestamp: tx.tx_timestamp || Math.floor(Date.now() / 1000),
+          tx_size: tx.tx_size || 0,
+          epoch_no: tx.epoch_no || 0,
+          cbor: tx.cbor,
+          body: txDeserialized.body,
+          witness: txDeserialized.witness,
+          auxiliaryData: txDeserialized.auxiliaryData,
+          isValid: txDeserialized.isValid !== false,
+          pending: false,
+          // Include UTXO data if available from sync
+          utxo: tx.utxo
+        };
+      } catch (e) {
+        console.error('Error deserializing transaction CBOR:', e);
+        // Fallback: ensure it at least has an id
+        const fallbackId = tx.tx_hash || tx.hash || 'fallback_' + Date.now();
+        return { ...tx, id: fallbackId };
+      }
+    }
+
+    // Legacy format - just ensure it has an id
+    const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
+    return { ...tx, id: txId };
+  });
+}

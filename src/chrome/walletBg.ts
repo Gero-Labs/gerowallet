@@ -59,13 +59,13 @@ import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import {
   Transaction,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { convertToTxSchema } from '@/chrome/helper';
 import {
   deserializeCardanoJsSdkTx,
   computeTxHash,
   serializeWitness,
 } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { convertTransactionsForStorage } from '@/shared/utils/converter';
 
 let blockchainDb: Dexie = null;
 
@@ -134,10 +134,6 @@ export class WalletBg {
 
   networkId(): number {
     return networks.resolveNetworkId(this.chain, this.network);
-  }
-
-  async sync(tip?: Tip) {
-    return this.syncService.sync(tip);
   }
 
   async resync() {
@@ -229,10 +225,10 @@ export class WalletBg {
           if (address === outAddress || stakeAddress === outAddress) {
             addresses.add(out.address)
             utxos.set(
-              `${transaction.id}#${idx}`,
+              `${transaction.id || transaction.tx_hash}#${idx}`,
               [
                 {
-                  txId: Cardano.TransactionId(transaction.id),
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
                   index: idx,
                   address: out.address,
                 },
@@ -516,10 +512,12 @@ export class WalletBg {
 
   async setAccountTransactions(txs): Promise<any> {
     return this.getDb()
-      .then(db => {
+      .then(async db => {
         const txsTable = db.table('transactions');
         if (txsTable) {
-          txsTable.bulkPut(txs);
+          // Use centralized conversion logic from converter.ts
+          const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos);
+          await txsTable.bulkPut(convertedTxs);
         }
       }).catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -675,19 +673,15 @@ export class WalletBg {
 
     // Create an array to hold the promises that need to be awaited
     const promises = [];
-    if (!this.isEnterpriseAddress()) {
-      // Note: Staking pools sync moved to alarm-based refresh (every 4 hours)
-      // Note: DReps sync moved to alarm-based refresh (every 4.5 hours)
-    }
 
     // Sync account info and handle rewards and transactions
-    promises.push(this.syncAccountInfo().then(async accountInfo => {
+    promises.push(this.syncService.syncAccountInfo().then(async accountInfo => {
       if (accountInfo) {
         if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-          await this.syncAccountRewards();
+          await this.syncService.syncAccountRewards();
         }
         if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
-          await this.syncAccountTransactions(0);
+          await this.syncService.syncAccountTransactions(0);
         }
       }
     }));
@@ -968,11 +962,25 @@ export class WalletBg {
       // Submit transaction via API
       const txId = await this.api.submitTx(txCbor);
 
-      // Convert to transaction schema for database storage
-      const txSchema = convertToTxSchema(txId, txCbor, utxos, this.networkId());
+      // Create transaction record using sync service pattern
+      const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
+      const pendingTx = {
+        id: txId, // Required for database key path
+        tx_hash: txId,
+        block_hash: '',
+        block_height: 0,
+        epoch_no: 0,
+        absolute_slot: 0,
+        tx_timestamp: Math.floor(Date.now() / 1000),
+        tx_size: 0,
+        cbor: txCbor,
+        pending: true,
+        utxo: null, // No UTXO data for submitted transactions
+        ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid, etc.
+      };
 
       // Store transaction in database
-      this.setAccountTransactions([txSchema])
+      this.setAccountTransactions([pendingTx])
         .catch(e => console.error('Error storing transaction:', e));
 
       return txId;
@@ -1030,22 +1038,6 @@ export class WalletBg {
     }
 
     return { signature: signatureHex, key: keyHex };
-  }
-
-  async syncAccountInfo(): Promise<any> {
-    return this.syncService.syncAccountInfo();
-  }
-
-  async syncAccountRewards(): Promise<void> {
-    return this.syncService.syncAccountRewards();
-  }
-
-  async syncAccountTransactions(height: number): Promise<any> {
-    return this.syncService.syncAccountTransactions(height);
-  }
-
-  async syncAssets(uniqueUnits: string[]): Promise<void> {
-    return this.syncService.syncAssets(uniqueUnits);
   }
 
   isEnterpriseAddress(): boolean {

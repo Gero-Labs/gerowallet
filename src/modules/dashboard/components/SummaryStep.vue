@@ -36,7 +36,7 @@
       <v-col cols="6" style="align-content: center">
         <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
         <div style="flex-flow: row; display: flex; justify-content: center;">
-          <CopyButton v-if="tx?.to_hex()" x-small :value="tx?.to_hex()" :title="'Copy CBOR'"></CopyButton>
+          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="'Copy CBOR'"></CopyButton>
         </div>
       </v-col>
     </v-row>
@@ -48,30 +48,16 @@ import Select from '@/shared/components/Select.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
 import DappAddress from '@/popup/modules/components/DappAddress.vue';
 import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
-import {
-  AuxiliaryData,
-  BigNum,
-  Transaction,
-  TransactionBody,
-  TransactionUnspentOutput,
-  Value,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { Buffer } from 'buffer';
-import { AssetWithQuantity } from '@/shared/models/asset-quantity';
 import networks from '@/utils/networks';
-import {
-  cardanoValueFromRemoteFormat,
-  diffAssetsFromIncomingToOutgoing,
-  getAssetsFromMultiAsset, getPayAndReceiveTokens,
-} from '@/shared/utils/builder';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
+import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 interface Props {
   sendData: any;
-  txData?: any;
+  txData?: Cardano.Tx;
 }
 
 const props = defineProps<Props>();
@@ -79,7 +65,7 @@ defineExpose({
   scanTx,
 });
 const loading = ref<boolean>(false);
-const tx = ref<Transaction>(undefined);
+const tx = ref<Cardano.Tx | undefined>(undefined);
 const risks = ref<any>({
   score: undefined
 });
@@ -91,13 +77,11 @@ const changeAddress = computed(() => {
 });
 
 const recipient = computed(() => {
-  if (tx.value) {
-    const txBody = tx.value.body();
-    for (let i = 0; i < txBody.outputs().len(); i++) {
-      const keyAddress = txBody.outputs().get(i).address();
-      const bech32Address = keyAddress.to_bech32();
-      if (changeAddress.value !== bech32Address) {
-        return bech32Address;
+  if (tx.value && tx.value.body.outputs) {
+    for (const output of tx.value.body.outputs) {
+      const outputAddress = output.address;
+      if (changeAddress.value !== outputAddress) {
+        return outputAddress;
       }
     }
   }
@@ -108,83 +92,112 @@ const swapDetails = computed(() => {
   if (!tx.value || !utxos.value || utxos.value.length === 0) {
     return null;
   }
-  const txBody: TransactionBody = tx.value.body();
-  let inputValue = Value.new(BigNum.from_str('0'));
-  for (let i = 0; i < txBody.inputs().len(); i++) {
-    const input = txBody.inputs().get(i);
-    const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
-    const inputTxIndex = input.index();
-    const utxo = utxos.value.find((utxo: Cardano.Utxo) => inputTxHash === utxo[0].txId && utxo[0].index === inputTxIndex);
+  
+  const txBody = tx.value.body;
+  
+  // Calculate input value from UTXOs
+  let inputCoins = BigInt(0);
+  const inputAssets = new Map<Cardano.AssetId, bigint>();
+  
+  for (const input of txBody.inputs) {
+    const utxo = utxos.value.find((utxo: Cardano.Utxo) => 
+      input.txId === utxo[0].txId && input.index === utxo[0].index
+    );
     if (utxo) {
-      inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
+      inputCoins += BigInt(utxo[1].value.coins);
+      if (utxo[1].value.assets) {
+        utxo[1].value.assets.forEach((amount, assetId) => {
+          const currentAmount = inputAssets.get(assetId) || BigInt(0);
+          inputAssets.set(assetId, currentAmount + BigInt(amount));
+        });
+      }
     }
   }
-
-  const inputValueAssets = getAssetsFromMultiAsset(inputValue.multiasset());
-  inputValueAssets.push(new AssetWithQuantity('cardano', inputValue.coin().to_str()));
-
-  let outputValue = Value.new(BigNum.from_str('0'));
-  for (let i = 0; i < txBody.outputs().len(); i++) {
-    const output = txBody.outputs().get(i);
-    const bech32Address = output.address().to_bech32();
-    if (bech32Address === changeAddress.value) {
-      outputValue = outputValue.checked_add(output.amount());
+  
+  // Calculate change output value (what stays in our wallet)
+  let changeCoins = BigInt(0);
+  const changeAssets = new Map<Cardano.AssetId, bigint>();
+  
+  for (const output of txBody.outputs) {
+    if (output.address === changeAddress.value) {
+      changeCoins += BigInt(output.value.coins);
+      if (output.value.assets) {
+        output.value.assets.forEach((amount, assetId) => {
+          const currentAmount = changeAssets.get(assetId) || BigInt(0);
+          changeAssets.set(assetId, currentAmount + BigInt(amount));
+        });
+      }
     }
   }
-
-  const outputValueAssets = getAssetsFromMultiAsset(outputValue.multiasset());
-  outputValueAssets.push(new AssetWithQuantity('cardano', outputValue.coin().to_str()));
-
-  const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
-  const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
-  const cardanoToken = payTokens.find(token => token.name === 'cardano')
-  let totalGive = cardanoToken ? cardanoToken.amount : 0;
-  const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
-    return { amount: token.amount, currency: token.name, id: token.id };
+  
+  // Calculate what we're giving away (input - change - fee)
+  const fee = BigInt(txBody.fee);
+  const giveCoins = inputCoins - changeCoins - fee;
+  
+  const giveAssets: Array<{amount: string, currency: string, id: string}> = [];
+  inputAssets.forEach((inputAmount, assetId) => {
+    const changeAmount = changeAssets.get(assetId) || BigInt(0);
+    const giveAmount = inputAmount - changeAmount;
+    if (giveAmount > BigInt(0)) {
+      giveAssets.push({
+        amount: giveAmount.toString(),
+        currency: assetId,
+        id: assetId
+      });
+    }
   });
-
-  const foundAda = receiveTokens.find(token => token.name === 'cardano');
-  const totalReceive = foundAda ? foundAda.amount : 0;
-  const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
-    return { amount: token.amount, currency: token.name, id: token.id };
-  });
-  const txFee = tx.value.body().fee().to_str()
-  const txMetadata: AuxiliaryData = tx.value.auxiliary_data();
+  
   const swapDetails = {
     give: {
-      total: Number(0 - totalGive),
-      txFee,
+      total: Number(giveCoins),
+      txFee: fee.toString(),
       provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-      assets: assetsGive,
+      assets: giveAssets,
     },
     receive: {
-      total: totalReceive,
+      total: 0, // For send transactions, we don't receive anything
       provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-      assets: assetsReceive,
+      assets: [],
     },
     recipient: recipient.value,
-    txMetadata: txMetadata?.to_js_value(),
+    txMetadata: tx.value.auxiliaryData,
   };
-  console.log(swapDetails)
+  
+  console.log('SwapDetails (Cardano JS SDK):', swapDetails);
   return swapDetails;
 })
 
-async function scanTx(txData) {
-  risks.value.score = undefined
-  loading.value = true
-  tx.value = txData
+// Helper function to get CBOR hex from Cardano.Tx
+const getCborHex = (): string => {
+  if (!tx.value) return '';
   try {
+    return serializeCardanoJsSdkTx(tx.value);
+  } catch (error) {
+    console.error('Error serializing transaction to CBOR:', error);
+    return '';
+  }
+};
+
+async function scanTx(txData: Cardano.Tx) {
+  risks.value.score = undefined;
+  loading.value = true;
+  tx.value = txData;
+  
+  try {
+    const cborHex = getCborHex();
     risks.value = await cardanoShieldApi.scanTx({
-      cborHex: txData.to_hex(),
+      cborHex,
       toAddress: props.sendData.recipientAddress,
       fromAddress: changeAddress.value,
       url: 'https://gerowallet.io',
     });
   } catch (e) {
+    console.error('Error scanning transaction with Cardano Shield:', e);
     risks.value = {
       addressRisk: 'unknown',
     };
   }
+  
   loading.value = false;
 }
 </script>

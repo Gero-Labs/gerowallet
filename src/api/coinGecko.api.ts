@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { parseHttpError } from '@/shared/utils/parser';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],

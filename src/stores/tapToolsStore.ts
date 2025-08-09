@@ -1,7 +1,7 @@
 import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import tapToolsApi from '@/api/tap-tools-api';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface TapToolsStore {
   portfolio: any;
@@ -34,6 +34,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<TapToolsStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 TapToolsStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...tapToolsStore, ...patch };
   await smartPersist('tapToolsStore', next);
 }
@@ -69,6 +77,12 @@ export default {
   setTokens(tokens: any) {
     tapToolsStore.tokens = tokens;
     persist({ tokens: tokens });
+  },
+  clear() {
+    tapToolsStore.portfolio = {};
+    tapToolsStore.portfolioTrendedValue = {};
+    tapToolsStore.tokens = {};
+    persist({ portfolio: {}, portfolioTrendedValue: {}, tokens: {} });
   },
   async loadPortfolio(stakeAddress: string) {
     try {

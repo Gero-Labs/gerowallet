@@ -1,6 +1,6 @@
 /**
  * Storage Sync Utilities
- * 
+ *
  * Helper functions to integrate stores with the centralized storage observer
  */
 
@@ -21,21 +21,20 @@ export function createStorageSync<T extends Record<string, any>>(
   options: StoreSyncOptions
 ) {
   const { storeName, syncKeys, onSync, debugPrefix = '🔄' } = options;
-  
+
   // Subscribe to the main store key
   const unsubscribeMain = storageObserver.subscribe(storeName, (change, key) => {
     const newValue = change.newValue;
     if (!newValue) return;
 
-    console.debug(`${debugPrefix} ${storeName}: Syncing from storage`, { key, hasNewValue: !!newValue });
+    // Only log if there are actual sync conflicts or errors
 
     // If specific sync keys are defined, only sync those
     if (syncKeys) {
       let hasChanges = false;
       for (const syncKey of syncKeys) {
         if (newValue[syncKey] !== undefined && store[syncKey] !== newValue[syncKey]) {
-          console.debug(`${debugPrefix} ${storeName}: Updating ${syncKey}`);
-          store[syncKey] = newValue[syncKey];
+          (store as any)[syncKey] = newValue[syncKey];
           hasChanges = true;
         }
       }
@@ -47,8 +46,7 @@ export function createStorageSync<T extends Record<string, any>>(
       let hasChanges = false;
       for (const [prop, value] of Object.entries(newValue)) {
         if (store[prop] !== value) {
-          console.debug(`${debugPrefix} ${storeName}: Updating ${prop}`);
-          store[prop] = value;
+          (store as any)[prop] = value;
           hasChanges = true;
         }
       }
@@ -65,8 +63,7 @@ export function createStorageSync<T extends Record<string, any>>(
       const unsub = storageObserver.subscribe(syncKey, (change, key) => {
         const newValue = change.newValue;
         if (newValue !== undefined && store[syncKey] !== newValue) {
-          console.debug(`${debugPrefix} ${storeName}: Syncing individual key ${syncKey}`);
-          store[syncKey] = newValue;
+          (store as any)[syncKey] = newValue;
           if (onSync) {
             onSync({ [syncKey]: newValue }, key);
           }
@@ -108,7 +105,6 @@ class DebouncedStorageWriter {
           const valueToWrite = this.pendingWrites.get(key);
           if (valueToWrite !== undefined) {
             await chrome.storage.local.set({ [key]: valueToWrite });
-            console.debug(`💾 DebouncedWriter: Wrote ${key} to storage`);
             resolve();
           }
         } catch (error) {
@@ -122,30 +118,6 @@ class DebouncedStorageWriter {
 
       this.writeTimers.set(key, timer);
     });
-  }
-
-  /**
-   * Force immediate write of all pending changes
-   */
-  async flush(): Promise<void> {
-    const promises: Promise<void>[] = [];
-    
-    for (const [key, timer] of this.writeTimers.entries()) {
-      clearTimeout(timer);
-      const value = this.pendingWrites.get(key);
-      if (value !== undefined) {
-        promises.push(
-          chrome.storage.local.set({ [key]: value }).then(() => {
-            console.debug(`💾 DebouncedWriter: Flushed ${key} to storage`);
-          })
-        );
-      }
-    }
-
-    this.writeTimers.clear();
-    this.pendingWrites.clear();
-    
-    await Promise.all(promises);
   }
 }
 
@@ -163,21 +135,15 @@ export async function smartPersist(key: string, value: any): Promise<void> {
  */
 export async function hydrateStore(storeName: string, store: Record<string, any>): Promise<void> {
   try {
-    console.debug(`🔄 Hydrating ${storeName} from storage`);
     const result = await chrome.storage.local.get(storeName);
     const storedData = result[storeName];
-    
+
     if (storedData) {
-      let changesCount = 0;
       for (const [key, value] of Object.entries(storedData)) {
         if (store[key] !== value) {
           store[key] = value;
-          changesCount++;
         }
       }
-      console.debug(`✅ Hydrated ${storeName}: ${changesCount} properties updated`);
-    } else {
-      console.debug(`ℹ️ No stored data found for ${storeName}`);
     }
   } catch (error) {
     console.error(`❌ Failed to hydrate ${storeName}:`, error);

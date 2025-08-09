@@ -36,7 +36,7 @@ class AblyService {
     };
 
     this.client = new Ably.Realtime(clientOptions);
-    
+
     // Also set the authCallback directly on the auth object after creation
     if (this.client.auth) {
       this.client.auth.authOptions = {
@@ -130,22 +130,22 @@ class AblyService {
     if (this.client.auth?.tokenDetails) {
       this.client.auth.tokenDetails = null;
     }
-    
+
     // Clear auth method to force using authCallback
     if (this.client.auth) {
       this.client.auth.method = null;
-      
+
       // Clear any cached clientId to prevent mismatch
       if (this.client.auth.clientId) {
         this.client.auth.clientId = null;
       }
     }
-    
+
     // Clear clientId from options as well
     if (this.client.options?.clientId) {
       this.client.options.clientId = null;
     }
-    
+
     this.client.connect();
   }
 
@@ -182,7 +182,7 @@ class AblyService {
         hasAuthCallback: typeof this.client.auth?.authOptions?.authCallback === 'function',
         authKeys: this.client.auth?.authOptions ? Object.keys(this.client.auth.authOptions) : []
       });
-      
+
       if (currentState === 'connected') {
         console.debug('✅ Connection already ready');
         resolve();
@@ -232,7 +232,7 @@ class AblyService {
     return new Promise((resolve, reject) => {
       const currentState = channel.state;
       console.debug(`🔍 Current channel state: ${currentState}`);
-      
+
       if (currentState === 'attached') {
         console.debug('✅ Channel already ready');
         resolve();
@@ -259,7 +259,7 @@ class AblyService {
       const timeout = setTimeout(() => {
         const finalState = channel.state;
         console.warn(`⏰ Channel timeout after ${timeoutMs}ms, current state: ${finalState}`);
-        
+
         // If channel ended up in failed state during timeout, reject
         if (finalState === 'failed') {
           reject(new Error(`Channel failed during timeout, final state: ${finalState}`));
@@ -327,46 +327,46 @@ class AblyService {
               // Handle specific message types
               switch (msg.name) {
                 case 'SYNC':
-                  console.debug('🔄 Processing SYNC message');
+                  console.debug('SYNC::🔄 Processing SYNC message');
                   if (handlers.onSync) {
                     await handlers.onSync(msg);
                   }
                   break;
                 default:
-                  console.debug(`📬 Received message type: ${msg.name}`, msg.data);
+                  console.debug(`SYNC::📬 Received message type: ${msg.name}`, msg.data);
                   if (handlers.onMessage) {
                     await handlers.onMessage(msg);
                   }
               }
             }).then(() => {
-              console.debug(`✅ Successfully subscribed to private channel: ${privateChan}`);
+              console.debug(`SYNC::✅ Successfully subscribed to private channel: ${privateChan}`);
               this.subscribedChannels.set(privateChan, channel);
               resolve();
             }).catch(subscribeError => {
-              console.warn(`Failed to subscribe to private channel ${privateChan}:`, subscribeError);
+              console.warn(`SYNC::Failed to subscribe to private channel ${privateChan}:`, subscribeError);
               resolve(); // Don't reject, just continue without this channel
             });
 
             // Add channel state listeners for debugging
             channel.on('attached', () => {
-              console.debug(`✅ Private channel ${privateChan} attached successfully`);
+              console.debug(`SYNC::✅ Private channel ${privateChan} attached successfully`);
             });
 
             channel.on('detached', () => {
-              console.debug(`❌ Private channel ${privateChan} detached`);
+              console.debug(`SYNC::❌ Private channel ${privateChan} detached`);
             });
 
             channel.on('failed', (error) => {
-              console.warn(`⚠️ Private channel ${privateChan} access denied - continuing without realtime updates:`, error);
+              console.warn(`SYNC::⚠️ Private channel ${privateChan} access denied - continuing without realtime updates:`, error);
               // Don't throw or reject - just continue without this channel
             });
 
           }).catch(channelError => {
-            console.warn(`Private channel ${privateChan} failed to reach ready state:`, channelError);
+            console.warn(`SYNC::Private channel ${privateChan} failed to reach ready state:`, channelError);
             resolve(); // Don't reject, just continue without this channel
           });
         }).catch(connectionError => {
-          console.warn(`Private channel connection failed to reach ready state:`, connectionError);
+          console.warn(`SYNC::Private channel connection failed to reach ready state:`, connectionError);
           resolve(); // Don't reject, just continue without this channel
         });
       } else {
@@ -391,16 +391,16 @@ class AblyService {
         groupChan,
         authParams: this.authParams
       });
-      
+
       if (!this.subscribedChannels.has(groupChan)) {
         // Wait for connection to be ready before subscribing
         this.waitForConnectionReady().then(() => {
           const channel: Ably.RealtimeChannel = this.client.channels.get(groupChan);
-          
+
           // Wait for channel to be ready before subscribing
           this.waitForChannelReady(channel).then(() => {
             console.debug(`📡 Channel ${groupChan} is ready, subscribing...`);
-            
+
             channel.subscribe(async (msg: Ably.InboundMessage) => {
               switch (msg.name) {
                 case 'TIP':
@@ -450,25 +450,25 @@ class AblyService {
 
   public async publishToSyncChannel(chain: string, network: string, data: any): Promise<void> {
     const syncChannel: string = `${chain.toUpperCase()}.${network.toUpperCase()}.SYNC`;
-    
+
     // Check if connection is active before attempting to publish
     const connectionState = this.client?.connection?.state;
     if (!this.client || !connectionState || connectionState === 'closed' || connectionState === 'failed') {
-      console.warn(`⚠️ Cannot publish to sync channel ${syncChannel}: connection state is ${connectionState}`);
+      console.warn(`SYNC::⚠️ Cannot publish to sync channel ${syncChannel}: connection state is ${connectionState}`);
       return;
     }
-    
+
     if (connectionState !== 'connected') {
-      console.warn(`⚠️ Cannot publish to sync channel ${syncChannel}: connection not ready (state: ${connectionState})`);
+      console.warn(`SYNC::⚠️ Cannot publish to sync channel ${syncChannel}: connection not ready (state: ${connectionState})`);
       return;
     }
-    
+
     try {
-      console.debug(`📡 Publishing to sync channel ${syncChannel}...`);
+      console.debug(`SYNC::📡 Publishing to sync channel ${syncChannel}...`, data);
       await this.client.channels.get(syncChannel).publish('SYNC', JSON.stringify(data));
-      console.debug(`✅ Successfully published to sync channel ${syncChannel}`);
+      console.debug(`SYNC::✅ Successfully published to sync channel ${syncChannel}`);
     } catch (error) {
-      console.warn(`⚠️ Failed to publish to sync channel ${syncChannel}:`, error);
+      console.warn(`SYNC::⚠️ Failed to publish to sync channel ${syncChannel}:`, error);
       // Don't throw - just log the error to prevent breaking the sync process
     }
   }

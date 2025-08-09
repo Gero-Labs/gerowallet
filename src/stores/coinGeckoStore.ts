@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import coinGeckoApi from '@/api/coinGecko.api';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface CoinGeckoStore {
   cache: Record<string, any>;
@@ -29,6 +29,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<CoinGeckoStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 CoinGeckoStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...coinGeckoStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {
