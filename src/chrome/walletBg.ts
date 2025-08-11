@@ -1,21 +1,34 @@
 import Dexie from 'dexie';
 import { Api } from '@/api/api';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Ed25519PublicKey, Hash28ByteBase16, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto'
-import { APIError, TxSendError, TxSignError } from '@/chrome/config';
+import { Cardano, Serialization, util } from '@cardano-sdk/core';
+import {
+  Bip32PrivateKey,
+  Ed25519PrivateKey,
+  Ed25519PublicKey,
+  Ed25519PublicKeyHex,
+  Ed25519SignatureHex,
+  Hash28ByteBase16,
+} from '@cardano-sdk/crypto';
+import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
+  HARDENED,
+  BIP44_SCAN_SIZE,
   ChainDerivations,
+  coin_type,
+  CoinTypes,
+  ERROR,
+  Keys,
   Provider,
   purpose,
-  coin_type,
   Tip,
   WalletType,
-  BIP44_SCAN_SIZE, WalletTypePurpose, CoinTypes, ERROR, Keys,
+  WalletTypePurpose,
 } from '@/models/types';
 import {
-  addrToSignWith, decryptWithPassword,
+  addrToSignWith,
+  decryptWithPassword,
   getAddress,
   getCcColdKey,
   getCcHotKey,
@@ -33,7 +46,13 @@ import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
 import XerberusStore from '@/stores/xerberusStore';
-import { resolveAsset, findCollectionDescription, findCollectionName, longestCommonStartingSubstring } from '@/shared/utils/resolver';
+import {
+  analyzeTransactionForSignatures,
+  findCollectionDescription,
+  findCollectionName,
+  longestCommonStartingSubstring,
+  resolveAsset,
+} from '@/shared/utils/resolver';
 import { getDb } from '@/db/wallet-db';
 import RealFiStore from '@/stores/realFiStore';
 import TapToolsStore from '@/stores/tapToolsStore';
@@ -41,31 +60,20 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
-import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import {
   buildAndSignData,
+  convertTransactionsForStorage,
   createCoseKey,
   createCOSEKeyHex,
   createSignDataBuilder,
   toHexArray,
 } from '@/shared/utils/converter';
-import { Ed25519PrivateKey } from '@cardano-sdk/crypto';
-import { DataSignError } from '@/chrome/config';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
-import { util } from '@cardano-sdk/core';
 import { Buffer } from 'buffer';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import {
-  Transaction,
-} from '@emurgo/cardano-serialization-lib-browser';
-import {
-  deserializeCardanoJsSdkTx,
-  computeTxHash,
-  serializeWitness,
-} from '@/chrome/cardanoJsSdkCbor';
+import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
-import { convertTransactionsForStorage } from '@/shared/utils/converter';
 
 let blockchainDb: Dexie = null;
 
@@ -128,20 +136,11 @@ export class WalletBg {
   }
 
   unsubscribeAll() {
-    // Unsubscribe from new loader system
     this.loaderFactory.unsubscribeAll();
   }
 
   networkId(): number {
     return networks.resolveNetworkId(this.chain, this.network);
-  }
-
-  async resync() {
-    return this.syncService.resync();
-  }
-
-  async setSync(syncObject) {
-    return this.syncService.setSync(syncObject);
   }
 
   public async loadPools() {
@@ -449,14 +448,6 @@ export class WalletBg {
       });
   }
 
-  getControlledAmount() {
-    let controlledAmount: bigint = 0n;
-    WalletStore.state.utxos.forEach((utxo: Cardano.Utxo) => {
-      controlledAmount += utxo[1].value.coins
-    })
-    return controlledAmount;
-  }
-
   async setAccountInfo(accountInfo): Promise<any> {
     const resAccount = await this.getAccountInfo();
     const acc = {
@@ -756,7 +747,15 @@ export class WalletBg {
       const signatures = new Map<string, string>();
 
       // Analyze transaction to determine required signatures
-      const requiredSigners = this.analyzeTransactionForSignatures(transaction, utxos, addresses, accountIndex);
+      const requiredSigners = analyzeTransactionForSignatures(
+        transaction,
+        utxos,
+        addresses,
+        accountIndex,
+        this.stakeAddress,
+        this.paymentKeyExternal.bind(this),
+        this.stakeKey.bind(this)
+      );
 
       // Sign with each required key
       for (const signer of requiredSigners) {
@@ -799,138 +798,6 @@ export class WalletBg {
     }
   }
 
-  /**
-   * Analyzes transaction to determine which keys need to sign
-   * @param transaction - The transaction to analyze
-   * @param utxos - Available UTXOs
-   * @param addresses - Address mappings
-   * @param accountIndex - Account index for derivation
-   * @returns Array of signers with their derivation paths
-   */
-  private analyzeTransactionForSignatures(
-    transaction: Cardano.Tx,
-    utxos: Cardano.Utxo[],
-    addresses: Keys,
-    accountIndex: number
-  ): Array<{ derivationPath: number[], type: string }> {
-    const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
-
-    // Check transaction inputs
-    for (const input of transaction.body.inputs) {
-      const utxo = utxos.find(u =>
-        u[0].txId === input.txId && u[0].index === input.index
-      );
-
-      if (utxo) {
-        const outputAddress = utxo[1].address;
-
-        // The addresses parameter is actually the keys object from wallet store
-        // It has structure: { payment: [addressObj], change: [addressObj], stake: [addressObj], ... }
-        let foundAddressInfo = null;
-
-        // Search in payment addresses
-        if (addresses.payment) {
-          foundAddressInfo = addresses.payment.find((addr: any) => addr.address === outputAddress);
-        }
-
-        // Search in change addresses if not found in payment
-        if (!foundAddressInfo && addresses.change) {
-          foundAddressInfo = addresses.change.find((addr: any) => addr.address === outputAddress);
-        }
-
-        if (foundAddressInfo && foundAddressInfo.path) {
-          const pathArray = this.parseDerivationPath(foundAddressInfo.path);
-          requiredSigners.push({
-            derivationPath: pathArray,
-            type: 'payment'
-          });
-        } else {
-          // This should not happen if the wallet store is properly populated
-          // But fallback to external 0 as last resort
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.EXTERNAL, 0],
-            type: 'payment'
-          });
-        }
-      }
-    }
-
-    // Check for certificates (staking operations)
-    if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-      for (const certificate of transaction.body.certificates) {
-        if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
-            certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
-            certificate.__typename === Cardano.CertificateType.StakeDelegation ||
-            certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation) {
-          // Need stake key signature
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake'
-          });
-        }
-        // Add more certificate types as needed
-      }
-    }
-
-    // Check for withdrawals
-    if (transaction.body.withdrawals && transaction.body.withdrawals.length > 0) {
-      for (const rewardAddress of transaction.body.withdrawals) {
-        if (rewardAddress.stakeAddress === this.stakeAddress) {
-          // Need stake key signature for withdrawal
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake'
-          });
-        }
-      }
-    }
-
-    // Check for required signers field
-    if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
-      for (const keyHash of transaction.body.requiredExtraSignatures) {
-        // Try to match the key hash to our known keys
-        const paymentKeyHash = this.paymentKeyExternal(0).hash().hex();
-        const stakeKeyHash = this.stakeKey().hash().hex();
-
-        if (keyHash === Hash28ByteBase16(paymentKeyHash)) {
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.EXTERNAL, 0],
-            type: 'payment'
-          });
-        } else if (keyHash === Hash28ByteBase16(stakeKeyHash)) {
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake'
-          });
-        }
-      }
-    }
-
-    // Remove duplicates
-    const uniqueSigners = requiredSigners.filter((signer, index, self) =>
-      index === self.findIndex(s =>
-        s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
-      )
-    );
-
-    return uniqueSigners;
-  }
-
-  /**
-   * Parses a derivation path string into an array of numbers
-   * @param pathString - Derivation path string (e.g., "m/1852'/1815'/0'/0/0")
-   * @returns Array of derivation path numbers
-   */
-  private parseDerivationPath(pathString: string): number[] {
-    return pathString
-      .replace('m/', '')
-      .split('/')
-      .map(segment => {
-        const num = parseInt(segment.replace("'", ""));
-        return segment.includes("'") ? num + HARDENED : num;
-      })
-      .slice(3); // Remove the first 3 elements (purpose, coin_type, account) as they're handled at account level
-  }
 
   /**
    * Submit transaction using Cardano JS SDK
@@ -938,34 +805,26 @@ export class WalletBg {
    * @param utxos - UTXOs for transaction schema conversion
    * @returns Promise with transaction ID
    */
-  async submitTx(txInput: Transaction | string | Cardano.Tx, utxos: any[]): Promise<string> {
+  async submitTx(txInput: string | Cardano.Tx, utxos: any[]): Promise<string> {
     let txCbor: string;
-    let transaction: Cardano.Tx;
 
     // Handle different input types and convert to CBOR hex
     if (typeof txInput === 'string') {
       // Already a CBOR hex string
       txCbor = txInput;
-      transaction = deserializeCardanoJsSdkTx(txInput);
-    } else if (txInput instanceof Transaction) {
-      // Legacy Emurgo Transaction object
-      txCbor = txInput.to_hex();
-      transaction = deserializeCardanoJsSdkTx(txCbor);
     } else {
       // Cardano JS SDK transaction object
-      transaction = txInput;
-      txCbor = Serialization.Transaction.fromCore(transaction).toCbor();
+      txCbor = Serialization.Transaction.fromCore(txInput).toCbor();
     }
 
     try {
-
       // Submit transaction via API
       const txId = await this.api.submitTx(txCbor);
 
       // Create transaction record using sync service pattern
       const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
       const pendingTx = {
-        id: txId, // Required for database key path
+        id: txId, // Required for a database key path
         tx_hash: txId,
         block_hash: '',
         block_height: 0,
@@ -979,7 +838,7 @@ export class WalletBg {
         ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid, etc.
       };
 
-      // Store transaction in database
+      // Store transaction in a database
       this.setAccountTransactions([pendingTx])
         .catch(e => console.error('Error storing transaction:', e));
 

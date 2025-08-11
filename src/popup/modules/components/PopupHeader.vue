@@ -40,7 +40,7 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 
-const props = defineProps({
+defineProps({
   title: {
     type: String,
     default: '',
@@ -67,8 +67,8 @@ const queryParams = ref(null);
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const favicon = computed(() => {
-  if (queryParams?.website) {
-    return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${queryParams.website}&size=16`;
+  if (queryParams.value?.website) {
+    return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${queryParams.value.website}&size=16`;
   }
   return '';
 });
@@ -99,7 +99,7 @@ function extractHostname(url) {
   //find & remove "?"
   hostname = hostname.split('?')[0];
 
-  this.validateDomain(hostname);
+  validateDomain(hostname);
   return hostname;
 }
 
@@ -117,11 +117,17 @@ onMounted(async () => {
   const route = vmProxy.$route;
   queryParams.value = route.query;
   try {
-    dappRisk.value = DappRisk[await cardanoShieldApi.scanUrl(queryParams.value['website'])];
+    const riskString = await cardanoShieldApi.scanUrl(queryParams.value['website']);
+    dappRisk.value = DappRisk[riskString as keyof typeof DappRisk] ?? DappRisk.unknown;
   } catch (e) {
     console.log(e);
   }
   loading.value = false;
+})
+
+// Expose domain property for parent components to access via refs
+defineExpose({
+  domain
 })
 </script>
 <style scoped>

@@ -174,7 +174,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, watch, ref, onMounted, onBeforeUnmount, toRefs } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
@@ -292,13 +292,13 @@ const isInsufficientBalance = computed(() => {
   return Number(quantityA) > balanceA
 })
 
-const tokens = computed(() => {
-  // Convert resolvedAssets object to array if it exists
+const tokens = computed<any[]>(() => {
+  // Convert a resolvedAssets object to array if it exists
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
   return (
     assetsArray.map((token: any) => ({
       name: token.metadata.name,
-      ticker: token.metadata.ticker,
+      ticker: token.metadata?.ticker,
       img: token.img,
       balance: token.quantity,
       decimals: token.metadata.decimals,
@@ -318,19 +318,12 @@ const marketPriceDeltaPercentage = computed(() => {
 const nativeTokenComputed = computed(() => {
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
-  const token: any = assetsArray.find((token: any) => token.ticker === currencyTicker);
-  return token
-    ? {
-      name: token.metadata.name,
-      ticker: token.metadata.ticker,
-      img: token.img,
-      balance: token.quantity,
-      decimals: token.metadata.decimals,
-      unit: token.unit,
-      quantity: '0',
-      verified: true,
-    }
-    : {
+  const token: any = assetsArray.find((token: any) => token.metadata?.ticker === currencyTicker);
+  console.log('token', token)
+  if (token) {
+    return token
+  } else {
+    return {
       name: 'Cardano',
       ticker: 'ADA',
       img: cardanoLogo,
@@ -339,7 +332,8 @@ const nativeTokenComputed = computed(() => {
       decimals: 6,
       unit: '',
       verified: true,
-    };
+    }
+  }
 })
 
 const availableTokens = computed(() => {
@@ -347,26 +341,22 @@ const availableTokens = computed(() => {
     return [];
   }
 
-  const resolvedAssets = tokens.value;
-  const native = resolvedAssets?.find(t => t.unit === nativeTokenComputed.value.unit);
-
-  const nativeToken = { ...nativeTokenComputed.value }; // avoid modifying the original state
-
-  if (native) {
-    nativeToken.balance = native.balance;
-  }
-
-  const availableTokens = Object.values(dexHunterTokens)
+  const nativeToken = {
+    ticker: nativeTokenComputed.value.metadata?.ticker,
+    balance: nativeTokenComputed.value.quantity,
+    ...nativeTokenComputed.value
+  }; // avoid modifying the original state
+  const availableTokens = Object.values(dexHunterTokens.value)
     .map((token: any) => {
-      const found = resolvedAssets?.find(t => t.unit === token['unit']);
+      const found: any = resolvedAssets.value[token['unit']];
       const res = {
         ...token,
-        balance: found ? found.balance : 0,
+        balance: found ? found.quantity : 0,
       };
       if (found && selectedTokenB.value.unit === found.unit) {
         selectedTokenB.value.balance = res.balance
       }
-      if (selectedTokenA.value.ticker === nativeToken.ticker) {
+      if (selectedTokenA.value?.ticker === nativeToken?.ticker) {
         selectedTokenA.value.balance = nativeToken.balance
       }
       return res
@@ -387,9 +377,9 @@ const availableTokens = computed(() => {
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-  const result = [nativeToken, ...availableTokens]
-  console.log('availableTokens', result)
-  return result;
+  const gr = [nativeToken, ...availableTokens];
+  console.log('nativeToken', gr)
+  return gr;
 });
 
 const calculateWeightedPriceImpact = computed(() => {
@@ -421,8 +411,8 @@ const pairPrice = computed(() => {
   if (poolError.value) {
     return 'No Pool Found'
   }
-  const tokenA = selectedTokenA.value.ticker;
-  const tokenB = selectedTokenB.value.ticker === 'ADA' ? tokenA : selectedTokenB.value.ticker;
+  const tokenA = selectedTokenA.value?.ticker;
+  const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;
   if (!pairPriceToggle.value) {
     return `1 ${tokenB} = ${price_ba2.value?.toFixed(7)} ADA`;
   } else {
@@ -430,14 +420,14 @@ const pairPrice = computed(() => {
   }
 });
 
-watch( () => selectedTokenA.value.ticker, async (newVal, oldVal) => {
+watch( () => selectedTokenA.value?.ticker, async (newVal, oldVal) => {
   if (isUpdating.value) return; // Prevent recursive updates
   isUpdating.value = true; // Set flag to prevent mutual watcher trigger
 
   if (newVal === 'ADA') {
     // If selectedTokenA is changed to ADA, set selectedTokenB to last non-ADA tokenB if exists
     if (lastNonADATokenB.value) {
-      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value.ticker);
+      selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === lastNonADATokenB.value?.ticker);
     } else {
       selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === oldVal);
     }
@@ -447,7 +437,7 @@ watch( () => selectedTokenA.value.ticker, async (newVal, oldVal) => {
     // Set selectedTokenB to ADA
     selectedTokenB.value = availableTokens.value.find(token => token['ticker'] === 'ADA');
   }
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
+  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value?.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
   // Estimate prices after updating tokens
   await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
   isUpdating.value = false; // Reset flag

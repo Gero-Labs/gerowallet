@@ -30,7 +30,7 @@ export class WalletManager {
   private constructor() {}
 
   /**
-   * Get singleton instance of WalletManager
+   * Get a singleton instance of WalletManager
    */
   static getInstance(): WalletManager {
     if (!WalletManager.instance) {
@@ -238,7 +238,7 @@ export class WalletManager {
               if (!ablyService.isTipProcessed(syncObject.block.hash)) {
                 ablyService.markTipAsProcessed(syncObject.block.hash);
               }
-              await walletBg.setSync(syncObject);
+              await walletBg.syncService.setSync(syncObject);
               LoadingState.setSyncing(false);
             });
           } catch (e) {
@@ -394,36 +394,11 @@ export class WalletManager {
   }
 
   /**
-   * Set or create a wallet instance (legacy method for backward compatibility)
-   * @param walletData - Wallet data to create instance from
-   * @returns WalletBg instance or null if failed
-   */
-  async setWallet(walletData: any): Promise<WalletBg | null> {
-    return await this.login(walletData);
-  }
-
-  /**
    * Get current wallet instance
    * @returns Current WalletBg instance or null
    */
   getWallet(): WalletBg | null {
     return this.walletBg;
-  }
-
-  /**
-   * Get current wallet ID
-   * @returns Current wallet ID or null
-   */
-  getCurrentWalletId(): number | null {
-    return this.currentWalletId;
-  }
-
-  /**
-   * Check if wallet is currently active
-   * @returns True if wallet instance exists
-   */
-  isWalletActive(): boolean {
-    return this.walletBg !== null;
   }
 
   /**
@@ -442,16 +417,6 @@ export class WalletManager {
           });
         });
       });
-    }
-  }
-
-  /**
-   * Reset the singleton instance (useful for testing)
-   */
-  static resetInstance(): void {
-    if (WalletManager.instance) {
-      WalletManager.instance.logout();
-      WalletManager.instance = null as any;
     }
   }
 }

@@ -47,7 +47,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34"
+                      :offset-y="44"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -79,7 +79,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34"
+                      :offset-y="44"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
