@@ -61,8 +61,11 @@
             </v-list-item-content>
             <v-list-item-content class="text-right" v-if="item['balance']">
               <v-list-item-title>
-                {{ filters.toCurrency(item['balance'], false, 0, '', ' ' + item['ticker'], true, item['decimals']) }}
+                {{ filters.toCurrency(item['balance'], false, 4, '', ' ' + item['ticker'], true, item['decimals']) }}
               </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ filters.toCurrency(item['price'], false, 6, '$','', false, 0) }}
+              </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
         </template>

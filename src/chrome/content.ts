@@ -18,7 +18,7 @@ const injectScript = () => {
   const script = document.createElement('script');
   script.async = false;
   if (chrome?.runtime) {
-    script.src = chrome.runtime.getURL('content/_virtual_inject.js');
+    script.src = chrome.runtime.getURL('content/inject.js');
   }
   script.onload = () => {
     script.remove();
@@ -142,8 +142,10 @@ async function injectBring() {
 
 if (shouldInject()) {
   injectScript();
-  await injectBring();
-  Messaging.createProxyController();
+  (async () => {
+    await injectBring();
+    Messaging.createProxyController();
+  })();
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {

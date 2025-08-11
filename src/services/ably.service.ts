@@ -36,19 +36,17 @@ class AblyService {
     };
 
     this.client = new Ably.Realtime(clientOptions);
-
-    // Also set the authCallback directly on the auth object after creation
-    if (this.client.auth) {
-      this.client.auth.authOptions = {
-        authCallback: this.handleAuthCallback.bind(this)
-      };
-    }
   }
 
   private handleAuthCallback(tokenParams: Ably.TokenParams, callback: Ably.StandardCallback<Ably.TokenDetails | string>): void {
     if (!this.authParams) {
       console.error('❌ Ably auth params not set');
-      return callback('Ably: not yet authenticated', null);
+      const errorInfo: Ably.ErrorInfo = {
+        message: 'Ably: not yet authenticated',
+        code: 40140,
+        statusCode: 401
+      } as Ably.ErrorInfo;
+      return callback(errorInfo, null);
     }
 
     // Check for clientId mismatch - ignore the clientId from tokenParams and use our own
@@ -61,7 +59,12 @@ class AblyService {
 
     if (!this.api) {
       console.error('❌ Ably API instance not set');
-      return callback('API instance not initialized', null);
+      const errorInfo: Ably.ErrorInfo = {
+        message: 'API instance not initialized',
+        code: 40000,
+        statusCode: 400
+      } as Ably.ErrorInfo;
+      return callback(errorInfo, null);
     }
 
     this.api.ablyToken(this.authParams.address)
@@ -71,7 +74,12 @@ class AblyService {
       })
       .catch(err => {
         console.error('❌ Ably token fetch failed:', err.message || err);
-        callback(err.message || 'Token fetch failed', null);
+        const errorInfo: Ably.ErrorInfo = {
+          message: err.message || 'Token fetch failed',
+          code: 40140,
+          statusCode: 401
+        } as Ably.ErrorInfo;
+        callback(errorInfo, null);
       });
   }
 
@@ -80,12 +88,7 @@ class AblyService {
   }
 
   private setupConnectionListeners(): void {
-    this.client.connection.on('connecting', () => {
-      console.info('🔄 Ably connecting...');
-    });
-
     this.client.connection.on('connected', (connectionStateChange: Ably.ConnectionStateChange) => {
-      console.info('✅ Ably connected!', connectionStateChange);
       if (connectionStateChange.current === 'connected') {
         LoadingState.setText('');
         LoadingState.setConnected(true);
@@ -93,59 +96,23 @@ class AblyService {
     });
 
     this.client.connection.on('disconnected', (connectionStateChange: Ably.ConnectionStateChange) => {
-      console.info('❌ Ably disconnected', connectionStateChange);
+      console.warn('❌ Ably disconnected:', connectionStateChange.reason);
       LoadingState.setText('Wallet is Disconnected from the Network.<br>Reconnecting ...');
       LoadingState.setConnected(false);
     });
 
     this.client.connection.on('failed', (connectionStateChange: Ably.ConnectionStateChange) => {
-      console.error('❌ Ably connection failed', connectionStateChange);
+      console.error('❌ Ably connection failed:', connectionStateChange.reason || connectionStateChange);
     });
 
     this.client.connection.on('suspended', (connectionStateChange: Ably.ConnectionStateChange) => {
-      console.warn('⚠️ Ably connection suspended', connectionStateChange);
-    });
-
-    this.client.connection.on('closing', () => {
-      console.info('🔄 Ably connection closing...');
-    });
-
-    this.client.connection.on('closed', () => {
-      console.info('❌ Ably connection closed');
-    });
-
-    // Listen for all connection state changes
-    this.client.connection.on((connectionStateChange: Ably.ConnectionStateChange) => {
-      console.debug('🔄 Connection state changed:', {
-        previous: connectionStateChange.previous,
-        current: connectionStateChange.current,
-        reason: connectionStateChange.reason,
-        retryIn: connectionStateChange.retryIn
-      });
+      console.warn('⚠️ Ably connection suspended:', connectionStateChange.reason);
     });
   }
 
   public connect(): void {
-    // Clear any existing token details to force fresh authentication via authCallback
-    if (this.client.auth?.tokenDetails) {
-      this.client.auth.tokenDetails = null;
-    }
-
-    // Clear auth method to force using authCallback
-    if (this.client.auth) {
-      this.client.auth.method = null;
-
-      // Clear any cached clientId to prevent mismatch
-      if (this.client.auth.clientId) {
-        this.client.auth.clientId = null;
-      }
-    }
-
-    // Clear clientId from options as well
-    if (this.client.options?.clientId) {
-      this.client.options.clientId = null;
-    }
-
+    // Force fresh authentication by recreating the client
+    // This ensures clean auth state without accessing private properties
     this.client.connect();
   }
 
@@ -175,33 +142,18 @@ class AblyService {
   private waitForConnectionReady(timeoutMs: number = 10000): Promise<void> {
     return new Promise((resolve, reject) => {
       const currentState = this.client.connection.state;
-      console.debug(`🔍 Current connection state: ${currentState}`);
-      console.debug('🔍 Auth configuration check:', {
-        hasAuth: !!this.client.auth,
-        hasAuthOptions: !!this.client.auth?.authOptions,
-        hasAuthCallback: typeof this.client.auth?.authOptions?.authCallback === 'function',
-        authKeys: this.client.auth?.authOptions ? Object.keys(this.client.auth.authOptions) : []
-      });
 
       if (currentState === 'connected') {
-        console.debug('✅ Connection already ready');
         resolve();
         return;
       }
 
       const timeout = setTimeout(() => {
-        console.warn(`⏰ Connection timeout after ${timeoutMs}ms, current state: ${this.client.connection.state}`);
-        console.warn('🔍 Final auth state check:', {
-          hasAuth: !!this.client.auth,
-          hasAuthOptions: !!this.client.auth?.authOptions,
-          hasAuthCallback: typeof this.client.auth?.authOptions?.authCallback === 'function',
-          tokenDetails: !!this.client.auth?.tokenDetails
-        });
+        console.warn(`⏰ Ably connection timeout after ${timeoutMs}ms, state: ${this.client.connection.state}`);
         reject(new Error(`Connection timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
       const onConnected = () => {
-        console.debug('✅ Connection ready!');
         clearTimeout(timeout);
         this.client.connection.off('connected', onConnected);
         this.client.connection.off('failed', onFailed);
@@ -209,14 +161,7 @@ class AblyService {
       };
 
       const onFailed = (error: any) => {
-        console.error('❌ Connection failed:', error);
-        console.error('🔍 Auth state at failure:', {
-          hasAuth: !!this.client.auth,
-          hasAuthOptions: !!this.client.auth?.authOptions,
-          hasAuthCallback: typeof this.client.auth?.authOptions?.authCallback === 'function',
-          tokenDetails: !!this.client.auth?.tokenDetails,
-          errorMessage: error.message || error.reason || error
-        });
+        console.error('❌ Ably connection failed:', error.reason || error.message || error);
         clearTimeout(timeout);
         this.client.connection.off('connected', onConnected);
         this.client.connection.off('failed', onFailed);
@@ -229,28 +174,24 @@ class AblyService {
   }
 
   private waitForChannelReady(channel: Ably.RealtimeChannel, timeoutMs: number = 10000): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const currentState = channel.state;
-      console.debug(`🔍 Current channel state: ${currentState}`);
 
       if (currentState === 'attached') {
-        console.debug('✅ Channel already ready');
         resolve();
         return;
       }
 
       // If channel is already in failed state, don't wait - reject immediately
       if (currentState === 'failed') {
-        console.warn('❌ Channel is already in failed state, skipping subscription');
         reject(new Error('Channel is in failed state'));
         return;
       }
 
       // If channel is in initialized state, force attachment
       if (currentState === 'initialized') {
-        console.debug('🔄 Channel in initialized state, forcing attachment...');
         try {
-          channel.attach();
+          await channel.attach();
         } catch (attachError) {
           console.warn('⚠️ Failed to force channel attachment:', attachError);
         }
@@ -258,11 +199,9 @@ class AblyService {
 
       const timeout = setTimeout(() => {
         const finalState = channel.state;
-        console.warn(`⏰ Channel timeout after ${timeoutMs}ms, current state: ${finalState}`);
-
-        // If channel ended up in failed state during timeout, reject
         if (finalState === 'failed') {
-          reject(new Error(`Channel failed during timeout, final state: ${finalState}`));
+          console.warn(`⏰ Channel timeout - failed state: ${finalState}`);
+          reject(new Error(`Channel failed during timeout`));
         } else {
           // For other states, resolve to continue
           resolve();
@@ -270,7 +209,6 @@ class AblyService {
       }, timeoutMs);
 
       const onAttached = () => {
-        console.debug('✅ Channel ready!');
         clearTimeout(timeout);
         channel.off('attached', onAttached);
         channel.off('failed', onFailed);
@@ -278,11 +216,10 @@ class AblyService {
       };
 
       const onFailed = (error: any) => {
-        console.warn('❌ Channel failed during wait, stopping subscription:', error);
+        console.warn('❌ Channel failed:', error.reason || error.message || error);
         clearTimeout(timeout);
         channel.off('attached', onAttached);
         channel.off('failed', onFailed);
-        // Reject to prevent subscription attempts on failed channels
         reject(new Error(`Channel failed: ${error.reason || error.message || error}`));
       };
 
@@ -300,74 +237,48 @@ class AblyService {
   ): Promise<void> {
     return new Promise((resolve) => {
       const privateChan = address;
-      console.debug('🔐 Attempting to subscribe to private channel:', privateChan);
-      console.debug('🔐 Connection state before subscription:', this.client.connection.state);
 
       if (!this.subscribedChannels.has(privateChan)) {
         // Wait for connection to be ready before subscribing
         this.waitForConnectionReady().then(() => {
-          console.debug('🔐 Getting channel for private subscription...');
           const channel: Ably.RealtimeChannel = this.client.channels.get(privateChan);
-          console.debug('🔐 Channel obtained, setting up subscription...');
 
           // Wait for channel to be ready before subscribing
           this.waitForChannelReady(channel).then(() => {
-            console.debug(`🔐 Private channel ${privateChan} is ready, subscribing...`);
-
             // Subscribe to messages
             channel.subscribe(async (msg: Ably.InboundMessage) => {
-              console.debug(`📨 RAW message received on private channel ${privateChan}:`, {
-                name: msg.name,
-                data: msg.data,
-                timestamp: msg.timestamp,
-                clientId: msg.clientId,
-                connectionId: msg.connectionId
-              });
-
               // Handle specific message types
               switch (msg.name) {
                 case 'SYNC':
-                  console.debug('SYNC::🔄 Processing SYNC message');
                   if (handlers.onSync) {
                     await handlers.onSync(msg);
                   }
                   break;
                 default:
-                  console.debug(`SYNC::📬 Received message type: ${msg.name}`, msg.data);
                   if (handlers.onMessage) {
                     await handlers.onMessage(msg);
                   }
               }
             }).then(() => {
-              console.debug(`SYNC::✅ Successfully subscribed to private channel: ${privateChan}`);
               this.subscribedChannels.set(privateChan, channel);
               resolve();
             }).catch(subscribeError => {
-              console.warn(`SYNC::Failed to subscribe to private channel ${privateChan}:`, subscribeError);
+              console.warn(`Failed to subscribe to private channel:`, subscribeError.message || subscribeError);
               resolve(); // Don't reject, just continue without this channel
             });
 
-            // Add channel state listeners for debugging
-            channel.on('attached', () => {
-              console.debug(`SYNC::✅ Private channel ${privateChan} attached successfully`);
-            });
-
-            channel.on('detached', () => {
-              console.debug(`SYNC::❌ Private channel ${privateChan} detached`);
-            });
-
-            channel.on('failed', (error) => {
-              console.warn(`SYNC::⚠️ Private channel ${privateChan} access denied - continuing without realtime updates:`, error);
-              // Don't throw or reject - just continue without this channel
+            // Add critical error listeners
+            channel.on('failed', (stateChange) => {
+              console.warn(`⚠️ Private channel access denied:`, stateChange.reason || stateChange);
             });
 
           }).catch(channelError => {
-            console.warn(`SYNC::Private channel ${privateChan} failed to reach ready state:`, channelError);
-            resolve(); // Don't reject, just continue without this channel
+            console.warn(`Private channel failed to reach ready state:`, channelError.message || channelError);
+            resolve();
           });
         }).catch(connectionError => {
-          console.warn(`SYNC::Private channel connection failed to reach ready state:`, connectionError);
-          resolve(); // Don't reject, just continue without this channel
+          console.warn(`Private channel connection failed:`, connectionError.message || connectionError);
+          resolve();
         });
       } else {
         resolve();
@@ -383,14 +294,8 @@ class AblyService {
       onMessage?: AblyMessageHandler;
     }
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const groupChan: string = `${chain}.${network}`;
-      console.debug('🔐 Group channel subscription request:', {
-        chain,
-        network,
-        groupChan,
-        authParams: this.authParams
-      });
 
       if (!this.subscribedChannels.has(groupChan)) {
         // Wait for connection to be ready before subscribing
@@ -399,48 +304,38 @@ class AblyService {
 
           // Wait for channel to be ready before subscribing
           this.waitForChannelReady(channel).then(() => {
-            console.debug(`📡 Channel ${groupChan} is ready, subscribing...`);
-
             channel.subscribe(async (msg: Ably.InboundMessage) => {
               switch (msg.name) {
                 case 'TIP':
-                  console.debug('🔄 Processing TIP message');
                   if (handlers.onTip) {
-                    handlers.onTip(msg);
+                    await handlers.onTip(msg);
                   }
                   break;
                 default:
-                  console.debug('▶ Group: ' + msg.name, msg.data);
                   if (handlers.onMessage) {
                     await handlers.onMessage(msg);
                   }
               }
             }).then(() => {
-              console.debug(`✅ Successfully subscribed to group channel: ${groupChan}`);
               this.subscribedChannels.set(groupChan, channel);
               resolve();
             }).catch(subscribeError => {
-              console.warn(`Failed to subscribe to group channel ${groupChan}:`, subscribeError);
-              resolve(); // Don't reject, just continue without this channel
+              console.warn(`Failed to subscribe to group channel:`, subscribeError.message || subscribeError);
+              resolve();
             });
 
-            // Add error handling for group channel
-            channel.on('failed', (error) => {
-              console.warn(`⚠️ Group channel ${groupChan} access denied - continuing without realtime updates:`, error);
-              // Don't throw or reject - just continue without this channel
-            });
-
-            channel.on('detached', () => {
-              console.debug(`❌ Group channel ${groupChan} detached`);
+            // Add critical error handling
+            channel.on('failed', (stateChange) => {
+              console.warn(`⚠️ Group channel access denied:`, stateChange.reason || stateChange);
             });
 
           }).catch(channelError => {
-            console.warn(`Channel ${groupChan} failed to reach ready state:`, channelError);
-            resolve(); // Don't reject, just continue without this channel
+            console.warn(`Group channel failed to reach ready state:`, channelError.message || channelError);
+            resolve();
           });
         }).catch(connectionError => {
-          console.warn(`Connection failed to reach ready state:`, connectionError);
-          resolve(); // Don't reject, just continue without this channel
+          console.warn(`Group channel connection failed:`, connectionError.message || connectionError);
+          resolve();
         });
       } else {
         resolve();
@@ -464,12 +359,9 @@ class AblyService {
     }
 
     try {
-      console.debug(`SYNC::📡 Publishing to sync channel ${syncChannel}...`, data);
       await this.client.channels.get(syncChannel).publish('SYNC', JSON.stringify(data));
-      console.debug(`SYNC::✅ Successfully published to sync channel ${syncChannel}`);
     } catch (error) {
-      console.warn(`SYNC::⚠️ Failed to publish to sync channel ${syncChannel}:`, error);
-      // Don't throw - just log the error to prevent breaking the sync process
+      console.warn(`⚠️ Failed to publish to sync channel:`, error);
     }
   }
 

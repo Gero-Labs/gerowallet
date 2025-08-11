@@ -283,7 +283,6 @@ const computedValues = computed(() => {
   }
 
   // Fallback for chains without portfolio API support (like Apex)
-  console.log('')
   if (account.value) {
     if (account.value.controlled_amount && account.value.controlled_amount > 0) {
       // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
