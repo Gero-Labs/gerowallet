@@ -9,6 +9,7 @@ import NetworkStore from '@/stores/networkStore';
 import { CID } from 'multiformats/cid';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
+import { HARDENED, ChainDerivations, Keys } from '@/models/types';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
@@ -560,4 +561,141 @@ export function get24hChange(data) {
 export function resolvePrivateKey(mnemonic: string): Bip32PrivateKey {
   const bip39entropy = bip39.mnemonicToEntropy(mnemonic);
   return Bip32PrivateKey.fromBip39Entropy(Buffer.from(bip39entropy, 'hex'), '');
+}
+
+/**
+ * Analyzes transaction to determine which keys need to sign
+ * @param transaction - The transaction to analyze
+ * @param utxos - Available UTXOs
+ * @param addresses - Address mappings
+ * @param accountIndex - Account index for derivation
+ * @param stakeAddress - The stake address for the wallet
+ * @param paymentKeyExternal - Function to get payment key
+ * @param stakeKey - Function to get stake key
+ * @returns Array of signers with their derivation paths
+ */
+export function analyzeTransactionForSignatures(
+  transaction: Cardano.Tx,
+  utxos: Cardano.Utxo[],
+  addresses: Keys,
+  accountIndex: number,
+  stakeAddress: string,
+  paymentKeyExternal: (index: number) => any,
+  stakeKey: () => any
+): Array<{ derivationPath: number[], type: string }> {
+  const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
+
+  // Check transaction inputs
+  for (const input of transaction.body.inputs) {
+    const utxo = utxos.find(u =>
+      u[0].txId === input.txId && u[0].index === input.index
+    );
+
+    if (utxo) {
+      const outputAddress = utxo[1].address;
+
+      // The addresses parameter is actually the keys object from wallet store
+      // It has structure: { payment: [addressObj], change: [addressObj], stake: [addressObj], ... }
+      let foundAddressInfo = null;
+
+      // Search in payment addresses
+      if (addresses.payment) {
+        foundAddressInfo = addresses.payment.find((addr: any) => addr.address === outputAddress);
+      }
+
+      // Search in change addresses if not found in payment
+      if (!foundAddressInfo && addresses.change) {
+        foundAddressInfo = addresses.change.find((addr: any) => addr.address === outputAddress);
+      }
+
+      if (foundAddressInfo && foundAddressInfo.path) {
+        const pathArray = parseDerivationPath(foundAddressInfo.path);
+        requiredSigners.push({
+          derivationPath: pathArray,
+          type: 'payment'
+        });
+      } else {
+        // This should not happen if the wallet store is properly populated
+        // But fallback to external 0 as last resort
+        requiredSigners.push({
+          derivationPath: [ChainDerivations.EXTERNAL, 0],
+          type: 'payment'
+        });
+      }
+    }
+  }
+
+  // Check for certificates (staking operations)
+  if (transaction.body.certificates && transaction.body.certificates.length > 0) {
+    for (const certificate of transaction.body.certificates) {
+      if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
+          certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
+          certificate.__typename === Cardano.CertificateType.StakeDelegation ||
+          certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation) {
+        // Need stake key signature
+        requiredSigners.push({
+          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+          type: 'stake'
+        });
+      }
+      // Add more certificate types as needed
+    }
+  }
+
+  // Check for withdrawals
+  if (transaction.body.withdrawals && transaction.body.withdrawals.length > 0) {
+    for (const rewardAddress of transaction.body.withdrawals) {
+      if (rewardAddress.stakeAddress === stakeAddress) {
+        // Need stake key signature for withdrawal
+        requiredSigners.push({
+          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+          type: 'stake'
+        });
+      }
+    }
+  }
+
+  // Check for required signers field
+  if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
+    for (const keyHash of transaction.body.requiredExtraSignatures) {
+      // Try to match the key hash to our known keys
+      const paymentKeyHash = paymentKeyExternal(0).hash().hex();
+      const stakeKeyHash = stakeKey().hash().hex();
+
+      if (keyHash === Hash28ByteBase16(paymentKeyHash)) {
+        requiredSigners.push({
+          derivationPath: [ChainDerivations.EXTERNAL, 0],
+          type: 'payment'
+        });
+      } else if (keyHash === Hash28ByteBase16(stakeKeyHash)) {
+        requiredSigners.push({
+          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+          type: 'stake'
+        });
+      }
+    }
+  }
+
+  // Remove duplicates
+  return requiredSigners.filter((signer, index, self) =>
+      index === self.findIndex(s =>
+        s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type
+      )
+  );
+}
+
+/**
+ * Parses a derivation path string into an array of numbers
+ * @param pathString - Derivation path string (e.g., "m/1852'/1815'/0'/0/0")
+ * @returns Array of derivation path numbers
+ */
+export function parseDerivationPath(pathString: string): number[] {
+  return pathString
+    .replace('m/', '')
+    .split('/')
+    .map(segment => {
+      const num = parseInt(segment.replace("'", ""));
+      return segment.includes("'") ? num + HARDENED : num;
+    })
+    .slice(3); // Remove the first 3 elements (purpose, coin_type, account) as they're handled at account level
 }

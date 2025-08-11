@@ -3,8 +3,7 @@ import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/
 import * as bip39 from 'bip39';
 import { encrypt } from '@/shared/utils/crypto';
 import * as Crypto from '@cardano-sdk/crypto';
-import { CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
-import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+import { HARDENED, CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { encryptPrivateKey } from '@/chrome/serialization';
