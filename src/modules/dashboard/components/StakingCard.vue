@@ -1,25 +1,25 @@
 <template>
-  <v-card flat outlined class="liquid-glass" :loading="loadingTxs">
+  <v-card flat outlined class="liquid-glass" :loading="loadingTxs || poolLoading">
     <v-card-title>Staking</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters>
           <v-col cols="5">
-            <v-card outlined flat tile class="fill-height" style="border-left-width: 0; border-bottom-width: 0">
-              <v-card-title style="font-size: 14px; line-height: 1.5" class="pa-2">
-                <v-row no-gutters style="background-color: #161B26; border-radius: 8px" class="py-4" >
+            <v-card outlined flat tile class="fill-height staking-left-card">
+              <v-card-title class="staking-card-title pa-2">
+                <v-row no-gutters class="staking-info-row py-4" >
                   <v-col cols="6" class="px-1 text-center">
-                    <span style="font-size: 12px">Delegating to</span>
-                    <h4 style="color: white" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h4>
+                    <span class="staking-label">Delegating to</span>
+                    <h4 class="staking-value" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h4>
                     <v-btn x-small text color="#F97066" @click="unstake">Unstake</v-btn>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span style="font-size: 12px">Total</span>
-                    <h4 style="color: white" v-if="loggedWallet && account">{{ filters.toCurrency(account.controlled_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
+                    <span class="staking-label">Total</span>
+                    <h4 class="staking-value" v-if="loggedWallet && account">{{ filters.toCurrency(account.controlled_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span style="font-size: 12px">Rewards</span>
-                    <h4 style="color: white" v-if="account">{{ filters.toCurrency(account.withdrawable_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
+                    <span class="staking-label">Rewards</span>
+                    <h4 class="staking-value" v-if="account">{{ filters.toCurrency(account.withdrawable_amount, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h4>
                     <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
                       Withdraw
                     </v-btn>
@@ -60,44 +60,44 @@
                   </v-btn>
                 </div>
                 <v-row no-gutters class="pt-2 pb-1">
-                  <v-col cols="6" style="display: block;text-align: center;" v-if="account">
+                  <v-col cols="6" class="staking-detail-col" v-if="account">
                     <h5>Pool Id</h5>
-                    <span style="color: white;">{{ filters.truncate(account?.pool_id) }}</span>
+                    <span class="staking-detail-value">{{ filters.truncate(account?.pool_id) }}</span>
                     <CopyButton :value="account?.pool_id" x-small></CopyButton>
                   </v-col>
-                  <v-col cols="6" style="display: block;text-align: center;">
+                  <v-col cols="6" class="staking-detail-col">
                     <h5>ROS</h5>
-                    <span style="color: white;">{{ pool?.ros ? pool.ros.toFixed(2)+'%' : '0%' }}</span>
+                    <span class="staking-detail-value">{{ pool?.ros ? pool.ros.toFixed(2)+'%' : '0%' }}</span>
                   </v-col>
                 </v-row>
                 <v-row no-gutters>
-                  <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
+                  <v-col cols="6" class="staking-detail-col" v-if="loggedWallet && pool">
                     <h5>Fees</h5>
-                    <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+                    <span class="staking-fees-text">{{ pool.margin + '%' }} / {{ filters.toCurrency(pool.fixed_cost, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
                   </v-col>
-                  <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
+                  <v-col cols="6" class="staking-detail-col" v-if="pool">
                     <h5>Saturation</h5>
                     <v-progress-linear rounded :color="filters.getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
                       <template v-slot:default="{ value }">
                         <strong>{{ Math.ceil(value) }}%</strong>
                       </template>
                     </v-progress-linear>
-                    <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
+                    <div class="staking-saturation-details">
                       <strong>{{ filters.toCurrency(pool.active_stake, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
-                      <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
-                        <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
+                      <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" class="staking-stake-change-up">
+                        <v-icon x-small color="#47cd89" class="staking-stake-arrow">mdi-arrow-up-bold</v-icon>
                         {{ filters.toCurrency(Number(pool.active_stake) - Number(pool.live_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                       </strong>
-                      <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
-                        <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
+                      <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" class="staking-stake-change-down">
+                        <v-icon x-small color="#F97066" class="staking-stake-arrow-down">mdi-arrow-down-bold</v-icon>
                         {{ filters.toCurrency(Number(pool.live_stake) - Number(pool.active_stake), false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
                       </strong>
                     </div>
                   </v-col>
                 </v-row>
                 <v-row no-gutters class="pt-2">
-                  <v-col cols="12" style="display: block;text-align: center;">
-                    <div style="min-height: 155px" v-if="rewardsChartData && Object.values(rewardsChartData).length > 0">
+                  <v-col cols="12" class="staking-chart-col">
+                    <div class="staking-chart-container" v-if="rewardsChartData && Object.values(rewardsChartData).length > 0">
                       <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
                     </div>
                   </v-col>
@@ -106,7 +106,7 @@
             </v-card>
           </v-col>
           <v-col cols="7">
-            <v-card outlined flat tile class="fill-height" style="border-left-width: 0; border-right-width: 0; border-bottom-width: 0">
+            <v-card outlined flat tile class="fill-height staking-right-card">
               <v-card-text class="pa-2">
                 <v-card outlined flat>
                   <v-data-table :items="rewardsData" :headers="stakingHeaders" class="transparent"
@@ -123,8 +123,8 @@
                           <v-img :src="resolvePoolIcon(item.pool_id)" :alt="item.pool_id+ ' Icon'"></v-img>
                         </v-list-item-avatar>
                         <v-list-item-content>
-                          <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
-                          <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
+                          <v-list-item-title class="rewards-pool-name">{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
+                          <v-list-item-subtitle class="rewards-pool-description">
                             {{ resolvePoolDescription(item.pool_id) }}
                           </v-list-item-subtitle>
                         </v-list-item-content>
@@ -167,7 +167,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, ref } from 'vue'
+import { toRefs, computed, ref, watch, onMounted } from 'vue'
 import RewardsChart from './RewardsChart.vue';
 import filters from "@/shared/utils/filters";
 import CopyButton from "@/shared/components/CopyButton.vue";
@@ -180,6 +180,8 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
+import stakingStoreActions from '@/stores/stakingStore';
+import { Provider } from '@/models/types';
 
 const props = defineProps({
   chartData: Object,
@@ -189,6 +191,7 @@ const props = defineProps({
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore)
 const { pools, tip, epochParams } = toRefs(networkStore)
 const { loadingTxs } = toRefs(loadingState)
+const { currentPool, poolLoading, poolError } = toRefs(stakingStoreActions.state)
 
 const hideZero = ref<boolean>(false);
 const sortBy = ref<string>('epoch');
@@ -204,7 +207,10 @@ const withdrawalDialog = ref<boolean>(false);
 const txData = ref<any>(undefined);
 
 const pool = computed(() => {
-  if (pools.value) {
+  if (currentPool.value) {
+    return currentPool.value
+  }
+  if (pools.value && account.value?.pool_id) {
     return pools.value[account.value.pool_id]
   }
   return null
@@ -295,8 +301,7 @@ const unstake = async () => {
     // Create deregistration certificate
     const certificate: Cardano.Certificate = {
       __typename: Cardano.CertificateType.StakeDeregistration,
-      stakeCredential,
-      deposit: stakeKeyDepositLovelace
+      stakeCredential
     };
     certificates.push(certificate);
 
@@ -369,6 +374,29 @@ const resolvePoolDescription = (poolId) => {
 const isNumeric = (n) => {
   return !isNaN(parseFloat(n)) && isFinite(n);
 }
+
+const loadPoolData = async (poolId: string) => {
+  if (poolId && loggedWallet.value) {
+    try {
+      stakingStoreActions.clearCurrentPool()
+      await stakingStoreActions.loadPoolById(loggedWallet.value, Provider.BLOCKFROST, poolId)
+    } catch (error) {
+      console.error('Error loading pool data:', error)
+    }
+  }
+}
+
+watch(() => account.value?.pool_id, async (newPoolId, oldPoolId) => {
+  if (newPoolId && newPoolId !== oldPoolId) {
+    await loadPoolData(newPoolId)
+  }
+}, { immediate: true })
+
+onMounted(async () => {
+  if (account.value?.pool_id) {
+    await loadPoolData(account.value.pool_id)
+  }
+})
 </script>
 <style scoped>
 .v-progress-linear__determinate {
@@ -377,5 +405,107 @@ const isNumeric = (n) => {
 
 .v-data-table-header {
   background-color: rgb(22, 27, 38);
+}
+
+/* StakingCard specific styles */
+.staking-left-card {
+  border-left-width: 0;
+  border-bottom-width: 0;
+}
+
+.staking-right-card {
+  border-left-width: 0;
+  border-right-width: 0;
+  border-bottom-width: 0;
+}
+
+.staking-card-title {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.staking-info-row {
+  background-color: #161B26;
+  border-radius: 8px;
+}
+
+.staking-label {
+  font-size: 12px;
+}
+
+.staking-value {
+  color: white;
+}
+
+.staking-detail-col {
+  display: block;
+  text-align: center;
+}
+
+.staking-detail-value {
+  color: white;
+}
+
+.staking-fees-text {
+  font-size: 14px;
+  color: white;
+}
+
+.staking-saturation-details {
+  font-size: 10px;
+  text-align-last: justify;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.staking-stake-change-up {
+  display: inline-flex;
+  font-size: 10px;
+  color: white;
+}
+
+.staking-stake-change-down {
+  display: inline-flex;
+  font-size: 10px;
+  color: white;
+}
+
+.staking-stake-arrow {
+  font-size: 10px;
+}
+
+.staking-stake-arrow-down {
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.staking-chart-col {
+  display: block;
+  text-align: center;
+}
+
+.staking-chart-container {
+  min-height: 155px;
+}
+
+/* Rewards table styles */
+.rewards-pool-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.rewards-pool-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
 }
 </style>
