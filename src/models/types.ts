@@ -371,4 +371,24 @@ export interface Keys {
   }[];
 }
 
+// Pagination interfaces
+export interface PaginationMeta {
+  page: number;
+  total_items: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  hide_saturated?: boolean;
+  pledge_met?: boolean;
+}
 

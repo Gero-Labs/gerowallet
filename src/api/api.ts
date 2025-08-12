@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, Proof, Provider } from '@/models/types';
+import { Blockchain, Network, Proof, Provider, PaginatedResponse, PaginationParams } from '@/models/types';
 
 export class Api {
   public chain: string;
@@ -138,16 +138,160 @@ export class Api {
     }
   }
 
-  async getAllDReps() {
+  async getPoolById(poolId: string) {
     try {
       const { data, status } = await this.axiosInstance.get(
-        `/api/dreps/all?chain=${this.chain}&network=${this.network}`
+        `/api/pools/${poolId}?chain=${this.chain}&network=${this.network}`
       );
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return null;
+      }
+      throw parseHttpError(error);
+    }
+  }
+
+  async getPoolsPaginated(params: PaginationParams = {}): Promise<PaginatedResponse<any>> {
+    try {
+      // Build query parameters for server-side filtering and pagination
+      const queryParams = new URLSearchParams({
+        chain: this.chain,
+        network: this.network,
+        page: (params.page || 1).toString(),
+        per_page: (params.per_page || 20).toString(),
+      });
+
+      // Add optional filter parameters
+      if (params.search) {
+        queryParams.append('search', params.search);
+      }
+      if (params.hide_saturated !== undefined) {
+        queryParams.append('hide_saturated', params.hide_saturated.toString());
+      }
+      if (params.pledge_met !== undefined) {
+        queryParams.append('pledge_met', params.pledge_met.toString());
+      }
+
+      console.log('Sending request with params:', queryParams.toString());
+
+      const { data, status } = await this.axiosInstance.get(
+        `/api/pools/all?${queryParams.toString()}`
+      );
+      
+      if (status === 200) {
+        // If server returns paginated response format, use it directly
+        if (data && typeof data === 'object' && data.items && data.meta) {
+          return data;
+        }
+        
+        // Otherwise, wrap raw array in pagination format (fallback)
+        const pools = data || [];
+        return {
+          items: pools,
+          meta: {
+            page: params.page || 1,
+            total_items: pools.length,
+            per_page: params.per_page || 20,
+            total_pages: Math.ceil(pools.length / (params.per_page || 20))
+          }
+        };
+      }
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      if (error.response?.status === 404) {
+        return {
+          items: [],
+          meta: {
+            page: params.page || 1,
+            total_items: 0,
+            per_page: params.per_page || 20,
+            total_pages: 0
+          }
+        };
+      }
+      throw parseHttpError(error);
+    }
+  }
+
+  async getAllDReps(page: number = 1, per_page: number = 50, search?: string): Promise<{data: any[], meta: any}> {
+    try {
+      console.log(`🌐 getAllDReps API call: ${this.chain}-${this.network}, page: ${page}, per_page: ${per_page}, search: "${search}"`);
+      
+      // Build query parameters
+      const params = new URLSearchParams({
+        chain: this.chain,
+        network: this.network,
+        page: page.toString(),
+        per_page: per_page.toString()
+      });
+      
+      if (search && search.trim()) {
+        params.append('search', search.trim());
+      }
+      
+      const url = `/api/dreps/all?${params.toString()}`;
+      console.log(`🔗 getAllDReps Request URL: ${url}`);
+      
+      const { data, status } = await this.axiosInstance.get(url);
+      
+      if (status === 200) {
+        // If server returns paginated response
+        if (data && typeof data === 'object' && data.data && data.meta) {
+          console.log(`✅ getAllDReps Server Response (paginated):`, {
+            dataLength: data.data?.length || 0,
+            meta: data.meta
+          });
+          return data;
+        }
+        
+        // If server returns just array (old format), create pagination structure
+        const allData = Array.isArray(data) ? data : [];
+        console.log(`📊 getAllDReps got ${allData.length} total DReps from API (old format)`);
+
+        // Client-side filtering if search is provided
+        let filteredData = allData;
+        if (search && search.trim()) {
+          const searchTerm = search.toLowerCase();
+          filteredData = allData.filter((drep: any) => {
+            const name = drep.metadata?.meta_json?.body?.givenName?.['@value'] || 
+                        drep.metadata?.meta_json?.body?.givenName || 
+                        'N/A';
+            const id = drep.drep_id || '';
+            
+            return name.toLowerCase().includes(searchTerm) || 
+                   id.toLowerCase().includes(searchTerm);
+          });
+          console.log(`🔍 getAllDReps filtered to ${filteredData.length} DReps for search: "${search}"`);
+        }
+
+        // Client-side pagination
+        const total_items = filteredData.length;
+        const total_pages = Math.ceil(total_items / per_page);
+        const start_index = (page - 1) * per_page;
+        const end_index = start_index + per_page;
+        const paginatedData = filteredData.slice(start_index, end_index);
+
+        const result = {
+          data: paginatedData,
+          meta: {
+            page,
+            total_items,
+            per_page,
+            total_pages
+          }
+        };
+
+        console.log(`📄 getAllDReps returning page ${page}/${total_pages} with ${paginatedData.length} items`);
+        return result;
+      }
+      
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      console.error('❌ getAllDReps API error:', error);
+      if (error.response?.status === 404) {
+        return { data: [], meta: { page: 1, total_items: 0, per_page: per_page, total_pages: 0 } };
       }
       throw parseHttpError(error);
     }

@@ -60,10 +60,6 @@ export default {
     networkStore.dreps = dreps;
     persist({ dreps: dreps });
   },
-  setPools(pools: any) {
-    networkStore.pools = pools;
-    persist({ pools: pools });
-  },
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
     networkStore.epochParams = epochParams;
     persist({ epochParams: epochParams });
