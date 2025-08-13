@@ -51,7 +51,6 @@
   import { AssetWithQuantity } from '@/shared/models/asset-quantity';
   import networks from '@/utils/networks';
   import {
-    cardanoValueFromRemoteFormat,
     diffAssetsFromIncomingToOutgoing,
     getAssetsFromMultiAsset,
     getPayAndReceiveTokens,
@@ -94,80 +93,80 @@
     return changeAddress.value;
   });
 
-  const swapDetails = computed<SwapDetails | null>(() => {
-    if (!tx.value || !utxos.value || utxos.value.length === 0) {
-      return null;
-    }
-
-    const txBody = tx.value.body();
-    let inputValue = Value.new(BigNum.from_str('0'));
-
-    for (let i = 0; i < txBody.inputs().len(); i++) {
-      const input = txBody.inputs().get(i);
-      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
-      const inputTxIndex = input.index();
-      const utxo = utxos.value.find(utxo => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
-      if (utxo) {
-        console.log(utxo);
-        inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
-      }
-    }
-
-    const inputValueAssets = getAssetsFromMultiAsset(inputValue.multiasset());
-    inputValueAssets.push(new AssetWithQuantity('cardano', inputValue.coin().to_str()));
-
-    let outputValue = Value.new(BigNum.from_str('0'));
-    for (let i = 0; i < txBody.outputs().len(); i++) {
-      const output = txBody.outputs().get(i);
-      const bech32Address = output.address().to_bech32();
-      if (bech32Address === changeAddress.value) {
-        outputValue = outputValue.checked_add(output.amount());
-      }
-    }
-
-    const outputValueAssets = getAssetsFromMultiAsset(outputValue.multiasset());
-    outputValueAssets.push(new AssetWithQuantity('cardano', outputValue.coin().to_str()));
-
-    const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
-    const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
-    const cardanoToken = payTokens.find(token => token.name === 'cardano');
-    let totalGive = cardanoToken ? cardanoToken.amount : 0;
-    const assetsGive = payTokens
-      .filter(token => token.name !== 'cardano')
-      .map(token => ({
-        amount: token.amount,
-        currency: token.name,
-        id: token.id,
-      }));
-
-    const foundAda = receiveTokens.find(token => token.name === 'cardano');
-    const totalReceive = foundAda ? foundAda.amount : 0;
-    const assetsReceive = receiveTokens
-      .filter(token => token.name !== 'cardano')
-      .map(token => ({
-        amount: token.amount,
-        currency: token.name,
-        id: token.id,
-      }));
-
-    const txFee = tx.value.body().fee().to_str();
-
-    return {
-      give: {
-        total: Number(0 - totalGive),
-        txFee,
-        provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-        assets: assetsGive,
-      },
-      receive: {
-        total: totalReceive,
-        provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
-        assets: assetsReceive,
-      },
-      recipient: recipient.value,
-      txMetadata: undefined,
-    };
-  });
+  // const swapDetails = computed<SwapDetails | null>(() => {
+  //   if (!tx.value || !utxos.value || utxos.value.length === 0) {
+  //     return null;
+  //   }
+  //
+  //   const txBody = tx.value.body();
+  //   let inputValue = Value.new(BigNum.from_str('0'));
+  //
+  //   for (let i = 0; i < txBody.inputs().len(); i++) {
+  //     const input = txBody.inputs().get(i);
+  //     const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
+  //     const inputTxIndex = input.index();
+  //     const utxo = utxos.value.find(utxo => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
+  //     if (utxo) {
+  //       console.log(utxo);
+  //       inputValue = inputValue.checked_add(cardanoValueFromRemoteFormat(utxo));
+  //     }
+  //   }
+  //
+  //   const inputValueAssets = getAssetsFromMultiAsset(inputValue.multiasset());
+  //   inputValueAssets.push(new AssetWithQuantity('cardano', inputValue.coin().to_str()));
+  //
+  //   let outputValue = Value.new(BigNum.from_str('0'));
+  //   for (let i = 0; i < txBody.outputs().len(); i++) {
+  //     const output = txBody.outputs().get(i);
+  //     const bech32Address = output.address().to_bech32();
+  //     if (bech32Address === changeAddress.value) {
+  //       outputValue = outputValue.checked_add(output.amount());
+  //     }
+  //   }
+  //
+  //   const outputValueAssets = getAssetsFromMultiAsset(outputValue.multiasset());
+  //   outputValueAssets.push(new AssetWithQuantity('cardano', outputValue.coin().to_str()));
+  //
+  //   const diff = diffAssetsFromIncomingToOutgoing(inputValueAssets, outputValueAssets);
+  //   const { payTokens, receiveTokens } = getPayAndReceiveTokens(diff);
+  //   const cardanoToken = payTokens.find(token => token.name === 'cardano');
+  //   let totalGive = cardanoToken ? cardanoToken.amount : 0;
+  //   const assetsGive = payTokens
+  //     .filter(token => token.name !== 'cardano')
+  //     .map(token => ({
+  //       amount: token.amount,
+  //       currency: token.name,
+  //       id: token.id,
+  //     }));
+  //
+  //   const foundAda = receiveTokens.find(token => token.name === 'cardano');
+  //   const totalReceive = foundAda ? foundAda.amount : 0;
+  //   const assetsReceive = receiveTokens
+  //     .filter(token => token.name !== 'cardano')
+  //     .map(token => ({
+  //       amount: token.amount,
+  //       currency: token.name,
+  //       id: token.id,
+  //     }));
+  //
+  //   const txFee = tx.value.body().fee().to_str();
+  //
+  //   return {
+  //     give: {
+  //       total: Number(0 - totalGive),
+  //       txFee,
+  //       provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
+  //       assets: assetsGive,
+  //     },
+  //     receive: {
+  //       total: totalReceive,
+  //       provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
+  //       assets: assetsReceive,
+  //     },
+  //     recipient: recipient.value,
+  //     txMetadata: undefined,
+  //   };
+  // });
 
   const scanTx = async (txData: Transaction) => {
     risks.value.score = undefined;

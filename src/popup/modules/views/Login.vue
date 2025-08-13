@@ -67,7 +67,7 @@ const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);
 
 const selectedWallet = ref({});
-const controller = ref(Messaging.createInternalController());
+const controller = ref<any>(null);
 const tabId = ref<number>();
 
 const useSidePanel = computed(() => {

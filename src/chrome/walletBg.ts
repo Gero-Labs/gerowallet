@@ -74,6 +74,8 @@ import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { default as blockchainApi } from '@/api/blockchain-api';
+import { setStakingPools, setDReps } from '@/db';
 
 let blockchainDb: Dexie = null;
 
@@ -508,7 +510,59 @@ export class WalletBg {
         if (txsTable) {
           // Use centralized conversion logic from converter.ts
           const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos);
-          await txsTable.bulkPut(convertedTxs);
+
+          // Get existing transactions by their IDs
+          const txIds = convertedTxs.map(tx => tx.id);
+          const existingTxs = await txsTable.where('id').anyOf(txIds).toArray();
+
+          // Create a map of existing transactions for quick lookup
+          const existingTxMap = new Map(existingTxs.map(tx => [tx.id, tx]));
+
+          // Helper function to safely stringify objects with BigInt
+          const safeStringify = (obj: any): string => {
+            return JSON.stringify(obj, (key, value) => {
+              if (typeof value === 'bigint') {
+                return value.toString();
+              }
+              return value;
+            });
+          };
+
+          // Separate new transactions from potentially updated ones
+          const newTxs = [];
+          const updatedTxs = [];
+
+          convertedTxs.forEach(newTx => {
+            const existingTx = existingTxMap.get(newTx.id);
+
+            if (!existingTx) {
+              // Transaction doesn't exist - it's new
+              newTxs.push(newTx);
+            } else {
+              // Transaction exists - check if it changed
+              // Use safe stringify to handle BigInt values
+              try {
+                if (safeStringify(existingTx) !== safeStringify(newTx)) {
+                  updatedTxs.push(newTx);
+                }
+              } catch (e) {
+                // If comparison fails, assume transaction needs update to be safe
+                console.debug(`Comparison failed for tx ${newTx.id}, including in update`, e);
+                updatedTxs.push(newTx);
+              }
+            }
+          });
+
+          // Combine new and updated transactions
+          const txsToUpdate = [...newTxs, ...updatedTxs];
+
+          // Only update if there are changes
+          if (txsToUpdate.length > 0) {
+            console.debug(`Saving ${newTxs.length} new and ${updatedTxs.length} updated transactions (${convertedTxs.length} total processed)`);
+            await txsTable.bulkPut(txsToUpdate);
+          } else {
+            console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
+          }
         }
       }).catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -985,10 +1039,6 @@ async function refreshStakingPoolsAlarm() {
       return;
     }
 
-    // Import the API and database functions
-    const { default: blockchainApi } = await import('@/api/blockchain-api');
-    const { setStakingPools } = await import('@/db/index');
-
     // Fetch fresh staking pools data
     const stakingPoolsData = await blockchainApi.getAllStakingPools(loggedWallet.chain, loggedWallet.network);
 
@@ -1011,10 +1061,6 @@ async function refreshDRepsAlarm() {
     if (!loggedWallet) {
       return;
     }
-
-    // Import the API and database functions
-    const { default: blockchainApi } = await import('@/api/blockchain-api');
-    const { setDReps } = await import('@/db/index');
 
     // Fetch fresh DReps data
     const drepsData = await blockchainApi.getAllDReps(loggedWallet.chain, loggedWallet.network);

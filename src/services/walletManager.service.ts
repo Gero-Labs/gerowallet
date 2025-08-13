@@ -1,4 +1,4 @@
-import { WalletBg } from '@/chrome/walletBg';
+import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore from '@/stores/walletStore';
 import { STORAGE } from '@/chrome/config';
@@ -310,7 +310,6 @@ export class WalletManager {
       this.closeAllOtherExtensionPopups();
       // Clean up alarms
       if (chrome?.alarms?.onAlarm?.hasListeners()) {
-        const { alarmListener } = await import('@/chrome/walletBg');
         chrome.alarms.onAlarm.removeListener(alarmListener);
       }
 
