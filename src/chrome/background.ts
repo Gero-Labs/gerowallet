@@ -1,5 +1,3 @@
-import Loading from '@/stores/loading';
-
 // Handle unhandled promise rejections to prevent console errors
 self.addEventListener('unhandledrejection', (event) => {
   // Check if it's an Ably channel access error (which we handle gracefully)
@@ -32,6 +30,7 @@ self.addEventListener('activate', (event) => {
   console.log('Service Worker activated');
 });
 
+import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import {
   APIError,
@@ -65,9 +64,9 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { convertToTxSchema } from '@/chrome/helper';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
-import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletManager } from '@/services/walletManager.service';
 import { Cardano } from '@cardano-sdk/core';
+import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -1094,7 +1093,6 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       let txInput;
       if (request.data.txCbor && request.data.witnessHex) {
         // Combine transaction CBOR with witness
-        const { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } = await import('@/chrome/cardanoJsSdkCbor');
         const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
         const witness = deserializeWitness(request.data.witnessHex);
 
