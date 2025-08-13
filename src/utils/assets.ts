@@ -365,3 +365,10 @@ export default {
   frontCardNoMcx2,
   emptyState
 }
+
+export {
+  geroDashboardApex,
+  geroDashboard,
+  google,
+  zkFold
+}
