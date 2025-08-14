@@ -172,8 +172,6 @@ export class Api {
         queryParams.append('pledge_met', params.pledge_met.toString());
       }
 
-      console.log('Sending request with params:', queryParams.toString());
-
       const { data, status } = await this.axiosInstance.get(`/api/pools?${queryParams.toString()}`);
 
       if (status === 200) {
