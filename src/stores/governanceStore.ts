@@ -32,10 +32,10 @@ const governanceStoreActions = {
   async loadDRepsPaginated(wallet: any, provider: any, params: PaginationParams = {}) {
     governanceStore.loading = true;
     governanceStore.error = null;
-    
+
     try {
       const api = new Api(wallet, provider);
-      
+
       // Merge current filters with params
       const requestParams: PaginationParams = {
         page: params.page || 1,
@@ -44,21 +44,15 @@ const governanceStoreActions = {
         sort_by: params.sort_by,
         sort_desc: params.sort_desc,
       };
-      
+
       console.log('🚀 Loading DReps with params:', requestParams);
-      
+
       const response: PaginatedResponse<any> = await api.getDRepsPaginated(requestParams);
-      
+
       // For server-side pagination, always replace dreps with current page data
       governanceStore.dreps = response.items || [];
-      
+
       governanceStore.paginationMeta = response.meta;
-      
-      console.log('✅ DReps loaded successfully:', {
-        drepsCount: governanceStore.dreps.length,
-        meta: governanceStore.paginationMeta
-      });
-      
     } catch (error: any) {
       governanceStore.error = error?.message || 'Failed to load DReps';
       console.error('❌ Error loading paginated DReps:', error);
@@ -70,19 +64,18 @@ const governanceStoreActions = {
   async loadDRepById(wallet: any, provider: any, drepId: string) {
     governanceStore.drepLoading = true;
     governanceStore.drepError = null;
-    
+
     try {
       const api = new Api(wallet, provider);
-      
+
       // Поиск DRep по ID в текущих данных
       const drep = governanceStore.dreps.find(d => d.drep_id === drepId);
-      
+
       if (drep) {
         governanceStore.currentDRep = drep;
       } else {
         governanceStore.drepError = 'DRep not found';
       }
-      
     } catch (error: any) {
       governanceStore.drepError = error?.message || 'Failed to load DRep';
       console.error('Error loading DRep by ID:', error);
@@ -134,7 +127,7 @@ const governanceStoreActions = {
     governanceStore.drepError = null;
   },
 
-  state: governanceStore
+  state: governanceStore,
 };
 
 export default governanceStoreActions;

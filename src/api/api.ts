@@ -234,23 +234,16 @@ export class Api {
         queryParams.append('sort_desc', params.sort_desc.toString());
       }
 
-      console.log('📡 getDRepsPaginated request with params:', queryParams.toString());
-
       const { data, status } = await this.axiosInstance.get(`/api/dreps?${queryParams.toString()}`);
 
       if (status === 200) {
         // If server returns paginated response format, use it directly
         if (data && typeof data === 'object' && data.items && data.meta) {
-          console.log('✅ Server returned paginated format:', {
-            itemsLength: data.items.length,
-            meta: data.meta,
-          });
           return data;
         }
 
         // Otherwise, wrap raw array in pagination format (fallback with client-side pagination)
         const allDReps = data || [];
-        console.log(`📊 Server returned array format with ${allDReps.length} DReps, applying client-side pagination`);
 
         // Client-side filtering if search is provided
         let filteredDReps = allDReps;
@@ -265,7 +258,6 @@ export class Api {
 
             return name.toLowerCase().includes(searchTerm) || id.toLowerCase().includes(searchTerm);
           });
-          console.log(`🔍 Filtered to ${filteredDReps.length} DReps for search: "${params.search}"`);
         }
 
         // Client-side pagination
@@ -276,8 +268,6 @@ export class Api {
         const start_index = (page - 1) * per_page;
         const end_index = start_index + per_page;
         const paginatedDReps = filteredDReps.slice(start_index, end_index);
-
-        console.log(`📄 Client-side pagination: page ${page}/${total_pages}, showing ${paginatedDReps.length} items`);
 
         return {
           items: paginatedDReps,
@@ -291,7 +281,6 @@ export class Api {
       }
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
-      console.error('❌ getDRepsPaginated error:', error);
       if (error.response?.status === 404) {
         return {
           items: [],
