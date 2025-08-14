@@ -18,7 +18,7 @@
           <v-icon>mdi-window-close</v-icon>
         </v-btn>
         <v-row no-gutters>
-          <v-col cols="12" xl="4" lg="4" md="4">
+          <v-col cols="4" xl="4" lg="4" md="4">
             <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
               Routes
             </v-card-title>
@@ -26,7 +26,7 @@
               {{ estimation['splits']?.length > 1 ? estimation['splits'].length : 'Direct'  }}
             </v-card-subtitle>
           </v-col>
-          <v-col cols="12" xl="4" lg="4" md="4">
+          <v-col cols="4" xl="4" lg="4" md="4">
             <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
               Net Price
             </v-card-title>
@@ -34,7 +34,7 @@
               {{ filters.toCurrency(estimation['net_price'] || 0, false, 2, '', ' '+tokenB['ticker'], false, 0) }}
             </v-card-subtitle>
           </v-col>
-          <v-col cols="12" xl="4" lg="4" md="4">
+          <v-col cols="4" xl="4" lg="4" md="4">
             <v-card-title style="font-size: 14px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
               Min. Receive
             </v-card-title>
@@ -68,7 +68,7 @@
 <!--          </v-col>-->
         </v-row>
       </v-card-title>
-      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 200px)">
+      <v-card-text class="d-flex justify-space-around justify-center flex-column py-1" style="overflow-y: auto; height: calc(100% - 104px)">
         <v-row no-gutters>
           <v-col cols="6" v-for="(dex,index) in dexes" :key="index" style="height: 38px">
             <v-list-item class="px-2" dense>

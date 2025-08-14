@@ -1,4 +1,4 @@
-import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+const HARDENED = 2147483648;
 
 const WalletType = {
   Trezor: 'Trezor',

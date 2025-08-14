@@ -44,7 +44,7 @@
           ></AssetsToSendStep>
         </v-stepper-content>
         <v-stepper-content step="3">
-          <SummaryStep ref="summary" :sendData="sendData" :tx-data="txData" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
+          <SummaryStep ref="summary" :sendData="sendData" :tx-data="tx" @next="signAndSubmitTx" @prev="prevStep"></SummaryStep>
         </v-stepper-content>
       </CustomStepper>
       <v-overlay
@@ -192,28 +192,25 @@ import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
 import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
-import { assetsToValue, parseAddress, toUTxO, toUTxO2 } from '@/shared/utils/converter';
-import { buildTx as buildTx2 } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
-import {
-  Transaction,
-  TransactionOutput,
-  TransactionOutputs,
-  TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
-import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import Vue, { toRefs, onMounted, computed, ref, watch } from 'vue';
+// import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
+import { toRefs, onMounted, computed, ref, watch } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
-import { UREncoder } from '@keystonehq/keystone-sdk';
+// import { UREncoder } from '@keystonehq/keystone-sdk';
 import { isPaymentAddress } from '@/chrome/serialization';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { Cardano } from '@cardano-sdk/core';
 
 interface Props {
   isOpen: boolean;
@@ -222,7 +219,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, tokens: resolvedAssets } = toRefs(walletStore)
+const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const currentStep = ref<number>(1);
@@ -254,20 +251,23 @@ const tooltip = ref<any>({
   enabled: false,
   text: 'Wrong Spending Password!',
 });
-const txBody = ref<any>(undefined);
-const txData = ref<any>(undefined);
+const tx = ref<Cardano.Tx | undefined>(undefined);
+const txCbor = ref<string>('');
+const txWitnesses = ref<string>('');
+const isSubmit = ref<boolean>(false);
 const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
 const overlay = ref<boolean>(false);
-const type = ref<string>('');
-const cbor = ref<string>('');
+// const type = ref<string>('');
+// const cbor = ref<string>('');
 const keystoneScan = ref<boolean>(false);
 const isInit = ref<boolean>(false);
+const qrCode = ref<QRCodeStyling | null>(null);
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
-    const tokens = Object.values(resolvedAssets.value).map(token => {
+    const tokens = Object.values(resolvedAssets.value).map((token: any) => {
       return {
         ...token,
         name: token.metadata.name,
@@ -283,6 +283,7 @@ const tokens = computed(() => {
       if (a.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
         return -1
       }
+      return 0;
       // return (this.pinnedTokens.includes(a.unit) ? -1 : 1) || a.ticker.localeCompare(b.ticker) TODO
     })
     return tokens
@@ -321,8 +322,10 @@ const resetData = () => {
   spendingPassword.value = ''
   currentStep.value = 1;
   txSubmitLoading.value = false
-  txBody.value = undefined
-  txData.value = undefined
+  tx.value = undefined
+  txCbor.value = ''
+  txWitnesses.value = ''
+  isSubmit.value = false
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
   if (foundAsset) {
@@ -346,29 +349,40 @@ const backScan = () => {
   }
 }
 
-const onDecode = async (result) => {
-  console.log(result)
-  const signature = parseSignature(result);
-  const signedTx = Transaction.new(
-    txBody.value,
-    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
-    undefined // TODO Transaction metadata
-  );
-  console.log(signedTx.to_json())
-  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-  console.log(txId)
-  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-  emit('close')
-}
-
-const onInit = (promise) => {
-  promise.then(() => {
-    isInit.value = true
-    console.log("Camera initialized successfully");
-  }).catch((error) => {
-    console.error("Camera initialization failed:", error);
-  });
-}
+// const onDecode = async (result) => {
+//   console.log(result)
+//   const signature = parseSignature(result);
+//
+//   try {
+//     const submitResult = await Messaging.sendToBackgroundFromOptions({
+//       method: MessageTypes.SUBMIT_TX,
+//       data: {
+//         txCbor: txCbor.value,
+//         witnessHex: signature.witnessSet,
+//         utxos: utxos.value
+//       }
+//     }) as { data: { txId?: string; error?: string } };
+//
+//     if (submitResult.data.error) {
+//       throw new Error(submitResult.data.error);
+//     }
+//
+//     snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+//     emit('close');
+//   } catch (error) {
+//     console.error('Error submitting transaction:', error);
+//     snackbar.setError(error instanceof Error ? error.message : 'Unknown error');
+//   }
+// }
+//
+// const onInit = (promise) => {
+//   promise.then(() => {
+//     isInit.value = true
+//     console.log("Camera initialized successfully");
+//   }).catch((error) => {
+//     console.error("Camera initialization failed:", error);
+//   });
+// }
 
 const enableToolTip = () => {
   tooltip.value.enabled = true;
@@ -377,108 +391,183 @@ const enableToolTip = () => {
   }, 3000);
 }
 
-async function signAndSubmitTx() {
-  const signAndReturnTx = async () => {
-    txSubmitLoading.value = true
-    try {
-      const txCbor = txData.value.to_hex()
-      const partialSign = false
-      const response = await loggedWallet.value.signTx(
-        txCbor,
-        partialSign,
-        spendingPassword.value,
-        0,
-        utxos.value,
-        addresses.value, //TODO
-        !isBT.value
-      );
-      const signedTx = Transaction.new(
-        txBody.value,
-        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-        undefined // TODO Transaction metadata
-      );
-      console.log(signedTx.to_json())
-      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-      console.log(txId)
-      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-      emit('close');
-    } catch (e) {
-      snackbar.setError(e)
-      console.error(e);
-    }
-    txSubmitLoading.value = false
-  };
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
-      await signAndReturnTx();
-    } else {
+const signTx = async (): Promise<boolean> => {
+  txSubmitLoading.value = true;
+  try {
+    console.log('Signing send transaction');
+    console.log('Transaction:', tx.value);
+
+    // First, verify password via a background message
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
+
+    if (!passwordVerification.data.isValid) {
       enableToolTip();
-    }
-  } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    if (qrCode.value) {
-      qrCode.value = null; // Clear the QRCode instance
-      if (vmProxy.$refs.qrCode)
-        vmProxy.$refs.qrCode.innerHTML = '';
+      return false;
     }
 
-    const ur = createKeystoneSignRequest(txData.value, loggedWallet.value, utxos.value, addresses.value)
-    type.value = ur.type
-    cbor.value = Buffer.from(ur.cbor).toString('hex')
-    qrCodeOptions(UREncoder.encodeSinglePart(ur), 430)
-    console.log('')
-    overlay.value = true
-    qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-    Vue.nextTick(() => {
-      qrCode.value.append(vmProxy.$refs.qrCode);
-    });
-    console.log('qrCode')
+    // Serialize the Cardano.Tx to CBOR for Chrome messaging
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+    console.log('Serialized transaction CBOR:', txCbor.value);
+
+    // Sign the transaction via background message
+    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: {
+        txCbor: txCbor.value,
+        partialSign: false,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        utxos: utxos.value,
+        addresses: keys.value,
+        isUsb: !isBT.value
+      }
+    }) as { data: { witnesses?: any; error?: string } };
+
+    console.log('Transaction signed successfully:', witnessResult);
+
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
+    }
+
+    console.log('Signed transaction witness:', witnessResult.data.witnesses);
+    txWitnesses.value = witnessResult.data.witnesses;
+    return true;
+  } catch (e) {
+    console.error('Error signing send transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    return false;
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+const submitTx = async () => {
+  try {
+    txSubmitLoading.value = true;
+    console.log('Submitting send transaction');
+    const submitResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor.value,
+        witnessHex: txWitnesses.value,
+        utxos: utxos.value
+      }
+    }) as { data: { txId?: string; error?: string } };
+
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
+    }
+
+    snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    emit('close');
+  } catch (e) {
+    console.error('Error submitting send transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+  } finally {
+    txSubmitLoading.value = false;
+    isSubmit.value = false;
+  }
+};
+
+async function signAndSubmitTx() {
+  if (isSubmit.value) {
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      await submitTx();
+    }
   } else {
-    await signAndReturnTx();
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      const isValid: boolean = await signTx();
+      if (!isValid) {
+        return;
+      }
+      // Auto-submit for send transactions (unlike staking where user might want to review)
+      await submitTx();
+    } else if (loggedWallet.value?.type === WalletType.Keystone) {
+      if (qrCode.value) {
+        qrCode.value = null; // Clear the QRCode instance
+        if (vmProxy.$refs.qrCode)
+          vmProxy.$refs.qrCode.innerHTML = '';
+      }
+
+      // TODO: Update Keystone flow to work with Cardano JS SDK transactions
+      // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
+      // type.value = ur.type;
+      // cbor.value = Buffer.from(ur.cbor).toString('hex');
+      // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
+      // console.log('');
+      // overlay.value = true;
+      // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
+      // Vue.nextTick(() => {
+      //   qrCode.value.append(vmProxy.$refs.qrCode);
+      // });
+      // console.log('qrCode');
+    } else {
+      // Hardware wallets (Ledger, etc.)
+      const isValid: boolean = await signTx();
+      if (isValid) {
+        await submitTx();
+      }
+    }
   }
 }
 
-function buildTx(sendTokens) {
+async function buildTx(sendTokens) {
   if (!sendData.value.recipientAddress || !isPaymentAddress(sendData.value.recipientAddress)) {
     return
   }
+
   const recipientAddress = sendData.value.recipientAddress;
-  const tokens = [];
+
+  // Build assets map for Cardano JS SDK
+  const assetsMap = new Map<Cardano.AssetId, bigint>();
+  let coinsAmount = BigInt(0);
+
   if (sendTokens.length > 0) {
     sendTokens.filter(token => (token.unit || token.unit === '') && token.decimals != null).forEach(token => {
+      const quantity = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, token.decimals)));
+
       if (token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)) {
-        tokens.push({
-          unit: 'lovelace',
-          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-        });
+        coinsAmount = quantity;
       } else {
-        tokens.push({
-          unit: token.unit,
-          quantity: (Number(token.quantity) * Math.pow(10, token.decimals)).toString(),
-        });
+        assetsMap.set(token.unit as Cardano.AssetId, quantity);
       }
     });
   }
+
   if (sendData.value.selectedCollectibles.length > 0) {
     sendData.value.selectedCollectibles.forEach(collectible => {
-      tokens.push({
-        unit: collectible.unit,
-        quantity: collectible.toSendQuantity.toString(),
-      });
+      assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
     });
   }
-  const outputs = TransactionOutputs.new();
-  outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO2(utxo)));
+
+  // Create output using Cardano JS SDK format
+  const outputs: Cardano.TxOut[] = [{
+    address: recipientAddress as Cardano.PaymentAddress,
+    value: {
+      coins: coinsAmount as Cardano.Lovelace,
+      assets: assetsMap
+    }
+  }];
+
   try {
-    txBody.value = buildTx2(epochParams.value, outputs, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress, [], []);
-    sendData.value.minAda = 0
-    sendData.value.adaShortage = 0
-    txValid.value = true
-    txData.value = Transaction.new(txBody.value, TransactionWitnessSet.new())
+    tx.value = await buildCardanoTransaction({
+      outputs,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: loggedWallet.value.baseAddress,
+      tip: tip.value
+    });
+
+    sendData.value.minAda = 0;
+    sendData.value.adaShortage = 0;
+    txValid.value = true;
+    console.log('Built transaction:', tx.value);
   } catch (e) {
-    console.log(e)
-    throw e
+    console.log(e);
+    throw e;
   }
 }
 
@@ -489,7 +578,7 @@ function nextStep() {
     if (currentStep.value === 1) {
       currentStep.value++;
     } else if (currentStep.value === 2) {
-      vmProxy.$refs.summary.scanTx(txData.value);
+      vmProxy.$refs.summary.scanTx(tx.value);
       currentStep.value++;
     } else if (currentStep.value === 3) {
       signAndSubmitTx();
@@ -515,7 +604,7 @@ function selectCollectible(collectible) {
   }
 }
 
-function setMax(index) {
+async function setMax(index) {
   const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
   const selectedToken = sendTokensCopy[index];
 
@@ -524,12 +613,12 @@ function setMax(index) {
   } else {
     selectedToken.quantity = Number(selectedToken.balance);
   }
-  tryBuildMaxTx(sendTokensCopy, index);
+  await tryBuildMaxTx(sendTokensCopy, index);
 }
 
-function tryBuildMaxTx(tokens, index) {
+async function tryBuildMaxTx(tokens, index) {
   try {
-    buildTx(tokens)
+    await buildTx(tokens)
   } catch (e) {
     if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
       const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
@@ -556,13 +645,13 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-watch(sendData, (val) => {
+watch(sendData, async (val) => {
   try {
     console.log('build tx')
-    if (!val.recipientAddress) {
+    if (!val['recipientAddress']) {
       return;
     }
-    buildTx(val.selectedTokens)
+    await buildTx(val['selectedTokens'])
     txValid.value = true
   } catch(e) {
     console.error(e)
@@ -582,7 +671,7 @@ watch(sendData, (val) => {
 onMounted(() => {
   if (resolvedAssets.value) {
     const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
-    const adaAssetFound = Object.values(resolvedAssets.value).find(asset => asset.metadata.ticker === nativeTicker);
+    const adaAssetFound = Object.values(resolvedAssets.value).find((asset: any) => asset.metadata.ticker === nativeTicker);
     if (adaAssetFound) {
       sendData.value.selectedTokens = [adaAssetFound];
     }

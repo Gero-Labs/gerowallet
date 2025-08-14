@@ -2,7 +2,7 @@ import Vue from 'vue';
 import { getArtists } from '@/shared/utils/converter';
 import { Howl } from 'howler';
 import { resolveIcon } from '@/shared/utils/resolver';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 import { walletStore } from '@/stores/walletStore';
 
 export interface MusicStore {
@@ -104,6 +104,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<MusicStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 MusicStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...musicStore, ...patch };
   await smartPersist('musicStore', next);
 }

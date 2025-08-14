@@ -389,7 +389,6 @@ const signAndSubmitTx = async () => {
     type.value = ur.type;
     cbor.value = Buffer.from(ur.cbor).toString('hex');
     qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
-    console.log('');
     overlay.value = true;
     qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
     nextTick(() => {

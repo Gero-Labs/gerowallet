@@ -1,22 +1,30 @@
 import Dexie from 'dexie';
 import { Api } from '@/api/api';
-import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Ed25519PublicKey, Hash28ByteBase16, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
-import { APIError, TxSendError, TxSignError } from '@/chrome/config';
+import { Cardano, Serialization, util } from '@cardano-sdk/core';
+import {
+  Bip32PrivateKey,
+  Ed25519PrivateKey,
+  Ed25519PublicKey,
+  Ed25519PublicKeyHex,
+  Ed25519SignatureHex,
+  Hash28ByteBase16,
+} from '@cardano-sdk/crypto';
+import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
-  ChainDerivations,
-  Provider,
-  purpose,
-  coin_type,
-  Tip,
-  WalletType,
+  HARDENED,
   BIP44_SCAN_SIZE,
-  WalletTypePurpose,
+  ChainDerivations,
+  coin_type,
   CoinTypes,
   ERROR,
   Keys,
+  Provider,
+  purpose,
+  Tip,
+  WalletType,
+  WalletTypePurpose,
 } from '@/models/types';
 import {
   addrToSignWith,
@@ -39,10 +47,11 @@ import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
 import XerberusStore from '@/stores/xerberusStore';
 import {
-  resolveAsset,
+  analyzeTransactionForSignatures,
   findCollectionDescription,
   findCollectionName,
   longestCommonStartingSubstring,
+  resolveAsset,
 } from '@/shared/utils/resolver';
 import { getDb } from '@/db/wallet-db';
 import RealFiStore from '@/stores/realFiStore';
@@ -51,25 +60,22 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
-import { HARDENED, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import ledger from '@/shared/utils/ledger';
 import {
   buildAndSignData,
+  convertTransactionsForStorage,
   createCoseKey,
   createCOSEKeyHex,
   createSignDataBuilder,
   toHexArray,
 } from '@/shared/utils/converter';
-import { Ed25519PrivateKey } from '@cardano-sdk/crypto';
-import { DataSignError } from '@/chrome/config';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
-import { util } from '@cardano-sdk/core';
 import { Buffer } from 'buffer';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
-import { convertToTxSchema } from '@/chrome/helper';
-import { deserializeCardanoJsSdkTx, computeTxHash, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
+import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { default as blockchainApi } from '@/api/blockchain-api';
+import { setStakingPools, setDReps } from '@/db';
 
 let blockchainDb: Dexie = null;
 
@@ -132,24 +138,11 @@ export class WalletBg {
   }
 
   unsubscribeAll() {
-    // Unsubscribe from new loader system
     this.loaderFactory.unsubscribeAll();
   }
 
   networkId(): number {
     return networks.resolveNetworkId(this.chain, this.network);
-  }
-
-  async sync(tip?: Tip) {
-    return this.syncService.sync(tip);
-  }
-
-  async resync() {
-    return this.syncService.resync();
-  }
-
-  async setSync(syncObject) {
-    return this.syncService.setSync(syncObject);
   }
 
   public async loadPools() {
@@ -232,21 +225,24 @@ export class WalletBg {
             outAddress = rewardAddr.toAddress().toBech32();
           }
           if (address === outAddress || stakeAddress === outAddress) {
-            addresses.add(out.address);
-            utxos.set(`${transaction.id}#${idx}`, [
-              {
-                txId: Cardano.TransactionId(transaction.id),
-                index: idx,
-                address: out.address,
-              },
-              {
-                address: out.address,
-                value: out.value,
-                datumHash: out.datumHash,
-                datum: out.datum,
-                scriptReference: out.scriptReference,
-              },
-            ]);
+            addresses.add(out.address)
+            utxos.set(
+              `${transaction.id || transaction.tx_hash}#${idx}`,
+              [
+                {
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                  index: idx,
+                  address: out.address,
+                },
+                {
+                  address: out.address,
+                  value: out.value,
+                  datumHash: out.datumHash,
+                  datum: out.datum,
+                  scriptReference: out.scriptReference
+                }
+              ]
+            );
           }
           if (out.value.assets) {
             out.value.assets.keys().forEach((key: string) => {
@@ -472,14 +468,6 @@ export class WalletBg {
       });
   }
 
-  getControlledAmount() {
-    let controlledAmount: bigint = 0n;
-    WalletStore.state.utxos.forEach((utxo: Cardano.Utxo) => {
-      controlledAmount += utxo[1].value.coins;
-    });
-    return controlledAmount;
-  }
-
   async setAccountInfo(accountInfo): Promise<any> {
     const resAccount = await this.getAccountInfo();
     const acc = {
@@ -535,10 +523,64 @@ export class WalletBg {
 
   async setAccountTransactions(txs): Promise<any> {
     return this.getDb()
-      .then(db => {
+      .then(async db => {
         const txsTable = db.table('transactions');
         if (txsTable) {
-          txsTable.bulkPut(txs);
+          // Use centralized conversion logic from converter.ts
+          const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos);
+
+          // Get existing transactions by their IDs
+          const txIds = convertedTxs.map(tx => tx.id);
+          const existingTxs = await txsTable.where('id').anyOf(txIds).toArray();
+
+          // Create a map of existing transactions for quick lookup
+          const existingTxMap = new Map(existingTxs.map(tx => [tx.id, tx]));
+
+          // Helper function to safely stringify objects with BigInt
+          const safeStringify = (obj: any): string => {
+            return JSON.stringify(obj, (key, value) => {
+              if (typeof value === 'bigint') {
+                return value.toString();
+              }
+              return value;
+            });
+          };
+
+          // Separate new transactions from potentially updated ones
+          const newTxs = [];
+          const updatedTxs = [];
+
+          convertedTxs.forEach(newTx => {
+            const existingTx = existingTxMap.get(newTx.id);
+
+            if (!existingTx) {
+              // Transaction doesn't exist - it's new
+              newTxs.push(newTx);
+            } else {
+              // Transaction exists - check if it changed
+              // Use safe stringify to handle BigInt values
+              try {
+                if (safeStringify(existingTx) !== safeStringify(newTx)) {
+                  updatedTxs.push(newTx);
+                }
+              } catch (e) {
+                // If comparison fails, assume transaction needs update to be safe
+                console.debug(`Comparison failed for tx ${newTx.id}, including in update`, e);
+                updatedTxs.push(newTx);
+              }
+            }
+          });
+
+          // Combine new and updated transactions
+          const txsToUpdate = [...newTxs, ...updatedTxs];
+
+          // Only update if there are changes
+          if (txsToUpdate.length > 0) {
+            console.debug(`Saving ${newTxs.length} new and ${updatedTxs.length} updated transactions (${convertedTxs.length} total processed)`);
+            await txsTable.bulkPut(txsToUpdate);
+          } else {
+            console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
+          }
         }
       })
       .catch(err => {
@@ -711,27 +753,18 @@ export class WalletBg {
 
     // Create an array to hold the promises that need to be awaited
     const promises = [];
-    if (!this.isEnterpriseAddress()) {
-      // Note: Staking pools sync moved to alarm-based refresh (every 4 hours)
-      // Note: DReps sync moved to alarm-based refresh (every 4.5 hours)
-    }
 
     // Sync account info and handle rewards and transactions
-    promises.push(
-      this.syncAccountInfo().then(async accountInfo => {
-        if (accountInfo) {
-          if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-            await this.syncAccountRewards();
-          }
-          if (
-            !prevAccountInfo ||
-            Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/
-          ) {
-            await this.syncAccountTransactions(0);
-          }
+    promises.push(this.syncService.syncAccountInfo().then(async accountInfo => {
+      if (accountInfo) {
+        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
+          await this.syncService.syncAccountRewards();
         }
-      })
-    );
+        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
+          await this.syncService.syncAccountTransactions(0);
+        }
+      }
+    }));
 
     // Wait for all promises to complete
     await Promise.all(promises);
@@ -814,7 +847,15 @@ export class WalletBg {
       const signatures = new Map<string, string>();
 
       // Analyze transaction to determine required signatures
-      const requiredSigners = this.analyzeTransactionForSignatures(transaction, utxos, addresses, accountIndex);
+      const requiredSigners = analyzeTransactionForSignatures(
+        transaction,
+        utxos,
+        addresses,
+        accountIndex,
+        this.stakeAddress,
+        this.paymentKeyExternal.bind(this),
+        this.stakeKey.bind(this)
+      );
 
       // Sign with each required key
       for (const signer of requiredSigners) {
@@ -853,138 +894,6 @@ export class WalletBg {
     }
   }
 
-  /**
-   * Analyzes transaction to determine which keys need to sign
-   * @param transaction - The transaction to analyze
-   * @param utxos - Available UTXOs
-   * @param addresses - Address mappings
-   * @param accountIndex - Account index for derivation
-   * @returns Array of signers with their derivation paths
-   */
-  private analyzeTransactionForSignatures(
-    transaction: Cardano.Tx,
-    utxos: Cardano.Utxo[],
-    addresses: Keys,
-    accountIndex: number
-  ): Array<{ derivationPath: number[]; type: string }> {
-    const requiredSigners: Array<{ derivationPath: number[]; type: string }> = [];
-
-    // Check transaction inputs
-    for (const input of transaction.body.inputs) {
-      const utxo = utxos.find(u => u[0].txId === input.txId && u[0].index === input.index);
-
-      if (utxo) {
-        const outputAddress = utxo[1].address;
-
-        // The addresses parameter is actually the keys object from wallet store
-        // It has structure: { payment: [addressObj], change: [addressObj], stake: [addressObj], ... }
-        let foundAddressInfo = null;
-
-        // Search in payment addresses
-        if (addresses.payment) {
-          foundAddressInfo = addresses.payment.find((addr: any) => addr.address === outputAddress);
-        }
-
-        // Search in change addresses if not found in payment
-        if (!foundAddressInfo && addresses.change) {
-          foundAddressInfo = addresses.change.find((addr: any) => addr.address === outputAddress);
-        }
-
-        if (foundAddressInfo && foundAddressInfo.path) {
-          const pathArray = this.parseDerivationPath(foundAddressInfo.path);
-          requiredSigners.push({
-            derivationPath: pathArray,
-            type: 'payment',
-          });
-        } else {
-          // This should not happen if the wallet store is properly populated
-          // But fallback to external 0 as last resort
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.EXTERNAL, 0],
-            type: 'payment',
-          });
-        }
-      }
-    }
-
-    // Check for certificates (staking operations)
-    if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-      for (const certificate of transaction.body.certificates) {
-        if (
-          certificate.__typename === Cardano.CertificateType.StakeRegistration ||
-          certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
-          certificate.__typename === Cardano.CertificateType.StakeDelegation ||
-          certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation
-        ) {
-          // Need stake key signature
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake',
-          });
-        }
-        // Add more certificate types as needed
-      }
-    }
-
-    // Check for withdrawals
-    if (transaction.body.withdrawals && transaction.body.withdrawals.length > 0) {
-      for (const rewardAddress of transaction.body.withdrawals) {
-        if (rewardAddress.stakeAddress === this.stakeAddress) {
-          // Need stake key signature for withdrawal
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake',
-          });
-        }
-      }
-    }
-
-    // Check for required signers field
-    if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
-      for (const keyHash of transaction.body.requiredExtraSignatures) {
-        // Try to match the key hash to our known keys
-        const paymentKeyHash = this.paymentKeyExternal(0).hash().hex();
-        const stakeKeyHash = this.stakeKey().hash().hex();
-
-        if (keyHash === Hash28ByteBase16(paymentKeyHash)) {
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.EXTERNAL, 0],
-            type: 'payment',
-          });
-        } else if (keyHash === Hash28ByteBase16(stakeKeyHash)) {
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-            type: 'stake',
-          });
-        }
-      }
-    }
-
-    // Remove duplicates
-    const uniqueSigners = requiredSigners.filter(
-      (signer, index, self) =>
-        index ===
-        self.findIndex(s => s.derivationPath.join(',') === signer.derivationPath.join(',') && s.type === signer.type)
-    );
-
-    return uniqueSigners;
-  }
-
-  /**
-   * Parses a derivation path string into an array of numbers
-   * @param pathString - Derivation path string (e.g., "m/1852'/1815'/0'/0/0")
-   * @returns Array of derivation path numbers
-   */
-  private parseDerivationPath(pathString: string): number[] {
-    return pathString
-      .replace('m/', '')
-      .split('/')
-      .map(segment => {
-        const num = parseInt(segment.replace("'", ''));
-        return segment.includes("'") ? num + HARDENED : num;
-      })
-      .slice(3); // Remove the first 3 elements (purpose, coin_type, account) as they're handled at account level
-  }
 
   /**
    * Submit transaction using Cardano JS SDK
@@ -992,34 +901,42 @@ export class WalletBg {
    * @param utxos - UTXOs for transaction schema conversion
    * @returns Promise with transaction ID
    */
-  async submitTx(txInput: Transaction | string | Cardano.Tx, utxos: any[]): Promise<string> {
+  async submitTx(txInput: string | Cardano.Tx, utxos: any[]): Promise<string> {
     let txCbor: string;
-    let transaction: Cardano.Tx;
 
     // Handle different input types and convert to CBOR hex
     if (typeof txInput === 'string') {
       // Already a CBOR hex string
       txCbor = txInput;
-      transaction = deserializeCardanoJsSdkTx(txInput);
-    } else if (txInput instanceof Transaction) {
-      // Legacy Emurgo Transaction object
-      txCbor = txInput.to_hex();
-      transaction = deserializeCardanoJsSdkTx(txCbor);
     } else {
       // Cardano JS SDK transaction object
-      transaction = txInput;
-      txCbor = Serialization.Transaction.fromCore(transaction).toCbor();
+      txCbor = Serialization.Transaction.fromCore(txInput).toCbor();
     }
 
     try {
       // Submit transaction via API
       const txId = await this.api.submitTx(txCbor);
 
-      // Convert to transaction schema for database storage
-      const txSchema = convertToTxSchema(txId, txCbor, utxos, this.networkId());
+      // Create transaction record using sync service pattern
+      const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
+      const pendingTx = {
+        id: txId, // Required for a database key path
+        tx_hash: txId,
+        block_hash: '',
+        block_height: 0,
+        epoch_no: 0,
+        absolute_slot: 0,
+        tx_timestamp: Math.floor(Date.now() / 1000),
+        tx_size: 0,
+        cbor: txCbor,
+        pending: true,
+        utxo: null, // No UTXO data for submitted transactions
+        ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid, etc.
+      };
 
-      // Store transaction in database
-      this.setAccountTransactions([txSchema]).catch(e => console.error('Error storing transaction:', e));
+      // Store transaction in a database
+      this.setAccountTransactions([pendingTx])
+        .catch(e => console.error('Error storing transaction:', e));
 
       return txId;
     } catch (error) {
@@ -1086,22 +1003,6 @@ export class WalletBg {
     }
 
     return { signature: signatureHex, key: keyHex };
-  }
-
-  async syncAccountInfo(): Promise<any> {
-    return this.syncService.syncAccountInfo();
-  }
-
-  async syncAccountRewards(): Promise<void> {
-    return this.syncService.syncAccountRewards();
-  }
-
-  async syncAccountTransactions(height: number): Promise<any> {
-    return this.syncService.syncAccountTransactions(height);
-  }
-
-  async syncAssets(uniqueUnits: string[]): Promise<void> {
-    return this.syncService.syncAssets(uniqueUnits);
   }
 
   isEnterpriseAddress(): boolean {
@@ -1175,9 +1076,55 @@ export class WalletBg {
   }
 
   endSync() {
-    clearInterval(WalletStore.state.fiatRatesIntervalId);
-    WalletStore.setFiatRatesIntervalId(null);
-    NetworkStore.setTickerStatisticsIntervalId(null);
+    clearInterval(WalletStore.state.fiatRatesIntervalId)
+    WalletStore.setFiatRatesIntervalId(null)
+    NetworkStore.setTickerStatisticsIntervalId(null)
+  }
+}
+
+/**
+ * Alarm handler for refreshing staking pools every 4 hours
+ * Implements the syncTable(1) functionality from SyncService
+ */
+async function refreshStakingPoolsAlarm() {
+  try {
+
+    // Get current logged wallet from WalletStore
+    const loggedWallet = WalletStore.state.loggedWallet;
+    if (!loggedWallet) {
+      return;
+    }
+
+    // Fetch fresh staking pools data
+    const stakingPoolsData = await blockchainApi.getAllStakingPools(loggedWallet.chain, loggedWallet.network);
+
+    // Store staking pools data in database
+    await setStakingPools(loggedWallet.chain, loggedWallet.network, stakingPoolsData);
+  } catch (error) {
+    console.error('❌ Error in staking pools refresh alarm:', error);
+  }
+}
+
+/**
+ * Alarm handler for refreshing DReps every ~4.5 hours (280 minutes)
+ * Implements the syncTable(2) functionality from SyncService
+ */
+async function refreshDRepsAlarm() {
+  try {
+
+    // Get current logged wallet from WalletStore
+    const loggedWallet = WalletStore.state.loggedWallet;
+    if (!loggedWallet) {
+      return;
+    }
+
+    // Fetch fresh DReps data
+    const drepsData = await blockchainApi.getAllDReps(loggedWallet.chain, loggedWallet.network);
+
+    // Store DReps data in database
+    await setDReps(loggedWallet.chain, loggedWallet.network, drepsData);
+  } catch (error) {
+    console.error('❌ Error in DReps refresh alarm:', error);
   }
 }
 

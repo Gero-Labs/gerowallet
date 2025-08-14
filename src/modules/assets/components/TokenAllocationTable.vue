@@ -9,7 +9,7 @@
         flat
         solo
         hide-details
-        :placeholder="currentTab === 0 ? 'Search assets...' : 'Search collections...'"
+        :placeholder="currentTab === 0 ? 'Search Assets' : 'Search Collections'"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px; margin-left: 16px;"
@@ -117,7 +117,7 @@
       </v-tabs>
     </v-card-title>
     <v-card-text class="pa-0">
-      <v-tabs-items v-model="currentTab" class="transparent fixed-tab-height">
+      <v-tabs-items v-model="currentTab" class="transparent">
         <v-tab-item>
           <TokensTab
             :sort-options="sortOptions"
@@ -364,7 +364,6 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 
 .top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
   background: transparent !important;
-  background-color: transparent !important;
 }
 
 /* Override Vuetify v-select height with higher specificity */
@@ -400,15 +399,6 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
   overflow: hidden !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   isolation: isolate !important;
-}
-
-/* Fixed height for tab content to prevent jumping */
-.fixed-tab-height {
-  min-height: 350px !important;
-}
-
-.fixed-tab-height .v-window-item {
-  min-height: 350px !important;
 }
 
 /* Dynamic responsive tabs styling */
