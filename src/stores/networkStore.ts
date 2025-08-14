@@ -4,8 +4,6 @@ import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSy
 
 export interface NetworkStore {
   assets: any;
-  dreps: any;
-  pools: any;
   epochParams: Cardano.ProtocolParameters;
   tip: Cardano.Tip & {
     epoch: number;
@@ -19,8 +17,6 @@ export interface NetworkStore {
 
 export const networkStore = Vue.observable<NetworkStore>({
   assets: {},
-  dreps: {},
-  pools: {},
   epochParams: null,
   tip: null,
   price: {},
@@ -29,7 +25,7 @@ export const networkStore = Vue.observable<NetworkStore>({
 });
 
 // Initialize store with centralized storage sync
-const SYNC_KEYS = ['assets', 'dreps', 'pools', 'epochParams', 'tip', 'price', 'tickerStatisticsIntervalId', 'genesis'];
+const SYNC_KEYS = ['assets', 'epochParams', 'tip', 'price', 'tickerStatisticsIntervalId', 'genesis'];
 
 // Hydrate from storage on initialization
 hydrateStore('networkStore', networkStore);
@@ -38,7 +34,7 @@ hydrateStore('networkStore', networkStore);
 const unsubscribe = createStorageSync(networkStore, {
   storeName: 'networkStore',
   syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 NetworkStore'
+  debugPrefix: '🔄 NetworkStore',
 });
 
 // Clean up on unload (for contexts that support it)
@@ -56,15 +52,11 @@ export default {
     networkStore.assets = assets;
     persist({ assets: assets });
   },
-  setDReps(dreps: any) {
-    networkStore.dreps = dreps;
-    persist({ dreps: dreps });
-  },
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
     networkStore.epochParams = epochParams;
     persist({ epochParams: epochParams });
   },
-  setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
+  setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number }) {
     networkStore.tip = tip;
     persist({ tip: tip });
   },
@@ -73,12 +65,12 @@ export default {
     persist({ price: price });
   },
   setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
-    networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId
+    networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
     persist({ tickerStatisticsIntervalId: tickerStatisticsIntervalId });
   },
   setGenesis(genesis: any) {
     networkStore.genesis = genesis;
     persist({ genesis: genesis });
   },
-  state: networkStore
+  state: networkStore,
 };

@@ -390,5 +390,7 @@ export interface PaginationParams {
   search?: string;
   hide_saturated?: boolean;
   pledge_met?: boolean;
+  sort_by?: string;
+  sort_desc?: boolean;
 }
 

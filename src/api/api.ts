@@ -11,7 +11,7 @@ export class Api {
   constructor(wallet, provider: Provider) {
     this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain);
     this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
-    this.provider = Provider[provider]
+    this.provider = Provider[provider];
     this.axiosInstance = axios.create({
       baseURL: import.meta.env['VITE_BACKEND_URL'],
       timeout: 120000,
@@ -23,13 +23,21 @@ export class Api {
   }
 
   async ablyToken(baseAddress: string) {
-    return await this.axiosInstance.get(`/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`);
+    return await this.axiosInstance.get(
+      `/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`
+    );
   }
 
-  async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
+  async sync(
+    from: number,
+    to: any,
+    address: string,
+    rewards_sum: string,
+    controlled_amount: string,
+    withdrawable_amount: string
+  ): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.post(
-        `/api/sync`, {
+      const { data, status } = await this.axiosInstance.post(`/api/sync`, {
         chain: this.chain,
         network: this.network,
         provider: this.provider,
@@ -38,9 +46,8 @@ export class Api {
         address,
         rewards_sum,
         controlled_amount,
-        withdrawable_amount
-      }
-      );
+        withdrawable_amount,
+      });
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -99,7 +106,7 @@ export class Api {
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return [];
       }
       throw parseHttpError(error);
     }
@@ -107,35 +114,26 @@ export class Api {
 
   async getTransactionsInfo(txHashes: string[]) {
     try {
-      const { data, status } = await this.axiosInstance.post(`/api/transactions/info?chain=${this.chain}&network=${this.network}`, txHashes);
-      console.log("data:", data);
+      const { data, status } = await this.axiosInstance.post(
+        `/api/transactions/info?chain=${this.chain}&network=${this.network}`,
+        txHashes
+      );
+      console.log('data:', data);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return [];
       }
       throw parseHttpError(error);
     }
   }
 
   async getTransactionsCbor(txHashes: string[]) {
-    return await this.axiosInstance.post(`/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, txHashes);
-  }
-
-  async getAllPools() {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/pools/all?chain=${this.chain}&network=${this.network}`
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
-        return []
-      }
-      throw parseHttpError(error);
-    }
+    return await this.axiosInstance.post(
+      `/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
+      txHashes
+    );
   }
 
   async getPoolById(poolId: string) {
@@ -176,16 +174,14 @@ export class Api {
 
       console.log('Sending request with params:', queryParams.toString());
 
-      const { data, status } = await this.axiosInstance.get(
-        `/api/pools/all?${queryParams.toString()}`
-      );
-      
+      const { data, status } = await this.axiosInstance.get(`/api/pools?${queryParams.toString()}`);
+
       if (status === 200) {
         // If server returns paginated response format, use it directly
         if (data && typeof data === 'object' && data.items && data.meta) {
           return data;
         }
-        
+
         // Otherwise, wrap raw array in pagination format (fallback)
         const pools = data || [];
         return {
@@ -194,8 +190,8 @@ export class Api {
             page: params.page || 1,
             total_items: pools.length,
             per_page: params.per_page || 20,
-            total_pages: Math.ceil(pools.length / (params.per_page || 20))
-          }
+            total_pages: Math.ceil(pools.length / (params.per_page || 20)),
+          },
         };
       }
       throw parseHttpError(data);
@@ -207,108 +203,126 @@ export class Api {
             page: params.page || 1,
             total_items: 0,
             per_page: params.per_page || 20,
-            total_pages: 0
-          }
+            total_pages: 0,
+          },
         };
       }
       throw parseHttpError(error);
     }
   }
 
-  async getAllDReps(page: number = 1, per_page: number = 50, search?: string): Promise<{data: any[], meta: any}> {
+  async getDRepsPaginated(params: PaginationParams = {}): Promise<PaginatedResponse<any>> {
     try {
-      console.log(`🌐 getAllDReps API call: ${this.chain}-${this.network}, page: ${page}, per_page: ${per_page}, search: "${search}"`);
-      
-      // Build query parameters
-      const params = new URLSearchParams({
+      // Build query parameters for server-side filtering and pagination
+      const queryParams = new URLSearchParams({
         chain: this.chain,
         network: this.network,
-        page: page.toString(),
-        per_page: per_page.toString()
+        page: (params.page || 1).toString(),
+        per_page: (params.per_page || 25).toString(),
       });
-      
-      if (search && search.trim()) {
-        params.append('search', search.trim());
+
+      // Add optional filter parameters
+      if (params.search) {
+        queryParams.append('search', params.search);
       }
-      
-      const url = `/api/dreps/all?${params.toString()}`;
-      console.log(`🔗 getAllDReps Request URL: ${url}`);
-      
-      const { data, status } = await this.axiosInstance.get(url);
-      
+
+      // Add sorting parameters
+      if (params.sort_by) {
+        queryParams.append('sort_by', params.sort_by);
+      }
+      if (params.sort_desc !== undefined) {
+        queryParams.append('sort_desc', params.sort_desc.toString());
+      }
+
+      console.log('📡 getDRepsPaginated request with params:', queryParams.toString());
+
+      const { data, status } = await this.axiosInstance.get(`/api/dreps?${queryParams.toString()}`);
+
       if (status === 200) {
-        // If server returns paginated response
-        if (data && typeof data === 'object' && data.data && data.meta) {
-          console.log(`✅ getAllDReps Server Response (paginated):`, {
-            dataLength: data.data?.length || 0,
-            meta: data.meta
+        // If server returns paginated response format, use it directly
+        if (data && typeof data === 'object' && data.items && data.meta) {
+          console.log('✅ Server returned paginated format:', {
+            itemsLength: data.items.length,
+            meta: data.meta,
           });
           return data;
         }
-        
-        // If server returns just array (old format), create pagination structure
-        const allData = Array.isArray(data) ? data : [];
-        console.log(`📊 getAllDReps got ${allData.length} total DReps from API (old format)`);
+
+        // Otherwise, wrap raw array in pagination format (fallback with client-side pagination)
+        const allDReps = data || [];
+        console.log(`📊 Server returned array format with ${allDReps.length} DReps, applying client-side pagination`);
 
         // Client-side filtering if search is provided
-        let filteredData = allData;
-        if (search && search.trim()) {
-          const searchTerm = search.toLowerCase();
-          filteredData = allData.filter((drep: any) => {
-            const name = drep.metadata?.meta_json?.body?.givenName?.['@value'] || 
-                        drep.metadata?.meta_json?.body?.givenName || 
-                        'N/A';
+        let filteredDReps = allDReps;
+        if (params.search && params.search.trim()) {
+          const searchTerm = params.search.toLowerCase();
+          filteredDReps = allDReps.filter((drep: any) => {
+            const name =
+              drep.metadata?.meta_json?.body?.givenName?.['@value'] ||
+              drep.metadata?.meta_json?.body?.givenName ||
+              'N/A';
             const id = drep.drep_id || '';
-            
-            return name.toLowerCase().includes(searchTerm) || 
-                   id.toLowerCase().includes(searchTerm);
+
+            return name.toLowerCase().includes(searchTerm) || id.toLowerCase().includes(searchTerm);
           });
-          console.log(`🔍 getAllDReps filtered to ${filteredData.length} DReps for search: "${search}"`);
+          console.log(`🔍 Filtered to ${filteredDReps.length} DReps for search: "${params.search}"`);
         }
 
         // Client-side pagination
-        const total_items = filteredData.length;
+        const page = params.page || 1;
+        const per_page = params.per_page || 25;
+        const total_items = filteredDReps.length;
         const total_pages = Math.ceil(total_items / per_page);
         const start_index = (page - 1) * per_page;
         const end_index = start_index + per_page;
-        const paginatedData = filteredData.slice(start_index, end_index);
+        const paginatedDReps = filteredDReps.slice(start_index, end_index);
 
-        const result = {
-          data: paginatedData,
+        console.log(`📄 Client-side pagination: page ${page}/${total_pages}, showing ${paginatedDReps.length} items`);
+
+        return {
+          items: paginatedDReps,
           meta: {
             page,
             total_items,
             per_page,
-            total_pages
-          }
+            total_pages,
+          },
         };
-
-        console.log(`📄 getAllDReps returning page ${page}/${total_pages} with ${paginatedData.length} items`);
-        return result;
       }
-      
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
-      console.error('❌ getAllDReps API error:', error);
+      console.error('❌ getDRepsPaginated error:', error);
       if (error.response?.status === 404) {
-        return { data: [], meta: { page: 1, total_items: 0, per_page: per_page, total_pages: 0 } };
+        return {
+          items: [],
+          meta: {
+            page: params.page || 1,
+            total_items: 0,
+            per_page: params.per_page || 25,
+            total_pages: 0,
+          },
+        };
       }
       throw parseHttpError(error);
     }
   }
 
   async getAssetsInfo(units: string[]) {
-    const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`;
     return await this.axiosInstance.post(url, units);
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
-    return await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+    return await this.axiosInstance.get(
+      `/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
+    );
   }
 
   async getAssetNFTAddress(policyId: string, assetName: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+      const { data, status } = await this.axiosInstance.get(
+        `/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
+      );
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -325,11 +339,15 @@ export class Api {
   }
 
   async getGenesis() {
-    return await this.axiosInstance.get(`/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`);
+    return await this.axiosInstance.get(
+      `/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    );
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
-    return await this.axiosInstance.get(`/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`);
+    return await this.axiosInstance.get(
+      `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
+    );
   }
 
   async fetchTickerStatistics() {
@@ -355,8 +373,11 @@ export class Api {
   }
 
   async submitTx(body: string): Promise<any> {
-    const { data } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`, body);
-    return data
+    const { data } = await this.axiosInstance.post(
+      `/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`,
+      body
+    );
+    return data;
   }
 
   async getBankAccountId(userId: number): Promise<number> {
@@ -371,9 +392,9 @@ export class Api {
 
   async verifyProof(proof: Proof, publicSignals: string[]): Promise<boolean> {
     try {
-      const response = await this.axiosInstance.post("api/zk-snark/verify-proof", {
+      const response = await this.axiosInstance.post('api/zk-snark/verify-proof', {
         proof,
-        publicSignals
+        publicSignals,
       });
       return response.data;
     } catch (error) {
@@ -390,7 +411,7 @@ export class Api {
         period,
         from,
         to,
-      }
+      };
       const { data, status } = await this.axiosInstance.post(`/api/v2/charts`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
@@ -418,18 +439,15 @@ export class Api {
      */
     createWallet: async (multisig: any, parentWalletAddress: string) => {
       try {
-        const { data, status } = await this.axiosInstance.post(
-          `/api/multisig/add`,
-          {
-            multisig,
-            parentWalletAddress
-          }
-        );
+        const { data, status } = await this.axiosInstance.post(`/api/multisig/add`, {
+          multisig,
+          parentWalletAddress,
+        });
         if (status === 200) return data;
         throw parseHttpError(data);
       } catch (error: any | AxiosError) {
         if (error.response?.status === 404) {
-          return []
+          return [];
         }
         throw parseHttpError(error);
       }
@@ -469,10 +487,7 @@ export class Api {
        */
       create: async (body: string): Promise<any> => {
         try {
-          const { data } = await this.axiosInstance.post(
-            `/api/multisig/transactions`,
-            body
-          );
+          const { data } = await this.axiosInstance.post(`/api/multisig/transactions`, body);
           return data;
         } catch (error) {
           throw parseHttpError(error);
@@ -621,5 +636,5 @@ export class Api {
         }
       },
     },
-  }
+  };
 }
