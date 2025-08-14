@@ -45,8 +45,6 @@ const governanceStoreActions = {
         sort_desc: params.sort_desc,
       };
 
-      console.log('🚀 Loading DReps with params:', requestParams);
-
       const response: PaginatedResponse<any> = await api.getDRepsPaginated(requestParams);
 
       // For server-side pagination, always replace dreps with current page data
