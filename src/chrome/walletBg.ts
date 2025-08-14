@@ -145,16 +145,8 @@ export class WalletBg {
     return networks.resolveNetworkId(this.chain, this.network);
   }
 
-  public async loadPools() {
-    return this.loaderFactory.load('pools');
-  }
-
   public async loadRewards() {
     return this.loaderFactory.load('rewards');
-  }
-
-  public async loadDReps() {
-    return this.loaderFactory.load('dreps');
   }
 
   public async loadConfig() {
@@ -225,24 +217,21 @@ export class WalletBg {
             outAddress = rewardAddr.toAddress().toBech32();
           }
           if (address === outAddress || stakeAddress === outAddress) {
-            addresses.add(out.address)
-            utxos.set(
-              `${transaction.id || transaction.tx_hash}#${idx}`,
-              [
-                {
-                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                  index: idx,
-                  address: out.address,
-                },
-                {
-                  address: out.address,
-                  value: out.value,
-                  datumHash: out.datumHash,
-                  datum: out.datum,
-                  scriptReference: out.scriptReference
-                }
-              ]
-            );
+            addresses.add(out.address);
+            utxos.set(`${transaction.id || transaction.tx_hash}#${idx}`, [
+              {
+                txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                index: idx,
+                address: out.address,
+              },
+              {
+                address: out.address,
+                value: out.value,
+                datumHash: out.datumHash,
+                datum: out.datum,
+                scriptReference: out.scriptReference,
+              },
+            ]);
           }
           if (out.value.assets) {
             out.value.assets.keys().forEach((key: string) => {
@@ -576,7 +565,9 @@ export class WalletBg {
 
           // Only update if there are changes
           if (txsToUpdate.length > 0) {
-            console.debug(`Saving ${newTxs.length} new and ${updatedTxs.length} updated transactions (${convertedTxs.length} total processed)`);
+            console.debug(
+              `Saving ${newTxs.length} new and ${updatedTxs.length} updated transactions (${convertedTxs.length} total processed)`
+            );
             await txsTable.bulkPut(txsToUpdate);
           } else {
             console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
@@ -755,16 +746,21 @@ export class WalletBg {
     const promises = [];
 
     // Sync account info and handle rewards and transactions
-    promises.push(this.syncService.syncAccountInfo().then(async accountInfo => {
-      if (accountInfo) {
-        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-          await this.syncService.syncAccountRewards();
+    promises.push(
+      this.syncService.syncAccountInfo().then(async accountInfo => {
+        if (accountInfo) {
+          if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
+            await this.syncService.syncAccountRewards();
+          }
+          if (
+            !prevAccountInfo ||
+            Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/
+          ) {
+            await this.syncService.syncAccountTransactions(0);
+          }
         }
-        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
-          await this.syncService.syncAccountTransactions(0);
-        }
-      }
-    }));
+      })
+    );
 
     // Wait for all promises to complete
     await Promise.all(promises);
@@ -894,7 +890,6 @@ export class WalletBg {
     }
   }
 
-
   /**
    * Submit transaction using Cardano JS SDK
    * @param txInput - Either a legacy Transaction object, CBOR hex string, or Cardano.Tx object (Cardano JS SDK)
@@ -935,8 +930,7 @@ export class WalletBg {
       };
 
       // Store transaction in a database
-      this.setAccountTransactions([pendingTx])
-        .catch(e => console.error('Error storing transaction:', e));
+      this.setAccountTransactions([pendingTx]).catch(e => console.error('Error storing transaction:', e));
 
       return txId;
     } catch (error) {
@@ -1076,9 +1070,9 @@ export class WalletBg {
   }
 
   endSync() {
-    clearInterval(WalletStore.state.fiatRatesIntervalId)
-    WalletStore.setFiatRatesIntervalId(null)
-    NetworkStore.setTickerStatisticsIntervalId(null)
+    clearInterval(WalletStore.state.fiatRatesIntervalId);
+    WalletStore.setFiatRatesIntervalId(null);
+    NetworkStore.setTickerStatisticsIntervalId(null);
   }
 }
 
@@ -1088,7 +1082,6 @@ export class WalletBg {
  */
 async function refreshStakingPoolsAlarm() {
   try {
-
     // Get current logged wallet from WalletStore
     const loggedWallet = WalletStore.state.loggedWallet;
     if (!loggedWallet) {
@@ -1111,7 +1104,6 @@ async function refreshStakingPoolsAlarm() {
  */
 async function refreshDRepsAlarm() {
   try {
-
     // Get current logged wallet from WalletStore
     const loggedWallet = WalletStore.state.loggedWallet;
     if (!loggedWallet) {
