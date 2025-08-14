@@ -1076,50 +1076,6 @@ export class WalletBg {
   }
 }
 
-/**
- * Alarm handler for refreshing staking pools every 4 hours
- * Implements the syncTable(1) functionality from SyncService
- */
-async function refreshStakingPoolsAlarm() {
-  try {
-    // Get current logged wallet from WalletStore
-    const loggedWallet = WalletStore.state.loggedWallet;
-    if (!loggedWallet) {
-      return;
-    }
-
-    // Fetch fresh staking pools data
-    const stakingPoolsData = await blockchainApi.getAllStakingPools(loggedWallet.chain, loggedWallet.network);
-
-    // Store staking pools data in database
-    await setStakingPools(loggedWallet.chain, loggedWallet.network, stakingPoolsData);
-  } catch (error) {
-    console.error('❌ Error in staking pools refresh alarm:', error);
-  }
-}
-
-/**
- * Alarm handler for refreshing DReps every ~4.5 hours (280 minutes)
- * Implements the syncTable(2) functionality from SyncService
- */
-async function refreshDRepsAlarm() {
-  try {
-    // Get current logged wallet from WalletStore
-    const loggedWallet = WalletStore.state.loggedWallet;
-    if (!loggedWallet) {
-      return;
-    }
-
-    // Fetch fresh DReps data
-    const drepsData = await blockchainApi.getAllDReps(loggedWallet.chain, loggedWallet.network);
-
-    // Store DReps data in database
-    await setDReps(loggedWallet.chain, loggedWallet.network, drepsData);
-  } catch (error) {
-    console.error('❌ Error in DReps refresh alarm:', error);
-  }
-}
-
 export function alarmListener(alarm) {
   if (alarm.name === 'refreshDexHunterPrices') {
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens));
