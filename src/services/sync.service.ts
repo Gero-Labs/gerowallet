@@ -324,20 +324,7 @@ export class SyncService {
     return null;
   }
 
-   /**
-   * Get DReps (Delegated Representatives) data
-   */
-  async getDReps() {
-    try {
-      const res = await this.api.getAllDReps();
-      if (res) {
-        return res;
-      }
-    } catch (e) {
-      console.debug(e);
-    }
-    return null;
-  }
+
 
   /**
    * Get the block height of the latest transaction
