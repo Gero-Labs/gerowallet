@@ -162,8 +162,6 @@
                       :disable-sort="false"
                       @update:page="onPageChange"
                       @update:items-per-page="onItemsPerPageChange"
-                      @update:sort-by="onSortChange"
-                      @update:sort-desc="onSortChange"
                       no-data-text="No DReps found"
                       no-results-text="No DReps match your search"
                     >
@@ -241,7 +239,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs, onMounted, watch } from 'vue';
+import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import governanceStoreActions from '@/stores/governanceStore';
@@ -579,9 +577,14 @@ const onSearchChange = (searchTerm: string) => {
   loadDRepsPaginated(1);
 };
 
+// Debounce sort changes to prevent multiple rapid calls
+let sortTimeout: NodeJS.Timeout;
 const onSortChange = () => {
   console.log('🔄 Sort changed, reloading page 1');
-  loadDRepsPaginated(1);
+  if (sortTimeout) clearTimeout(sortTimeout);
+  sortTimeout = setTimeout(() => {
+    loadDRepsPaginated(1);
+  }, 100);
 };
 
 // Watch search changes
@@ -593,9 +596,12 @@ watch(search, newSearch => {
   }, 500);
 });
 
-// Watch sorting changes
-watch([sortBy, sortDesc], () => {
-  onSortChange();
+// Watch sorting changes - only trigger when values actually change
+watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
+  // Only trigger if this is not the initial setup
+  if (oldSortBy !== undefined && oldSortDesc !== undefined) {
+    onSortChange();
+  }
 });
 
 // Watch pagination meta changes for debugging
@@ -616,6 +622,12 @@ onMounted(async () => {
     paginationMeta: paginationMeta.value,
     drepsCount: governanceDReps.value?.length || 0
   });
+});
+
+onUnmounted(() => {
+  // Clean up timeouts
+  if (searchTimeout) clearTimeout(searchTimeout);
+  if (sortTimeout) clearTimeout(sortTimeout);
 });
 </script>
 <style scoped>
