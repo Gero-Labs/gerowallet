@@ -15,7 +15,7 @@ import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
 import { encryptPrivateKey } from '@/chrome/serialization';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface GeroStore {
   wallets: any;
@@ -50,6 +50,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<GeroStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 GeroStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...geroStore, ...patch };
   const nextString: string = JSON.stringify(next, (key, value) => {
       if (value instanceof Map) {

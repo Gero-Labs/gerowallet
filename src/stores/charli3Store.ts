@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface MarketToken {
   symbol: string;
@@ -64,6 +64,14 @@ if (typeof window !== 'undefined') {
 }
 
 async function persist(patch: Partial<Charli3Store>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 Charli3Store persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { 
     ...charli3Store, 
     ...patch,

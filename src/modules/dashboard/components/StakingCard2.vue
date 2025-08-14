@@ -361,11 +361,11 @@ const rewardsChartData = computed(() => {
 const withdraw = async () => {
   try {
     // Prepare withdrawals if there are any rewards
-    const withdrawals = [];
+    const withdrawals: Cardano.Withdrawal[] = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
       withdrawals.push({
-        address: loggedWallet.value.stakeAddress,
-        amount: account.value.withdrawable_amount.toString(),
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount)
       });
     }
 
@@ -415,11 +415,11 @@ const unstake = async () => {
     certificates.push(certificate);
 
     // Prepare withdrawals if there are any rewards
-    const withdrawals = [];
+    const withdrawals: Cardano.Withdrawal[] = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
       withdrawals.push({
-        address: loggedWallet.value.stakeAddress,
-        amount: account.value.withdrawable_amount.toString(),
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount)
       });
     }
 

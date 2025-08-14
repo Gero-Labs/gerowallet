@@ -1,7 +1,6 @@
 import Dexie from 'dexie';
 import { BaseLoader } from './base';
 import WalletStore from '@/stores/walletStore';
-import { STORAGE } from '@/chrome/config';
 import { toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
@@ -117,14 +116,8 @@ export class ConnectedDappsLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('connected_dapps').toArray(),
       (newConnectedDapps) => {
+        console.log('new ConnectedDapps', newConnectedDapps)
         WalletStore.setConnectedDapps(newConnectedDapps);
-        if (chrome?.storage) { // TODO Remove
-          if (newConnectedDapps) {
-            chrome.storage.local.set({[STORAGE.whitelisted]: newConnectedDapps});
-          } else {
-            chrome.storage.local.remove(STORAGE.whitelisted);
-          }
-        }
       },
       (error) => {
         console.error('Failed to Fetch Connected Dapps:', error);

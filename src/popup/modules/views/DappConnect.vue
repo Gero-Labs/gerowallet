@@ -42,13 +42,14 @@
   </PopupHeader>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
-import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+
+const vmProxy = getCurrentInstance()!.proxy as any
 
 // Get store values
 const { loggedWallet, config } = toRefs(walletStore);
@@ -71,13 +72,14 @@ const decline = async () => {
 };
 
 const confirm = async () => {
-  await WalletStore.addConnectedDapp(loggedWallet.value.id, popupHeader.value.domain);
+  await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
   await controller.value.returnData({ data: true, error: {} });
   window.close();
 };
 
 // Lifecycle
 onMounted(() => {
+  console.log('DappConnect')
   if (useSidePanel.value) {
     const params = new URLSearchParams(window.location.href);
     tabId.value = Number(params.get("tabId"));

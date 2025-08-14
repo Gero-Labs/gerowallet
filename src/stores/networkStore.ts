@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 
 export interface NetworkStore {
   assets: any;
@@ -49,28 +49,64 @@ async function persist(patch: Partial<NetworkStore>): Promise<void> {
 
 export default {
   setAssets(assets: any) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setAssets called from ${context} context`);
     networkStore.assets = assets;
-    persist({ assets: assets });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ assets: assets });
+    }
   },
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setEpochParams called from ${context} context`);
     networkStore.epochParams = epochParams;
-    persist({ epochParams: epochParams });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ epochParams: epochParams });
+    }
   },
-  setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number }) {
+  setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setTip called from ${context} context`);
     networkStore.tip = tip;
-    persist({ tip: tip });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ tip: tip });
+    }
   },
   setPrice(price: {}) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
-    persist({ price: price });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ price: price });
+    }
   },
   setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
     networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
-    persist({ tickerStatisticsIntervalId: tickerStatisticsIntervalId });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ tickerStatisticsIntervalId: tickerStatisticsIntervalId });
+    }
   },
   setGenesis(genesis: any) {
+    const context = getContextType();
+    console.debug(`🔍 NetworkStore setGenesis called from ${context} context`);
     networkStore.genesis = genesis;
-    persist({ genesis: genesis });
+
+    // Only persist from background context to prevent cross-context conflicts
+    if (context === 'background') {
+      persist({ genesis: genesis });
+    }
   },
   state: networkStore,
 };

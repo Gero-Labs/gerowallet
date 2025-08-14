@@ -2,7 +2,7 @@
   <!-- NFT Gallery Container -->
   <div class="nft-gallery-container">
     <!-- Fixed height container to match assets table -->
-    <div class="collectibles-fixed-container">
+    <div>
       <!-- Grid View -->
       <div class="gallery-grid px-3 pb-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
       <v-card
@@ -42,7 +42,7 @@
       </div>
 
       <!-- Pagination for gallery views -->
-      <div v-if="totalPages > 1" class="text-center mt-3">
+      <div v-if="totalPages > 1" class="text-center mb-2">
         <v-pagination
           v-model="collectiblesPage"
           :length="totalPages"
@@ -114,7 +114,7 @@ const cardSize = computed(() => {
   if (screenWidth.value <= 480) {
     return 90; // Very small screens
   } else if (screenWidth.value <= 768) {
-    return 100; // Small screens  
+    return 100; // Small screens
   } else if (screenWidth.value <= 1200) {
     return 115; // Medium screens
   } else {
@@ -236,13 +236,6 @@ onUnmounted(() => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
-}
-
-/* Fixed height container to match assets table dimensions */
-.collectibles-fixed-container {
-  min-height: 350px; /* Match the fixed tab height */
-  display: flex;
-  flex-direction: column;
 }
 
 .liquid-glass-card,

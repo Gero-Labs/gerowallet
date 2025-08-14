@@ -162,19 +162,50 @@ export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: H
 export function getUtxos(
   amount: string = undefined,
   paginate: Paginate = undefined,
-  utxos: any[],
-  collateral: any
+  utxos: Cardano.Utxo[],
+  collateral: Cardano.Utxo
 ): Serialization.TransactionUnspentOutput[] {
   // Exclude collateral input from the overall UTXO set
   if (collateral) {
     utxos = utxos.filter(
       (utxo) =>
-        !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index)
+        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
     );
   }
 
   // Convert raw UTXOs to the appropriate format
-  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
+  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {
+    // Reconstruct the value with proper Map for assets (needed after JSON deserialization)
+    let value = utxo[1].value;
+    if (value?.assets && !(value.assets instanceof Map)) {
+      const assetsMap = new Map<Cardano.AssetId, bigint>();
+      // Convert plain object back to Map
+      Object.entries(value.assets).forEach(([assetId, quantity]) => {
+        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+      });
+      value = {
+        coins: BigInt(value.coins),
+        assets: assetsMap
+      };
+    } else if (value) {
+      // Ensure coins is BigInt even if no assets
+      value = {
+        coins: BigInt(value.coins),
+        assets: value.assets || undefined
+      };
+    }
+    
+    return Serialization.TransactionUnspentOutput.fromCore([{
+      txId: utxo[0].txId,
+      index: utxo[0].index
+    }, {
+      address: utxo[1].address,
+      value: value,
+      datumHash: utxo[1].datumHash,
+      datum: utxo[1].datum,
+      scriptReference: utxo[1].scriptReference
+    }]);
+  });
 
   // If no amount is specified, return all UTXOs (with optional pagination)
   if (!amount) {

@@ -1,7 +1,8 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
-import { createStorageSync, smartPersist, hydrateStore } from '@/utils/storageSync';
+import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
+import LoadingState from '@/stores/loading';
 
 interface WhitelistedEntry {
   domain: string;
@@ -78,6 +79,14 @@ export const hydrateWalletStore = (): Promise<void> => {
 };
 
 async function persist(patch: Partial<WalletStore>): Promise<void> {
+  const context = getContextType();
+  
+  // Only persist from background context to prevent cross-context conflicts
+  if (context !== 'background') {
+    console.debug(`🔍 WalletStore persist skipped from ${context} context for:`, Object.keys(patch));
+    return;
+  }
+
   const next = { ...walletStore, ...patch };
   try {
     const nextString: string = JSON.stringify(next, (key, value) => {
@@ -289,6 +298,8 @@ export default {
     walletStore.rewards = [];
     walletStore.contacts = {};
     walletStore.connectedDapps = [];
+    // Reset loading states to prevent stuck loading indicators
+    LoadingState.setLoadingTxs(false);
     // Note: loggedWallet and config are updated separately during login process
   },
   state: walletStore

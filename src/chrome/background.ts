@@ -1,5 +1,3 @@
-import Loading from '@/stores/loading';
-
 // Handle unhandled promise rejections to prevent console errors
 self.addEventListener('unhandledrejection', (event) => {
   // Check if it's an Ably channel access error (which we handle gracefully)
@@ -32,6 +30,7 @@ self.addEventListener('activate', (event) => {
   console.log('Service Worker activated');
 });
 
+import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import {
   APIError,
@@ -49,7 +48,6 @@ import {
   focusOrCreatePopup,
   getUsedAddresses,
   getCollateral,
-  getAddress,
   getUtxos,
   getBalance,
   getRewardAddress,
@@ -66,8 +64,9 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { convertToTxSchema } from '@/chrome/helper';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
-import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletManager } from '@/services/walletManager.service';
+import { Cardano } from '@cardano-sdk/core';
+import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -230,8 +229,8 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
 app.add(METHOD.getBalance, async (request, sendResponse) => {
   console.log('getBalance', request)
   try {
-    const collateral = await getStorage(STORAGE.collateral);
-    const utxosFromStorage = await getStorage(STORAGE.utxos);
+    const collateral = WalletStore.state.collateral;
+    const utxosFromStorage = WalletStore.state.utxos;
     const balance = getBalance(utxosFromStorage, collateral)
     sendResponse({
       id: request.id,
@@ -332,8 +331,8 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
+  const loggedWallet = WalletStore.state.loggedWallet
+  if (!loggedWallet) {
     sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
@@ -341,27 +340,17 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
-  const address = await getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    sendResponse({
-      id: request.id,
-      data: address.toBytes(),
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } else {
-    sendResponse({
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
+  sendResponse({
+    id: request.id,
+    data: Cardano.Address.fromBech32(loggedWallet.baseAddress).toBytes(),
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
+  const loggedWallet = WalletStore.state.loggedWallet
+  if (!loggedWallet || !loggedWallet.baseAddress) {
     sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
@@ -369,22 +358,12 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
-  const address = getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    sendResponse({
-      id: request.id,
-      data: address.toBech32(),
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } else {
-    sendResponse({
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
+  sendResponse({
+    id: request.id,
+    data: loggedWallet.baseAddress,
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
@@ -412,20 +391,16 @@ interface WhitelistedEntry {
 }
 
 async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = await getWhitelisted();
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps
+  console.log(whitelisted)
   const bringDomains = await getStorage('bring_relevantDomains')
   if (whitelisted.find(el => origin.includes(el.domain))) return true;
   return !!(bringDomains && bringDomains.find(el => origin.includes(el)));
 }
 
-async function getWhitelisted(): Promise<WhitelistedEntry[]> {
-  const result = await getStorage(STORAGE.whitelisted);
-  return Array.isArray(result) ? result : [];
-}
-
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
   console.log('getNetworkId', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
       id: request.id,
@@ -445,7 +420,7 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
   console.log('getRewardAddresses', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
       id: request.id,
@@ -467,8 +442,8 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
   console.log('getUtxos', request)
   try {
-    const utxosFromStorage = await getStorage(STORAGE.utxos);
-    const collateral = await getStorage(STORAGE.collateral);
+    const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
+    const collateral = WalletStore.state.collateral;
     const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
     let res: string[] | null;
     if (utxos) {
@@ -494,7 +469,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
-  const storedUtxos = await getStorage(STORAGE.utxos);
+  const storedUtxos = WalletStore.state.utxos;
   try {
     const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
     sendResponse({
@@ -514,7 +489,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  console.log('getUsedAddresses', request)
+  console.log('getUsedAddresses', request) //TODO
   try {
     const addresses = getUsedAddresses(await getStorage(STORAGE.addresses), request?.data?.paginate);
     sendResponse({
@@ -534,8 +509,8 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
-  console.log('getUnusedAddresses', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  console.log('getUnusedAddresses', request) //TODO
+  const loggedWallet = WalletStore.state.loggedWallet;
   const addresses = await getStorage(STORAGE.addresses)
   try {
     const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, addresses);
@@ -703,7 +678,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
 
 app.add(METHOD.submitTx, async (request, sendResponse) => {
   try {
-    const loggedWallet = await getStorage(STORAGE.loggedWallet);
+    const loggedWallet = WalletStore.state.loggedWallet;
     if (!loggedWallet || !loggedWallet.publicKey) {
       sendResponse({
         id: request.id,
@@ -727,10 +702,10 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
           throw APIError.InvalidRequest;
       }
     }
-    const utxos = await getStorage(STORAGE.utxos);
+    const utxos = WalletStore.state.utxos;
     const txCbor = request.data.tx
     const txId = await response.text();
-    if (txId) {
+    if (txId) { //TODO
       const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
       const currentWallet = walletManager.getWallet();
       if (currentWallet) {
@@ -756,7 +731,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
       id: request.id,
@@ -786,7 +761,7 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
 
 app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
   try {
-    const account = await getStorage(STORAGE.account);
+    const account = WalletStore.state.account;
     if (!account) {
       sendResponse({
         id: request.id,
@@ -796,7 +771,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
       });
     }
     if (account.active) {
-      const loggedWallet = await getStorage(STORAGE.loggedWallet);
+      const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
           id: request.id,
@@ -835,7 +810,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
 
 app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
   try {
-    const account = await getStorage(STORAGE.account);
+    const account = WalletStore.state.account;
     if (!account) {
       sendResponse({
         id: request.id,
@@ -845,7 +820,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
       });
     }
     if (account.active) {
-      const loggedWallet = await getStorage(STORAGE.loggedWallet);
+      const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
           id: request.id,
@@ -883,7 +858,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAccountPub, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
       id: request.id,
@@ -912,7 +887,7 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   try {
     sendResponse({
       id: request.id,
@@ -1118,15 +1093,14 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       let txInput;
       if (request.data.txCbor && request.data.witnessHex) {
         // Combine transaction CBOR with witness
-        const { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } = await import('@/chrome/cardanoJsSdkCbor');
         const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
         const witness = deserializeWitness(request.data.witnessHex);
-        
+
         const signedTx = {
           ...tx,
           witness: witness
         };
-        
+
         txInput = serializeCardanoJsSdkTx(signedTx);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
@@ -1222,10 +1196,9 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
-    console.log('resync')
     const currentWallet = walletManager.getWallet();
     if (currentWallet) {
-      await currentWallet.resync();
+      await currentWallet.syncService.resync();
       sendResponse({
         id: request.id,
         data: { success: true },
