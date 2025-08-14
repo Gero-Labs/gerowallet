@@ -79,7 +79,7 @@ export class WalletManager {
           encryptedMnemonic: walletBg?.encryptedMnemonic,
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
-          token: walletBg.token
+          token: walletBg.token,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -110,36 +110,42 @@ export class WalletManager {
    */
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
     LoadingState.setText('Setting up wallet address...');
-    const promises = []
+    const promises = [];
 
     if (walletBg.type === WalletType.Google) {
-      promises.push(zkFoldApi.walletAddress(walletBg.userId).then(res => {
-        if (res['status'] !== 200) {
-          throw new Error('Failed to get address');
-        }
-        walletBg.baseAddress = res['data']['address']
-      }))
+      promises.push(
+        zkFoldApi.walletAddress(walletBg.userId).then(res => {
+          if (res['status'] !== 200) {
+            throw new Error('Failed to get address');
+          }
+          walletBg.baseAddress = res['data']['address'];
+        })
+      );
+    }
+    LoadingState.setText('12');
+
+    console.log('Loading assets');
+    walletBg.loadGenesis();
+    const promises2: any[] = [];
+    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams());
+    console.log('Loading rewards');
+    if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
+      console.log('Loading rewards');
+      promises2.push(walletBg.loadRewards());
     }
 
-    LoadingState.setText('Loading blockchain data...');
-    walletBg.loadGenesis()
-    const promises2: any[] = []
-    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams())
-    if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(walletBg.loadPools())
-      promises2.push(walletBg.loadRewards())
-    }
     if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(walletBg.loadDReps())
-    }
-    if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(DexHunterStore.loadTokens())
-      promises2.push(DexHunterStore.loadBlacklistPolicies())
+      console.log('Loading tokens');
+      promises2.push(DexHunterStore.loadTokens());
+      console.log('Loading blacklist policies');
+      promises2.push(DexHunterStore.loadBlacklistPolicies());
     }
     if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(BringStore.loadBringCache(walletBg.baseAddress))
+      console.log('Loading bring cache');
+      promises2.push(BringStore.loadBringCache(walletBg.baseAddress));
     }
-    await Promise.all(promises2)
+    console.log('Loading rewards');
+    await Promise.all(promises2);
 
     LoadingState.setText('Loading wallet data...');
     promises.push(
@@ -148,8 +154,8 @@ export class WalletManager {
       walletBg.loadAccount(),
       walletBg.loadContacts(),
       walletBg.loadConnectedDapps(),
-      walletBg.loadTransactions(),
-    )
+      walletBg.loadTransactions()
+    );
 
     const chain = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network = Object.keys(Network).find(key => Network[key] === walletBg.network);
@@ -166,7 +172,7 @@ export class WalletManager {
       address,
       baseAddress: walletBg.baseAddress,
       stakeAddress: walletBg.stakeAddress,
-      isEnterpriseAddress: walletBg.isEnterpriseAddress()
+      isEnterpriseAddress: walletBg.isEnterpriseAddress(),
     });
 
     console.debug('🔐 Setting up Ably service for wallet switch:', {
@@ -175,7 +181,7 @@ export class WalletManager {
       network,
       address,
       baseAddress: walletBg.baseAddress,
-      stakeAddress: walletBg.stakeAddress
+      stakeAddress: walletBg.stakeAddress,
     });
     console.debug('🔐 Ably service current state before setup:', {
       connectionState: ablyService['client']?.connection?.state,
@@ -183,7 +189,7 @@ export class WalletManager {
       currentAuthParams: ablyService['authParams'],
       hasApi: !!ablyService['api'],
       apiChain: ablyService['api']?.chain,
-      apiNetwork: ablyService['api']?.network
+      apiNetwork: ablyService['api']?.network,
     });
 
     // Force close existing connection if any to ensure fresh authentication
@@ -195,7 +201,7 @@ export class WalletManager {
     console.debug('📡 New API instance details:', {
       chain: walletBg.api.chain,
       network: walletBg.api.network,
-      provider: walletBg.api.provider
+      provider: walletBg.api.provider,
     });
     console.debug('📡 Connecting to Ably service...');
     ablyService.connect();
@@ -208,7 +214,7 @@ export class WalletManager {
     // Additional check - wait for connection to be established
     const maxWaitTime = 10000; // 10 seconds max
     const startTime = Date.now();
-    while (ablyService['client']?.connection?.state !== 'connected' && (Date.now() - startTime) < maxWaitTime) {
+    while (ablyService['client']?.connection?.state !== 'connected' && Date.now() - startTime < maxWaitTime) {
       console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -220,68 +226,73 @@ export class WalletManager {
     }
 
     promises.push(
-      ablyService.subscribeToPrivateChannel(address, {
-        onSync: async (msg: Ably.InboundMessage) => {
-          console.debug('🔄 SYNC message received on private channel!', msg);
-          try {
-            if (this.syncMutex.isLocked()) {
-              console.debug('⏳ Sync mutex is locked, skipping');
-              return;
-            }
-            this.syncMutex.runExclusive(async () => {
-              LoadingState.setText('');
-              LoadingState.setSyncing(true);
-              const syncObject = JSON.parse(msg.data);
-              console.debug('📊 Processing sync object:', syncObject);
-              if (!ablyService.isTipProcessed(syncObject.block.hash)) {
-                ablyService.markTipAsProcessed(syncObject.block.hash);
+      ablyService
+        .subscribeToPrivateChannel(address, {
+          onSync: async (msg: Ably.InboundMessage) => {
+            console.debug('🔄 SYNC message received on private channel!', msg);
+            try {
+              if (this.syncMutex.isLocked()) {
+                console.debug('⏳ Sync mutex is locked, skipping');
+                return;
               }
-              await walletBg.setSync(syncObject);
-              LoadingState.setSyncing(false);
-            });
-          } catch (e) {
-            console.error('❌ Error processing sync message:', e);
-          } finally {
-            LoadingState.setRestoring(false);
-          }
-        },
-        onMessage: async (msg: Ably.InboundMessage) => {
-          console.debug('📬 General message received on private channel:', msg);
-        }
-      }).catch(error => {
-        console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably private channel fails
-      })
+              this.syncMutex.runExclusive(async () => {
+                LoadingState.setText('');
+                LoadingState.setSyncing(true);
+                const syncObject = JSON.parse(msg.data);
+                console.debug('📊 Processing sync object:', syncObject);
+                if (!ablyService.isTipProcessed(syncObject.block.hash)) {
+                  ablyService.markTipAsProcessed(syncObject.block.hash);
+                }
+                await walletBg.setSync(syncObject);
+                LoadingState.setSyncing(false);
+              });
+            } catch (e) {
+              console.error('❌ Error processing sync message:', e);
+            } finally {
+              LoadingState.setRestoring(false);
+            }
+          },
+          onMessage: async (msg: Ably.InboundMessage) => {
+            console.debug('📬 General message received on private channel:', msg);
+          },
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+          // Continue wallet initialization even if Ably private channel fails
+        })
     );
 
     // Subscribe to group channel
     promises.push(
-      ablyService.subscribeToGroupChannel(chain, network, {
-        onTip: async (msg: Ably.InboundMessage) => {
-          try {
-            if (this.tipMutex.isLocked()) {
-              console.debug('⏳ Tip mutex is locked, skipping');
-              return;
+      ablyService
+        .subscribeToGroupChannel(chain, network, {
+          onTip: async (msg: Ably.InboundMessage) => {
+            try {
+              if (this.tipMutex.isLocked()) {
+                console.debug('⏳ Tip mutex is locked, skipping');
+                return;
+              }
+              const tip = JSON.parse(msg.data)?.data as Tip;
+              console.debug('TIP', tip);
+              if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
+                return;
+              }
+              this.tipMutex
+                .runExclusive(() => {
+                  walletBg.sync(tip);
+                })
+                .catch(err => {
+                  console.error('TIP processing failed', err);
+                });
+            } catch (e) {
+              console.error(e);
             }
-            const tip = JSON.parse(msg.data)?.data as Tip;
-            console.debug('TIP', tip);
-            if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
-              return;
-            }
-            this.tipMutex.runExclusive(() => {
-              walletBg.sync(tip);
-            })
-              .catch(err => {
-                console.error('TIP processing failed', err);
-              });
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }).catch(error => {
-        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably group channel fails
-      })
+          },
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
+          // Continue wallet initialization even if Ably group channel fails
+        })
     );
 
     // Wait for all initialization promises to complete
@@ -364,11 +375,13 @@ export class WalletManager {
       // Dispatch logout event
       try {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('gero:logout', {
-            bubbles: true,
-            cancelable: true,
-            composed: false,
-          }));
+          window.dispatchEvent(
+            new CustomEvent('gero:logout', {
+              bubbles: true,
+              cancelable: true,
+              composed: false,
+            })
+          );
         }
       } catch (eventError) {
         console.warn('Failed to dispatch logout event:', eventError);
@@ -428,10 +441,10 @@ export class WalletManager {
    */
   private closeAllOtherExtensionPopups(): void {
     if (typeof chrome !== 'undefined' && chrome.windows) {
-      chrome.windows.getCurrent(function(currentWindow) {
+      chrome.windows.getCurrent(function (currentWindow) {
         const currentId = currentWindow.id;
-        chrome.windows.getAll(function(windows) {
-          windows.forEach(function(window) {
+        chrome.windows.getAll(function (windows) {
+          windows.forEach(function (window) {
             if (window.id !== currentId && window.type === 'popup') {
               chrome.windows.remove(window.id!);
             }

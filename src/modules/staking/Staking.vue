@@ -1,7 +1,7 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id"> 1
+      <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id"> 
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
