@@ -41,7 +41,7 @@
                     </div>
                   </v-card-text>
                   <v-card-text class="px-0 pb-0">
-              <div class="d-flex">
+                    <div class="d-flex">
                       <v-select
                         v-model="delegationModel"
                         label="New Delegation"
@@ -52,19 +52,24 @@
                         :menu-props="{ offsetY: true }"
                         attach
                       />
-                <v-btn class="geroButton ml-3" style="color: black!important;" height="40" :disabled="delegationModel === undefined || delegateLoading || delegationModel === 'Own Account (soon)' || delegationModel === 'Gero DRep (soon)'" @click="delegate" :loading="delegateLoading">
+                      <v-btn
+                        class="geroButton ml-3"
+                        style="color: black !important"
+                        height="40"
+                        :disabled="
+                          delegationModel === undefined ||
+                          delegateLoading ||
+                          delegationModel === 'Own Account (soon)' ||
+                          delegationModel === 'Gero DRep (soon)'
+                        "
+                        @click="delegate"
+                        :loading="delegateLoading"
+                      >
                         Delegate
                       </v-btn>
                     </div>
                   </v-card-text>
-            <v-alert
-              class="mt-4 mb-0"
-              border="left"
-              colored-border
-              color="primary"
-              type="info"
-              elevation="2"
-            >
+                  <v-alert class="mt-4 mb-0" border="left" colored-border color="primary" type="info" elevation="2">
                     Delegate to a DRep for governance actions;
                     <br />
                     It will be required to withdraw staking rewards
@@ -95,7 +100,7 @@
                     typically assign their voting rights to a registered DRep who will vote on their behalf.
                     Additionally, there are two predefined DRep options available:
                   </v-card-subtitle>
-            <div class="px-4 py-0 text-center">
+                  <div class="px-4 py-0 text-center">
                     <v-tooltip bottom>
                       <template v-slot:activator="{ on, attrs }">
                         <span
@@ -140,8 +145,8 @@
                   </v-card-title>
                   <!-- Debug pagination info -->
                   <v-card-subtitle v-if="paginationMeta" class="text-caption">
-                    Showing {{ governanceDReps?.length || 0 }} of {{ paginationMeta.total_items }} DReps 
-                    (Page {{ paginationMeta.page }} of {{ paginationMeta.total_pages }})
+                    Showing {{ governanceDReps?.length || 0 }} of {{ paginationMeta.total_items }} DReps (Page
+                    {{ paginationMeta.page }} of {{ paginationMeta.total_pages }})
                   </v-card-subtitle>
                   <v-card-text class="px-0">
                     <v-data-table
@@ -340,7 +345,7 @@ const paginationInfo = computed(() => {
     totalPages: paginationMeta.value?.total_pages || 0,
     currentPage: currentPage.value,
     itemsPerPage: itemsPerPage.value,
-    itemsOnCurrentPage: governanceDReps.value?.length || 0
+    itemsOnCurrentPage: governanceDReps.value?.length || 0,
   };
 });
 
@@ -432,7 +437,6 @@ const getIconByURI = (uri: string) => {
 
 const delegate = async () => {
   delegateLoading.value = true;
-  console.log('delegate', delegationModel.value);
   const wallet = loggedWallet.value;
   const certificates = [];
   if (!account.value?.active) {
@@ -499,7 +503,6 @@ const delegate = async () => {
 };
 
 const drepDelegate = (row: any) => {
-  console.log('delegate', row);
   selectedDRep.value = row;
   const wallet = loggedWallet.value;
   const certificates = [];
@@ -535,7 +538,6 @@ const drepDelegate = (row: any) => {
   isDelegateDialogOpen.value = true;
 };
 
-// Pagination methods
 const currentPage = ref(1);
 const itemsPerPage = ref(15);
 
@@ -556,19 +558,15 @@ const loadDRepsPaginated = async (page: number = 1) => {
     sort_by: sortBy.value,
     sort_desc: sortDesc.value,
   });
-
-  // Debug pagination info after loading
-  console.log('🔍 Pagination debug info:', paginationInfo.value);
 };
 
 const onPageChange = (page: number) => {
-  console.log(`📄 Page changed to ${page}`);
   loadDRepsPaginated(page);
 };
 
 const onItemsPerPageChange = (newItemsPerPage: number) => {
   itemsPerPage.value = newItemsPerPage;
-  currentPage.value = 1; // Reset to first page when changing items per page
+  currentPage.value = 1;
   loadDRepsPaginated(1);
 };
 
@@ -577,10 +575,8 @@ const onSearchChange = (searchTerm: string) => {
   loadDRepsPaginated(1);
 };
 
-// Debounce sort changes to prevent multiple rapid calls
 let sortTimeout: NodeJS.Timeout;
 const onSortChange = () => {
-  console.log('🔄 Sort changed, reloading page 1');
   if (sortTimeout) clearTimeout(sortTimeout);
   sortTimeout = setTimeout(() => {
     loadDRepsPaginated(1);
@@ -596,32 +592,14 @@ watch(search, newSearch => {
   }, 500);
 });
 
-// Watch sorting changes - only trigger when values actually change
 watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
-  // Only trigger if this is not the initial setup
   if (oldSortBy !== undefined && oldSortDesc !== undefined) {
     onSortChange();
   }
 });
 
-// Watch pagination meta changes for debugging
-watch(paginationMeta, (newMeta) => {
-  console.log('📊 Pagination meta changed:', newMeta);
-}, { deep: true });
-
 onMounted(async () => {
-  console.log('🔄 CardanoGovernance mounted');
-
-  // Load initial paginated data
   await loadDRepsPaginated(1);
-  
-  // Debug initial pagination state
-  console.log('🔍 Initial pagination state:', {
-    currentPage: currentPage.value,
-    itemsPerPage: itemsPerPage.value,
-    paginationMeta: paginationMeta.value,
-    drepsCount: governanceDReps.value?.length || 0
-  });
 });
 
 onUnmounted(() => {
