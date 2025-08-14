@@ -81,7 +81,7 @@ export class WalletManager {
           encryptedMnemonic: walletBg?.encryptedMnemonic,
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
-          token: walletBg.token
+          token: walletBg.token,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -115,32 +115,32 @@ export class WalletManager {
     const promises = [];
 
     if (walletBg.type === WalletType.Google) {
-      promises.push(zkFoldApi.walletAddress(walletBg.userId).then(res => {
-        if (res['status'] !== 200) {
-          throw new Error('Failed to get address');
-        }
-        walletBg.baseAddress = res['data']['address']
-      }))
+      promises.push(
+        zkFoldApi.walletAddress(walletBg.userId).then(res => {
+          if (res['status'] !== 200) {
+            throw new Error('Failed to get address');
+          }
+          walletBg.baseAddress = res['data']['address'];
+        })
+      );
     }
 
     LoadingState.setText('Loading blockchain data...');
-    walletBg.loadGenesis()
-    const promises2: any[] = []
-    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams())
+    walletBg.loadGenesis();
+    const promises2: any[] = [];
+    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams());
     if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
       promises2.push(walletBg.loadRewards());
     }
+
     if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(walletBg.loadDReps())
-    }
-    if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(DexHunterStore.loadTokens())
-      promises2.push(DexHunterStore.loadBlacklistPolicies())
+      promises2.push(DexHunterStore.loadTokens());
+      promises2.push(DexHunterStore.loadBlacklistPolicies());
     }
     if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(BringStore.loadBringCache(walletBg.baseAddress))
+      promises2.push(BringStore.loadBringCache(walletBg.baseAddress));
     }
-    await Promise.all(promises2)
+    await Promise.all(promises2);
 
     LoadingState.setText('Loading wallet data...');
     promises.push(
@@ -149,8 +149,8 @@ export class WalletManager {
       walletBg.loadAccount(),
       walletBg.loadContacts(),
       walletBg.loadConnectedDapps(),
-      walletBg.loadTransactions(),
-    )
+      walletBg.loadTransactions()
+    );
 
     const chain = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network = Object.keys(Network).find(key => Network[key] === walletBg.network);
@@ -221,68 +221,73 @@ export class WalletManager {
     }
 
     promises.push(
-      ablyService.subscribeToPrivateChannel(address, {
-        onSync: async (msg: Ably.InboundMessage) => {
-          console.debug('SYNC::🔄 SYNC message received on private channel!', msg);
-          try {
-            if (this.syncMutex.isLocked()) {
-              console.debug('SYNC::⏳ Sync mutex is locked, skipping');
-              return;
-            }
-            this.syncMutex.runExclusive(async () => {
-              LoadingState.setText('');
-              LoadingState.setSyncing(true);
-              const syncObject = JSON.parse(msg.data);
-              console.debug('SYNC::📊 Processing sync object:', syncObject);
-              if (!ablyService.isTipProcessed(syncObject.block.hash)) {
-                ablyService.markTipAsProcessed(syncObject.block.hash);
+      ablyService
+        .subscribeToPrivateChannel(address, {
+          onSync: async (msg: Ably.InboundMessage) => {
+            console.debug('SYNC::🔄 SYNC message received on private channel!', msg);
+            try {
+              if (this.syncMutex.isLocked()) {
+                console.debug('SYNC::⏳ Sync mutex is locked, skipping');
+                return;
               }
-              await walletBg.syncService.setSync(syncObject);
-              LoadingState.setSyncing(false);
-            });
-          } catch (e) {
-            console.error('SYNC::❌ Error processing sync message:', e);
-          } finally {
-            LoadingState.setRestoring(false);
-          }
-        },
-        onMessage: async (msg: Ably.InboundMessage) => {
-          console.debug('SYNC::📬 General message received on private channel:', msg);
-        }
-      }).catch(error => {
-        console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably private channel fails
-      })
+              this.syncMutex.runExclusive(async () => {
+                LoadingState.setText('');
+                LoadingState.setSyncing(true);
+                const syncObject = JSON.parse(msg.data);
+                console.debug('SYNC::📊 Processing sync object:', syncObject);
+                if (!ablyService.isTipProcessed(syncObject.block.hash)) {
+                  ablyService.markTipAsProcessed(syncObject.block.hash);
+                }
+                await walletBg.syncService.setSync(syncObject);
+                LoadingState.setSyncing(false);
+              });
+            } catch (e) {
+              console.error('SYNC::❌ Error processing sync message:', e);
+            } finally {
+              LoadingState.setRestoring(false);
+            }
+          },
+          onMessage: async (msg: Ably.InboundMessage) => {
+            console.debug('SYNC::📬 General message received on private channel:', msg);
+          },
+        })
+        .catch(error => {
+          console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+          // Continue wallet initialization even if Ably private channel fails
+        })
     );
 
     // Subscribe to group channel
     promises.push(
-      ablyService.subscribeToGroupChannel(chain, network, {
-        onTip: async (msg: Ably.InboundMessage) => {
-          try {
-            if (this.tipMutex.isLocked()) {
-              console.debug('⏳ Tip mutex is locked, skipping');
-              return;
+      ablyService
+        .subscribeToGroupChannel(chain, network, {
+          onTip: async (msg: Ably.InboundMessage) => {
+            try {
+              if (this.tipMutex.isLocked()) {
+                console.debug('⏳ Tip mutex is locked, skipping');
+                return;
+              }
+              const tip = JSON.parse(msg.data)?.data as Tip;
+              console.debug('TIP', tip);
+              if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
+                return;
+              }
+              this.tipMutex
+                .runExclusive(() => {
+                  walletBg.syncService.sync(tip);
+                })
+                .catch(err => {
+                  console.error('TIP processing failed', err);
+                });
+            } catch (e) {
+              console.error(e);
             }
-            const tip = JSON.parse(msg.data)?.data as Tip;
-            console.debug('TIP', tip);
-            if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
-              return;
-            }
-            this.tipMutex.runExclusive(() => {
-              walletBg.syncService.sync(tip);
-            })
-              .catch(err => {
-                console.error('TIP processing failed', err);
-              });
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }).catch(error => {
-        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably group channel fails
-      })
+          },
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
+          // Continue wallet initialization even if Ably group channel fails
+        })
     );
 
     // Wait for all initialization promises to complete
