@@ -542,7 +542,6 @@ const currentPage = ref(1);
 const itemsPerPage = ref(15);
 
 const loadDRepsPaginated = async (page: number = 1) => {
-  console.log(`📄 Loading DReps page ${page}`);
   currentPage.value = page;
 
   const wallet = loggedWallet.value;
