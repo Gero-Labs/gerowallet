@@ -188,7 +188,7 @@ export class WalletBg {
   }
 
   public async getEpochProtocolIfNotExists(epoch: number) {
-    if (NetworkStore.state.epochParams[epoch]) {
+    if (NetworkStore.state.tip?.epoch == epoch) {
       return null
     }
     return epoch
@@ -518,47 +518,25 @@ export class WalletBg {
           // Create a map of existing transactions for quick lookup
           const existingTxMap = new Map(existingTxs.map(tx => [tx.id, tx]));
 
-          // Helper function to safely stringify objects with BigInt
-          const safeStringify = (obj: any): string => {
-            return JSON.stringify(obj, (key, value) => {
-              if (typeof value === 'bigint') {
-                return value.toString();
-              }
-              return value;
-            });
-          };
-
-          // Separate new transactions from potentially updated ones
-          const newTxs = [];
-          const updatedTxs = [];
+          // Separate new transactions from those with pending status changes
+          const txsToUpdate = [];
 
           convertedTxs.forEach(newTx => {
             const existingTx = existingTxMap.get(newTx.id);
 
             if (!existingTx) {
-              // Transaction doesn't exist - it's new
-              newTxs.push(newTx);
-            } else {
-              // Transaction exists - check if it changed
-              // Use safe stringify to handle BigInt values
-              try {
-                if (safeStringify(existingTx) !== safeStringify(newTx)) {
-                  updatedTxs.push(newTx);
-                }
-              } catch (e) {
-                // If comparison fails, assume transaction needs update to be safe
-                console.debug(`Comparison failed for tx ${newTx.id}, including in update`, e);
-                updatedTxs.push(newTx);
-              }
+              // Transaction doesn't exist - it's new, add it
+              txsToUpdate.push(newTx);
+            } else if (existingTx.pending !== newTx.pending) {
+              // Transaction exists but pending status changed - update it
+              txsToUpdate.push(newTx);
             }
+            // Otherwise, transaction exists and hasn't changed - skip it
           });
-
-          // Combine new and updated transactions
-          const txsToUpdate = [...newTxs, ...updatedTxs];
 
           // Only update if there are changes
           if (txsToUpdate.length > 0) {
-            console.debug(`Saving ${newTxs.length} new and ${updatedTxs.length} updated transactions (${convertedTxs.length} total processed)`);
+            console.debug(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
           } else {
             console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);

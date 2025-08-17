@@ -412,7 +412,7 @@ const signTx = async (): Promise<boolean> => {
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     console.log('Serialized transaction CBOR:', txCbor.value);
 
-    // Sign the transaction via background message
+    // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
