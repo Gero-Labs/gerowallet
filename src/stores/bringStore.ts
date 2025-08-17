@@ -1,6 +1,8 @@
 import Vue from 'vue';
 import cashbackApi from '@/api/cashback-api';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface BringStore {
   bringCache: any;
@@ -10,35 +12,40 @@ export const bringStore = Vue.observable<BringStore>({
   bringCache: undefined,
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['bringCache'];
+const STORE_NAME = 'bringStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('bringStore', bringStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing bring store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<BringStore>) => {
+    console.debug('📥 Received bring store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in bringStore) {
+        (bringStore as any)[key] = updates[key as keyof BringStore];
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(bringStore, {
-  storeName: 'bringStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 BringStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(bringStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated bring store from storage');
+    }
+  });
 }
 
-async function persist(patch: Partial<BringStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 BringStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...bringStore, ...patch };
-  const nextString: string = JSON.stringify(next, (key, value) => {
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<BringStore>) {
+  if (context === 'background') {
+    // Serialize data for broadcasting
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
           obj[key] = value;
@@ -49,9 +56,19 @@ async function persist(patch: Partial<BringStore>): Promise<void> {
       } else {
         return value;
       }
-    }
-  );
-  await smartPersist('bringStore', JSON.parse(nextString));
+    }));
+    
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { bringCache: undefined };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      });
+    });
+  }
 }
 
 export default {
@@ -65,7 +82,38 @@ export default {
   },
   setBringCache(bringCache: any) {
     bringStore.bringCache = bringCache;
-    persist({ bringCache: bringCache });
+    broadcastFromBackground({ bringCache });
   },
-  state: bringStore
+  state: bringStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): BringStore {
+    return { ...bringStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: BringStore = {
+      bringCache: undefined
+    };
+    
+    Object.assign(bringStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to check if cache exists
+  hasCache(): boolean {
+    return bringStore.bringCache !== undefined;
+  },
+  
+  // Utility method to get cache data
+  getCache(): any {
+    return bringStore.bringCache;
+  },
+  
+  // Utility method to clear cache
+  clearCache() {
+    bringStore.bringCache = undefined;
+    broadcastFromBackground({ bringCache: undefined });
+  }
 };

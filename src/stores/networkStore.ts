@@ -1,6 +1,8 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface NetworkStore {
   assets: any;
@@ -17,6 +19,7 @@ export interface NetworkStore {
   genesis: any;
 }
 
+// Create observable state
 export const networkStore = Vue.observable<NetworkStore>({
   assets: {},
   dreps: {},
@@ -28,27 +31,74 @@ export const networkStore = Vue.observable<NetworkStore>({
   genesis: null,
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['assets', 'dreps', 'pools', 'epochParams', 'tip', 'price', 'tickerStatisticsIntervalId', 'genesis'];
+const STORE_NAME = 'networkStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('networkStore', networkStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing network store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
+    console.debug('📥 Received network store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in networkStore) {
+        (networkStore as any)[key] = updates[key as keyof NetworkStore];
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(networkStore, {
-  storeName: 'networkStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 NetworkStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(networkStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated network store from storage');
+    }
+  });
 }
 
-async function persist(patch: Partial<NetworkStore>): Promise<void> {
-  const next = { ...networkStore, ...patch };
-  await smartPersist('networkStore', next);
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<NetworkStore>) {
+  if (context === 'background') {
+    // Serialize data for broadcasting (handle BigInt, Maps, etc.)
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      } else if (value instanceof Map) {
+        return Array.from(value.entries()).reduce((obj, [key, value]) => {
+          obj[key] = value;
+          return obj;
+        }, {});
+      } else if (value instanceof Set) {
+        return Array.from(value);
+      } else {
+        return value;
+      }
+    }));
+    
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || {
+        assets: {},
+        dreps: {},
+        pools: {},
+        epochParams: null,
+        tip: null,
+        price: {},
+        tickerStatisticsIntervalId: null,
+        genesis: null
+      };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      });
+    });
+  }
 }
 
 export default {
@@ -57,80 +107,155 @@ export default {
     console.debug(`🔍 NetworkStore setAssets called from ${context} context`);
     networkStore.assets = assets;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ assets: assets });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ assets });
   },
+  
   setDReps(dreps: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setDReps called from ${context} context`);
     networkStore.dreps = dreps;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ dreps: dreps });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ dreps });
   },
+  
   setPools(pools: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setPools called from ${context} context`);
     networkStore.pools = pools;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ pools: pools });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ pools });
   },
+  
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setEpochParams called from ${context} context`);
     networkStore.epochParams = epochParams;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ epochParams: epochParams });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ epochParams });
   },
+  
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setTip called from ${context} context`);
     networkStore.tip = tip;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ tip: tip });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ tip });
   },
+  
   setPrice(price: {}) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ price: price });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ price });
   },
+  
   setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
     networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ tickerStatisticsIntervalId: tickerStatisticsIntervalId });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ tickerStatisticsIntervalId });
   },
+  
   setGenesis(genesis: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setGenesis called from ${context} context`);
     networkStore.genesis = genesis;
     
-    // Only persist from background context to prevent cross-context conflicts
-    if (context === 'background') {
-      persist({ genesis: genesis });
-    }
+    // Broadcast from background context
+    broadcastFromBackground({ genesis });
   },
-  state: networkStore
+  
+  // Expose the observable state
+  state: networkStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): NetworkStore {
+    return { ...networkStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: NetworkStore = {
+      assets: {},
+      dreps: {},
+      pools: {},
+      epochParams: null,
+      tip: null,
+      price: {},
+      tickerStatisticsIntervalId: null,
+      genesis: null
+    };
+    
+    Object.assign(networkStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to check if network is synced
+  isSynced(): boolean {
+    return networkStore.tip !== null && networkStore.epochParams !== null;
+  },
+  
+  // Utility method to get current epoch
+  getCurrentEpoch(): number | null {
+    return networkStore.tip?.epoch || null;
+  },
+  
+  // Utility method to get current slot
+  getCurrentSlot(): number | null {
+    return networkStore.tip?.slot || null;
+  },
+  
+  // Utility method to get current block height
+  getCurrentBlockHeight(): number | null {
+    return networkStore.tip?.blockNo || null;
+  },
+  
+  // Utility method to get ADA price in USD
+  getAdaPrice(): number {
+    return networkStore.price?.lastPrice || 0;
+  },
+  
+  // Utility method to get price change percentage
+  getPriceChangePercent(): number {
+    return networkStore.price?.priceChangePercentage || 0;
+  },
+  
+  // Utility method to check if an asset exists
+  hasAsset(unit: string): boolean {
+    return unit in networkStore.assets;
+  },
+  
+  // Utility method to get asset by unit
+  getAsset(unit: string): any {
+    return networkStore.assets[unit];
+  },
+  
+  // Utility method to check if a pool exists
+  hasPool(poolId: string): boolean {
+    return poolId in networkStore.pools;
+  },
+  
+  // Utility method to get pool by ID
+  getPool(poolId: string): any {
+    return networkStore.pools[poolId];
+  },
+  
+  // Utility method to check if a DRep exists
+  hasDRep(drepId: string): boolean {
+    return drepId in networkStore.dreps;
+  },
+  
+  // Utility method to get DRep by ID
+  getDRep(drepId: string): any {
+    return networkStore.dreps[drepId];
+  }
 };

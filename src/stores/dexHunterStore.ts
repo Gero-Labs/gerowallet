@@ -2,85 +2,118 @@ import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface DexHunterStore {
   dexHunterTokens: {};
   blacklistPolicies: string[];
 }
 
+// Create an observable state
 export const dexHunterStore = Vue.observable<DexHunterStore>({
   dexHunterTokens: {},
   blacklistPolicies: [],
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['dexHunterTokens', 'blacklistPolicies'];
+const STORE_NAME = 'dexHunterStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('dexHunterStore', dexHunterStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing dexHunter store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<DexHunterStore>) => {
+    console.debug('📥 Received dexHunter store update:', updates);
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(dexHunterStore, {
-  storeName: 'dexHunterStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 DexHunterStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
-}
-
-async function persist(patch: Partial<DexHunterStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 DexHunterStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...dexHunterStore, ...patch };
-  await smartPersist('dexHunterStore', next);
-}
-
-async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 DexHunterStore persistTokenPatch skipped from ${context} context for:`, unit);
-    return;
-  }
-
-  const result = await chrome.storage.local.get('dexHunterStore');
-  const saved: DexHunterStore = result['dexHunterStore'] || { dexHunterTokens: {}, blacklistPolicies: [] };
-  const tokensCopy = { ...saved.dexHunterTokens };
-
-  tokensCopy[unit] = {
-    ...tokensCopy[unit],
-    price: patch.price,
-    mcap: patch.mcap,
-  };
-
-  await chrome.storage.local.set({
-    dexHunterStore: {
-      ...saved,
-      dexHunterTokens: tokensCopy,
-    },
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in dexHunterStore) {
+        (dexHunterStore as any)[key] = updates[key as keyof DexHunterStore];
+      }
+    });
   });
+
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(dexHunterStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated dexHunter store from storage:', result[STORE_NAME]);
+    }
+  });
+}
+
+/**
+ * Broadcast updates from the background context
+ */
+function broadcastFromBackground(updates: Partial<DexHunterStore>) {
+  if (context === 'background') {
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
+
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [] };
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...updates }
+      });
+    });
+  }
+}
+
+/**
+ * Special handler for token patches (partial updates to nested objects)
+ */
+async function broadcastTokenPatch(unit: string, patch: { price: number; mcap: number }) {
+  if (context === 'background') {
+    // Get current state
+    const result = await chrome.storage.local.get(STORE_NAME);
+    const saved: DexHunterStore = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [] };
+
+    // Create updated tokens object
+    const updatedTokens = {
+      ...saved.dexHunterTokens,
+      [unit]: {
+        ...saved.dexHunterTokens[unit],
+        price: patch.price,
+        mcap: patch.mcap,
+      }
+    };
+
+    // Update local state
+    dexHunterStore.dexHunterTokens = updatedTokens;
+
+    // Broadcast the update
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, {
+      dexHunterTokens: updatedTokens
+    });
+
+    // Persist to storage
+    await chrome.storage.local.set({
+      [STORE_NAME]: {
+        ...saved,
+        dexHunterTokens: updatedTokens,
+      },
+    });
+  }
 }
 
 export default {
   setTokens(dexHunterTokens: any) {
     dexHunterStore.dexHunterTokens = dexHunterTokens;
-    persist({ dexHunterTokens: dexHunterTokens });
+
+    // Broadcast from background context
+    broadcastFromBackground({ dexHunterTokens });
   },
+
   setBlacklistPolicies(blacklistPolicies: string[]) {
     dexHunterStore.blacklistPolicies = blacklistPolicies;
-    persist({ blacklistPolicies: blacklistPolicies });
+
+    // Broadcast from background context
+    broadcastFromBackground({ blacklistPolicies });
   },
+
   async loadTokens() {
     try {
       const res = await dexHunterApi.getSwapTokens();
@@ -108,6 +141,7 @@ export default {
       console.error(error);
     }
   },
+
   async updatePrices(tokensUnits: string[]) {
     for (const unit of tokensUnits) {
       try {
@@ -115,7 +149,7 @@ export default {
           const res = await dexHunterApi.mCap(unit);
           if (res.status === 200) {
             const { price, mcap } = res.data;
-            await persistTokenPatch(unit, { price, mcap });
+            await broadcastTokenPatch(unit, { price, mcap });
           }
         }
       } catch (e) {
@@ -123,6 +157,7 @@ export default {
       }
     }
   },
+
   async loadBlacklistPolicies() {
     try {
       const res = await dexHunterApi.getAllBlacklistPolicies()
@@ -135,6 +170,7 @@ export default {
       console.error(e)
     }
   },
+
   async searchTokens(query?: string) {
     const res = await dexHunterApi.getSwapTokens(query);
     if (res) {
@@ -167,5 +203,23 @@ export default {
       return []
     }
   },
-  state: dexHunterStore
+
+  // Expose the observable state
+  state: dexHunterStore,
+
+  // Utility method to get the current state snapshot
+  getSnapshot(): DexHunterStore {
+    return { ...dexHunterStore };
+  },
+
+  // Utility method to reset state
+  reset() {
+    const resetState: DexHunterStore = {
+      dexHunterTokens: {},
+      blacklistPolicies: [],
+    };
+
+    Object.assign(dexHunterStore, resetState);
+    broadcastFromBackground(resetState);
+  }
 };

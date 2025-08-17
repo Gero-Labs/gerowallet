@@ -319,6 +319,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
 
 // Computed properties
 const tokensList = computed(() => {
+  console.log('tokens', tokens.value)
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
       token.risk = 'AAA';
@@ -348,6 +349,8 @@ const tokensList = computed(() => {
     }
     return token
   });
+
+  console.log('tokens', res)
 
   // Apply filters
   res = res.filter(token => {
