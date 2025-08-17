@@ -124,6 +124,23 @@
       </v-col> -->
     </v-row>
 
+    <!-- KaiserEx Token Reception -->
+    <v-row no-gutters>
+      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
+        <v-card outlined class="liquid-glass">
+          <v-card-title>KaiserEx Token Reception</v-card-title>
+          <v-card-text>
+            <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
+              Receive Token from KaiserEx
+            </v-btn>
+            <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
+              {{ kaiserExMessage.text }}
+            </v-alert>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <!-- Claim Dialog -->
     <ClaimDialog
       :show="showClaimDialog"
@@ -158,6 +175,7 @@ import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '..
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
+import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -168,6 +186,9 @@ const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
 const showClaimDialog = ref(false);
+
+const kaiserExLoading = ref(false);
+const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
 
 // Carousel state
 const currentCarouselIndex = ref(0);
@@ -394,6 +415,28 @@ const showApexWallet = () => {
 const showApexFeatures = () => {
   console.log('Showing Apex Features...');
   // Add your Apex features logic here
+};
+
+
+const handleReceiveKaiserExToken = async () => {
+  kaiserExLoading.value = true;
+  kaiserExMessage.value = null;
+
+  try {
+    await receiveKaiserExToken((tokenData) => {
+      kaiserExMessage.value = {
+        type: 'success',
+        text: `Token received successfully! Token: ${tokenData.access_token}`
+      };
+      kaiserExLoading.value = false;
+    });
+  } catch (error) {
+    kaiserExMessage.value = {
+      type: 'error',
+      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+    kaiserExLoading.value = false;
+  }
 };
 
 // Empty state handlers
