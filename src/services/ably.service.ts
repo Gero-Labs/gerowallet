@@ -3,6 +3,7 @@ import * as Ably from 'ably';
 import FIFOCache from 'tiny-fifo-cache';
 import LoadingState from '@/stores/loading';
 import { Api } from '@/api/api';
+import messageReconstructionService from '@/services/messageReconstruction.service';
 
 const tips = new FIFOCache<string, boolean>(10);
 
@@ -122,14 +123,18 @@ class AblyService {
       this.client.connection?.close();
       this.client.close();
       this.api = null;
+      
+      // Clear any pending message chunks
+      messageReconstructionService.clearAll();
     } catch (e) {
       console.warn('Error closing Ably connection:', e);
     }
   }
 
   public setAuthParams(chain: string, network: string, address: string): void {
+    console.debug('🔐 Setting auth params:', { chain, network, address });
     this.authParams = { chain, network, address };
-    // Always recreate the client when setting auth params to ensure completely fresh state
+    // ALWAYS recreate client when setting auth params for fresh state
     this.close();
     this.recreateClient();
   }
@@ -252,6 +257,30 @@ class AblyService {
                 case 'SYNC':
                   if (handlers.onSync) {
                     await handlers.onSync(msg);
+                  }
+                  break;
+                case 'SYNC_CHUNK':
+                  // Handle chunked messages
+                  try {
+                    const chunk = JSON.parse(msg.data);
+                    console.debug('📦 Received SYNC_CHUNK on private channel:', chunk);
+                    
+                    const reconstructedMessage = messageReconstructionService.processChunk(chunk);
+                    if (reconstructedMessage) {
+                      // Message is complete, handle based on original message type
+                      if (chunk.message_type === 'SYNC' && handlers.onSync) {
+                        // Create a mock Ably message for backward compatibility
+                        const mockMessage: Ably.InboundMessage = {
+                          ...msg,
+                          name: 'SYNC',
+                          data: JSON.stringify(reconstructedMessage)
+                        };
+                        await handlers.onSync(mockMessage);
+                      }
+                      // Add other message type handlers as needed
+                    }
+                  } catch (error) {
+                    console.error('❌ Failed to process SYNC_CHUNK:', error);
                   }
                   break;
                 default:

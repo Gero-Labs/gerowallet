@@ -15,7 +15,9 @@ import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
 import { encryptPrivateKey } from '@/chrome/serialization';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface GeroStore {
   wallets: any;
@@ -31,35 +33,40 @@ export const geroStore: GeroStore =  Vue.observable<GeroStore>({
   },
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['wallets', 'network', 'config'];
+const STORE_NAME = 'geroStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('geroStore', geroStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing gero store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<GeroStore>) => {
+    console.debug('📥 Received gero store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in geroStore) {
+        (geroStore as any)[key] = updates[key as keyof GeroStore];
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(geroStore, {
-  storeName: 'geroStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 GeroStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(geroStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated gero store from storage');
+    }
+  });
 }
 
-async function persist(patch: Partial<GeroStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 GeroStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...geroStore, ...patch };
-  const nextString: string = JSON.stringify(next, (key, value) => {
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<GeroStore>) {
+  if (context === 'background') {
+    // Serialize data for broadcasting
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
           obj[key] = value;
@@ -70,28 +77,44 @@ async function persist(patch: Partial<GeroStore>): Promise<void> {
       } else {
         return value;
       }
-    }
-  );
-  await smartPersist('geroStore', JSON.parse(nextString));
+    }));
+    
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || {
+        wallets: {},
+        network: networks[0],
+        config: {
+          welcomeDone: true
+        }
+      };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      });
+    });
+  }
 }
 
 export default {
   setWallets(wallets: any) {
     geroStore.wallets = wallets;
-    persist({ wallets: wallets });
+    broadcastFromBackground({ wallets });
   },
   setConfig(config: any) {
     geroStore.config = config;
-    persist({ config: config });
+    broadcastFromBackground({ config });
   },
   setNetwork(network: any) {
     geroStore.network = network;
-    persist({ network: network });
+    broadcastFromBackground({ network });
   },
   removeWallet(walletId: number) {
     if (geroStore.wallets && geroStore.wallets[walletId]) {
       delete geroStore.wallets[walletId];
-      persist({ wallets: geroStore.wallets });
+      broadcastFromBackground({ wallets: geroStore.wallets });
       deleteWallet(walletId);
     }
   },
@@ -100,7 +123,7 @@ export default {
     // Update the wallets field with the latest wallets from the database
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
-    persist({ wallets: updatedWallets });
+    broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];
   },
   async createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
@@ -108,7 +131,7 @@ export default {
     // Update the wallets field with the latest wallets from the database
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
-    persist({ wallets: updatedWallets });
+    broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];
   },
   async createNewHardwareWallet(wallet: any) {
@@ -116,7 +139,7 @@ export default {
     // Update the wallets field with the latest wallets from the database
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
-    persist({ wallets: updatedWallets });
+    broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];
   },
 
@@ -131,7 +154,7 @@ export default {
     // 2) immediately reload local state
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
-    persist({ wallets: updatedWallets });
+    broadcastFromBackground({ wallets: updatedWallets });
   },
 
   /**
@@ -145,7 +168,7 @@ export default {
     // 2) immediately reload local state
     const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
-    persist({ wallets: updatedWallets });
+    broadcastFromBackground({ wallets: updatedWallets });
   },
 
   /**
@@ -184,7 +207,7 @@ export default {
         // Reload local state
         const updatedWallets = await getAllWallets();
         geroStore.wallets = updatedWallets;
-        persist({ wallets: updatedWallets });
+        broadcastFromBackground({ wallets: updatedWallets });
 
       } catch (e) {
         throw ERROR.wrongPassword;
@@ -192,5 +215,49 @@ export default {
     }
   },
 
-  state: geroStore
+  state: geroStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): GeroStore {
+    return { ...geroStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: GeroStore = {
+      wallets: {},
+      network: networks[0],
+      config: {
+        welcomeDone: true
+      }
+    };
+    
+    Object.assign(geroStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to check if user has completed welcome
+  isWelcomeDone(): boolean {
+    return geroStore.config?.welcomeDone || false;
+  },
+  
+  // Utility method to get current network
+  getCurrentNetwork(): any {
+    return geroStore.network;
+  },
+  
+  // Utility method to get all wallets
+  getAllWallets(): any {
+    return geroStore.wallets;
+  },
+  
+  // Utility method to get wallet by ID
+  getWallet(walletId: number): any {
+    return geroStore.wallets?.[walletId];
+  },
+  
+  // Utility method to check if wallet exists
+  hasWallet(walletId: number): boolean {
+    return geroStore.wallets && walletId in geroStore.wallets;
+  }
 }

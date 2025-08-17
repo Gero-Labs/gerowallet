@@ -82,21 +82,6 @@ export const POPUP_WINDOW = {
   left: 100,
 };
 
-export const STORAGE = {
-  loggedWallet: 'loggedWallet',
-  whitelisted: 'whitelisted',
-  encryptedKey: 'encryptedKey',
-  account: 'account',
-  currentAccount: 'currentAccount',
-  network: 'network',
-  currency: 'currency',
-  migration: 'migration',
-  addresses: 'addresses',
-  utxos: 'utxos',
-  collateral: 'collateral',
-  assets: 'assets'
-};
-
 export const EVENT = {
   accountChange: 'accountChange',
   networkChange: 'networkChange',

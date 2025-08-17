@@ -1,44 +1,56 @@
 import Vue from 'vue';
 import coinGeckoApi from '@/api/coinGecko.api';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface CoinGeckoStore {
   cache: Record<string, any>;
 }
 
-export const coinGeckoStore: CoinGeckoStore = Vue.observable<CoinGeckoStore>({
+// Create observable state
+export const coinGeckoStore = Vue.observable<CoinGeckoStore>({
   cache: {}
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['cache'];
+const STORE_NAME = 'coinGeckoStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('coinGeckoStore', coinGeckoStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing coinGecko store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<CoinGeckoStore>) => {
+    console.debug('📥 Received coinGecko store update:', updates);
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(coinGeckoStore, {
-  storeName: 'coinGeckoStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 CoinGeckoStore'
-});
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in coinGeckoStore) {
+        (coinGeckoStore as any)[key] = updates[key as keyof CoinGeckoStore];
+      }
+    });
+  });
 
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(coinGeckoStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated coinGecko store from storage:', result[STORE_NAME]);
+    }
+  });
 }
 
-async function persist(patch: Partial<CoinGeckoStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 CoinGeckoStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
+/**
+ * Broadcast updates from the background context
+ */
+function broadcastFromBackground(updates: Partial<CoinGeckoStore>) {
+  if (context === 'background') {
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
 
-  const next = { ...coinGeckoStore, ...patch };
-  const nextString: string = JSON.stringify(next, (key, value) => {
+    // Also persist to storage as fallback
+    // Handle serialization for complex types
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
           obj[key] = value;
@@ -49,9 +61,15 @@ async function persist(patch: Partial<CoinGeckoStore>): Promise<void> {
       } else {
         return value;
       }
-    }
-  );
-  await smartPersist('coinGeckoStore', JSON.parse(nextString));
+    }));
+
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { cache: {} };
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
+      });
+    });
+  }
 }
 
 export default {
@@ -60,12 +78,44 @@ export default {
       const res = await coinGeckoApi.getSimplePrice();
       this.setCache(res.data);
     } catch (e) {
-      console.warn(e);
+      console.warn('Failed to update CoinGecko prices:', e);
     }
   },
+
   setCache(cache: Record<string, any>) {
     coinGeckoStore.cache = cache;
-    persist({ cache: cache });
+
+    // Broadcast from background context
+    broadcastFromBackground({ cache });
   },
-  state: coinGeckoStore
-}
+
+  // Expose the observable state
+  state: coinGeckoStore,
+
+  // Utility method to get current state snapshot
+  getSnapshot(): CoinGeckoStore {
+    return { ...coinGeckoStore };
+  },
+
+  // Utility method to reset state
+  reset() {
+    const resetState: CoinGeckoStore = {
+      cache: {}
+    };
+
+    Object.assign(coinGeckoStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+
+  // Utility method to get price for a specific coin
+  getPrice(coinId: string): number | undefined {
+    return coinGeckoStore.cache[coinId]?.usd;
+  },
+
+  // Utility method to check if the cache is stale (older than 5 minutes)
+  isCacheStale(maxAge: number = 5 * 60 * 1000): boolean {
+    const cacheTimestamp = coinGeckoStore.cache._timestamp;
+    if (!cacheTimestamp) return true;
+    return Date.now() - cacheTimestamp > maxAge;
+  }
+};

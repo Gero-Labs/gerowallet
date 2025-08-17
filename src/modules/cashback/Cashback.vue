@@ -144,7 +144,8 @@
         {{ loadingMore ? "Loading ..." : "" }}
       </v-card-title>
       <v-card-title ref="intersectionTarget" style="font-size: 14px" v-if="supported">
-        Powered By<v-btn color="primary" class="px-0 mx-0 ml-1" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
+        Powered By
+        <v-btn color="primary" class="px-0 mx-0 ml-1" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
       </v-card-title>
     </v-card-actions>
     <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
@@ -170,10 +171,9 @@ const { bringCache } = toRefs(bringStore);
 
 const isIntersecting = ref(false);
 const selectedCategoryIndex = ref(0);
-const entries = ref([]);
 const intersectionTarget = ref<Element>();
 const searchTerms = ref([]);
-const model = ref(null);
+const model = ref<string>("");
 const categories = ref({
   items: []
 });
@@ -181,7 +181,7 @@ const chipLoading = ref(false);
 const isLoading = ref(false);
 const isLoading2 = ref(false);
 const loadingMore = ref(false);
-const retailers = ref({});
+const retailers = ref(null);
 const nextPage = ref(null);
 const isRewardsDialogOpen = ref(false);
 const isRetailerDialogOpen = ref(false);
@@ -191,11 +191,7 @@ const generalTermsUrl = ref(null);
 const retailerTermsBasePath = ref(null);
 const totalItems = ref(null);
 const supported = ref(true);
-const searchTerm = ref('');
-
-const terms = computed(() => {
-  return entries.value;
-});
+const searchTerm = ref<string>('');
 
 const selectedCategory = computed(() => {
   return categories.value.items[selectedCategoryIndex.value];
@@ -215,8 +211,11 @@ const pending = computed(() => {
   return undefined;
 });
 
-const deals = computed(() => {
-  return Object.values(retailers.value);
+const deals = computed<any[]>(() => {
+  if (retailers.value) {
+    return Object.values(retailers.value);
+  }
+  return [];
 });
 
 watch(isIntersecting, async (val) => {
@@ -231,7 +230,7 @@ watch(isIntersecting, async (val) => {
   }
 });
 
-watch(model, async (val) => {
+watch(model, async (val: string) => {
   isLoading.value = true;
   if (val) {
     selectedCategoryIndex.value = null;
@@ -261,10 +260,6 @@ watch(selectedCategory, async () => {
 useIntersectionObserver(intersectionTarget, ([{ isIntersecting: intersecting }]) => {
   isIntersecting.value = intersecting;
 });
-
-const onIntersect = (entries: any, observer: any) => {
-  isIntersecting.value = entries[0].isIntersecting;
-};
 
 const openRetailerDialog = (retailerData: any) => {
   retailer.value = retailerData;
