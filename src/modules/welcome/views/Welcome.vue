@@ -149,7 +149,6 @@ const welcomeBg = computed(() => {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 80px 20px 20px 20px;
 }
 
 /* Fallback for browsers without backdrop-filter support */
