@@ -36,11 +36,7 @@
                   </v-alert>
                 </v-col>
               </v-row>
-              <v-layout
-                column
-                class="no-gutters px-4 transparent"
-                :justify-start="true"
-              >
+              <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
                 <v-app-bar flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
@@ -122,13 +118,7 @@
                       </v-btn>
                     </template>
                     <v-card outlined class="liquid-glass-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6">
-                        Notifications
-                        <v-spacer></v-spacer>
-                        <v-btn small icon>
-                          <v-icon> mdi-dots-horizontal </v-icon>
-                        </v-btn>
-                      </v-card-title>
+                      <v-card-title class="pa-2 text-h6"> Notifications </v-card-title>
                       <v-card-text class="pa-0">
                         <v-list class="transparent">
                           <v-list-item>
@@ -270,7 +260,7 @@ const buyDialog = ref(false);
 const receiveDialog = ref(false);
 
 // Background image loading state for performance optimization
-const backgroundImageLoaded = ref(false)
+const backgroundImageLoaded = ref(false);
 
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value);
@@ -382,23 +372,24 @@ watch(
 
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
-  const currentChain = loggedWallet.value?.chain
-  const imageUrl = currentChain === Blockchain.APEX_PRIME || currentChain === Blockchain.APEX_VECTOR
-    ? assets.apexBg
-    : assets.cardanoBg
+  const currentChain = loggedWallet.value?.chain;
+  const imageUrl =
+    currentChain === Blockchain.APEX_PRIME || currentChain === Blockchain.APEX_VECTOR
+      ? assets.apexBg
+      : assets.cardanoBg;
 
-  const img = new Image()
+  const img = new Image();
   img.onload = () => {
-    backgroundImageLoaded.value = true
-  }
+    backgroundImageLoaded.value = true;
+  };
   img.onerror = () => {
     // Fallback: show background anyway after a timeout
     setTimeout(() => {
-      backgroundImageLoaded.value = true
-    }, 100)
-  }
-  img.src = imageUrl
-}
+      backgroundImageLoaded.value = true;
+    }, 100);
+  };
+  img.src = imageUrl;
+};
 
 // Lifecycle
 onMounted(async () => {
@@ -406,9 +397,12 @@ onMounted(async () => {
   updateThemeColors();
 
   // Preload background image after critical content
-  requestIdleCallback(() => {
-    preloadBackgroundImage()
-  }, { timeout: 2000 })
+  requestIdleCallback(
+    () => {
+      preloadBackgroundImage();
+    },
+    { timeout: 2000 }
+  );
 });
 </script>
 
@@ -430,7 +424,7 @@ onMounted(async () => {
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
 
-  &[style*="url("] {
+  &[style*='url('] {
     opacity: 1;
   }
 }
@@ -452,7 +446,7 @@ onMounted(async () => {
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
 
-  &[style*="url("] {
+  &[style*='url('] {
     opacity: 1;
   }
 }
