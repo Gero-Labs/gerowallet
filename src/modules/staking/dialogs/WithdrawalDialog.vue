@@ -156,7 +156,7 @@ const signWithdrawalTx = async () => {
       console.log('Signing Cardano JS SDK withdrawal transaction');
       console.log('Transaction:', props.tx);
 
-      // First verify password via background message
+      // First, verify password via a background message
       const passwordVerification = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value }

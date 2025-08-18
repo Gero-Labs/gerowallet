@@ -1,6 +1,8 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
 
@@ -8,6 +10,7 @@ interface WhitelistedEntry {
   domain: string;
   id: number;
 }
+
 export interface WalletStore {
   loggedWallet: any;
   account: any;
@@ -25,6 +28,7 @@ export interface WalletStore {
   connectedDapps?: any[];
 }
 
+// Create observable state
 export const walletStore = Vue.observable<WalletStore>({
   loggedWallet: null,
   account: null,
@@ -55,60 +59,108 @@ export const walletStore = Vue.observable<WalletStore>({
   connectedDapps: []
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['loggedWallet', 'account', 'transactions', 'utxos', 'tokens', 'collections', 'rewards', 'config', 'keys', 'contacts', 'connectedDapps', 'collateral'];
+const STORE_NAME = 'walletStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('walletStore', walletStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing wallet store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
+    console.debug('📥 Received wallet store update:', updates);
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(walletStore, {
-  storeName: 'walletStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 WalletStore'
-});
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in walletStore) {
+        (walletStore as any)[key] = updates[key as keyof WalletStore];
+      }
+    });
+  });
 
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(walletStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated wallet store from storage');
+    }
+  });
 }
 
 // Promise-based storage hydration for backward compatibility
 export const hydrateWalletStore = (): Promise<void> => {
-  return hydrateStore('walletStore', walletStore);
+  return new Promise((resolve) => {
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      if (result[STORE_NAME]) {
+        Object.assign(walletStore, result[STORE_NAME]);
+      }
+      resolve();
+    });
+  });
 };
 
-async function persist(patch: Partial<WalletStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 WalletStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...walletStore, ...patch };
-  try {
-    const nextString: string = JSON.stringify(next, (key, value) => {
-        if (value instanceof Map) {
-          return Array.from(value.entries()).reduce((obj, [key, value]) => {
-            obj[key] = value;
-            return obj;
-          }, {});
-        } else if (typeof value === 'bigint') {
-          return value.toString();
-        } else {
-          return value;
-        }
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<WalletStore>) {
+  if (context === 'background') {
+    // Log what we're trying to broadcast
+    if ('keys' in updates) {
+      console.debug('📤 Broadcasting keys update:', updates.keys ? 'keys present' : 'keys null');
+    }
+    
+    // Serialize data for broadcasting (handle BigInt, Maps, etc.)
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      } else if (value instanceof Map) {
+        return Array.from(value.entries()).reduce((obj, [key, value]) => {
+          obj[key] = value;
+          return obj;
+        }, {});
+      } else if (value instanceof Set) {
+        return Array.from(value);
+      } else {
+        return value;
       }
-    );
-    await smartPersist('walletStore', JSON.parse(nextString));
-  } catch (error) {
-    console.error('Persist failed for patch:', Object.keys(patch), error);
-    // Try to persist without the problematic patch
-    if (Object.keys(patch).length === 1) {
-      const key = Object.keys(patch)[0];
-      console.warn(`Skipping persist for ${key} due to serialization error`);
+    }));
+    
+    // Check if keys survived serialization
+    if ('keys' in updates && 'keys' in serializedUpdates) {
+      console.debug('📤 Keys after serialization:', serializedUpdates.keys ? 'keys present' : 'keys null');
+    }
+
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+
+    // Also persist to storage as fallback - use current local state as base instead of storage
+    try {
+      // Use current local store state as the base to avoid race conditions
+      const current = walletStore;
+      const finalState = { ...current, ...serializedUpdates };
+      
+      // Log if keys are being stored
+      if ('keys' in serializedUpdates) {
+        console.debug('💾 Storing keys to chrome.storage:', finalState.keys ? 'keys present' : 'keys null');
+      }
+      
+      chrome.storage.local.set({
+        [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
+          if (typeof value === 'bigint') {
+            return value.toString();
+          } else if (value instanceof Map) {
+            return Array.from(value.entries()).reduce((obj, [key, value]) => {
+              obj[key] = value;
+              return obj;
+            }, {});
+          } else if (value instanceof Set) {
+            return Array.from(value);
+          } else {
+            return value;
+          }
+        }))
+      });
+    } catch (error) {
+      console.error('Failed to persist wallet store to storage:', Object.keys(updates), error);
     }
   }
 }
@@ -116,16 +168,19 @@ async function persist(patch: Partial<WalletStore>): Promise<void> {
 export default {
   setLoggedWallet(loggedWallet: any) {
     walletStore.loggedWallet = loggedWallet;
-    persist({ loggedWallet: loggedWallet });
+    broadcastFromBackground({ loggedWallet });
   },
+
   setAccount(account: any) {
     walletStore.account = account;
-    persist({ account: account });
+    broadcastFromBackground({ account });
   },
+
   setTransactions(transactions: any[]) {
     walletStore.transactions = transactions;
-    persist({ transactions: transactions });
+    broadcastFromBackground({ transactions });
   },
+
   setUtxos(utxos: Cardano.Utxo[]) {
     if (utxos) {
       console.log('collateral')
@@ -140,105 +195,126 @@ export default {
       }
     }
     walletStore.utxos = utxos;
-    persist({ utxos: utxos });
+    broadcastFromBackground({ utxos });
   },
+
   setCollateral(collateral: Cardano.Utxo) {
     walletStore.collateral = collateral;
-    persist({ collateral: collateral });
+    broadcastFromBackground({ collateral });
   },
+
   setKeys(keys: any) {
+    console.debug('🔑 Setting keys in walletStore:', keys);
     walletStore.keys = keys;
-    persist({ keys: keys });
+    broadcastFromBackground({ keys });
   },
+
   setTokens(tokens: {}) {
     console.debug('Setting tokens:', Object.keys(tokens).length, 'tokens');
     walletStore.tokens = tokens;
-    persist({ tokens: tokens });
+    broadcastFromBackground({ tokens });
   },
+
   setCollections(collections: {}) {
-    walletStore.collections = collections
-    persist({ collections: collections })
+    walletStore.collections = collections;
+    broadcastFromBackground({ collections });
   },
+
   setConfig(config: {}) {
     walletStore.config = config;
-    persist({ config: config });
+    broadcastFromBackground({ config });
   },
+
   setFiatRates(fiatRates: any) {
     walletStore.fiatRates = fiatRates;
-    persist({ fiatRates: fiatRates });
+    broadcastFromBackground({ fiatRates });
   },
+
   setFiatRatesIntervalId(fiatRatesIntervalId: any) {
     walletStore.fiatRatesIntervalId = fiatRatesIntervalId;
-    persist({ fiatRatesIntervalId: fiatRatesIntervalId });
+    broadcastFromBackground({ fiatRatesIntervalId });
   },
+
   setRewards(rewards: any[]) {
     walletStore.rewards = rewards;
-    persist({ rewards: rewards });
+    broadcastFromBackground({ rewards });
   },
+
   getTxAutoSubmit(state) {
     if (state?.config && 'txAutoSubmit' in state.config) {
       return state.config.txAutoSubmit
     }
     return true
   },
+
   getUseSidePanel(state) {
     if (state?.config && 'useSidePanel' in state.config) {
       return state.config.useSidePanel
     }
     return false
   },
+
   hasBackup(): boolean {
     return 'backup' in walletStore.config;
   },
+
   getBackup(): boolean {
     if (walletStore.config && this.hasBackup) {
       return walletStore.config.backup
     }
     return true
   },
+
   setContacts(contacts: any) {
     walletStore.contacts = contacts;
-    persist({ contacts: contacts });
+    broadcastFromBackground({ contacts });
   },
+
   setBackup(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.backup = value;
-      persist({ config: walletStore.config });
+      broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'backup', value);
     }
   },
+
   setHideScamTokens(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.hideScamTokens = value;
-      persist({ config: walletStore.config });
+      broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'hideScamTokens', value);
     }
   },
+
   setHideUnverifiedTokens(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.hideUnverifiedTokens = value;
-      persist({ config: walletStore.config });
+      broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'hideUnverifiedTokens', value);
     }
   },
+
   setHideUnratedTokens(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.hideUnratedTokens = value;
-      persist({ config: walletStore.config });
+      broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'hideUnratedTokens', value);
     }
   },
+
   setLocale(value: string) {
     if (walletStore.config && walletStore.loggedWallet) {
       walletStore.config.locale = value;
-      persist({ config: walletStore.config });
+      broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'locale', value);
     }
   },
+
   setConnectedDapps(connectedDapps: any[]) {
     walletStore.connectedDapps = connectedDapps;
-    persist({ connectedDapps: connectedDapps });
+    broadcastFromBackground({ connectedDapps });
   },
+
   async addConnectedDapp(walletId: number, domain: string) {
     try {
       // Use the database function to add the dapp
@@ -248,59 +324,102 @@ export default {
         // Update store immediately for instant UI feedback
         const updatedDapps = [...walletStore.connectedDapps, domainObject];
         walletStore.connectedDapps = updatedDapps;
-        persist({ connectedDapps: updatedDapps });
+        broadcastFromBackground({ connectedDapps: updatedDapps });
       }
     } catch (err) {
       console.error(`Failed to add connected dapp in walletStore: ${err}`);
     }
   },
+
   disconnectDapp(walletId: number, id: string) {
     // Update UI immediately for instant feedback
     const updatedDapps = walletStore.connectedDapps.filter(dapp => dapp.id !== id);
     walletStore.connectedDapps = updatedDapps;
-    persist({ connectedDapps: updatedDapps });
+    broadcastFromBackground({ connectedDapps: updatedDapps });
 
     // Remove from database - the loadConnectedDapps() subscription will sync
     // but won't cause UI flickering since we already updated the store
     removeDapp(walletId, id);
   },
+
   isWhitelisted(origin: string): boolean {
     if (!walletStore.connectedDapps || !Array.isArray(walletStore.connectedDapps)) return false;
     const whitelisted = walletStore.connectedDapps as WhitelistedEntry[]
     return !!whitelisted.find(el => origin.includes(el.domain));
   },
+
   logout() {
     console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
-    this.setLoggedWallet(null);
-    this.setAccount(null);
-    this.setTransactions([]);
-    this.setUtxos([]);
-    this.setKeys(null);
-    this.setTokens({});
-    this.setCollections({});
-    this.setConfig({});
-    this.setFiatRates(null);
-    this.setFiatRatesIntervalId(null);
-    this.setRewards([]);
-    this.setConnectedDapps([]);
+    // Clear all data at once
+    const clearedState: Partial<WalletStore> = {
+      loggedWallet: null,
+      account: null,
+      transactions: [],
+      contacts: {},
+      utxos: [],
+      collateral: null,
+      keys: null,
+      tokens: {},
+      collections: {},
+      config: {},
+      fiatRates: null,
+      fiatRatesIntervalId: null,
+      rewards: [],
+      connectedDapps: []
+    };
+
+    // Apply to local state
+    Object.assign(walletStore, clearedState);
+
+    // Broadcast all changes at once
+    broadcastFromBackground(clearedState);
+
+    // Clear Chrome alarms
     chrome.alarms.clearAll();
   },
+
   clearForWalletSwitch() {
+    console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
-    walletStore.account = null;
-    walletStore.transactions = [];
-    walletStore.utxos = [];
-    walletStore.collateral = null;
-    walletStore.keys = null;
-    walletStore.tokens = {};
-    walletStore.collections = {};
-    walletStore.rewards = [];
-    walletStore.contacts = {};
-    walletStore.connectedDapps = [];
-    // Reset loading states to prevent stuck loading indicators
+    const clearedState: Partial<WalletStore> = {
+      account: null,
+      transactions: [],
+      utxos: [],
+      collateral: null,
+      keys: null,
+      tokens: {},
+      collections: {},
+      rewards: [],
+      contacts: {},
+      connectedDapps: []
+    };
+
+    // Apply to local state
+    Object.assign(walletStore, clearedState);
+
+    // Clear loading state
     LoadingState.setLoadingTxs(false);
-    // Note: loggedWallet and config are updated separately during login process
+
+    // Note: We don't broadcast here because the background script
+    // will update with new wallet data shortly
   },
-  state: walletStore
+
+  // Expose the observable state
+  state: walletStore,
+
+  // Utility method to get current state snapshot
+  getSnapshot(): WalletStore {
+    return { ...walletStore };
+  },
+
+  // Utility method to check if wallet is logged in
+  isLoggedIn(): boolean {
+    return walletStore.loggedWallet !== null;
+  },
+
+  // Utility method to get current wallet ID
+  getWalletId(): number | null {
+    return walletStore.loggedWallet?.id || null;
+  }
 };
