@@ -303,7 +303,7 @@ const selectedDRep = ref(undefined);
 const delegationModel = ref(undefined);
 const xLogo = assets.xSvg;
 const telegramLogo = assets.telegramSvg;
-const sortBy = ref('voting_power');
+const sortBy = ref('');
 const sortDesc = ref(true);
 const search = ref('');
 
@@ -336,17 +336,6 @@ const delegatingTo = computed(() => {
     }
   }
   return res;
-});
-
-// Debug computed property for pagination info
-const paginationInfo = computed(() => {
-  return {
-    totalItems: paginationMeta.value?.total_items || 0,
-    totalPages: paginationMeta.value?.total_pages || 0,
-    currentPage: currentPage.value,
-    itemsPerPage: itemsPerPage.value,
-    itemsOnCurrentPage: governanceDReps.value?.length || 0,
-  };
 });
 
 const drepsList = computed(() => {
