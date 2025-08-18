@@ -1,7 +1,7 @@
 <template>
   <v-layout>
     <v-row no-gutters>
-      <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id"> 
+      <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id">
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
@@ -14,8 +14,7 @@
                   <v-spacer></v-spacer>
                   <div class="staking-pro-toggle">
                     <p class="mr-5 my-auto">PRO</p>
-                    <v-switch inset dense v-model="isPro" hide-details class="staking-switch">
-                    </v-switch>
+                    <v-switch inset dense v-model="isPro" hide-details class="staking-switch"> </v-switch>
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
@@ -27,13 +26,7 @@
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-title class="staking-support-title"> Consider supporting us </v-card-title>
                 <v-card-subtitle>
-                  <v-btn
-                    small
-                    class="staking-gero-btn"
-                    @click="delegateToGero"
-                  >
-                    Stake with GERO
-                  </v-btn>
+                  <v-btn small class="staking-gero-btn" @click="delegateToGero"> Stake with GERO </v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -62,7 +55,13 @@
                 ></v-switch>
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
-                <v-switch dense v-model="pledgeMet" label="Pledge Met" hide-details class="staking-filter-switch"></v-switch>
+                <v-switch
+                  dense
+                  v-model="pledgeMet"
+                  label="Pledge Met"
+                  hide-details
+                  class="staking-filter-switch"
+                ></v-switch>
               </v-col>
             </v-row>
           </v-card-subtitle>
@@ -79,7 +78,6 @@
               <p class="mt-2 error--text">{{ poolsError }}</p>
               <v-btn @click="loadPaginatedPools(1)" color="primary">Retry</v-btn>
             </div>
-
             <v-data-table
               v-if="isPro && !poolsLoading && !poolsError"
               dense
@@ -106,8 +104,7 @@
                     ></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
-                    <v-list-item-title
-                      class="pool-name-title"
+                    <v-list-item-title class="pool-name-title"
                       >{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
                       <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
@@ -171,14 +168,10 @@
                         </v-btn>
                       </div>
                     </v-list-item-title>
-                    <v-list-item-subtitle
-                      class="pool-description"
-                      v-if="item.description"
-                      >{{ item.description }}</v-list-item-subtitle
-                    >
-                    <v-list-item-subtitle
-                      class="pool-id-subtitle mr-1"
-                    >
+                    <v-list-item-subtitle class="pool-description" v-if="item.description">{{
+                      item.description
+                    }}</v-list-item-subtitle>
+                    <v-list-item-subtitle class="pool-id-subtitle mr-1">
                       {{ filters.truncate(item.pool_id_bech32) }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
@@ -237,9 +230,7 @@
                     v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000"
                     class="stake-change-down"
                   >
-                    <v-icon x-small color="#F97066" class="stake-arrow-icon-down"
-                      >mdi-arrow-down-bold</v-icon
-                    >
+                    <v-icon x-small color="#F97066" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.live_stake) - Number(item.active_stake),
@@ -406,12 +397,7 @@
                           <span class="pool-card-label">Pledge</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip
-                            x-small
-                            color="#085D3A"
-                            class="pool-pledge-chip"
-                            v-if="loggedWallet"
-                          >
+                          <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
                             {{
                               filters.toCurrency(
                                 pool.pledge,
@@ -532,7 +518,7 @@ const searchInput = ref(poolsFilters.value.search);
 const debouncedSearch = useDebounce(searchInput, 500); // 500ms debounce
 
 // Watch the debounced search value to trigger API calls
-watch(debouncedSearch, (newValue) => {
+watch(debouncedSearch, newValue => {
   stakingStore.updateFilters({ search: newValue });
   reloadWithFilters(); // Reload with new filters
 });
@@ -764,7 +750,7 @@ const poolExtendedInfo = (pool: any) => {
 
 onMounted(() => {
   // Load initial paginated pools data
-  loadPaginatedPools(1);
+  reloadWithFilters();
 });
 </script>
 <style scoped>
