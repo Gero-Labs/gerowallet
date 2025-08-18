@@ -82,9 +82,9 @@ import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
-import { verifyData } from '@/shared/utils/converter';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const { loggedWallet, config } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
@@ -143,10 +143,19 @@ const sign = async () => {
       console.log('address', address);
       const payload = request.value.data.payload;
       console.log('payload', payload);
-      const res = await loggedWallet.value.signData(address, payload, spendingPassword.value, 0, !isBT.value);
-      console.log(res);
-      verifyData(res, address, payload);
-      signature.value = res;
+
+      const res = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SIGN_DATA,
+        data: {
+          address: address,
+          payload: payload,
+          password: spendingPassword.value,
+          accountIndex: 0,
+          isUsb: !isBT.value
+        }
+      }) as { data: { key: string; signature: string } };
+      console.log('signData', res)
+      signature.value = res.data;
       if (txAutoSubmit.value) {
         await confirm();
       }
@@ -159,10 +168,15 @@ const sign = async () => {
 
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
-        await signAndReturnTx();
-      } else {
+      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+        data: { password: spendingPassword.value }
+      }) as { data: { isValid: boolean; error?: string } };
+
+      if (!passwordVerification.data.isValid) {
         enableToolTip();
+      } else {
+        await signAndReturnTx();
       }
     }
   } else {

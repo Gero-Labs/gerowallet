@@ -33,6 +33,12 @@ export default {
     }
   },
   async estimate(amount_in: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
+    if (token_in === 'lovelace') {
+      token_in = ''
+    }
+    if (token_out === 'lovelace') {
+      token_out = ''
+    }
     const requestBody = {
       amount_in,
       referrer,
@@ -44,21 +50,21 @@ export default {
     return await axiosInstance.post(`/api/v2/swap/estimate`, requestBody);
   },
   async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
-    try {
-      const requestBody = {
-        amount_out,
-        referrer,
-        slippage,
-        token_in,
-        token_out,
-        blacklisted_dexes
-      }
-      const { data, status } = await axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
+    if (token_in === 'lovelace') {
+      token_in = ''
     }
+    if (token_out === 'lovelace') {
+      token_out = ''
+    }
+    const requestBody = {
+      amount_out,
+      referrer,
+      slippage,
+      token_in,
+      token_out,
+      blacklisted_dexes
+    }
+    await axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
   },
   async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
     const requestBody = {

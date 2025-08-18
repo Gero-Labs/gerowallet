@@ -126,8 +126,13 @@
                 class="transparent"
                 :header-props="{ 'sort-icon': 'mdi-menu-up' }"
             >
-              <template v-slot:[`item.date`]="{ item }">
-                {{new Date(item.date).toLocaleString()}}
+              <template v-slot:[`item.txid`]="{ item }">
+                <v-list-item class="px-0">
+                  <v-list-item-content>
+                    <v-list-item-title>{{ filters.truncate(item?.txid) }}<CopyButton style="margin-top: -1px" :value="item?.txid" x-small /></v-list-item-title>
+                    <v-list-item-subtitle>{{new Date(item.date).toLocaleString()}}</v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
                 <div>{{ filters.toCurrency(item.tokenAmount+"", false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
@@ -154,6 +159,7 @@ import { METHOD } from '@/chrome/config';
 import { Address } from '@emurgo/cardano-serialization-lib-browser';
 import cashbackApi from '@/api/cashback-api';
 import { Messaging } from '@/chrome/messaging';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 interface Props {
   isOpen: boolean;
@@ -169,8 +175,8 @@ const { loggedWallet } = toRefs(walletStore);
 
 const currentTab = ref(0);
 const expanded = ref([]);
-const messageToSign = ref(undefined);
-const signature = ref(undefined);
+const messageToSign = ref<string>("");
+const signature = ref<string>("");
 const loading = ref(false);
 
 const dealsHeaders = ref([
@@ -181,7 +187,7 @@ const dealsHeaders = ref([
 ]);
 
 const claimHeaders = ref([
-  { text: "Time", align: "start", sortable: true, value: "date"},
+  { text: "Transaction Id", align: "start", sortable: true, value: "txid"},
   { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
 ]);
 
@@ -257,7 +263,7 @@ const claim = async () => {
       method: METHOD.signData,
       data: { address: Address.from_bech32(baseAddress.value).to_hex(), payload: stringToHex(messageToSignValue) },
     };
-    const signatureResult = await Messaging.sendToBackground(request);
+    const signatureResult: any = await Messaging.sendToBackground(request);
     if (signatureResult.error) {
       snackbar.setError(signatureResult.error.info);
     } else {
@@ -267,7 +273,7 @@ const claim = async () => {
         await bringStoreModule.loadBringCache(baseAddress.value);
       }
     }
-  } catch (e) {
+  } catch (e: any) {
     snackbar.setError(e);
     console.log(e);
   }

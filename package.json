@@ -1,7 +1,7 @@
 {
   "name": "gero-wallet",
   "displayName": "Gero Dashboard",
-  "version": "2.5.4",
+  "version": "2.6.0",
   "private": true,
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
@@ -25,7 +25,6 @@
     "pack:zip:beta": "rimraf extension/*.zip && jszip-cli add extension/* -o ./extension/Gero-v${npm_package_version}-Beta.zip",
     "pack:crx": "crx pack extension -o ./extension.crx",
     "pack:xpi": "cross-env WEB_EXT_ARTIFACTS_DIR=./ web-ext build --source-dir ./extension --filename extension.xpi --overwrite-dest",
-
     "start:chromium": "web-ext run --source-dir ./extension --target=chromium",
     "start:firefox": "web-ext run --source-dir ./extension --target=firefox-desktop",
     "clear": "rimraf --glob extension/assets extension/background extension/content extension/index.html extension/manifest.json",
@@ -49,7 +48,7 @@
     "@mdi/font": "^7.4.47",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
-    "ably": "^2.9.0",
+    "ably": "^2.11.0",
     "archiver": "^7.0.1",
     "array-chunk-by-size": "^2.1.1",
     "async-mutex": "^0.5.0",
@@ -76,6 +75,7 @@
     "multiformats": "^13.3.7",
     "net": "^1.0.2",
     "node-stdlib-browser": "^1.2.1",
+    "pako": "^2.1.0",
     "process": "^0.11.10",
     "psl": "^1.9.0",
     "qr-code-styling": "^1.6.0-rc.1",
@@ -103,6 +103,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/howler": "^2.2.11",
     "@types/lodash": "^4.17.7",
+    "@types/pako": "^2.0.4",
     "@types/w3c-web-usb": "^1.0.10",
     "@types/webextension-polyfill": "^0.12.1",
     "@typescript-eslint/eslint-plugin": "^5.4.0",

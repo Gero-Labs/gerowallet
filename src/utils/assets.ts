@@ -129,6 +129,7 @@ import debitCardImage from '@/assets/geroCard.png'
 import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
+import bringWhite from '@/assets/svg/bring-white.svg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -213,6 +214,7 @@ export default {
   buyAda,
   sellAda,
   card,
+  bringWhite,
   detectCIDVersion(cidStr: string) {
     try {
       const cid = CID.parse(cidStr);

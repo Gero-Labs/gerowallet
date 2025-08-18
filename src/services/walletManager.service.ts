@@ -1,7 +1,6 @@
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore from '@/stores/walletStore';
-import { STORAGE } from '@/chrome/config';
 import zkFoldApi from '@/api/zk-fold.api';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
@@ -13,6 +12,7 @@ import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
+import NetworkStore from '@/stores/networkStore';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -208,7 +208,7 @@ export class WalletManager {
     console.debug('🔐 Connection state after delay:', ablyService['client']?.connection?.state);
 
     // Additional check - wait for connection to be established
-    const maxWaitTime = 10000; // 10 seconds max
+    const maxWaitTime = 10000; // 10-second max
     const startTime = Date.now();
     while (ablyService['client']?.connection?.state !== 'connected' && (Date.now() - startTime) < maxWaitTime) {
       console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
@@ -243,8 +243,6 @@ export class WalletManager {
             });
           } catch (e) {
             console.error('SYNC::❌ Error processing sync message:', e);
-          } finally {
-            LoadingState.setRestoring(false);
           }
         },
         onMessage: async (msg: Ably.InboundMessage) => {
@@ -333,10 +331,7 @@ export class WalletManager {
       if (chrome?.storage) {
         try {
           await Promise.all([
-            chrome.storage.local.remove(STORAGE.whitelisted),
             chrome.storage.local.remove('loggedWallet'),
-            chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
-            chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
           ]);
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
@@ -347,6 +342,7 @@ export class WalletManager {
       try {
         WalletStore.logout();
         TapToolsStore.clear();
+        NetworkStore.reset(); //TODO Reset only on network change
         await MusicStore.logout();
       } catch (storeError) {
         console.warn('Failed to logout from wallet store:', storeError);
