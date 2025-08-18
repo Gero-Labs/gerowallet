@@ -303,7 +303,7 @@ const selectedDRep = ref(undefined);
 const delegationModel = ref(undefined);
 const xLogo = assets.xSvg;
 const telegramLogo = assets.telegramSvg;
-const sortBy = ref('');
+const sortBy = ref('voting_power');
 const sortDesc = ref(true);
 const search = ref('');
 
