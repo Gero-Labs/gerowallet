@@ -177,7 +177,7 @@
                           </v-list-item-avatar>
                           <v-list-item-content class="pl-12">
                             <v-list-item-title class="drep-title">
-                              <span class="font-16">{{ item.name }}</span>
+                              <span class="font-16">{{ item.name }} </span>
                               <template v-for="(link, index) in item.links">
                                 <v-btn
                                   icon
