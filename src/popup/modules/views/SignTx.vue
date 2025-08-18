@@ -127,6 +127,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
@@ -318,17 +319,27 @@ const sign = async () => {
     try {
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
-      const response = await loggedWallet.value.signTx(
-        txCbor,
-        partialSign,
-        spendingPassword.value,
-        0,
-        reconstructedUTxOs.value,
-        addresses.value,
-        !isBT.value
-      );
-      console.log(response);
-      witnesses.value = response.witnesses;
+      const witnessResult = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SIGN_TX,
+        data: {
+          txCbor: txCbor,
+          partialSign: partialSign,
+          password: spendingPassword.value,
+          accountIndex: 0,
+          utxos: utxos.value,
+          addresses: keys.value,
+          isUsb: !isBT.value
+        }
+      }) as { data: { witnesses?: any; error?: string } };
+
+      console.log('Transaction signed successfully:', witnessResult);
+
+      if (witnessResult.data.error) {
+        throw new Error(witnessResult.data.error);
+      }
+
+      console.log('Signed transaction witness:', witnessResult.data.witnesses);
+      witnesses.value = witnessResult.data.witnesses;
       if (txAutoSubmit.value) {
         await confirm();
       }
@@ -340,7 +351,13 @@ const sign = async () => {
   };
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
+
+      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+        data: { password: spendingPassword.value }
+      }) as { data: { isValid: boolean; error?: string } };
+
+      if (passwordVerification.data.isValid) {
         await signAndReturnTx();
       } else {
         enableToolTip();

@@ -1,4 +1,3 @@
-// Handle unhandled promise rejections to prevent console errors
 self.addEventListener('unhandledrejection', (event) => {
   // Check if it's an Ably channel access error (which we handle gracefully)
   if (event.reason && event.reason.message && event.reason.message.includes('Channel denied access')) {
@@ -23,21 +22,21 @@ self.addEventListener('offline', () => {
 
 // For Service Worker lifecycle events
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installing');
+  console.log('Service Worker installing', event);
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated');
+  console.log('Service Worker activated', event);
 });
 
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import {
   APIError,
   METHOD,
   POPUP,
   SENDER,
-  STORAGE,
   TARGET,
   TxSendError,
 } from '@/chrome/config';
@@ -61,11 +60,10 @@ import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
-import { convertToTxSchema } from '@/chrome/helper';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 if (import.meta.hot) {
@@ -105,6 +103,9 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
     cashbackPagePath: '/index.html#/cashback'
   })
 })();
+
+// Initialize background store messaging (the import alone initializes it)
+console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
 const currentVersion: string = chrome.runtime.getManifest().version;
 
 if (!isBeta) {
@@ -115,7 +116,7 @@ if (!isBeta) {
         title: 'Extension Updated',
         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
         iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/2.5.4.png'),
+        imageUrl: chrome.runtime.getURL('public/2.6.0.png'),
       });
     }
   });
@@ -285,12 +286,12 @@ app.add(METHOD.enable, (request, sendResponse) => {
   };
 
   if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
-    const sidepanelUrl =
+    const sidePanelUrl =
       `index.html#/${POPUP.dappConnect}` +
       `?website=${encodeURIComponent(origin)}` +
       `&tabId=${request.send.tab.id}`;
 
-    openSidebar(tabId, sidepanelUrl)
+    openSidebar(tabId, sidePanelUrl)
       .then(openedTabId => Messaging.sendToSidePanelInternal(openedTabId, request))
       .then(normalizeAndSend)
       .catch(err => reply({ error: err }));
@@ -489,9 +490,18 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  console.log('getUsedAddresses', request) //TODO
+  console.log('getUsedAddresses', request)
   try {
-    const addresses = getUsedAddresses(await getStorage(STORAGE.addresses), request?.data?.paginate);
+    const loggedWallet = WalletStore.state.loggedWallet
+    if (!loggedWallet) {
+      sendResponse({
+        id: request.id,
+        error: APIError.AccountNotSet,
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+    const addresses = getUsedAddresses(WalletStore.state.keys, request?.data?.paginate);
     sendResponse({
       id: request.id,
       data: addresses,
@@ -509,11 +519,19 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
-  console.log('getUnusedAddresses', request) //TODO
-  const loggedWallet = WalletStore.state.loggedWallet;
-  const addresses = await getStorage(STORAGE.addresses)
+  console.log('getUnusedAddresses', request)
   try {
-    const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, addresses);
+    const loggedWallet = WalletStore.state.loggedWallet
+    if (!loggedWallet) {
+      sendResponse({
+        id: request.id,
+        error: APIError.AccountNotSet,
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+    const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, WalletStore.state.keys);
+    console.log(addressesRes)
     sendResponse({
       id: request.id,
       data: addressesRes,
@@ -521,6 +539,7 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
+    console.error(e)
     sendResponse({
       id: request.id,
       error: e,
@@ -585,13 +604,14 @@ app.add(METHOD.signData, (request, sendResponse) => {
       Messaging.sendToSidePanelInternal(tabId, request)
     );
   } else {
-    const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
     responsePromise = focusOrCreatePopup(popupURL, 470, 600).then((tab) =>
       Messaging.sendToPopupInternal(tab.id, request)
     );
   }
   responsePromise
     .then((response: any) => {
+      console.log('sidePanel signData', response)
       if (response.data) {
         sendResponse({
           id: request.id,
@@ -689,30 +709,55 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
+      let error: any;
       switch (response.status) {
         case 400:
-          throw { ...TxSendError.Failure, message: response.statusText };
+          error = { ...TxSendError.Failure, message: response.statusText };
+          break;
         case 500:
-          throw APIError.InternalError;
+          error = APIError.InternalError;
+          break;
         case 429:
-          throw TxSendError.Refused;
+          error = TxSendError.Refused;
+          break;
         case 425:
-          throw ERROR.fullMempool;
+          error = ERROR.fullMempool;
+          break;
         default:
-          throw APIError.InvalidRequest;
+          error = APIError.InvalidRequest;
       }
+      console.error("Error in submitTx:", error);
+      sendResponse({
+        id: request.id,
+        error,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
     }
-    const utxos = WalletStore.state.utxos;
     const txCbor = request.data.tx
     const txId = await response.text();
-    if (txId) { //TODO
-      const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
+    console.log('txId', txId)
+    if (txId) {
+      const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
+      const pendingTx = {
+        id: txId, // Required for a database key path
+        tx_hash: txId,
+        block_hash: '',
+        block_height: 0,
+        epoch_no: 0,
+        absolute_slot: 0,
+        tx_timestamp: Math.floor(Date.now() / 1000),
+        tx_size: 0,
+        cbor: txCbor,
+        pending: true,
+        utxo: null, // No UTXO data for submitted transactions
+        ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid, etc.
+      };
       const currentWallet = walletManager.getWallet();
       if (currentWallet) {
-        await currentWallet.setAccountTransactions([tx])
+        await currentWallet.setAccountTransactions([pendingTx])
       }
     }
-    console.log('txId', txId)
     sendResponse({
       id: request.id,
       data: txId,
@@ -1031,6 +1076,43 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
   }
 });
 
+app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
+  try {
+    console.log('sign data', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      const res = await walletBg.signData(
+        request.data.address,
+        request.data.payload,
+        request.data.password,
+        request.data.accountIndex || 0,
+        request.data.isUsb
+      );
+      sendResponse({
+        id: request.id,
+        data: res,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Data:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
     console.log('sign tx', request);
@@ -1090,7 +1172,7 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       // Handle different transaction input formats
-      let txInput;
+      let txCbor: string;
       if (request.data.txCbor && request.data.witnessHex) {
         // Combine transaction CBOR with witness
         const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
@@ -1101,19 +1183,19 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
           witness: witness
         };
 
-        txInput = serializeCardanoJsSdkTx(signedTx);
+        txCbor = serializeCardanoJsSdkTx(signedTx);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
-        txInput = request.data.txCbor;
+        txCbor = request.data.txCbor;
       } else if (request.data.tx) {
         // Legacy Transaction object or Cardano.Tx object
-        txInput = request.data.tx;
+        txCbor = request.data.tx;
       } else {
         throw new Error('No transaction data provided (neither tx nor txCbor)');
       }
 
       const txId = await walletBg.submitTx(
-        txInput,
+        txCbor,
         request.data.utxos || []
       );
 

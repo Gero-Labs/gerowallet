@@ -1,78 +1,107 @@
 import Vue from 'vue';
 import xerberusApi from '@/api/xerberus.api';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface XerberusStore {
   risks: object;
 }
 
+// Create observable state
 export const xerberusStore = Vue.observable<XerberusStore>({
   risks: {},
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['risks'];
+const STORE_NAME = 'xerberusStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('xerberusStore', xerberusStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing xerberus store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<XerberusStore>) => {
+    console.debug('📥 Received xerberus store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in xerberusStore) {
+        (xerberusStore as any)[key] = updates[key as keyof XerberusStore];
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(xerberusStore, {
-  storeName: 'xerberusStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 XerberusStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
-}
-
-async function persist(patch: Partial<XerberusStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 XerberusStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...xerberusStore, ...patch };
-  await smartPersist('xerberusStore', next);
-}
-
-async function persistTokenPatch(fingerprint: string, patch: { risk: string; }): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 XerberusStore persistTokenPatch skipped from ${context} context for:`, fingerprint);
-    return;
-  }
-
-  const result = await chrome.storage.local.get('xerberusStore');
-  const saved: XerberusStore = result['xerberusStore'] || { risks: {} };
-  const risksCopy = { ...saved.risks };
-
-  risksCopy[fingerprint] = {
-    ...(risksCopy[fingerprint] || {}),
-    risk: patch.risk
-  };
-
-  await chrome.storage.local.set({
-    xerberusStore: {
-      ...saved,
-      risks: risksCopy,
-    },
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(xerberusStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated xerberus store from storage:', result[STORE_NAME]);
+    }
   });
 }
 
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<XerberusStore>) {
+  if (context === 'background') {
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { risks: {} };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...updates } 
+      });
+    });
+  }
+}
+
+/**
+ * Special handler for risk patches (partial updates to nested risk objects)
+ */
+async function broadcastRiskPatch(fingerprint: string, patch: { risk: string }) {
+  if (context === 'background') {
+    // Get current state
+    const result = await chrome.storage.local.get(STORE_NAME);
+    const saved: XerberusStore = result[STORE_NAME] || { risks: {} };
+    
+    // Create updated risks object
+    const updatedRisks = {
+      ...saved.risks,
+      [fingerprint]: {
+        ...saved.risks[fingerprint],
+        risk: patch.risk
+      }
+    };
+    
+    // Update local state
+    xerberusStore.risks = updatedRisks;
+    
+    // Broadcast the update
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, { 
+      risks: updatedRisks 
+    });
+    
+    // Persist to storage
+    await chrome.storage.local.set({
+      [STORE_NAME]: {
+        ...saved,
+        risks: updatedRisks,
+      },
+    });
+  }
+}
 
 export default {
   setRisks(risks: any) {
     xerberusStore.risks = risks;
-    persist({ risks: risks });
+    
+    // Broadcast from background context
+    broadcastFromBackground({ risks });
   },
+  
   async updateRisks(fingerprints: string[]) {
     const promises = fingerprints
       .filter(Boolean)
@@ -85,16 +114,52 @@ export default {
       );
 
     const results = await Promise.all(promises);
-    const risks = {};
 
     for (const item of results) {
       if (item && item.status === 200) {
         const risk = item.data.data.risk_category;
         const fingerprint = item.data.data.fingerprint;
-        risks[fingerprint] = { risk };
-        await persistTokenPatch(fingerprint, { risk });
+        await broadcastRiskPatch(fingerprint, { risk });
       }
     }
   },
-  state: xerberusStore
+  
+  // Expose the observable state
+  state: xerberusStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): XerberusStore {
+    return { ...xerberusStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: XerberusStore = {
+      risks: {}
+    };
+    
+    Object.assign(xerberusStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to get risk for a specific token
+  getRisk(fingerprint: string): string | undefined {
+    return xerberusStore.risks[fingerprint]?.risk;
+  },
+  
+  // Utility method to check if token has high risk
+  isHighRisk(fingerprint: string): boolean {
+    const risk = this.getRisk(fingerprint);
+    return risk === 'HIGH' || risk === 'CRITICAL';
+  },
+  
+  // Utility method to get all risky tokens
+  getRiskyTokens(): { fingerprint: string; risk: string }[] {
+    return Object.entries(xerberusStore.risks)
+      .filter(([_, data]: [string, any]) => data.risk && data.risk !== 'LOW')
+      .map(([fingerprint, data]: [string, any]) => ({
+        fingerprint,
+        risk: data.risk
+      }));
+  }
 };
