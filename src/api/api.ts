@@ -228,8 +228,8 @@ export class Api {
       if (params.sort_by) {
         queryParams.append('sort_by', params.sort_by);
       }
-      if (params.sort_desc !== undefined) {
-        queryParams.append('sort_desc', params.sort_desc.toString());
+      if (params.sort_direction !== undefined) {
+        queryParams.append('sort_direction', params.sort_direction.toString());
       }
 
       const { data, status } = await this.axiosInstance.get(`/api/dreps?${queryParams.toString()}`);

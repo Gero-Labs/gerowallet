@@ -42,7 +42,7 @@ const governanceStoreActions = {
         per_page: params.per_page || 25,
         search: params.search !== undefined ? params.search : governanceStore.filters.search,
         sort_by: params.sort_by,
-        sort_desc: params.sort_desc,
+        sort_direction: params.sort_direction,
       };
 
       const response: PaginatedResponse<any> = await api.getDRepsPaginated(requestParams);
