@@ -1,9 +1,9 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 100%; margin: auto; width: 100%; justify-items: center; padding-top: 20px;">
+  <v-card class="transparent" flat style="max-width: 100%; margin: auto; width: 100%; justify-items: center; padding-top: 20px;">
     <div style="max-width: 416px; width: 100%; height: 280px; padding: 20px; position: relative; border-radius: 16px; background-color: rgba(12, 14, 18, 0.85); flex-direction: column; justify-content: flex-start; align-items: flex-start; gap: 8px; display: flex; outline: 1px rgba(255, 255, 255, 0.10) solid; outline-offset: -1px; margin-top: 120px">
       <v-carousel
         v-model="currentSlide"
-        :cycle="true"
+        :cycle="false"
         :interval="4000"
         height="100%"
         hide-delimiter-background
@@ -12,7 +12,7 @@
       >
         <v-carousel-item>
           <div style="position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
-            <v-img :src="assets.debitCardBgImage" cover style="position: absolute; width: 100%; height: 100%; top: 0; left: 0;" />
+            <v-img :src="assets.debitCardBgImage" cover style="position: absolute; width: calc(100% - 1px); height: calc(100% - 1px); top: 1px; left: 1px; z-index: 0; border-radius: 16px;" />
             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 2;">
               <div style="font-family: 'Tenby Seven', sans-serif; font-size: 24px; font-weight: 700; color: white; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.5);">
                 <div>Gero</div>
@@ -20,9 +20,9 @@
                 <div>Card</div>
               </div>
             </div>
-            <img 
-              :src="assets.frontCardNoMcx2" 
-              alt="Gero Card" 
+            <img
+              :src="assets.frontCardNoMcx2"
+              alt="Gero Card"
               style="position: relative; max-width: 280px; width: 90%; height: auto; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5)); transform: rotateY(-5deg) rotateX(5deg); z-index: 1;"
             />
           </div>
@@ -126,14 +126,7 @@
 import assets from '@/utils/assets';
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import networks from '@/utils/networks';
-
-const hoveredText = ref<string>('Buy / Sell Crypto')
 const currentSlide = ref(0)
-
-function onHover(text: string) {
-  hoveredText.value = text
-}
 
 const { loggedWallet } = toRefs(walletStore);
 

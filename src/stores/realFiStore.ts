@@ -1,74 +1,104 @@
 import Vue from 'vue';
 import realfiApi from '@/api/realfi-api';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface RealFiStore {
   tokens: {};
 }
 
+// Create observable state
 export const realFiStore = Vue.observable<RealFiStore>({
   tokens: {},
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['tokens'];
+const STORE_NAME = 'realFiStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('realFiStore', realFiStore);
-
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(realFiStore, {
-  storeName: 'realFiStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 RealFiStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
-}
-
-async function persist(patch: Partial<RealFiStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 RealFiStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
-  }
-
-  const next = { ...realFiStore, ...patch };
-  await smartPersist('realFiStore', next);
-}
-
-async function persistTokenPatch(unit: string, patch: { data: any[]; }): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 RealFiStore persistTokenPatch skipped from ${context} context for:`, unit);
-    return;
-  }
-
-  const result = await chrome.storage.local.get('realFiStore');
-  const saved: RealFiStore = result['realFiStore'] || { tokens: {} };
-  const tokensCopy = { ...saved.tokens };
-
-  tokensCopy[unit] = patch.data;
-
-  await chrome.storage.local.set({
-    realFiStore: {
-      ...saved,
-      tokens: tokensCopy,
-    },
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing realFi store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<RealFiStore>) => {
+    console.debug('📥 Received realFi store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in realFiStore) {
+        (realFiStore as any)[key] = updates[key as keyof RealFiStore];
+      }
+    });
   });
+
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(realFiStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated realFi store from storage:', result[STORE_NAME]);
+    }
+  });
+}
+
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<RealFiStore>) {
+  if (context === 'background') {
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { tokens: {} };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...updates } 
+      });
+    });
+  }
+}
+
+/**
+ * Special handler for token patches (partial updates to nested token data)
+ */
+async function broadcastTokenPatch(unit: string, patch: { data: any[] }) {
+  if (context === 'background') {
+    // Get current state
+    const result = await chrome.storage.local.get(STORE_NAME);
+    const saved: RealFiStore = result[STORE_NAME] || { tokens: {} };
+    
+    // Create updated tokens object
+    const updatedTokens = {
+      ...saved.tokens,
+      [unit]: patch.data
+    };
+    
+    // Update local state
+    realFiStore.tokens = updatedTokens;
+    
+    // Broadcast the update
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, { 
+      tokens: updatedTokens 
+    });
+    
+    // Persist to storage
+    await chrome.storage.local.set({
+      [STORE_NAME]: {
+        ...saved,
+        tokens: updatedTokens,
+      },
+    });
+  }
 }
 
 export default {
   setTokens(tokens: any) {
     realFiStore.tokens = tokens;
-    persist({ tokens: tokens });
+    
+    // Broadcast from background context
+    broadcastFromBackground({ tokens });
   },
+  
   async updateTokenHistory(tokensUnits: string[]) {
     for (const unit of tokensUnits) {
       try {
@@ -76,13 +106,57 @@ export default {
           const res = await realfiApi.historicalCandles(unit);
           if (res.status === 200) {
             const data = res.data;
-            await persistTokenPatch(unit, { data });
+            await broadcastTokenPatch(unit, { data });
           }
         }
       } catch (e) {
-        console.warn(`failed to fetch ${unit}`, e);
+        console.warn(`Failed to fetch RealFi history for ${unit}:`, e);
       }
     }
   },
-  state: realFiStore
+  
+  // Expose the observable state
+  state: realFiStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): RealFiStore {
+    return { ...realFiStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: RealFiStore = {
+      tokens: {}
+    };
+    
+    Object.assign(realFiStore, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to get token history
+  getTokenHistory(unit: string): any[] | undefined {
+    return realFiStore.tokens[unit];
+  },
+  
+  // Utility method to check if token history exists
+  hasTokenHistory(unit: string): boolean {
+    return unit in realFiStore.tokens && Array.isArray(realFiStore.tokens[unit]);
+  },
+  
+  // Utility method to get all tokens with history
+  getTokensWithHistory(): string[] {
+    return Object.keys(realFiStore.tokens).filter(unit => 
+      Array.isArray(realFiStore.tokens[unit]) && realFiStore.tokens[unit].length > 0
+    );
+  },
+  
+  // Utility method to clear token history for a specific token
+  clearTokenHistory(unit: string) {
+    if (unit in realFiStore.tokens) {
+      const updatedTokens = { ...realFiStore.tokens };
+      delete updatedTokens[unit];
+      realFiStore.tokens = updatedTokens;
+      broadcastFromBackground({ tokens: updatedTokens });
+    }
+  }
 };

@@ -1,7 +1,6 @@
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore from '@/stores/walletStore';
-import { STORAGE } from '@/chrome/config';
 import zkFoldApi from '@/api/zk-fold.api';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
@@ -13,6 +12,7 @@ import * as Ably from 'ably';
 import { Mutex, withTimeout } from 'async-mutex';
 import { clearDbCache } from '@/db/wallet-db';
 import MusicStore from '@/stores/musicStore';
+import NetworkStore from '@/stores/networkStore';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -207,7 +207,7 @@ export class WalletManager {
     console.debug('🔐 Connection state after delay:', ablyService['client']?.connection?.state);
 
     // Additional check - wait for connection to be established
-    const maxWaitTime = 10000; // 10 seconds max
+    const maxWaitTime = 10000; // 10-second max
     const startTime = Date.now();
     while (ablyService['client']?.connection?.state !== 'connected' && Date.now() - startTime < maxWaitTime) {
       console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
@@ -221,40 +221,36 @@ export class WalletManager {
     }
 
     promises.push(
-      ablyService
-        .subscribeToPrivateChannel(address, {
-          onSync: async (msg: Ably.InboundMessage) => {
-            console.debug('SYNC::🔄 SYNC message received on private channel!', msg);
-            try {
-              if (this.syncMutex.isLocked()) {
-                console.debug('SYNC::⏳ Sync mutex is locked, skipping');
-                return;
-              }
-              this.syncMutex.runExclusive(async () => {
-                LoadingState.setText('');
-                LoadingState.setSyncing(true);
-                const syncObject = JSON.parse(msg.data);
-                console.debug('SYNC::📊 Processing sync object:', syncObject);
-                if (!ablyService.isTipProcessed(syncObject.block.hash)) {
-                  ablyService.markTipAsProcessed(syncObject.block.hash);
-                }
-                await walletBg.syncService.setSync(syncObject);
-                LoadingState.setSyncing(false);
-              });
-            } catch (e) {
-              console.error('SYNC::❌ Error processing sync message:', e);
-            } finally {
-              LoadingState.setRestoring(false);
+      ablyService.subscribeToPrivateChannel(address, {
+        onSync: async (msg: Ably.InboundMessage) => {
+          console.debug('SYNC::🔄 SYNC message received on private channel!', msg);
+          try {
+            if (this.syncMutex.isLocked()) {
+              console.debug('SYNC::⏳ Sync mutex is locked, skipping');
+              return;
             }
-          },
-          onMessage: async (msg: Ably.InboundMessage) => {
-            console.debug('SYNC::📬 General message received on private channel:', msg);
-          },
-        })
-        .catch(error => {
-          console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
-          // Continue wallet initialization even if Ably private channel fails
-        })
+            this.syncMutex.runExclusive(async () => {
+              LoadingState.setText('');
+              LoadingState.setSyncing(true);
+              const syncObject = JSON.parse(msg.data);
+              console.debug('SYNC::📊 Processing sync object:', syncObject);
+              if (!ablyService.isTipProcessed(syncObject.block.hash)) {
+                ablyService.markTipAsProcessed(syncObject.block.hash);
+              }
+              await walletBg.syncService.setSync(syncObject);
+              LoadingState.setSyncing(false);
+            });
+          } catch (e) {
+            console.error('SYNC::❌ Error processing sync message:', e);
+          }
+        },
+        onMessage: async (msg: Ably.InboundMessage) => {
+          console.debug('SYNC::📬 General message received on private channel:', msg);
+        }
+      }).catch(error => {
+        console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+        // Continue wallet initialization even if Ably private channel fails
+      })
     );
 
     // Subscribe to group channel
@@ -337,10 +333,7 @@ export class WalletManager {
       if (chrome?.storage) {
         try {
           await Promise.all([
-            chrome.storage.local.remove(STORAGE.whitelisted),
             chrome.storage.local.remove('loggedWallet'),
-            chrome.storage.local.set({ [STORAGE.utxos]: new Map() }),
-            chrome.storage.local.set({ [STORAGE.addresses]: new Set() }),
           ]);
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
@@ -351,6 +344,7 @@ export class WalletManager {
       try {
         WalletStore.logout();
         TapToolsStore.clear();
+        NetworkStore.reset(); //TODO Reset only on network change
         await MusicStore.logout();
       } catch (storeError) {
         console.warn('Failed to logout from wallet store:', storeError);

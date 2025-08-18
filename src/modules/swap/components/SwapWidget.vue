@@ -163,11 +163,11 @@
         max-width="420"
         style="color: black!important; width: 100%; border-radius: 10px;"
         class="geroButton"
-        :disabled="isSwapDisabled || loading"
+        :disabled="isSwapDisabled || loading || poolError"
         @click="prepareSwap"
         :loading="loading"
       >
-        <span style="font-size: 13px; font-weight: 600;">{{ swapButtonText }}</span>
+        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? 'Pool Not Found' : swapButtonText }}</span>
       </v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
@@ -185,11 +185,11 @@ import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
-import { Transaction } from '@emurgo/cardano-serialization-lib-browser';
 import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const emit = defineEmits(['onSwap'])
 
@@ -290,22 +290,6 @@ const isInsufficientBalance = computed(() => {
   const b = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '')
   const balanceA = Number(b)
   return Number(quantityA) > balanceA
-})
-
-const tokens = computed<any[]>(() => {
-  // Convert a resolvedAssets object to array if it exists
-  const assetsArray = resolvedAssets.value ? Object.values(resolvedAssets.value) : [];
-  return (
-    assetsArray.map((token: any) => ({
-      name: token.metadata.name,
-      ticker: token.metadata?.ticker,
-      img: token.img,
-      balance: token.quantity,
-      decimals: token.metadata.decimals,
-      unit: token.unit,
-      quantity: '0',
-    })) || []
-  );
 })
 
 const marketPriceDeltaPercentage = computed(() => {
@@ -409,7 +393,7 @@ const slippageDisplay = computed(() => {
 
 const pairPrice = computed(() => {
   if (poolError.value) {
-    return 'No Pool Found'
+    return 'Pool Not Found'
   }
   const tokenA = selectedTokenA.value?.ticker;
   const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;
@@ -539,10 +523,32 @@ const setSlippage = (val) => {
 }
 
 const switchPair = () => {
-  selectedTokenA.value = selectedTokenB.value
+  // Set the flag to prevent watchers from triggering
+  isUpdating.value = true;
+
+  // Store current values
+  const tempTokenA = { ...selectedTokenA.value };
+  const tempTokenB = { ...selectedTokenB.value };
+
+  // Swap the tokens
+  selectedTokenA.value = tempTokenB;
+  selectedTokenB.value = tempTokenA;
+
+  // Update last non-ADA tokens if needed
+  if (tempTokenB.ticker !== 'ADA') {
+    lastNonADATokenA.value = tempTokenB;
+  }
+  if (tempTokenA.ticker !== 'ADA') {
+    lastNonADATokenB.value = tempTokenA;
+  }
+
+  // Reset the flag after a small delay to ensure watchers don't interfere
+  setTimeout(() => {
+    isUpdating.value = false;
+  }, 100);
 }
 
-const estimate = (token_in, token_out, amount_in, update) => {
+const estimate = (token_in: string, token_out: string, amount_in, update) => {
   if (!loggedWallet.value) {
     return
   }
@@ -591,12 +597,12 @@ const reverseEstimate = async (token_in, token_out, amount_out, update) => {
   try {
     const res = await dexHunterApi.reverseEstimate(amount_out, token_in, token_out, slippage, blacklisted_dexes.value);
     poolError.value = false
-    price_ab.value = res.net_price_reverse;
-    price_ba.value = res.net_price;
+    price_ab.value = res.data.net_price_reverse;
+    price_ba.value = res.data.net_price;
     if (update) {
-      total_input_without_slippage.value = res.total_input_without_slippage
-      splits.value = res.splits
-      estimation.value = res
+      total_input_without_slippage.value = res.data.total_input_without_slippage
+      splits.value = res.data.splits
+      estimation.value = res.data
       selectedTokenA.value.quantity = filters.toCurrency(total_input_without_slippage.value, false, selectedTokenA.value.decimals, '', '', false, 0);
     }
   } catch (e) {
@@ -690,7 +696,19 @@ const prepareSwap = async () => {
 }
 
 const submit = async (cborHex: string) => {
-  const txId = await loggedWallet.value.submitTx(Transaction.from_hex(cborHex), utxos);
+  const submitResult = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_TX,
+    data: {
+      txCbor: cborHex,
+      witnessHex: null,
+      utxos: utxos.value
+    }
+  }) as { data: { txId?: string; error?: string } };
+
+  if (submitResult.data.error) {
+    throw new Error(submitResult.data.error);
+  }
+  const txId = submitResult.data.txId;
   snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
   emit('onSwap')
   console.log(txId)

@@ -34,6 +34,7 @@ export class SyncService {
         tip = await this.api.getTip();
       }
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
+      console.log('lastSyncInfo', lastSyncInfo)
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
         try {
