@@ -56,10 +56,11 @@ import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
-import loading from '@/stores/loading';
-import WalletStore from '@/stores/walletStore';
+import { walletStore } from '@/stores/walletStore';
 
 const selectedWallet = ref<string | null>(null);
+
+const { loggedWallet } = toRefs(walletStore);
 
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
 
@@ -92,6 +93,7 @@ const resolveNetworkIcon = (item: Wallet): string => {
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const submitLogin = async (walletId: string): Promise<void> => {
+  console.log('submitLogin')
   try {
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
 
@@ -105,17 +107,17 @@ const submitLogin = async (walletId: string): Promise<void> => {
     const maxWaitTime = 5000; // 5 seconds max wait
     const pollInterval = 50; // 50ms intervals
     const startTime = Date.now();
-    
-    while (!WalletStore.state.loggedWallet && (Date.now() - startTime) < maxWaitTime) {
+
+    while (!loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
-    
-    if (!WalletStore.state.loggedWallet) {
+
+    if (!loggedWallet.value) {
       console.error('❌ Login failed: Wallet not found in store after timeout');
       return;
     }
-    
-    console.debug('✅ Login synchronized, wallet logged in:', !!WalletStore.state.loggedWallet);
+
+    console.debug('✅ Login synchronized, wallet logged in:', !!loggedWallet.value);
 
     const queryParams = vmProxy.$route.query;
     console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
@@ -140,7 +142,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
 /* Ensure all parent elements are transparent for backdrop-filter to work */
 .transparent-override,
 .transparent-override .v-card__title,
-.transparent-override .v-card__subtitle, 
+.transparent-override .v-card__subtitle,
 .transparent-override .v-card__text {
   background: transparent !important;
   backdrop-filter: none !important;
@@ -155,7 +157,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
 }
 
 .wallet-row {
-  background: 
+  background:
     linear-gradient(135deg, rgba(19, 22, 27, 0.6) 0%, rgba(19, 22, 27, 0.4) 100%),
     radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.03) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.02) 0%, transparent 50%) !important;
@@ -164,7 +166,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 8px !important;
   margin: 4px 0 !important;
-  box-shadow: 
+  box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
   transition: all 0.2s ease !important;
@@ -173,14 +175,14 @@ const submitLogin = async (walletId: string): Promise<void> => {
 }
 
 .wallet-row:hover {
-  background: 
+  background:
     linear-gradient(135deg, rgba(19, 22, 27, 0.7) 0%, rgba(19, 22, 27, 0.5) 100%),
     radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.05) 0%, transparent 50%),
     radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%) !important;
   backdrop-filter: blur(16px) saturate(1.5) !important;
   -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
   border-color: rgba(45, 240, 247, 0.2) !important;
-  box-shadow: 
+  box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   transform: translateY(-1px) !important;
@@ -202,7 +204,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
   .wallet-row {
     background-color: rgba(19, 22, 27, 0.85) !important;
   }
-  
+
   .wallet-row:hover {
     background-color: rgba(19, 22, 27, 0.95) !important;
   }

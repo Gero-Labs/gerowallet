@@ -152,13 +152,15 @@ export async function hydrateStore(storeName: string, store: Record<string, any>
 
 /**
  * Context detection utility
+ * Returns 'browser' for all extension UI contexts (options, popup, etc.)
+ * Returns 'background' for service worker/background script
+ * Returns 'content' for content scripts
  */
-export function getContextType(): 'background' | 'content' | 'options' | 'popup' | 'unknown' {
+export function getContextType(): 'background' | 'browser' | 'content' {
   if (typeof window === 'undefined') return 'background';
   if (window.location.protocol === 'chrome-extension:') {
-    if (window.location.pathname.includes('options')) return 'options';
-    if (window.location.pathname.includes('popup')) return 'popup';
-    return 'options'; // Default for extension pages
+    // All extension UI pages (options, popup, etc.) are considered 'browser' context
+    return 'browser';
   }
   return 'content';
 }

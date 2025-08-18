@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Sign Data" :show-website="!(this.$route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)" :disabled="loading">
+    <PopupHeader title="Sign Data" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
@@ -75,24 +75,23 @@
   </v-form>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs } from 'vue';
+import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
-import { verifyData } from '@/shared/utils/converter';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const { loggedWallet, config } = toRefs(walletStore);
-
+const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const request = ref<any>(null);
 const message = ref('');
-const password = ref('');
 const valid = ref(false);
 const tooltip = ref({
   enabled: false,
@@ -106,11 +105,11 @@ const signature = ref<any>(undefined);
 const form = ref<any>(null);
 
 const txAutoSubmit = computed(() => {
-  return config.value?.txAutoSubmit || true;
+  return config.value?.txAutoSubmit;
 });
 
 const useSidePanel = computed(() => {
-  return config.value?.useSidePanel || true;
+  return config.value?.useSidePanel;
 });
 
 const enableToolTip = () => {
@@ -144,14 +143,23 @@ const sign = async () => {
       console.log('address', address);
       const payload = request.value.data.payload;
       console.log('payload', payload);
-      const res = await loggedWallet.value.signData(address, payload, spendingPassword.value, 0, !isBT.value);
-      console.log(res);
-      verifyData(res, address, payload);
-      signature.value = res;
+
+      const res = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SIGN_DATA,
+        data: {
+          address: address,
+          payload: payload,
+          password: spendingPassword.value,
+          accountIndex: 0,
+          isUsb: !isBT.value
+        }
+      }) as { data: { key: string; signature: string } };
+      console.log('signData', res)
+      signature.value = res.data;
       if (txAutoSubmit.value) {
         await confirm();
       }
-    } catch (e) {
+    } catch (e: any) {
       snackbar.setError(e);
       console.log(e);
     }
@@ -160,10 +168,15 @@ const sign = async () => {
 
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
-      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
-        await signAndReturnTx();
-      } else {
+      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+        data: { password: spendingPassword.value }
+      }) as { data: { isValid: boolean; error?: string } };
+
+      if (!passwordVerification.data.isValid) {
         enableToolTip();
+      } else {
+        await signAndReturnTx();
       }
     }
   } else {
@@ -186,13 +199,13 @@ const init = async () => {
 
 onMounted(async () => {
   if (useSidePanel.value) {
+    console.log('sidePanel')
     const params = new URLSearchParams(window.location.href);
     tabId.value = Number(params.get("tabId"));
     controller.value = Messaging.createInternalSidePanelController(tabId.value);
   } else {
     controller.value = Messaging.createInternalController();
   }
-
   await init();
 });
 </script>

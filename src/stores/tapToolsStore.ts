@@ -1,7 +1,9 @@
 import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import tapToolsApi from '@/api/tap-tools-api';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface TapToolsStore {
   portfolio: any;
@@ -9,117 +11,157 @@ export interface TapToolsStore {
   tokens: {};
 }
 
+// Create observable state
 export const tapToolsStore = Vue.observable<TapToolsStore>({
   portfolio: {},
   portfolioTrendedValue: {},
   tokens: {}
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['portfolio', 'portfolioTrendedValue', 'tokens'];
+const STORE_NAME = 'tapToolsStore';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('tapToolsStore', tapToolsStore);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing tapTools store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<TapToolsStore>) => {
+    console.debug('📥 Received tapTools store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in tapToolsStore) {
+        (tapToolsStore as any)[key] = updates[key as keyof TapToolsStore];
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(tapToolsStore, {
-  storeName: 'tapToolsStore',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 TapToolsStore'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      Object.assign(tapToolsStore, result[STORE_NAME]);
+      console.debug('💾 Hydrated tapTools store from storage:', result[STORE_NAME]);
+    }
+  });
 }
 
-async function persist(patch: Partial<TapToolsStore>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 TapToolsStore persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<TapToolsStore>) {
+  if (context === 'background') {
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || { portfolio: {}, portfolioTrendedValue: {}, tokens: {} };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...updates } 
+      });
+    });
   }
-
-  const next = { ...tapToolsStore, ...patch };
-  await smartPersist('tapToolsStore', next);
 }
-
-// async function persistTokenPatch(unit: string, patch: { price: number; mcap: number }): Promise<void> {
-//   const result = await chrome.storage.local.get('tapToolsStore');
-//   const saved: TapToolsStore = result['tapToolsStore'] || { tokens: {} };
-//   const tokensCopy = { ...saved.tokens };
-//
-//   tokensCopy[unit] = {
-//     ...tokensCopy[unit],
-//     price: patch.price,
-//     mcap: patch.mcap,
-//   };
-//
-//   await chrome.storage.local.set({
-//     tapToolsStore: {
-//       ...saved,
-//       dexHunterTokens: tokensCopy,
-//     },
-//   });
-// }
 
 export default {
   setPortfolio(portfolio: any) {
     tapToolsStore.portfolio = portfolio;
-    persist({ portfolio: portfolio });
+    
+    // Broadcast from background context
+    broadcastFromBackground({ portfolio });
   },
+  
   setPortfolioTrendedValue(portfolioTrendedValue: any) {
     tapToolsStore.portfolioTrendedValue = portfolioTrendedValue;
-    persist({ portfolioTrendedValue: portfolioTrendedValue });
+    
+    // Broadcast from background context
+    broadcastFromBackground({ portfolioTrendedValue });
   },
+  
   setTokens(tokens: any) {
     tapToolsStore.tokens = tokens;
-    persist({ tokens: tokens });
+    
+    // Broadcast from background context
+    broadcastFromBackground({ tokens });
   },
+  
   clear() {
-    tapToolsStore.portfolio = {};
-    tapToolsStore.portfolioTrendedValue = {};
-    tapToolsStore.tokens = {};
-    persist({ portfolio: {}, portfolioTrendedValue: {}, tokens: {} });
+    const clearedState: TapToolsStore = {
+      portfolio: {},
+      portfolioTrendedValue: {},
+      tokens: {}
+    };
+    
+    // Apply to local state
+    Object.assign(tapToolsStore, clearedState);
+    
+    // Broadcast all changes at once
+    broadcastFromBackground(clearedState);
   },
+  
   async loadPortfolio(stakeAddress: string) {
     try {
-      const res = await tapToolsApi.getPortfolio(stakeAddress)
-      if (res?.status == 200) {
-        this.setPortfolio(res.data)
+      const res = await tapToolsApi.getPortfolio(stakeAddress);
+      if (res?.status === 200) {
+        this.setPortfolio(res.data);
       } else {
-        console.log(parseHttpError(res))
+        console.warn('Failed to load portfolio:', parseHttpError(res));
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error loading portfolio:', e);
     }
   },
+  
   async loadPortfolioTrendedValue(stakeAddress: string) {
     try {
       const res = await tapToolsApi.getPortfolioTrendedValue(stakeAddress);
-      if (res?.status == 200) {
-        this.setPortfolioTrendedValue(res.data.map((element: any) => [element.time * 1000, element.value]))
+      if (res?.status === 200) {
+        this.setPortfolioTrendedValue(res.data.map((element: any) => [element.time * 1000, element.value]));
       } else {
-        console.log(parseHttpError(res))
+        console.warn('Failed to load portfolio trended value:', parseHttpError(res));
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error loading portfolio trended value:', e);
     }
   },
-  // async updatePrices(tokensUnits: string[]) {
-  //   for (const unit of tokensUnits) {
-  //     try {
-  //       const res = await dexhunterApi.mCap(unit);
-  //       if (res.status === 200) {
-  //         const { price, mcap } = res.data;
-  //         await persistTokenPatch(unit, { price, mcap });
-  //       }
-  //     } catch (e) {
-  //       console.warn(`failed to fetch ${unit}`, e);
-  //     }
-  //   }
-  // },
-  state: tapToolsStore
+  
+  // Expose the observable state
+  state: tapToolsStore,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): TapToolsStore {
+    return { ...tapToolsStore };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    this.clear();
+  },
+  
+  // Utility method to check if portfolio data exists
+  hasPortfolioData(): boolean {
+    return Object.keys(tapToolsStore.portfolio).length > 0;
+  },
+  
+  // Utility method to check if trended value data exists
+  hasTrendedValueData(): boolean {
+    return Array.isArray(tapToolsStore.portfolioTrendedValue) && tapToolsStore.portfolioTrendedValue.length > 0;
+  },
+  
+  // Utility method to get portfolio total value
+  getPortfolioTotalValue(): number {
+    return tapToolsStore.portfolio?.total_value || 0;
+  },
+  
+  // Utility method to get portfolio change percentage
+  getPortfolioChangePercent(): number {
+    return tapToolsStore.portfolio?.change_24h_percent || 0;
+  },
+  
+  // Utility method to check if portfolio data is stale (older than 5 minutes)
+  isPortfolioStale(maxAge: number = 5 * 60 * 1000): boolean {
+    const timestamp = tapToolsStore.portfolio?._timestamp;
+    if (!timestamp) return true;
+    return Date.now() - timestamp > maxAge;
+  }
 };

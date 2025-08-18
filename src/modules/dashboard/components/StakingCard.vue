@@ -181,11 +181,6 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 
-const props = defineProps({
-  chartData: Object,
-  project: Object,
-})
-
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore)
 const { pools, tip, epochParams } = toRefs(networkStore)
 const { loadingTxs } = toRefs(loadingState)
@@ -246,11 +241,11 @@ const rewardsChartData = computed(() => {
 const withdraw = async () => {
   try {
     // Prepare withdrawals if there are any rewards
-    const withdrawals = [];
+    const withdrawals: Cardano.Withdrawal[] = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
       withdrawals.push({
-        address: loggedWallet.value.stakeAddress,
-        amount: account.value.withdrawable_amount.toString()
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount)
       });
     }
 
@@ -296,16 +291,15 @@ const unstake = async () => {
     const certificate: Cardano.Certificate = {
       __typename: Cardano.CertificateType.StakeDeregistration,
       stakeCredential,
-      deposit: stakeKeyDepositLovelace
     };
     certificates.push(certificate);
 
     // Prepare withdrawals if there are any rewards
-    const withdrawals = [];
+    const withdrawals: Cardano.Withdrawal[] = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
       withdrawals.push({
-        address: loggedWallet.value.stakeAddress,
-        amount: account.value.withdrawable_amount.toString()
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount)
       });
     }
 

@@ -137,7 +137,6 @@ export function stakeKeyHash(pubKey: Bip32PublicKey, index: number): Ed25519KeyH
 }
 
 export function getAddress(xpub: string, chain: string, network: string, index: number = 0): Cardano.Address {
-  console.info('getting address');
   const networkId = networks.resolveNetworkId(chain, network);
   const pubKey = getPublicKey(xpub);
   return buildBaseAddress(networkId,
@@ -174,8 +173,37 @@ export function getUtxos(
   }
 
   // Convert raw UTXOs to the appropriate format
-  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo) => {
-    return Serialization.TransactionUnspentOutput.fromCore(utxo);
+  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {
+    // Reconstruct the value with proper Map for assets (needed after JSON deserialization)
+    let value = utxo[1].value;
+    if (value?.assets && !(value.assets instanceof Map)) {
+      const assetsMap = new Map<Cardano.AssetId, bigint>();
+      // Convert plain object back to Map
+      Object.entries(value.assets).forEach(([assetId, quantity]) => {
+        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+      });
+      value = {
+        coins: BigInt(value.coins),
+        assets: assetsMap
+      };
+    } else if (value) {
+      // Ensure coins is BigInt even if no assets
+      value = {
+        coins: BigInt(value.coins),
+        assets: value.assets || undefined
+      };
+    }
+
+    return Serialization.TransactionUnspentOutput.fromCore([{
+      txId: utxo[0].txId,
+      index: utxo[0].index
+    }, {
+      address: utxo[1].address,
+      value: value,
+      datumHash: utxo[1].datumHash,
+      datum: utxo[1].datum,
+      scriptReference: utxo[1].scriptReference
+    }]);
   });
 
   // If no amount is specified, return all UTXOs (with optional pagination)
@@ -401,32 +429,34 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
   return filteredUtxos.map((utxo) => toUTxO(utxo).toCbor());
 }
 
-export function getUsedAddresses(addresses: {}, paginate?: Paginate): HexBlob[] {
+export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
   let res: HexBlob[] = []
-  const addressesArray: any[] = Object.values(addresses)
-  if (addressesArray && Array.isArray(addressesArray)) {
-    addressesArray.sort((a,b) => (a['path'] > b['path']) ? 1 : ((b['path'] > a['path']) ? -1 : 0))
-    const addressesArrayHex: HexBlob[] = addressesArray.map(el => Cardano.Address.fromBech32(el['address']).toBytes())
+  const addresses: string[] = keys.payment.filter(a => a.used);
+  if (addresses && Array.isArray(addresses)) {
+    const addressesArrayHex: HexBlob[] = addresses.map(el => Cardano.Address.fromBech32(el['address']).toBytes());
     res = paginateArray(addressesArrayHex, paginate);
   }
   return res
 }
 
-export function getUnusedAddresses(xpub: string, chain: string, network: string, addresses: {}): HexBlob[] {
-  console.debug('getting unused addresses');
-  let addressesArray: any[] = Object.values(addresses)
-  let highestIndex: number = 0;
-  if (addressesArray && Array.isArray(addressesArray)) {
-    addressesArray.forEach(el => {
-      const hdPath: number[] = hdPathToArray(el['path'])
-      if (hdPath[3] === 0) {
-        if (hdPath[4] > highestIndex) {
+export function getUnusedAddresses(xpub: string, chain: string, network: string, keys: any): HexBlob[] {
+  let res: HexBlob[] = []
+  const addresses: string[] = keys.payment.filter(a => !a.used);
+  if (addresses && Array.isArray(addresses)) {
+    res = addresses.map(el => Cardano.Address.fromBech32(el['address']).toBytes());
+    if (res.length == 0) {
+      let highestIndex: number = 0
+      const usedAddresses = keys.payment.filter(a => a.used)
+      usedAddresses.forEach((usedAddress: any) => {
+        const hdPath: number[] = hdPathToArray(usedAddress.path)
+        if (hdPath[3] === 0 && hdPath[4] > highestIndex) {
           highestIndex = hdPath[4]
         }
-      }
-    })
+      });
+      res = [getAddress(xpub, chain, network, highestIndex + 1).toBytes()]
+    }
   }
-  return [getAddress(xpub, chain, network, highestIndex + 1).toBytes()]
+  return res;
 }
 
 function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {

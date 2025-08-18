@@ -8,9 +8,31 @@
       <div class="total">{{ toCurrency(amount?.total, true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</div>
       <div class="assets mr-1" v-if="amount?.assets?.length">Assets:</div>
       <div v-if="amount?.assets?.length">
-        <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
-          <div class="pr-1">{{ asset.currency }}</div>
-          <div>{{ toCurrency(asset.amount, false, 0, '', '', false, decimals(asset?.id)) }}</div>
+        <div v-for="(asset, index) in shownAssets" :key="asset.currency" class="asset-entry">
+          <div class="pr-1"></div>
+          <div>
+            <v-chip pill small class="px-1" outlined :key="`asset_${index}`" :color="risk ? 'error' : 'primary'" style="margin: 2px!important;">
+              <v-avatar v-if="asset.img" left>
+                <v-img :src="asset.img" :alt="`${asset.currency} Logo`" contain>
+                  <template v-slot:placeholder>
+                    <v-row
+                      class="fill-height ma-0"
+                      align="center"
+                      justify="center"
+                    >
+                      <v-progress-circular
+                        size="14"
+                        width="2"
+                        indeterminate
+                        color="grey lighten-5"
+                      ></v-progress-circular>
+                    </v-row>
+                  </template>
+                </v-img>
+              </v-avatar>
+              {{ toCurrency(asset.amount, false, 0, '', ` ${asset.currency}`, false, decimals(asset?.id)) }}
+            </v-chip>
+          </div>
         </div>
         <a v-if="hiddenAssets" class="asset-entry" @click="toggleAllAssets()">
           {{ hiddenAssets }} more types of collectibles

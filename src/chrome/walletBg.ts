@@ -74,6 +74,8 @@ import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { default as blockchainApi } from '@/api/blockchain-api';
+import { setStakingPools, setDReps } from '@/db';
 
 let blockchainDb: Dexie = null;
 
@@ -186,7 +188,7 @@ export class WalletBg {
   }
 
   public async getEpochProtocolIfNotExists(epoch: number) {
-    if (NetworkStore.state.epochParams[epoch]) {
+    if (NetworkStore.state.tip?.epoch == epoch) {
       return null
     }
     return epoch
@@ -508,7 +510,37 @@ export class WalletBg {
         if (txsTable) {
           // Use centralized conversion logic from converter.ts
           const convertedTxs = convertTransactionsForStorage(txs, WalletStore.state.utxos);
-          await txsTable.bulkPut(convertedTxs);
+
+          // Get existing transactions by their IDs
+          const txIds = convertedTxs.map(tx => tx.id);
+          const existingTxs = await txsTable.where('id').anyOf(txIds).toArray();
+
+          // Create a map of existing transactions for quick lookup
+          const existingTxMap = new Map(existingTxs.map(tx => [tx.id, tx]));
+
+          // Separate new transactions from those with pending status changes
+          const txsToUpdate = [];
+
+          convertedTxs.forEach(newTx => {
+            const existingTx = existingTxMap.get(newTx.id);
+
+            if (!existingTx) {
+              // Transaction doesn't exist - it's new, add it
+              txsToUpdate.push(newTx);
+            } else if (existingTx.pending !== newTx.pending) {
+              // Transaction exists but pending status changed - update it
+              txsToUpdate.push(newTx);
+            }
+            // Otherwise, transaction exists and hasn't changed - skip it
+          });
+
+          // Only update if there are changes
+          if (txsToUpdate.length > 0) {
+            console.debug(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
+            await txsTable.bulkPut(txsToUpdate);
+          } else {
+            console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
+          }
         }
       }).catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
@@ -985,10 +1017,6 @@ async function refreshStakingPoolsAlarm() {
       return;
     }
 
-    // Import the API and database functions
-    const { default: blockchainApi } = await import('@/api/blockchain-api');
-    const { setStakingPools } = await import('@/db/index');
-
     // Fetch fresh staking pools data
     const stakingPoolsData = await blockchainApi.getAllStakingPools(loggedWallet.chain, loggedWallet.network);
 
@@ -1011,10 +1039,6 @@ async function refreshDRepsAlarm() {
     if (!loggedWallet) {
       return;
     }
-
-    // Import the API and database functions
-    const { default: blockchainApi } = await import('@/api/blockchain-api');
-    const { setDReps } = await import('@/db/index');
 
     // Fetch fresh DReps data
     const drepsData = await blockchainApi.getAllDReps(loggedWallet.chain, loggedWallet.network);
