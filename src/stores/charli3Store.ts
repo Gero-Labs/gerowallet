@@ -1,5 +1,7 @@
 import Vue from 'vue';
-import { createStorageSync, smartPersist, hydrateStore, getContextType } from '@/utils/storageSync';
+import { getContextType } from '@/utils/storageSync';
+import storeMessaging from '@/services/storeMessaging.service';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface MarketToken {
   symbol: string;
@@ -45,48 +47,80 @@ export const charli3Store = Vue.observable<Charli3Store>({
   error: null
 });
 
-// Initialize store with centralized storage sync
-const SYNC_KEYS = ['marketData', 'logoCache', 'lastRefreshTime', 'error'];
+const STORE_NAME = 'charli3Store';
+const context = getContextType();
 
-// Hydrate from storage on initialization
-hydrateStore('charli3Store', charli3Store);
+// Initialize messaging based on context
+if (context === 'browser') {
+  console.debug(`🔌 Initializing charli3 store messaging in browser context`);
+  // Browser context: Subscribe to updates from background
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<Charli3Store>) => {
+    console.debug('📥 Received charli3 store update:', updates);
+    
+    // Apply updates to the observable state
+    Object.keys(updates).forEach(key => {
+      if (key in charli3Store) {
+        // Special handling for Date fields
+        if (key === 'lastRefreshTime' && updates[key] && typeof updates[key] === 'string') {
+          charli3Store[key] = new Date(updates[key] as string);
+        } else {
+          (charli3Store as any)[key] = updates[key as keyof Charli3Store];
+        }
+      }
+    });
+  });
 
-// Set up centralized storage sync
-const unsubscribe = createStorageSync(charli3Store, {
-  storeName: 'charli3Store',
-  syncKeys: SYNC_KEYS,
-  debugPrefix: '🔄 Charli3Store'
-});
-
-// Clean up on unload (for contexts that support it)
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', unsubscribe);
+  // Initial hydration from chrome.storage (fallback for initial state)
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    if (result[STORE_NAME]) {
+      const stored = result[STORE_NAME];
+      // Convert stored date string back to Date object
+      if (stored.lastRefreshTime && typeof stored.lastRefreshTime === 'string') {
+        stored.lastRefreshTime = new Date(stored.lastRefreshTime);
+      }
+      Object.assign(charli3Store, stored);
+      console.debug('💾 Hydrated charli3 store from storage');
+    }
+  });
 }
 
-async function persist(patch: Partial<Charli3Store>): Promise<void> {
-  const context = getContextType();
-  
-  // Only persist from background context to prevent cross-context conflicts
-  if (context !== 'background') {
-    console.debug(`🔍 Charli3Store persist skipped from ${context} context for:`, Object.keys(patch));
-    return;
+/**
+ * Broadcast updates from background context
+ */
+function broadcastFromBackground(updates: Partial<Charli3Store>) {
+  if (context === 'background') {
+    // Serialize data for broadcasting (convert Date to string)
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
+      if (value instanceof Date) {
+        return value.toISOString();
+      } else if (typeof value === 'bigint') {
+        return value.toString();
+      } else {
+        return value;
+      }
+    }));
+    
+    // Broadcast to all connected browser contexts
+    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+    
+    // Also persist to storage as fallback
+    chrome.storage.local.get(STORE_NAME, (result) => {
+      const current = result[STORE_NAME] || {
+        marketData: {
+          topVolume: [],
+          topGainers: [],
+          topTvl: []
+        },
+        logoCache: {},
+        lastRefreshTime: null,
+        loading: false,
+        error: null
+      };
+      chrome.storage.local.set({ 
+        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      });
+    });
   }
-
-  const next = { 
-    ...charli3Store, 
-    ...patch,
-    // Convert Date to string for storage
-    lastRefreshTime: patch.lastRefreshTime ? patch.lastRefreshTime.toISOString() : charli3Store.lastRefreshTime?.toISOString()
-  };
-  
-  const nextString = JSON.stringify(next, (key, value) => {
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    return value;
-  });
-  
-  await smartPersist('charli3Store', JSON.parse(nextString));
 }
 
 export default {
@@ -94,7 +128,7 @@ export default {
     charli3Store.marketData = marketData;
     charli3Store.lastRefreshTime = new Date();
     charli3Store.error = null;
-    persist({ 
+    broadcastFromBackground({ 
       marketData, 
       lastRefreshTime: charli3Store.lastRefreshTime,
       error: null
@@ -109,7 +143,7 @@ export default {
   setError(error: string | null) {
     charli3Store.error = error;
     charli3Store.loading = false;
-    persist({ error, loading: false });
+    broadcastFromBackground({ error, loading: false });
   },
 
   cacheTokenLogo(tokenKey: string, logoUrl: string) {
@@ -119,7 +153,7 @@ export default {
     };
     
     charli3Store.logoCache[tokenKey] = logoEntry;
-    persist({ logoCache: charli3Store.logoCache });
+    broadcastFromBackground({ logoCache: charli3Store.logoCache });
   },
 
   getCachedLogo(tokenKey: string): string | null {
@@ -134,7 +168,7 @@ export default {
     } else {
       // Remove expired cache entry
       delete charli3Store.logoCache[tokenKey];
-      persist({ logoCache: charli3Store.logoCache });
+      broadcastFromBackground({ logoCache: charli3Store.logoCache });
       return null;
     }
   },
@@ -159,7 +193,7 @@ export default {
     }
 
     if (hasChanged) {
-      persist({ logoCache: charli3Store.logoCache });
+      broadcastFromBackground({ logoCache: charli3Store.logoCache });
     }
   },
 
@@ -175,7 +209,7 @@ export default {
     }
 
     if (hasChanged) {
-      persist({ logoCache: charli3Store.logoCache });
+      broadcastFromBackground({ logoCache: charli3Store.logoCache });
       console.log('Cleared all invalid blob URLs from cache');
     }
   },
@@ -194,8 +228,8 @@ export default {
     updateArrayLogos(charli3Store.marketData.topGainers);
     updateArrayLogos(charli3Store.marketData.topTvl);
 
-    // Persist updated market data
-    persist({ marketData: charli3Store.marketData });
+    // Broadcast updated market data
+    broadcastFromBackground({ marketData: charli3Store.marketData });
   },
 
   isDataStale(): boolean {
@@ -217,5 +251,59 @@ export default {
     return new Date(lastRefresh.getTime() + 5 * 60 * 1000);
   },
 
-  state: charli3Store
+  state: charli3Store,
+  
+  // Utility method to get current state snapshot
+  getSnapshot(): any {
+    return { 
+      ...charli3Store,
+      // Convert Date to string for serialization
+      lastRefreshTime: charli3Store.lastRefreshTime?.toISOString() || null
+    };
+  },
+  
+  // Utility method to reset state
+  reset() {
+    const resetState: Charli3Store = {
+      marketData: {
+        topVolume: [],
+        topGainers: [],
+        topTvl: []
+      },
+      logoCache: {},
+      lastRefreshTime: null,
+      loading: false,
+      error: null
+    };
+    
+    Object.assign(charli3Store, resetState);
+    broadcastFromBackground(resetState);
+  },
+  
+  // Utility method to check if market data exists
+  hasMarketData(): boolean {
+    return charli3Store.marketData.topVolume.length > 0 || 
+           charli3Store.marketData.topGainers.length > 0 || 
+           charli3Store.marketData.topTvl.length > 0;
+  },
+  
+  // Utility method to get top volume tokens
+  getTopVolumeTokens(): MarketToken[] {
+    return charli3Store.marketData.topVolume;
+  },
+  
+  // Utility method to get top gainers
+  getTopGainers(): MarketToken[] {
+    return charli3Store.marketData.topGainers;
+  },
+  
+  // Utility method to get top TVL tokens
+  getTopTvlTokens(): MarketToken[] {
+    return charli3Store.marketData.topTvl;
+  },
+  
+  // Utility method to check cache size
+  getCacheSize(): number {
+    return Object.keys(charli3Store.logoCache).length;
+  }
 };

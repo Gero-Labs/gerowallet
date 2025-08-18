@@ -1,23 +1,18 @@
 import {
   Address,
-  AssetName,
-  Assets,
   BigNum,
   Certificate,
   Certificates,
   CoinSelectionStrategyCIP2,
   ExUnitPrices,
   LinearFee,
-  MultiAsset,
   RewardAddress,
-  ScriptHash,
   TransactionBody,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
   TransactionOutputs,
   TransactionUnspentOutputs,
   UnitInterval,
-  Value,
   Withdrawals,
 } from '@emurgo/cardano-serialization-lib-browser';
 import { AssetWithQuantity } from '@/shared/models/asset-quantity';
@@ -32,7 +27,7 @@ import {
   SelectionConstraints,
   ProtocolParametersForInputSelection
 } from '@cardano-sdk/input-selection';
-const { BrowserTxConstruction } = await import('@/chrome/cardanoJsSdkCbor');
+import { BrowserTxConstruction} from '@/chrome/cardanoJsSdkCbor';
 
 export function getTransactionBuilder(pp: Cardano.ProtocolParameters): TransactionBuilder {
   return TransactionBuilder.new(TransactionBuilderConfigBuilder.new()
@@ -161,26 +156,6 @@ function outputHasAssets(outputs: TransactionOutputs) {
   return false;
 }
 
-export function cardanoValueFromRemoteFormat(utxo: Cardano.Utxo) {
-  const cardanoValue: Value = Value.new(BigNum.from_str(utxo[1].value.coins.toString()));
-  if (!utxo[1].value.assets || utxo[1].value.assets.size === 0) {
-    return cardanoValue;
-  }
-  const assets: MultiAsset = MultiAsset.new();
-  Object.entries(utxo[1].value.assets).forEach((entry: [Cardano.AssetId, string]) => {
-    const policyId: ScriptHash = ScriptHash.from_hex(Cardano.AssetId.getPolicyId(entry[0]));
-    const assetName: AssetName = AssetName.new(Buffer.from(Cardano.AssetId.getAssetName(entry[0]) || '', 'hex'));
-    const quantity: BigNum = BigNum.from_str(entry[1]);
-    const policyContent: Assets = assets.get(policyId) ?? Assets.new();
-    policyContent.insert(assetName, quantity);
-    assets.insert(policyId, policyContent);
-  });
-  if (assets.len() > 0) {
-    cardanoValue.set_multiasset(assets);
-  }
-  return cardanoValue;
-}
-
 export function getAssetsFromMultiAsset(multiAsset) {
   if (!multiAsset) return [];
   const result = [];
@@ -204,30 +179,34 @@ export function getAssetsFromMultiAsset(multiAsset) {
   return result;
 }
 
-export function diffAssetsFromIncomingToOutgoing(inputAssets, outputAssets) {
+export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, outputAssets: Cardano.Value) {
   if (!inputAssets || !outputAssets) {
     return null;
   }
-  const allAssets = new Set([
-    ...inputAssets.map(input => input.asset.name),
-    ...outputAssets.map(output => output.asset.name),
+  const allAssets: Set<Cardano.AssetId> = new Set([
+    ...(inputAssets.assets ? inputAssets.assets.keys() : []),
+    ...(outputAssets.assets ? outputAssets.assets.keys() : []),
   ]);
-  return Array.from(allAssets)
-    .map(assetName => {
-      const inValue = inputAssets.find(input => input.asset.name === assetName);
-      const outValue = outputAssets.find(output => output.asset.name === assetName);
-      const difference = BigInt(inValue ? inValue.quantity : '') - BigInt(outValue ? outValue.quantity : '');
-      if (assetName === 'cardano') {
-        return { assetName, quantity: difference, id: 'cardano' };
-      }
-      const policy = assetName.slice(0, 56);
+  const assetsArray = Array.from(allAssets)
+    .map(assetId => {
+      const inValue: bigint = inputAssets.assets ? inputAssets.assets.get(assetId) : 0n;
+      const outValue: bigint = outputAssets.assets ? outputAssets.assets.get(assetId) : 0n;
+      const difference: bigint = inValue - outValue;
       return {
-        assetName,
+        assetName: Cardano.AssetName.toUTF8(Cardano.AssetId.getAssetName(assetId), true),
+        policy: Cardano.AssetId.getPolicyId(assetId),
         quantity: difference,
-        policy,
-        id: inValue ? inValue.asset.id : outValue?.asset.id,
+        id: assetId,
       };
-    }).filter(asset => asset.quantity !== BigInt(0));
+    }).filter(asset => asset.quantity !== 0n);
+  console.log('assetsArray', assetsArray)
+  const cardano = {
+    assetName: 'cardano',
+    policy: '',
+    quantity: inputAssets.coins - outputAssets.coins,
+    id: 'cardano'
+  }
+  return [cardano, ...assetsArray]
 }
 
 export function getPayAndReceiveTokens(diff) {
@@ -266,7 +245,7 @@ export async function buildCardanoTransaction({
   implicitCoin = BigInt(0)
 }: {
   certificates?: Cardano.Certificate[];
-  withdrawals?: Array<{ address: string; amount: string }>;
+  withdrawals?: Cardano.Withdrawal[];
   outputs?: Cardano.TxOut[];
   utxos: Cardano.Utxo[];
   epochParams: any;
@@ -334,14 +313,7 @@ export async function buildCardanoTransaction({
 
       // Add withdrawals if any
       if (withdrawals.length > 0) {
-        const withdrawalMap = new Map<Cardano.RewardAccount, Cardano.Lovelace>();
-        withdrawals.forEach(withdrawal => {
-          withdrawalMap.set(
-            withdrawal.address as Cardano.RewardAccount,
-            BigInt(withdrawal.amount) as Cardano.Lovelace
-          );
-        });
-        tempTxBody.withdrawals = withdrawalMap;
+        tempTxBody.withdrawals = withdrawals;
       }
 
       const tempTx: Cardano.Tx = {
@@ -415,14 +387,7 @@ export async function buildCardanoTransaction({
 
   // Add withdrawals if provided
   if (withdrawals.length > 0) {
-    const withdrawalMap = new Map<Cardano.RewardAccount, Cardano.Lovelace>();
-    withdrawals.forEach(withdrawal => {
-      withdrawalMap.set(
-        withdrawal.address as Cardano.RewardAccount,
-        BigInt(withdrawal.amount) as Cardano.Lovelace
-      );
-    });
-    txBody.withdrawals = withdrawalMap;
+    txBody.withdrawals = withdrawals;
   }
 
   // Create a final transaction

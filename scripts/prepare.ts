@@ -5,6 +5,36 @@ import chokidar from 'chokidar'
 import { isDev, log, port, r } from './utils'
 
 /**
+ * Copy assets that are needed during development
+ */
+async function copyDevAssets() {
+  // Ensure directories exist
+  await fs.ensureDir(r('extension/public'))
+
+  // Copy public assets
+  const publicAssets = r('src/assets/public')
+  if (await fs.pathExists(publicAssets)) {
+    try {
+      await fs.copy(publicAssets, r('extension/public'), { overwrite: true })
+      log('PRE', 'copied public assets')
+    } catch (error) {
+      console.warn('Failed to copy public assets:', error)
+    }
+  }
+
+  // Copy notification assets
+  const notificationAssets = r('src/assets/notifications')
+  if (await fs.pathExists(notificationAssets)) {
+    try {
+      await fs.copy(notificationAssets, r('extension/public/'), { overwrite: true })
+      log('PRE', 'copied notification assets')
+    } catch (error) {
+      console.warn('Failed to copy notification assets:', error)
+    }
+  }
+}
+
+/**
  * Stub index.html to use Vite in development
  */
 async function stubIndexHtml() {
@@ -37,6 +67,7 @@ function writeManifest() {
 writeManifest()
 
 if (isDev) {
+  copyDevAssets()
   stubIndexHtml()
   chokidar.watch(r('src/**/*.html'))
     .on('change', () => {
