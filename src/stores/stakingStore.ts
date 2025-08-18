@@ -47,6 +47,8 @@ const stakingStoreActions = {
         search: params.search !== undefined ? params.search : stakingStore.filters.search,
         hide_saturated: params.hide_saturated !== undefined ? params.hide_saturated : stakingStore.filters.hideSaturated,
         pledge_met: params.pledge_met !== undefined ? params.pledge_met : stakingStore.filters.pledgeMet,
+        sort_by: params.sort_by,
+        sort_direction: params.sort_direction,
       };
       
       const response: PaginatedResponse<any> = await api.getPoolsPaginated(requestParams);

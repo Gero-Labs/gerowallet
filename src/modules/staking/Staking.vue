@@ -538,6 +538,8 @@ const reloadWithFilters = () => {
 const selectedPool = ref<any>(null);
 const txData = ref<any>(null);
 const isDelegateDialogOpen = ref<boolean>(false);
+const sortBy = ref<string>('ros');
+const sortDesc = ref<boolean>(true);
 
 const headers = computed(() => {
   return [
@@ -603,6 +605,8 @@ const loadPaginatedPools = async (pageNum: number = 1) => {
   await stakingStore.loadPoolsPaginated(loggedWallet.value, provider, {
     page: pageNum,
     per_page: pageSize.value,
+    sort_by: sortBy.value,
+    sort_direction: sortDesc.value ? 'desc' : 'asc',
   });
 };
 
@@ -662,6 +666,12 @@ const pagedPools = computed<any[]>(() => {
 // Watch for page changes to load new data
 watch(page, newPage => {
   loadPaginatedPools(newPage);
+});
+
+watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
+  if (oldSortBy !== undefined && oldSortDesc !== undefined) {
+    loadPaginatedPools(1);
+  }
 });
 
 const delegateToGero = () => {

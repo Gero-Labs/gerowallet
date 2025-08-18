@@ -544,7 +544,7 @@ const loadDRepsPaginated = async (page: number = 1) => {
     per_page: itemsPerPage.value,
     search: search.value,
     sort_by: sortBy.value,
-    sort_desc: sortDesc.value,
+    sort_direction: sortDesc.value ? 'desc' : 'asc',
   });
 };
 
