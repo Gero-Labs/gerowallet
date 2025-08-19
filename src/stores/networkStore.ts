@@ -6,8 +6,6 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
 export interface NetworkStore {
   assets: any;
-  dreps: any;
-  pools: any;
   epochParams: Cardano.ProtocolParameters;
   tip: Cardano.Tip & {
     epoch: number;
@@ -22,8 +20,6 @@ export interface NetworkStore {
 // Create observable state
 export const networkStore = Vue.observable<NetworkStore>({
   assets: {},
-  dreps: {},
-  pools: {},
   epochParams: null,
   tip: null,
   price: {},
@@ -40,7 +36,7 @@ if (context === 'browser') {
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
     console.debug('📥 Received network store update:', updates);
-    
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in networkStore) {
@@ -78,24 +74,22 @@ function broadcastFromBackground(updates: Partial<NetworkStore>) {
         return value;
       }
     }));
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
       const current = result[STORE_NAME] || {
         assets: {},
-        dreps: {},
-        pools: {},
         epochParams: null,
         tip: null,
         price: {},
         tickerStatisticsIntervalId: null,
         genesis: null
       };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
       });
     });
   }
@@ -106,156 +100,116 @@ export default {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setAssets called from ${context} context`);
     networkStore.assets = assets;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ assets });
   },
-  
-  setDReps(dreps: any) {
-    const context = getContextType();
-    console.debug(`🔍 NetworkStore setDReps called from ${context} context`);
-    networkStore.dreps = dreps;
-    
-    // Broadcast from background context
-    broadcastFromBackground({ dreps });
-  },
-  
-  setPools(pools: any) {
-    const context = getContextType();
-    console.debug(`🔍 NetworkStore setPools called from ${context} context`);
-    networkStore.pools = pools;
-    
-    // Broadcast from background context
-    broadcastFromBackground({ pools });
-  },
-  
+
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setEpochParams called from ${context} context`);
     networkStore.epochParams = epochParams;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ epochParams });
   },
-  
+
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setTip called from ${context} context`);
     networkStore.tip = tip;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ tip });
   },
-  
+
   setPrice(price: {}) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ price });
   },
-  
+
   setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
     networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ tickerStatisticsIntervalId });
   },
-  
+
   setGenesis(genesis: any) {
     const context = getContextType();
     console.debug(`🔍 NetworkStore setGenesis called from ${context} context`);
     networkStore.genesis = genesis;
-    
+
     // Broadcast from background context
     broadcastFromBackground({ genesis });
   },
-  
+
   // Expose the observable state
   state: networkStore,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): NetworkStore {
     return { ...networkStore };
   },
-  
+
   // Utility method to reset state
   reset() {
     const resetState: NetworkStore = {
       assets: {},
-      dreps: {},
-      pools: {},
       epochParams: null,
       tip: null,
       price: {},
       tickerStatisticsIntervalId: null,
       genesis: null
     };
-    
+
     Object.assign(networkStore, resetState);
     broadcastFromBackground(resetState);
   },
-  
+
   // Utility method to check if network is synced
   isSynced(): boolean {
     return networkStore.tip !== null && networkStore.epochParams !== null;
   },
-  
+
   // Utility method to get current epoch
   getCurrentEpoch(): number | null {
     return networkStore.tip?.epoch || null;
   },
-  
+
   // Utility method to get current slot
   getCurrentSlot(): number | null {
     return networkStore.tip?.slot || null;
   },
-  
+
   // Utility method to get current block height
   getCurrentBlockHeight(): number | null {
     return networkStore.tip?.blockNo || null;
   },
-  
+
   // Utility method to get ADA price in USD
   getAdaPrice(): number {
     return networkStore.price?.lastPrice || 0;
   },
-  
+
   // Utility method to get price change percentage
   getPriceChangePercent(): number {
     return networkStore.price?.priceChangePercentage || 0;
   },
-  
+
   // Utility method to check if an asset exists
   hasAsset(unit: string): boolean {
     return unit in networkStore.assets;
   },
-  
+
   // Utility method to get asset by unit
   getAsset(unit: string): any {
     return networkStore.assets[unit];
-  },
-  
-  // Utility method to check if a pool exists
-  hasPool(poolId: string): boolean {
-    return poolId in networkStore.pools;
-  },
-  
-  // Utility method to get pool by ID
-  getPool(poolId: string): any {
-    return networkStore.pools[poolId];
-  },
-  
-  // Utility method to check if a DRep exists
-  hasDRep(drepId: string): boolean {
-    return drepId in networkStore.dreps;
-  },
-  
-  // Utility method to get DRep by ID
-  getDRep(drepId: string): any {
-    return networkStore.dreps[drepId];
   }
 };
