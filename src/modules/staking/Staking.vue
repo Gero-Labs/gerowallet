@@ -66,20 +66,14 @@
             </v-row>
           </v-card-subtitle>
           <v-card-text class="py-0">
-            <!-- Loading indicator -->
-            <div v-if="poolsLoading" class="text-center py-4">
-              <v-progress-circular indeterminate color="primary"></v-progress-circular>
-              <p class="mt-2">Loading pools...</p>
-            </div>
-
             <!-- Error message -->
             <div v-if="poolsError" class="text-center py-4">
               <v-icon color="error" large>mdi-alert</v-icon>
               <p class="mt-2 error--text">{{ poolsError }}</p>
-              <v-btn @click="loadPaginatedPools(1)" color="primary">Retry</v-btn>
+              <v-btn @click="reloadWithFilters" color="primary">Retry</v-btn>
             </div>
             <v-data-table
-              v-if="isPro && !poolsLoading && !poolsError"
+              v-if="isPro"
               dense
               :headers="headers"
               :items="stakePools"
@@ -87,9 +81,12 @@
               :page.sync="page"
               @page-count="pageCount = $event"
               :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-              multi-sort
+              :must-sort="true"
               hide-default-footer
               class="poolsTable transparent"
+              :sort-by.sync="sortBy"
+              :sort-desc.sync="sortDesc"
+              :loading="poolsLoading"
               @click:row="delegate"
             >
               <template v-slot:[`item.name`]="{ item }">
@@ -274,7 +271,7 @@
                 <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
               </template>
             </v-data-table>
-            <v-row no-gutters v-else-if="!poolsLoading && !poolsError">
+            <v-row no-gutters v-else>
               <v-col
                 cols="12"
                 xl="3"
@@ -659,9 +656,8 @@ const pagedPools = computed<any[]>(() => {
   return data.splice(startIndex, pageSize.value);
 });
 
-
-watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
-  if (oldSortBy !== undefined && oldSortDesc !== undefined) {
+watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
+  if (newSortBy !== undefined && newSortDesc !== undefined) {
     loadPaginatedPools(1);
   }
 });
