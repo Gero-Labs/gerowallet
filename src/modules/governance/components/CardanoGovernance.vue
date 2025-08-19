@@ -307,11 +307,11 @@ const sortBy = ref('voting_power');
 const sortDesc = ref(true);
 const search = ref('');
 const drepsHeaders = [
-  { text: 'ID', sortable: false, align: 'transparent', value: 'id', width: '81' },
-  { text: 'Name', sortable: true, align: 'left', value: 'name', width: '131' },
+  { text: 'ID', sortable: false, align: 'transparent', value: 'id' },
+  { text: 'Name', sortable: true, align: 'left', value: 'name' },
   { text: 'Delegators', sortable: true, align: 'left', value: 'delegators', width: '120' },
-  { text: 'Votes', sortable: true, align: 'left', value: 'votes', width: '80' },
-  { text: 'Voting Power', sortable: true, align: 'left', value: 'voting_power', width: '120' },
+  { text: 'Votes', sortable: true, align: 'left', value: 'votes', width: '85' },
+  { text: 'Voting Power', sortable: true, align: 'left', value: 'voting_power', width: '131' },
 ];
 
 // Computed properties
