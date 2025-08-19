@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import { Api } from '@/api/api';
+import blockchainApi from '@/api/blockchain-api';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
 
 export interface StakingStore {
@@ -33,31 +33,33 @@ export const stakingStore = Vue.observable<StakingStore>({
 });
 
 const stakingStoreActions = {
-  async loadPoolsPaginated(wallet: any, provider: any, params: PaginationParams = {}) {
+  async loadPoolsPaginated(wallet: any, params: PaginationParams = {}) {
     stakingStore.loading = true;
     stakingStore.error = null;
-    
+
     try {
-      const api = new Api(wallet, provider);
-      
       // Merge current filters with params
       const requestParams: PaginationParams = {
         page: params.page || 1,
         per_page: params.per_page || 8,
         search: params.search !== undefined ? params.search : stakingStore.filters.search,
-        hide_saturated: params.hide_saturated !== undefined ? params.hide_saturated : stakingStore.filters.hideSaturated,
+        hide_saturated:
+          params.hide_saturated !== undefined ? params.hide_saturated : stakingStore.filters.hideSaturated,
         pledge_met: params.pledge_met !== undefined ? params.pledge_met : stakingStore.filters.pledgeMet,
         sort_by: params.sort_by,
         sort_direction: params.sort_direction,
       };
-      
-      const response: PaginatedResponse<any> = await api.getPoolsPaginated(requestParams);
-      
+
+      const response: PaginatedResponse<any> = await blockchainApi.getPoolsPaginated(
+        requestParams,
+        wallet.chain,
+        wallet.network
+      );
+
       // For server-side pagination, always replace pools with current page data
       stakingStore.pools = response.items || [];
-      
+
       stakingStore.paginationMeta = response.meta;
-      
     } catch (error: any) {
       stakingStore.error = error?.message || 'Failed to load pools';
       console.error('Error loading paginated pools:', error);
@@ -66,20 +68,18 @@ const stakingStoreActions = {
     }
   },
 
-  async loadPoolById(wallet: any, provider: any, poolId: string) {
+  async loadPoolById(wallet: any, poolId: string) {
     stakingStore.poolLoading = true;
     stakingStore.poolError = null;
-    
+
     try {
-      const api = new Api(wallet, provider);
-      const pool = await api.getPoolById(poolId);
-      
+      const pool = await blockchainApi.getPoolById(poolId, wallet.chain, wallet.network);
+
       if (pool) {
         stakingStore.currentPool = pool;
       } else {
         stakingStore.poolError = 'Pool not found';
       }
-      
     } catch (error: any) {
       stakingStore.poolError = error?.message || 'Failed to load pool';
       console.error('Error loading pool by ID:', error);
@@ -131,7 +131,7 @@ const stakingStoreActions = {
     stakingStore.poolError = null;
   },
 
-  state: stakingStore
+  state: stakingStore,
 };
 
 export default stakingStoreActions;

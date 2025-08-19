@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import { Api } from '@/api/api';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
+import blockchainApi from '@/api/blockchain-api';
 
 export interface GovernanceStore {
   dreps: any[];
@@ -29,13 +30,11 @@ export const governanceStore = Vue.observable<GovernanceStore>({
 });
 
 const governanceStoreActions = {
-  async loadDRepsPaginated(wallet: any, provider: any, params: PaginationParams = {}) {
+  async loadDRepsPaginated(wallet: any, params: PaginationParams = {}) {
     governanceStore.loading = true;
     governanceStore.error = null;
 
     try {
-      const api = new Api(wallet, provider);
-
       // Merge current filters with params
       const requestParams: PaginationParams = {
         page: params.page || 1,
@@ -45,7 +44,7 @@ const governanceStoreActions = {
         sort_direction: params.sort_direction,
       };
 
-      const response: PaginatedResponse<any> = await api.getDRepsPaginated(requestParams);
+      const response: PaginatedResponse<any> = await blockchainApi.getDRepsPaginated(requestParams, wallet.chain, wallet.network);
 
       // For server-side pagination, always replace dreps with current page data
       governanceStore.dreps = response.items || [];
@@ -59,15 +58,12 @@ const governanceStoreActions = {
     }
   },
 
-  async loadDRepById(wallet: any, provider: any, drepId: string) {
+  async loadDRepById(wallet: any, drepId: string) {
     governanceStore.drepLoading = true;
     governanceStore.drepError = null;
 
     try {
-      const api = new Api(wallet, provider);
-
-      // Поиск DRep по ID в текущих данных
-      const drep = governanceStore.dreps.find(d => d.drep_id === drepId);
+        const drep = await blockchainApi.getPoolById(drepId, wallet.chain, wallet.network);
 
       if (drep) {
         governanceStore.currentDRep = drep;

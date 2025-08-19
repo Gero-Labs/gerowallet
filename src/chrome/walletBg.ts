@@ -74,16 +74,14 @@ import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
-import { default as blockchainApi } from '@/api/blockchain-api';
-import { setStakingPools, setDReps } from '@/db';
 
 let blockchainDb: Dexie = null;
 
 export class WalletBg {
   api: Api;
   syncService: SyncService;
-  loaderFactory: LoaderFactory;
-
+  loaderFactory: LoaderFactory; 
+  
   id: any;
   name: any;
   icon: any;

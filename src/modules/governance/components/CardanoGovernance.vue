@@ -20,17 +20,17 @@
                     <div class="gradient-text text-h6 font-weight-semibold">
                       {{ delegatingTo }}
                     </div>
-                    <div class="flex-center" v-if="dreps[account?.drep_id]">
+                    <div class="flex-center" v-if="currentDRep">
                       <div class="white--text text-h6 font-weight-semibold">
-                        {{ truncate(account?.drep_id) }}
+                        {{ truncate(currentDRep.drep_id) }}
                       </div>
-                      <CopyButton small :value="account?.drep_id"></CopyButton>
+                      <CopyButton small :value="currentDRep.drep_id"></CopyButton>
                     </div>
-                    <div class="gradient-text text-subtitle-2 font-weight-semibold" v-if="dreps[account?.drep_id]">
+                    <div class="gradient-text text-subtitle-2 font-weight-semibold" v-if="currentDRep">
                       Vote Power:
                       {{
                         toCurrency(
-                          dreps[account?.drep_id].amount,
+                          currentDRep.amount,
                           false,
                           2,
                           networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
@@ -248,7 +248,6 @@ import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import governanceStoreActions from '@/stores/governanceStore';
-import { Provider } from '@/models/types';
 
 const { truncate, toCurrency } = filters;
 import networks from '@/utils/networks';
@@ -279,6 +278,7 @@ const { tip } = toRefs(networkStore);
 
 // Governance store
 const { dreps: governanceDReps, loading: drepsLoading, paginationMeta } = toRefs(governanceStoreActions.state);
+const { currentDRep } = toRefs(governanceStoreActions.state);
 
 // Create a computed property for dreps that combines governance data
 const dreps = computed(() => {
@@ -306,10 +306,9 @@ const telegramLogo = assets.telegramSvg;
 const sortBy = ref('voting_power');
 const sortDesc = ref(true);
 const search = ref('');
-
 const drepsHeaders = [
-  { text: 'ID', sortable: false, align: 'transparent', value: 'id' },
-  { text: 'Name', sortable: true, align: 'left', value: 'name' },
+  { text: 'ID', sortable: false, align: 'transparent', value: 'id', width: '81' },
+  { text: 'Name', sortable: true, align: 'left', value: 'name', width: '131' },
   { text: 'Delegators', sortable: true, align: 'left', value: 'delegators', width: '120' },
   { text: 'Votes', sortable: true, align: 'left', value: 'votes', width: '80' },
   { text: 'Voting Power', sortable: true, align: 'left', value: 'voting_power', width: '120' },
@@ -318,14 +317,14 @@ const drepsHeaders = [
 // Computed properties
 const delegatingTo = computed(() => {
   let res = 'Undelegated';
-  if (account.value?.drep_id) {
+  if (currentDRep.value) {
     res = 'N/A';
-    if (account.value?.drep_id == 'drep_always_no_confidence') {
+    if (currentDRep.value.drep_id == 'drep_always_no_confidence') {
       res = 'No Confidence';
-    } else if (account.value?.drep_id == 'drep_always_abstain') {
+    } else if (currentDRep.value.drep_id == 'drep_always_abstain') {
       res = 'Abstain';
     } else {
-      const drep = dreps.value[account.value.drep_id];
+      const drep = currentDRep.value;
       if (drep && drep['metadata']?.meta_json?.body?.givenName) {
         if (drep['metadata'].meta_json.body.givenName['@value']) {
           res = drep['metadata'].meta_json.body.givenName['@value'];
@@ -539,7 +538,7 @@ const loadDRepsPaginated = async (page: number = 1) => {
     return;
   }
 
-  await governanceStoreActions.loadDRepsPaginated(wallet, Provider.BLOCKFROST, {
+  await governanceStoreActions.loadDRepsPaginated(wallet, {
     page,
     per_page: itemsPerPage.value,
     search: search.value,
@@ -580,8 +579,8 @@ watch(search, newSearch => {
   }, 500);
 });
 
-watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
-  if (oldSortBy !== undefined && oldSortDesc !== undefined) {
+watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
+  if (newSortBy !== undefined && newSortDesc !== undefined) {
     onSortChange();
   }
 });
@@ -589,6 +588,16 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) =
 onMounted(async () => {
   await loadDRepsPaginated(1);
 });
+
+watch(
+  account,
+  async () => {
+    if (account.value?.drep_id) {
+      await governanceStoreActions.loadDRepById(loggedWallet.value, account.value.drep_id);
+    }
+  },
+  { immediate: true }
+);
 
 onUnmounted(() => {
   // Clean up timeouts
