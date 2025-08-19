@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, Proof, Provider } from '@/models/types';
+import { Blockchain, Network, Proof, Provider, PaginatedResponse, PaginationParams } from '@/models/types';
 
 export class Api {
   public chain: string;
@@ -11,7 +11,7 @@ export class Api {
   constructor(wallet, provider: Provider) {
     this.chain = Object.keys(Blockchain).find(key => Blockchain[key] === wallet.chain);
     this.network = Object.keys(Network).find(key => Network[key] === wallet.network);
-    this.provider = Provider[provider]
+    this.provider = Provider[provider];
     this.axiosInstance = axios.create({
       baseURL: import.meta.env['VITE_BACKEND_URL'],
       timeout: 120000,
@@ -23,13 +23,21 @@ export class Api {
   }
 
   async ablyToken(baseAddress: string) {
-    return await this.axiosInstance.get(`/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`);
+    return await this.axiosInstance.get(
+      `/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`
+    );
   }
 
-  async sync(from: number, to: any, address: string, rewards_sum: string, controlled_amount: string, withdrawable_amount: string): Promise<any> {
+  async sync(
+    from: number,
+    to: any,
+    address: string,
+    rewards_sum: string,
+    controlled_amount: string,
+    withdrawable_amount: string
+  ): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.post(
-        `/api/sync`, {
+      const { data, status } = await this.axiosInstance.post(`/api/sync`, {
         chain: this.chain,
         network: this.network,
         provider: this.provider,
@@ -38,9 +46,8 @@ export class Api {
         address,
         rewards_sum,
         controlled_amount,
-        withdrawable_amount
-      }
-      );
+        withdrawable_amount,
+      });
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -99,7 +106,7 @@ export class Api {
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return [];
       }
       throw parseHttpError(error);
     }
@@ -107,64 +114,46 @@ export class Api {
 
   async getTransactionsInfo(txHashes: string[]) {
     try {
-      const { data, status } = await this.axiosInstance.post(`/api/transactions/info?chain=${this.chain}&network=${this.network}`, txHashes);
-      console.log("data:", data);
+      const { data, status } = await this.axiosInstance.post(
+        `/api/transactions/info?chain=${this.chain}&network=${this.network}`,
+        txHashes
+      );
+      console.log('data:', data);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
       if (error.response?.status === 404) {
-        return []
+        return [];
       }
       throw parseHttpError(error);
     }
   }
 
   async getTransactionsCbor(txHashes: string[]) {
-    return await this.axiosInstance.post(`/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`, txHashes);
+    return await this.axiosInstance.post(
+      `/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
+      txHashes
+    );
   }
 
-  async getAllPools() {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/pools/all?chain=${this.chain}&network=${this.network}`
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
-        return []
-      }
-      throw parseHttpError(error);
-    }
-  }
 
-  async getAllDReps() {
-    try {
-      const { data, status } = await this.axiosInstance.get(
-        `/api/dreps/all?chain=${this.chain}&network=${this.network}`
-      );
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error: any | AxiosError) {
-      if (error.response?.status === 404) {
-        return []
-      }
-      throw parseHttpError(error);
-    }
-  }
 
   async getAssetsInfo(units: string[]) {
-    const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`;
     return await this.axiosInstance.post(url, units);
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
-    return await this.axiosInstance.get(`/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+    return await this.axiosInstance.get(
+      `/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
+    );
   }
 
   async getAssetNFTAddress(policyId: string, assetName: string): Promise<any> {
     try {
-      const { data, status } = await this.axiosInstance.get(`/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`);
+      const { data, status } = await this.axiosInstance.get(
+        `/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
+      );
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
@@ -181,11 +170,15 @@ export class Api {
   }
 
   async getGenesis() {
-    return await this.axiosInstance.get(`/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`);
+    return await this.axiosInstance.get(
+      `/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+    );
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
-    return await this.axiosInstance.get(`/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`);
+    return await this.axiosInstance.get(
+      `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
+    );
   }
 
   async fetchTickerStatistics() {
@@ -211,8 +204,11 @@ export class Api {
   }
 
   async submitTx(body: string): Promise<any> {
-    const { data } = await this.axiosInstance.post(`/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`, body);
-    return data
+    const { data } = await this.axiosInstance.post(
+      `/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`,
+      body
+    );
+    return data;
   }
 
   async getBankAccountId(userId: number): Promise<number> {
@@ -227,9 +223,9 @@ export class Api {
 
   async verifyProof(proof: Proof, publicSignals: string[]): Promise<boolean> {
     try {
-      const response = await this.axiosInstance.post("api/zk-snark/verify-proof", {
+      const response = await this.axiosInstance.post('api/zk-snark/verify-proof', {
         proof,
-        publicSignals
+        publicSignals,
       });
       return response.data;
     } catch (error) {
@@ -246,7 +242,7 @@ export class Api {
         period,
         from,
         to,
-      }
+      };
       const { data, status } = await this.axiosInstance.post(`/api/v2/charts`, requestBody);
       if (status === 200) return data;
       throw parseHttpError(data);
@@ -274,18 +270,15 @@ export class Api {
      */
     createWallet: async (multisig: any, parentWalletAddress: string) => {
       try {
-        const { data, status } = await this.axiosInstance.post(
-          `/api/multisig/add`,
-          {
-            multisig,
-            parentWalletAddress
-          }
-        );
+        const { data, status } = await this.axiosInstance.post(`/api/multisig/add`, {
+          multisig,
+          parentWalletAddress,
+        });
         if (status === 200) return data;
         throw parseHttpError(data);
       } catch (error: any | AxiosError) {
         if (error.response?.status === 404) {
-          return []
+          return [];
         }
         throw parseHttpError(error);
       }
@@ -325,10 +318,7 @@ export class Api {
        */
       create: async (body: string): Promise<any> => {
         try {
-          const { data } = await this.axiosInstance.post(
-            `/api/multisig/transactions`,
-            body
-          );
+          const { data } = await this.axiosInstance.post(`/api/multisig/transactions`, body);
           return data;
         } catch (error) {
           throw parseHttpError(error);
@@ -477,5 +467,5 @@ export class Api {
         }
       },
     },
-  }
+  };
 }

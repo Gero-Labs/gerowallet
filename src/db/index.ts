@@ -46,44 +46,6 @@ export function clearBlockchainDbCache(chain: string, network: string) {
   }
 }
 
-/**
- * Set staking pools data in blockchain database
- * Used by alarm-based refresh mechanism
- */
-export async function setStakingPools(chain: string, network: string, stakingPoolsData: any[]): Promise<void> {
-  const blockchainDB = await getBlockchainDb(chain, network);
-  if (!blockchainDB) {
-    throw new Error('Failed to get blockchain database');
-  }
-
-  if (stakingPoolsData && stakingPoolsData.length > 0) {
-    const poolsTable = blockchainDB.table('pools');
-    await poolsTable.bulkPut(stakingPoolsData);
-    console.debug(`✅ Staking pools stored in database (${stakingPoolsData.length} pools)`);
-  } else {
-    console.warn('⚠️ No staking pools data to store');
-  }
-}
-
-/**
- * Set DReps data in blockchain database
- * Used by alarm-based refresh mechanism
- */
-export async function setDReps(chain: string, network: string, drepsData: any[]): Promise<void> {
-  const blockchainDB = await getBlockchainDb(chain, network);
-  if (!blockchainDB) {
-    throw new Error('Failed to get blockchain database');
-  }
-
-  if (drepsData && drepsData.length > 0) {
-    const drepsTable = blockchainDB.table('dreps');
-    await drepsTable.bulkPut(drepsData);
-    console.debug(`✅ DReps stored in database (${drepsData.length} DReps)`);
-  } else {
-    console.warn('⚠️ No DReps data to store');
-  }
-}
-
 export default {
   async getAllWallets() {
     return db['wallets'].toArray();
