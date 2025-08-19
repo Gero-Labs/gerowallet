@@ -1,19 +1,13 @@
 import Dexie from 'dexie';
 import { LoaderRegistry } from './base';
-import {
-  PoolsLoader,
-  DRepsLoader,
-  AssetsLoader,
-  GenesisLoader,
-  EpochParamsLoader
-} from './network';
+import { AssetsLoader, GenesisLoader, EpochParamsLoader } from './network';
 import {
   AccountLoader,
   ContactsLoader,
   ConfigLoader,
   RewardsLoader,
   ConnectedDappsLoader,
-  TransactionsLoader
+  TransactionsLoader,
 } from './walletLoader';
 
 /**
@@ -42,29 +36,33 @@ export class LoaderFactory {
    */
   createAllLoaders(): void {
     // Network loaders
-    this.registry.register('pools', new PoolsLoader(this.walletContext.getBlockchainDb.bind(this.walletContext)));
-    this.registry.register('dreps', new DRepsLoader(this.walletContext.getBlockchainDb.bind(this.walletContext)));
     this.registry.register('assets', new AssetsLoader(this.walletContext.getBlockchainDb.bind(this.walletContext)));
-    this.registry.register('genesis_info', new GenesisLoader(this.walletContext.getBlockchainDb.bind(this.walletContext)));
-    this.registry.register('epoch_params', new EpochParamsLoader(
-      this.walletContext.getBlockchainDb.bind(this.walletContext),
-      this.walletContext.chain,
-      this.walletContext.network
-    ));
+    this.registry.register(
+      'genesis_info',
+      new GenesisLoader(this.walletContext.getBlockchainDb.bind(this.walletContext))
+    );
+    this.registry.register(
+      'epoch_params',
+      new EpochParamsLoader(
+        this.walletContext.getBlockchainDb.bind(this.walletContext),
+        this.walletContext.chain,
+        this.walletContext.network
+      )
+    );
 
     // Wallet loaders
-    this.registry.register('account', new AccountLoader(
-      this.walletContext.getDb.bind(this.walletContext),
-      this.walletContext.id
-    ));
+    this.registry.register(
+      'account',
+      new AccountLoader(this.walletContext.getDb.bind(this.walletContext), this.walletContext.id)
+    );
     this.registry.register('contacts', new ContactsLoader(this.walletContext.getDb.bind(this.walletContext)));
     this.registry.register('config', new ConfigLoader(this.walletContext.getDb.bind(this.walletContext)));
     this.registry.register('rewards', new RewardsLoader(this.walletContext.getDb.bind(this.walletContext)));
     this.registry.register('dapps', new ConnectedDappsLoader(this.walletContext.getDb.bind(this.walletContext)));
-    this.registry.register('transactions', new TransactionsLoader(
-      this.walletContext.getDb.bind(this.walletContext),
-      this.walletContext
-    ));
+    this.registry.register(
+      'transactions',
+      new TransactionsLoader(this.walletContext.getDb.bind(this.walletContext), this.walletContext)
+    );
   }
 
   /**

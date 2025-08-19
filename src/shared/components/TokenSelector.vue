@@ -101,33 +101,6 @@
                     >
                   </v-btn>
                 </v-list-item-title>
-
-                <!--              <v-menu-->
-                <!--                style="background-color: black"-->
-                <!--                offset-y-->
-                <!--                transition="scroll-y-transition"-->
-                <!--                :close-on-click="true"-->
-                <!--                :close-on-content-click="false"-->
-
-                <!--              >-->
-                <!--                <template v-slot:activator="{ on, attrs, value }">-->
-                <!--                  -->
-                <!--                </template>-->
-                <!--                <v-list dense class="pa-0">-->
-                <!--                  <v-subheader class="px-0">-->
-                <!--                    <v-text-field dense filled hide-details prepend-inner-icon="mdi-magnify"></v-text-field>-->
-                <!--                  </v-subheader>-->
-                <!--                  <v-list-item-group v-model="selectedToken" mandatory>-->
-                <!--                    <v-list-item v-for="(item, index) in available" :key="index" :value="item">-->
-                <!--                      <v-list-item-avatar size="20">-->
-                <!--                        <img :src="item.img" :alt="`${selectedToken.ticker} Logo`"/>-->
-                <!--                      </v-list-item-avatar>-->
-                <!--                      <v-list-item-title class="text-center">{{ item.name }}</v-list-item-title>-->
-                <!--                      <v-list-item-subtitle class="text-center">{{ item.ticker }}</v-list-item-subtitle>-->
-                <!--                    </v-list-item>-->
-                <!--                  </v-list-item-group>-->
-                <!--                </v-list>-->
-                <!--              </v-menu>-->
                 <v-list-item-subtitle class="light-text">
                   {{ selectedToken.name }}
                 </v-list-item-subtitle>
@@ -246,7 +219,7 @@ const props = defineProps({
   },
   maxButtonEnabled: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   readOnly: {
     type: Boolean,
