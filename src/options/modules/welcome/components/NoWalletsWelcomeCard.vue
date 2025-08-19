@@ -34,84 +34,6 @@
       <img :src="assets.rectangle"  style="width: 72px; height: 72px; right: -40px; top: -43px; position: absolute; opacity: 0.96;" alt="">
       <img :src="assets.rectangle2" style="width: 32px; height: 32px; right: -60px; top: 13px; position: absolute;" alt="">
       <img :src="assets.rectangle" style="width: 80px; height: 80px; left: -40px; top: 227px; position: absolute; transform: rotate(180deg); opacity: 0.9;" alt="">
-      <!-- Commented out animated stats card
-      <div style="width: 148px; height: 59px; left: -45px; top: -31px; position: absolute;">
-        <div class="stats-viewport">
-          <div class="stats-list">
-            <div class="span-pair">
-              <span class="label">Portfolio</span>
-              <span class="value">$16.5K</span>
-            </div>
-            <div class="span-pair">
-              <span class="label">Assets</span>
-              <span class="value">$22.3K</span>
-            </div>
-            <div class="span-pair">
-              <span class="label">Collectibles</span>
-              <span class="value">$1.8K</span>
-            </div>
-            <div class="span-pair">
-              <span class="label">Liquidity</span>
-              <span class="value">$761</span>
-            </div>
-            <div class="span-pair">
-              <span class="label">Portfolio</span>
-              <span class="value">$16.5K</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      -->
-      <!-- Commented out quick actions card
-      <div style="width: 216px; height: 118px; padding: 16px; right: -47px; bottom: -47px; position: absolute; background: rgba(12, 14, 18, 0.85); border-radius: 12px; outline: 1px rgba(255, 255, 255, 0.10) solid; outline-offset: -1px; flex-direction: column; justify-content: flex-start; align-items: center; gap: 12px; display: inline-flex">
-        <div style="align-self: stretch; flex-direction: column; justify-content: flex-start; align-items: flex-start; gap: 16px; display: flex">
-          <div style="align-self: stretch; font-size: 16px; font-weight: 600; line-height: 14px; word-wrap: break-word">{{ hoveredText }}</div>
-        </div>
-        <div style="height: 60px; padding: 8px; border-radius: 12px; justify-content: flex-start; align-items: center; gap: 12px; display: inline-flex">
-          <div @mouseenter="onHover('Buy / Sell Crypto')" style="padding: 8px; background: rgba(255, 245.33, 158.31, 0.10); border-radius: 8px; justify-content: center; align-items: center; gap: 8px; display: flex">
-            <v-avatar tile :size="hoveredText === 'Buy / Sell Crypto' ? 28 : 20">
-              <v-img :src="assets.dollarShieldSvg" alt="Buy" contain></v-img>
-            </v-avatar>
-          </div>
-          <div @mouseenter="onHover('Quick Send')" style="padding: 8px; background: rgba(0, 223, 243, 0.10); border-radius: 8px; justify-content: center; align-items: center; gap: 8px; display: flex">
-            <v-avatar tile :size="hoveredText === 'Quick Send' ? 28 : 20">
-              <v-img
-                :src="assets.sendSvg"
-                alt="Send"
-                contain
-                style="
-                    filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);
-                  "
-              ></v-img>
-            </v-avatar>
-          </div>
-          <div @mouseenter="onHover('Receive')" style="padding: 8px; background: rgba(117.27, 223.73, 166.95, 0.10); border-radius: 8px; justify-content: center; align-items: center; gap: 8px; display: flex">
-            <v-avatar tile :size="hoveredText === 'Receive' ? 28 : 20">
-              <v-img
-                :src="assets.qrCodeSvg"
-                alt="Receive"
-                contain
-                style="
-                    filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);
-                  "
-              ></v-img>
-            </v-avatar>
-          </div>
-          <div @mouseenter="onHover('Swap')" style="padding: 8px; background: rgba(252.96, 161.57, 155.04, 0.10); border-radius: 8px; justify-content: center; align-items: center; gap: 8px; display: flex">
-            <v-avatar tile :size="hoveredText === 'Swap' ? 28 : 20">
-              <v-img
-                :src="assets.swapSvg"
-                alt="Swap"
-                contain
-                style="
-                    filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);
-                  "
-              ></v-img>
-            </v-avatar>
-          </div>
-        </div>
-      </div>
-      -->
     </div>
     <div style="width: 456px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; gap: 16px; padding: 20px; padding-top: 100px; padding-bottom: 40px;">
       <div style="text-align: center">
@@ -126,6 +48,7 @@
 import assets from '@/utils/assets';
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+
 const currentSlide = ref(0)
 
 const { loggedWallet } = toRefs(walletStore);
@@ -138,6 +61,15 @@ const gradientClass = computed(() => {
 });
 </script>
 <style scoped>
+/* Ensure all parent elements are transparent for backdrop-filter to work */
+.transparent-override,
+.transparent-override .v-card__title,
+.transparent-override .v-card__subtitle, 
+.transparent-override .v-card__text {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 .stats-viewport {
   width: 100%;
   height: 58px;
