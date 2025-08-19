@@ -74,16 +74,14 @@ import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
-import { default as blockchainApi } from '@/api/blockchain-api';
-import { setStakingPools, setDReps } from '@/db';
 
 let blockchainDb: Dexie = null;
 
 export class WalletBg {
   api: Api;
   syncService: SyncService;
-  loaderFactory: LoaderFactory;
-
+  loaderFactory: LoaderFactory; 
+  
   id: any;
   name: any;
   icon: any;
@@ -117,10 +115,10 @@ export class WalletBg {
     this.network = wallet.network;
     this.userId = wallet.userId;
     this.encryptedMnemonic = wallet.encryptedMnemonic;
-    this.provider = networks.resolveDefaultProvider(this.chain, this.network)
+    this.provider = networks.resolveDefaultProvider(this.chain, this.network);
     this.api = new Api(wallet, this.provider);
     this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
-    this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32()
+    this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     this.syncService = new SyncService(this);
     this.loaderFactory = new LoaderFactory({
       id: this.id,
@@ -132,7 +130,7 @@ export class WalletBg {
       networkId: this.networkId.bind(this),
       getDb: this.getDb.bind(this),
       getBlockchainDb: this.getBlockchainDb.bind(this),
-      setUtxosAndAddresses: this.setUtxosAndAddresses.bind(this)
+      setUtxosAndAddresses: this.setUtxosAndAddresses.bind(this),
     });
     this.loaderFactory.createAllLoaders();
   }
@@ -145,16 +143,8 @@ export class WalletBg {
     return networks.resolveNetworkId(this.chain, this.network);
   }
 
-  public async loadPools() {
-    return this.loaderFactory.load('pools');
-  }
-
   public async loadRewards() {
     return this.loaderFactory.load('rewards');
-  }
-
-  public async loadDReps() {
-    return this.loaderFactory.load('dreps');
   }
 
   public async loadConfig() {
@@ -191,7 +181,7 @@ export class WalletBg {
     if (NetworkStore.state.tip?.epoch == epoch) {
       return null
     }
-    return epoch
+    return epoch;
   }
 
   async setUtxosAndAddresses(transactions: any[]) {
@@ -200,7 +190,7 @@ export class WalletBg {
     if (this.isEnterpriseAddress()) {
       address = this.baseAddress;
     } else {
-      stakeAddress = this.stakeAddress
+      stakeAddress = this.stakeAddress;
     }
 
     const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
@@ -212,11 +202,12 @@ export class WalletBg {
         utxos.delete(`${inp.txId}#${inp.index}`);
       }
       transaction.body.outputs.forEach((out, idx) => {
-        let outAddress = out.address
-        const outAddressType = Cardano.Address.fromString(outAddress).getType()
-        try { // TODO Support Byron Addresses
+        let outAddress = out.address;
+        const outAddressType = Cardano.Address.fromString(outAddress).getType();
+        try {
+          // TODO Support Byron Addresses
           if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-            const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase()
+            const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
             const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
               this.networkId(),
               baseAddress.getStakeCredential()
@@ -224,40 +215,37 @@ export class WalletBg {
             outAddress = rewardAddr.toAddress().toBech32();
           }
           if (address === outAddress || stakeAddress === outAddress) {
-            addresses.add(out.address)
-            utxos.set(
-              `${transaction.id || transaction.tx_hash}#${idx}`,
-              [
-                {
-                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                  index: idx,
-                  address: out.address,
-                },
-                {
-                  address: out.address,
-                  value: out.value,
-                  datumHash: out.datumHash,
-                  datum: out.datum,
-                  scriptReference: out.scriptReference
-                }
-              ]
-            );
+            addresses.add(out.address);
+            utxos.set(`${transaction.id || transaction.tx_hash}#${idx}`, [
+              {
+                txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                index: idx,
+                address: out.address,
+              },
+              {
+                address: out.address,
+                value: out.value,
+                datumHash: out.datumHash,
+                datum: out.datum,
+                scriptReference: out.scriptReference,
+              },
+            ]);
           }
           if (out.value.assets) {
             out.value.assets.keys().forEach((key: string) => {
               if (!uniqueAssets.has(key)) {
-                uniqueAssets.add(key)
+                uniqueAssets.add(key);
               }
             });
           }
         } catch (e) {
-          console.error(e)
+          console.error(e);
         }
       });
     }
 
     // Set Assets Info in Network DB
-    await this.syncService.syncAssets(Array.from(uniqueAssets))
+    await this.syncService.syncAssets(Array.from(uniqueAssets));
     //TODO wait for network Store to Load Assets
 
     // Resolve Assets from UTxOs
@@ -265,8 +253,8 @@ export class WalletBg {
 
     // Keys
     if (this.type !== WalletType.Google) {
-        const keys = await this.syncService.syncKeys(Array.from(addresses));
-        WalletStore.setKeys(keys);
+      const keys = await this.syncService.syncKeys(Array.from(addresses));
+      WalletStore.setKeys(keys);
     }
 
     // UTxOs
@@ -283,8 +271,8 @@ export class WalletBg {
       adaBalance += utxo[1].value.coins;
       utxo[1].value.assets?.entries().forEach(asset => {
         const key: Cardano.AssetId = asset[0];
-        const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(asset[0])
-        const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(asset[0])
+        const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(asset[0]);
+        const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(asset[0]);
         if (!assets[key]) {
           assets[key] = {
             quantity: 0n,
@@ -295,9 +283,9 @@ export class WalletBg {
           };
         }
         assets[key].quantity += asset[1];
-        assets[key].policy_id = Cardano.AssetId.getPolicyId(asset[0])
-        assets[key].asset_name = Cardano.AssetId.getAssetName(asset[0])
-        assets[key].unit = asset[0]
+        assets[key].policy_id = Cardano.AssetId.getPolicyId(asset[0]);
+        assets[key].asset_name = Cardano.AssetId.getAssetName(asset[0]);
+        assets[key].unit = asset[0];
         assets[key].fingerprint = Cardano.AssetFingerprint.fromParts(policyId, assetName);
       });
     });
@@ -322,7 +310,9 @@ export class WalletBg {
       };
     }
 
-    const resolvedAssets = Object.entries(assets).map(([key, asset]) => [key, asset['policy_id'] === '' ? asset : resolveAsset(asset)] as const);
+    const resolvedAssets = Object.entries(assets).map(
+      ([key, asset]) => [key, asset['policy_id'] === '' ? asset : resolveAsset(asset)] as const
+    );
 
     // Set Tokens
     const tokens = Object.fromEntries(resolvedAssets.filter(([, resolved]) => Boolean(resolved.metadata)));
@@ -350,59 +340,74 @@ export class WalletBg {
     if (Object.values(collectibles).length === 0) {
       return;
     }
-    const collections = {}
+    const collections = {};
     Object.values(collectibles).forEach((collectible: any) => {
-      let resolvedAsset
+      let resolvedAsset;
       if (collectible.policy_id === '') {
-        resolvedAsset = collectible
+        resolvedAsset = collectible;
       } else {
-        resolvedAsset = resolveAsset(collectible)
+        resolvedAsset = resolveAsset(collectible);
       }
       if (collections[collectible.policy_id]) {
-        collections[collectible.policy_id]['items'].push(collectible)
-        collections[collectible.policy_id]['quantity'] += Number(collectible.quantity)
-        const description = findCollectionDescription(resolvedAsset)
+        collections[collectible.policy_id]['items'].push(collectible);
+        collections[collectible.policy_id]['quantity'] += Number(collectible.quantity);
+        const description = findCollectionDescription(resolvedAsset);
         if (description) {
-          collections[collectible.policy_id]['description'] = description
+          collections[collectible.policy_id]['description'] = description;
         }
       } else {
-        collections[collectible.policy_id] = {}
-        collections[collectible.policy_id]['items'] = [resolvedAsset]
-        collections[collectible.policy_id]['name'] = findCollectionName(resolvedAsset)
-        const description = findCollectionDescription(resolvedAsset)
+        collections[collectible.policy_id] = {};
+        collections[collectible.policy_id]['items'] = [resolvedAsset];
+        collections[collectible.policy_id]['name'] = findCollectionName(resolvedAsset);
+        const description = findCollectionDescription(resolvedAsset);
         if (description) {
-          collections[collectible.policy_id]['description'] = description
+          collections[collectible.policy_id]['description'] = description;
         }
-        collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img
-        collections[collectible.policy_id]['quantity'] = Number(collectible.quantity)
-        collections[collectible.policy_id]['isScam'] = resolvedAsset.isScam
+        collections[collectible.policy_id]['img'] = collections[collectible.policy_id]['items'][0].img;
+        collections[collectible.policy_id]['quantity'] = Number(collectible.quantity);
+        collections[collectible.policy_id]['isScam'] = resolvedAsset.isScam;
       }
-    })
+    });
     Object.values(collections).forEach(collection => {
-      const items = collection['items']
+      const items = collection['items'];
       if (items[0]['policy_id'] === 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0fb9a') {
-        collection['name'] = 'adaHandle'
+        collection['name'] = 'adaHandle';
       } else if (items[0]['policy_id'] === '85152e10643c1440ba2ba817e3dd1faf7bd7296a8b605efd0f0f2d18') {
-        collection['name'] = 'MusicBox Dimensions'
+        collection['name'] = 'MusicBox Dimensions';
       } else if (!collection['name']) {
         if (items.some(item => item['onchain_metadata'])) {
-          collection['name'] = longestCommonStartingSubstring(items
-            .filter(item => item['onchain_metadata'] && item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')])
-            .map(item => item['onchain_metadata'][Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')]))
+          collection['name'] = longestCommonStartingSubstring(
+            items
+              .filter(
+                item =>
+                  item['onchain_metadata'] &&
+                  item['onchain_metadata'][
+                    Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')
+                  ]
+              )
+              .map(
+                item =>
+                  item['onchain_metadata'][
+                    Object.keys(item['onchain_metadata']).find(key => key.toLowerCase() === 'name')
+                  ]
+              )
+          );
         }
         if (!collection['name']) {
-          collection['name'] = longestCommonStartingSubstring(items.map(item => item[Object.keys(item).find(key => key.toLowerCase() === 'name')]).filter(item => !!item))
+          collection['name'] = longestCommonStartingSubstring(
+            items.map(item => item[Object.keys(item).find(key => key.toLowerCase() === 'name')]).filter(item => !!item)
+          );
         }
         if (!collection['name']) {
-          collection['name'] = items[0]['policy_id']
+          collection['name'] = items[0]['policy_id'];
         }
       }
       if (Array.isArray(collection['name'])) {
         collection['name'] = collection['name'].join(' ');
       }
-    })
-    WalletStore.setCollections(collections)
-    MusicStore.resolveMusicPlaylist(Object.values(collections))
+    });
+    WalletStore.setCollections(collections);
+    MusicStore.resolveMusicPlaylist(Object.values(collections));
   }
 
   public async loadTransactions() {
@@ -542,7 +547,8 @@ export class WalletBg {
             console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
         }
-      }).catch(err => {
+      })
+      .catch(err => {
         console.error(`Failed to open database: ${err.stack || err}`);
       });
   }
@@ -561,36 +567,46 @@ export class WalletBg {
 
   resolvePathsForMissingAddresses(usedAddresses: string[]): any {
     const resolvedAddresses: any[] = [];
-    let addressIndex: number = 0;       // Start from the first address index
-    let consecutiveUnused: number = 0;  // Track consecutive unused addresses
+    let addressIndex: number = 0; // Start from the first address index
+    let consecutiveUnused: number = 0; // Track consecutive unused addresses
     const keys = {
-      stake: [{
-        address: this.stakeAddress,
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
-        cred: Hash28ByteBase16(getStakeKey(this.publicKey, 0).hash().hex()),
-      }],
+      stake: [
+        {
+          address: this.stakeAddress,
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CHIMERIC_ACCOUNT}/${addressIndex}`,
+          cred: Hash28ByteBase16(getStakeKey(this.publicKey, 0).hash().hex()),
+        },
+      ],
       payment: [],
       change: [],
-      ccCold: [{
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
-        cred: Hash28ByteBase16(getCcColdKey(this.publicKey, 0).hash().hex()),
-      }],
-      ccHot: [{
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
-        cred: Hash28ByteBase16(getCcHotKey(this.publicKey, 0).hash().hex()),
-      }],
-      drep129: [{
-        address: getCip129DrepId(this.publicKey),
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
-        cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
-      }],
-      drep105: [{
-        address: getCip105DrepId(this.publicKey),
-        path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
-        cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
-      }],
-      script: []
-    }
+      ccCold: [
+        {
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD}/${addressIndex}`,
+          cred: Hash28ByteBase16(getCcColdKey(this.publicKey, 0).hash().hex()),
+        },
+      ],
+      ccHot: [
+        {
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT}/${addressIndex}`,
+          cred: Hash28ByteBase16(getCcHotKey(this.publicKey, 0).hash().hex()),
+        },
+      ],
+      drep129: [
+        {
+          address: getCip129DrepId(this.publicKey),
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
+        },
+      ],
+      drep105: [
+        {
+          address: getCip105DrepId(this.publicKey),
+          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.DREP}/${addressIndex}`,
+          cred: Hash28ByteBase16(getDrepKey(this.publicKey, 0).hash().hex()),
+        },
+      ],
+      script: [],
+    };
     while (consecutiveUnused < BIP44_SCAN_SIZE) {
       const derivedAddress: string = this.deriveExternalAddressFromPath(addressIndex).toBech32();
       const internalDerivedAddress: string = this.deriveInternalAddressFromPath(addressIndex).toAddress().toBech32();
@@ -600,11 +616,11 @@ export class WalletBg {
         path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.EXTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(derivedAddress),
         used: false,
-      }
+      };
       if (usedAddresses.includes(derivedAddress)) {
         resolvedAddresses.push(derivedPaymentAddress);
         consecutiveUnused = 0;
-        derivedPaymentAddress.used = true
+        derivedPaymentAddress.used = true;
         found = true;
       }
       keys.payment.push(derivedPaymentAddress);
@@ -613,28 +629,28 @@ export class WalletBg {
         path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/0'/${ChainDerivations.INTERNAL}/${addressIndex}`,
         cred: keyHashFromAddress(internalDerivedAddress),
         used: false,
-      }
+      };
       if (usedAddresses.includes(internalDerivedAddress)) {
         resolvedAddresses.push(derivedChangeAddress);
         consecutiveUnused = 0;
-        derivedChangeAddress.used = true
+        derivedChangeAddress.used = true;
         found = true;
       }
       keys.change.push(derivedChangeAddress);
       if (!found) {
-        consecutiveUnused++;  // Increment unused address counter if no match is found
+        consecutiveUnused++; // Increment unused address counter if no match is found
       }
       // If we've resolved all missing addresses, we can break earlyCardano.
       if (usedAddresses.length === resolvedAddresses.length) {
         break;
       }
-      addressIndex++;  // Move to the next address index
+      addressIndex++; // Move to the next address index
     }
     return keys;
   }
 
   deriveExternalAddressFromPath(addressIndex: number): Cardano.Address {
-    return getAddress(this.publicKey, this.chain, this.network, addressIndex)
+    return getAddress(this.publicKey, this.chain, this.network, addressIndex);
   }
 
   deriveInternalAddressFromPath(addressIndex) {
@@ -642,11 +658,11 @@ export class WalletBg {
       this.networkId(),
       {
         type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16(this.paymentKeyInternal(addressIndex).hash().hex())
+        hash: Hash28ByteBase16(this.paymentKeyInternal(addressIndex).hash().hex()),
       },
       {
         type: Cardano.CredentialType.KeyHash,
-        hash: Hash28ByteBase16(this.stakeKey().hash().hex())
+        hash: Hash28ByteBase16(this.stakeKey().hash().hex()),
       }
     );
   }
@@ -660,25 +676,31 @@ export class WalletBg {
   }
 
   stakeKey(): Ed25519PublicKey {
-    return getStakeKey(this.publicKey, 0)
+    return getStakeKey(this.publicKey, 0);
   }
 
   drepKey(): Ed25519PublicKey {
-    return getDrepKey(this.publicKey, 0)
+    return getDrepKey(this.publicKey, 0);
   }
 
-  requestAccountKey(password: string, accountIndex: number): {
-    accountKey: Bip32PrivateKey,
-    paymentKey: Ed25519PrivateKey,
-    stakeKey: Ed25519PrivateKey,
-    drepKey: Ed25519PrivateKey
+  requestAccountKey(
+    password: string,
+    accountIndex: number
+  ): {
+    accountKey: Bip32PrivateKey;
+    paymentKey: Ed25519PrivateKey;
+    stakeKey: Ed25519PrivateKey;
+    drepKey: Ed25519PrivateKey;
   } {
     let accountKey: Bip32PrivateKey;
     try {
       const decrypted = decrypt(this.encryptedPrivateKey, password);
       const buffer: Buffer = decryptWithPassword(password, JSON.parse(decrypted));
-      accountKey = Bip32PrivateKey.fromBytes(buffer)
-        .derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]);
+      accountKey = Bip32PrivateKey.fromBytes(buffer).derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + accountIndex,
+      ]);
     } catch (e) {
       throw ERROR.wrongPassword;
     }
@@ -687,7 +709,7 @@ export class WalletBg {
       accountKey,
       paymentKey: accountKey.derive([ChainDerivations.EXTERNAL, 0]).toRawKey(),
       stakeKey: accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, 0]).toRawKey(),
-      drepKey: accountKey.derive([ChainDerivations.DREP, 0]).toRawKey()
+      drepKey: accountKey.derive([ChainDerivations.DREP, 0]).toRawKey(),
     };
   }
 
@@ -698,16 +720,21 @@ export class WalletBg {
     const promises = [];
 
     // Sync account info and handle rewards and transactions
-    promises.push(this.syncService.syncAccountInfo().then(async accountInfo => {
-      if (accountInfo) {
-        if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
-          await this.syncService.syncAccountRewards();
+    promises.push(
+      this.syncService.syncAccountInfo().then(async accountInfo => {
+        if (accountInfo) {
+          if (!prevAccountInfo || Number(prevAccountInfo.rewards_sum) != Number(accountInfo.rewards_sum)) {
+            await this.syncService.syncAccountRewards();
+          }
+          if (
+            !prevAccountInfo ||
+            Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/
+          ) {
+            await this.syncService.syncAccountTransactions(0);
+          }
         }
-        if (!prevAccountInfo || Number(prevAccountInfo.controlled_amount) != Number(accountInfo.controlled_amount) /* TODO Add Pool ID ?*/) {
-          await this.syncService.syncAccountTransactions(0);
-        }
-      }
-    }));
+      })
+    );
 
     // Wait for all promises to complete
     await Promise.all(promises);
@@ -737,7 +764,15 @@ export class WalletBg {
    * @param isUsb - USB connection flag for hardware wallets
    * @returns Promise with witness set hex string
    */
-  async signTx(txInput: string | Cardano.Tx, partialSign: boolean = false, password: string, accountIndex: number, utxos: Cardano.Utxo[], addresses: Keys, isUsb?: boolean): Promise<{ witnesses: string }> {
+  async signTx(
+    txInput: string | Cardano.Tx,
+    partialSign: boolean = false,
+    password: string,
+    accountIndex: number,
+    utxos: Cardano.Utxo[],
+    addresses: Keys,
+    isUsb?: boolean
+  ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
     // Convert input to Cardano JS SDK transaction
@@ -748,7 +783,6 @@ export class WalletBg {
       // Already a Cardano JS SDK transaction object
       transaction = txInput;
     }
-
 
     // Handle different wallet types
     if (this.type === WalletType.Ledger) {
@@ -773,7 +807,11 @@ export class WalletBg {
       const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
 
       // Derive account private key
-      const accountPrivateKey = rootPrivateKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]);
+      const accountPrivateKey = rootPrivateKey.derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + accountIndex,
+      ]);
 
       // Create signature map for the witness
       const signatures = new Map<string, string>();
@@ -805,10 +843,7 @@ export class WalletBg {
         const rawPublicKeyBytes = rawPublicKey.bytes();
         const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
 
-        signatures.set(
-          rawPublicKeyHex as Ed25519PublicKeyHex,
-          signature.hex() as Ed25519SignatureHex
-        );
+        signatures.set(rawPublicKeyHex as Ed25519PublicKeyHex, signature.hex() as Ed25519SignatureHex);
       }
 
       // Create witness set - ensure signatures map is properly set
@@ -817,19 +852,17 @@ export class WalletBg {
         scripts: transaction.witness?.scripts,
         datums: transaction.witness?.datums,
         redeemers: transaction.witness?.redeemers,
-        bootstrap: transaction.witness?.bootstrap
+        bootstrap: transaction.witness?.bootstrap,
       };
-
 
       // Serialize witness to CBOR hex
       const witnessHex = serializeWitness(witness);
 
       return {
-        witnesses: witnessHex
+        witnesses: witnessHex,
       };
     }
   }
-
 
   /**
    * Submit transaction using Cardano JS SDK
@@ -871,8 +904,7 @@ export class WalletBg {
       };
 
       // Store transaction in a database
-      this.setAccountTransactions([pendingTx])
-        .catch(e => console.error('Error storing transaction:', e));
+      this.setAccountTransactions([pendingTx]).catch(e => console.error('Error storing transaction:', e));
 
       return txId;
     } catch (error) {
@@ -893,22 +925,32 @@ export class WalletBg {
     }
   }
 
-  async signData(address: Cardano.PaymentAddress | Cardano.RewardAccount | string, payload: string, password: string, accountIndex: number, isUsb: boolean) {
+  async signData(
+    address: Cardano.PaymentAddress | Cardano.RewardAccount | string,
+    payload: string,
+    password: string,
+    accountIndex: number,
+    isUsb: boolean
+  ) {
     let signatureHex: string, keyHex: string;
     const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
 
     if (this.type === WalletType.Ledger) {
       const response: SignedMessageData = await ledger.signData(
-        addr, payload, networks.resolveNetwork(this.chain, this.network), accountIndex, isUsb,
+        addr,
+        payload,
+        networks.resolveNetwork(this.chain, this.network),
+        accountIndex,
+        isUsb
       );
       const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
       signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
       keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
     } else {
-      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes())
+      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes());
       const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
       const keyHash: string = credential.hash;
-      let accountKey: Ed25519PrivateKey
+      let accountKey: Ed25519PrivateKey;
       const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
       if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
         accountKey = paymentKey;
@@ -925,7 +967,7 @@ export class WalletBg {
       const toSign = builder.make_data_to_sign().to_bytes();
       signatureHex = buildAndSignData(builder, toSign, accountKey);
       const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-      keyHex = util.bytesToHex(coseKey.to_bytes())
+      keyHex = util.bytesToHex(coseKey.to_bytes());
     }
 
     return { signature: signatureHex, key: keyHex };
@@ -951,7 +993,7 @@ export class WalletBg {
         await blockchainDb.open();
       } catch (err) {
         console.error('Error opening blockchain DB:', err);
-        throw err;  // or return null, depending on your error-handling strategy
+        throw err; // or return null, depending on your error-handling strategy
       }
     }
 
@@ -962,111 +1004,65 @@ export class WalletBg {
     this.endSync();
 
     try {
-      const tickerStatistics = await this.api.fetchTickerStatistics()
-      NetworkStore.setPrice(tickerStatistics)
+      const tickerStatistics = await this.api.fetchTickerStatistics();
+      NetworkStore.setPrice(tickerStatistics);
     } catch (err) {
       // Ignore ticker statistics errors
     }
     if (!NetworkStore.state.tickerStatisticsIntervalId) {
-      NetworkStore.setTickerStatisticsIntervalId(setInterval(async () => {
-        try {
-          const tickerStatistics = await this.api.fetchTickerStatistics()
-          NetworkStore.setPrice(tickerStatistics)
-        } catch (err) {
-          // Ignore ticker statistics errors
-        }
-      }, 20000))
+      NetworkStore.setTickerStatisticsIntervalId(
+        setInterval(async () => {
+          try {
+            const tickerStatistics = await this.api.fetchTickerStatistics();
+            NetworkStore.setPrice(tickerStatistics);
+          } catch (err) {
+            // Ignore ticker statistics errors
+          }
+        }, 20000)
+      );
     }
 
     // Fiat Rates
     try {
-      const fiatRates = await this.api.fetchFiatRates()
-      WalletStore.setFiatRates(fiatRates)
+      const fiatRates = await this.api.fetchFiatRates();
+      WalletStore.setFiatRates(fiatRates);
     } catch (err) {
       // Ignore fiat rates errors
     }
     if (!WalletStore.state.fiatRatesIntervalId) {
-      WalletStore.setFiatRatesIntervalId(setInterval(async () => {
-        try {
-          const fiatRates = await this.api.fetchFiatRates()
-          WalletStore.setFiatRates(fiatRates)
-        } catch (err) {
-          // Ignore fiat rates errors
-        }
-      }, 14400000));
+      WalletStore.setFiatRatesIntervalId(
+        setInterval(async () => {
+          try {
+            const fiatRates = await this.api.fetchFiatRates();
+            WalletStore.setFiatRates(fiatRates);
+          } catch (err) {
+            // Ignore fiat rates errors
+          }
+        }, 14400000)
+      );
     }
   }
 
   endSync() {
-    clearInterval(WalletStore.state.fiatRatesIntervalId)
-    WalletStore.setFiatRatesIntervalId(null)
-    NetworkStore.setTickerStatisticsIntervalId(null)
-  }
-}
-
-/**
- * Alarm handler for refreshing staking pools every 4 hours
- * Implements the syncTable(1) functionality from SyncService
- */
-async function refreshStakingPoolsAlarm() {
-  try {
-
-    // Get current logged wallet from WalletStore
-    const loggedWallet = WalletStore.state.loggedWallet;
-    if (!loggedWallet) {
-      return;
-    }
-
-    // Fetch fresh staking pools data
-    const stakingPoolsData = await blockchainApi.getAllStakingPools(loggedWallet.chain, loggedWallet.network);
-
-    // Store staking pools data in database
-    await setStakingPools(loggedWallet.chain, loggedWallet.network, stakingPoolsData);
-  } catch (error) {
-    console.error('❌ Error in staking pools refresh alarm:', error);
-  }
-}
-
-/**
- * Alarm handler for refreshing DReps every ~4.5 hours (280 minutes)
- * Implements the syncTable(2) functionality from SyncService
- */
-async function refreshDRepsAlarm() {
-  try {
-
-    // Get current logged wallet from WalletStore
-    const loggedWallet = WalletStore.state.loggedWallet;
-    if (!loggedWallet) {
-      return;
-    }
-
-    // Fetch fresh DReps data
-    const drepsData = await blockchainApi.getAllDReps(loggedWallet.chain, loggedWallet.network);
-
-    // Store DReps data in database
-    await setDReps(loggedWallet.chain, loggedWallet.network, drepsData);
-  } catch (error) {
-    console.error('❌ Error in DReps refresh alarm:', error);
+    clearInterval(WalletStore.state.fiatRatesIntervalId);
+    WalletStore.setFiatRatesIntervalId(null);
+    NetworkStore.setTickerStatisticsIntervalId(null);
   }
 }
 
 export function alarmListener(alarm) {
-  if (alarm.name === 'refreshStakingPools') {
-    refreshStakingPoolsAlarm();
-  } else if (alarm.name === 'refreshDReps') {
-    refreshDRepsAlarm();
-  } else if (alarm.name === 'refreshDexHunterPrices') {
-    DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens))
+  if (alarm.name === 'refreshDexHunterPrices') {
+    DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens));
   } else if (alarm.name === 'refreshXerberusRisks') {
-    XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint))
+    XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint));
   } else if (alarm.name === 'refreshTokenHistory') {
-    RealFiStore.updateTokenHistory(Object.values(WalletStore.state.tokens).map((token: any) => token.unit))
+    RealFiStore.updateTokenHistory(Object.values(WalletStore.state.tokens).map((token: any) => token.unit));
   } else if (alarm.name.includes('portfolio')) {
-    const stakeAddress = alarm.name.split('|')[1]
-    TapToolsStore.loadPortfolio(stakeAddress)
+    const stakeAddress = alarm.name.split('|')[1];
+    TapToolsStore.loadPortfolio(stakeAddress);
   } else if (alarm.name.includes('trendedPortfolio')) {
-    const stakeAddress = alarm.name.split('|')[1]
-    TapToolsStore.loadPortfolioTrendedValue(stakeAddress)
+    const stakeAddress = alarm.name.split('|')[1];
+    TapToolsStore.loadPortfolioTrendedValue(stakeAddress);
   } else if (alarm.name === 'coinGeckoPrices') {
     CoinGeckoStore.updatePrices();
   }
