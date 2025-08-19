@@ -211,25 +211,5 @@ export default {
   // Utility method to get asset by unit
   getAsset(unit: string): any {
     return networkStore.assets[unit];
-  },
-
-  // Utility method to check if a pool exists
-  hasPool(poolId: string): boolean {
-    return poolId in networkStore.pools;
-  },
-
-  // Utility method to get pool by ID
-  getPool(poolId: string): any {
-    return networkStore.pools[poolId];
-  },
-
-  // Utility method to check if a DRep exists
-  hasDRep(drepId: string): boolean {
-    return drepId in networkStore.dreps;
-  },
-
-  // Utility method to get DRep by ID
-  getDRep(drepId: string): any {
-    return networkStore.dreps[drepId];
   }
 };
