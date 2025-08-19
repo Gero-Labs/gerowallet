@@ -10,7 +10,12 @@
               {{ formatPortfolioValue() }}
             </div>
             <div class="address-section" v-if="shortenAddress">
-              <CopyButton :avatar="assets.walletSvg" :title="shortenAddress"  :value="loggedWallet?.baseAddress || ''" x-small />
+              <CopyButton
+                :avatar="assets.walletSvg"
+                :title="shortenAddress"
+                :value="loggedWallet?.baseAddress || ''"
+                x-small
+              />
             </div>
           </div>
         </div>
@@ -88,13 +93,10 @@
       </div>
     </div>
 
-    <div id="highstock-chart" v-show="chartData && chartData.length > 0" style="margin-top: 40px;"></div>
-    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
+    <div id="highstock-chart" v-show="chartData && chartData.length > 0" style="margin-top: 40px"></div>
+    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px; align-content: center">
       <v-avatar size="24" v-if="!loadingTxs">
-        <v-img
-          :src="assets.walletSvg"
-          alt="Wallet"
-        ></v-img>
+        <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
       </v-avatar>
       <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
       <span v-else>There seems to be no data in this wallet</span>
@@ -102,9 +104,9 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from "vue";
-import Highstock from "highcharts/highstock";
-import filters from "@/shared/utils/filters";
+import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
+import Highstock from 'highcharts/highstock';
+import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -154,31 +156,52 @@ const savePortfolioTabSetting = (tabValue: string): void => {
   }
 };
 
-const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: "7D", vsLabel: "vs last week" });
+const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLabel: 'vs last week' });
 const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const showUsd = ref(false); // Toggle state for showing USD in portfolio value
 
 const tabs = {
-  YEAR: { value: "YEAR", label: "12M", vsLabel: "vs last year" },
-  QUARTER: { value: "QUARTER", label: "3M", vsLabel: "vs last quarter" },
-  MONTH: { value: "MONTH", label: "30D", vsLabel: "vs last month" },
-  WEEK: { value: "WEEK", label: "7D", vsLabel: "vs last week" },
-  DAY: { value: "DAY", label: "1D", vsLabel: "vs last day" },
+  YEAR: { value: 'YEAR', label: '12M', vsLabel: 'vs last year' },
+  QUARTER: { value: 'QUARTER', label: '3M', vsLabel: 'vs last quarter' },
+  MONTH: { value: 'MONTH', label: '30D', vsLabel: 'vs last month' },
+  WEEK: { value: 'WEEK', label: '7D', vsLabel: 'vs last week' },
+  DAY: { value: 'DAY', label: '1D', vsLabel: 'vs last day' },
 };
 
 // Computed properties
 const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-         loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
 const chartColors = computed(() => {
   if (isApex.value) {
-    return ['#dc753e', '#e67e22', '#d35400', '#f39c12', '#ff8c42', '#a0522d', '#cd853f', '#ff7f50', '#ffa500', '#ff6347'];
+    return [
+      '#dc753e',
+      '#e67e22',
+      '#d35400',
+      '#f39c12',
+      '#ff8c42',
+      '#a0522d',
+      '#cd853f',
+      '#ff7f50',
+      '#ffa500',
+      '#ff6347',
+    ];
   } else {
-    return ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'];
+    return [
+      '#00DFF3',
+      '#155B75',
+      '#167dd6',
+      '#900C3F',
+      '#511849',
+      '#3D3D6B',
+      '#2A7B9B',
+      '#00BAAD',
+      '#57C785',
+      '#ADD45C',
+    ];
   }
 });
 
@@ -187,8 +210,7 @@ const primaryColor = computed(() => {
 });
 
 const shortenAddress = computed(() => {
-  return loggedWallet.value?.baseAddress ?
-    filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
+  return loggedWallet.value?.baseAddress ? filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
 });
 
 // Portfolio value formatting with ADA/USD toggle
@@ -270,13 +292,13 @@ const createChartSeries = (chartData: any[]): any[] => {
   // Only show ADA data
   if (chartData.length > 0) {
     series.push({
-      type: "areaspline",
-      name: "Portfolio Balance",
+      type: 'areaspline',
+      name: 'Portfolio Balance',
       data: chartData,
       showInLegend: false, // Hide legend for single series
       color: primaryColor.value,
       marker: {
-        symbol: "circle",
+        symbol: 'circle',
         enabled: false,
         radius: 3,
         lineWidth: 1,
@@ -378,7 +400,7 @@ const createChartSeries = (chartData: any[]): any[] => {
 //   console.log('Total series created:', series.length);
 //   return series;
 // };
-const loadChart = (newVal) => {
+const loadChart = newVal => {
   // COMMENTED OUT: Dual-axis functionality
   // Simple single-axis chart with ADA data only
   if (!newVal.length) {
@@ -428,28 +450,28 @@ const loadChart = (newVal) => {
     title: {
       useHTML: true,
       floating: true,
-      align: "left",
+      align: 'left',
       text: '',
       style: {
-        fontSize: "14px",
+        fontSize: '14px',
       },
     },
     chart: {
       spacingLeft: 0,
       spacingRight: 0,
-      backgroundColor: "transparent",
+      backgroundColor: 'transparent',
       height: 184,
       style: {
-        fontFamily: "Quicksand",
+        fontFamily: 'Quicksand',
       },
       zoomType: 'x', // Enable horizontal selection/dragging only
       panning: {
-        enabled: false // Disable panning completely
+        enabled: false, // Disable panning completely
       },
       zooming: {
         mouseWheel: {
-          enabled: false // Disable mouse wheel zooming
-        }
+          enabled: false, // Disable mouse wheel zooming
+        },
       },
     },
     rangeSelector: {
@@ -466,18 +488,18 @@ const loadChart = (newVal) => {
       enabled: false,
     },
     tooltip: {
-      backgroundColor: "rgb(12,14,18)",
-      borderColor: "#1F242F",
+      backgroundColor: 'rgb(12,14,18)',
+      borderColor: '#1F242F',
       style: {
-        fontFamily: "Inter",
-        color: "#fff",
+        fontFamily: 'Inter',
+        color: '#fff',
       },
       // COMMENTED OUT: Dual-axis tooltip
       shared: false,
       formatter: function () {
-        const formattedValue = filters.toCurrency(this.y, false, 2, currency, '', true, 0);
-        return `${new Date(this.key).toLocaleString()}<br> <b>${formattedValue}</b>`;
-      }
+        const formattedValue = filters.toCurrency(this.y, false, 2, showUsd.value ? '$' : currency, '', true, 0);
+        return `${new Date(this.x).toLocaleString()}<br> <b>${formattedValue}</b>`;
+      },
       // COMMENTED OUT: Original dual-axis tooltip
       // shared: showDualAxis.value,
       // formatter: function () {
@@ -506,12 +528,12 @@ const loadChart = (newVal) => {
       allowDecimals: false,
       title: {
         enabled: false,
-        text: "Time",
+        text: 'Time',
       },
       labels: {
         style: {
-          fontFamily: "Inter",
-          color: "#fff",
+          fontFamily: 'Inter',
+          color: '#fff',
         },
       },
       // COMMENTED OUT: Dual-axis Y-axis update events
@@ -533,18 +555,18 @@ const loadChart = (newVal) => {
       max: axisRange?.max,
       labels: {
         style: {
-          color: "#fff",
+          color: '#fff',
         },
-        formatter: function() {
-          return formatAxisNumber(this.value, currency);
-        }
+        formatter: function () {
+          return formatAxisNumber(this.value, showUsd.value ? '$' : currency);
+        },
       },
       opposite: true,
       plotLines: [
         {
           value: 0,
           width: 1,
-          color: "#3d3d3d",
+          color: '#3d3d3d',
         },
       ],
     },
@@ -636,21 +658,25 @@ const loadChart = (newVal) => {
     // },
     colors: chartColors.value,
     legend: {
-      align: "right",
-      verticalAlign: "middle",
-      layout: "vertical",
+      align: 'right',
+      verticalAlign: 'middle',
+      layout: 'vertical',
     },
     series: createChartSeries(primaryData),
     useUTC: true,
   };
-  chartInstance.value = Highstock.stockChart("highstock-chart", data as any);
+  chartInstance.value = Highstock.stockChart('highstock-chart', data as any);
 
   // Completely disable wheel events on chart container (reuse existing chartContainer variable)
   if (chartContainer) {
-    chartContainer.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }, { passive: false });
+    chartContainer.addEventListener(
+      'wheel',
+      e => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false }
+    );
   }
 };
 
@@ -661,32 +687,32 @@ const arraysEqual = (a, b) => {
 
   for (let i = 0; i < a.length; ++i) {
     if (Array.isArray(a[i]) && Array.isArray(b[i])) {
-      return arraysEqual(a[i], b[i])
+      return arraysEqual(a[i], b[i]);
     } else if (a[i] !== b[i]) return false;
   }
   return true;
 };
 
-const isDisabled = (tabItem) => {
-  if (!props.chartData || !props.chartData[props.chartData.length-1]) {
-    return true
+const isDisabled = tabItem => {
+  if (!props.chartData || !props.chartData[props.chartData.length - 1]) {
+    return true;
   }
-  const lastTxTime = props.chartData[props.chartData.length-1][0]
+  const lastTxTime = props.chartData[props.chartData.length - 1][0];
   if (tabItem.value === 'DAY') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 1
+    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 1;
   } else if (tabItem.value === 'WEEK') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 7
+    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 7;
   } else if (tabItem.value === 'MONTH') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 30
+    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 30;
   } else if (tabItem.value === 'QUARTER') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 90
+    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 90;
   } else if (tabItem.value === 'YEAR') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 365
+    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 365;
   }
-  return false
+  return false;
 };
 
-const handleTabClick = (tabItem) => {
+const handleTabClick = tabItem => {
   tab.value = tabItem;
 
   // Save tab preference to localStorage
@@ -705,7 +731,7 @@ const handleTabClick = (tabItem) => {
   } else if (tabItem.value === tabs.DAY.value) {
     start = new Date(start.setUTCHours(end.getUTCHours() - 24));
   } else {
-    start = new Date(Date.parse("27 Sep 2017 00:00:00 GMT"));
+    start = new Date(Date.parse('27 Sep 2017 00:00:00 GMT'));
   }
   const startUTC = Date.UTC(
     start.getUTCFullYear(),
@@ -818,43 +844,63 @@ const handleTabClick = (tabItem) => {
 // };
 
 const generateTitleText = () => {
-  return ''
+  return '';
 };
-watch(price, (newVal) => {
-  lastPrice.value = newVal.lastPrice
-  if (chartInstance.value?.title) {
-    chartInstance.value.title.update({ text: generateTitleText() });
-  }
-}, { deep: true });
+watch(
+  price,
+  newVal => {
+    lastPrice.value = newVal.lastPrice;
+    if (chartInstance.value?.title) {
+      chartInstance.value.title.update({ text: generateTitleText() });
+    }
+  },
+  { deep: true }
+);
 
 // COMMENTED OUT: Dual-axis chart data watching
 // Simple single chart data watching (ADA only)
-watch(() => props.chartData, (newChartData, oldChartData) => {
-  if (arraysEqual(newChartData, oldChartData)) {
-    return;
-  }
-  loadChart(newChartData);
+watch(
+  () => props.chartData,
+  (newChartData, oldChartData) => {
+    if (arraysEqual(newChartData, oldChartData)) {
+      return;
+    }
+    loadChart(newChartData);
 
-  // Apply the current time range filter after chart loads with new data
-  if (newChartData?.length > 0) {
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
-  }
-}, { deep: true });
+    // Apply the current time range filter after chart loads with new data
+    if (newChartData?.length > 0) {
+      setTimeout(() => {
+        handleTabClick(tab.value);
+      }, 100);
+    }
+  },
+  { deep: true }
+);
 
 // COMMENTED OUT: Dual-axis wallet watching
 // Simple wallet watching for single chart
-watch(loggedWallet, () => {
-  if (props.chartData.length > 0) {
-    loadChart(props.chartData);
+watch(
+  loggedWallet,
+  () => {
+    if (props.chartData.length > 0) {
+      loadChart(props.chartData);
 
-    // Apply the current time range filter after wallet change
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
+      // Apply the current time range filter after wallet change
+      setTimeout(() => {
+        handleTabClick(tab.value);
+      }, 100);
+    }
+  },
+  { deep: true }
+);
+
+watch(showUsd, newVal => {
+  if (newVal) {
+    loadChart(props.chartDataUsd);
+  } else {
+    loadChart(props.chartData);
   }
-}, { deep: true });
+});
 
 onBeforeUnmount(() => {
   if (chartInstance.value) {
