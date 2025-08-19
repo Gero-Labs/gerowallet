@@ -598,11 +598,7 @@ const delegatingToGero = computed(() => {
 const loadPaginatedPools = async (pageNum: number = 1) => {
   if (!loggedWallet.value) return;
 
-  // Get provider from networks utility
-  const provider = networks.resolveDefaultProvider(loggedWallet.value.chain, loggedWallet.value.network);
-
-  page.value = pageNum;
-  await stakingStore.loadPoolsPaginated(loggedWallet.value, provider, {
+  await stakingStore.loadPoolsPaginated(loggedWallet.value, {
     page: pageNum,
     per_page: pageSize.value,
     sort_by: sortBy.value,
@@ -663,10 +659,6 @@ const pagedPools = computed<any[]>(() => {
   return data.splice(startIndex, pageSize.value);
 });
 
-// Watch for page changes to load new data
-watch(page, newPage => {
-  loadPaginatedPools(newPage);
-});
 
 watch([sortBy, sortDesc], ([newSortBy, newSortDesc], [oldSortBy, oldSortDesc]) => {
   if (oldSortBy !== undefined && oldSortDesc !== undefined) {
