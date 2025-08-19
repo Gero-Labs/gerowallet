@@ -21,108 +21,130 @@
 
     <!-- Regular dashboard content when wallet has tokens -->
     <template v-else>
-    <!-- Combined row for Cardano with metrics + chart + carousel -->
-    <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
-      <!-- Left side: Chart and Market Data stacked -->
-      <v-col cols="12" xl="9" lg="9" md="12" sm="12">
-        <!-- Chart row -->
-        <v-row no-gutters>
-          <v-col cols="12" class="pa-2">
-            <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
-              <v-card-text>
-                <PortfolioChart
-                  :chart-data="computeChartData.adaData"
-                  :chart-data-usd="computeChartData.usdData"
-                  :portfolio-value-ada="computedValues.totalValue"
-                  :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                />
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
+      <!-- Combined row for Cardano with metrics + chart + carousel -->
+      <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
+        <!-- Left side: Chart and Market Data stacked -->
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12">
+          <!-- Chart row -->
+          <v-row no-gutters>
+            <v-col cols="12" class="pa-2">
+              <v-card
+                outlined
+                class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+              >
+                <v-card-text>
+                  <PortfolioChart
+                    :chart-data="computeChartData.adaData"
+                    :chart-data-usd="computeChartData.usdData"
+                    :portfolio-value-ada="computedValues.totalValue"
+                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                  />
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
 
-        <!-- Market Data Cards row -->
-        <v-row no-gutters>
-          <v-col cols="12" class="pa-2">
-            <TokensMarketCards />
-          </v-col>
-        </v-row>
-      </v-col>
+          <!-- Market Data Cards row -->
+          <v-row no-gutters>
+            <v-col cols="12" class="pa-2">
+              <TokensMarketCards />
+            </v-col>
+          </v-row>
+        </v-col>
 
-      <!-- Right side: Carousel spanning full height -->
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <FeatureCarousel
-          :model-value="currentCarouselIndex"
-          @update:modelValue="currentCarouselIndex = $event"
-          :items="carouselItems"
-          :paused="carouselPaused"
-          :is-loading="isLoading"
-          :show-progress-bar="true"
-          carousel-class="feature-carousel dashboard-card feature-card-full-height"
-          @item-click="handleCarouselClick"
-        />
-      </v-col>
-    </v-row>
+        <!-- Right side: Carousel spanning full height -->
+        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+          <FeatureCarousel
+            :model-value="currentCarouselIndex"
+            @update:modelValue="currentCarouselIndex = $event"
+            :items="carouselItems"
+            :paused="carouselPaused"
+            :is-loading="isLoading"
+            :show-progress-bar="true"
+            carousel-class="feature-carousel dashboard-card feature-card-full-height"
+            @item-click="handleCarouselClick"
+          />
+        </v-col>
+      </v-row>
 
-    <!-- Separate chart row for non-Cardano wallets -->
-    <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
-      <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
-          <v-card-text>
-            <PortfolioChart
-              :chart-data="computeChartData.adaData"
-              :chart-data-usd="computeChartData.usdData"
-              :portfolio-value-ada="computedValues.totalValue"
-              :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-            />
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
-        <AssetsPieChart />
-      </v-col>
+      <!-- Separate chart row for non-Cardano wallets -->
+      <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
+        <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
+          <v-card
+            outlined
+            class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+          >
+            <v-card-text>
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :portfolio-value-ada="computedValues.totalValue"
+                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+              />
+            </v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
+          <AssetsPieChart />
+        </v-col>
 
-      <!-- Apex Carousel Card -->
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR">
-        <FeatureCarousel
-          :model-value="currentApexCarouselIndex"
-          @update:model-value="currentApexCarouselIndex = $event"
-          :items="apexCarouselItems"
-          :paused="apexCarouselPaused"
-          :is-loading="isLoading"
-          :show-progress-bar="false"
-          carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
-          wrapper-class="apex-carousel-wrapper"
-          @item-click="handleCarouselClick"
-          @mouse-enter="pauseApexCarousel"
-          @mouse-leave="resumeApexCarousel"
-        />
-      </v-col>
-    </v-row>
+        <!-- Apex Carousel Card -->
+        <v-col
+          cols="12"
+          xl="3"
+          lg="3"
+          md="12"
+          sm="12"
+          class="pa-2"
+          v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR"
+        >
+          <FeatureCarousel
+            :model-value="currentApexCarouselIndex"
+            @update:model-value="currentApexCarouselIndex = $event"
+            :items="apexCarouselItems"
+            :paused="apexCarouselPaused"
+            :is-loading="isLoading"
+            :show-progress-bar="false"
+            carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
+            wrapper-class="apex-carousel-wrapper"
+            @item-click="handleCarouselClick"
+            @mouse-enter="pauseApexCarousel"
+            @mouse-leave="resumeApexCarousel"
+          />
+        </v-col>
+      </v-row>
 
-    <!-- Token Allocation Table Row -->
-    <v-row no-gutters>
-      <v-col cols="12" class="pa-2">
-        <TokenAllocationTable />
-      </v-col>
-    </v-row>
+      <!-- Token Allocation Table Row -->
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <TokenAllocationTable />
+        </v-col>
+      </v-row>
 
-    <!-- Transactions and Staking Row + Swap Widget Column -->
-    <v-row no-gutters>
-      <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
-        <TransactionsCard style="min-height: 396px;"></TransactionsCard>
-      </v-col>
-      <v-col cols="12" :xl="isSwapEnabled ? 5 : 6" :lg="isSwapEnabled ? 5 : 6" md="6" sm="12" class="pa-2" v-if="isStakingEnabled">
-        <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
-        <NoTokensCard v-else></NoTokensCard>
-      </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
-        <SwapWidget class="fill-height" />
-      </v-col>
-      <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+      <!-- Transactions and Staking Row + Swap Widget Column -->
+      <v-row no-gutters>
+        <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
+          <TransactionsCard style="min-height: 396px"></TransactionsCard>
+        </v-col>
+        <v-col
+          cols="12"
+          :xl="isSwapEnabled ? 5 : 6"
+          :lg="isSwapEnabled ? 5 : 6"
+          md="6"
+          sm="12"
+          class="pa-2"
+          v-if="isStakingEnabled"
+        >
+          <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
+          <NoTokensCard v-else></NoTokensCard>
+        </v-col>
+        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
+          <SwapWidget class="fill-height" />
+        </v-col>
+        <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
         <CashbackCard></CashbackCard>
       </v-col> -->
-    </v-row>
+      </v-row>
 
     <!-- KaiserEx Token Reception -->
     <v-row no-gutters>
@@ -170,6 +192,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
+import filters from '@/shared/utils/filters';
 
 // Import carousel assets
 import assets from '@/utils/assets';
@@ -206,7 +229,7 @@ const carouselItems = ref<CarouselItem[]>([
     logo: assets.logoStackedLight,
     logoAlt: 'NIGHT Logo',
     backgroundImage: assets.midnightImage,
-    action: 'openClaimDialog'
+    action: 'openClaimDialog',
   },
   {
     id: 'gero-debit-card',
@@ -217,7 +240,7 @@ const carouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.debitCardBgImage,
     cardImage: assets.debitCardImage,
     action: 'showDebitCardInfo',
-    type: 'debit-card' as const
+    type: 'debit-card' as const,
   },
   {
     id: 'ada-cashback',
@@ -228,8 +251,8 @@ const carouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.cashbackCarouselImage,
     cardImage: assets.cashbackImage,
     action: 'navigateToCashback',
-    type: 'ada-cashback' as const
-  }
+    type: 'ada-cashback' as const,
+  },
 ]);
 
 // Carousel items for Apex
@@ -241,7 +264,7 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.geroDashboardApex,
     logoAlt: 'Apex Fusion Logo',
     backgroundImage: assets.apexBgDashboard,
-    action: 'showApexWelcome'
+    action: 'showApexWelcome',
   },
   {
     id: 'apex-wallet',
@@ -250,7 +273,7 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.walletGeroApex,
     logoAlt: 'Apex Wallet Logo',
     backgroundImage: assets.apexImage,
-    action: 'showApexWallet'
+    action: 'showApexWallet',
   },
   {
     id: 'apex-features',
@@ -259,16 +282,18 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.apexSvg,
     logoAlt: 'Apex Features Logo',
     backgroundImage: assets.apexBgDashboard,
-    action: 'showApexFeatures'
-  }
+    action: 'showApexFeatures',
+  },
 ]);
 
 const isStakingEnabled = computed(() => {
   if (loggedWallet.value?.baseAddress) {
-    return Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
+    return (
+      Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
+    );
   }
   return false;
-})
+});
 
 const isSwapEnabled = computed(() => {
   return networks.resolveSwapSupport(loggedWallet.value.chain, loggedWallet.value.network);
@@ -284,61 +309,66 @@ const shouldBackup = computed(() => {
 });
 
 const computedValues = computed(() => {
-  let assetsValue = 0
+  let assetsValue = 0;
   if (portfolio.value?.positionsFt) {
     portfolio.value.positionsFt.forEach(position => {
-      assetsValue += position.adaValue
-    })
+      assetsValue += position.adaValue;
+    });
   }
-  let collectibles = 0
+  let collectibles = 0;
   if (portfolio.value?.positionsNft) {
     portfolio.value.positionsNft.forEach(position => {
-      collectibles += position.adaValue
-    })
+      collectibles += position.adaValue;
+    });
   }
-  let lpsValue = 0
+  let lpsValue = 0;
   if (portfolio.value?.positionsLp) {
     portfolio.value.positionsLp.forEach(position => {
-      lpsValue += position.adaValue
-    })
+      lpsValue += position.adaValue;
+    });
   }
 
   // Fallback for chains without portfolio API support (like Apex)
   if (account.value) {
     if (account.value.controlled_amount && account.value.controlled_amount > 0) {
       // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
-      assetsValue += account.value.controlled_amount / 1000000 // Convert to main unit (ADA/APEX)
+      assetsValue += account.value.controlled_amount / 1000000; // Convert to main unit (ADA/APEX)
     }
     // Add other asset values if they have USD/ADA pricing data
   }
 
-  const totalValue = assetsValue + collectibles + lpsValue
-  return { totalValue, assetsValue, collectibles, lpsValue }
-})
+  const totalValue = assetsValue + collectibles + lpsValue;
+  return { totalValue, assetsValue, collectibles, lpsValue };
+});
 
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
       adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
-      usdData: [],
-    }
+      usdData: Array.isArray(portfolioTrendedValue.value)
+        ? portfolioTrendedValue.value.map(item => [item[0], item[1] * (price.value?.lastPrice || 0)])
+        : [],
+    };
   }
   console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
-  let graphData = undefined
-  let currentBalance = 0
+  let graphData = undefined;
+  let usdData = undefined;
+  let currentBalance = 0;
   if (transactions.value) {
-    graphData = []
+    graphData = [];
+    usdData = [];
     transactions.value.forEach(tx => {
-      currentBalance += tx.ada
-      graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
-    })
+      currentBalance += tx.ada;
+      graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
+      usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+    });
   }
   return {
-    adaData: graphData || [],
-    usdData: [] // No historical USD data for non-mainnet
-  }
+    adaData: graphData || [], // No historical USD data for non-mainnet
+    usdData: usdData || [],
+  };
 });
 
 // Apex carousel methods
@@ -350,9 +380,8 @@ const resumeApexCarousel = () => {
   apexCarouselPaused.value = false;
 };
 
-
 const handleCarouselClick = (item: any) => {
-  switch(item.action) {
+  switch (item.action) {
     case 'openClaimDialog':
       openClaimDialog();
       break;
@@ -466,7 +495,6 @@ const handleBackupWallet = () => {
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
-
 </script>
 <style scoped>
 .transactions-table {
