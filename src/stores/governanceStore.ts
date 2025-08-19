@@ -63,7 +63,7 @@ const governanceStoreActions = {
     governanceStore.drepError = null;
 
     try {
-        const drep = await blockchainApi.getPoolById(drepId, wallet.chain, wallet.network);
+      const drep = await blockchainApi.getDRepById(drepId, wallet.chain, wallet.network);
 
       if (drep) {
         governanceStore.currentDRep = drep;

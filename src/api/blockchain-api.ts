@@ -183,4 +183,21 @@ export default {
       throw parseHttpError(error);
     }
   },
+
+  async getDRepById(drepId: string, chain: string, network: string) {
+    const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain) || '';
+    const networkEnum: string = Object.keys(Network).find(key => Network[key] === network) || '';
+    try {
+      const { data, status } = await axiosInstance.get(
+        `/api/dreps/${drepId}?chain=${chainEnum}&network=${networkEnum}`
+      );
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw parseHttpError(error);
+    }
+  },
 };
