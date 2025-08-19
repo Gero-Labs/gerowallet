@@ -285,7 +285,7 @@ export class WalletManager {
     );
 
     // Wait for all initialization promises to complete
-    LoadingState.setText('Finalizing wallet setup...');
+    LoadingState.setText('Initializing wallet...');
     await Promise.all(promises);
 
     LoadingState.setText('Wallet initialization complete');
