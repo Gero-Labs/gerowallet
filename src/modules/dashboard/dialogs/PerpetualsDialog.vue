@@ -80,6 +80,29 @@
                     hide-default-footer
                     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
                   >
+                    <!-- Custom headers with padding -->
+                    <template v-slot:[`header.asset`]="{ header }">
+                      <span style="padding-left: 12px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.positionType`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.currentValue`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.entryPrice`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.pnl`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.leverage`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    <template v-slot:[`header.actions`]="{ header }">
+                      <span style="padding: 0 8px;">{{ header.text }}</span>
+                    </template>
+                    
                     <template v-slot:body.append>
                       <tr v-if="positions.length > positionsPerPage" class="no-hover">
                         <td :colspan="positionHeaders.length" class="text-center pa-0 ma-0">
@@ -95,7 +118,7 @@
                     </template>
                     <!-- Asset column with trend icon -->
                     <template v-slot:[`item.asset`]="{ item }">
-                      <div class="d-flex align-items-center">
+                      <div class="d-flex align-items-center pl-2">
                         <span class="asset-name">{{ item.asset?.name || 'ADA' }}</span>
                         <v-avatar 
                           v-if="item.pnl !== undefined || item.unrealizedPnl !== undefined" 
@@ -946,7 +969,7 @@ const positionHeaders = ref([
   { text: "Asset", align: "start", sortable: true, value: "asset", width: "35" },
   { text: "Side", align: "center", sortable: true, value: "positionType", width: "28" },
   { text: "Value", align: "center", sortable: true, value: "currentValue", width: "42" },
-  { text: "Entry / Mark", align: "center", sortable: true, value: "entryPrice", width: "48" },
+  { text: "Entry/Mark", align: "center", sortable: true, value: "entryPrice", width: "52" },
   { text: "P&L", align: "center", sortable: true, value: "pnl", width: "42" },
   { text: "Lev", align: "center", sortable: true, value: "leverage", width: "22" },
   { text: "", align: "center", sortable: false, value: "actions", width: "26" },
@@ -1818,6 +1841,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #ffffff;
   font-size: 11px;
+  padding-left: 4px;
 }
 
 /* Close position button */
