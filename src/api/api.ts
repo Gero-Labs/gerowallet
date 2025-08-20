@@ -251,6 +251,55 @@ export class Api {
     }
   }
 
+  // Strike Finance Perpetuals API methods
+  strike = {
+    /**
+     * Get all perpetual positions for a wallet address
+     */
+    getPositions: async (address: string): Promise<any[]> => {
+      try {
+        const { data, status } = await this.axiosInstance.get(`/api/strike/perpetuals/getPositions`, {
+          params: { address }
+        });
+        if (status === 200) return data || [];
+        throw parseHttpError(data);
+      } catch (error: any | AxiosError) {
+        if (error.response?.status === 404) {
+          return [];
+        }
+        throw parseHttpError(error);
+      }
+    },
+
+    /**
+     * Open a new perpetual position
+     */
+    openPosition: async (request: any): Promise<string> => {
+      try {
+        const requestBody = { request };
+        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/openPosition`, requestBody);
+        if (status === 200) return data;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+
+    /**
+     * Close an existing perpetual position
+     */
+    closePosition: async (request: any): Promise<string> => {
+      try {
+        const requestBody = { request };
+        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/closePosition`, requestBody);
+        if (status === 200) return data;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+  };
+
   async getMember(memberId: string): Promise<any> {
     try {
       const { data, status } = await this.axiosInstance.get(`/api/members/${memberId}`);
