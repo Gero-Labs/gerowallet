@@ -489,27 +489,12 @@ const walletManager = WalletManager.getInstance();
 
 // Process position data - ONLY return what exists in the API + calculated values from other APIs
 const processPositionData = (position: any) => {
-  console.log(`🔍 Processing position with Strike Finance API data:`, {
-    hasCurrentPrice: !!position.currentPrice,
-    hasMarkPrice: !!position.markPrice,
-    hasPnl: !!position.pnl,
-    hasUnrealizedPnl: !!position.unrealizedPnl,
-    hasOpeningFee: !!position.openingFee,
-    hasAccumulatedFees: !!position.accumulatedFees,
-    hasAccumulatedBorrowFee: !!position.accumulatedBorrowFee,
-    hasTotalFees: !!position.totalFees,
-    positionSize: position.positionSize,
-    entryPrice: position.entryPrice,
-    currentAdaPrice: price.value?.lastPrice,
-    allApiFields: Object.keys(position)
-  });
   
   const result: any = {};
   
   // Use wallet store ADA price as current price (this is what Strike Finance shows)
   if (price.value?.lastPrice) {
     result.currentPrice = Number(price.value.lastPrice);
-    console.log(`💰 Using ADA price from wallet store: $${result.currentPrice}`);
   } else if (position.currentPrice !== undefined) {
     result.currentPrice = Number(position.currentPrice);
   }
@@ -543,16 +528,6 @@ const processPositionData = (position: any) => {
     result.unrealizedPnl = result.pnl;
     result.pnlPercentage = Number(pnlPercentage.toFixed(2));
     
-    console.log(`🧮 P&L Calculation (Strike Finance formula):`, {
-      positionType,
-      entryPrice,
-      currentPrice,
-      positionSize,
-      leverage,
-      priceDiff,
-      unrealizedPnl,
-      pnlPercentage
-    });
   } else if (position.pnl !== undefined) {
     // Fallback to API provided P&L
     result.pnl = Number(position.pnl);
@@ -579,14 +554,8 @@ const processPositionData = (position: any) => {
     result.currentPositionValueUsd = Number((positionSizeAda * result.currentPrice).toFixed(2));
     result.currentPositionValueAda = positionSizeAda;
     
-    console.log(`💰 Current Position Value:`, {
-      positionSizeAda,
-      currentPrice: result.currentPrice,
-      valueUsd: result.currentPositionValueUsd
-    });
   }
   
-  console.log(`✅ Final processed position data:`, result);
   return result;
 };
 
@@ -597,11 +566,6 @@ const createStrikeHttpClient = () => {
   return {
     async getPositions(address: string): Promise<any[]> {
       try {
-        console.log('🌐 Direct HTTP call to Strike getPositions:', {
-          baseURL,
-          address,
-          url: `${baseURL}/api/strike/perpetuals/getPositions?address=${address}`
-        });
         
         const response = await axios.get(`${baseURL}/api/strike/perpetuals/getPositions`, {
           params: { address },
@@ -612,10 +576,9 @@ const createStrikeHttpClient = () => {
           }
         });
         
-        console.log('✅ Direct HTTP response:', response);
         return response.data || [];
       } catch (error) {
-        console.error('❌ Direct HTTP error:', error);
+        console.error('Strike API error:', error?.message || error);
         throw error;
       }
     },
@@ -632,7 +595,7 @@ const createStrikeHttpClient = () => {
         
         return response.data?.transactionId || response.data;
       } catch (error) {
-        console.error('❌ Strike openPosition error:', error);
+        console.error('Strike openPosition error:', error?.message || error);
         throw error;
       }
     },
@@ -649,7 +612,7 @@ const createStrikeHttpClient = () => {
         
         return response.data?.transactionId || response.data;
       } catch (error) {
-        console.error('❌ Strike closePosition error:', error);
+        console.error('Strike closePosition error:', error?.message || error);
         throw error;
       }
     }
@@ -663,18 +626,13 @@ const rawPositions = ref<PerpetualPosition[]>([]);
 
 // Reactive positions that update when ADA price changes
 const positions = computed(() => {
-  console.log('🔍 Positions computed - rawPositions length:', rawPositions.value.length);
-  console.log('🔍 Raw positions data:', rawPositions.value);
   
   if (!rawPositions.value.length) {
-    console.log('❌ No raw positions found');
     return [];
   }
   
-  console.log('🔄 Recalculating positions with current ADA price:', price.value?.lastPrice);
   
   const processed = rawPositions.value.map((position, index) => {
-    console.log(`🔍 Processing position ${index + 1}:`, position);
     
     // Re-process position data with current price
     const processedData = processPositionData(position);
@@ -685,11 +643,9 @@ const positions = computed(() => {
       ...processedData
     };
     
-    console.log(`✅ Enhanced position ${index + 1}:`, enhanced);
     return enhanced;
   });
   
-  console.log('✅ Final processed positions:', processed);
   return processed;
 });
 const closingPositions = ref<Record<string, boolean>>({});
@@ -751,7 +707,6 @@ watch(() => props.isOpen, (newVal) => {
 // Watch for ADA price changes and log updates
 watch(() => price.value?.lastPrice, (newPrice, oldPrice) => {
   if (newPrice !== oldPrice && rawPositions.value.length > 0) {
-    console.log(`🔄 ADA price changed: ${oldPrice} → ${newPrice}, positions will recalculate automatically`);
   }
 });
 
@@ -806,7 +761,6 @@ const openPosition = async () => {
 
   loading.value = true;
   try {
-    console.log('Opening position:', positionData.value);
     
     const openRequest: CreatePerpetualRequest = {
       address: walletAddress,
@@ -841,7 +795,6 @@ const openPosition = async () => {
     };
     await loadPositions();
     
-    console.log('Position opened successfully');
   } catch (error) {
     console.error('Failed to open position:', error);
     // TODO: Show user-friendly error notification
@@ -858,7 +811,6 @@ const closePosition = async (position: PerpetualPosition) => {
 
   closingPositions.value[position.id] = true;
   try {
-    console.log('Closing position:', position);
     
     const closeRequest: ClosePerpetualRequest = {
       address: loggedWallet.value?.baseAddress,
@@ -873,7 +825,6 @@ const closePosition = async (position: PerpetualPosition) => {
     // Reload positions after successful close
     await loadPositions();
     
-    console.log('Position closed successfully');
   } catch (error) {
     console.error('Failed to close position:', error);
     // TODO: Show user-friendly error notification
@@ -922,51 +873,15 @@ const loadPositions = async () => {
 
   loadingPositions.value = true;
   try {
-    console.log('🔄 Loading positions for wallet:', walletAddress);
     
     // Use direct HTTP client instead of problematic API object
     const strikeClient = createStrikeHttpClient();
     const fetchedPositions = await strikeClient.getPositions(walletAddress);
     
-    console.log('📥 Raw API Response:', fetchedPositions);
-    console.log('📊 Response type:', typeof fetchedPositions);
-    console.log('📏 Response length:', Array.isArray(fetchedPositions) ? fetchedPositions.length : 'Not an array');
     
-    // Debug individual position structure
-    if (Array.isArray(fetchedPositions) && fetchedPositions.length > 0) {
-      console.log('🔍 RAW API POSITIONS DATA:', fetchedPositions);
-      fetchedPositions.forEach((pos, index) => {
-        console.log(`🔍 Position ${index + 1} RAW DATA:`, {
-          position: pos.position,
-          entryPrice: pos.entryPrice,
-          positionSize: pos.positionSize,
-          leverage: pos.leverage,
-          collateral: pos.collateral,
-          asset: pos.asset,
-          status: pos.status,
-          liquidationPrice: pos.liquidationPrice,
-          stopLoss: pos.stopLoss,
-          takeProfit: pos.takeProfit,
-          isPending: pos.isPending,
-          hourlyBorrowFee: pos.hourlyBorrowFee,
-          version: pos.version,
-          ALL_FIELDS: pos
-        });
-        
-        // Check if API has additional nested data
-        console.log(`🔍 Position ${index + 1} ASSET DETAILS:`, {
-          asset_full: pos.asset,
-          asset_name: pos.asset?.name,
-          asset_ticker: pos.asset?.ticker,
-          asset_symbol: pos.asset?.symbol,
-          all_asset_keys: pos.asset ? Object.keys(pos.asset) : 'No asset object'
-        });
-      });
-    }
     
     // Store raw positions for reactive processing
     rawPositions.value = fetchedPositions.map((position, index) => {
-      console.log(`🔍 Storing raw position ${index + 1}:`, position);
       
       // Extract collateral amount from the API data structure
       const collateralAmount = position.collateral?.amount || position.collateralAmount || 0;
@@ -988,20 +903,11 @@ const loadPositions = async () => {
         outRef: position.outRef || { txHash: `fake-${index}`, outputIndex: 0 }
       };
       
-      console.log(`✅ Stored raw position ${index + 1}:`, basePosition);
       return basePosition;
     });
     
-    console.log(`✅ Stored ${rawPositions.value.length} raw positions for reactive processing`);
   } catch (error) {
-    console.error('❌ Failed to load positions:', error);
-    console.error('🔍 Error details:', {
-      message: error?.message,
-      status: error?.response?.status,
-      statusText: error?.response?.statusText,
-      data: error?.response?.data,
-      config: error?.config
-    });
+    console.error('Failed to load positions:', error?.message || error);
     // Show user-friendly error message
     rawPositions.value = [];
   } finally {

@@ -118,7 +118,6 @@ export class Api {
         `/api/transactions/info?chain=${this.chain}&network=${this.network}`,
         txHashes
       );
-      console.log('data:', data);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
