@@ -121,8 +121,8 @@ onMounted(async () => {
       
       // Fetch real card details and PIN
       await Promise.all([
-        cardStore.fetchCardDetails(wallet, cardUuid),
-        cardStore.fetchCardPin(wallet, cardUuid),
+        cardStore.fetchCardDetails(cardUuid),
+        cardStore.fetchCardPin(cardUuid),
       ]);
       
       console.log('ViewCardDetails - Real data loaded:', {

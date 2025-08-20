@@ -254,7 +254,7 @@ const handleNext = async () => {
         const wallet = wallets.length > 0 ? wallets[0] : null;
         
         if (wallet && cardStore.isAuthenticated) {
-          await cardStore.fetchVerificationLink(wallet);
+          await cardStore.fetchVerificationLink();
           
           if (cardStore.state.verificationLink?.url) {
             // Open verification link in new window

@@ -112,7 +112,7 @@ onMounted(async () => {
     const wallet = wallets.length > 0 ? wallets[0] : null;
     
     if (wallet) {
-      await cardStore.initialize(wallet);
+      await cardStore.initialize();
       console.log('API initialized successfully');
     } else {
       console.warn('No wallet available for initialization');

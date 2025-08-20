@@ -59,44 +59,7 @@ const setStatus = (status: 'new' | 'pending' | 'approved') => {
   cardStore.state.selectedCard = null;
   localStorage.removeItem('kycStatus');
 
-  // Set data based on status
-  switch (status) {
-    case 'new':
-      // No data needed
-      break;
-    case 'pending':
-      cardStore.state.userInfo = { email: 'test@example.com' };
-      localStorage.setItem('kycStatus', 'pending');
-      break;
-    case 'approved':
-      cardStore.state.userInfo = { email: 'test@example.com' };
-      cardStore.state.cards = [{
-        id: 1,
-        user_id: 1,
-        program_uuid: 'test-program-uuid',
-        currency: 'EUR',
-        account_to_charge: 'test-account',
-        processing_type: 'mastercard',
-        cardholder_phone: '+1234567890',
-        payment_card_type: 'prepaid',
-        order_uuid: 'test-order-uuid',
-        card_uuid: 'test-card-uuid',
-        status: 'done',
-        card_status: 'ACTIVE',
-        balance: '1000.00',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }];
-      cardStore.state.selectedCard = cardStore.state.cards[0];
-      // Legacy compatibility
-      cardStore.state.cardData = {
-        pan: '**** **** **** 1234',
-        currentBalance: '1000.00',
-        currency: 'EUR',
-      };
-      break;
-  }
-
+  // Note: No more mock data - using real API only
   setActiveStatus();
 };
 
@@ -130,7 +93,7 @@ onBeforeMount(async () => {
     const wallet = wallets.length > 0 ? wallets[0] : null;
     
     if (wallet) {
-      await cardStore.initialize(wallet);
+      await cardStore.initialize();
       console.log('API initialized successfully');
     } else {
       console.warn('No wallet available for initialization');

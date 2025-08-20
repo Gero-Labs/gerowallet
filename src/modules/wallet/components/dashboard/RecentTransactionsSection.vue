@@ -16,6 +16,22 @@
         </thead>
 
         <tbody>
+          <!-- Empty State -->
+          <tr v-if="!props.transactions || formattedTransactions.length === 0" class="empty-state-row">
+            <td colspan="5" class="empty-state-cell">
+              <div class="empty-state">
+                <div class="empty-icon">
+                  <img src="@/assets/emptyState.png" alt="No transactions" />
+                </div>
+                <h4 class="empty-title">No transactions yet</h4>
+                <p class="empty-description">
+                  Your transaction history will appear here once you start using your card.
+                </p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Transaction Rows -->
           <tr v-for="transaction in formattedTransactions" :key="transaction.id" class="table-row">
             <td class="table-cell date-cell">{{ transaction.date }}</td>
             <td class="table-cell transaction-cell">
@@ -54,7 +70,7 @@
       </table>
     </div>
 
-    <div class="pagination-container">
+    <div v-if="props.transactions && formattedTransactions.length > 0" class="pagination-container">
       <div class="pagination-wrapper">
         <v-btn
           variant="text"
@@ -290,12 +306,59 @@ const handlePageChange = (page: number | string) => {
       }
 
       tbody {
-        tr {
-          border-bottom: 1px solid $border-secondary;
+                  tr {
+            border-bottom: 1px solid $border-secondary;
 
-          &:last-child {
-            border-bottom: none;
-          }
+            &:last-child {
+              border-bottom: none;
+            }
+
+            &.empty-state-row {
+              border-bottom: none;
+
+              .empty-state-cell {
+                padding: $spacing-3xl 0;
+                text-align: center;
+
+                .empty-state {
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  gap: $spacing-lg;
+
+                  .empty-icon {
+                    width: 120px;
+                    height: 120px;
+                    opacity: 0.6;
+
+                    img {
+                      width: 100%;
+                      height: 100%;
+                      object-fit: contain;
+                    }
+                  }
+
+                  .empty-title {
+                    font-family: $font-family-primary;
+                    font-weight: $font-weight-semibold;
+                    font-size: $font-size-lg;
+                    line-height: 1.4;
+                    color: $text-primary;
+                    margin: 0;
+                  }
+
+                  .empty-description {
+                    font-family: $font-family-primary;
+                    font-weight: $font-weight-normal;
+                    font-size: $font-size-sm;
+                    line-height: 1.43;
+                    color: $text-muted;
+                    margin: 0;
+                    max-width: 300px;
+                  }
+                }
+              }
+            }
 
           td {
             padding: 16px 24px 16px 0;
