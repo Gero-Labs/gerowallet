@@ -1,6 +1,6 @@
 <template>
-  <div class="trading-view-chart-container">
-    <div ref="chartContainer" class="chart-container" :style="{width: width, height: height}"></div>
+  <div class="trading-view-chart-container" :style="{height: height}">
+    <div ref="chartContainer" class="chart-container" :style="{width: '100%', height: '100%', minHeight: height}"></div>
     <!-- Fallback for debugging -->
     <div v-if="showFallback" class="chart-fallback">
       <div class="fallback-content">
@@ -448,20 +448,39 @@ const initChart = async () => {
 
   await nextTick();
   
+  // Force container to recalculate dimensions
+  if (chartContainer.value) {
+    // Trigger reflow to ensure dimensions are calculated
+    chartContainer.value.style.display = 'none';
+    chartContainer.value.offsetHeight; // Force reflow
+    chartContainer.value.style.display = 'block';
+  }
+  
+  // Wait a bit for container to be fully rendered
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
   // Ensure container has dimensions
-  if (chartContainer.value.clientWidth === 0 || chartContainer.value.clientHeight === 0) {
-    console.debug('TradingViewChart: Container has no dimensions, retrying...');
+  const containerWidth = chartContainer.value.clientWidth || chartContainer.value.offsetWidth;
+  const containerHeight = chartContainer.value.clientHeight || chartContainer.value.offsetHeight;
+  
+  if (containerWidth === 0 || containerHeight === 0) {
+    console.debug('TradingViewChart: Container has no dimensions, retrying...', {
+      clientWidth: chartContainer.value.clientWidth,
+      clientHeight: chartContainer.value.clientHeight,
+      offsetWidth: chartContainer.value.offsetWidth,
+      offsetHeight: chartContainer.value.offsetHeight
+    });
     setTimeout(() => initChart(), 100);
     return;
   }
 
-  console.debug('TradingViewChart: Initializing chart with dimensions:', chartContainer.value.clientWidth, 'x', chartContainer.value.clientHeight);
+  console.debug('TradingViewChart: Initializing chart with dimensions:', containerWidth, 'x', containerHeight);
 
   try {
-    // Create new chart
+    // Create new chart with explicit dimensions
     chart = createChart(chartContainer.value, {
-      width: chartContainer.value.clientWidth,
-      height: chartContainer.value.clientHeight,
+      width: containerWidth,
+      height: containerHeight,
       layout: {
         background: { 
           type: 'solid' as const, 
@@ -586,23 +605,33 @@ const initChart = async () => {
   const resizeChart = () => {
     if (chart && chartContainer.value) {
       const containerRect = chartContainer.value.getBoundingClientRect();
-      chart.applyOptions({ 
-        width: containerRect.width,
-        height: containerRect.height
-      });
-      console.debug('TradingViewChart: Resized to', containerRect.width, 'x', containerRect.height);
+      const width = containerRect.width || chartContainer.value.offsetWidth;
+      const height = containerRect.height || chartContainer.value.offsetHeight;
+      
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ 
+          width: width,
+          height: height
+        });
+        console.debug('TradingViewChart: Resized to', width, 'x', height);
+      }
     }
   };
 
   // Initial resize to ensure proper fitting
-  setTimeout(() => resizeChart(), 100);
+  setTimeout(() => resizeChart(), 200);
   
   window.addEventListener('resize', resizeChart);
   
   // Use ResizeObserver for better container size detection
   if (chartContainer.value && 'ResizeObserver' in window) {
-    const resizeObserver = new ResizeObserver(() => {
-      resizeChart();
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          resizeChart();
+        }
+      }
     });
     resizeObserver.observe(chartContainer.value);
   }
@@ -641,8 +670,16 @@ watch(() => props.data, (newData) => {
 }, { deep: true });
 
 // Watch for fetchData prop changes to re-fetch when dialog reopens
-watch(() => props.fetchData, async (shouldFetch) => {
-  console.debug('TradingViewChart: fetchData watcher triggered', shouldFetch);
+watch(() => props.fetchData, async (shouldFetch, oldValue) => {
+  console.debug('TradingViewChart: fetchData watcher triggered', shouldFetch, 'was', oldValue);
+  
+  // If fetchData changed from false to true, reinitialize chart to fix sizing
+  if (shouldFetch && !oldValue) {
+    console.debug('TradingViewChart: Dialog reopened, reinitializing chart');
+    await nextTick();
+    await initChart(); // Reinitialize chart to fix sizing issues
+  }
+  
   if (shouldFetch && candlestickSeries && (!props.data || props.data.length === 0)) {
     console.debug('TradingViewChart: Re-fetching data due to fetchData prop change');
     try {
@@ -707,16 +744,23 @@ onMounted(() => {
   // Delay chart initialization to ensure DOM is fully rendered
   nextTick(() => {
     setTimeout(() => {
-      console.debug('TradingViewChart: Starting initialization');
+      console.debug('TradingViewChart: Starting initialization on mount');
       showFallback.value = true; // Show fallback initially
-      initChart();
+      if (props.fetchData || (props.data && props.data.length > 0)) {
+        initChart();
+      }
     }, 100);
   });
 });
 
 onBeforeUnmount(() => {
+  console.debug('TradingViewChart: Cleaning up chart on unmount');
   if (chart) {
-    chart.remove();
+    try {
+      chart.remove();
+    } catch (e) {
+      console.debug('TradingViewChart: Error removing chart:', e);
+    }
     chart = null;
     candlestickSeries = null;
   }
