@@ -10,7 +10,7 @@
         <div class="input-full">
           <label class="input-label">Name on card</label>
           <div class="card-number-input">
-            <span class="card-number-text">{{ cardData?.pan || 'Loading...' }}</span>
+            <span class="card-number-text">{{ cardData?.pan || 'No data available' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
@@ -26,13 +26,13 @@
           <label class="input-label">Card number</label>
           <div class="card-number-input">
             <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-            <span class="card-number-text">{{ cardNumber?.number || 'Loading...' }}</span>
+            <span class="card-number-text">{{ cardNumber?.number || 'No data available' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
           <label class="input-label">CVV</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ showCvv ? '123' : '•••' }}</span>
+            <span class="cvv-text">{{ showCvv ? cardCvv : '•••' }}</span>
             <v-btn icon small class="eye-btn" @click="toggleCvvVisibility">
               <v-icon small>{{ showCvv ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -44,7 +44,7 @@
         <div class="pin-container">
           <label class="input-label">PIN</label>
           <div class="pin-input">
-            <span class="pin-text">{{ showPin ? '1234' : '••••' }}</span>
+            <span class="pin-text">{{ showPin ? cardPin : '••••' }}</span>
             <v-btn icon small class="eye-btn" @click="togglePinVisibility">
               <v-icon small>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -57,13 +57,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { cardStore } from '../../../../../stores/modules/card';
+import cardStore from '../../../../../stores/modules/card';
 import geroStore from '../../../../../stores/geroStore';
-import { mockCardData, mockCardNumber } from '../../../../../models/card-mock';
 
 // Debug logging
-console.log('ViewCardDetails - cardData:', cardStore.cardData);
-console.log('ViewCardDetails - cardNumber:', cardStore.cardNumber);
+console.log('ViewCardDetails - cardDetails:', cardStore.state.cardDetails);
+console.log('ViewCardDetails - cardPin:', cardStore.state.cardPin);
 
 const showCvv = ref(false);
 const showPin = ref(false);
@@ -78,13 +77,26 @@ const expiryDate = computed(() => {
   return `${month} / ${year}`;
 });
 
-// Get card data with fallback to mock data
+// Get card data from store
 const cardData = computed(() => {
-  return cardStore.cardData || mockCardData;
+  return cardStore.state.cardDetails;
 });
 
 const cardNumber = computed(() => {
-  return cardStore.cardNumber || mockCardNumber;
+  if (cardStore.state.cardDetails) {
+    return { number: cardStore.state.cardDetails.pan };
+  }
+  return null;
+});
+
+// Get PIN data
+const cardPin = computed(() => {
+  return cardStore.state.cardPin?.pin || '';
+});
+
+// Get CVV data
+const cardCvv = computed(() => {
+  return cardStore.state.cardDetails?.cvc2 || '';
 });
 
 const toggleCvvVisibility = () => {
@@ -101,19 +113,27 @@ onMounted(async () => {
     console.log('ViewCardDetails - Initializing card data...');
     loading.value = true;
 
-    const wallet = geroStore.state.wallets;
-    if (wallet) {
-      // For now, just use mock data since the API is not ready
-      console.log('ViewCardDetails - Using mock data for development');
-      console.log('ViewCardDetails - Card data initialized:', {
-        cardData: cardStore.cardData,
-        cardNumber: cardStore.cardNumber,
+    const wallets = Object.values(geroStore.state.wallets);
+    const wallet = wallets.length > 0 ? wallets[0] : null;
+    
+    if (wallet && cardStore.state.selectedCard) {
+      const cardUuid = cardStore.state.selectedCard.card_uuid;
+      
+      // Fetch real card details and PIN
+      await Promise.all([
+        cardStore.fetchCardDetails(wallet, cardUuid),
+        cardStore.fetchCardPin(wallet, cardUuid),
+      ]);
+      
+      console.log('ViewCardDetails - Real data loaded:', {
+        cardDetails: cardStore.state.cardDetails,
+        cardPin: cardStore.state.cardPin,
       });
     } else {
-      console.warn('ViewCardDetails - No wallet available for initialization');
+      console.log('ViewCardDetails - No wallet or selected card available');
     }
   } catch (error) {
-    console.error('ViewCardDetails - Failed to initialize card data:', error);
+    console.error('ViewCardDetails - Failed to load card data:', error);
   } finally {
     loading.value = false;
   }

@@ -57,6 +57,8 @@ import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import KYCModal from './KYCModal.vue';
 import { ref } from 'vue';
+import cardStore from '@/stores/modules/card';
+import geroStore from '@/stores/geroStore';
 
 defineProps<{
   open: boolean;
@@ -76,8 +78,27 @@ const handleGetStarted = () => {
   showKYCModal.value = true;
 };
 
-const setKYCStatus = () => {
-  localStorage.setItem('kycStatus', 'pending');
+const setKYCStatus = async () => {
+  try {
+    // After KYC completion, order a new card
+    const wallets = Object.values(geroStore.state.wallets);
+    const wallet = wallets.length > 0 ? wallets[0] : null;
+    
+    if (wallet && cardStore.isAuthenticated) {
+      console.log('Ordering new card after KYC completion...');
+      const orderResponse = await cardStore.orderCard(wallet);
+      console.log('Card ordered successfully:', orderResponse);
+      
+      localStorage.setItem('kycStatus', 'pending');
+      localStorage.setItem('cardOrderUuid', orderResponse.orderUuid);
+    } else {
+      localStorage.setItem('kycStatus', 'pending');
+    }
+  } catch (error) {
+    console.error('Failed to order card:', error);
+    localStorage.setItem('kycStatus', 'pending');
+  }
+  
   showKYCModal.value = false;
   closeModal();
 };

@@ -1,8 +1,13 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory } from '@/models/card';
+import type {
+  AuthTokens,
+  HistoryParams,
+  CardState,
+  CardTransactionHistory,
+  OrderCardResponse,
+} from '@/models/card';
 import type { Activity } from '@/models/types';
-import { Api } from '@/api/api';
-import { Provider } from '@/models/types';
+import KaiserExApi from '@/api/kaiserex-api';
 
 export const cardStore = Vue.observable<CardState>({
   // Auth
@@ -13,52 +18,56 @@ export const cardStore = Vue.observable<CardState>({
   // User data
   userInfo: null,
   cardanoAddress: null,
+  verificationLink: null,
 
   // Card data
-  cardData: null,
-  cardNumber: null,
+  cards: null,
+  selectedCard: null,
+  cardDetails: null,
+  cardPin: null,
   cardBalance: null,
   cardHistory: null,
   totalDeposits: 0,
-  activities: [
-    {
-      id: 1,
-      type: 'Top-up',
-      cryptoAmount: '₳200',
-      fiatAmount: '+€130.00',
-      date: '03/05/2025',
-      status: 'Completed',
-    },
-    {
-      id: 2,
-      type: 'Top-up',
-      cryptoAmount: '₳200',
-      fiatAmount: '+€130.00',
-      date: '03/05/2025',
-      status: 'Completed',
-    },
-  ],
+  activities: [],
+
+  // Legacy card data for backward compatibility
+  cardData: null,
+  cardNumber: null,
 
   // Loading states
   loading: {
     userInfo: false,
     cardanoAddress: false,
-    cardData: false,
-    cardNumber: false,
+    verificationLink: false,
+    cards: false,
+    cardDetails: false,
+    cardPin: false,
     cardBalance: false,
     cardHistory: false,
+    orderCard: false,
+    changingPin: false,
     auth: false,
+    // Legacy loading states
+    cardData: false,
+    cardNumber: false,
   },
 
   // Error states
   errors: {
     userInfo: null,
     cardanoAddress: null,
-    cardData: null,
-    cardNumber: null,
+    verificationLink: null,
+    cards: null,
+    cardDetails: null,
+    cardPin: null,
     cardBalance: null,
     cardHistory: null,
+    orderCard: null,
+    changingPin: null,
     auth: null,
+    // Legacy error states
+    cardData: null,
+    cardNumber: null,
   },
 });
 
@@ -66,6 +75,10 @@ export const cardStore = Vue.observable<CardState>({
 chrome.storage.local.get('cardStore', res => {
   if (res['cardStore']) {
     Object.assign(cardStore, res['cardStore']);
+    // Update API token after loading state
+    if (cardStore.accessToken) {
+      kaiserExApi.setAccessToken(cardStore.accessToken);
+    }
   }
 });
 
@@ -73,55 +86,28 @@ chrome.storage.local.get('cardStore', res => {
 function persist(patch: Partial<CardState>) {
   const next = { ...cardStore, ...patch };
   chrome.storage.local.set({ cardStore: next });
+  
+  // Update API token when access token changes
+  if ('accessToken' in patch) {
+    if (patch.accessToken) {
+      kaiserExApi.setAccessToken(patch.accessToken);
+    } else {
+      kaiserExApi.clearAccessToken();
+    }
+  }
 }
 
-// Create API instance for card operations
-function getCardApi(wallet: any): Api {
-  const api = new Api(wallet, Provider.BLOCKFROST);
-
-  // Add auth interceptor for card operations
-  api.axiosInstance.interceptors.request.use(config => {
-    if (cardStore.accessToken) {
-      config.headers.Authorization = `Bearer ${cardStore.accessToken}`;
-    }
-    return config;
-  });
-
-  // Add response interceptor for token refresh
-  api.axiosInstance.interceptors.response.use(
-    response => response,
-    async error => {
-      if (error.response?.status === 401 && cardStore.refreshToken) {
-        try {
-          await cardStoreInstance.refreshAccessToken(wallet);
-          // Retry original request
-          const originalRequest = error.config;
-          originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
-          return api.axiosInstance(originalRequest);
-        } catch (refreshError) {
-          await cardStoreInstance.logout();
-          throw refreshError;
-        }
-      }
-      throw error;
-    }
-  );
-
-  return api;
-}
+// Create global KaiserEx API instance
+const kaiserExApi = new KaiserExApi();
 
 // Create store instance for internal use
 const cardStoreInstance = {
-  async refreshAccessToken(wallet: any): Promise<void> {
+  async refreshAccessToken(): Promise<void> {
     if (!cardStore.refreshToken) throw new Error('No refresh token available');
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.post('/api/token/refresh', {
-        refresh_token: cardStore.refreshToken,
-      });
-
-      const tokens: AuthTokens = response.data;
+      const tokens = await kaiserExApi.refreshAccessToken(cardStore.refreshToken);
+      
       cardStore.accessToken = tokens.access_token;
       cardStore.refreshToken = tokens.refresh_token;
       cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
@@ -145,12 +131,18 @@ const cardStoreInstance = {
     cardStore.tokenExpiry = null;
     cardStore.userInfo = null;
     cardStore.cardanoAddress = null;
-    cardStore.cardData = null;
-    cardStore.cardNumber = null;
+    cardStore.verificationLink = null;
+    cardStore.cards = null;
+    cardStore.selectedCard = null;
+    cardStore.cardDetails = null;
+    cardStore.cardPin = null;
     cardStore.cardBalance = null;
     cardStore.cardHistory = null;
     cardStore.totalDeposits = 0;
     cardStore.activities = [];
+    // Legacy data
+    cardStore.cardData = null;
+    cardStore.cardNumber = null;
 
     persist({
       accessToken: cardStore.accessToken,
@@ -158,12 +150,18 @@ const cardStoreInstance = {
       tokenExpiry: cardStore.tokenExpiry,
       userInfo: cardStore.userInfo,
       cardanoAddress: cardStore.cardanoAddress,
-      cardData: cardStore.cardData,
-      cardNumber: cardStore.cardNumber,
+      verificationLink: cardStore.verificationLink,
+      cards: cardStore.cards,
+      selectedCard: cardStore.selectedCard,
+      cardDetails: cardStore.cardDetails,
+      cardPin: cardStore.cardPin,
       cardBalance: cardStore.cardBalance,
       cardHistory: cardStore.cardHistory,
       totalDeposits: cardStore.totalDeposits,
       activities: cardStore.activities,
+      // Legacy data
+      cardData: cardStore.cardData,
+      cardNumber: cardStore.cardNumber,
     });
 
     await clearStoredTokens();
@@ -194,7 +192,11 @@ export default {
   },
 
   get hasCard() {
-    return cardStore.cardData !== null;
+    return cardStore.cards !== null && cardStore.cards.length > 0;
+  },
+
+  get selectedCard() {
+    return cardStore.selectedCard;
   },
 
   get hasCardanoAddress() {
@@ -211,27 +213,22 @@ export default {
   },
 
   get cardHistoryRecords() {
-    return cardStore.cardHistory?.history.records || [];
+    return cardStore.cardHistory?.records || [];
   },
 
   get cardHistoryMeta() {
-    return cardStore.cardHistory?.history.meta || null;
+    return cardStore.cardHistory?.meta || null;
   },
 
   // Auth methods
-  async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
+  async authenticate(code: string, codeVerifier: string): Promise<void> {
     cardStore.loading.auth = true;
     cardStore.errors.auth = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.post('/api/token', {
-        code,
-        codeVerifier,
-      });
+      const tokens = await kaiserExApi.exchangeOAuthCode(code, codeVerifier);
 
-      const tokens: AuthTokens = response.data;
       cardStore.accessToken = tokens.access_token;
       cardStore.refreshToken = tokens.refresh_token;
       cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
@@ -253,31 +250,8 @@ export default {
     }
   },
 
-  async refreshAccessToken(wallet: any): Promise<void> {
-    if (!cardStore.refreshToken) throw new Error('No refresh token available');
-
-    try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.post('/api/token/refresh', {
-        refresh_token: cardStore.refreshToken,
-      });
-
-      const tokens: AuthTokens = response.data;
-      cardStore.accessToken = tokens.access_token;
-      cardStore.refreshToken = tokens.refresh_token;
-      cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
-
-      persist({
-        accessToken: cardStore.accessToken,
-        refreshToken: cardStore.refreshToken,
-        tokenExpiry: cardStore.tokenExpiry,
-      });
-
-      await storeTokens(tokens);
-    } catch (error) {
-      await this.logout();
-      throw error;
-    }
+  async refreshAccessToken(): Promise<void> {
+    return cardStoreInstance.refreshAccessToken();
   },
 
   async logout(): Promise<void> {
@@ -286,12 +260,18 @@ export default {
     cardStore.tokenExpiry = null;
     cardStore.userInfo = null;
     cardStore.cardanoAddress = null;
-    cardStore.cardData = null;
-    cardStore.cardNumber = null;
+    cardStore.verificationLink = null;
+    cardStore.cards = null;
+    cardStore.selectedCard = null;
+    cardStore.cardDetails = null;
+    cardStore.cardPin = null;
     cardStore.cardBalance = null;
     cardStore.cardHistory = null;
     cardStore.totalDeposits = 0;
     cardStore.activities = [];
+    // Legacy data
+    cardStore.cardData = null;
+    cardStore.cardNumber = null;
 
     persist({
       accessToken: cardStore.accessToken,
@@ -299,27 +279,32 @@ export default {
       tokenExpiry: cardStore.tokenExpiry,
       userInfo: cardStore.userInfo,
       cardanoAddress: cardStore.cardanoAddress,
-      cardData: cardStore.cardData,
-      cardNumber: cardStore.cardNumber,
+      verificationLink: cardStore.verificationLink,
+      cards: cardStore.cards,
+      selectedCard: cardStore.selectedCard,
+      cardDetails: cardStore.cardDetails,
+      cardPin: cardStore.cardPin,
       cardBalance: cardStore.cardBalance,
       cardHistory: cardStore.cardHistory,
       totalDeposits: cardStore.totalDeposits,
       activities: cardStore.activities,
+      // Legacy data
+      cardData: cardStore.cardData,
+      cardNumber: cardStore.cardNumber,
     });
 
     await clearStoredTokens();
   },
 
   // User methods
-  async fetchUserInfo(wallet: any): Promise<void> {
+  async fetchUserInfo(): Promise<void> {
     cardStore.loading.userInfo = true;
     cardStore.errors.userInfo = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/user');
-      cardStore.userInfo = response.data;
+      
+      cardStore.userInfo = await kaiserExApi.getUserInfo();
       persist({ userInfo: cardStore.userInfo });
     } catch (error) {
       cardStore.errors.userInfo = error instanceof Error ? error.message : 'Failed to fetch user info';
@@ -331,15 +316,14 @@ export default {
     }
   },
 
-  async fetchCardanoAddress(wallet: any): Promise<void> {
+  async fetchCardanoAddress(): Promise<void> {
     cardStore.loading.cardanoAddress = true;
     cardStore.errors.cardanoAddress = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/cardano-address');
-      cardStore.cardanoAddress = response.data;
+      
+      cardStore.cardanoAddress = await kaiserExApi.getCardanoAddress();
       persist({ cardanoAddress: cardStore.cardanoAddress });
     } catch (error) {
       cardStore.errors.cardanoAddress = error instanceof Error ? error.message : 'Failed to fetch Cardano address';
@@ -351,56 +335,119 @@ export default {
     }
   },
 
+  async fetchVerificationLink(): Promise<void> {
+    cardStore.loading.verificationLink = true;
+    cardStore.errors.verificationLink = null;
+    persist({ loading: cardStore.loading, errors: cardStore.errors });
+
+    try {
+      
+      cardStore.verificationLink = await kaiserExApi.getVerificationLink();
+      persist({ verificationLink: cardStore.verificationLink });
+    } catch (error) {
+      cardStore.errors.verificationLink = error instanceof Error ? error.message : 'Failed to fetch verification link';
+      persist({ errors: cardStore.errors });
+      throw error;
+    } finally {
+      cardStore.loading.verificationLink = false;
+      persist({ loading: cardStore.loading });
+    }
+  },
+
   // Card methods
-  async fetchCardData(wallet: any): Promise<void> {
-    cardStore.loading.cardData = true;
-    cardStore.errors.cardData = null;
+  async fetchCards(): Promise<void> {
+    cardStore.loading.cards = true;
+    cardStore.errors.cards = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card');
-      cardStore.cardData = response.data;
-      persist({ cardData: cardStore.cardData });
+      
+      const cardsData = await kaiserExApi.getCards(); 
+      cardStore.cards = cardsData.data;
+
+      // Auto-select first card if available
+      if (cardStore.cards && cardStore.cards.length > 0 && !cardStore.selectedCard) {
+        cardStore.selectedCard = cardStore.cards[0];
+      }
+
+      persist({ cards: cardStore.cards, selectedCard: cardStore.selectedCard });
     } catch (error) {
-      cardStore.errors.cardData = error instanceof Error ? error.message : 'Failed to fetch card data';
+      cardStore.errors.cards = error instanceof Error ? error.message : 'Failed to fetch cards';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
-      cardStore.loading.cardData = false;
+      cardStore.loading.cards = false;
       persist({ loading: cardStore.loading });
     }
   },
 
-  async fetchCardNumber(wallet: any): Promise<void> {
-    cardStore.loading.cardNumber = true;
-    cardStore.errors.cardNumber = null;
+  async fetchCardDetails(cardUuid: string): Promise<void> {
+    cardStore.loading.cardDetails = true;
+    cardStore.errors.cardDetails = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card/number');
-      cardStore.cardNumber = response.data;
-      persist({ cardNumber: cardStore.cardNumber });
+      
+      cardStore.cardDetails = await kaiserExApi.getCardDetails(cardUuid);
+      persist({ cardDetails: cardStore.cardDetails });
     } catch (error) {
-      cardStore.errors.cardNumber = error instanceof Error ? error.message : 'Failed to fetch card number';
+      cardStore.errors.cardDetails = error instanceof Error ? error.message : 'Failed to fetch card details';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
-      cardStore.loading.cardNumber = false;
+      cardStore.loading.cardDetails = false;
       persist({ loading: cardStore.loading });
     }
   },
 
-  async fetchCardBalance(wallet: any): Promise<void> {
+  async fetchCardPin(cardUuid: string): Promise<void> {
+    cardStore.loading.cardPin = true;
+    cardStore.errors.cardPin = null;
+    persist({ loading: cardStore.loading, errors: cardStore.errors });
+
+    try {
+      
+      cardStore.cardPin = await kaiserExApi.getCardPin(cardUuid);
+      persist({ cardPin: cardStore.cardPin });
+    } catch (error) {
+      cardStore.errors.cardPin = error instanceof Error ? error.message : 'Failed to fetch card PIN';
+      persist({ errors: cardStore.errors });
+      throw error;
+    } finally {
+      cardStore.loading.cardPin = false;
+      persist({ loading: cardStore.loading });
+    }
+  },
+
+  async changeCardPin(cardUuid: string, newPin: string): Promise<void> {
+    cardStore.loading.changingPin = true;
+    cardStore.errors.changingPin = null;
+    persist({ loading: cardStore.loading, errors: cardStore.errors });
+
+    try {
+      
+      await kaiserExApi.changeCardPin(cardUuid, newPin);
+
+      // Refresh PIN data after successful change
+      await this.fetchCardPin(cardUuid);
+    } catch (error) {
+      cardStore.errors.changingPin = error instanceof Error ? error.message : 'Failed to change card PIN';
+      persist({ errors: cardStore.errors });
+      throw error;
+    } finally {
+      cardStore.loading.changingPin = false;
+      persist({ loading: cardStore.loading });
+    }
+  },
+
+  async fetchCardBalance(cardUuid: string): Promise<void> {
     cardStore.loading.cardBalance = true;
     cardStore.errors.cardBalance = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card/balance');
-      cardStore.cardBalance = response.data;
+      
+      cardStore.cardBalance = await kaiserExApi.getCardBalance(cardUuid);
       persist({ cardBalance: cardStore.cardBalance });
     } catch (error) {
       cardStore.errors.cardBalance = error instanceof Error ? error.message : 'Failed to fetch card balance';
@@ -412,23 +459,14 @@ export default {
     }
   },
 
-  async fetchCardHistory(wallet: any, params: HistoryParams = {}): Promise<void> {
+  async fetchCardHistory(cardUuid: string, params: HistoryParams = {}): Promise<void> {
     cardStore.loading.cardHistory = true;
     cardStore.errors.cardHistory = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
-      const queryParams = new URLSearchParams();
-
-      if (params.periodFrom) queryParams.append('periodFrom', params.periodFrom);
-      if (params.periodTo) queryParams.append('periodTo', params.periodTo);
-      if (params.page) queryParams.append('page', params.page.toString());
-      if (params.size) queryParams.append('size', params.size.toString());
-
-      const url = `/api/card/history${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await api.axiosInstance.get(url);
-      cardStore.cardHistory = response.data;
+      
+      cardStore.cardHistory = await kaiserExApi.getCardHistory(cardUuid, params);
       persist({ cardHistory: cardStore.cardHistory });
     } catch (error) {
       cardStore.errors.cardHistory = error instanceof Error ? error.message : 'Failed to fetch card history';
@@ -440,8 +478,41 @@ export default {
     }
   },
 
+  async orderCard(): Promise<OrderCardResponse> {
+    cardStore.loading.orderCard = true;
+    cardStore.errors.orderCard = null;
+    persist({ loading: cardStore.loading, errors: cardStore.errors });
+
+    try {
+      
+      const orderResponse = await kaiserExApi.orderCard();
+
+      // Refresh cards list after ordering
+      await this.fetchCards();
+
+      return orderResponse;
+    } catch (error) {
+      cardStore.errors.orderCard = error instanceof Error ? error.message : 'Failed to order card';
+      persist({ errors: cardStore.errors });
+      throw error;
+    } finally {
+      cardStore.loading.orderCard = false;
+      persist({ loading: cardStore.loading });
+    }
+  },
+
+  async getCardUuidByOrderUuid(orderUuid: string): Promise<string> {
+    try {
+      
+      const cardUuidResponse = await kaiserExApi.getCardUuidByOrderUuid(orderUuid);
+      return cardUuidResponse.card_uuid;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Initialize store
-  async initialize(wallet: any): Promise<void> {
+  async initialize(): Promise<void> {
     // Load stored tokens
     if (typeof chrome !== 'undefined' && chrome.storage) {
       const result = await chrome.storage.local.get([
@@ -465,12 +536,15 @@ export default {
     if (this.isAuthenticated) {
       try {
         // Preload essential data
-        await Promise.all([
-          this.fetchUserInfo(wallet),
-          this.fetchCardanoAddress(wallet),
-          this.fetchCardData(wallet),
-          this.fetchCardBalance(wallet),
-        ]);
+        await Promise.all([this.fetchUserInfo(), this.fetchCardanoAddress(), this.fetchCards()]);
+
+        // Load card-specific data if card is selected
+        if (cardStore.selectedCard) {
+          await Promise.all([
+            this.fetchCardBalance(cardStore.selectedCard.card_uuid),
+            this.fetchCardHistory(cardStore.selectedCard.card_uuid),
+          ]);
+        }
       } catch (error) {
         console.error('Failed to initialize card store:', error);
       }
@@ -489,10 +563,8 @@ export default {
   addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string): void {
     if (!cardStore.cardHistory) {
       cardStore.cardHistory = {
-        history: {
-          meta: { page: 1, records: 0, totalRecords: 0 },
-          records: []
-        }
+        meta: { page: 1, records: 0, totalRecords: 0 },
+        records: [],
       };
     }
 
@@ -500,12 +572,12 @@ export default {
       reference: transactionId,
       amount: {
         amount: eurAmount,
-        currencyCode: 'EUR'
+        currencyCode: 'EUR',
       },
       createTime: new Date().toISOString(),
       settlementDate: new Date().toISOString(),
       exchangeRate: eurAmount / adaAmount, // ADA to EUR rate
-      actionCode: 'APPROVE',
+      actionCode: '000', // ISO 8583 success code
       processingName: 'ADA Top-up',
       authorizationCode: `AUTH${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
       cardAcceptorTerminalId: 'GERO001',
@@ -514,28 +586,28 @@ export default {
       acquireCountryCode: 'US',
       mcc: {
         code: '6012',
-        description: 'Financial Institution'
+        description: 'Financial Institution',
       },
       reversedAmount: {
         amount: 0,
-        currencyCode: 'EUR'
+        currencyCode: 'EUR',
       },
       narrative: {
-        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`
+        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`,
       },
       debit: false, // Credit transaction (adding money)
-      state: 'SETTLED'
+      state: 'settled',
     };
 
     // Add to beginning of transactions array
-    cardStore.cardHistory.history.records.unshift(newTransaction);
-    cardStore.cardHistory.history.meta.records += 1;
-    cardStore.cardHistory.history.meta.totalRecords += 1;
-    
+    cardStore.cardHistory.records.unshift(newTransaction);
+    cardStore.cardHistory.meta.records += 1;
+    cardStore.cardHistory.meta.totalRecords += 1;
+
     console.log('💳 Transaction added to cardStore.cardHistory');
-    console.log('💳 Total records now:', cardStore.cardHistory.history.meta.totalRecords);
-    console.log('💳 First record:', cardStore.cardHistory.history.records[0]);
-    
+    console.log('💳 Total records now:', cardStore.cardHistory.meta.totalRecords);
+    console.log('💳 First record:', cardStore.cardHistory.records[0]);
+
     persist({ cardHistory: cardStore.cardHistory });
   },
 
@@ -548,7 +620,7 @@ export default {
       date: new Date().toLocaleDateString('en-GB', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
+        year: 'numeric',
       }),
       status: 'Completed',
     };
@@ -556,13 +628,45 @@ export default {
     // Add to beginning of activities array using Vue.set for reactivity
     const newActivities = [newActivity, ...cardStore.activities];
     Vue.set(cardStore, 'activities', newActivities);
-    
+
     console.log('🎯 Activity added to cardStore.activities');
     console.log('🎯 Total activities now:', cardStore.activities.length);
     console.log('🎯 First activity:', cardStore.activities[0]);
     console.log('🎯 All activities:', cardStore.activities);
-    
+
     persist({ activities: cardStore.activities });
+  },
+
+  // Legacy methods for backward compatibility
+  async fetchCardData(): Promise<void> {
+    // Map to new fetchCards method
+    await this.fetchCards();
+
+    // Create legacy cardData from first card
+    if (cardStore.cards && cardStore.cards.length > 0) {
+      const firstCard = cardStore.cards[0];
+      cardStore.cardData = {
+        pan: '**** **** **** ' + firstCard.card_uuid.slice(-4),
+        currentBalance: firstCard.balance,
+        currency: firstCard.currency,
+      };
+      persist({ cardData: cardStore.cardData });
+    }
+  },
+
+  async fetchCardNumber(): Promise<void> {
+    // Map to new fetchCardDetails method
+    if (cardStore.selectedCard) {
+      await this.fetchCardDetails(cardStore.selectedCard.card_uuid);
+
+      // Create legacy cardNumber from cardDetails
+      if (cardStore.cardDetails) {
+        cardStore.cardNumber = {
+          number: cardStore.cardDetails.pan,
+        };
+        persist({ cardNumber: cardStore.cardNumber });
+      }
+    }
   },
 
   // State getter for compatibility

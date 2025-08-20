@@ -28,7 +28,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { useMockCardData } from '@/models/card-example';
 import geroStore from '@/stores/geroStore';
 import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
@@ -39,7 +38,7 @@ import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSec
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
 
-const { initializeMockData } = useMockCardData();
+
 
 // ADA to EUR conversion rate (hardcoded)
 const ADA_TO_EUR_RATE = 0.65;
@@ -93,7 +92,7 @@ const totalDepositAda = computed(() => {
 });
 
 const cardHistoryRecords = computed(() => {
-  const records = cardStore.state.cardHistory?.history.records || [];
+  const records = cardStore.state.cardHistory?.records || [];
   console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
   if (records.length > 0) {
     console.log('🏠 First record:', records[0]);
@@ -103,19 +102,23 @@ const cardHistoryRecords = computed(() => {
 
 // Initialize data
 onMounted(async () => {
-  console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
+  console.log('HomeSection mounted');
   console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
   
-  if (import.meta.env.DEV) {
-    // Use mock data in development
-    console.log('Initializing mock data...');
-    await initializeMockData();
-    console.log('Mock data initialized');
-  } else {
-    // Use real API in production
-    console.log('Initializing real API...');
-    await cardStore.initialize(geroStore.state.wallets);
-    console.log('Real API initialized');
+  try {
+    // Use real API
+    console.log('Initializing API...');
+    const wallets = Object.values(geroStore.state.wallets);
+    const wallet = wallets.length > 0 ? wallets[0] : null;
+    
+    if (wallet) {
+      await cardStore.initialize(wallet);
+      console.log('API initialized successfully');
+    } else {
+      console.warn('No wallet available for initialization');
+    }
+  } catch (error) {
+    console.error('Failed to initialize API:', error);
   }
   
   console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);

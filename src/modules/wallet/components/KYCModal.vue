@@ -44,6 +44,8 @@ import GradientButton from './GradientButton.vue';
 import KYCProgress from './KYCSteps/KYCProgress.vue';
 import KYCStepFirst from './KYCSteps/KYCStepFirst.vue';
 import KYCStepSecond from './KYCSteps/KYCStepSecond.vue';
+import cardStore from '@/stores/modules/card';
+import geroStore from '@/stores/geroStore';
 
 defineProps<{
   open: boolean;
@@ -234,7 +236,7 @@ const retakePhoto = () => {
   startCamera();
 };
 
-const handleNext = () => {
+const handleNext = async () => {
   if (currentStep.value === 1) {
     if (uploadedFile.value) {
       resetCameraState();
@@ -244,9 +246,31 @@ const handleNext = () => {
     }
   } else if (currentStep.value === 2) {
     if (capturedPhoto.value) {
-      console.log('KYC submitted');
-      emit('complete', true);
-      closeModal();
+      try {
+        console.log('KYC submitted - fetching verification link...');
+        
+        // Get verification link from KaiserEx API
+        const wallets = Object.values(geroStore.state.wallets);
+        const wallet = wallets.length > 0 ? wallets[0] : null;
+        
+        if (wallet && cardStore.isAuthenticated) {
+          await cardStore.fetchVerificationLink(wallet);
+          
+          if (cardStore.state.verificationLink?.url) {
+            // Open verification link in new window
+            window.open(cardStore.state.verificationLink.url, '_blank');
+            console.log('Verification link opened:', cardStore.state.verificationLink.url);
+          }
+        }
+        
+        emit('complete', true);
+        closeModal();
+      } catch (error) {
+        console.error('Failed to get verification link:', error);
+        // Still complete the flow even if verification link fails
+        emit('complete', true);
+        closeModal();
+      }
     } else {
       alert('Please take a photo first.');
     }

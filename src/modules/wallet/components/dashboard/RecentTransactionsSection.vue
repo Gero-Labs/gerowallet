@@ -120,8 +120,9 @@ const formattedTransactions = computed(() => {
       ? `- ${tx.amount.currencyCode}${tx.amount.amount.toFixed(2)}`
       : `+ ${tx.amount.currencyCode}${tx.amount.amount.toFixed(2)}`;
 
-    // Extract merchant name from cardAcceptorNameAndLocation
-    const merchantName = tx.narrative.description.split(' ')[0] || 'Unknown';
+    // Extract merchant name from cardAcceptorNameAndLocation or narrative
+    const merchantName = tx.narrative?.description?.split(' ')[0] || 
+                        tx.cardAcceptorNameAndLocation.split(' ')[0] || 'Unknown';
 
     // Determine category based on MCC code
     const category = getCategoryFromMCC(tx.mcc.code);

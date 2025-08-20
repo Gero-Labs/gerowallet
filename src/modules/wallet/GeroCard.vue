@@ -18,14 +18,12 @@
 <script setup lang="ts">
 import { ref, onBeforeMount, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { useMockCardData } from '@/models/card-example';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
 import geroStore from '@/stores/geroStore';
 
 const store = geroStore;
-const { initializeMockData } = useMockCardData();
 
 const section = ref(OrderCardSection);
 const currentStatus = ref('new' as 'new' | 'pending' | 'approved');
@@ -43,7 +41,7 @@ const determineStatus = computed(() => {
   }
 
   // If user and card data exist, show home section
-  if (cardStore.state.userInfo && cardStore.state.cardData) {
+  if (cardStore.state.userInfo && (cardStore.state.cards?.length > 0 || cardStore.state.cardData)) {
     localStorage.removeItem('kycStatus');
     return 'approved';
   }
@@ -57,6 +55,8 @@ const setStatus = (status: 'new' | 'pending' | 'approved') => {
   // Clear existing data
   cardStore.state.userInfo = null;
   cardStore.state.cardData = null;
+  cardStore.state.cards = null;
+  cardStore.state.selectedCard = null;
   localStorage.removeItem('kycStatus');
 
   // Set data based on status
@@ -70,6 +70,25 @@ const setStatus = (status: 'new' | 'pending' | 'approved') => {
       break;
     case 'approved':
       cardStore.state.userInfo = { email: 'test@example.com' };
+      cardStore.state.cards = [{
+        id: 1,
+        user_id: 1,
+        program_uuid: 'test-program-uuid',
+        currency: 'EUR',
+        account_to_charge: 'test-account',
+        processing_type: 'mastercard',
+        cardholder_phone: '+1234567890',
+        payment_card_type: 'prepaid',
+        order_uuid: 'test-order-uuid',
+        card_uuid: 'test-card-uuid',
+        status: 'done',
+        card_status: 'ACTIVE',
+        balance: '1000.00',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }];
+      cardStore.state.selectedCard = cardStore.state.cards[0];
+      // Legacy compatibility
       cardStore.state.cardData = {
         pan: '**** **** **** 1234',
         currentBalance: '1000.00',
@@ -82,10 +101,11 @@ const setStatus = (status: 'new' | 'pending' | 'approved') => {
 };
 
 const setActiveStatus = () => {
-  const status = import.meta.env.DEV ? currentStatus.value : determineStatus.value;
+  const status = determineStatus.value;
   console.log('Current status:', status);
   console.log('User info:', cardStore.state.userInfo);
   console.log('Card data:', cardStore.state.cardData);
+  console.log('Cards:', cardStore.state.cards);
 
   switch (status) {
     case 'new':
@@ -103,17 +123,20 @@ const setActiveStatus = () => {
 };
 
 onBeforeMount(async () => {
-  // Initialize mock data in development
-  if (import.meta.env.DEV) {
-    console.log('Initializing mock data in GeroWallet...');
-    await initializeMockData();
-  } else {
-    // Use real API in production
-    console.log('Initializing real API in GeroWallet...');
-    // Get the first available wallet or pass null if no wallets
+  try {
+    // Use real API
+    console.log('Initializing API in GeroWallet...');
     const wallets = Object.values(store.state.wallets);
     const wallet = wallets.length > 0 ? wallets[0] : null;
-    await cardStore.initialize(wallet);
+    
+    if (wallet) {
+      await cardStore.initialize(wallet);
+      console.log('API initialized successfully');
+    } else {
+      console.warn('No wallet available for initialization');
+    }
+  } catch (error) {
+    console.error('Failed to initialize API:', error);
   }
 
   // Set active status after data is loaded
@@ -124,12 +147,10 @@ onBeforeMount(async () => {
 import { watch } from 'vue';
 
 watch(
-  [() => cardStore.state.userInfo, () => cardStore.state.cardData],
+  [() => cardStore.state.userInfo, () => cardStore.state.cardData, () => cardStore.state.cards],
   () => {
-    if (!import.meta.env.DEV) {
-      console.log('User data changed, updating status...');
-      setActiveStatus();
-    }
+    console.log('User data changed, updating status...');
+    setActiveStatus();
   },
   { deep: true }
 );
