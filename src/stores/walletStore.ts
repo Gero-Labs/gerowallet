@@ -380,6 +380,18 @@ export default {
 
   clearForWalletSwitch() {
     console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
+    
+    // CRITICAL: Clear all Chrome alarms to prevent memory leaks during wallet switching
+    chrome.alarms.clearAll();
+    console.debug('🧹 Cleared all Chrome alarms during wallet switch');
+    
+    // Clear intervals to prevent memory leaks
+    if (walletStore.fiatRatesIntervalId) {
+      clearInterval(walletStore.fiatRatesIntervalId);
+      walletStore.fiatRatesIntervalId = null;
+      console.debug('🧹 Cleared fiat rates interval during wallet switch');
+    }
+    
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
     const clearedState: Partial<WalletStore> = {
@@ -392,7 +404,8 @@ export default {
       collections: {},
       rewards: [],
       contacts: {},
-      connectedDapps: []
+      connectedDapps: [],
+      fiatRatesIntervalId: null
     };
 
     // Apply to local state

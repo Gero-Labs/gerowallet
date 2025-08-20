@@ -87,11 +87,33 @@
           <span class="button-text">Swap</span>
         </v-btn>
       </div>
+      
+      <div class="action-button-wrapper">
+        <v-btn 
+          ref="perpetualsButton"
+          class="expandable-button perpetuals-button" 
+          color="#B794F41A" 
+          height="28" 
+          @click="currentDialog = dialogs.PERPETUALS"
+          :style="getButtonGlowStyle('perpetuals')"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.barChart"
+              alt="Perpetuals"
+              contain
+              style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">Perpetuals</span>
+        </v-btn>
+      </div>
     </div>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog v-if="!isSwapDisabled" :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
+    <PerpetualsDialog :isOpen="currentDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
   </div>
 </template>
 <script setup lang="ts">
@@ -100,6 +122,7 @@ import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
 import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
+import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -113,6 +136,7 @@ const dialogs = ref<any>({
   RECEIVE: 'RECEIVE',
   SWAP: 'SWAP',
   BUY: 'BUY',
+  PERPETUALS: 'PERPETUALS',
 });
 
 const mousePosition = ref<{x: number, y: number} | null>(null);
@@ -123,6 +147,7 @@ const buyButton = ref(null);
 const sendButton = ref(null);
 const receiveButton = ref(null);
 const swapButton = ref(null);
+const perpetualsButton = ref(null);
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {
@@ -134,6 +159,15 @@ const isBuyDisabled = computed(() => {
 const isSwapDisabled = computed(() => {
   if (loggedWallet.value) {
     return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+  }
+  return true;
+})
+
+const isPerpetualsDisabled = computed(() => {
+  // Enable for Cardano mainnet and preprod for testing
+  if (loggedWallet.value) {
+    return !(loggedWallet.value.chain === 'CARDANO' && 
+             (loggedWallet.value.network === 'MAINNET' || loggedWallet.value.network === 'PREPROD'));
   }
   return true;
 })
@@ -169,7 +203,7 @@ const handleMouseLeave = () => {
 const updateButtonGlows = () => {
   if (!mousePosition.value) return;
   
-  const buttons = ['buy', 'send', 'receive', 'swap'];
+  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
   const newGlows: Record<string, any> = {};
   
   buttons.forEach(buttonType => {
@@ -225,7 +259,8 @@ const getButtonGlowStyle = (buttonType: string) => {
     buy: '#FFF59E',
     send: '#00DFF3', 
     receive: '#75E0A7',
-    swap: '#FDA29B'
+    swap: '#FDA29B',
+    perpetuals: '#B794F4'
   };
   
   const color = colors[buttonType];
@@ -364,5 +399,15 @@ const getButtonGlowStyle = (buttonType: string) => {
 
 .swap-button .button-text {
   color: #FDA29B;
+}
+
+.perpetuals-button {
+  background: rgba(183, 148, 244, 0.12) !important;
+  border: 0.5px solid rgba(183, 148, 244, 0.4) !important;
+}
+
+
+.perpetuals-button .button-text {
+  color: #B794F4;
 }
 </style>

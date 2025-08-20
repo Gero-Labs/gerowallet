@@ -137,6 +137,8 @@ export class WalletBg {
 
   unsubscribeAll() {
     this.loaderFactory.unsubscribeAll();
+    // CRITICAL: Clear all intervals and alarms during cleanup
+    this.endSync();
   }
 
   networkId(): number {
@@ -1044,9 +1046,17 @@ export class WalletBg {
   }
 
   endSync() {
+    // Clear fiat rates interval
     clearInterval(WalletStore.state.fiatRatesIntervalId);
     WalletStore.setFiatRatesIntervalId(null);
+    
+    // Clear ticker statistics interval
+    if (NetworkStore.state.tickerStatisticsIntervalId) {
+      clearInterval(NetworkStore.state.tickerStatisticsIntervalId);
+    }
     NetworkStore.setTickerStatisticsIntervalId(null);
+    
+    console.debug('🧹 WalletBg endSync: Cleared all intervals');
   }
 }
 

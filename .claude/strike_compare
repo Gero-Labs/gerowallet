@@ -1,0 +1,87 @@
+this is the output of the console 
+ddr1q9hnmantdjruxqzc9qqq6kznup8xha3shuvhtktsp3j0rmh4xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxkskmexus
+PerpetualsDialog.vue:350 🌐 Direct HTTP call to Strike getPositions: {baseURL: 'https://dev.gerowallet.io', address: 'addr1q9hnmantdjruxqzc9qqq6kznup8xha3shuvhtktsp3j0r…my84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxkskmexus', url: 'https://dev.gerowallet.io/api/strike/perpetuals/ge…my84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxkskmexus'}
+PerpetualsDialog.vue:365 ✅ Direct HTTP response: {data: Array(2), status: 200, statusText: '', headers: AxiosHeaders, config: {…}, …}
+PerpetualsDialog.vue:569 📥 Raw API Response: (2) [{…}, {…}]
+PerpetualsDialog.vue:570 📊 Response type: object
+PerpetualsDialog.vue:571 📏 Response length: 2
+PerpetualsDialog.vue:575 🔍 RAW API POSITIONS DATA: (2) [{…}, {…}]
+PerpetualsDialog.vue:577 🔍 Position 1 RAW DATA: {position: 'Short', entryPrice: 0.8714, positionSize: 100, leverage: 1, collateral: {…}, …}
+PerpetualsDialog.vue:577 🔍 Position 2 RAW DATA: {position: 'Long', entryPrice: 0.8737, positionSize: 110, leverage: 1.1, collateral: {…}, …}
+PerpetualsDialog.vue:598 🔍 Processing position 1 - USING EXACT API DATA: {position: 'Short', stopLoss: 0, takeProfit: 0, asset: {…}, collateral: {…}, …}
+PerpetualsDialog.vue:256 🔍 Getting current price for: 
+PerpetualsDialog.vue:271 🔍 Available dexHunter tokens: (5) ['00000000000410c2d9e01e8ec78ab1dc6bbc383fae76cbe2689beb024d49444153', '007394e3117755fbb0558b93c54ce3bc6c85770920044ade143dc742505443', '008977011abb1d15bbba595c0418307f4cfc7bbc707b17522db4e7c44d59484d', '016be5325fd988fea98ad422fcfd53e5352cacfced5c106a932a35a442544e', '0171c997b8853fde686763d93b36ab8e04ce947bb6aa09a9ee5c4401544f4b454e'] ... (showing first 5)
+PerpetualsDialog.vue:278 💰 Found price for : 0
+PerpetualsDialog.vue:307 🧮 P&L Calculation for : {assetName: '', currentPrice: 0, entryPrice: 0.8714, positionSize: 100, leverage: 1, …}
+PerpetualsDialog.vue:339 💰 P&L Result: {currentPrice: 0, pnl: 87.14, pnlPercentage: 87.14}
+PerpetualsDialog.vue:609 💰 Calculated values for position 1 (using API data): {currentPrice: 0, pnl: 87.14, pnlPercentage: 87.14, usedEntryPrice: 0.8714, usedPositionSize: 100, …}
+PerpetualsDialog.vue:637 ✅ FINAL Enhanced position 1: {API_entryPrice: 0.8714, API_positionSize: 100, API_leverage: 1, API_collateral: {…}, API_liquidationPrice: 1.6448, …}
+PerpetualsDialog.vue:598 🔍 Processing position 2 - USING EXACT API DATA: {position: 'Long', stopLoss: 0, takeProfit: 0, asset: {…}, collateral: {…}, …}
+PerpetualsDialog.vue:256 🔍 Getting current price for: 
+PerpetualsDialog.vue:271 🔍 Available dexHunter tokens: (5) ['00000000000410c2d9e01e8ec78ab1dc6bbc383fae76cbe2689beb024d49444153', '007394e3117755fbb0558b93c54ce3bc6c85770920044ade143dc742505443', '008977011abb1d15bbba595c0418307f4cfc7bbc707b17522db4e7c44d59484d', '016be5325fd988fea98ad422fcfd53e5352cacfced5c106a932a35a442544e', '0171c997b8853fde686763d93b36ab8e04ce947bb6aa09a9ee5c4401544f4b454e'] ... (showing first 5)
+PerpetualsDialog.vue:278 💰 Found price for : 0
+PerpetualsDialog.vue:307 🧮 P&L Calculation for : {assetName: '', currentPrice: 0, entryPrice: 0.8737, positionSize: 110, leverage: 1.1, …}
+PerpetualsDialog.vue:339 💰 P&L Result: {currentPrice: 0, pnl: -96.11, pnlPercentage: -96.11}
+PerpetualsDialog.vue:609 💰 Calculated values for position 2 (using API data): {currentPrice: 0, pnl: -96.11, pnlPercentage: -96.11, usedEntryPrice: 0.8737, usedPositionSize: 110, …}
+PerpetualsDialog.vue:637 ✅ FINAL Enhanced position 2: {API_entryPrice: 0.8737, API_positionSize: 110, API_leverage: 1.1, API_collateral: {…}, API_liquidationPrice: 0.2503, …}
+PerpetualsDialog.vue:652 ✅ Processed 2 positions: (2) [{…}, {…}, __ob__: Observer2]
+
+
+this is what i see in my positions tab directly from strikes website
+Position
+Current Position Value
+Total Position Size
+Entry / Mark Price
+Liquidation Price
+Collateral
+TP/SL
+Short ADA
+1.0x Leverage
+$85.19 (99.53 ADA)
+Opening Fee:
+$1.92
+Hourly Borrow Fee:
+$0.0022 (0.0025%)
+Next hourly fee update:
+43m 9s
+Accumulated Borrow Fee:
+$1.58
+PNL:
+$1.55
+PNL With Fees:
+-$1.95
+-$1.95 (-2.15%)
+$85.22
+100.00 ADA
+$0.8714 / $0.8559
+$1.6448	
+$87.14
+N/A
+
+
+Close
+Long ADA
+1.1x Leverage
+$66.04 (77.16 ADA)
+Opening Fee:
+$1.94
+Hourly Borrow Fee:
+$0.02 (0.03%)
+Next hourly fee update:
+41m 38s
+Accumulated Borrow Fee:
+$17.43
+PNL:
+-$1.96
+PNL With Fees:
+-$21.33
+-$21.33 (-19.98%)
+$94.17
+110.00 ADA
+$0.8737 / $0.8559
+$0.25	
+$87.37
+N/A
+
+
+Close

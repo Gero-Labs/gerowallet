@@ -160,6 +160,12 @@ export default {
 
   // Utility method to reset state
   reset() {
+    // CRITICAL: Clear ticker statistics interval to prevent memory leaks
+    if (networkStore.tickerStatisticsIntervalId) {
+      clearInterval(networkStore.tickerStatisticsIntervalId);
+      console.debug('🧹 Cleared ticker statistics interval during network reset');
+    }
+    
     const resetState: NetworkStore = {
       assets: {},
       epochParams: null,

@@ -20,7 +20,9 @@ export default defineConfig({
     target: 'es2022',
     assetsDir: '.',
     watch: isDev
-      ? {}
+      ? {
+          ignored: ['**/DumpStack.log.tmp', '**/DumpStack.log', '**/*.tmp', '**/node_modules/**', '**/.git/**']
+        }
       : undefined,
     outDir: r('extension/content'),
     cssCodeSplit: false,

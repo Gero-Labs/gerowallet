@@ -8,6 +8,14 @@ import wasm from 'vite-plugin-wasm';
 
 export default defineConfig({
   ...sharedConfig,
+  server: {
+    ...sharedConfig.server,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+      ignored: ['**/DumpStack.log.tmp', '**/DumpStack.log', '**/*.tmp', '**/node_modules/**', '**/.git/**']
+    }
+  },
   define: {
     '__DEV__': isDev,
     '__NAME__': JSON.stringify(packageJson.name),

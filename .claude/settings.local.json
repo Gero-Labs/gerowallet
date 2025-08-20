@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(dir D:GeroReposgitReposgeroFrontgerowalletvite.config*.mts)",
+      "Bash(rm:*)",
+      "WebFetch(domain:app.strikefinance.org)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
