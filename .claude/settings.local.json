@@ -5,7 +5,8 @@
       "Bash(dir D:GeroReposgitReposgeroFrontgerowalletvite.config*.mts)",
       "Bash(rm:*)",
       "WebFetch(domain:app.strikefinance.org)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
