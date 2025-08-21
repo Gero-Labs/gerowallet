@@ -362,7 +362,6 @@ const availableTokens = computed(() => {
       return b.balance - a.balance;
     });
   const gr = [nativeToken, ...availableTokens];
-  console.log('nativeToken', gr)
   return gr;
 });
 
