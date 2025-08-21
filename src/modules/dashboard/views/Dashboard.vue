@@ -465,6 +465,11 @@ const handleReceiveKaiserExToken = async () => {
       text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
     kaiserExLoading.value = false;
+  } finally {
+    // Always ensure loading state is cleared, even if popup was manually closed
+    setTimeout(() => {
+      kaiserExLoading.value = false;
+    }, 1000);
   }
 };
 
