@@ -6,12 +6,12 @@
     @close="$emit('close')"
     content-class="rounded-xxl dialogStyle"
     scrollable
-    max-width="850"
+    :max-width="850"
     :min-height="0"
     :persistent="persistent"
   >
     <v-card-text class="pa-0">
-      <p>This privacy notice for Gero Labs Inc. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;),
+      <p>This privacy notice for A.D. Labs Inc. (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;),
         describes how and why we might collect, store, use, and/or share (&quot;process&quot;) your information when
         you use our services (&quot;Services&quot;), such as when you:</p>
       <ul id="l1">
@@ -46,7 +46,7 @@
 
       <p><span style="font-weight: 600;">What personal information do we process?</span><br>
         When you visit, use, or navigate our Services, we may process personal
-        information depending on how you interact with Gero Labs Inc. and the Services, the choices you make, and the
+        information depending on how you interact with A.D. Labs Inc. and the Services, the choices you make, and the
         products and features you use. Click <a href="#information-collection">here</a> to learn more.</p>
 
       <p><span style="font-weight: 600;">Do we process any sensitive personal information?</span><br>We do not process
@@ -86,7 +86,7 @@
         , or by contacting us. We will consider and act upon any request in accordance with applicable data protection
         laws.</p>
 
-      <p>Want to learn more about what Gero Labs Inc. does with any information we collect? Click <a href="#table-of-contents">here</a>
+      <p>Want to learn more about what A.D. Labs Inc. does with any information we collect? Click <a href="#table-of-contents">here</a>
         to review the notice in full.</p>
 
       <h2 id="table-of-contents">TABLE OF CONTENTS</h2>
@@ -665,8 +665,8 @@
       <p>We may use your personal information for our own business purposes, such as for undertaking internal research
         for technological development and demonstration. This is not considered to be &quot;selling&quot; of your
         personal information.</p>
-      <p>Gero Labs Inc. has not disclosed or sold any personal information to third parties for a business or
-        commercial purpose in the preceding twelve (12) months. Gero Labs Inc. will not sell personal information in
+      <p>A.D. Labs Inc. has not disclosed or sold any personal information to third parties for a business or
+        commercial purpose in the preceding twelve (12) months. A.D. Labs Inc. will not sell personal information in
         the future belonging to website visitors, users, and other consumers.</p>
       <p style="font-weight: 600">Your rights with respect to your personal data</p>
       <p style="font-weight: 600; text-decoration: underline">Right to request deletion of the data — Request to
@@ -760,7 +760,7 @@
       <h2 id="notice-contact">13. HOW CAN YOU CONTACT US ABOUT THIS NOTICE?</h2>
       <p>If you have questions or comments about this notice, you may email us at <a
           href="mailto:support@gerowallet.io" target="_blank">support@gerowallet.io</a> or by post to:</p>
-      <p>Gero Labs Inc.</p>
+      <p>A.D. Labs Inc.</p>
       <p>Trinity Chambers PO Box 4301</p>
       <p>Road Town, Tortola 4301 British Virgin Islands</p>
 
