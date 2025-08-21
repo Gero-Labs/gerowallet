@@ -1,6 +1,5 @@
 <template>
   <v-layout column>
-
     <!-- Show comprehensive empty state when wallet has no tokens -->
     <template v-if="isWalletEmpty">
       <v-row no-gutters>
@@ -33,12 +32,15 @@
                 class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
               >
                 <v-card-text>
-                  <PortfolioChart
-                    :chart-data="computeChartData.adaData"
-                    :chart-data-usd="computeChartData.usdData"
-                    :portfolio-value-ada="computedValues.totalValue"
-                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                  />
+                                <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="computedValues.totalValue"
+                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                :loading="loadingTxs"
+              />
                 </v-card-text>
               </v-card>
             </v-col>
@@ -78,8 +80,11 @@
               <PortfolioChart
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
                 :portfolio-value-ada="computedValues.totalValue"
                 :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                :loading="loadingTxs"
               />
             </v-card-text>
           </v-card>
@@ -146,34 +151,30 @@
       </v-col> -->
       </v-row>
 
-    <!-- KaiserEx Token Reception -->
-    <v-row no-gutters>
-      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-        <v-card outlined class="liquid-glass">
-          <v-card-title>KaiserEx Token Reception</v-card-title>
-          <v-card-text>
-            <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
-              Receive Token from KaiserEx
-            </v-btn>
-            <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
-              {{ kaiserExMessage.text }}
-            </v-alert>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+      <!-- KaiserEx Token Reception -->
+      <v-row no-gutters>
+        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
+          <v-card outlined class="liquid-glass">
+            <v-card-title>KaiserEx Token Reception</v-card-title>
+            <v-card-text>
+              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
+                Receive Token from KaiserEx
+              </v-btn>
+              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
+                {{ kaiserExMessage.text }}
+              </v-alert>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
 
-    <!-- Claim Dialog -->
-    <ClaimDialog
-      :show="showClaimDialog"
-      @close="showClaimDialog = false"
-    />
-
+      <!-- Claim Dialog -->
+      <ClaimDialog :show="showClaimDialog" @close="showClaimDialog = false" />
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance, onMounted } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
@@ -193,7 +194,7 @@ import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 import filters from '@/shared/utils/filters';
-
+import tapToolsApi from '@/api/tap-tools-api';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -202,12 +203,11 @@ import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
-const router = instance?.proxy.$router;
 
 // Store refs
 const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
+const { portfolio } = toRefs(tapToolsStore);
 const showClaimDialog = ref(false);
 
 const kaiserExLoading = ref(false);
@@ -219,7 +219,7 @@ const currentApexCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
 const isLoading = ref(false);
-
+const loadingTxs = ref(true);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
@@ -341,33 +341,40 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
+const usdChartData = ref<any[]>([]);
+const adaChartData = ref<any[]>([]);
+const eurChartData = ref<any[]>([]);
+
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
-      adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
-      usdData: Array.isArray(portfolioTrendedValue.value)
-        ? portfolioTrendedValue.value.map(item => [item[0], item[1] * (price.value?.lastPrice || 0)])
-        : [],
+      adaData: adaChartData.value,
+      usdData: usdChartData.value,
+      eurData: eurChartData.value,
     };
   }
   console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
   let graphData = undefined;
   let usdData = undefined;
+  let eurData = undefined;
   let currentBalance = 0;
   if (transactions.value) {
     graphData = [];
     usdData = [];
+    eurData = [];
     transactions.value.forEach(tx => {
       currentBalance += tx.ada;
       graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
       usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+      eurData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
     });
   }
   return {
-    adaData: graphData || [], // No historical USD data for non-mainnet
+    adaData: graphData || [],
     usdData: usdData || [],
+    eurData: eurData || [],
   };
 });
 
@@ -425,6 +432,7 @@ const showDebitCardInfo = () => {
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
+  const router = instance?.proxy?.$router;
   if (router && router.currentRoute.path !== '/cashback') {
     console.log('Navigating to cashback page...');
     router.push('/cashback');
@@ -446,23 +454,22 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
-
 const handleReceiveKaiserExToken = async () => {
   kaiserExLoading.value = true;
   kaiserExMessage.value = null;
 
   try {
-    await receiveKaiserExToken((tokenData) => {
+    await receiveKaiserExToken(tokenData => {
       kaiserExMessage.value = {
         type: 'success',
-        text: `Token received successfully! Token: ${tokenData.access_token}`
+        text: `Token received successfully! Token: ${tokenData.access_token}`,
       };
       kaiserExLoading.value = false;
     });
   } catch (error) {
     kaiserExMessage.value = {
       type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
     kaiserExLoading.value = false;
   }
@@ -495,6 +502,43 @@ const handleBackupWallet = () => {
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
+const getUsdChartData = async () => {
+  try {
+    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'USD');
+    usdChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
+    console.log('usdChartData', usdChartData.value);
+  } catch (error) {
+    console.error('Error loading portfolio trended value:', error);
+  }
+};
+const getAdaChartData = async () => {
+  try {
+    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'ADA');
+    adaChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
+    console.log('adaChartData', adaChartData.value);
+  } catch (error) {
+    console.error('Error loading portfolio trended value:', error);
+  }
+};
+
+const getEurChartData = async () => {
+  try {
+    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'EUR');
+    eurChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
+    console.log('eurChartData', eurChartData.value);
+  } catch (error) {
+    console.error('Error loading portfolio trended value:', error);
+  }
+};
+onMounted(async () => {
+  loadingTxs.value = true;
+  try {
+    await Promise.all([getAdaChartData(), getUsdChartData(), getEurChartData()]);
+  } catch (error) {
+    console.error('Error loading portfolio trended value:', error);
+  }
+  loadingTxs.value = false;
+});
 </script>
 <style scoped>
 .transactions-table {
