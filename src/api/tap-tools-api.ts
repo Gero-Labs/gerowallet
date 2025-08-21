@@ -1,21 +1,23 @@
 import axios from 'axios';
+import { parseHttpError } from '@/shared/utils/parser';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
-  timeout: 10000,
+  timeout: 30000, // Increased timeout to 30 seconds for portfolio data
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
   },
 });
+
 export default {
   async dailyPriceChange(unit: string): Promise<any> {
-    return await axiosInstance.get(`/api/token/prices/chg?unit=${unit}`);
+    return axiosInstance.get(`/api/token/prices/chg?unit=${unit}`);
   },
   async getPortfolio(stakeAddress: string): Promise<any> {
-    return await axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
+    return axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
   },
-  async getPortfolioTrendedValue(stakeAddress: string): Promise<any> {
-    return await axiosInstance.get(`/api/wallet/value/trended?address=${stakeAddress}&timeframe=1y&quote=USD`);
-  }
-}
+  async getPortfolioTrendedValue(stakeAddress: string, currency: string = 'USD'): Promise<any> {
+    return axiosInstance.get(`/api/wallet/value/trended?address=${stakeAddress}&timeframe=1y&quote=${currency}`);
+  },
+};
