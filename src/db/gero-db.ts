@@ -71,6 +71,12 @@ export async function getDb() {
   });
 
   db.version(geroDBVersion).stores(geroDBSchema)
+  
+      // Add portfolio_charts table for version 13
+  db.version(13).stores({
+    ...geroDBSchema,
+    portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt' // data is JSON string
+  })
 
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
