@@ -80,8 +80,8 @@ let blockchainDb: Dexie = null;
 export class WalletBg {
   api: Api;
   syncService: SyncService;
-  loaderFactory: LoaderFactory; 
-  
+  loaderFactory: LoaderFactory;
+
   id: any;
   name: any;
   icon: any;
@@ -1060,9 +1060,6 @@ export function alarmListener(alarm) {
   } else if (alarm.name.includes('portfolio')) {
     const stakeAddress = alarm.name.split('|')[1];
     TapToolsStore.loadPortfolio(stakeAddress);
-  } else if (alarm.name.includes('trendedPortfolio')) {
-    const stakeAddress = alarm.name.split('|')[1];
-    TapToolsStore.loadPortfolioTrendedValue(stakeAddress);
   } else if (alarm.name === 'coinGeckoPrices') {
     CoinGeckoStore.updatePrices();
   }

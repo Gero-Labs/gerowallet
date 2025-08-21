@@ -32,15 +32,15 @@
                 class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
               >
                 <v-card-text>
-                                <PortfolioChart
-                :chart-data="computeChartData.adaData"
-                :chart-data-usd="computeChartData.usdData"
-                :chart-data-eur="computeChartData.eurData"
-                :portfolio-value-ada="computedValues.totalValue"
-                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
-                :loading="loadingTxs"
-              />
+                  <PortfolioChart
+                    :chart-data="computeChartData.adaData"
+                    :chart-data-usd="computeChartData.usdData"
+                    :chart-data-eur="computeChartData.eurData"
+                    :portfolio-value-ada="computedValues.totalValue"
+                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :loading="loadingTxs"
+                  />
                 </v-card-text>
               </v-card>
             </v-col>
@@ -174,7 +174,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance, onMounted } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
@@ -193,8 +193,9 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
-import filters from '@/shared/utils/filters';
-import tapToolsApi from '@/api/tap-tools-api';
+
+import { usePortfolioData } from '@/shared/composables/usePortfolioData';
+import { portfolioCacheService } from '@/db/portfolio-cache';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -219,7 +220,7 @@ const currentApexCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
 const isLoading = ref(false);
-const loadingTxs = ref(true);
+const loadingTxs = computed(() => portfolioLoading.value);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
@@ -341,9 +342,22 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
-const usdChartData = ref<any[]>([]);
-const adaChartData = ref<any[]>([]);
-const eurChartData = ref<any[]>([]);
+// Initialize portfolio data composable with 4-hour cache
+const portfolioComposable = usePortfolioData({
+  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
+  enableCache: true,
+});
+
+const {
+  adaData: adaChartData,
+  usdData: usdChartData,
+  eurData: eurChartData,
+  isLoading: portfolioLoading,
+  loadMissingData,
+  refreshPortfolioData,
+  getCacheStats,
+  getCacheStatus,
+} = portfolioComposable;
 
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
@@ -354,7 +368,6 @@ const computeChartData = computed(() => {
       eurData: eurChartData.value,
     };
   }
-  console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
   let graphData = undefined;
   let usdData = undefined;
@@ -410,23 +423,18 @@ const handleCarouselClick = (item: any) => {
     case 'showApexFeatures':
       showApexFeatures();
       break;
-    default:
-      console.log('Carousel item clicked:', item.id);
   }
 };
 
 const openClaimDialog = () => {
-  console.log('Opening claim dialog...');
   showClaimDialog.value = true;
 };
 
 const showUpdateInfo = () => {
-  console.log('Showing update info...');
   // Add your update info logic here
 };
 
 const showDebitCardInfo = () => {
-  console.log('Showing debit card info...');
   // Add your debit card info logic here
 };
 
@@ -434,23 +442,19 @@ const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
   const router = instance?.proxy?.$router;
   if (router && router.currentRoute.path !== '/cashback') {
-    console.log('Navigating to cashback page...');
     router.push('/cashback');
   }
 };
 
 const showApexWelcome = () => {
-  console.log('Welcome to Apex Fusion!');
   // Add your Apex welcome logic here
 };
 
 const showApexWallet = () => {
-  console.log('Showing Apex Wallet info...');
   // Add your Apex wallet logic here
 };
 
 const showApexFeatures = () => {
-  console.log('Showing Apex Features...');
   // Add your Apex features logic here
 };
 
@@ -477,68 +481,79 @@ const handleReceiveKaiserExToken = async () => {
 
 // Empty state handlers
 const handleBuyCrypto = () => {
-  console.log('Opening buy crypto dialog - emitting to parent');
   instance?.proxy?.$emit('open-buy-dialog');
 };
 
 const handleShowReceive = () => {
-  console.log('Opening receive dialog - emitting to parent');
   instance?.proxy?.$emit('open-receive-dialog');
 };
 
 const handleOpenLearn = () => {
-  console.log('Opening learning resources...');
   // Could open a modal with tutorials or redirect to docs
   window.open('https://docs.gerowallet.io', '_blank');
 };
 
 const handleStartTutorial = () => {
-  console.log('Starting interactive tutorial...');
   // Implement interactive tutorial
 };
 
 const handleBackupWallet = () => {
-  console.log('Backup wallet button clicked - emitting to parent');
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
-const getUsdChartData = async () => {
-  try {
-    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'USD');
-    usdChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
-    console.log('usdChartData', usdChartData.value);
-  } catch (error) {
-    console.error('Error loading portfolio trended value:', error);
-  }
-};
-const getAdaChartData = async () => {
-  try {
-    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'ADA');
-    adaChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
-    console.log('adaChartData', adaChartData.value);
-  } catch (error) {
-    console.error('Error loading portfolio trended value:', error);
+// Portfolio data loading is now handled by usePortfolioData composable
+
+// Utility function to refresh portfolio data
+const refreshPortfolioChart = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (address) {
+    await refreshPortfolioData(address);
   }
 };
 
-const getEurChartData = async () => {
-  try {
-    const { data } = await tapToolsApi.getPortfolioTrendedValue(loggedWallet.value?.baseAddress || '', 'EUR');
-    eurChartData.value = data.map((item: any) => [item.time * 1000, item.value]);
-    console.log('eurChartData', eurChartData.value);
-  } catch (error) {
-    console.error('Error loading portfolio trended value:', error);
+// Utility function to get cache information (for debugging)
+const getPortfolioCacheInfo = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (!address) {
+    return null;
   }
+
+  const stats = await getCacheStats();
+  const status = await getCacheStatus(address);
+
+  return { stats, status };
 };
-onMounted(async () => {
-  loadingTxs.value = true;
-  try {
-    await Promise.all([getAdaChartData(), getUsdChartData(), getEurChartData()]);
-  } catch (error) {
-    console.error('Error loading portfolio trended value:', error);
-  }
-  loadingTxs.value = false;
+
+// Expose functions for potential use
+defineExpose({
+  refreshPortfolioChart,
+  getPortfolioCacheInfo,
 });
+// Watch for wallet changes to reload portfolio data with smart caching
+watch(
+  () => loggedWallet.value?.baseAddress,
+  async (newAddress, oldAddress) => {
+    if (newAddress && newAddress !== oldAddress) {
+      try {
+        // Load missing data only (smart caching) with timeout to prevent memory issues
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Portfolio data loading timeout')), 30000)
+        );
+        
+        await Promise.race([
+          loadMissingData(newAddress),
+          timeoutPromise
+        ]);
+      } catch (error) {
+        console.warn('Portfolio data loading failed or timed out:', error);
+        // Continue with empty data rather than crashing
+      }
+    }
+  },
+  { immediate: true } // Load data on mount
+);
+
+
 </script>
 <style scoped>
 .transactions-table {
