@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, Proof, Provider, PaginatedResponse, PaginationParams } from '@/models/types';
+import { Blockchain, Network, Proof, Provider } from '@/models/types';
 
 export class Api {
   public chain: string;
