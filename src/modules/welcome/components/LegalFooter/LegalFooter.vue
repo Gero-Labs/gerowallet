@@ -1,19 +1,6 @@
-<script setup lang="ts">
-import { ref } from 'vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
-import PrivacyPolicyDialog from '@/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue';
-import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
-
-const privacyPolicyDialog = ref(false);
-const changeLogDialog = ref(false);
-
-//@ts-ignore
-const version = ref<string>(APP_VERSION);
-</script>
-
 <template>
   <div class="footer-legal">
-    <GButton color="white" text :ripple="false" class="footer-btn" @click="privacyPolicyDialog = true">
+    <GButton color="white" text :ripple="false" class="footer-btn" @click="handlePrivacyClick">
       {{ $t('privacyPolicy') }}
     </GButton>
     <v-divider vertical></v-divider>
@@ -37,7 +24,24 @@ const version = ref<string>(APP_VERSION);
     <ChangeLogDialog :isOpen="changeLogDialog" @close="changeLogDialog = false" :persistent="false" />
   </div>
 </template>
+<script setup lang="ts">
+import { ref } from 'vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import PrivacyPolicyDialog from '@/options/modules/navigation/dialogs/PrivacyPolicyDialog.vue';
+import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 
+const privacyPolicyDialog = ref(false);
+const changeLogDialog = ref(false);
+
+//@ts-ignore
+const version = ref<string>(APP_VERSION);
+
+const handlePrivacyClick = () => {
+  console.log('Privacy policy clicked!');
+  privacyPolicyDialog.value = true;
+  console.log('privacyPolicyDialog value:', privacyPolicyDialog.value);
+};
+</script>
 <style lang="css" scoped>
 .footer-legal {
   height: 38px;
