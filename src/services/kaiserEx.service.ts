@@ -73,36 +73,57 @@ class KaiserExServiceImpl implements KaiserExService {
   }
 
   async auth(completeCallback?: (tokenData: KaiserExTokenData) => void): Promise<void> {
-    if (completeCallback) this.completeCallback = completeCallback;
+    return new Promise((resolve, reject) => {
+      if (completeCallback) this.completeCallback = completeCallback;
 
-    console.log('[KaiserEx] Starting OAuth flow...');
-    const { codeVerifier, codeChallenge } = await this.generatePKCE();
-    this.codeVerifier = codeVerifier;
-    console.log('[KaiserEx] Generated PKCE - codeChallenge:', codeChallenge);
+      console.log('[KaiserEx] Starting OAuth flow...');
+      this.generatePKCE().then(({ codeVerifier, codeChallenge }) => {
+        this.codeVerifier = codeVerifier;
+        console.log('[KaiserEx] Generated PKCE - codeChallenge:', codeChallenge);
 
-    const url = this.loginUrl(codeChallenge);
-    console.log('[KaiserEx] Opening OAuth URL:', url);
-    console.log('[KaiserEx] Expected message origin:', this.oauthDomain);
+        const url = this.loginUrl(codeChallenge);
+        console.log('[KaiserEx] Opening OAuth URL:', url);
+        console.log('[KaiserEx] Expected message origin:', this.oauthDomain);
 
-    if (this.options.asWindow) {
-      this.KaiserExWindow = window.open(
-        url,
-        "oauthWindow",
-        `width=${this.options.width},height=${this.options.height}`
-      );
-    } else {
-      this.KaiserExWindow = window.open(url, "oauthWindow");
-    }
+        if (this.options.asWindow) {
+          this.KaiserExWindow = window.open(
+            url,
+            "oauthWindow",
+            `width=${this.options.width},height=${this.options.height}`
+          );
+        } else {
+          this.KaiserExWindow = window.open(url, "oauthWindow");
+        }
 
-    console.log('[KaiserEx] Popup window opened, waiting for OAuth callback message...');
+        console.log('[KaiserEx] Popup window opened, waiting for OAuth callback message...');
 
-    // Bind the message listener to this instance
-    const boundListener = this.oauthCodeMessageListener.bind(this);
-    window.addEventListener("message", boundListener);
-    console.log('[KaiserEx] Message listener registered');
+        // Bind the message listener to this instance
+        const boundListener = this.oauthCodeMessageListener.bind(this);
+        window.addEventListener("message", boundListener);
+        console.log('[KaiserEx] Message listener registered');
 
-    // Store the bound listener for cleanup
-    (this as any)._boundListener = boundListener;
+        // Store the bound listener for cleanup
+        (this as any)._boundListener = boundListener;
+        (this as any)._authResolve = resolve;
+        (this as any)._authReject = reject;
+
+        // Monitor popup window closure to reject the promise
+        if (this.KaiserExWindow) {
+          const checkClosed = () => {
+            if (this.KaiserExWindow?.closed) {
+              console.log('[KaiserEx] Popup window was closed by user');
+              // Clean up the message listener
+              window.removeEventListener("message", boundListener);
+              // Reject the auth promise to trigger the error handler in Dashboard
+              reject(new Error('Authentication window was closed by user'));
+            } else {
+              setTimeout(checkClosed, 1000);
+            }
+          };
+          setTimeout(checkClosed, 1000);
+        }
+      });
+    });
   }
 
   async oauthCodeMessageListener(message: MessageEvent): Promise<void> {
@@ -161,10 +182,17 @@ class KaiserExServiceImpl implements KaiserExService {
         if (this.completeCallback) {
           this.completeCallback(data);
         }
+        // Resolve the auth promise
+        if ((this as any)._authResolve) {
+          (this as any)._authResolve();
+        }
       })
       .catch(error => {
         console.error('KaiserEx token exchange error:', error);
-        throw error;
+        // Reject the auth promise
+        if ((this as any)._authReject) {
+          (this as any)._authReject(error);
+        }
       });
   }
 }
