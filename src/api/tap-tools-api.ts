@@ -1,9 +1,7 @@
 import axios from 'axios';
-import { parseHttpError } from '@/shared/utils/parser';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
-  timeout: 30000, // Increased timeout to 30 seconds for portfolio data
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',

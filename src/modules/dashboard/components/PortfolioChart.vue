@@ -91,7 +91,8 @@
         </div>
       </div>
     </div>
-    <div id="highstock-chart" v-show="chartData && chartData.length > 0" style="margin-top: 40px"></div>
+    <v-progress-circular v-if="loading" :indeterminate="true"></v-progress-circular>
+    <div id="highstock-chart" v-show="chartData && chartData.length > 0 && !loading" style="margin-top: 40px"></div>
     <v-card-text
       v-if="!chartData || (chartData.length === 0 && !loading)"
       style="font-size: 20px; align-content: center"
@@ -101,7 +102,6 @@
       </v-avatar>
       <span v-else>There seems to be no data in this wallet</span>
     </v-card-text>
-    <v-progress-circular v-if="loading" :indeterminate="true"></v-progress-circular>
   </div>
 </template>
 <script setup lang="ts">
@@ -270,12 +270,12 @@ const currentCurrencyConfig = computed(() => {
 const activeChartData = computed(() => {
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return props.chartDataUsd;
+      return props.chartDataUsd || [];
     case CurrencyType.EUR:
-      return props.chartDataEur;
+      return props.chartDataEur || [];
     case CurrencyType.NATIVE:
     default:
-      return props.chartData;
+      return props.chartData || [];
   }
 });
 
@@ -294,11 +294,11 @@ const activePortfolioValue = computed(() => {
 const availableCurrencies = computed(() => {
   const currencies = [CurrencyType.NATIVE];
 
-  if (props.chartDataUsd.length > 0 || props.portfolioValueUsd > 0) {
+  if ((props.chartDataUsd && props.chartDataUsd.length > 0) || props.portfolioValueUsd > 0) {
     currencies.push(CurrencyType.USD);
   }
 
-  if (props.chartDataEur.length > 0 || props.portfolioValueEur > 0) {
+  if ((props.chartDataEur && props.chartDataEur.length > 0) || props.portfolioValueEur > 0) {
     currencies.push(CurrencyType.EUR);
   }
 
@@ -524,6 +524,15 @@ const loadChart = () => {
       console.warn('Error destroying chart:', error);
     }
     chartInstance.value = null;
+  }
+  
+  // Force garbage collection hint
+  if (window.gc) {
+    try {
+      window.gc();
+    } catch (e) {
+      // Ignore if gc is not available
+    }
   }
 
   // COMMENTED OUT: Dual-axis Y-axis update throttling
@@ -792,7 +801,7 @@ const arraysEqual = (a, b) => {
 };
 
 const isDisabled = tabItem => {
-  if (!props.chartData || !props.chartData[props.chartData.length - 1]) {
+  if (!props.chartData || !Array.isArray(props.chartData) || props.chartData.length === 0 || !props.chartData[props.chartData.length - 1]) {
     return true;
   }
   const lastTxTime = props.chartData[props.chartData.length - 1][0];
@@ -961,8 +970,8 @@ watch(
   (newValues, oldValues) => {
     // Handle case where values might be undefined initially
     if (!newValues || !oldValues) {
-      // If new values exist, try to load chart
-      if (newValues) {
+      // If new values exist and not loading, try to load chart
+      if (newValues && !props.loading) {
         const activeData = activeChartData.value;
         if (activeData && activeData.length > 0) {
           loadChart();
@@ -988,15 +997,20 @@ watch(
       return;
     }
 
-    const activeData = activeChartData.value;
-    if (activeData && activeData.length > 0) {
-      loadChart();
-      console.log('Chart data updated:', selectedCurrency.value, 'length:', activeData.length);
+    // Только обновляем график если не в состоянии загрузки
+    if (!props.loading) {
+      const activeData = activeChartData.value;
+      if (activeData && activeData.length > 0) {
+        loadChart();
+        console.log('Chart data updated:', selectedCurrency.value, 'length:', activeData.length);
 
-      // Apply the current time range filter after chart loads with new data
-      setTimeout(() => {
-        handleTabClick(tab.value);
-      }, 100);
+        // Apply the current time range filter after chart loads with new data
+        setTimeout(() => {
+          handleTabClick(tab.value);
+        }, 100);
+      }
+    } else {
+      console.log('Skipping chart update while loading...');
     }
   },
   { deep: true, immediate: true }
@@ -1007,7 +1021,7 @@ watch(
 watch(
   loggedWallet,
   () => {
-    if (props.chartData.length > 0) {
+    if (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) {
       loadChart();
 
       // Apply the current time range filter after wallet change
@@ -1026,16 +1040,38 @@ watch(selectedCurrency, () => {
 
 onBeforeUnmount(() => {
   if (chartInstance.value) {
-    chartInstance.value.destroy();
+    try {
+      chartInstance.value.destroy();
+    } catch (error) {
+      console.warn('Error destroying chart:', error);
+    }
+    chartInstance.value = null;
+  }
+  
+  // Clear any event listeners to prevent memory leaks
+  const chartContainer = document.getElementById('highstock-chart');
+  if (chartContainer) {
+    chartContainer.replaceWith(chartContainer.cloneNode(true));
   }
 });
 
 watch(
   () => props.loading,
-  newVal => {
-    if (!newVal) {
-      loadChart();
-      handleTabClick(tab.value);
+  (newVal, oldVal) => {
+    // Когда loading завершается (false), инициализируем график
+    if (oldVal && !newVal) {
+      console.log('Loading finished, initializing chart...');
+      const hasAnyData = (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) || 
+                         (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) || 
+                         (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+
+      if (hasAnyData) {
+        // Небольшая задержка чтобы DOM обновился
+        setTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 50);
+      }
     }
   }
 );
@@ -1056,17 +1092,23 @@ onMounted(() => {
     tab.value = tabs.WEEK;
   }
 
-  const hasAnyData = props.chartData.length > 0 || props.chartDataUsd.length > 0 || props.chartDataEur.length > 0;
+  // Только инициализируем график если данные уже есть И loading завершен
+  if (!props.loading) {
+    const hasAnyData = (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) || 
+                       (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) || 
+                       (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
 
-  if (hasAnyData) {
-    loadChart();
-
-    // Apply the initial time range filter after chart loads
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
+    if (hasAnyData) {
+      console.log('Data available on mount, loading chart...');
+      setTimeout(() => {
+        loadChart();
+        handleTabClick(tab.value);
+      }, 100);
+    } else {
+      console.log('No data available on mount');
+    }
   } else {
-    console.log('No data to load chart');
+    console.log('Still loading on mount, waiting for completion...');
   }
 });
 </script>

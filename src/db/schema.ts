@@ -1,6 +1,6 @@
 export const geroWalletDbName: string = 'GeroWalletDatabase'
 
-export const geroDBVersion: number = 11;
+export const geroDBVersion: number = 13;
 
 export const geroDBSchema = {
   wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
@@ -8,7 +8,7 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 }
 
-export const walletDBVersion: number = 4;
+export const walletDBVersion: number = 6;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -20,6 +20,7 @@ export const walletDBSchema = {
   transactions: 'id',
   connected_dapps: '++id, domain, time',
   multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
+  portfolio_charts: '++id, address, currency, data, timestamp, expiresAt', // data is now JSON string
 }
 
 export const blockChainDBVersion: number = 5;
