@@ -717,7 +717,7 @@
   </v-card-text>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import { resolveAsset } from '@/shared/utils/resolver';
@@ -729,7 +729,7 @@ import networks from '@/utils/networks';
 import governanceStoreActions from '@/stores/governanceStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import stakingStoreActions from '@/stores/stakingStore';
-import stakingStore from '@/stores/stakingStore';
+import blockchainApi from '@/api/blockchain-api';
 
 interface Props {
   transactionInfo: any;
@@ -953,9 +953,9 @@ const shrink = () => {
 
 const resolvePoolMeta = async (poolId: string) => {
   if (poolId) {
-    await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
-    if (stakingStore.state.currentPool) {
-      currentPoolMeta.value = JSON.parse(stakingStore.state.currentPool.pool_extended_info)?.info;
+    const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value.chain, loggedWallet.value.network)
+    if (pool) {
+      currentPoolMeta.value = JSON.parse(pool.pool_extended_info)?.info;
     } else {
       currentPoolMeta.value = '';
     }
@@ -980,10 +980,6 @@ watch(
   },
   { immediate: true }
 );
-
-onBeforeUnmount(() => {
-  stakingStore.clearCurrentPool();
-});
 </script>
 <style scoped>
 .transaction-info {
