@@ -1,5 +1,6 @@
-import { getDb } from '@/db/gero-db';
+import { getWalletDb } from '@/db/index';
 import tapToolsApi from '@/api/tap-tools-api';
+import { walletStore } from '@/stores/walletStore';
 
 export interface PortfolioChartsEntry {
   id?: number;
@@ -35,13 +36,31 @@ export class PortfolioCacheService {
     }
 
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return null;
+      }
+      const db = await getWalletDb(walletId);
       const now = Date.now();
-      const entry = await db
-        .table('portfolio_charts')
-        .where(['address', 'currency'])
-        .equals([address, currency])
-        .first();
+      // Try composite index first, fallback to individual queries if schema mismatch
+      let entry;
+      try {
+        entry = await db
+          .table('portfolio_charts')
+          .where(['address', 'currency'])
+          .equals([address, currency])
+          .first();
+      } catch (schemaError: any) {
+        if (schemaError.name === 'SchemaError') {
+          console.warn('Composite index not available, using fallback method for cache lookup');
+          // Fallback: query by address and filter by currency
+          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
+          entry = entries.find(e => e.currency === currency);
+        } else {
+          throw schemaError;
+        }
+      }
 
       if (!entry) {
         return null;
@@ -86,7 +105,12 @@ export class PortfolioCacheService {
     }
 
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return;
+      }
+      const db = await getWalletDb(walletId);
       const now = Date.now();
       const expiresAt = now + this.cacheTimeMs;
 
@@ -116,8 +140,28 @@ export class PortfolioCacheService {
    */
   async removeCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<void> {
     try {
-      const db = await getDb();
-      await db.table('portfolio_charts').where(['address', 'currency']).equals([address, currency]).delete();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return;
+      }
+      const db = await getWalletDb(walletId);
+      // Try composite index first, fallback to individual queries if schema mismatch
+      try {
+        await db.table('portfolio_charts').where(['address', 'currency']).equals([address, currency]).delete();
+      } catch (schemaError: any) {
+        if (schemaError.name === 'SchemaError') {
+          console.warn('Composite index not available, using fallback method for cache removal');
+          // Fallback: query by address and filter by currency
+          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
+          const entriesToDelete = entries.filter(entry => entry.currency === currency);
+          for (const entry of entriesToDelete) {
+            await db.table('portfolio_charts').delete(entry.id);
+          }
+        } else {
+          throw schemaError;
+        }
+      }
     } catch (error) {
       console.error('Error removing cached portfolio data:', error);
     }
@@ -128,7 +172,12 @@ export class PortfolioCacheService {
    */
   async clearAddressCache(address: string): Promise<void> {
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return;
+      }
+      const db = await getWalletDb(walletId);
       await db.table('portfolio_charts').where('address').equals(address).delete();
     } catch (error) {
       console.error('Error clearing address cache:', error);
@@ -140,7 +189,12 @@ export class PortfolioCacheService {
    */
   async clearAllCache(): Promise<void> {
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return;
+      }
+      const db = await getWalletDb(walletId);
       await db.table('portfolio_charts').clear();
     } catch (error) {
       console.error('Error clearing all portfolio cache:', error);
@@ -152,7 +206,12 @@ export class PortfolioCacheService {
    */
   async cleanupExpiredCache(): Promise<number> {
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return 0;
+      }
+      const db = await getWalletDb(walletId);
       const now = Date.now();
       const expiredEntries = await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).toArray();
 
@@ -182,7 +241,20 @@ export class PortfolioCacheService {
     enableCache: boolean;
   }> {
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return {
+          totalEntries: 0,
+          validEntries: 0,
+          expiredEntries: 0,
+          oldestEntry: null,
+          newestEntry: null,
+          cacheTimeMs: this.cacheTimeMs,
+          enableCache: this.enableCache,
+        };
+      }
+      const db = await getWalletDb(walletId);
       const allEntries = await db.table('portfolio_charts').toArray();
       const now = Date.now();
 
@@ -261,10 +333,12 @@ export class PortfolioCacheService {
     }
 
     try {
-      // Load cache data sequentially to reduce memory usage
-      const cachedAda = await this.getCachedData(address, 'ADA');
-      const cachedUsd = await this.getCachedData(address, 'USD');
-      const cachedEur = await this.getCachedData(address, 'EUR');
+      // Load cache data in parallel for better performance
+      const [cachedAda, cachedUsd, cachedEur] = await Promise.all([
+        this.getCachedData(address, 'ADA'),
+        this.getCachedData(address, 'USD'),
+        this.getCachedData(address, 'EUR')
+      ]);
 
       // Determine what needs to be loaded
       const currenciesToLoad: ('ADA' | 'USD' | 'EUR')[] = [];
@@ -276,32 +350,44 @@ export class PortfolioCacheService {
       let usdData = cachedUsd && Array.isArray(cachedUsd) ? cachedUsd : [];
       let eurData = cachedEur && Array.isArray(cachedEur) ? cachedEur : [];
 
-      // Load missing data sequentially
-      for (const currency of currenciesToLoad) {
+      // Load missing data in parallel for better performance
+      if (currenciesToLoad.length > 0) {
         try {
-          const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency);
+          const loadPromises = currenciesToLoad.map(async (currency) => {
+            try {
+              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency);
+              
+              // Simple conversion to array format
+              const processedData = data.map((item: any) => [item.time * 1000, item.value]);
+              
+              // Save to cache
+              await this.saveToCache(address, currency, processedData);
+              
+              return { currency, data: processedData };
+            } catch (error) {
+              console.error(`Error loading ${currency} portfolio data:`, error);
+              return { currency, data: [] };
+            }
+          });
 
-          // Simple conversion to array format
-          const processedData = data.map((item: any) => [item.time * 1000, item.value]);
-
-          // Save to cache
-          await this.saveToCache(address, currency, processedData);
-
-          // Update data arrays
-          switch (currency) {
-            case 'ADA':
-              adaData = processedData;
-              break;
-            case 'USD':
-              usdData = processedData;
-              break;
-            case 'EUR':
-              eurData = processedData;
-              break;
-          }
+          const results = await Promise.all(loadPromises);
+          
+          // Update data arrays with results
+          results.forEach(result => {
+            switch (result.currency) {
+              case 'ADA':
+                adaData = result.data;
+                break;
+              case 'USD':
+                usdData = result.data;
+                break;
+              case 'EUR':
+                eurData = result.data;
+                break;
+            }
+          });
         } catch (error) {
-          console.error(`Error loading ${currency} portfolio data:`, error);
-          // Keep existing data or empty array
+          console.error('Error loading portfolio data in parallel:', error);
         }
       }
 
@@ -337,7 +423,16 @@ export class PortfolioCacheService {
     eur: { hasData: boolean; dataPoints: number; expiresAt: number | null };
   }> {
     try {
-      const db = await getDb();
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return {
+          ada: { hasData: false, dataPoints: 0, expiresAt: null },
+          usd: { hasData: false, dataPoints: 0, expiresAt: null },
+          eur: { hasData: false, dataPoints: 0, expiresAt: null },
+        };
+      }
+      const db = await getWalletDb(walletId);
       const now = Date.now();
 
       // Load sequentially to reduce memory usage
@@ -425,22 +520,28 @@ export class PortfolioCacheService {
     if (!status.usd.hasData) currenciesToLoad.push('USD');
     if (!status.eur.hasData) currenciesToLoad.push('EUR');
 
-    // Load data sequentially to reduce memory pressure
-    const results: any[] = [];
-    for (const currency of currenciesToLoad) {
-      const data = await this.forceLoadCurrencyData(address, currency);
-      results.push(data);
-    }
+    // Load data in parallel for better performance
+    const loadPromises = currenciesToLoad.map(currency => 
+      this.forceLoadCurrencyData(address, currency)
+    );
+    
+    // Get existing data from cache in parallel
+    const existingDataPromises = [
+      status.ada.hasData ? this.getCachedData(address, 'ADA') : Promise.resolve([]),
+      status.usd.hasData ? this.getCachedData(address, 'USD') : Promise.resolve([]),
+      status.eur.hasData ? this.getCachedData(address, 'EUR') : Promise.resolve([])
+    ];
 
-    // Get existing data from cache sequentially
-    const existingAda = status.ada.hasData ? await this.getCachedData(address, 'ADA') : [];
-    const existingUsd = status.usd.hasData ? await this.getCachedData(address, 'USD') : [];
-    const existingEur = status.eur.hasData ? await this.getCachedData(address, 'EUR') : [];
+    // Wait for all operations to complete
+    const [loadedResults, existingAda, existingUsd, existingEur] = await Promise.all([
+      Promise.all(loadPromises),
+      ...existingDataPromises
+    ]);
 
     return {
-      adaData: status.ada.hasData ? existingAda : results[currenciesToLoad.indexOf('ADA')] || [],
-      usdData: status.usd.hasData ? existingUsd : results[currenciesToLoad.indexOf('USD')] || [],
-      eurData: status.eur.hasData ? existingEur : results[currenciesToLoad.indexOf('EUR')] || [],
+      adaData: status.ada.hasData ? existingAda : loadedResults[currenciesToLoad.indexOf('ADA')] || [],
+      usdData: status.usd.hasData ? existingUsd : loadedResults[currenciesToLoad.indexOf('USD')] || [],
+      eurData: status.eur.hasData ? existingEur : loadedResults[currenciesToLoad.indexOf('EUR')] || [],
     };
   }
 }
