@@ -12,7 +12,9 @@
       "Bash(npx tsc:*)",
       "Bash(node:*)",
       "Bash(grep:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebFetch(domain:api.kraken.com)",
+      "WebFetch(domain:docs.kraken.com)"
     ],
     "deny": []
   }

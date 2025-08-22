@@ -34,6 +34,7 @@ interface Props {
   height?: string;
   theme?: 'light' | 'dark';
   fetchData?: boolean;
+  useKraken?: boolean;  // NEW: Use Kraken API for ADA/USD data
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -42,7 +43,8 @@ const props = withDefaults(defineProps<Props>(), {
   width: '100%',
   height: '200px',
   theme: 'dark',
-  fetchData: false
+  fetchData: false,
+  useKraken: false
 });
 
 const emit = defineEmits<{
@@ -258,6 +260,74 @@ const fetchAdaUsdData = async (): Promise<CandlestickDataPoint[]> => {
       console.debug('TradingViewChart: No data sources available');
       return [];
     }
+  } finally {
+    isLoadingData.value = false;
+  }
+};
+
+// Fetch ADA/USD historical data from Kraken API
+const fetchKrakenHistoricalData = async (): Promise<CandlestickDataPoint[]> => {
+  const krakenApiUrl = import.meta.env.VITE_KRAKEN_API_URL || 'https://api.kraken.com';
+  
+  try {
+    isLoadingData.value = true;
+    console.debug('🦑 TradingViewChart: Fetching ADA/USD historical data from Kraken');
+    
+    // Fetch OHLC data with 5-minute intervals (up to 720 candles)
+    const response = await axios.get(`${krakenApiUrl}/0/public/OHLC?pair=ADAUSD&interval=5`, {
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.debug('🦑 TradingViewChart: Kraken response received:', {
+      status: response.status,
+      hasData: !!response.data?.result?.ADAUSD,
+      dataLength: response.data?.result?.ADAUSD?.length || 0
+    });
+    
+    if (response.data?.result?.ADAUSD && Array.isArray(response.data.result.ADAUSD)) {
+      const krakenData = response.data.result.ADAUSD;
+      
+      // Convert Kraken OHLC format to chart format
+      const chartData: CandlestickDataPoint[] = krakenData
+        .map((candle: any[]) => {
+          if (!Array.isArray(candle) || candle.length < 6) return null;
+          
+          // Kraken format: [timestamp, open, high, low, close, vwap, volume, count]
+          const [timestamp, open, high, low, close] = candle;
+          
+          return {
+            time: parseInt(timestamp) as Time,
+            open: parseFloat(open),
+            high: parseFloat(high),
+            low: parseFloat(low),
+            close: parseFloat(close)
+          };
+        })
+        .filter((item): item is CandlestickDataPoint => item !== null)
+        .sort((a, b) => (a.time as number) - (b.time as number)); // Ensure chronological order
+      
+      console.debug('🦑 TradingViewChart: Processed Kraken data:', {
+        totalCandles: chartData.length,
+        timeRange: chartData.length > 0 ? {
+          first: new Date((chartData[0].time as number) * 1000).toISOString(),
+          last: new Date((chartData[chartData.length - 1].time as number) * 1000).toISOString()
+        } : null,
+        sampleCandle: chartData[0]
+      });
+      
+      return chartData;
+    }
+    
+    console.warn('🦑 TradingViewChart: Invalid Kraken response format');
+    return [];
+    
+  } catch (error) {
+    console.error('🦑 TradingViewChart: Failed to fetch Kraken historical data:', error);
+    throw error;
   } finally {
     isLoadingData.value = false;
   }
@@ -556,10 +626,15 @@ const initChart = async () => {
     console.debug('TradingViewChart: Setting provided data', props.data.length, 'points');
     dataToSet = props.data;
   } else if (props.fetchData) {
-    // Fetch real data based on symbol
+    // Fetch real data based on symbol and source preference
     if (props.symbol === 'ADA/USD') {
-      console.debug('TradingViewChart: Fetching real ADA/USD data from backend');
-      dataToSet = await fetchAdaUsdData();
+      if (props.useKraken) {
+        console.debug('🦑 TradingViewChart: Fetching ADA/USD data from Kraken API');
+        dataToSet = await fetchKrakenHistoricalData();
+      } else {
+        console.debug('TradingViewChart: Fetching real ADA/USD data from backend');
+        dataToSet = await fetchAdaUsdData();
+      }
     } else {
       // For other tokens, use TapTools/DexHunter
       console.debug(`TradingViewChart: Fetching ${props.symbol} data from TapTools/DexHunter`);
@@ -686,8 +761,13 @@ watch(() => props.fetchData, async (shouldFetch, oldValue) => {
       let freshData: CandlestickDataPoint[];
       
       if (props.symbol === 'ADA/USD') {
-        console.debug('TradingViewChart: Re-fetching ADA/USD data from backend');
-        freshData = await fetchAdaUsdData();
+        if (props.useKraken) {
+          console.debug('🦑 TradingViewChart: Re-fetching ADA/USD data from Kraken API');
+          freshData = await fetchKrakenHistoricalData();
+        } else {
+          console.debug('TradingViewChart: Re-fetching ADA/USD data from backend');
+          freshData = await fetchAdaUsdData();
+        }
       } else {
         console.debug(`TradingViewChart: Re-fetching ${props.symbol} data from TapTools/DexHunter`);
         freshData = await fetchTokenPriceHistory(props.symbol);
@@ -722,7 +802,12 @@ watch(() => props.symbol, async (newSymbol, oldSymbol) => {
       let freshData: CandlestickDataPoint[];
       
       if (newSymbol === 'ADA/USD') {
-        freshData = await fetchAdaUsdData();
+        if (props.useKraken) {
+          console.debug('🦑 TradingViewChart: Fetching ADA/USD data from Kraken API for symbol change');
+          freshData = await fetchKrakenHistoricalData();
+        } else {
+          freshData = await fetchAdaUsdData();
+        }
       } else {
         freshData = await fetchTokenPriceHistory(newSymbol);
       }
