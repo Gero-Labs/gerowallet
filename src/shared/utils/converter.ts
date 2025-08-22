@@ -288,8 +288,6 @@ export function verifyData(data: { key: string; signature: string }, address2: s
   const coseSign1_verify = COSESign1.from_bytes(toHexBuffer(data.signature));
   const signedSigStruc_verify = coseSign1_verify.signed_data();
   const isSame = toHexString(signedSigStruc_verify.payload()) === payload2;
-  console.log(payload2)
-  console.warn("verifyData: isSame:", isSame);
   return isSame;
 }
 
@@ -822,7 +820,6 @@ export const assembleWitnesses = (accountData2, signedTxData) => {
     vkeyWitnesses.add(getVkeyWitness(pubKey, witness.witnessSignatureHex));
   }
   witnesses.set_vkeys(vkeyWitnesses);
-  console.log(witnesses.to_json())
   const witnessSetHex = witnesses.to_hex();
   safeFreeCSLObject(vkeyWitnesses);
   safeFreeCSLObject(witnesses);

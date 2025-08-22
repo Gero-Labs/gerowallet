@@ -1,3 +1,20 @@
+<template>
+  <v-btn
+    :text="props.text"
+    :color="props.color"
+    :disabled="props.disabled"
+    :loading="props.loading"
+    :size="props.size"
+    :variant="props.variant"
+    :block="props.block"
+    :href="props.href"
+    :target="props.target"
+    :ripple="props.ripple"
+    @click="$emit('click', $event)"
+  >
+    <slot />
+  </v-btn>
+</template>
 <script setup lang="ts">
 
 export interface GeroButtonProps{
@@ -10,6 +27,7 @@ export interface GeroButtonProps{
   disabled?: boolean;
   loading?: boolean;
   text?: boolean;
+  href?: string;
   target?: string;
   ripple?: boolean;
 };
@@ -26,23 +44,6 @@ const props = withDefaults(defineProps<GeroButtonProps>(), {
 });
 
 const emits = defineEmits<{
-    (e:'click:button', event): void
+  (e:'click', event): void
 }>();
 </script>
-
-<template>
-  <v-btn
-    :text="props.text"
-    :color="props.color"
-    :disabled="props.disabled"
-    :loading="props.loading"
-    :size="props.size"
-    :variant="props.variant"
-    :block="props.block"
-    :target="props.target"
-    :ripple="props.ripple"
-    @click="$emit('click:button', $event)"
-  >
-    <slot />
-  </v-btn>
-</template>

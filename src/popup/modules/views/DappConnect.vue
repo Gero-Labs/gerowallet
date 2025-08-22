@@ -79,7 +79,6 @@ const confirm = async () => {
 
 // Lifecycle
 onMounted(() => {
-  console.log('DappConnect')
   if (useSidePanel.value) {
     const params = new URLSearchParams(window.location.href);
     tabId.value = Number(params.get("tabId"));

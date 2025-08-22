@@ -70,7 +70,7 @@
           </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
-            <h4><strong>{{ toCurrency(tx.body().fee().to_str(), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4><strong>{{ toCurrency(tx?.body?.fee?.toString() || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: center;">
             <v-tooltip
@@ -93,7 +93,7 @@
                   hide-details
                   required
                   :disabled="loading"
-                  @keydown.enter.prevent="signDelegationTx"
+                  @keydown.enter.prevent="signAndSubmitDelegationTx"
                 >
                   <template v-slot:append>
                     <v-icon @click="showPassword = !showPassword" tabindex="-1">
@@ -109,108 +109,49 @@
                 <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
-            <v-btn color="primary" elevation="0" @click="signDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Delegate
+            <v-btn color="primary" elevation="0" @click="signAndSubmitDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+              {{ isSubmit ? 'Submit' : 'Delegate' }}
             </v-btn>
           </v-col>
         </v-row>
       </v-form>
     </v-card-actions>
+    <!-- TODO: Keystone hardware wallet overlay UI - currently disabled -->
+    <!-- This overlay shows QR codes for Keystone device interaction -->
+    <!-- When re-enabling, uncomment the v-overlay section below and restore related functionality -->
+    <!--
     <v-overlay
       :absolute="true"
       opacity="0.99"
       :value="overlay"
       class="hardwareOverlay"
     >
-      <v-alert
-        color="white"
-        dense
-        outlined
-        type="info"
-        prominent
-        border="left"
-        v-if="!keystoneScan"
-        class="mt-10 mb-0"
-      >
-        <b>Instructions</b>
-        <div v-if="loggedWallet?.type === WalletType.Keystone">
-          <ul class="text-left" style="line-height: 1.5">
-            <li>Unlock your Keystone device.</li>
-            <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-            <li>Use your Keystone device to scan the QR code.</li>
-            <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
-          </ul>
-        </div>
-      </v-alert>
-      <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
-        <v-card-title>
-          Scan QR Code
-        </v-card-title>
-        <v-card-subtitle>
-          <ul class="text-left" style="line-height: 1.5">
-            <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-            <li>Use a low density setting for animated QR codes if required.</li>
-          </ul>
-        </v-card-subtitle>
-        <v-card-text class="text-center">
-          <div class="qr-scanner" v-show="isInit">
-<!--            <QrcodeStream @decode="onDecode" @init="onInit">-->
-<!--              <div id="qr-shaded-region" style="position: absolute; border-width: 74px 163px; border-style: solid; border-color: rgba(0, 0, 0, 0.48); box-sizing: border-box; inset: 0;">-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; left: 0;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; top: -5px; right: 0;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; left: 0;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 40px; height: 5px; bottom: -5px; right: 0;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; left: -5px;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; left: -5px;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; top: -5px; right: -5px;"></div>-->
-<!--                <div style="position: absolute; background-color: rgb(255, 255, 255); width: 5px; height: 45px; bottom: -5px; right: -5px;"></div>-->
-<!--              </div>-->
-<!--            </QrcodeStream>-->
-          </div>
-          <div style="flex-flow: column; display: flex;align-items: center;" class="pt-10" v-if="!isInit">
-            <v-progress-circular size="150" indeterminate></v-progress-circular>
-            <span class="pt-4">Loading ... </span>
-          </div>
-        </v-card-text>
-      </v-card>
-
-      <!--      <AnimatedQRCode :type="type" :cbor="cbor" />-->
-      <div id="qr-code" ref="qrCodeRef" class="text-center" v-show="!keystoneScan"> </div>
-      <div class="text-center pt-2">
-        <v-btn
-          text
-          @click="backScan"
-          class="mr-2"
-        >{{ keystoneScan ? 'Back' : 'Cancel' }}
-        </v-btn>
-        <v-btn
-          v-if="!keystoneScan"
-          class="geroButton"
-          style="color: black!important;"
-          @click="keystoneScan = true"
-        >NEXT
-        </v-btn>
-      </div>
+      ...
     </v-overlay>
+    -->
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { BigNum, Transaction, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
+import { Cardano } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import networks from "@/utils/networks";
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
-import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { UREncoder } from '@keystonehq/keystone-sdk';
-import QRCodeStyling from 'qr-code-styling';
+// TODO: Keystone support needs to be reimplemented with Cardano JS SDK
+// import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
+// import { UREncoder } from '@keystonehq/keystone-sdk';
+// import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
-import { walletStore } from '@/stores/walletStore'
+import { walletStore } from '@/stores/walletStore';
+import { Messaging } from '@/chrome/messaging';
+import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { MessageTypes } from '@/models/MessageTypes';
 
 const props = defineProps({
   isOpen: {
@@ -222,7 +163,7 @@ const props = defineProps({
     default: () => {},
   },
   tx: {
-    type: Transaction,
+    type: Object as () => Cardano.Tx,
     default: () => {},
   }
 });
@@ -241,14 +182,18 @@ const tooltip = ref({
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
-const overlay = ref(false);
-const type = ref<string | undefined>(undefined);
-const cbor = ref<string | undefined>(undefined);
-const keystoneScan = ref(false);
-const isInit = ref(false);
-const qrCode = ref<any>(null);
-const form = ref<any>(null);
-const qrCodeRef = ref<HTMLElement | null>(null);
+const txCbor = ref<string>('');
+const txWitnesses = ref(null);
+const isSubmit = ref(false);
+// TODO: Keystone hardware wallet state - currently disabled
+// const overlay = ref(false);
+// const type = ref<string | undefined>(undefined);
+// const cbor = ref<string | undefined>(undefined);
+// const keystoneScan = ref(false);
+// const isInit = ref(false);
+// const qrCode = ref<any>(null);
+// const qrCodeRef = ref<HTMLElement | null>(null);
+const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
 
 const { toCurrency, truncate } = filters;
 
@@ -257,29 +202,31 @@ const xLogo = assets.xSvg;
 const telegramLogo = assets.telegramSvg;
 
 const depositFee = computed(() => {
-  let depositFee = 0;
-  const totalAdaBalance = BigNum.from_str(account.value.controlled_amount.toString())
-  let totalAdaOutput = 0
-  if (props.tx?.body()?.inputs()) {
-    for (let i = 0; i < props.tx?.body()?.inputs().len(); i++) {
-      const input = props.tx?.body()?.inputs().get(i)
-      const utxo = utxos.value?.find(((utxo: Cardano.Utxo) => utxo.tx_hash === input.transaction_id().to_hex() && utxo.tx_index === input.index()))
-      if (utxo) {
-        totalAdaOutput -= Number(utxo.value)
-      }
-    }
+  if (!props.tx?.body) return 0;
+
+  // Check for vote registration certificate with deposit
+  const registrationCert: Cardano.Certificate
+    = props.tx.body.certificates?.find(
+    (cert: any) => cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation ||
+            cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
+            cert.__typename === Cardano.CertificateType.VoteDelegation
+  );
+
+  // For DRep delegation, check if there's a deposit required
+  if (registrationCert && 'deposit' in registrationCert && registrationCert.deposit) {
+    return Number(registrationCert.deposit);
   }
-  if (props.tx?.body()?.outputs()) {
-    for (let i = 0; i < props.tx?.body()?.outputs().len(); i++) {
-      const output = props.tx?.body()?.outputs().get(i)
-      totalAdaOutput += Number(output.amount().coin().to_str())
-    }
-    console.log('totalAdaBalance', totalAdaBalance.to_str())
-    console.log('totalAdaOutput', totalAdaOutput)
-    depositFee = totalAdaOutput + Number(props.tx.body().fee().to_str())
-    return depositFee*-1;
+
+  // Also check for governance deposit in certificates
+  const drepRegistration = props.tx.body.certificates?.find(
+    (cert: any) => cert.deposit && (cert.dRep || cert.anchor)
+  );
+
+  if (drepRegistration && 'deposit' in drepRegistration && drepRegistration.deposit) {
+    return Number(drepRegistration.deposit);
   }
-  return 0
+
+  return 0;
 });
 
 const cols = computed(() => {
@@ -305,38 +252,9 @@ const getIconByURI = (uri: string) => {
   return 'mdi-link'
 };
 
-const backScan = () => {
-  if (keystoneScan.value) {
-    keystoneScan.value = false
-    isInit.value = false
-  } else {
-    overlay.value = false
-  }
-};
-
-const onDecode = async (result: any) => {
-  console.log(result)
-  const signature = parseSignature(result);
-  const signedTx = Transaction.new(
-    props.tx.body(),
-    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
-    undefined // TODO Transaction metadata
-  );
-  console.log(signedTx.to_json())
-  const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-  console.log(txId)
-  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`)
-  emit('close')
-};
-
-const onInit = (promise: Promise<any>) => {
-  promise.then(() => {
-    isInit.value = true
-    console.log("Camera initialized successfully");
-  }).catch((error) => {
-    console.error("Camera initialization failed:", error);
-  });
-};
+// TODO: Keystone QR code functionality - currently disabled
+// Keystone wallet support needs to be reimplemented with Cardano JS SDK
+// This includes QR code generation, scanning, and signature parsing
 
 const enableToolTip = () => {
   tooltip.value.enabled = true;
@@ -345,61 +263,114 @@ const enableToolTip = () => {
   }, 3000);
 };
 
-const signDelegationTx = async () => {
-  const signAndReturnTx = async () => {
-    loading.value = true
-    try {
-      const txCbor = props.tx.to_hex()
-      const partialSign = false
-      const response = await loggedWallet.value.signTx(
-        txCbor,
-        partialSign,
-        spendingPassword.value,
-        0,
-        utxos.value,
-        keys.value,
-        !isBT.value
-      );
-      const signedTx = Transaction.new(
-        props.tx.body(),
-        TransactionWitnessSet.from_bytes(Buffer.from(response.witnesses, "hex")),
-        undefined // TODO Transaction metadata
-      );
-      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-      console.log(txId)
-      snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${txId}`)
-      emit('close')
-    } catch (e) {
-      snackbar.setError(e)
-      console.log(e);
+const signTx = async (): Promise<boolean> => {
+  loading.value = true
+  try {
+    console.log('Signing Cardano JS SDK DRep delegation transaction');
+    console.log('Transaction:', props.tx);
+
+    // First, verify password via a background message
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
+
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      loading.value = false;
+      return false;
     }
+
+    // Serialize the Cardano.Tx to CBOR for Chrome messaging
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    console.log('Serialized transaction CBOR:', txCbor.value);
+
+    // Sign the transaction via background message
+    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: {
+        txCbor: txCbor.value, // Pass serialized CBOR instead of the object
+        partialSign: false,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        utxos: utxos.value,
+        addresses: keys.value, // Address mappings
+        isUsb: !isBT.value
+      }
+    }) as { data: { witnesses?: any; error?: string } };
+
+    console.log('Transaction signed successfully:', witnessResult);
+
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
+    }
+
+    console.log('Signed transaction witness:', witnessResult.data.witnesses);
+    txWitnesses.value = witnessResult.data.witnesses;
+    return true;
+  } catch (e) {
+    console.error('Error signing DRep delegation transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    return false;
+  } finally {
     loading.value = false
-  };
+  }
+};
+
+const submitTx = async () => {
+  try {
+    loading.value = true
+    console.log('Submitting Cardano JS SDK DRep delegation transaction');
+    const submitResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor.value,
+        witnessHex: txWitnesses.value,
+        utxos: utxos.value
+      }
+    }) as { data: { txId?: string; error?: string } };
+
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
+    }
+
+    snackbar.fireSuccess(`DRep Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`)
+    emit('close')
+  } catch (e) {
+    console.error('Error submitting DRep delegation transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+  } finally {
+    loading.value = false
+  }
+};
+
+const signAndSubmitDelegationTx = async () => {
   if (loggedWallet.value?.type === WalletType.Normal) {
-    if (form.value.validate()) {
-      if (loggedWallet.value.verifySpendingPassword(spendingPassword.value)) {
-        await signAndReturnTx();
+    if (form.value?.validate()) {
+      if(!isSubmit.value) {
+        // Sign the transaction
+        const success = await signTx();
+        if (success) {
+          isSubmit.value = true;
+        }
       } else {
-        enableToolTip();
+        // Submit the transaction
+        await submitTx();
       }
     }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
-    if (qrCode.value) {
-      qrCode.value = null; // Clear the QRCode instance
-      if (qrCodeRef.value)
-        qrCodeRef.value.innerHTML = '';
-    }
-
-    const ur = createKeystoneSignRequest(props.tx, loggedWallet.value, utxos.value, addresses.value)
-    type.value = ur.type
-    cbor.value = Buffer.from(ur.cbor).toString('hex')
-    qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
-    overlay.value = true
-    nextTick(() => {
-      qrCode.value.append(qrCodeRef.value);
-    });
+    // TODO: Keystone hardware wallet support needs reimplementation with Cardano JS SDK
+    snackbar.setError('Keystone wallet support is coming soon for DRep delegation');
   } else {
-    await signAndReturnTx();
+    // For Ledger and Trezor wallets
+    if(!isSubmit.value) {
+      const success = await signTx();
+      if (success) {
+        isSubmit.value = true;
+      }
+    } else {
+      await submitTx();
+    }
   }
 };
 
@@ -411,6 +382,7 @@ watch(() => props.isOpen, (val) => {
   if (val) {
     spendingPassword.value = ''
     showPassword.value = false
+    isSubmit.value = false
     if (form.value) {
       form.value.resetValidation()
     }

@@ -110,7 +110,7 @@ export default {
     console.debug(`🔍 NetworkStore setEpochParams called from ${context} context`);
     networkStore.epochParams = epochParams;
 
-    // Broadcast from background context
+    // Broadcast from a background context
     broadcastFromBackground({ epochParams });
   },
 

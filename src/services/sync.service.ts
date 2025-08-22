@@ -34,7 +34,6 @@ export class SyncService {
         tip = await this.api.getTip();
       }
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
-      console.log('lastSyncInfo', lastSyncInfo)
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
         try {
@@ -280,6 +279,7 @@ export class SyncService {
    * @param knownAddresses - Array of known addresses to sync keys for
    */
   async syncKeys(knownAddresses: string[]): Promise<any> {
+    
     if (!knownAddresses || knownAddresses.length === 0) {
       return null;
     }
@@ -289,9 +289,12 @@ export class SyncService {
       const db: any = await this.walletBg.getDb();
       const addressesTable = db.table('addresses');
       if (!addressesTable) {
+        console.error('syncKeys error - No Addresses Table');
         throw new Error('No Addresses Table.');
       }
+      
       resolvedKeys = this.walletBg.resolvePathsForMissingAddresses(knownAddresses);
+      
       await db.transaction('rw', addressesTable, async () => {
         await addressesTable.clear();
         await addressesTable.put({

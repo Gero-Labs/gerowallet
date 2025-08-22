@@ -7,6 +7,7 @@ import {
 } from '@/db/schema';
 
 let db: Dexie = null
+
 const blockchainDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
@@ -79,7 +80,7 @@ export default {
   },
   setBlockchainDBVersionSchema(db: Dexie) {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
-  },
+  }, 
   setWalletDBVersionSchema(db: Dexie) {
     console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
