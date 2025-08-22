@@ -2,6 +2,8 @@ import Dexie, { DexieError } from 'dexie';
 import {
   blockChainDBSchema,
   blockChainDBVersion,
+  walletDBSchema,
+  walletDBVersion,
 } from '@/db/schema';
 
 let db: Dexie = null
@@ -78,6 +80,10 @@ export default {
   },
   setBlockchainDBVersionSchema(db: Dexie) {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
+  }, 
+  setWalletDBVersionSchema(db: Dexie) {
+    console.log('setWalletDBVersionSchema')
+    db.version(walletDBVersion).stores(walletDBSchema);
   },
   async checkIfDbExists(dbName: string) {
     return await Dexie.exists(dbName);
