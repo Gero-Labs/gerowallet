@@ -2,7 +2,8 @@
  * KaiserEx OAuth Service
  * Handles PKCE authentication flow for KaiserEx token reception
  */
-const backendUrl = import.meta.env['VITE_BACKEND_URL'];
+const viteBackendUrl = import.meta.env['VITE_BACKEND_URL'];
+const backendUrl = 'https://api.dev.kaiserex.cybro.cz';
 
 export interface KaiserExTokenData {
   access_token: string;
@@ -29,9 +30,7 @@ export interface KaiserExService {
 }
 
 class KaiserExServiceImpl implements KaiserExService {
-  baseUrl = `${backendUrl}/api/kaiserex`;
-  // The actual OAuth domain that sends the message
-  oauthDomain = 'https://api.dev.kaiserex.cybro.cz';
+  baseUrl = `${backendUrl}`;
 
   options = {
     width: 800,
@@ -76,14 +75,10 @@ class KaiserExServiceImpl implements KaiserExService {
     return new Promise((resolve, reject) => {
       if (completeCallback) this.completeCallback = completeCallback;
 
-      console.log('[KaiserEx] Starting OAuth flow...');
       this.generatePKCE().then(({ codeVerifier, codeChallenge }) => {
         this.codeVerifier = codeVerifier;
-        console.log('[KaiserEx] Generated PKCE - codeChallenge:', codeChallenge);
 
         const url = this.loginUrl(codeChallenge);
-        console.log('[KaiserEx] Opening OAuth URL:', url);
-        console.log('[KaiserEx] Expected message origin:', this.oauthDomain);
 
         if (this.options.asWindow) {
           this.KaiserExWindow = window.open(
@@ -95,27 +90,30 @@ class KaiserExServiceImpl implements KaiserExService {
           this.KaiserExWindow = window.open(url, "oauthWindow");
         }
 
-        console.log('[KaiserEx] Popup window opened, waiting for OAuth callback message...');
 
         // Bind the message listener to this instance
         const boundListener = this.oauthCodeMessageListener.bind(this);
         window.addEventListener("message", boundListener);
-        console.log('[KaiserEx] Message listener registered');
 
         // Store the bound listener for cleanup
         (this as any)._boundListener = boundListener;
         (this as any)._authResolve = resolve;
         (this as any)._authReject = reject;
 
-        // Monitor popup window closure to reject the promise
+        // Monitor popup window closure to reject the promise (but only if auth hasn't completed)
         if (this.KaiserExWindow) {
+          let authCompleted = false;
+          (this as any)._markAuthCompleted = () => { authCompleted = true; };
+
           const checkClosed = () => {
             if (this.KaiserExWindow?.closed) {
-              console.log('[KaiserEx] Popup window was closed by user');
-              // Clean up the message listener
-              window.removeEventListener("message", boundListener);
-              // Reject the auth promise to trigger the error handler in Dashboard
-              reject(new Error('Authentication window was closed by user'));
+              if (!authCompleted) {
+                // Clean up the message listener
+                window.removeEventListener("message", boundListener);
+                // Reject the auth promise to trigger the error handler in Dashboard
+                reject(new Error('Authentication window was closed by user'));
+              } else {
+              }
             } else {
               setTimeout(checkClosed, 1000);
             }
@@ -127,40 +125,37 @@ class KaiserExServiceImpl implements KaiserExService {
   }
 
   async oauthCodeMessageListener(message: MessageEvent): Promise<void> {
-    console.log('[KaiserEx] Received postMessage from origin:', message.origin);
-    console.log('[KaiserEx] Message data:', message.data);
-    
+
     // Accept messages from either the KaiserEx OAuth domain or backend (for local development)
     const allowedOrigins = [
-      this.oauthDomain,
+      this.baseUrl,
       'http://localhost:8081', // Local backend
-      'http://localhost:8080', // Alternative local backend port
-      window.location.origin // Allow same origin for development
+      window.location.origin // Allow the same origin for development
     ];
-    
-    console.log('[KaiserEx] Allowed origins:', allowedOrigins);
-    
+
+
     if (!allowedOrigins.includes(message.origin)) {
       console.warn('[KaiserEx] ❌ Rejected message from unauthorized origin:', message.origin);
       console.warn('[KaiserEx] Expected one of:', allowedOrigins);
       return;
     }
-    
-    console.log('[KaiserEx] ✅ Origin validated');
-    
+
+
     if (message.data.type === "OAUTH_CODE") {
-      console.log('[KaiserEx] OAuth code received:', message.data.code);
       const code = message.data.code;
+
+      // Mark auth as completed to prevent race condition with window close detection
+      if ((this as any)._markAuthCompleted) {
+        (this as any)._markAuthCompleted();
+      }
+
       if (this.KaiserExWindow) {
         this.KaiserExWindow.close();
-        console.log('[KaiserEx] Popup window closed');
       }
       // Remove the event listener
       window.removeEventListener("message", (this as any)._boundListener);
-      console.log('[KaiserEx] Starting token exchange...');
       this.issueToken(code);
     } else {
-      console.log('[KaiserEx] Message type is not OAUTH_CODE, ignoring');
     }
   }
 
@@ -170,7 +165,7 @@ class KaiserExServiceImpl implements KaiserExService {
       codeVerifier: this.codeVerifier,
     };
     // Use backend proxy for token exchange
-    fetch(this.baseUrl + '/api/token', {
+    fetch( `${viteBackendUrl}/api/kaiserex/api/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

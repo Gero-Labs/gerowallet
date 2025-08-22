@@ -14,32 +14,34 @@
             <v-row no-gutters>
               <!-- Left Column -->
               <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass">
-                  <v-card-text class="pa-2 current-delegation-card">
-                    <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
-                    <div class="gradient-text text-h6 font-weight-semibold">
-                      {{ delegatingTo }}
-                    </div>
-                    <div class="flex-center" v-if="currentDRep">
-                      <div class="white--text text-h6 font-weight-semibold">
-                        {{ truncate(currentDRep.drep_id) }}
-                      </div>
-                      <CopyButton small :value="currentDRep.drep_id"></CopyButton>
-                    </div>
-                    <div class="gradient-text text-subtitle-2 font-weight-semibold" v-if="currentDRep">
-                      Vote Power:
-                      {{
-                        toCurrency(
-                          currentDRep.amount,
-                          false,
-                          2,
-                          networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
-                          '',
-                          true
-                        )
-                      }}
-                    </div>
-                  </v-card-text>
+                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card">
+                  <v-list-item three-line>
+                    <v-list-item-content>
+                      <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
+                      <v-list-item-title class="gradient-text text-h6 font-weight-semibold">
+                        {{ delegatingTo }}
+                      </v-list-item-title>
+                      <v-list-item-subtitle v-if="currentDRep" class="white--text font-weight-semibold">
+                        {{ truncate(currentDRep.drep_id) }}<CopyButton small :value="currentDRep.drep_id"></CopyButton>
+                      </v-list-item-subtitle>
+                      <v-list-item-subtitle v-if="currentDRep" class="gradient-text text-subtitle-2 font-weight-semibold">
+                        Vote Power:
+                        {{
+                          toCurrency(
+                            currentDRep.amount,
+                            false,
+                            2,
+                            networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                            '',
+                            true
+                          )
+                        }}
+                      </v-list-item-subtitle>
+                    </v-list-item-content>
+                    <v-list-item-avatar v-if="currentDRep && currentDRep['metadata']?.meta_json?.body?.image?.contentUrl" size="80">
+                      <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>/
+                    </v-list-item-avatar>
+                  </v-list-item>
                   <v-card-text class="px-0 pb-0">
                     <div class="d-flex">
                       <v-select
@@ -69,7 +71,14 @@
                       </v-btn>
                     </div>
                   </v-card-text>
-                  <v-alert class="mt-4 mb-0" border="left" colored-border color="primary" type="info" elevation="2">
+                  <v-alert
+                    class="mt-4 mb-0 transparent"
+                    border="left"
+                    colored-border
+                    color="primary"
+                    type="info"
+                    elevation="0"
+                  >
                     Delegate to a DRep for governance actions;
                     <br />
                     It will be required to withdraw staking rewards
@@ -248,33 +257,19 @@ import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import governanceStoreActions from '@/stores/governanceStore';
-
-const { truncate, toCurrency } = filters;
 import networks from '@/utils/networks';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
-import {
-  Certificate,
-  Credential,
-  DRep,
-  Ed25519KeyHash,
-  ScriptHash,
-  StakeRegistration,
-  Transaction,
-  TransactionUnspentOutputs,
-  TransactionWitnessSet,
-  VoteDelegation,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { toUTxO } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
-import { Messaging } from '@/chrome/messaging';
-import { METHOD } from '@/chrome/config';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 
+const { truncate, toCurrency } = filters;
+
 const { loggedWallet, utxos, account, keys } = toRefs(walletStore);
-const { tip } = toRefs(networkStore);
+const { epochParams, tip } = toRefs(networkStore);
 
 // Governance store
 const { dreps: governanceDReps, loading: drepsLoading, paginationMeta } = toRefs(governanceStoreActions.state);
@@ -291,9 +286,8 @@ const dreps = computed(() => {
   return drepsMap;
 });
 
-// Get drepId and baseAddress from loggedWallet
+// Get drepId from loggedWallet
 const drepId = computed(() => keys.value?.drep129[0].address);
-const baseAddress = computed(() => loggedWallet.value?.baseAddress);
 
 // Data refs
 const delegateLoading = ref(false);
@@ -425,105 +419,172 @@ const getIconByURI = (uri: string) => {
 
 const delegate = async () => {
   delegateLoading.value = true;
-  const wallet = loggedWallet.value;
-  const certificates = [];
-  if (!account.value?.active) {
-    const registrationCertificate = Certificate.new_stake_registration(
-      StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())))
-    );
-    certificates.push(registrationCertificate);
-  }
-  let dRep: DRep;
-  if (delegationModel.value == 'Abstain') {
-    dRep = DRep.new_always_abstain();
-  } else if (delegationModel.value == 'No Confidence') {
-    dRep = DRep.new_always_no_confidence();
-  } else if (delegationModel.value == 'Gero DRep') {
-    delegateLoading.value = false;
-    return; // TODO
-  } else if (delegationModel.value == 'Own Account') {
-    delegateLoading.value = false;
-    return; // TODO
-  }
-  const delegationCertificate = Certificate.new_vote_delegation(
-    VoteDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), dRep)
-  );
-  certificates.push(delegationCertificate);
 
   try {
-    const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-    utxos.value.forEach(utxo => transactionUnspentOutputs.add(toUTxO(utxo)));
-    const txBody = buildTx(
-      loggedWallet.value,
-      undefined,
-      transactionUnspentOutputs,
-      tip.value.slot,
-      baseAddress.value,
-      certificates,
-      []
-    );
-    const tx: Transaction = Transaction.new(txBody, TransactionWitnessSet.new());
-    const txCbor = tx.to_hex();
-    const partialSign = true;
-    const signaturesRes: any = await Messaging.sendToBackground({
-      method: METHOD.signTx,
-      data: { tx: txCbor, partialSign },
-    });
-    if (signaturesRes.error) {
-      snackbar.setError(signaturesRes.error.info);
-    } else {
-      console.log(signaturesRes);
-      const signedTx = Transaction.new(
-        txBody,
-        TransactionWitnessSet.from_bytes(Buffer.from(signaturesRes.data, 'hex')),
-        undefined
-      );
-      console.log(signedTx.to_json());
-      const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-      console.log(txId);
-      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
     }
-  } catch (e) {
-    snackbar.setError(String(e));
-    console.log(e);
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    // Create DRep ID based on selection
+    let dRep: Cardano.DelegateRepresentative;
+    if (delegationModel.value === 'Abstain') {
+      dRep = {
+        __typename: 'AlwaysAbstain'
+      } as Cardano.AlwaysAbstain;
+    } else if (delegationModel.value === 'No Confidence') {
+      dRep = dRep = {
+        __typename: 'AlwaysNoConfidence'
+      } as Cardano.AlwaysNoConfidence;
+    } else if (delegationModel.value === 'Gero DRep') {
+      delegateLoading.value = false;
+      return; // TODO
+    } else if (delegationModel.value === 'Own Account') {
+      delegateLoading.value = false;
+      return; // TODO
+    } else {
+      delegateLoading.value = false;
+      return;
+    }
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+    let implicitCoin = BigInt(0);
+    let certificate: Cardano.Certificate;
+
+    if (!account.value?.active) {
+      // Need to register a stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.VoteRegistrationDelegation,
+        stakeCredential,
+        dRep,
+        deposit: stakeKeyDepositLovelace,
+      } as Cardano.VoteRegistrationDelegationCertificate;
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.VoteDelegation,
+        stakeCredential,
+        dRep,
+      } as Cardano.VoteDelegationCertificate;
+    }
+    certificates.push(certificate);
+
+    // Use the generic transaction builder
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin,
+    });
+
+    console.log('Vote delegation transaction built successfully');
+
+  } catch (error) {
+    console.error('Error building vote delegation transaction:', error);
+    snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+
   delegateLoading.value = false;
 };
 
-const drepDelegate = (row: any) => {
+const drepDelegate = async (row: any) => {
   selectedDRep.value = row;
-  const wallet = loggedWallet.value;
-  const certificates = [];
-  if (!account.value?.active) {
-    const registrationCertificate = Certificate.new_stake_registration(
-      StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())))
-    );
-    certificates.push(registrationCertificate);
-  }
-  // Delegation Certificate
-  const drepHash = selectedDRep.value.has_script
-    ? ScriptHash.from_hex(selectedDRep.value.hex)
-    : Ed25519KeyHash.from_hex(selectedDRep.value.hex);
-  const dRep = selectedDRep.value.has_script ? DRep.new_script_hash(drepHash) : DRep.new_key_hash(drepHash);
-  const delegationCertificate = Certificate.new_vote_delegation(
-    VoteDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), dRep)
-  );
-  certificates.push(delegationCertificate);
 
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach(utxo => transactionUnspentOutputs.add(toUTxO(utxo)));
-  const txBody = buildTx(
-    loggedWallet.value,
-    undefined,
-    transactionUnspentOutputs,
-    tip.value.slot,
-    baseAddress.value,
-    certificates,
-    []
-  );
-  txData.value = Transaction.new(txBody, TransactionWitnessSet.new());
-  console.log(txBody.to_json());
-  isDelegateDialogOpen.value = true;
+  try {
+    console.log('epochParams.value:', epochParams.value);
+    console.log('tip.value:', tip.value);
+    console.log('networkStore.state:', networkStore.state);
+
+    // Use epoch parameters from store, or fallback to default network parameters
+    let currentEpochParams = epochParams.value;
+    if (!currentEpochParams) {
+      console.warn('Epoch parameters not available from store, using default parameters');
+      // Get default parameters for the current network
+      const defaultParams = networks.resolveNetwork(loggedWallet.value?.chain, loggedWallet.value?.network);
+      if (defaultParams?.protocolParams) {
+        // Convert default parameters to SDK format (same conversion as in network.ts loader)
+        currentEpochParams = {
+          ...defaultParams.protocolParams,
+          stakeKeyDeposit: parseInt(defaultParams.protocolParams.key_deposit),
+          poolDeposit: parseInt(defaultParams.protocolParams.pool_deposit),
+          minFeeCoefficient: parseInt(defaultParams.protocolParams.min_fee_a),
+          minFeeConstant: parseInt(defaultParams.protocolParams.min_fee_b),
+          coinsPerUtxoByte: parseInt(defaultParams.protocolParams.coins_per_utxo_size || defaultParams.protocolParams.coins_per_utxo_word),
+        };
+        console.log('Using default epoch parameters (converted to SDK format):', currentEpochParams);
+      } else {
+        throw new Error('No epoch parameters available and no default parameters found');
+      }
+    } else {
+      console.log('Using store epoch parameters:', currentEpochParams);
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    // Create DRep object from selected DRep data
+    console.log('selectedDRep', selectedDRep.value);
+    const dRep = selectedDRep.value.has_script ?
+      Serialization.DRep.newScriptHash(selectedDRep.value.hex) :
+      Serialization.DRep.newKeyHash(selectedDRep.value.hex);
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(currentEpochParams.stakeKeyDeposit);
+    let implicitCoin = BigInt(0);
+    let certificate: Cardano.Certificate;
+
+    if (!account.value?.active) {
+      // Need to register a stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.VoteRegistrationDelegation,
+        stakeCredential,
+        dRep: dRep.toCore(),
+        deposit: stakeKeyDepositLovelace,
+      } as Cardano.VoteRegistrationDelegationCertificate;
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.VoteDelegation,
+        stakeCredential,
+        dRep: dRep.toCore(),
+      } as Cardano.VoteDelegationCertificate;
+    }
+    certificates.push(certificate);
+
+    // Use the generic transaction builder
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: currentEpochParams,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin,
+    });
+
+    console.log('DRep delegation transaction built successfully');
+    console.log('Transaction outputs:', txData.value.body.outputs);
+    isDelegateDialogOpen.value = true;
+  } catch (error) {
+    console.error('Error building DRep delegation transaction:', error);
+    snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 };
 
 const currentPage = ref(1);

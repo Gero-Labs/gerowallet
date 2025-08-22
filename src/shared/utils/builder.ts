@@ -45,7 +45,6 @@ export function getTransactionBuilder(pp: Cardano.ProtocolParameters): Transacti
 
 export function buildTx(protocolParams: Cardano.ProtocolParameters, outputs: TransactionOutputs, utxos: TransactionUnspentOutputs, currentSlot: number, changeAddress: string, certificates: Certificate[] = [], withdrawals: Withdrawal[] = [], metadata = undefined): TransactionBody {
   if (!changeAddress) {
-    console.log('Change Address', changeAddress)
     return null;
   }
   const txBuilder = getTransactionBuilder(protocolParams);
@@ -98,8 +97,6 @@ export function buildTx(protocolParams: Cardano.ProtocolParameters, outputs: Tra
 
   txBuilder.set_validity_start_interval(0)
 
-  const hasDeregistrationCert = !!certificates.find(certificate => certificate.kind() == 1)
-  console.log(hasDeregistrationCert) // TODO Fix
   // add utxos to the transaction as inputs
   // const shouldUseAllUtxos = hasDeregistrationCert || withdrawals.length > 0; // length > 0 || withdrawals.length > 0;
   try {
@@ -107,7 +104,6 @@ export function buildTx(protocolParams: Cardano.ProtocolParameters, outputs: Tra
     const calcChangeAddress = Address.from_bech32(changeAddress);
     txBuilder.add_change_if_needed(calcChangeAddress);
   } catch (e: unknown) {
-    console.log(e)
     const error = e as string;
     if (isNotEnoughBalanceError(error)) {
       addInputUtxos(txBuilder, utxos, outputs, true);
@@ -199,7 +195,6 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
         id: assetId,
       };
     }).filter(asset => asset.quantity !== 0n);
-  console.log('assetsArray', assetsArray)
   const cardano = {
     assetName: 'cardano',
     policy: '',
@@ -261,22 +256,58 @@ export async function buildCardanoTransaction({
   // Create a change address resolver for input selection
   const changeAddressResolver: ChangeAddressResolver = {
     resolve: async (selectionSkeleton: SelectionSkeleton) => {
-      // Calculate change amount
+      // Calculate change amounts for both ADA and native tokens
       const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
       const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
       const implicitCost = implicitCoin + selectionSkeleton.fee;
       const changeAmount = totalInput - totalOutput - implicitCost;
 
-      if (changeAmount <= BigInt(0)) {
+      // Calculate change assets by aggregating all input assets and subtracting output assets
+      const changeAssets = new Map<Cardano.AssetId, bigint>();
+
+
+      // Add all input assets
+      for (const [, utxo] of selectionSkeleton.inputs) {
+        if (utxo.value.assets) {
+          for (const [assetId, quantity] of utxo.value.assets) {
+            const currentQuantity = changeAssets.get(assetId) || BigInt(0);
+            const newQuantity = currentQuantity + quantity;
+            changeAssets.set(assetId, newQuantity);
+          }
+        }
+      }
+
+
+      // Subtract all output assets
+      for (const output of selectionSkeleton.outputs) {
+        if (output.value.assets) {
+          for (const [assetId, quantity] of output.value.assets) {
+            const currentQuantity = changeAssets.get(assetId) || BigInt(0);
+            const newQuantity = currentQuantity - quantity;
+            if (newQuantity > BigInt(0)) {
+              changeAssets.set(assetId, newQuantity);
+            } else {
+              changeAssets.delete(assetId);
+            }
+          }
+        }
+      }
+
+
+      // Only create change output if there's ADA change or remaining assets
+      if (changeAmount <= BigInt(0) && changeAssets.size === 0) {
         return []; // No change needed
       }
+
+      // Ensure we have at least minimum ADA for the change output if there are assets
+      const finalChangeAmount = changeAmount > BigInt(0) ? changeAmount : BigInt(1000000); // 1 ADA minimum
 
       // Create change output to a specified address
       const changeOutput: Cardano.TxOut = {
         address: changeAddress as Cardano.PaymentAddress,
         value: {
-          coins: changeAmount,
-          assets: new Map()
+          coins: finalChangeAmount,
+          assets: changeAssets
         }
       };
 
@@ -334,21 +365,51 @@ export async function buildCardanoTransaction({
     computeSelectionLimit: async () => 20
   };
 
-  // Convert UTXOs to proper format with BigInt values
-  const formattedUtxos: Cardano.Utxo[] = utxos.map((utxo: any) => [
-    utxo[0], // TxIn remains the same
-    {
-      ...utxo[1], // TxOut
-      value: {
-        coins: BigInt(utxo[1].value.coins), // Ensure BigInt
-        assets: utxo[1].value.assets || new Map()
-      }
+  // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
+  const formattedUtxos: Cardano.Utxo[] = utxos.map((utxo: any) => {
+
+    // Ensure assets is always a Map (not undefined or null)
+    let assets: Map<Cardano.AssetId, bigint>;
+
+    if (utxo[1].value.assets instanceof Map) {
+      assets = utxo[1].value.assets;
+    } else if (utxo[1].value.assets && typeof utxo[1].value.assets === 'object') {
+      // Handle case where assets might be an object instead of Map
+      assets = new Map();
+      Object.entries(utxo[1].value.assets).forEach(([assetId, quantity]) => {
+        assets.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+      });
+    } else {
+      assets = new Map();
     }
-  ]);
+
+
+    return [
+      utxo[0], // TxIn remains the same
+      {
+        ...utxo[1], // TxOut
+        value: {
+          coins: BigInt(utxo[1].value.coins), // Ensure BigInt
+          assets: assets
+        }
+      }
+    ];
+  });
+
 
   // Convert arrays to Sets for input selection
   const utxoSet = new Set(formattedUtxos);
-  const outputsSet = new Set<Cardano.TxOut>(outputs);
+
+  // Ensure outputs have proper asset structure (Map, not undefined)
+  const normalizedOutputs = outputs.map(output => ({
+    ...output,
+    value: {
+      ...output.value,
+      assets: output.value.assets || new Map()
+    }
+  }));
+
+  const outputsSet = new Set<Cardano.TxOut>(normalizedOutputs);
 
   // Handle deposit/return as an implicit coin for input selection
   const implicitValue: ImplicitValue = {
@@ -359,6 +420,7 @@ export async function buildCardanoTransaction({
     } : undefined
   };
 
+
   // Perform input selection with implicit value for deposits
   const selectionResult = await selector.select({
     preSelectedUtxo: new Set(),
@@ -368,8 +430,18 @@ export async function buildCardanoTransaction({
     implicitValue
   });
 
+
   // Build the final transaction body - include both requested outputs and change outputs
-  const finalOutputs = [...outputs, ...selectionResult.selection.change];
+  // Ensure change outputs also have proper asset structure
+  const normalizedChange = selectionResult.selection.change.map(output => ({
+    ...output,
+    value: {
+      ...output.value,
+      assets: output.value.assets || new Map()
+    }
+  }));
+  const finalOutputs = [...normalizedOutputs, ...normalizedChange];
+
 
   const txBody: Cardano.TxBody = {
     inputs: Array.from(selectionResult.selection.inputs).map(utxo => utxo[0]),
