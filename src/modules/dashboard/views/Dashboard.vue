@@ -1,6 +1,5 @@
 <template>
   <v-layout column>
-
     <!-- Show comprehensive empty state when wallet has no tokens -->
     <template v-if="isWalletEmpty">
       <v-row no-gutters>
@@ -36,8 +35,11 @@
                   <PortfolioChart
                     :chart-data="computeChartData.adaData"
                     :chart-data-usd="computeChartData.usdData"
+                    :chart-data-eur="computeChartData.eurData"
                     :portfolio-value-ada="computedValues.totalValue"
                     :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :loading="loadingTxs"
                   />
                 </v-card-text>
               </v-card>
@@ -78,8 +80,11 @@
               <PortfolioChart
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
                 :portfolio-value-ada="computedValues.totalValue"
                 :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                :loading="loadingTxs"
               />
             </v-card-text>
           </v-card>
@@ -146,34 +151,30 @@
       </v-col> -->
       </v-row>
 
-    <!-- KaiserEx Token Reception -->
-    <v-row no-gutters>
-      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-        <v-card outlined class="liquid-glass">
-          <v-card-title>KaiserEx Token Reception</v-card-title>
-          <v-card-text>
-            <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
-              Receive Token from KaiserEx
-            </v-btn>
-            <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
-              {{ kaiserExMessage.text }}
-            </v-alert>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+      <!-- KaiserEx Token Reception -->
+      <v-row no-gutters>
+        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
+          <v-card outlined class="liquid-glass">
+            <v-card-title>KaiserEx Token Reception</v-card-title>
+            <v-card-text>
+              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
+                Receive Token from KaiserEx
+              </v-btn>
+              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
+                {{ kaiserExMessage.text }}
+              </v-alert>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
 
-    <!-- Claim Dialog -->
-    <ClaimDialog
-      :show="showClaimDialog"
-      @close="showClaimDialog = false"
-    />
-
+      <!-- Claim Dialog -->
+      <ClaimDialog :show="showClaimDialog" @close="showClaimDialog = false" />
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
@@ -192,8 +193,9 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
-import filters from '@/shared/utils/filters';
 
+import { usePortfolioData } from '@/shared/composables/usePortfolioData';
+import { portfolioCacheService } from '@/db/portfolio-cache';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -202,12 +204,11 @@ import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
-const router = instance?.proxy.$router;
 
 // Store refs
 const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
+const { portfolio } = toRefs(tapToolsStore);
 const showClaimDialog = ref(false);
 
 const kaiserExLoading = ref(false);
@@ -219,7 +220,7 @@ const currentApexCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
 const isLoading = ref(false);
-
+const loadingTxs = computed(() => portfolioLoading.value);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
@@ -341,33 +342,52 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
+// Initialize portfolio data composable with 4-hour cache
+const portfolioComposable = usePortfolioData({
+  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
+  enableCache: true,
+});
+
+const {
+  adaData: adaChartData,
+  usdData: usdChartData,
+  eurData: eurChartData,
+  isLoading: portfolioLoading,
+  loadMissingData,
+  refreshPortfolioData,
+  getCacheStats,
+  getCacheStatus,
+} = portfolioComposable;
+
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
-      adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
-      usdData: Array.isArray(portfolioTrendedValue.value)
-        ? portfolioTrendedValue.value.map(item => [item[0], item[1] * (price.value?.lastPrice || 0)])
-        : [],
+      adaData: adaChartData.value,
+      usdData: usdChartData.value,
+      eurData: eurChartData.value,
     };
   }
-  console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
   let graphData = undefined;
   let usdData = undefined;
+  let eurData = undefined;
   let currentBalance = 0;
   if (transactions.value) {
     graphData = [];
     usdData = [];
+    eurData = [];
     transactions.value.forEach(tx => {
       currentBalance += tx.ada;
       graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
       usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+      eurData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
     });
   }
   return {
-    adaData: graphData || [], // No historical USD data for non-mainnet
+    adaData: graphData || [],
     usdData: usdData || [],
+    eurData: eurData || [],
   };
 });
 
@@ -403,66 +423,57 @@ const handleCarouselClick = (item: any) => {
     case 'showApexFeatures':
       showApexFeatures();
       break;
-    default:
-      console.log('Carousel item clicked:', item.id);
   }
 };
 
 const openClaimDialog = () => {
-  console.log('Opening claim dialog...');
   showClaimDialog.value = true;
 };
 
 const showUpdateInfo = () => {
-  console.log('Showing update info...');
   // Add your update info logic here
 };
 
 const showDebitCardInfo = () => {
-  console.log('Showing debit card info...');
   // Add your debit card info logic here
 };
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
+  const router = instance?.proxy?.$router;
   if (router && router.currentRoute.path !== '/cashback') {
-    console.log('Navigating to cashback page...');
     router.push('/cashback');
   }
 };
 
 const showApexWelcome = () => {
-  console.log('Welcome to Apex Fusion!');
   // Add your Apex welcome logic here
 };
 
 const showApexWallet = () => {
-  console.log('Showing Apex Wallet info...');
   // Add your Apex wallet logic here
 };
 
 const showApexFeatures = () => {
-  console.log('Showing Apex Features...');
   // Add your Apex features logic here
 };
-
 
 const handleReceiveKaiserExToken = async () => {
   kaiserExLoading.value = true;
   kaiserExMessage.value = null;
 
   try {
-    await receiveKaiserExToken((tokenData) => {
+    await receiveKaiserExToken(tokenData => {
       kaiserExMessage.value = {
         type: 'success',
-        text: `Token received successfully! Token: ${tokenData.access_token}`
+        text: `Token received successfully! Token: ${tokenData.access_token}`,
       };
       kaiserExLoading.value = false;
     });
   } catch (error) {
     kaiserExMessage.value = {
       type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
     kaiserExLoading.value = false;
   } finally {
@@ -475,31 +486,79 @@ const handleReceiveKaiserExToken = async () => {
 
 // Empty state handlers
 const handleBuyCrypto = () => {
-  console.log('Opening buy crypto dialog - emitting to parent');
   instance?.proxy?.$emit('open-buy-dialog');
 };
 
 const handleShowReceive = () => {
-  console.log('Opening receive dialog - emitting to parent');
   instance?.proxy?.$emit('open-receive-dialog');
 };
 
 const handleOpenLearn = () => {
-  console.log('Opening learning resources...');
   // Could open a modal with tutorials or redirect to docs
   window.open('https://docs.gerowallet.io', '_blank');
 };
 
 const handleStartTutorial = () => {
-  console.log('Starting interactive tutorial...');
   // Implement interactive tutorial
 };
 
 const handleBackupWallet = () => {
-  console.log('Backup wallet button clicked - emitting to parent');
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
+// Portfolio data loading is now handled by usePortfolioData composable
+
+// Utility function to refresh portfolio data
+const refreshPortfolioChart = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (address) {
+    await refreshPortfolioData(address);
+  }
+};
+
+// Utility function to get cache information (for debugging)
+const getPortfolioCacheInfo = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (!address) {
+    return null;
+  }
+
+  const stats = await getCacheStats();
+  const status = await getCacheStatus(address);
+
+  return { stats, status };
+};
+
+// Expose functions for potential use
+defineExpose({
+  refreshPortfolioChart,
+  getPortfolioCacheInfo,
+});
+// Watch for wallet changes to reload portfolio data with smart caching
+watch(
+  () => loggedWallet.value?.baseAddress,
+  async (newAddress, oldAddress) => {
+    if (newAddress && newAddress !== oldAddress) {
+      try {
+        // Load missing data only (smart caching) with timeout to prevent memory issues
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Portfolio data loading timeout')), 30000)
+        );
+        
+        await Promise.race([
+          loadMissingData(newAddress),
+          timeoutPromise
+        ]);
+      } catch (error) {
+        console.warn('Portfolio data loading failed or timed out:', error);
+        // Continue with empty data rather than crashing
+      }
+    }
+  },
+  { immediate: true } // Load data on mount
+);
+
+
 </script>
 <style scoped>
 .transactions-table {

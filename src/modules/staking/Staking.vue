@@ -76,8 +76,8 @@
               v-if="isPro"
               dense
               :headers="headers"
-              :items="stakePools"
-              :items-per-page="pageSize"
+              :items="paginatedPools"
+              :items-per-page="15"
               :page.sync="page"
               @page-count="pageCount = $event"
               :header-props="{ 'sort-icon': 'mdi-menu-up' }"
@@ -278,7 +278,7 @@
                 lg="4"
                 md="6"
                 sm="12"
-                v-for="(pool, index) in pagedPools"
+                v-for="(pool, index) in paginatedPools"
                 :key="index"
                 class="px-2 py-2"
               >
@@ -490,7 +490,7 @@ const {
 } = toRefs(stakingStore.state);
 
 const page = ref<number>(1);
-const pageSize = ref<number>(20);
+const pageSize = ref<number>(15);
 const pageCount = ref<number>(0);
 
 // Use reactive filters from store
@@ -603,57 +603,10 @@ const loadPaginatedPools = async (pageNum: number = 1) => {
   });
 };
 
-// Use paginated pools from store, but keep fallback to old pools for compatibility
-const stakePools = computed(() => {
-  // If we have paginated pools, use them
-  if (paginatedPools.value && paginatedPools.value.length > 0) {
-    return paginatedPools.value.filter((pool: any) => pool.pool_status === 'registered');
-  }
-
-  // Fallback to old logic if paginated pools are not available
-  const poolsCopy = structuredClone(pools.value);
-  if (poolsCopy) {
-    let filteredPools = Object.values(poolsCopy).filter((pool: any) => pool.pool_status === 'registered');
-    if (poolsCopy) {
-      filteredPools = filteredPools.filter(
-        (pool: any) =>
-          (pool.ticker && pool.ticker.toLowerCase().includes(search.value.toLowerCase())) ||
-          (pool.name && pool.name.toLowerCase().includes(search.value.toLowerCase()))
-      );
-    }
-    if (pledgeMet.value) {
-      filteredPools = filteredPools.filter((pool: any) => {
-        return Number(pool.pledge) <= Number(pool.live_pledge);
-      });
-    }
-    filteredPools.sort((a: any, b: any) => {
-      if (a.pool_id_bech32 === geroPoolId.value) return -1;
-      if (b.pool_id_bech32 === geroPoolId.value) return 1;
-      return 0;
-    });
-    return filteredPools;
-  }
-  return [];
-});
-
 const numPages = computed(() => {
-  // Use pagination meta if available, otherwise calculate from stakePools
   if (paginationMeta.value) {
     return paginationMeta.value.total_pages;
   }
-  return Math.ceil(stakePools.value.length / pageSize.value);
-});
-
-const pagedPools = computed<any[]>(() => {
-  // For paginated API, we show all loaded pools (they are already paged)
-  if (paginatedPools.value && paginatedPools.value.length > 0) {
-    return stakePools.value;
-  }
-
-  // Fallback to old logic for client-side pagination
-  const startIndex = (page.value - 1) * pageSize.value;
-  const data = [...stakePools.value];
-  return data.splice(startIndex, pageSize.value);
 });
 
 watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
