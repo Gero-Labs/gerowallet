@@ -5,6 +5,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
+import priceService from '@/stores/priceStore';
 
 interface WhitelistedEntry {
   domain: string;
@@ -169,6 +170,13 @@ export default {
   setLoggedWallet(loggedWallet: any) {
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
+    
+    // Initialize price service when wallet is set
+    if (loggedWallet) {
+      priceService.initialize().catch(error => {
+        console.error('Failed to initialize price service:', error);
+      });
+    }
   },
 
   setAccount(account: any) {
@@ -350,6 +358,10 @@ export default {
 
   logout() {
     console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
+    
+    // Disconnect price service
+    priceService.disconnect();
+    
     // Clear all data at once
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
@@ -380,6 +392,9 @@ export default {
 
   clearForWalletSwitch() {
     console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
+    
+    // Reconnect price service for the new wallet context
+    priceService.reconnect();
     
     // CRITICAL: Clear all Chrome alarms to prevent memory leaks during wallet switching
     chrome.alarms.clearAll();

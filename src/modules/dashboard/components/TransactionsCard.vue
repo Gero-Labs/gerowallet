@@ -112,7 +112,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4">
-                {{ filters.toCurrency(item.ada * price?.lastPrice, true, 0, '$', '', false, 6) }}
+                {{ filters.toCurrency(item.ada * adaPrice, true, 0, '$', '', false, 6) }}
               </div>
             </div>
           </template>
@@ -173,6 +173,7 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 
 const props = defineProps({
   selectedTransaction: {
@@ -191,6 +192,9 @@ const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets, pools } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+
+// Use Kraken WebSocket price for ADA, fallback to network store price
+const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 
 const activityHeaders = ref([
   { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },

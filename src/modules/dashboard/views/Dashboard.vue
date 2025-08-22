@@ -37,7 +37,7 @@
                     :chart-data="computeChartData.adaData"
                     :chart-data-usd="computeChartData.usdData"
                     :portfolio-value-ada="computedValues.totalValue"
-                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :portfolio-value-usd="computedValues.totalValue * adaPrice"
                   />
                 </v-card-text>
               </v-card>
@@ -79,7 +79,7 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :portfolio-value-ada="computedValues.totalValue"
-                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-usd="computedValues.totalValue * adaPrice"
               />
             </v-card-text>
           </v-card>
@@ -190,6 +190,7 @@ import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 import filters from '@/shared/utils/filters';
@@ -208,6 +209,9 @@ const router = instance?.proxy.$router;
 const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
+
+// Use Kraken WebSocket price for ADA, fallback to network store price
+const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 const showClaimDialog = ref(false);
 
 const kaiserExLoading = ref(false);
@@ -347,7 +351,7 @@ const computeChartData = computed(() => {
     return {
       adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
       usdData: Array.isArray(portfolioTrendedValue.value)
-        ? portfolioTrendedValue.value.map(item => [item[0], item[1] * (price.value?.lastPrice || 0)])
+        ? portfolioTrendedValue.value.map(item => [item[0], item[1] * adaPrice.value])
         : [],
     };
   }
@@ -362,7 +366,7 @@ const computeChartData = computed(() => {
     transactions.value.forEach(tx => {
       currentBalance += tx.ada;
       graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
-      usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+      usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * adaPrice.value]);
     });
   }
   return {
