@@ -462,7 +462,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
 import { useDebounce } from '@vueuse/core';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
@@ -616,14 +616,14 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
   }
 });
 
-const delegateToGero = () => {
+const delegateToGero = async () => {
   if (loggedWallet.value) {
     const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
-    const pool = pools.value[poolId];
-    if (!pool) {
-      return;
+    await stakingStore.loadPoolById(loggedWallet.value, poolId);
+
+    if (stakingStore.state.currentPool) {
+      delegate(stakingStore.state.currentPool);
     }
-    delegate(pool);
   }
 };
 
@@ -703,6 +703,10 @@ const poolExtendedInfo = (pool: any) => {
 onMounted(() => {
   // Load initial paginated pools data
   reloadWithFilters();
+});
+
+onBeforeUnmount(() => {
+  stakingStore.clearCurrentPool();
 });
 </script>
 <style scoped>

@@ -195,7 +195,6 @@ import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
-import { portfolioCacheService } from '@/db/portfolio-cache';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -541,10 +540,10 @@ watch(
     if (newAddress && newAddress !== oldAddress) {
       try {
         // Load missing data only (smart caching) with timeout to prevent memory issues
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Portfolio data loading timeout')), 30000)
         );
-        
+
         await Promise.race([
           loadMissingData(newAddress),
           timeoutPromise
