@@ -21,7 +21,6 @@ export const walletDBSchema = {
   transactions: 'id',
   connected_dapps: '++id, domain, time',
   multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
-  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // data is now JSON string
 };
 
 export const blockChainDBVersion: number = 5;
@@ -38,5 +37,5 @@ export const blockChainDBSchema = {
 export const portfolioDBVersion: number = 1;
 
 export const portfolioDBSchema = {
-  portfolio: '++id, address, currency, data, timestamp, expiresAt',
+  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // data is JSON string
 };

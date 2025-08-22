@@ -2,14 +2,11 @@ import Dexie, { DexieError } from 'dexie';
 import {
   blockChainDBSchema,
   blockChainDBVersion,
-  portfolioDBSchema,
-  portfolioDBVersion,
 } from '@/db/schema';
 
 let db: Dexie = null
 
 const blockchainDbCache: Map<string, Dexie> = new Map();
-const portfolioDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
   const dbName = `${chain}_${network}`;
@@ -39,29 +36,12 @@ export async function getBlockchainDb(chain: string, network: string): Promise<D
   }
 }
 
-export async function getPortfolioDb(address: string): Promise<Dexie> {
-  const dbName = `portfolio_${address}`;
-  const db: Dexie = new Dexie(dbName);
-  db.version(portfolioDBVersion).stores(portfolioDBSchema);
-  await db.open();
-  return db;
-}
-
 export function clearBlockchainDbCache(chain: string, network: string) {
   const dbName = `${chain}_${network}`;
   const db = blockchainDbCache.get(dbName);
   if (db) {
     db.close();
     blockchainDbCache.delete(dbName);
-  }
-}
-
-export function clearPortfolioDbCache(address: string) {
-  const dbName = `portfolio_${address}`;
-  const db = portfolioDbCache.get(dbName);
-  if (db) {
-    db.close();
-    portfolioDbCache.delete(dbName);
   }
 }
 
@@ -96,16 +76,8 @@ export default {
       }
     }
   },
-  async createPortfolioDatabase(address: string) {
-    const db = await getPortfolioDb(address);
-    this.setPortfolioDBVersionSchema(db);
-    return db;
-  },
   setBlockchainDBVersionSchema(db: Dexie) {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
-  },
-  setPortfolioDBVersionSchema(db: Dexie) {
-    db.version(portfolioDBVersion).stores(portfolioDBSchema);
   },
   async checkIfDbExists(dbName: string) {
     return await Dexie.exists(dbName);
