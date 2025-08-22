@@ -1,14 +1,15 @@
-export const geroWalletDbName: string = 'GeroWalletDatabase'
+export const geroWalletDbName: string = 'GeroWalletDatabase';
 
 export const geroDBVersion: number = 13;
 
 export const geroDBSchema = {
-  wallets: '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
+  wallets:
+    '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
   config: '++id, key, value',
   provider: '++id, [name+chain+network], baseUrl, apiKey',
-}
+};
 
-export const walletDBVersion: number = 6;
+export const walletDBVersion: number = 7;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -20,8 +21,8 @@ export const walletDBSchema = {
   transactions: 'id',
   connected_dapps: '++id, domain, time',
   multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
-  portfolio_charts: '++id, address, currency, data, timestamp, expiresAt', // data is now JSON string
-}
+  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // data is now JSON string
+};
 
 export const blockChainDBVersion: number = 5;
 
@@ -31,5 +32,11 @@ export const blockChainDBSchema = {
   sync: '++id, time',
   assets: 'asset, fingerprint, asset_name, policy_id',
   epoch_params: 'epoch',
-  genesis_info: 'id'
-}
+  genesis_info: 'id',
+};
+
+export const portfolioDBVersion: number = 1;
+
+export const portfolioDBSchema = {
+  portfolio: '++id, address, currency, data, timestamp, expiresAt',
+};
