@@ -2,8 +2,6 @@ import Dexie, { DexieError } from 'dexie';
 import {
   blockChainDBSchema,
   blockChainDBVersion,
-  walletDBSchema,
-  walletDBVersion,
   portfolioDBSchema,
   portfolioDBVersion,
 } from '@/db/schema';
@@ -12,7 +10,6 @@ let db: Dexie = null
 
 const blockchainDbCache: Map<string, Dexie> = new Map();
 const portfolioDbCache: Map<string, Dexie> = new Map();
-const walletDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
   const dbName = `${chain}_${network}`;
@@ -50,34 +47,6 @@ export async function getPortfolioDb(address: string): Promise<Dexie> {
   return db;
 }
 
-export async function getWalletDb(walletId: number): Promise<Dexie> {
-  const dbName = `wallet-${walletId}`;
-  
-  if (walletDbCache.has(dbName)) {
-    return walletDbCache.get(dbName)!;
-  }
-  
-  try {
-    const db: Dexie = new Dexie(dbName);
-    db.version(walletDBVersion).stores(walletDBSchema);
-    await db.open();
-    walletDbCache.set(dbName, db);
-    return db;
-  } catch (error: DexieError | any) {
-    console.debug('Wallet database error:', error)
-    if (error.name === 'NoSuchDatabaseError') {
-      const db: Dexie = new Dexie(dbName);
-      db.version(walletDBVersion).stores(walletDBSchema);
-      await db.open();
-      walletDbCache.set(dbName, db);
-      return db;
-    } else {
-      console.error('Error opening wallet database:', error);
-      return null
-    }
-  }
-}
-
 export function clearBlockchainDbCache(chain: string, network: string) {
   const dbName = `${chain}_${network}`;
   const db = blockchainDbCache.get(dbName);
@@ -93,15 +62,6 @@ export function clearPortfolioDbCache(address: string) {
   if (db) {
     db.close();
     portfolioDbCache.delete(dbName);
-  }
-}
-
-export function clearWalletDbCache(walletId: number) {
-  const dbName = `wallet-${walletId}`;
-  const db = walletDbCache.get(dbName);
-  if (db) {
-    db.close();
-    walletDbCache.delete(dbName);
   }
 }
 
@@ -143,10 +103,6 @@ export default {
   },
   setBlockchainDBVersionSchema(db: Dexie) {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
-  },
-  setWalletDBVersionSchema(db: Dexie) {
-    console.log('setWalletDBVersionSchema')
-    db.version(walletDBVersion).stores(walletDBSchema);
   },
   setPortfolioDBVersionSchema(db: Dexie) {
     db.version(portfolioDBVersion).stores(portfolioDBSchema);

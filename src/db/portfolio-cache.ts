@@ -1,4 +1,13 @@
-import { getWalletDb } from '@/db/index';
+import { 
+  getPortfolioChart, 
+  savePortfolioChart, 
+  removePortfolioChart,
+  clearPortfolioChartsByAddress,
+  clearAllPortfolioCharts,
+  cleanupExpiredPortfolioCharts,
+  getPortfolioChartsStats,
+  getPortfolioChartsStatus
+} from '@/db/wallet-db';
 import tapToolsApi from '@/api/tap-tools-api';
 import { walletStore } from '@/stores/walletStore';
 
@@ -41,26 +50,8 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return null;
       }
-      const db = await getWalletDb(walletId);
       const now = Date.now();
-      // Try composite index first, fallback to individual queries if schema mismatch
-      let entry;
-      try {
-        entry = await db
-          .table('portfolio_charts')
-          .where(['address', 'currency'])
-          .equals([address, currency])
-          .first();
-      } catch (schemaError: any) {
-        if (schemaError.name === 'SchemaError') {
-          console.warn('Composite index not available, using fallback method for cache lookup');
-          // Fallback: query by address and filter by currency
-          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
-          entry = entries.find(e => e.currency === currency);
-        } else {
-          throw schemaError;
-        }
-      }
+      const entry = await getPortfolioChart(walletId, address, currency);
 
       if (!entry) {
         return null;
@@ -68,7 +59,7 @@ export class PortfolioCacheService {
 
       // Check if cache is expired
       if (entry.expiresAt <= now) {
-        await this.removeCachedData(address, currency);
+        await removePortfolioChart(walletId, address, currency);
         return null;
       }
 
@@ -110,7 +101,6 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return;
       }
-      const db = await getWalletDb(walletId);
       const now = Date.now();
       const expiresAt = now + this.cacheTimeMs;
 
@@ -126,10 +116,10 @@ export class PortfolioCacheService {
       };
 
       // Remove existing entry if exists
-      await this.removeCachedData(address, currency);
+      await removePortfolioChart(walletId, address, currency);
 
       // Add new entry
-      await db.table('portfolio_charts').add(entry);
+      await savePortfolioChart(walletId, entry);
     } catch (error) {
       console.error('Error saving portfolio data to cache:', error);
     }
@@ -145,23 +135,7 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return;
       }
-      const db = await getWalletDb(walletId);
-      // Try composite index first, fallback to individual queries if schema mismatch
-      try {
-        await db.table('portfolio_charts').where(['address', 'currency']).equals([address, currency]).delete();
-      } catch (schemaError: any) {
-        if (schemaError.name === 'SchemaError') {
-          console.warn('Composite index not available, using fallback method for cache removal');
-          // Fallback: query by address and filter by currency
-          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
-          const entriesToDelete = entries.filter(entry => entry.currency === currency);
-          for (const entry of entriesToDelete) {
-            await db.table('portfolio_charts').delete(entry.id);
-          }
-        } else {
-          throw schemaError;
-        }
-      }
+      await removePortfolioChart(walletId, address, currency);
     } catch (error) {
       console.error('Error removing cached portfolio data:', error);
     }
@@ -177,8 +151,7 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return;
       }
-      const db = await getWalletDb(walletId);
-      await db.table('portfolio_charts').where('address').equals(address).delete();
+      await clearPortfolioChartsByAddress(walletId, address);
     } catch (error) {
       console.error('Error clearing address cache:', error);
     }
@@ -194,8 +167,7 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return;
       }
-      const db = await getWalletDb(walletId);
-      await db.table('portfolio_charts').clear();
+      await clearAllPortfolioCharts(walletId);
     } catch (error) {
       console.error('Error clearing all portfolio cache:', error);
     }
@@ -211,17 +183,7 @@ export class PortfolioCacheService {
         console.warn('No wallet ID available for portfolio cache');
         return 0;
       }
-      const db = await getWalletDb(walletId);
-      const now = Date.now();
-      const expiredEntries = await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).toArray();
-
-      if (expiredEntries.length > 0) {
-        await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).delete();
-
-        return expiredEntries.length;
-      }
-
-      return 0;
+      return await cleanupExpiredPortfolioCharts(walletId);
     } catch (error) {
       console.error('Error cleaning up expired cache:', error);
       return 0;
@@ -254,19 +216,14 @@ export class PortfolioCacheService {
           enableCache: this.enableCache,
         };
       }
-      const db = await getWalletDb(walletId);
-      const allEntries = await db.table('portfolio_charts').toArray();
-      const now = Date.now();
-
-      const validEntries = allEntries.filter(entry => entry.expiresAt > now);
-      const expiredEntries = allEntries.filter(entry => entry.expiresAt <= now);
-
+      const stats = await getPortfolioChartsStats(walletId);
+      
       return {
-        totalEntries: allEntries.length,
-        validEntries: validEntries.length,
-        expiredEntries: expiredEntries.length,
-        oldestEntry: allEntries.length > 0 ? Math.min(...allEntries.map(e => e.timestamp)) : null,
-        newestEntry: allEntries.length > 0 ? Math.max(...allEntries.map(e => e.timestamp)) : null,
+        totalEntries: stats.totalEntries,
+        validEntries: stats.validEntries,
+        expiredEntries: stats.expiredEntries,
+        oldestEntry: stats.oldestEntry,
+        newestEntry: stats.newestEntry,
         cacheTimeMs: this.cacheTimeMs,
         enableCache: this.enableCache,
       };
@@ -333,22 +290,43 @@ export class PortfolioCacheService {
     }
 
     try {
+      const walletId = walletStore.loggedWallet?.id;
+      if (!walletId) {
+        console.warn('No wallet ID available for portfolio cache');
+        return { adaData: [], usdData: [], eurData: [] };
+      }
+      
       // Load cache data in parallel for better performance
       const [cachedAda, cachedUsd, cachedEur] = await Promise.all([
-        this.getCachedData(address, 'ADA'),
-        this.getCachedData(address, 'USD'),
-        this.getCachedData(address, 'EUR')
+        getPortfolioChart(walletId, address, 'ADA'),
+        getPortfolioChart(walletId, address, 'USD'),
+        getPortfolioChart(walletId, address, 'EUR')
       ]);
 
       // Determine what needs to be loaded
+      const now = Date.now();
       const currenciesToLoad: ('ADA' | 'USD' | 'EUR')[] = [];
-      if (!cachedAda || !Array.isArray(cachedAda)) currenciesToLoad.push('ADA');
-      if (!cachedUsd || !Array.isArray(cachedUsd)) currenciesToLoad.push('USD');
-      if (!cachedEur || !Array.isArray(cachedEur)) currenciesToLoad.push('EUR');
+      
+      const isValidEntry = (entry: any) => entry && entry.expiresAt > now;
+      
+      if (!isValidEntry(cachedAda)) currenciesToLoad.push('ADA');
+      if (!isValidEntry(cachedUsd)) currenciesToLoad.push('USD');
+      if (!isValidEntry(cachedEur)) currenciesToLoad.push('EUR');
 
-      let adaData = cachedAda && Array.isArray(cachedAda) ? cachedAda : [];
-      let usdData = cachedUsd && Array.isArray(cachedUsd) ? cachedUsd : [];
-      let eurData = cachedEur && Array.isArray(cachedEur) ? cachedEur : [];
+      // Parse cached data
+      const parseData = (entry: any) => {
+        if (!entry || !entry.data) return [];
+        try {
+          return Array.isArray(entry.data) ? entry.data : JSON.parse(entry.data);
+        } catch (e) {
+          console.error('Error parsing cached data:', e);
+          return [];
+        }
+      };
+
+      let adaData = parseData(cachedAda);
+      let usdData = parseData(cachedUsd);
+      let eurData = parseData(cachedEur);
 
       // Load missing data in parallel for better performance
       if (currenciesToLoad.length > 0) {
@@ -432,45 +410,7 @@ export class PortfolioCacheService {
           eur: { hasData: false, dataPoints: 0, expiresAt: null },
         };
       }
-      const db = await getWalletDb(walletId);
-      const now = Date.now();
-
-      // Load sequentially to reduce memory usage
-      const adaEntry = await db
-        .table('portfolio_charts')
-        .where(['address', 'currency'])
-        .equals([address, 'ADA'])
-        .first();
-
-      const usdEntry = await db
-        .table('portfolio_charts')
-        .where(['address', 'currency'])
-        .equals([address, 'USD'])
-        .first();
-
-      const eurEntry = await db
-        .table('portfolio_charts')
-        .where(['address', 'currency'])
-        .equals([address, 'EUR'])
-        .first();
-
-      return {
-        ada: {
-          hasData: !!(adaEntry && adaEntry.expiresAt > now),
-          dataPoints: adaEntry?.data?.length || 0,
-          expiresAt: adaEntry?.expiresAt || null,
-        },
-        usd: {
-          hasData: !!(usdEntry && usdEntry.expiresAt > now),
-          dataPoints: usdEntry?.data?.length || 0,
-          expiresAt: usdEntry?.expiresAt || null,
-        },
-        eur: {
-          hasData: !!(eurEntry && eurEntry.expiresAt > now),
-          dataPoints: eurEntry?.data?.length || 0,
-          expiresAt: eurEntry?.expiresAt || null,
-        },
-      };
+      return await getPortfolioChartsStatus(walletId, address);
     } catch (error) {
       console.error('Error getting cache status:', error);
       return {
