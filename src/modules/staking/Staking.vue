@@ -607,6 +607,7 @@ const numPages = computed(() => {
   if (paginationMeta.value) {
     return paginationMeta.value.total_pages;
   }
+  return 1;
 });
 
 watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
