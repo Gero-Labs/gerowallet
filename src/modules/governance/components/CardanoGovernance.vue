@@ -14,7 +14,7 @@
             <v-row no-gutters>
               <!-- Left Column -->
               <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card">
+                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card" style="z-index: 1">
                   <v-list-item three-line>
                     <v-list-item-content>
                       <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
