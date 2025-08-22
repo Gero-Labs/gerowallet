@@ -111,13 +111,13 @@
                   </v-tooltip>
 
                   <!-- Notifications Menu (preserved from current version) -->
-                  <v-menu offset-y :close-on-content-click="false">
+                  <v-menu offset-y :close-on-content-click="false" nudge-left="75" nudge-top="-10">
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
                         <v-icon size="20">mdi-bell-outline</v-icon>
                       </v-btn>
                     </template>
-                    <v-card outlined class="liquid-glass-card" min-width="200">
+                    <v-card outlined class="notifications-card" min-width="200">
                       <v-card-title class="pa-2 text-h6"> Notifications </v-card-title>
                       <v-card-text class="pa-0">
                         <v-list class="transparent">
@@ -617,5 +617,14 @@ div.v-toolbar__content {
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
   transform: translateY(-2px) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+.notifications-card {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
 }
 </style>

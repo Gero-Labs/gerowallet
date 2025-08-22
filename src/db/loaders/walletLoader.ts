@@ -72,7 +72,6 @@ export class ConfigLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('config').toArray(),
       (config) => {
-        console.log('setWalletConfig', config);
         WalletStore.setConfig(config.reduce(function(map, val) {
           map[val.key] = val.value;
           return map;
@@ -116,7 +115,6 @@ export class ConnectedDappsLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('connected_dapps').toArray(),
       (newConnectedDapps) => {
-        console.log('new ConnectedDapps', newConnectedDapps)
         WalletStore.setConnectedDapps(newConnectedDapps);
       },
       (error) => {
@@ -151,7 +149,6 @@ export class TransactionsLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('transactions').toArray(),
       async (newTransactions: any[]) => {
-        console.log('newTransactions', newTransactions);
         Loading.setLoadingTxs(true);
         try {
           let transactions: any = [];
@@ -257,9 +254,13 @@ export class TransactionsLoader extends BaseLoader {
                 };
               });
           }
-          console.log('setTransactions', transactions)
           WalletStore.setTransactions(transactions);
-          await this.walletContext.setUtxosAndAddresses(transactions);
+          
+          try {
+            await this.walletContext.setUtxosAndAddresses(transactions);
+          } catch (error) {
+            console.error('setUtxosAndAddresses failed:', error);
+          }
         } catch (e) {
           console.error(e);
           // Return an empty array on error instead of failing completely

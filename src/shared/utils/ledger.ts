@@ -74,7 +74,6 @@ export default {
       let transport: Transport;
       if (!isBluetooth) {
         transport = await this.connectViaUSB();
-        console.log(transport);
       } else {
         transport = await this.connectViaBT();
       }
@@ -99,7 +98,6 @@ export default {
       return { productName, version, hwPublicKey, keys };
     } catch (error: any) {
       snackbar.setError(error.message);
-      console.log('catch error', error.message);
       this.usbDevice = undefined;
     }
     return this.usbDevice;
@@ -131,7 +129,6 @@ export default {
       try {
         transport = await TransportWebUSB.create();
       } catch (e) {
-        console.log(e);
         const usbDevice = await navigator.usb.requestDevice({
           filters: [{ vendorId: 11415 }],
         });
@@ -185,7 +182,6 @@ export default {
     isUsb?: boolean,
   ): Promise<string> {
     const txBody = tx.body();
-    console.log(txBody.to_json());
     const address: Address = Address.from_bech32(wallet.baseAddress);
     // const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
     const credList = Array.from(creds).map(el => {
@@ -320,13 +316,11 @@ export default {
     }
     const fullTx = JSON.parse(JSON.stringify(req));
 
-    console.log(fullTx);
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
     await this.ensureLedgerVersion(ledger);
 
     const response: SignedTransactionData = await ledger.signTransaction(fullTx);
-    console.log('response', response);
     return assembleWitnesses(accountData, response);
   },
   generateAdditionalWitnessPaths(credList, inputs, collaterals: TxInput[], refInputs: TxInput[]) {
@@ -772,7 +766,6 @@ export default {
     const ledgerInputs = [];
     for (let i = 0 ; i < inputs.len() ; i++) {
       const input = inputs.get(i)
-      console.log(utxoList)
       const utxo3 = utxoList.find((u2) => u2.tx_hash === input.transaction_id().to_hex() && u2.tx_index === input.index());
       const cred = utxo3 ? getAddressCredentials(utxo3.payment_addr.bech32) : null;
       const key3 = cred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
@@ -929,9 +922,7 @@ export default {
       network: { protocolMagic: network.networkParams.networkMagic, networkId: network.networkId },
     };
 
-    console.log(messageData);
     let transport: Transport;
-    console.log(isUsb);
     if (isUsb) {
       transport = await this.connectViaUSB();
     } else {
