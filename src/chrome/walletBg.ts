@@ -185,18 +185,24 @@ export class WalletBg {
   }
 
   async setUtxosAndAddresses(transactions: any[]) {
+    console.debug('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
+    
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {
       address = this.baseAddress;
+      console.debug('🏢 Using enterprise address:', address);
     } else {
       stakeAddress = this.stakeAddress;
+      console.debug('🏛️ Using stake address:', stakeAddress);
     }
 
     const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
     const addresses: Set<string> = new Set<string>();
     addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
+    
+    console.debug('🔍 Processing transactions for UTXOs...');
     for (const transaction of transactions) {
       for (const inp of transaction.body.inputs) {
         utxos.delete(`${inp.txId}#${inp.index}`);
@@ -216,7 +222,17 @@ export class WalletBg {
           }
           if (address === outAddress || stakeAddress === outAddress) {
             addresses.add(out.address);
-            utxos.set(`${transaction.id || transaction.tx_hash}#${idx}`, [
+            const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
+            console.debug(`💰 Creating UTXO: ${utxoId}`);
+            console.debug(`  Address: ${out.address}`);
+            console.debug(`  Coins: ${out.value?.coins || 'undefined'}`);
+            console.debug(`  Assets:`, out.value?.assets ? `${out.value.assets.size} assets` : 'undefined assets');
+            if (out.value?.assets && out.value.assets.size > 0) {
+              out.value.assets.forEach((amount, assetId) => {
+                console.debug(`    Asset ${assetId}: ${amount}`);
+              });
+            }
+            utxos.set(utxoId, [
               {
                 txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
                 index: idx,
@@ -252,13 +268,21 @@ export class WalletBg {
     this.setAssets(Array.from(utxos.values()));
 
     // Keys
+    console.debug('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
     if (this.type !== WalletType.Google) {
+      console.debug('🔑 Syncing keys for addresses:', Array.from(addresses));
       const keys = await this.syncService.syncKeys(Array.from(addresses));
+      console.debug('🔑 Keys synced, result:', keys ? 'keys available' : 'keys null');
       WalletStore.setKeys(keys);
+      console.debug('🔑 Keys set in store');
+    } else {
+      console.debug('🔑 Skipping key sync for Google wallet type');
     }
 
     // UTxOs
+    console.debug('💰 Setting', utxos.size, 'UTXOs to store');
     WalletStore.setUtxos(Array.from(utxos.values()));
+    console.debug('✅ setUtxosAndAddresses completed successfully');
   }
 
   setAssets(utxos?: Cardano.Utxo[]) {
@@ -827,14 +851,24 @@ export class WalletBg {
         this.stakeKey.bind(this)
       );
 
+      console.debug('🔍 Required signers analysis:');
+      console.debug(`  Found ${requiredSigners.length} required signers`);
+      requiredSigners.forEach((signer, index) => {
+        console.debug(`  Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
+      });
+
       // Sign with each required key
       for (const signer of requiredSigners) {
+        console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+        
         const privateKey = accountPrivateKey.derive(signer.derivationPath);
         const rawPublicKey = privateKey.toRawKey().toPublic();
 
         // Create transaction hash for signing
         const txBodyHash = computeTxHash(transaction.body);
         const txBodyHashBytes = Buffer.from(txBodyHash, 'hex');
+
+        console.debug(`  Transaction hash: ${txBodyHash}`);
 
         // Sign the transaction hash
         const signature = privateKey.toRawKey().sign(txBodyHashBytes);
@@ -843,8 +877,17 @@ export class WalletBg {
         const rawPublicKeyBytes = rawPublicKey.bytes();
         const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
 
+        console.debug(`  Public key: ${rawPublicKeyHex}`);
+        console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
+
         signatures.set(rawPublicKeyHex as Ed25519PublicKeyHex, signature.hex() as Ed25519SignatureHex);
       }
+
+      console.debug(`🔏 Total signatures created: ${signatures.size}`);
+      console.debug('🔏 Signature map entries:');
+      signatures.forEach((sig, pubKey) => {
+        console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
+      });
 
       // Create witness set - ensure signatures map is properly set
       const witness: Cardano.Witness = {

@@ -36,24 +36,18 @@
 import { computed, ref, toRefs } from 'vue';
 import {Blockchain} from "@/models/types";
 import networks from "@/utils/networks";
-import {
-  Certificate, Ed25519KeyHash,
-  Credential,
-  StakeDelegation,
-  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { toUTxO } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
+import { Cardano } from '@cardano-sdk/core';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 
-const { loggedWallet, utxos, account } = toRefs(walletStore);
-const { tip, pools } = toRefs(networkStore)
+const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
+const { tip, epochParams } = toRefs(networkStore);
 
 const isDelegateDialogOpen = ref(false);
-const selectedPool = ref(undefined);
-const txData = ref(undefined);
+const selectedPool = ref<any>(null);
+const txData = ref<Cardano.Tx | null>(null);
 const geroPoolExists = computed(() => {
   if (loggedWallet.value) {
     return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
@@ -71,30 +65,80 @@ const assetType = computed(() => {
 const hasAssets = computed(() => {
   return !!account.value
 });
-const delegateToGero = () => {
-  const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
-  selectedPool.value = pools.value.find(pool => pool.pool_id_bech32 === poolId)
-  if (!selectedPool.value) {
-    console.log('Pool Not Found')
+const delegateToGero = async () => {
+  if (!loggedWallet.value) {
     return;
   }
-  const wallet = loggedWallet.value;
-  // Registration Certificate
-  const certificates = [];
-  if (!account.value?.active) {
-    const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-    certificates.push(registrationCertificate);
+
+  const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+  if (!poolId) {
+    return;
   }
-  // Delegation Certificate
-  const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(poolId)));
-  certificates.push(delegationCertificate);
-  // UTxOs
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-  const txBody = buildTx(loggedWallet.value, undefined, transactionUnspentOutputs, tip.value.slot, baseAddress.value, certificates, [])
-  txData.value = Transaction.new(txBody, TransactionWitnessSet.new())
-  console.log(txBody.to_json())
-  isDelegateDialogOpen.value = true
+
+  // Create a mock pool object for the dialog
+  selectedPool.value = {
+    pool_id_bech32: poolId,
+    pool_id: poolId,
+    ticker: 'GERO',
+    name: 'GERO Pool'
+  };
+
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    const cardanoPoolId = Cardano.PoolId(poolId);
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+    let certificate;
+    let implicitCoin = BigInt(0);
+
+    if (!account.value?.active) {
+      // Need to register a stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.StakeRegistrationDelegation,
+        stakeCredential,
+        poolId: cardanoPoolId,
+        deposit: stakeKeyDepositLovelace,
+      };
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.StakeDelegation,
+        stakeCredential,
+        poolId: cardanoPoolId,
+      };
+    }
+
+    certificates.push(certificate);
+
+    // Use the generic transaction builder
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin,
+    });
+
+    isDelegateDialogOpen.value = true;
+  } catch (error) {
+    console.error('Error building delegation transaction:', error);
+    // You might want to show an error message to the user here
+  }
 };
 </script>
 <style scoped>

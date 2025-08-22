@@ -21,7 +21,6 @@ export default {
       if (status === 200) return data;
       return parseHttpError(data);
     } catch (error) {
-      console.log(error)
       return parseHttpError(error);
     }
   }

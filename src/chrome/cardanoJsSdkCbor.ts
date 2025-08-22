@@ -147,7 +147,10 @@ export function extractStakeCredentialsFromCertificates(
   for (const cert of certificates) {
     if (cert.__typename === Cardano.CertificateType.StakeRegistration ||
         cert.__typename === Cardano.CertificateType.StakeDeregistration ||
-        cert.__typename === Cardano.CertificateType.StakeDelegation) {
+        cert.__typename === Cardano.CertificateType.StakeDelegation ||
+        cert.__typename === Cardano.CertificateType.VoteDelegation ||
+        cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
+        cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
       stakeCredentials.push(cert.stakeCredential.hash);
     }
     // Add more certificate types as needed
