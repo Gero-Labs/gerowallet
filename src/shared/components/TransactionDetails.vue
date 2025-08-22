@@ -343,8 +343,8 @@
                     <td class="text-left grey--text">Pool</td>
                     <td class="text-left">
                       <v-list-item class="px-0">
-                        <v-list-item-avatar v-if="resolvePoolMeta()?.url_png_icon_64x64">
-                          <v-img :src="resolvePoolMeta()?.url_png_icon_64x64" />
+                        <v-list-item-avatar v-if="currentPoolMeta?.url_png_icon_64x64">
+                          <v-img :src="currentPoolMeta?.url_png_icon_64x64" />
                         </v-list-item-avatar>
                         <v-list-item-content>
                           <v-list-item-title>
@@ -729,6 +729,7 @@ import networks from '@/utils/networks';
 import governanceStoreActions from '@/stores/governanceStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import stakingStoreActions from '@/stores/stakingStore';
+import blockchainApi from '@/api/blockchain-api';
 
 interface Props {
   transactionInfo: any;
@@ -744,6 +745,7 @@ const residue = ref<any[]>([]);
 const panels = ref<any[]>([]);
 const isExpanded = ref<boolean>(false);
 const isReportDialogOpen = ref<boolean>(false);
+const currentPoolMeta = ref<any>('');
 
 function findLovelace(io: { unit: string; quantity: number }[]) {
   const tok = io.find(t => t.unit === 'lovelace');
@@ -949,6 +951,17 @@ const shrink = () => {
   isExpanded.value = false;
 };
 
+const resolvePoolMeta = async (poolId: string) => {
+  if (poolId) {
+    const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value.chain, loggedWallet.value.network)
+    if (pool) {
+      currentPoolMeta.value = JSON.parse(pool.pool_extended_info)?.info;
+    } else {
+      currentPoolMeta.value = '';
+    }
+  }
+  return currentPoolMeta.value;
+};
 watch(
   () => props.transactionInfo,
   async () => {
@@ -956,7 +969,7 @@ watch(
     if (!value) return;
     const dRep = value.body?.certificates?.find((certificate: any) => certificate.dRep)?.dRep;
     const poolId = value.body?.certificates?.find((certificate: any) => certificate.poolId)?.poolId;
-
+    resolvePoolMeta(poolId);
     if (dRep) {
       const drepId = getDRepCip129(dRep);
       await governanceStoreActions.loadDRepById(loggedWallet.value, drepId.toString());
@@ -967,14 +980,6 @@ watch(
   },
   { immediate: true }
 );
-
-const resolvePoolMeta = () => {
-  const pool = currentPool.value;
-  if (pool) {
-    return JSON.parse(pool.pool_extended_info)?.info;
-  }
-  return '';
-};
 </script>
 <style scoped>
 .transaction-info {

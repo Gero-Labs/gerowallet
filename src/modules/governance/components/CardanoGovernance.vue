@@ -14,7 +14,7 @@
             <v-row no-gutters>
               <!-- Left Column -->
               <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card">
+                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card" style="z-index: 1">
                   <v-list-item three-line>
                     <v-list-item-content>
                       <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
@@ -25,7 +25,7 @@
                         {{ truncate(currentDRep.drep_id) }}<CopyButton small :value="currentDRep.drep_id"></CopyButton>
                       </v-list-item-subtitle>
                       <v-list-item-subtitle v-if="currentDRep" class="gradient-text text-subtitle-2 font-weight-semibold">
-                        Vote Power:
+                        Voting Power:
                         {{
                           toCurrency(
                             currentDRep.amount,
@@ -38,7 +38,7 @@
                         }}
                       </v-list-item-subtitle>
                     </v-list-item-content>
-                    <v-list-item-avatar v-if="currentDRep && currentDRep['metadata']?.meta_json?.body?.image?.contentUrl" size="80">
+                    <v-list-item-avatar v-if="currentDRep && currentDRep['metadata']?.meta_json?.body?.image?.contentUrl" size="80" rounded>
                       <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>/
                     </v-list-item-avatar>
                   </v-list-item>
@@ -110,7 +110,7 @@
                     Additionally, there are two predefined DRep options available:
                   </v-card-subtitle>
                   <div class="px-4 py-0 text-center">
-                    <v-tooltip bottom>
+                    <v-tooltip bottom content-class="custom-tooltip">
                       <template v-slot:activator="{ on, attrs }">
                         <span
                           v-bind="attrs"
@@ -126,7 +126,7 @@
                         for incentive purposes.
                       </div>
                     </v-tooltip>
-                    <v-tooltip bottom>
+                    <v-tooltip bottom content-class="custom-tooltip">
                       <template v-slot:activator="{ on, attrs }">
                         <span v-bind="attrs" v-on="on" class="mr-8 white--text text-decoration-underline cursor-pointer"
                           >No Confidence<v-icon class="ml-1" small>mdi-information-outline</v-icon>
@@ -150,7 +150,19 @@
                   <v-card-title
                     >Delegated Representatives (DReps)
                     <v-spacer></v-spacer>
-                    <v-text-field label="Search" outlined hide-details dense v-model="search"> </v-text-field>
+                    <v-text-field
+                      v-model="search"
+                      dense
+                      flat
+                      solo
+                      hide-details
+                      placeholder="Search DReps"
+                      prepend-inner-icon="mdi-magnify"
+                      clearable
+                      style="max-width: 200px"
+                      class="top-level-search"
+                      :loading="drepsLoading"
+                    ></v-text-field>
                   </v-card-title>
                   <!-- Debug pagination info -->
                   <v-card-subtitle v-if="paginationMeta" class="text-caption">
@@ -218,7 +230,7 @@
                             </v-list-item-title>
                             <v-list-item-subtitle class="drep-subtitle">
                               {{ truncate(item.id)
-                              }}<CopyButton class="ml-1 mb-2" x-small :value="item.id" v-if="item"></CopyButton>
+                              }}<CopyButton class="ml-1" x-small :value="item.id" v-if="item"></CopyButton>
                             </v-list-item-subtitle>
                           </v-list-item-content>
                         </v-list-item>
@@ -502,34 +514,6 @@ const drepDelegate = async (row: any) => {
   selectedDRep.value = row;
 
   try {
-    console.log('epochParams.value:', epochParams.value);
-    console.log('tip.value:', tip.value);
-    console.log('networkStore.state:', networkStore.state);
-
-    // Use epoch parameters from store, or fallback to default network parameters
-    let currentEpochParams = epochParams.value;
-    if (!currentEpochParams) {
-      console.warn('Epoch parameters not available from store, using default parameters');
-      // Get default parameters for the current network
-      const defaultParams = networks.resolveNetwork(loggedWallet.value?.chain, loggedWallet.value?.network);
-      if (defaultParams?.protocolParams) {
-        // Convert default parameters to SDK format (same conversion as in network.ts loader)
-        currentEpochParams = {
-          ...defaultParams.protocolParams,
-          stakeKeyDeposit: parseInt(defaultParams.protocolParams.key_deposit),
-          poolDeposit: parseInt(defaultParams.protocolParams.pool_deposit),
-          minFeeCoefficient: parseInt(defaultParams.protocolParams.min_fee_a),
-          minFeeConstant: parseInt(defaultParams.protocolParams.min_fee_b),
-          coinsPerUtxoByte: parseInt(defaultParams.protocolParams.coins_per_utxo_size || defaultParams.protocolParams.coins_per_utxo_word),
-        };
-        console.log('Using default epoch parameters (converted to SDK format):', currentEpochParams);
-      } else {
-        throw new Error('No epoch parameters available and no default parameters found');
-      }
-    } else {
-      console.log('Using store epoch parameters:', currentEpochParams);
-    }
-
     const certificates: Cardano.Certificate[] = [];
 
     // Create stake credential from the key hash
@@ -545,7 +529,7 @@ const drepDelegate = async (row: any) => {
       Serialization.DRep.newKeyHash(selectedDRep.value.hex);
 
     // Use proper deposit from epoch parameters - ensure BigInt conversion
-    const stakeKeyDepositLovelace = BigInt(currentEpochParams.stakeKeyDeposit);
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
     let implicitCoin = BigInt(0);
     let certificate: Cardano.Certificate;
 
@@ -572,7 +556,7 @@ const drepDelegate = async (row: any) => {
     txData.value = await buildCardanoTransaction({
       certificates,
       utxos: utxos.value,
-      epochParams: currentEpochParams,
+      epochParams: epochParams.value,
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
       implicitCoin,
@@ -686,6 +670,47 @@ onUnmounted(() => {
 }
 .mb-2 {
   margin-bottom: 2px;
+}
+
+.top-level-search.v-text-field {
+  background: transparent !important;
+}
+
+.top-level-search >>> .v-input__slot {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.top-level-search >>> .v-input__control {
+  background: transparent !important;
+}
+
+.top-level-search >>> .v-text-field__slot {
+  background: transparent !important;
+}
+
+.top-level-search >>> .v-input__slot:before {
+  border: none !important;
+}
+
+.top-level-search >>> .v-input__slot:after {
+  border: none !important;
+}
+
+.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
+  background: transparent !important;
+}
+
+@media (max-width: 600px) {
+  .top-level-search {
+    order: 2 !important;
+    margin-left: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .table-container {
+    max-height: calc(100vh - 150px); /* Меньший отступ для мобильных */
+  }
 }
 </style>
 <style>
