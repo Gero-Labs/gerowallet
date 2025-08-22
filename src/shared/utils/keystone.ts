@@ -47,7 +47,6 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
           address: utxo.payment_addr.bech32,
         })
       }
-      console.log(utxo)
     }
 
     if ((tx.body().certs() && tx.body().certs().len() > 0) || (tx.body().withdrawals() && tx.body().withdrawals().len() > 0)) {
@@ -96,7 +95,6 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
   // //   const { utxoList } = getFilteredUtxoList(appAccount, false);
   // //   inputUtxoList = utxoList;
   // // }
-  console.log('tx', tx.to_json())
   const req = {
     origin: 'gerowallet',
     requestId: crypto.randomUUID(),
@@ -105,7 +103,6 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
     extraSigners: res.extraSigners
   };
   const req_json = JSON.parse(JSON.stringify(req));
-  console.log("req_json", JSON.stringify(req_json));
   return sdk.cardano.generateSignRequest(req)
 }
 import logo128Url from '@/assets/img/bkp/logo128.png';

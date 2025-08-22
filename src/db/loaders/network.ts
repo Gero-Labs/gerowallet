@@ -43,7 +43,6 @@ export class GenesisLoader extends BaseLoader {
       () => blockchainDB.table('genesis_info').where({ id: 0 }).first(),
       genesis => {
         if (genesis) {
-          console.log('setGenesis', genesis);
           NetworkStore.setGenesis(genesis);
         }
       },
@@ -68,7 +67,6 @@ export class EpochParamsLoader extends BaseLoader {
     return this.createSubscription(
       () => blockchainDB.table('epoch_params').orderBy('epoch').last(),
       (epochParams: any) => {
-        console.debug('🔍 Epoch params received:', epochParams);
         let defaultEpochParams;
         if (!epochParams) {
           defaultEpochParams = networks.resolveNetwork(this.chain, this.network).protocolParams;
