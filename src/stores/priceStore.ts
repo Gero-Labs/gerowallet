@@ -40,10 +40,6 @@ class PriceService {
     try {
       console.debug('🦑 Initializing price service...');
       priceStore.connectionStatus = 'connecting';
-
-      // Set wallet context mode
-      krakenWebSocketService.setWalletContext(true);
-
       // Set up ticker update handler
       krakenWebSocketService.onTicker((ticker: PriceData) => {
         priceStore.adaUsd = ticker;
@@ -54,7 +50,7 @@ class PriceService {
 
       // Connect to Kraken WebSocket
       await krakenWebSocketService.connect();
-      
+
       // Subscribe to ADA/USD ticker
       krakenWebSocketService.subscribeToAdaUsd();
 
@@ -73,14 +69,14 @@ class PriceService {
    */
   disconnect(): void {
     console.debug('🦑 Disconnecting price service...');
-    
+
     krakenWebSocketService.disconnect();
-    
+
     // Reset price store
     priceStore.adaUsd = null;
     priceStore.isConnected = false;
     priceStore.connectionStatus = 'disconnected';
-    
+
     this.isInitialized = false;
     console.debug('🦑 Price service disconnected');
   }

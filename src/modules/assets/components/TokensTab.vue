@@ -156,7 +156,7 @@
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               icon
-              small
+              x-small
               class="action-btn swap-action"
               @click="openSwapDialog(item)"
               :disabled="!canSwap(item)"
@@ -166,8 +166,8 @@
               <v-img
                 :src="assets.swapSvg"
                 alt="Swap"
-                width="20"
-                height="20"
+                width="12"
+                height="12"
                 contain
                 style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
               />
@@ -183,7 +183,7 @@
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               icon
-              small
+              x-small
               class="action-btn perpetuals-action"
               @click="openPerpetualsDialog(item)"
               :disabled="!canTradePerpetuals(item)"
@@ -193,8 +193,8 @@
               <v-img
                 :src="assets.barChart"
                 alt="Perpetuals"
-                width="20"
-                height="20"
+                width="12"
+                height="12"
                 contain
                 style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
               />
@@ -618,9 +618,6 @@ const openPerpetualsDialog = (item: any) => {
 }
 
 .action-btn {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
   border-radius: 6px !important;
   transition: all 0.2s ease !important;
   border: 1px solid transparent !important;

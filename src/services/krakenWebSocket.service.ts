@@ -33,11 +33,12 @@ class KrakenWebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectDelay = 5000; // 5 seconds
-  private pingInterval: number | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
   private isConnected = false;
   private subscriptions: Set<string> = new Set();
   private onTickerUpdate: ((ticker: any) => void) | null = null;
-  private isWalletContext = false; // Track if this is wallet-wide or component-specific
+  private lastTickerTime = 0;
+  private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     console.debug('🦑 Kraken WebSocket Service initialized');
@@ -49,7 +50,8 @@ class KrakenWebSocketService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = import.meta.env.VITE_KRAKEN_WS_URL || 'wss://ws.kraken.com';
+        //@ts-ignore
+        const wsUrl = (import.meta.env.VITE_KRAKEN_WS_URL || 'wss://ws.kraken.com').replace(/['"]/g, '');
         console.log('🦑 🔧 WebSocket URL:', wsUrl);
         console.log('🦑 🔌 Creating WebSocket connection...');
         this.ws = new WebSocket(wsUrl);
@@ -60,6 +62,7 @@ class KrakenWebSocketService {
           this.isConnected = true;
           this.reconnectAttempts = 0;
           this.startPing();
+          this.startTickerMonitoring();
           resolve();
         };
 
@@ -71,7 +74,8 @@ class KrakenWebSocketService {
           console.debug('🦑 ❌ Disconnected from Kraken WebSocket:', event.code, event.reason);
           this.isConnected = false;
           this.stopPing();
-          
+          this.stopTickerMonitoring();
+
           // Attempt reconnection if not a normal closure
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
@@ -133,6 +137,7 @@ class KrakenWebSocketService {
     try {
       const message: KrakenMessage | any[] = JSON.parse(data);
 
+
       // Handle system messages (objects)
       if (typeof message === 'object' && !Array.isArray(message)) {
         this.handleSystemMessage(message as KrakenMessage);
@@ -155,15 +160,9 @@ class KrakenWebSocketService {
    */
   private handleSystemMessage(message: KrakenMessage): void {
     if (message.event === 'subscriptionStatus') {
-      if (message.status === 'subscribed') {
-        console.debug('🦑 ✅ Successfully subscribed to:', message.pair, message.subscription?.name);
-      } else if (message.status === 'error') {
+      if (message.status === 'error') {
         console.error('🦑 ❌ Subscription error:', message.errorMessage);
       }
-    } else if (message.event === 'systemStatus') {
-      console.debug('🦑 🖥️ System status:', message.status);
-    } else if (message.event === 'heartbeat') {
-      console.debug('🦑 💓 Heartbeat received');
     }
   }
 
@@ -174,11 +173,11 @@ class KrakenWebSocketService {
   private handleTickerData(data: any[]): void {
     if (data.length < 4) return;
 
-    const [channelId, tickerData, channelName, pair] = data;
+    const [channelID, tickerData, channelName, pair] = data;
 
     if (channelName === 'ticker' && pair === 'ADA/USD') {
+      this.lastTickerTime = Date.now();
       const ticker = this.parseTickerData(tickerData);
-      console.debug('🦑 📊 ADA/USD Ticker Update:', ticker);
       
       if (this.onTickerUpdate) {
         this.onTickerUpdate(ticker);
@@ -220,7 +219,6 @@ class KrakenWebSocketService {
     this.pingInterval = setInterval(() => {
       if (this.ws && this.isConnected) {
         this.ws.send(JSON.stringify({ event: 'ping' }));
-        console.debug('🦑 🏓 Ping sent to Kraken');
       }
     }, 30000); // Ping every 30 seconds
   }
@@ -236,50 +234,63 @@ class KrakenWebSocketService {
   }
 
   /**
+   * Start monitoring ticker updates and request fresh data periodically
+   */
+  private startTickerMonitoring(): void {
+    this.tickerRequestInterval = setInterval(() => {
+      const timeSinceLastUpdate = Date.now() - this.lastTickerTime;
+      
+      if (timeSinceLastUpdate > 120000) {
+        if (this.isConnected && this.subscriptions.has('ADA/USD')) {
+          this.subscribeToAdaUsd();
+        }
+      }
+    }, 30000); // Check every 30 seconds
+  }
+
+  /**
+   * Stop ticker monitoring
+   */
+  private stopTickerMonitoring(): void {
+    if (this.tickerRequestInterval) {
+      clearInterval(this.tickerRequestInterval);
+      this.tickerRequestInterval = null;
+    }
+  }
+
+  /**
    * Schedule reconnection attempt
    */
   private scheduleReconnect(): void {
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1); // Exponential backoff
-    
-    console.debug(`🦑 🔄 Scheduling reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
-    
+
     setTimeout(() => {
       if (this.reconnectAttempts <= this.maxReconnectAttempts) {
         this.connect()
           .then(() => {
-            console.debug('🦑 ✅ Reconnected successfully');
-            // Re-subscribe to ADA/USD
             setTimeout(() => this.subscribeToAdaUsd(), 1000);
           })
           .catch(() => {
-            console.debug('🦑 ❌ Reconnection failed, will try again...');
+            // Silent fail, will retry
           });
       }
     }, delay);
   }
 
   /**
-   * Set wallet context mode for automatic wallet switch handling
-   */
-  setWalletContext(enabled: boolean): void {
-    this.isWalletContext = enabled;
-    console.debug('🦑 Wallet context mode:', enabled ? 'enabled' : 'disabled');
-  }
-
-  /**
    * Disconnect from Kraken WebSocket
    */
   disconnect(): void {
-    console.debug('🦑 🔌 Disconnecting from Kraken WebSocket');
     this.isConnected = false;
     this.stopPing();
-    
+    this.stopTickerMonitoring();
+
     if (this.ws) {
       this.ws.close(1000, 'Normal closure');
       this.ws = null;
     }
-    
+
     this.subscriptions.clear();
     this.onTickerUpdate = null;
   }
