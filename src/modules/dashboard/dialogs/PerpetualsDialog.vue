@@ -4,988 +4,958 @@
     @close="$emit('close')"
     title="Strike Perpetuals"
     subtitle="Trade perpetual futures with leverage on Cardano"
-    :height="950"
-    :min-height="850"
+    :min-height="0"
     :width="1100"
-    :scrollable="false"
+    :scrollable="true"
   >
-    <v-card-text class="pt-1 dialog-content-container">
+    <v-card-text class="pt-1 dialog-content-container" style="z-index: 4">
+      <v-row>
+        <v-col cols="7">
+          <!-- ADA/USD Chart Header -->
+          <div
+            class="d-flex align-items-center justify-space-between"
+            style="margin-top: 5px; margin-bottom: 5px;"
+          >
+            <h4 class="column-title compact">{{ tickerSymbol }}/USD</h4>
+            <span class="chart-timeframe">24H Price Action</span>
+          </div>
 
-      <v-card
-        flat
-        outlined
-        class="mx-auto liquid-glass compact-perpetuals-widget d-flex flex-column px-3 py-3 fixed-height-card"
-      >
-        <v-card-text class="pa-2 flex-grow-1 d-flex flex-column">
-          <!-- Two-column layout -->
-          <v-card-text class="pb-0 px-0 pt-0">
-            <div class="two-column-layout">
-              <!-- Left Column: Chart and Positions -->
-              <div class="positions-column">
-                <!-- ADA/USD Chart Header -->
-                <div
-                  class="d-flex align-items-center justify-space-between mb-2"
+          <!-- TradingView ADA/USD Histogram Chart -->
+          <div class="chart-section mb-3">
+            <TradingViewChart
+              :symbol="tickerSymbol + '/USD'"
+              :data="chartData"
+              :enableRealtime="true"
+              :realtimeData="priceStore.adaUsd"
+              width="100%"
+              height="160px"
+              theme="dark"
+              @chartReady="onChartReady"
+            />
+          </div>
+
+          <!-- My Positions Header -->
+          <div
+            class="d-flex align-items-center justify-space-between mb-2"
+          >
+            <div class="d-flex align-items-center">
+              <h4 class="column-title compact">My Positions</h4>
+              <v-btn
+                icon
+                x-small
+                @click="loadPositions"
+                :loading="loadingPositions"
+                class="refresh-btn-external ml-2"
+              >
+                <v-icon x-small>mdi-reload</v-icon>
+              </v-btn>
+            </div>
+            <span v-if="positions.length > 0" class="positions-count">
+                {{ positions.length }} position{{
+                positions.length === 1 ? "" : "s"
+              }}
+              </span>
+          </div>
+
+          <!-- Loading state -->
+          <div v-if="loadingPositions" class="loading-state">
+            <v-progress-circular
+              indeterminate
+              color="#26FAB0"
+              size="40"
+            />
+            <p class="mt-3">Loading positions...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="positions.length === 0" class="empty-state">
+            <v-icon size="48" color="grey">mdi-chart-line</v-icon>
+            <p class="mt-2">No open positions</p>
+            <p class="mt-1 text-caption">
+              Your perpetual positions will appear here
+            </p>
+          </div>
+
+          <!-- Positions table -->
+          <div v-else class="positions-table">
+            <v-data-table
+              dense
+              class="transparent positions-data-table"
+              :headers="positionHeaders"
+              :items="paginatedPositions"
+              :items-per-page="-1"
+              hide-default-footer
+              :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+            >
+              <!-- Custom headers with padding -->
+              <template v-slot:[`header.asset`]="{ header }">
+                <span style="padding-left: 12px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.positionType`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.currentValue`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.entryPrice`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.pnlWithFees`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.leverage`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+              <template v-slot:[`header.actions`]="{ header }">
+                <span style="padding: 0 8px">{{ header.text }}</span>
+              </template>
+
+              <template v-slot:body.append>
+                <tr
+                  v-if="positions.length > positionsPerPage"
+                  class="no-hover"
                 >
-                  <h4 class="column-title compact">{{ tickerSymbol }}/USD</h4>
-                  <span class="chart-timeframe">24H Price Action</span>
-                </div>
-
-                <!-- TradingView ADA/USD Histogram Chart -->
-                <div class="chart-section mb-3">
-                  <TradingViewChart
-                    :symbol="tickerSymbol + '/USD'"
-                    :data="chartData"
-                    :fetchData="shouldFetchChartData"
-                    :useKraken="true"
-                    width="100%"
-                    height="160px"
-                    theme="dark"
-                    @chartReady="onChartReady"
-                  />
-                </div>
-
-                <!-- My Positions Header -->
-                <div
-                  class="d-flex align-items-center justify-space-between mb-2"
-                >
-                  <div class="d-flex align-items-center">
-                    <h4 class="column-title compact">My Positions</h4>
-                    <v-btn
-                      icon
-                      x-small
-                      @click="loadPositions"
-                      :loading="loadingPositions"
-                      class="refresh-btn-external ml-2"
-                    >
-                      <v-icon x-small>mdi-reload</v-icon>
-                    </v-btn>
-                  </div>
-                  <span v-if="positions.length > 0" class="positions-count">
-                    {{ positions.length }} position{{
-                      positions.length === 1 ? "" : "s"
-                    }}
-                  </span>
-                </div>
-
-                <!-- Loading state -->
-                <div v-if="loadingPositions" class="loading-state">
-                  <v-progress-circular
-                    indeterminate
-                    color="#26FAB0"
-                    size="40"
-                  />
-                  <p class="mt-3">Loading positions...</p>
-                </div>
-
-                <!-- Empty state -->
-                <div v-else-if="positions.length === 0" class="empty-state">
-                  <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-                  <p class="mt-2">No open positions</p>
-                  <p class="mt-1 text-caption">
-                    Your perpetual positions will appear here
-                  </p>
-                </div>
-
-                <!-- Positions table -->
-                <div v-else class="positions-table">
-                  <v-data-table
-                    dense
-                    class="transparent positions-data-table"
-                    :headers="positionHeaders"
-                    :items="paginatedPositions"
-                    :items-per-page="-1"
-                    hide-default-footer
-                    :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+                  <td
+                    :colspan="positionHeaders.length"
+                    class="text-center pa-0 ma-0"
                   >
-                    <!-- Custom headers with padding -->
-                    <template v-slot:[`header.asset`]="{ header }">
-                      <span style="padding-left: 12px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.positionType`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.currentValue`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.entryPrice`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.pnlWithFees`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.leverage`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
-                    <template v-slot:[`header.actions`]="{ header }">
-                      <span style="padding: 0 8px">{{ header.text }}</span>
-                    </template>
+                    <v-pagination
+                      v-model="currentPositionsPage"
+                      :length="
+                          Math.ceil(positions.length / positionsPerPage)
+                        "
+                      :total-visible="5"
+                      circle
+                      class="compact-pagination ma-0"
+                    ></v-pagination>
+                  </td>
+                </tr>
+              </template>
+              <template v-slot:[`item.asset`]="{ item }">
+                <div class="d-flex align-items-center pl-2">
+                    <span class="asset-name">{{
+                        item.asset?.ticker
+                      }}</span>
+                  <v-avatar
+                    v-if="
+                        item.pnl !== undefined ||
+                        item.unrealizedPnl !== undefined
+                      "
+                    tile
+                    size="16"
+                    class="ml-2"
+                  >
+                    <v-img
+                      :src="getPositionTrendIcon(item)"
+                      alt="P&L trend"
+                    />
+                  </v-avatar>
+                </div>
+              </template>
 
-                    <template v-slot:body.append>
-                      <tr
-                        v-if="positions.length > positionsPerPage"
-                        class="no-hover"
+              <!-- Position Type column with chip -->
+              <template v-slot:[`item.positionType`]="{ item }">
+                <v-chip
+                  v-if="item.position"
+                  :color="
+                      item.position.toUpperCase() === 'LONG'
+                        ? 'success'
+                        : 'error'
+                    "
+                  x-small
+                  label
+                  class="ultra-compact-chip"
+                  :style="
+                      item.position.toUpperCase() === 'LONG'
+                        ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
+                        : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
+                    "
+                >
+                  {{ item.position.toUpperCase() }}
+                </v-chip>
+              </template>
+
+              <!-- Current Value column with Strike Finance style tooltip -->
+              <template v-slot:[`item.currentValue`]="{ item }">
+                <div
+                  v-if="item.currentPositionValueUsd !== undefined"
+                  class="position-value-compact"
+                >
+                  <v-tooltip
+                    top
+                    content-class="custom-tooltip"
+                    max-width="280"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <div
+                        v-bind="attrs"
+                        v-on="on"
+                        class="position-value-hover"
                       >
-                        <td
-                          :colspan="positionHeaders.length"
-                          class="text-center pa-0 ma-0"
-                        >
-                          <v-pagination
-                            v-model="currentPositionsPage"
-                            :length="
-                              Math.ceil(positions.length / positionsPerPage)
+                        <div class="value-usd">
+                          ${{ item.currentPositionValueUsd.toFixed(2) }}
+                        </div>
+                        <div class="value-ada">
+                          {{ item.currentPositionValueAda.toFixed(2) }}A
+                        </div>
+                      </div>
+                    </template>
+                    <div class="fees-tooltip-content">
+                      <div class="fees-title">Position Breakdown</div>
+                      <div class="position-main-info">
+                        <div
+                          style="
+                              font-size: 14px;
+                              font-weight: 600;
+                              margin-bottom: 4px;
                             "
-                            :total-visible="5"
-                            circle
-                            class="compact-pagination ma-0"
-                          ></v-pagination>
-                        </td>
-                      </tr>
-                    </template>
-                    <!-- Asset column with trend icon -->
-                    <template v-slot:[`item.asset`]="{ item }">
-                      <div class="d-flex align-items-center pl-2">
-                        <span class="asset-name">{{
-                          item.asset?.name || "ADA"
-                        }}</span>
-                        <v-avatar
-                          v-if="
-                            item.pnl !== undefined ||
-                            item.unrealizedPnl !== undefined
-                          "
-                          tile
-                          size="16"
-                          class="ml-2"
                         >
-                          <v-img
-                            :src="getPositionTrendIcon(item)"
-                            alt="P&L trend"
-                          />
-                        </v-avatar>
-                      </div>
-                    </template>
-
-                    <!-- Position Type column with chip -->
-                    <template v-slot:[`item.positionType`]="{ item }">
-                      <v-chip
-                        v-if="item.position"
-                        :color="
-                          item.position.toUpperCase() === 'LONG'
-                            ? 'success'
-                            : 'error'
-                        "
-                        x-small
-                        label
-                        class="ultra-compact-chip"
-                        :style="
-                          item.position.toUpperCase() === 'LONG'
-                            ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
-                            : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
-                        "
-                      >
-                        {{ item.position.toUpperCase() }}
-                      </v-chip>
-                    </template>
-
-                    <!-- Current Value column with Strike Finance style tooltip -->
-                    <template v-slot:[`item.currentValue`]="{ item }">
-                      <div
-                        v-if="item.currentPositionValueUsd !== undefined"
-                        class="position-value-compact"
-                      >
-                        <v-tooltip
-                          top
-                          content-class="custom-tooltip"
-                          max-width="280"
-                        >
-                          <template v-slot:activator="{ on, attrs }">
-                            <div
-                              v-bind="attrs"
-                              v-on="on"
-                              class="position-value-hover"
-                            >
-                              <div class="value-usd">
-                                ${{ item.currentPositionValueUsd.toFixed(2) }}
-                              </div>
-                              <div class="value-ada">
-                                {{ item.currentPositionValueAda.toFixed(2) }}A
-                              </div>
-                            </div>
-                          </template>
-                          <div class="fees-tooltip-content">
-                            <div class="fees-title">Position Breakdown</div>
-                            <div class="position-main-info">
-                              <div
-                                style="
-                                  font-size: 14px;
-                                  font-weight: 600;
-                                  margin-bottom: 4px;
-                                "
-                              >
-                                ${{
-                                  calculatePositionFees(
-                                    item,
-                                    perpetualsPrice?.lastPrice
-                                  )?.positionValueUSD.toFixed(2)
-                                }}
-                                ({{
-                                  calculatePositionFees(
-                                    item,
-                                    perpetualsPrice?.lastPrice
-                                  )?.positionValueADA.toFixed(2)
-                                }}
-                                ADA)
-                              </div>
-                              <div
-                                :class="
-                                  calculatePositionFees(item, perpetualsPrice?.lastPrice)
-                                    ?.pnlWithFees >= 0
-                                    ? 'profit'
-                                    : 'loss'
-                                "
-                                style="font-size: 13px; font-weight: 600"
-                              >
-                                ${{
-                                  calculatePositionFees(
-                                    item,
-                                    perpetualsPrice?.lastPrice
-                                  )?.pnlWithFees.toFixed(2)
-                                }}
-                                ({{
-                                  calculatePositionFees(
-                                    item,
-                                    perpetualsPrice?.lastPrice
-                                  )?.pnlWithFeesPercentage.toFixed(2)
-                                }}%)
-                              </div>
-                            </div>
-
-                            <div
-                              v-if="
-                                calculatePositionFees(item, perpetualsPrice?.lastPrice)
-                              "
-                            >
-                              <div class="fee-item">
-                                <span>Opening Fee:</span>
-                                <span
-                                  >${{
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.openingFeeUSD.toFixed(2)
-                                  }}</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>Hourly Borrow Fee:</span>
-                                <span
-                                  >${{
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.hourlyBorrowFeeUSD.toFixed(4)
-                                  }}
-                                  ({{
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.hourlyBorrowFeePercentage
-                                  }})</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>Next Hourly Fee Update:</span>
-                                <span
-                                  style="
-                                    color: #26fab0;
-                                    font-weight: 600;
-                                    font-family: monospace;
-                                  "
-                                  >{{
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.nextCountdown
-                                  }}</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>Liquidation After Hourly:</span>
-                                <span
-                                  >${{
-                                    formatPriceWithMinDigits(
-                                      calculatePositionFees(
-                                        item,
-                                        perpetualsPrice?.lastPrice
-                                      )?.liquidationAfterHourly || 0
-                                    )
-                                  }}</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>Accumulated Borrow Fee:</span>
-                                <span
-                                  >${{
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.accumulatedBorrowFeeUSD.toFixed(2)
-                                  }}</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>PNL:</span>
-                                <span
-                                  :class="
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.basePNL >= 0
-                                      ? 'profit'
-                                      : 'loss'
-                                  "
-                                >
-                                  {{
-                                    formatCurrency(
-                                      calculatePositionFees(
-                                        item,
-                                        perpetualsPrice?.lastPrice
-                                      )?.basePNL || 0
-                                    )
-                                  }}
-                                </span>
-                              </div>
-                              <div
-                                class="fee-item"
-                                style="
-                                  margin-top: 8px;
-                                  padding-top: 8px;
-                                  border-top: 1px solid rgba(255, 255, 255, 0.1);
-                                "
-                              >
-                                <span><strong>PNL With Fees:</strong></span>
-                                <span
-                                  :class="
-                                    calculatePositionFees(
-                                      item,
-                                      perpetualsPrice?.lastPrice
-                                    )?.pnlWithFees >= 0
-                                      ? 'profit'
-                                      : 'loss'
-                                  "
-                                  style="font-weight: 600"
-                                >
-                                  <strong
-                                    >${{
-                                      calculatePositionFees(
-                                        item,
-                                        perpetualsPrice?.lastPrice
-                                      )?.pnlWithFees.toFixed(2)
-                                    }}</strong
-                                  >
-                                </span>
-                              </div>
-                            </div>
-                            <div v-else class="fee-item">
-                              <span
-                                >Tooltip unavailable - missing market data</span
-                              >
-                            </div>
-                          </div>
-                        </v-tooltip>
-                      </div>
-                      <span v-else>-</span>
-                    </template>
-
-                    <!-- Entry / Mark Price column -->
-                    <template v-slot:[`item.entryPrice`]="{ item }">
-                      <div
-                        v-if="item.entryPrice !== undefined"
-                        class="price-values-compact"
-                      >
-                        <div class="entry-price">
-                          ${{ item.entryPrice.toFixed(4) }}
+                          ${{
+                            calculatePositionFees(
+                              item,
+                              perpetualsPrice?.lastPrice
+                            )?.positionValueUSD.toFixed(2)
+                          }}
+                          ({{
+                            calculatePositionFees(
+                              item,
+                              perpetualsPrice?.lastPrice
+                            )?.positionValueADA.toFixed(2)
+                          }}
+                          ADA)
                         </div>
                         <div
-                          v-if="
-                            item.markPrice !== undefined &&
-                            item.markPrice !== item.entryPrice
-                          "
-                          class="mark-price"
-                        >
-                          / ${{ item.markPrice.toFixed(4) }}
-                        </div>
-                      </div>
-                      <span v-else>-</span>
-                    </template>
-
-                    <!-- P&L with Fees column with trend icon -->
-                    <template v-slot:[`item.pnlWithFees`]="{ item }">
-                      <div
-                        v-if="calculatePositionFees(item, perpetualsPrice?.lastPrice)"
-                        class="d-flex align-items-center justify-center"
-                      >
-                        <v-avatar
-                          tile
-                          size="10"
-                          class="mr-1 trend-icon-centered"
-                        >
-                          <v-img
-                            :src="
-                              calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees > 0
-                                ? assets.trendUpSvg
-                                : calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees < 0
-                                ? assets.trendDownSvg
-                                : assets.arrowRightSvg
+                          :class="
+                              calculatePositionFees(item, perpetualsPrice?.lastPrice)
+                                ?.pnlWithFees >= 0
+                                ? 'profit'
+                                : 'loss'
                             "
-                            alt="trend"
-                          />
-                        </v-avatar>
-                        <div class="pnl-values-compact">
-                          <div :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'">
-                            ${{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees.toFixed(0) }}
-                          </div>
-                          <div
-                            v-if="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFeesPercentage !== undefined"
-                            class="pnl-percentage"
-                            :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'"
-                          >
-                            {{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFeesPercentage.toFixed(1) }}%
-                          </div>
+                          style="font-size: 13px; font-weight: 600"
+                        >
+                          ${{
+                            calculatePositionFees(
+                              item,
+                              perpetualsPrice?.lastPrice
+                            )?.pnlWithFees.toFixed(2)
+                          }}
+                          ({{
+                            calculatePositionFees(
+                              item,
+                              perpetualsPrice?.lastPrice
+                            )?.pnlWithFeesPercentage.toFixed(2)
+                          }}%)
                         </div>
                       </div>
-                      <span v-else>-</span>
-                    </template>
 
-                    <!-- Leverage column -->
-                    <template v-slot:[`item.leverage`]="{ item }">
-                      <span v-if="item.leverage !== undefined"
-                        >{{ item.leverage }}x</span
+                      <div
+                        v-if="
+                            calculatePositionFees(item, perpetualsPrice?.lastPrice)
+                          "
                       >
-                      <span v-else>-</span>
-                    </template>
+                        <div class="fee-item">
+                          <span>Opening Fee:</span>
+                          <span
+                          >${{
+                              calculatePositionFees(
+                                item,
+                                perpetualsPrice?.lastPrice
+                              )?.openingFeeUSD.toFixed(2)
+                            }}</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>Hourly Borrow Fee:</span>
+                          <span
+                          >${{
+                              calculatePositionFees(
+                                item,
+                                perpetualsPrice?.lastPrice
+                              )?.hourlyBorrowFeeUSD.toFixed(4)
+                            }}
+                              ({{
+                              calculatePositionFees(
+                                item,
+                                perpetualsPrice?.lastPrice
+                              )?.hourlyBorrowFeePercentage
+                            }})</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>Next Hourly Fee Update:</span>
+                          <span
+                            style="
+                                color: #26fab0;
+                                font-weight: 600;
+                                font-family: monospace;
+                              "
+                          >{{
+                              calculatePositionFees(
+                                item,
+                                perpetualsPrice?.lastPrice
+                              )?.nextCountdown
+                            }}</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>Liquidation After Hourly:</span>
+                          <span
+                          >${{
+                              formatPriceWithMinDigits(
+                                calculatePositionFees(
+                                  item,
+                                  perpetualsPrice?.lastPrice
+                                )?.liquidationAfterHourly || 0
+                              )
+                            }}</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>Accumulated Borrow Fee:</span>
+                          <span
+                          >${{
+                              calculatePositionFees(
+                                item,
+                                perpetualsPrice?.lastPrice
+                              )?.accumulatedBorrowFeeUSD.toFixed(2)
+                            }}</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>PNL:</span>
+                          <span
+                            :class="
+                                calculatePositionFees(
+                                  item,
+                                  perpetualsPrice?.lastPrice
+                                )?.basePNL >= 0
+                                  ? 'profit'
+                                  : 'loss'
+                              "
+                          >
+                              {{
+                              formatCurrency(
+                                calculatePositionFees(
+                                  item,
+                                  perpetualsPrice?.lastPrice
+                                )?.basePNL || 0
+                              )
+                            }}
+                            </span>
+                        </div>
+                        <div
+                          class="fee-item"
+                          style="
+                              margin-top: 8px;
+                              padding-top: 8px;
+                              border-top: 1px solid rgba(255, 255, 255, 0.1);
+                            "
+                        >
+                          <span><strong>PNL With Fees:</strong></span>
+                          <span
+                            :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'"
+                            style="font-weight: 600"
+                          >
+                              <strong>
+                                ${{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees.toFixed(2) }}
+                              </strong>
+                            </span>
+                        </div>
+                      </div>
+                      <div v-else class="fee-item">
+                        <span>Tooltip unavailable - missing market data</span>
+                      </div>
+                    </div>
+                  </v-tooltip>
+                </div>
+                <span v-else>-</span>
+              </template>
 
-                    <!-- Actions column -->
-                    <template v-slot:[`item.actions`]="{ item }">
-                      <v-btn
-                        color="error"
-                        text
-                        x-small
-                        @click="closePosition(item)"
-                        :loading="closingPositions[item.id]"
-                        class="close-position-btn-compact"
-                        :disabled="closingPositions[item.id]"
-                      >
-                        <v-icon x-small>{{
-                          closingPositions[item.id]
-                            ? "mdi-loading mdi-spin"
-                            : "mdi-close"
-                        }}</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-data-table>
+              <!-- Entry / Mark Price column -->
+              <template v-slot:[`item.entryPrice`]="{ item }">
+                <div
+                  v-if="item.entryPrice !== undefined"
+                  class="price-values-compact"
+                >
+                  <div class="entry-price">
+                    ${{ item.entryPrice.toFixed(4) }}
+                  </div>
+                  <div
+                    v-if="
+                        item.markPrice !== undefined &&
+                        item.markPrice !== item.entryPrice
+                      "
+                    class="mark-price"
+                  >
+                    / ${{ item.markPrice.toFixed(4) }}
+                  </div>
+                </div>
+                <span v-else>-</span>
+              </template>
+
+              <!-- P&L with Fees column with trend icon -->
+              <template v-slot:[`item.pnlWithFees`]="{ item }">
+                <div
+                  v-if="calculatePositionFees(item, perpetualsPrice?.lastPrice)"
+                  class="d-flex align-items-center justify-center"
+                >
+                  <v-avatar
+                    tile
+                    size="10"
+                    class="mr-1 trend-icon-centered"
+                  >
+                    <v-img
+                      :src="
+                          calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees > 0
+                            ? assets.trendUpSvg
+                            : calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees < 0
+                            ? assets.trendDownSvg
+                            : assets.arrowRightSvg
+                        "
+                      alt="trend"
+                    />
+                  </v-avatar>
+                  <div class="pnl-values-compact">
+                    <div :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'">
+                      ${{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees.toFixed(0) }}
+                    </div>
+                    <div
+                      v-if="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFeesPercentage !== undefined"
+                      class="pnl-percentage"
+                      :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'"
+                    >
+                      {{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFeesPercentage.toFixed(1) }}%
+                    </div>
+                  </div>
+                </div>
+                <span v-else>-</span>
+              </template>
+
+              <!-- Leverage column -->
+              <template v-slot:[`item.leverage`]="{ item }">
+                  <span v-if="item.leverage !== undefined"
+                  >{{ item.leverage }}x</span
+                  >
+                <span v-else>-</span>
+              </template>
+
+              <!-- Actions column -->
+              <template v-slot:[`item.actions`]="{ item }">
+                <v-btn
+                  color="error"
+                  text
+                  x-small
+                  @click="closePosition(item)"
+                  :loading="closingPositions[item.id]"
+                  class="close-position-btn-compact"
+                  :disabled="closingPositions[item.id]"
+                >
+                  <v-icon x-small>{{
+                      closingPositions[item.id]
+                        ? "mdi-loading mdi-spin"
+                        : "mdi-close"
+                    }}</v-icon>
+                </v-btn>
+              </template>
+            </v-data-table>
+          </div>
+        </v-col>
+        <v-col cols="5">
+          <div
+            class="d-flex align-items-center justify-space-between mb-2"
+          >
+            <h4 class="column-title compact" style="align-content: center;">Open New Position</h4>
+            <!-- Real-time ADA Price Ticker -->
+            <div
+              class="ada-ticker-compact-corner"
+              v-if="perpetualsPrice?.lastPrice"
+            >
+              <div class="d-flex align-items-center">
+                <span class="ada-ticker-label-compact">ADA/USD</span>
+                <span
+                  class="price-change-symbol"
+                  :style="{
+                      color:
+                        !perpetualsPrice?.priceChangePercentage ||
+                        perpetualsPrice.priceChangePercentage === 0
+                          ? '#A3A3A3'
+                          : perpetualsPrice.priceChangePercentage > 0
+                          ? '#47CD89'
+                          : '#F97066',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      marginLeft: '4px',
+                      marginRight: '1px',
+                    }"
+                >
+                    {{
+                    !perpetualsPrice?.priceChangePercentage ||
+                    perpetualsPrice.priceChangePercentage === 0
+                      ? ""
+                      : perpetualsPrice.priceChangePercentage > 0
+                        ? "+"
+                        : "-"
+                  }}
+                  </span>
+                <span
+                  :style="{
+                      color:
+                        !perpetualsPrice?.priceChangePercentage ||
+                        perpetualsPrice.priceChangePercentage === 0
+                          ? '#A3A3A3'
+                          : perpetualsPrice.priceChangePercentage > 0
+                          ? '#47CD89'
+                          : '#F97066',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                    }"
+                >
+                    {{
+                    perpetualsPrice?.priceChangePercentage
+                      ? Math.abs(perpetualsPrice.priceChangePercentage).toFixed(2) +
+                      "%"
+                      : "0.00%"
+                  }}
+                  </span>
+                <span class="ada-current-price-compact ml-2"
+                >${{ Number(perpetualsPrice.lastPrice).toFixed(4) }}</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Scrollable form content -->
+          <div class="form-content-scrollable flex-grow-1">
+            <!-- Step 1: Position Direction -->
+            <div class="form-section compact">
+              <div class="form-label compact">Position Direction</div>
+              <v-btn-toggle
+                mandatory
+                active-class="geroButton"
+                v-model="positionData.position"
+                dense
+                class="mb-2 compact-toggle full-width-toggle"
+              >
+                <v-btn
+                  value="LONG"
+                  small
+                  rounded
+                  class="position-btn long-btn compact flex-btn"
+                >
+                  <v-icon x-small class="mr-1">mdi-trending-up</v-icon>
+                  LONG
+                </v-btn>
+                <v-btn
+                  value="SHORT"
+                  small
+                  rounded
+                  class="position-btn short-btn compact flex-btn"
+                >
+                  <v-icon x-small class="mr-1">mdi-trending-down</v-icon>
+                  SHORT
+                </v-btn>
+              </v-btn-toggle>
+            </div>
+
+            <!-- Step 2: Order Type -->
+            <div class="form-section compact">
+              <div class="form-label compact">Order Type</div>
+              <v-btn-toggle
+                mandatory
+                :active-class="
+                    positionData.position === 'SHORT'
+                      ? 'geroButtonShort'
+                      : 'geroButton'
+                  "
+                v-model="positionData.orderType"
+                dense
+                class="mb-2 compact-toggle full-width-toggle"
+              >
+                <v-btn
+                  value="MARKET"
+                  small
+                  rounded
+                  class="order-type-btn compact flex-btn"
+                  :class="{ 'short-theme': positionData.position === 'SHORT' }"
+                >
+                  <v-icon x-small class="mr-1">mdi-flash</v-icon>
+                  MARKET
+                </v-btn>
+                <v-btn
+                  value="LIMIT"
+                  small
+                  rounded
+                  class="order-type-btn compact flex-btn"
+                  :class="{ 'short-theme': positionData.position === 'SHORT' }"
+                >
+                  <v-icon x-small class="mr-1">mdi-target</v-icon>
+                  LIMIT
+                </v-btn>
+              </v-btn-toggle>
+            </div>
+
+            <!-- Limit Price (only for LIMIT orders) -->
+            <div
+              v-if="positionData.orderType === 'LIMIT'"
+              class="form-section compact"
+            >
+              <div class="form-label compact">Limit Price</div>
+              <v-card
+                class="input-card compact"
+                outlined
+                :class="{
+                    'short-position': positionData.position === 'SHORT',
+                  }"
+              >
+                <v-card-text class="pa-1">
+                  <div class="input-container">
+                    <v-text-field
+                      v-model.number="positionData.limitPrice"
+                      placeholder="0.0000"
+                      dense
+                      flat
+                      solo
+                      hide-details
+                      type="number"
+                      step="0.0001"
+                      class="price-input compact"
+                    />
+                    <span
+                      class="input-suffix"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >USD</span
+                    >
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+
+            <!-- Step 3: Collateral Amount -->
+            <div class="form-section compact">
+              <div class="d-flex align-center justify-space-between">
+                <div class="form-label compact">Collateral Amount</div>
+                <span class="available-balance compact"
+                >Available: {{ availableAdaBalance }} ADA</span
+                >
+              </div>
+              <v-card
+                class="input-card compact"
+                outlined
+                :class="{
+                    'short-position': positionData.position === 'SHORT',
+                  }"
+              >
+                <v-card-text class="pa-1">
+                  <div class="input-container">
+                    <v-text-field
+                      v-model.number="positionData.collateralAmount"
+                      placeholder="0.00"
+                      dense
+                      flat
+                      solo
+                      hide-details
+                      type="number"
+                      step="0.01"
+                      class="amount-input compact"
+                    />
+                    <span
+                      class="input-suffix"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >ADA</span
+                    >
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+
+            <!-- Step 4: Leverage -->
+            <div class="form-section compact">
+              <div class="d-flex align-center justify-space-between mb-1">
+                <div class="form-label compact">Leverage</div>
+                <div
+                  class="leverage-display compact"
+                  :class="{
+                      'short-position': positionData.position === 'SHORT',
+                    }"
+                >
+                  {{ positionData.leverage }}x
                 </div>
               </div>
+              <v-slider
+                v-model="positionData.leverage"
+                :min="1"
+                :max="15"
+                :step="0.1"
+                thumb-label
+                :color="
+                    positionData.position === 'SHORT'
+                      ? '#FF5252'
+                      : '#26FAB0'
+                  "
+                :track-color="
+                    positionData.position === 'SHORT'
+                      ? 'rgba(255, 82, 82, 0.2)'
+                      : 'rgba(38, 250, 176, 0.2)'
+                  "
+                :thumb-color="
+                    positionData.position === 'SHORT'
+                      ? '#FF5252'
+                      : '#26FAB0'
+                  "
+                class="leverage-slider compact"
+                :class="{
+                    'short-position-slider':
+                      positionData.position === 'SHORT',
+                  }"
+                @input="onLeverageSliderChange"
+              />
+            </div>
 
-              <!-- Right Column: Open Position Form -->
-              <div class="open-position-column d-flex flex-column">
-                <div
-                  class="d-flex align-items-center justify-space-between mb-2"
-                >
-                  <h4 class="column-title compact">Open New Position</h4>
-                  <!-- Real-time ADA Price Ticker -->
-                  <div
-                    class="ada-ticker-compact-corner"
-                    v-if="perpetualsPrice?.lastPrice"
-                  >
+            <!-- Step 5: Take Profit / Stop Loss (Optional) -->
+            <div class="form-section compact">
+              <v-expansion-panels flat class="tp-sl-panel compact">
+                <v-expansion-panel>
+                  <v-expansion-panel-header class="tp-sl-header compact">
                     <div class="d-flex align-items-center">
-                      <span class="ada-ticker-label-compact">ADA/USD</span>
-                      <span
-                        class="price-change-symbol"
-                        :style="{
-                          color:
-                            !perpetualsPrice?.priceChangePercentage ||
-                            perpetualsPrice.priceChangePercentage === 0
-                              ? '#A3A3A3'
-                              : perpetualsPrice.priceChangePercentage > 0
-                              ? '#47CD89'
-                              : '#F97066',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          marginLeft: '4px',
-                          marginRight: '1px',
-                        }"
+                      <v-icon x-small class="mr-1" color="#26FAB0"
+                      >mdi-shield-check</v-icon
                       >
-                        {{
-                          !perpetualsPrice?.priceChangePercentage ||
-                          perpetualsPrice.priceChangePercentage === 0
-                            ? ""
-                            : perpetualsPrice.priceChangePercentage > 0
-                            ? "+"
-                            : "-"
-                        }}
-                      </span>
-                      <span
-                        :style="{
-                          color:
-                            !perpetualsPrice?.priceChangePercentage ||
-                            perpetualsPrice.priceChangePercentage === 0
-                              ? '#A3A3A3'
-                              : perpetualsPrice.priceChangePercentage > 0
-                              ? '#47CD89'
-                              : '#F97066',
-                          fontSize: '11px',
-                          fontWeight: '600',
-                        }"
+                      <span class="tp-sl-title compact"
+                      >Take Profit / Stop Loss</span
                       >
-                        {{
-                          perpetualsPrice?.priceChangePercentage
-                            ? Math.abs(perpetualsPrice.priceChangePercentage).toFixed(2) +
-                              "%"
-                            : "0.00%"
-                        }}
-                      </span>
-                      <span class="ada-current-price-compact ml-2"
-                        >${{ Number(perpetualsPrice.lastPrice).toFixed(4) }}</span
+                      <span class="tp-sl-subtitle compact"
+                      >(Optional)</span
                       >
                     </div>
-                  </div>
-                </div>
-
-                <!-- Scrollable form content -->
-                <div class="form-content-scrollable flex-grow-1">
-                  <!-- Step 1: Position Direction -->
-                  <div class="form-section compact">
-                    <div class="form-label compact">Position Direction</div>
-                    <v-btn-toggle
-                      mandatory
-                      active-class="geroButton"
-                      v-model="positionData.position"
-                      dense
-                      class="mb-2 compact-toggle full-width-toggle"
-                    >
-                      <v-btn
-                        value="LONG"
-                        small
-                        rounded
-                        class="position-btn long-btn compact flex-btn"
-                      >
-                        <v-icon x-small class="mr-1">mdi-trending-up</v-icon>
-                        LONG
-                      </v-btn>
-                      <v-btn
-                        value="SHORT"
-                        small
-                        rounded
-                        class="position-btn short-btn compact flex-btn"
-                      >
-                        <v-icon x-small class="mr-1">mdi-trending-down</v-icon>
-                        SHORT
-                      </v-btn>
-                    </v-btn-toggle>
-                  </div>
-
-                  <!-- Step 2: Order Type -->
-                  <div class="form-section compact">
-                    <div class="form-label compact">Order Type</div>
-                    <v-btn-toggle
-                      mandatory
-                      :active-class="
-                        positionData.position === 'SHORT'
-                          ? 'geroButtonShort'
-                          : 'geroButton'
-                      "
-                      v-model="positionData.orderType"
-                      dense
-                      class="mb-2 compact-toggle full-width-toggle"
-                    >
-                      <v-btn
-                        value="MARKET"
-                        small
-                        rounded
-                        class="order-type-btn compact flex-btn"
-                        :class="{ 'short-theme': positionData.position === 'SHORT' }"
-                      >
-                        <v-icon x-small class="mr-1">mdi-flash</v-icon>
-                        MARKET
-                      </v-btn>
-                      <v-btn
-                        value="LIMIT"
-                        small
-                        rounded
-                        class="order-type-btn compact flex-btn"
-                        :class="{ 'short-theme': positionData.position === 'SHORT' }"
-                      >
-                        <v-icon x-small class="mr-1">mdi-target</v-icon>
-                        LIMIT
-                      </v-btn>
-                    </v-btn-toggle>
-                  </div>
-
-                  <!-- Limit Price (only for LIMIT orders) -->
-                  <div
-                    v-if="positionData.orderType === 'LIMIT'"
-                    class="form-section compact"
+                  </v-expansion-panel-header>
+                  <v-expansion-panel-content
+                    class="tp-sl-content compact"
                   >
-                    <div class="form-label compact">Limit Price</div>
-                    <v-card
-                      class="input-card compact"
-                      outlined
-                      :class="{
-                        'short-position': positionData.position === 'SHORT',
-                      }"
-                    >
-                      <v-card-text class="pa-1">
-                        <div class="input-container">
-                          <v-text-field
-                            v-model.number="positionData.limitPrice"
-                            placeholder="0.0000"
-                            dense
-                            flat
-                            solo
-                            hide-details
-                            type="number"
-                            step="0.0001"
-                            class="price-input compact"
-                          />
-                          <span
-                            class="input-suffix"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                            >USD</span
-                          >
-                        </div>
-                      </v-card-text>
-                    </v-card>
-                  </div>
-
-                  <!-- Step 3: Collateral Amount -->
-                  <div class="form-section compact">
-                    <div class="d-flex align-center justify-space-between">
-                      <div class="form-label compact">Collateral Amount</div>
-                      <span class="available-balance compact"
-                        >Available: {{ availableAdaBalance }} ADA</span
-                      >
-                    </div>
-                    <v-card
-                      class="input-card compact"
-                      outlined
-                      :class="{
-                        'short-position': positionData.position === 'SHORT',
-                      }"
-                    >
-                      <v-card-text class="pa-1">
-                        <div class="input-container">
-                          <v-text-field
-                            v-model.number="positionData.collateralAmount"
-                            placeholder="0.00"
-                            dense
-                            flat
-                            solo
-                            hide-details
-                            type="number"
-                            step="0.01"
-                            class="amount-input compact"
-                          />
-                          <span
-                            class="input-suffix"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                            >ADA</span
-                          >
-                        </div>
-                      </v-card-text>
-                    </v-card>
-                  </div>
-
-                  <!-- Step 4: Leverage -->
-                  <div class="form-section compact">
-                    <div class="d-flex align-center justify-space-between mb-1">
-                      <div class="form-label compact">Leverage</div>
-                      <div
-                        class="leverage-display compact"
-                        :class="{
-                          'short-position': positionData.position === 'SHORT',
-                        }"
-                      >
-                        {{ positionData.leverage }}x
+                    <!-- Take Profit -->
+                    <div class="mb-2">
+                      <div class="form-label small compact">
+                        Take Profit Price
                       </div>
-                    </div>
-                    <v-slider
-                      v-model="positionData.leverage"
-                      :min="1"
-                      :max="15"
-                      :step="0.1"
-                      thumb-label
-                      :color="
-                        positionData.position === 'SHORT'
-                          ? '#FF5252'
-                          : '#26FAB0'
-                      "
-                      :track-color="
-                        positionData.position === 'SHORT'
-                          ? 'rgba(255, 82, 82, 0.2)'
-                          : 'rgba(38, 250, 176, 0.2)'
-                      "
-                      :thumb-color="
-                        positionData.position === 'SHORT'
-                          ? '#FF5252'
-                          : '#26FAB0'
-                      "
-                      class="leverage-slider compact"
-                      :class="{
-                        'short-position-slider':
-                          positionData.position === 'SHORT',
-                      }"
-                      @input="onLeverageSliderChange"
-                    />
-                  </div>
-
-                  <!-- Step 5: Take Profit / Stop Loss (Optional) -->
-                  <div class="form-section compact">
-                    <v-expansion-panels flat class="tp-sl-panel compact">
-                      <v-expansion-panel>
-                        <v-expansion-panel-header class="tp-sl-header compact">
-                          <div class="d-flex align-items-center">
-                            <v-icon x-small class="mr-1" color="#26FAB0"
-                              >mdi-shield-check</v-icon
-                            >
-                            <span class="tp-sl-title compact"
-                              >Take Profit / Stop Loss</span
-                            >
-                            <span class="tp-sl-subtitle compact"
-                              >(Optional)</span
-                            >
-                          </div>
-                        </v-expansion-panel-header>
-                        <v-expansion-panel-content
-                          class="tp-sl-content compact"
-                        >
-                          <!-- Take Profit -->
-                          <div class="mb-2">
-                            <div class="form-label small compact">
-                              Take Profit Price
-                            </div>
-                            <v-card
-                              class="input-card small compact"
-                              outlined
+                      <v-card
+                        class="input-card small compact"
+                        outlined
+                        :class="{
+                            'short-position':
+                              positionData.position === 'SHORT',
+                          }"
+                      >
+                        <v-card-text class="pa-1">
+                          <div class="input-container">
+                            <v-text-field
+                              v-model.number="
+                                  positionData.takeProfitPrice
+                                "
+                              placeholder="0.0000"
+                              dense
+                              flat
+                              solo
+                              hide-details
+                              type="number"
+                              step="0.0001"
+                              class="price-input small compact"
+                            />
+                            <span
+                              class="input-suffix"
                               :class="{
-                                'short-position':
-                                  positionData.position === 'SHORT',
-                              }"
-                            >
-                              <v-card-text class="pa-1">
-                                <div class="input-container">
-                                  <v-text-field
-                                    v-model.number="
-                                      positionData.takeProfitPrice
-                                    "
-                                    placeholder="0.0000"
-                                    dense
-                                    flat
-                                    solo
-                                    hide-details
-                                    type="number"
-                                    step="0.0001"
-                                    class="price-input small compact"
-                                  />
-                                  <span
-                                    class="input-suffix"
-                                    :class="{
-                                      'short-position':
-                                        positionData.position === 'SHORT',
-                                    }"
-                                    >USD</span
-                                  >
-                                </div>
-                              </v-card-text>
-                            </v-card>
-                          </div>
-
-                          <!-- Stop Loss -->
-                          <div class="mb-2">
-                            <div class="form-label small compact">
-                              Stop Loss Price
-                            </div>
-                            <v-card
-                              class="input-card small compact"
-                              outlined
-                              :class="{
-                                'short-position':
-                                  positionData.position === 'SHORT',
-                              }"
-                            >
-                              <v-card-text class="pa-1">
-                                <div class="input-container">
-                                  <v-text-field
-                                    v-model.number="positionData.stopLossPrice"
-                                    placeholder="0.0000"
-                                    dense
-                                    flat
-                                    solo
-                                    hide-details
-                                    type="number"
-                                    step="0.0001"
-                                    class="price-input small compact"
-                                  />
-                                  <span
-                                    class="input-suffix"
-                                    :class="{
-                                      'short-position':
-                                        positionData.position === 'SHORT',
-                                    }"
-                                    >USD</span
-                                  >
-                                </div>
-                              </v-card-text>
-                            </v-card>
-                          </div>
-                        </v-expansion-panel-content>
-                      </v-expansion-panel>
-                    </v-expansion-panels>
-                  </div>
-                </div>
-                <!-- End scrollable form content -->
-
-                <!-- Bottom section - always at bottom -->
-                <div class="bottom-section">
-                  <!-- Position Summary -->
-                  <div class="form-section compact">
-                    <v-card
-                      flat
-                      class="position-summary-card compact"
-                      :class="{
-                        'short-position': positionData.position === 'SHORT',
-                      }"
-                    >
-                      <v-card-text class="pa-2">
-                        <div
-                          class="d-flex align-items-center justify-space-between mb-2"
-                        >
-                          <div
-                            class="summary-title compact"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                          >
-                            Position Summary
-                          </div>
-                          <!-- View Fees Tooltip -->
-                          <v-tooltip top content-class="custom-tooltip">
-                            <template v-slot:activator="{ on, attrs }">
-                              <v-btn
-                                text
-                                x-small
-                                class="fees-btn compact"
-                                v-bind="attrs"
-                                v-on="on"
-                              >
-                                <v-icon x-small class="mr-1"
-                                  >mdi-information</v-icon
-                                >
-                                View Fees
-                              </v-btn>
-                            </template>
-                            <div class="fees-tooltip-content">
-                              <div
-                                class="fees-title"
-                                :class="{
                                   'short-position':
                                     positionData.position === 'SHORT',
                                 }"
-                              >
-                                Trading Fees
-                              </div>
-                              <div class="fee-item">
-                                <span>Opening Fee:</span>
-                                <span>0.1%</span>
-                              </div>
-                              <div class="fee-item">
-                                <span>Hourly Borrow Fee:</span>
-                                <span>~0.001%</span>
-                              </div>
-                              <div class="fee-item">
-                                <span>Accumulated Borrow Fee:</span>
-                                <span
-                                  >{{
-                                    (accumulatedBorrowFee * 100).toFixed(4)
-                                  }}%</span
-                                >
-                              </div>
-                              <div class="fee-item">
-                                <span>Network Fee:</span>
-                                <span>~2-5 ADA</span>
-                              </div>
-                            </div>
-                          </v-tooltip>
-                        </div>
-                        <div class="summary-row compact">
-                          <span>Position Size:</span>
-                          <span
-                            class="summary-value"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                            >{{ positionSize }} ADA</span
-                          >
-                        </div>
-                        <div class="summary-row compact">
-                          <span>Notional Value:</span>
-                          <span
-                            class="summary-value"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                            >${{ notionalValue }}</span
-                          >
-                        </div>
-                        <div class="summary-row compact">
-                          <span>Est. Liquidation Price:</span>
-                          <span
-                            class="summary-value"
-                            :class="{
-                              'short-position':
-                                positionData.position === 'SHORT',
-                            }"
-                            >{{ liquidationPrice }}</span
-                          >
-                        </div>
-                      </v-card-text>
-                    </v-card>
-                  </div>
+                            >USD</span
+                            >
+                          </div>
+                        </v-card-text>
+                      </v-card>
+                    </div>
 
-                  <!-- Open Position Button -->
-                  <v-btn
-                    color="primary"
-                    block
-                    @click="openPosition"
-                    :loading="loading"
-                    :disabled="!canOpenPosition"
-                    class="open-position-btn enhanced compact"
-                    :class="{
-                      'short-position': positionData.position === 'SHORT',
-                    }"
-                  >
-                    <v-icon class="mr-1" small>{{
-                      positionData.orderType === "MARKET"
-                        ? "mdi-flash"
-                        : "mdi-target"
-                    }}</v-icon>
-                    Open {{ positionData.position }} Position
-                  </v-btn>
-                </div>
-                <!-- End bottom section -->
-              </div>
+                    <!-- Stop Loss -->
+                    <div class="mb-2">
+                      <div class="form-label small compact">
+                        Stop Loss Price
+                      </div>
+                      <v-card
+                        class="input-card small compact"
+                        outlined
+                        :class="{
+                            'short-position':
+                              positionData.position === 'SHORT',
+                          }"
+                      >
+                        <v-card-text class="pa-1">
+                          <div class="input-container">
+                            <v-text-field
+                              v-model.number="positionData.stopLossPrice"
+                              placeholder="0.0000"
+                              dense
+                              flat
+                              solo
+                              hide-details
+                              type="number"
+                              step="0.0001"
+                              class="price-input small compact"
+                            />
+                            <span
+                              class="input-suffix"
+                              :class="{
+                                  'short-position':
+                                    positionData.position === 'SHORT',
+                                }"
+                            >USD</span
+                            >
+                          </div>
+                        </v-card-text>
+                      </v-card>
+                    </div>
+                  </v-expansion-panel-content>
+                </v-expansion-panel>
+              </v-expansion-panels>
             </div>
-          </v-card-text>
-        </v-card-text>
-      </v-card>
+          </div>
+          <!-- End scrollable form content -->
+
+          <!-- Bottom section - always at bottom -->
+          <div class="bottom-section">
+            <!-- Position Summary -->
+            <div class="form-section compact">
+              <v-card
+                flat
+                class="position-summary-card compact"
+                :class="{
+                    'short-position': positionData.position === 'SHORT',
+                  }"
+              >
+                <v-card-text class="pa-2">
+                  <div
+                    class="d-flex align-items-center justify-space-between mb-2"
+                  >
+                    <div
+                      class="summary-title compact"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >
+                      Position Summary
+                    </div>
+                    <!-- View Fees Tooltip -->
+                    <v-tooltip top content-class="custom-tooltip">
+                      <template v-slot:activator="{ on, attrs }">
+                        <v-btn
+                          text
+                          x-small
+                          class="fees-btn compact"
+                          v-bind="attrs"
+                          v-on="on"
+                        >
+                          <v-icon x-small class="mr-1"
+                          >mdi-information</v-icon
+                          >
+                          View Fees
+                        </v-btn>
+                      </template>
+                      <div class="fees-tooltip-content">
+                        <div
+                          class="fees-title"
+                          :class="{
+                              'short-position':
+                                positionData.position === 'SHORT',
+                            }"
+                        >
+                          Trading Fees
+                        </div>
+                        <div class="fee-item">
+                          <span>Opening Fee:</span>
+                          <span>0.1%</span>
+                        </div>
+                        <div class="fee-item">
+                          <span>Hourly Borrow Fee:</span>
+                          <span>~0.001%</span>
+                        </div>
+                        <div class="fee-item">
+                          <span>Accumulated Borrow Fee:</span>
+                          <span
+                          >{{
+                              (accumulatedBorrowFee * 100).toFixed(4)
+                            }}%</span
+                          >
+                        </div>
+                        <div class="fee-item">
+                          <span>Network Fee:</span>
+                          <span>~2-5 ADA</span>
+                        </div>
+                      </div>
+                    </v-tooltip>
+                  </div>
+                  <div class="summary-row compact">
+                    <span>Position Size:</span>
+                    <span
+                      class="summary-value"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >{{ positionSize }} ADA</span
+                    >
+                  </div>
+                  <div class="summary-row compact">
+                    <span>Notional Value:</span>
+                    <span
+                      class="summary-value"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >${{ notionalValue }}</span
+                    >
+                  </div>
+                  <div class="summary-row compact">
+                    <span>Est. Liquidation Price:</span>
+                    <span
+                      class="summary-value"
+                      :class="{
+                          'short-position':
+                            positionData.position === 'SHORT',
+                        }"
+                    >{{ liquidationPrice }}</span
+                    >
+                  </div>
+                </v-card-text>
+              </v-card>
+            </div>
+
+            <!-- Open Position Button -->
+            <v-btn
+              color="primary"
+              block
+              @click="openPosition"
+              :loading="loading"
+              :disabled="!canOpenPosition"
+              class="open-position-btn enhanced compact"
+              :class="{
+                  'short-position': positionData.position === 'SHORT',
+                }"
+            >
+              <v-icon class="mr-1" small>{{
+                  positionData.orderType === "MARKET"
+                    ? "mdi-flash"
+                    : "mdi-target"
+                }}</v-icon>
+              Open {{ positionData.position }} Position
+            </v-btn>
+          </div>
+          <!-- End bottom section -->
+        </v-col>
+      </v-row>
     </v-card-text>
 
     <!-- Powered by Strike Finance Footer - positioned at dialog bottom -->
@@ -1002,32 +972,17 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onBeforeUnmount,
-  toRefs,
-  nextTick,
-} from "vue";
-import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
-import TradingViewChart from "@/shared/components/TradingViewChart.vue";
-import { walletStore } from "@/stores/walletStore";
-import { networkStore } from "@/stores/networkStore";
-import { dexHunterStore } from "@/stores/dexHunterStore";
-import { WalletManager } from "@/services/walletManager.service";
-import axios from "axios";
-import assets from "@/utils/assets";
-import type {
-  CreatePerpetualRequest,
-  ClosePerpetualRequest,
-  PerpetualPosition,
-} from "@/api/strike/types";
-import type { Time, IChartApi } from "lightweight-charts";
-import tapToolsApi from "@/api/tap-tools-api";
-import dexHunterApi from "@/api/dexhunter-api";
-import { priceStore } from "@/stores/priceStore";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import TradingViewChart from '@/shared/components/TradingViewChart.vue';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import assets from '@/utils/assets';
+import type { Asset, ClosePerpetualRequest, CreatePerpetualRequest, PerpetualPosition } from '@/api/strike-finance.api';
+import strikeFinanceApi from '@/api/strike-finance.api';
+import type { IChartApi, Time } from 'lightweight-charts';
+import { priceService, priceStore } from '@/stores/priceStore';
+import { AxiosResponse } from 'axios';
 
 interface CandlestickDataPoint {
   time: Time;
@@ -1043,17 +998,8 @@ const props = defineProps<{
 
 const emit = defineEmits(["close"]);
 
-const { loggedWallet } = toRefs(walletStore);
+const { loggedWallet, utxos, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { dexHunterTokens } = toRefs(dexHunterStore);
-const walletManager = WalletManager.getInstance();
-
-// Local Kraken price state for perpetuals dialog
-const krakenPrice = ref<any>({
-  lastPrice: null,
-  priceChangePercentage: null,
-  source: 'kraken'
-});
 
 // Use global Kraken price store, fallback to network price
 const perpetualsPrice = computed(() => {
@@ -1068,12 +1014,12 @@ const calculateAccumulatedBorrowFee = (
   hourlyBorrowFee: number,
   enteredPositionTime: number
 ) => {
-  const currentTime = Date.now() + 300000; // Add 5 minutes (300000ms) for validity interval
+  const currentTime = Date.now() + 300000; // Add 5 minutes (300000ms) for a validity interval
   const hoursElapsed = (currentTime - enteredPositionTime) / (1000 * 60 * 60);
   return hourlyBorrowFee * hoursElapsed;
 };
 
-// Calculate next hourly fee countdown
+// Calculate the next hourly fee countdown
 const calculateNextHourlyCountdown = (enteredPositionTime: number) => {
   const currentTime = Date.now() + 300000;
   const hoursElapsed = (currentTime - enteredPositionTime) / (1000 * 60 * 60);
@@ -1116,7 +1062,7 @@ const calculateOpeningFeeADA = (
   version?: number,
   token: "ada" | "snek" = "ada"
 ) => {
-  // Get percentage - use version if provided, otherwise use dynamic calculation
+  // Get a percentage-use version if provided, otherwise use dynamic calculation
   const percentage = version
     ? getVersionPercentage(version, token)
     : openingFee(position, totalLongInterest, totalShortInterest, token);
@@ -1124,9 +1070,7 @@ const calculateOpeningFeeADA = (
   // Platform fee: percentage of position size OR at least 2 ADA/SNEK
   const platformFee = Math.max(positionSize * percentage, 2);
   const lpFee = positionSize * 0.002;
-  const openFee = platformFee + lpFee;
-
-  return openFee;
+  return platformFee + lpFee;
 };
 
 const getVersionPercentage = (
@@ -1148,7 +1092,7 @@ const openingFee = (
   position: "Long" | "Short",
   totalLongInterest: number,
   totalShortInterest: number,
-  token: "ada" | "snek" = "ada"
+  _token: "ada" | "snek" = "ada"
 ): number => {
   if (position === "Short") {
     return 0.001;
@@ -1282,24 +1226,16 @@ const calculatePNLWithFees = (
   openingUSDFee?: number
 ) => {
   const basePNL = calculatePNL(entryPrice, markPrice, side, size);
-
   if (!includeFees) {
     return basePNL;
   }
-
-  let openingFee = 0;
-
+  let openingFee: number;
   if (openingUSDFee) {
     openingFee = openingUSDFee;
   } else {
     openingFee = calculateOpeningFee(size, entryPrice, 0, 0, "Long", version);
   }
-
-  const accumulatedBorrowFee = calculateAccumulatedBorrowFee(
-    hourlyBorrowFee,
-    enteredPositionTime
-  );
-
+  const accumulatedBorrowFee = calculateAccumulatedBorrowFee(hourlyBorrowFee, enteredPositionTime);
   return Number((basePNL - openingFee - accumulatedBorrowFee).toFixed(2));
 };
 
@@ -1307,7 +1243,7 @@ const calculatePNLWithFees = (
 const calculatePositionFees = (position: any, currentPrice: number) => {
   if (!position) return null;
 
-  // Extract props exactly as React component receives them
+  // Extract props exactly as a component receives them
   const positionSize = Number(position.positionSize || 0);
   const entryPrice = Number(position.entryPrice || currentPrice);
   const side = position.position as "Long" | "Short";
@@ -1384,7 +1320,7 @@ const calculatePositionFees = (position: any, currentPrice: number) => {
     totalPositionValue
   );
 
-  const result = {
+  return {
     positionValueUSD: totalPositionValue,
     positionValueADA: positionSize,
     openingFeeUSD: openingFee,
@@ -1400,9 +1336,6 @@ const calculatePositionFees = (position: any, currentPrice: number) => {
     liquidationAfterHourly,
     nextCountdown: calculateNextHourlyCountdown(enteredPositionTime),
   };
-
-
-  return result;
 };
 
 // Calculate liquidation price after next hourly update - exactly matching React component
@@ -1479,8 +1412,7 @@ const findLiquidationPrice = (
   enteredPositionTime: number,
   targetTime: number
 ) => {
-  const currentTime = targetTime;
-  const hoursElapsed = (currentTime - enteredPositionTime) / (1000 * 60 * 60);
+  const hoursElapsed = (targetTime - enteredPositionTime) / (1000 * 60 * 60);
   const interestFee = hourlyUsdBorrowFee * hoursElapsed;
 
   const maintainMarginFactor = maintainMarginAmount / 100;
@@ -1528,7 +1460,6 @@ const processPositionData = (position: any) => {
   ) {
     const entryPrice = Number(position.entryPrice);
     const positionSize = Number(position.positionSize);
-    const leverage = Number(position.leverage || 1);
     const currentPrice = result.currentPrice;
     const positionType = position.position?.toLowerCase();
 
@@ -1570,16 +1501,15 @@ const processPositionData = (position: any) => {
       position.accumulatedFees || position.accumulatedBorrowFee || 0
     );
 
-    // Calculate real-time accumulated borrow fee if position has entered time
+    // Calculate real-time accumulated borrow fee if the position has entered time
     if (
       position.enteredPositionTime &&
       position.hourlyBorrowFee !== undefined
     ) {
-      const realTimeAccumulatedFee = calculateAccumulatedBorrowFee(
+      accumulatedFees = calculateAccumulatedBorrowFee(
         Number(position.hourlyBorrowFee),
         Number(position.enteredPositionTime)
       );
-      accumulatedFees = realTimeAccumulatedFee;
     }
 
     result.totalFees = Number((openingFee + accumulatedFees).toFixed(6));
@@ -1591,34 +1521,29 @@ const processPositionData = (position: any) => {
     // Use raw collateral amount if available for more precision, otherwise fall back to collateralAmount
     const rawCollateralAmount = position.rawCollateralAssetAmount;
     const regularCollateralAmount = position.collateralAmount;
-    
+
     // Convert raw collateral amount from microADA to ADA (1 ADA = 1,000,000 microADA)
-    const collateralSizeAda = rawCollateralAmount 
+    const collateralSizeAda = rawCollateralAmount
       ? Number(rawCollateralAmount) / 1000000  // Convert microADA to ADA
       : Number(regularCollateralAmount);       // Use regular collateral amount if no raw amount
     const currentPrice = result.currentPrice;
-    
+
     // Current position value based on COLLATERAL at market price (without PNL consideration)
     const basePositionValueUsd = collateralSizeAda * currentPrice;
-    
+
     // Add PNL and subtract fees to get the actual current position value
     const pnl = result.pnl || 0; // Unrealized PNL
-    
-    // Calculate real-time total fees (opening + current accumulated borrow fees)
-    const staticTotalFees = result.totalFees || 0; // From API
-    
+
     // Get real-time fees using the same calculation as the tooltip
     const tooltipFees = calculatePositionFees(position, currentPrice);
     // Only use accumulated borrow fees, not opening fees (opening fees are in PNL)
-    const realTimeBorrowFees = tooltipFees ? tooltipFees.accumulatedBorrowFeeUSD : 0;
-    
     // Use only borrow fees for position value (opening fees already in PNL)
-    const totalFeesToUse = realTimeBorrowFees;
-    
+    const totalFeesToUse = tooltipFees ? tooltipFees.accumulatedBorrowFeeUSD : 0;
+
     // Final position value = base value + PNL - fees (including real-time borrow fees)
     const finalPositionValueUsd = basePositionValueUsd + pnl - totalFeesToUse;
-    
-    
+
+
     result.currentPositionValueUsd = Number(finalPositionValueUsd.toFixed(2));
     result.currentPositionValueAda = collateralSizeAda;
   }
@@ -1626,74 +1551,6 @@ const processPositionData = (position: any) => {
   return result;
 };
 
-// Create a direct HTTP client for Strike API
-const createStrikeHttpClient = () => {
-  const baseURL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
-
-  return {
-    async getPositions(address: string): Promise<any[]> {
-      try {
-        const response = await axios.get(`${baseURL}/api/strike/perpetuals/getPositions`, {
-          params: { address },
-          timeout: 30000,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
-
-        return response.data || [];
-      } catch (error) {
-        console.error("Strike API error:", error?.message || error);
-        throw error;
-      }
-    },
-
-    async openPosition(request: CreatePerpetualRequest): Promise<string> {
-      try {
-        const response = await axios.post(
-          `${baseURL}/api/strike/perpetuals/openPosition`,
-          request,
-          {
-            timeout: 30000,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          }
-        );
-
-        return response.data?.transactionId || response.data;
-      } catch (error) {
-        console.error("Strike openPosition error:", error?.message || error);
-        throw error;
-      }
-    },
-
-    async closePosition(request: ClosePerpetualRequest): Promise<string> {
-      try {
-        const response = await axios.post(
-          `${baseURL}/api/strike/perpetuals/closePosition`,
-          request,
-          {
-            timeout: 30000,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          }
-        );
-
-        return response.data?.transactionId || response.data;
-      } catch (error) {
-        console.error("Strike closePosition error:", error?.message || error);
-        throw error;
-      }
-    },
-  };
-};
-
-// Note: Using direct HTTP client instead of wallet API for Strike Finance calls
 
 const loading = ref(false);
 const rawPositions = ref<PerpetualPosition[]>([]);
@@ -1707,12 +1564,48 @@ const shouldFetchChartData = ref(false);
 const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
   const ticker = tickerSymbol.value;
 
-  // For all tickers, let the TradingViewChart component handle fetching
-  // ADA will use the backend /crypto/history/ADAUSDT endpoint
-  // Other tokens will use TapTools/DexHunter APIs
-  console.debug(`${ticker} ticker detected, chart will fetch appropriate data`);
-  shouldFetchChartData.value = true;
-  return []; // Return empty, chart will fetch its own data
+  if (ticker === 'ADA') {
+    // Fetch real ADA/USD data from Kraken
+    try {
+      const response = await fetch('https://api.kraken.com/0/public/OHLC?pair=ADAUSD&interval=5');
+      const data = await response.json();
+
+      if (data.error && data.error.length > 0) {
+        throw new Error(`Kraken API error: ${data.error.join(', ')}`);
+      }
+
+      // Find the pair key in the result
+      const pairKey = Object.keys(data.result).find(
+        key => key !== 'last' && key.toUpperCase().includes('ADAUSD')
+      );
+
+      if (!pairKey || !data.result[pairKey]) {
+        console.warn('[StrikeFinance] No OHLC data found for ADA/USD');
+        return generateSimpleOHLCData();
+      }
+
+      const krakenData = data.result[pairKey];
+
+      // Convert Kraken format to chart format
+      const chartData: CandlestickDataPoint[] = krakenData.map((candle: any[]) => ({
+        time: candle[0] as Time,
+        open: parseFloat(candle[1]),
+        high: parseFloat(candle[2]),
+        low: parseFloat(candle[3]),
+        close: parseFloat(candle[4])
+      })).sort((a: any, b: any) => a.time - b.time);
+
+      console.debug(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
+      return chartData;
+
+    } catch (error) {
+      console.error('[StrikeFinance] Failed to fetch ADA data from Kraken:', error);
+      return generateSimpleOHLCData();
+    }
+  } else {
+    // For other tokens, use TapTools/DexHunter
+    return await fetchTokenHistoryFromDexHunter(ticker);
+  }
 };
 
 // Fetch token price history from DexHunter API
@@ -1720,114 +1613,15 @@ const fetchTokenHistoryFromDexHunter = async (
   ticker: string
 ): Promise<CandlestickDataPoint[]> => {
   try {
-    console.debug(`Fetching ${ticker} price history from DexHunter/TapTools`);
+    console.debug(`[StrikeFinance] Fetching ${ticker} price history from DexHunter/TapTools`);
 
-    // Since TradingViewChart component now handles the fetching,
-    // we can just return empty array and let the component handle it
+    // Since the TradingViewChart component now handles the fetching,
+    // we can just return the empty array and let the component handle it
     return [];
   } catch (error) {
-    console.warn(`Failed to fetch ${ticker} data:`, error);
+    console.warn(`[StrikeFinance] Failed to fetch ${ticker} data:`, error);
     return generateSimpleOHLCData();
   }
-};
-
-// Fetch real ADA OHLC data (now handled by TradingViewChart component)
-const fetchRealAdaOHLC = async (): Promise<CandlestickData[]> => {
-  try {
-    // First try to get ADA price change data from TapTools
-    const priceChangeResponse = await tapToolsApi.dailyPriceChange("lovelace");
-
-    if (priceChangeResponse?.status === 200 && priceChangeResponse.data) {
-      // Convert price change data to OHLC estimation
-      console.debug(
-        "Got ADA price change data from TapTools:",
-        priceChangeResponse.data
-      );
-      return convertPriceDataToOHLC(priceChangeResponse.data);
-    }
-
-    // Fallback: generate OHLC from current price
-    const currentPrice = networkStore.perpetualsPrice?.lastPrice || 0.5; // Current ADA price
-    if (currentPrice > 0) {
-      return generateOHLCFromPrice(currentPrice);
-    }
-
-    return [];
-  } catch (error) {
-    console.error("Error fetching real ADA OHLC data:", error);
-    return [];
-  }
-};
-
-// Convert price data to volume estimates (higher price volatility = higher volume)
-const convertPriceDataToVolumeEstimate = (priceData: any): ChartData[] => {
-  const data: ChartData[] = [];
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-
-  // Base volume for ADA (typical daily volume is ~200M - 1B USD)
-  const baseVolumeUSD = 400000000; // 400M USD base
-  const currentPrice = networkStore.perpetualsPrice?.lastPrice || 0.5;
-
-  for (let i = 23; i >= 0; i--) {
-    const time = Math.floor((now - i * oneHour) / 1000) as Time;
-
-    // Simulate volume based on typical ADA trading patterns
-    const hourOfDay = new Date(now - i * oneHour).getHours();
-
-    // Higher volume during US/EU trading hours
-    let timeFactor = 1.0;
-    if (hourOfDay >= 8 && hourOfDay <= 16) {
-      // 8 AM - 4 PM UTC
-      timeFactor = 1.3; // 30% higher during active hours
-    } else if (hourOfDay >= 20 || hourOfDay <= 2) {
-      // Evening/night
-      timeFactor = 0.7; // 30% lower during quiet hours
-    }
-
-    // Add some volatility and market structure
-    const volatility = 0.6 + Math.random() * 0.8; // 0.6 to 1.4x
-    const marketTrend = Math.sin(i * 0.3) * 0.2 + 1; // Slight wave pattern
-
-    // Calculate hourly volume in USD
-    const hourlyVolumeUSD =
-      (baseVolumeUSD / 24) * timeFactor * volatility * marketTrend;
-
-    data.push({
-      time,
-      value: Math.round(hourlyVolumeUSD),
-    });
-  }
-
-  return data;
-};
-
-// Generate volume data based on current price (when API data is not available)
-const generateVolumeFromPrice = (currentPrice: number): ChartData[] => {
-  const data: ChartData[] = [];
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-
-  // Estimate volume based on price level (higher price often means more activity)
-  const priceMultiplier = Math.max(0.5, Math.min(2.0, currentPrice)); // Scale with price
-  const baseVolume = 300000000 * priceMultiplier; // Base 300M USD, scaled by price
-
-  for (let i = 23; i >= 0; i--) {
-    const time = Math.floor((now - i * oneHour) / 1000) as Time;
-
-    // Add realistic trading patterns
-    const timeVariation = Math.sin(i * 0.4) * 0.3 + 1; // Sine wave for daily pattern
-    const randomVolatility = 0.7 + Math.random() * 0.6; // 0.7 to 1.3x
-
-    const volume = (baseVolume / 24) * timeVariation * randomVolatility;
-
-    data.push({
-      time,
-      value: Math.round(volume),
-    });
-  }
-
-  return data;
 };
 
 // Generate simple OHLC data based on current ADA price
@@ -1836,7 +1630,7 @@ const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
   const now = Date.now();
   const oneHour = 60 * 60 * 1000;
 
-  let currentPrice = networkStore.perpetualsPrice?.lastPrice || 0.58; // Use real ADA price or fallback
+  let currentPrice = perpetualsPrice.value?.lastPrice || 0.58; // Use real ADA price or fallback
 
   for (let i = 23; i >= 0; i--) {
     const time = Math.floor((now - i * oneHour) / 1000) as Time;
@@ -1875,42 +1669,6 @@ const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
   return data;
 };
 
-// Generate realistic candlestick data based on current ADA price
-const generateEstimatedCandlestickData = (): CandlestickData[] => {
-  const data: CandlestickData[] = [];
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-
-  let currentPrice = networkStore.perpetualsPrice?.lastPrice || 0.58; // Use real ADA price or fallback
-
-  for (let i = 23; i >= 0; i--) {
-    const time = Math.floor((now - i * oneHour) / 1000) as Time;
-
-    // Generate realistic price movement
-    const volatility = 0.015; // 1.5% max hourly movement
-    const trend = (Math.random() - 0.5) * volatility; // Random walk
-    const open = currentPrice;
-
-    // Generate high and low based on volatility
-    const spread = Math.random() * 0.008; // Up to 0.8% intra-hour spread
-    const high = open + Math.random() * spread;
-    const low = open - Math.random() * spread;
-
-    // Close price with trend
-    const close = Math.max(low, Math.min(high, open * (1 + trend)));
-    currentPrice = close; // Update for next candle
-
-    data.push({
-      time,
-      open: Number(open.toFixed(4)),
-      high: Number(high.toFixed(4)),
-      low: Number(low.toFixed(4)),
-      close: Number(close.toFixed(4)),
-    });
-  }
-
-  return data;
-};
 
 const onChartReady = (chartInstance: IChartApi) => {
   chart.value = chartInstance;
@@ -1924,7 +1682,6 @@ let borrowFeeUpdateInterval: NodeJS.Timeout | null = null;
 const borrowFeeUpdateTrigger = ref(0);
 
 // Real-time countdown for next hourly fee update
-const nextHourlyFeeCountdown = ref("");
 let countdownInterval: NodeJS.Timeout | null = null;
 
 const startChartUpdates = () => {
@@ -1956,7 +1713,7 @@ const startBorrowFeeUpdates = () => {
     console.debug("Updated real-time accumulated borrow fees");
   }, 60000); // Every 60 seconds
 
-  // Update countdown every second for real-time display
+  // Update countdown every second for a real-time display
   countdownInterval = setInterval(() => {
     borrowFeeUpdateTrigger.value += 0.1; // Small increment to trigger tooltip updates
   }, 1000); // Every second
@@ -1986,13 +1743,13 @@ const positions = computed(() => {
     hasData: rawPositions.value.length > 0,
     firstPosition: rawPositions.value[0] || 'none'
   });
-  
+
   if (!rawPositions.value.length) {
     console.debug('🔍 No rawPositions available, returning empty array');
     return [];
   }
 
-  const processed = rawPositions.value.map((position, index) => {
+  return rawPositions.value.map((position, index) => {
     // Re-process position data with current price
     const processedData = processPositionData(position);
 
@@ -2015,13 +1772,11 @@ const positions = computed(() => {
 
     return enhanced;
   });
-
-  return processed;
 });
 
 // Ticker symbol for the chart (extracted from the trading pair)
 const tickerSymbol = computed(() => {
-  return "ADA"; // Default to ADA, can be made dynamic based on selected asset
+  return "ADA"; // Default to ADA can be made dynamic based on selected asset
 });
 
 const closingPositions = ref<Record<string, boolean>>({});
@@ -2086,20 +1841,19 @@ const positionHeaders = ref([
   },
   { text: "P&L", align: "center", sortable: true, value: "pnlWithFees", width: "42" },
   {
-    text: "Lev",
+    text: "Lvg.",
     align: "center",
     sortable: true,
     value: "leverage",
-    width: "22",
+    width: "42",
   },
   { text: "", align: "center", sortable: false, value: "actions", width: "26" },
 ]);
 
 // Computed properties
 const availableAdaBalance = computed(() => {
-  // Get ADA balance from wallet store (simplified - you might need to access the actual balance)
-  const tokens = walletStore.tokens || {};
-  const adaToken = Object.values(tokens).find(
+  // Get ADA balance from the wallet store (simplified - you might need to access the actual balance)
+  const adaToken = Object.values(tokens.value).find(
     (token: any) => token.policy_id === ""
   ) as any;
 
@@ -2116,6 +1870,17 @@ watch(
   async (newVal) => {
     if (newVal) {
       console.debug("PerpetualsDialog: Dialog opened, initializing chart data");
+
+      // Initialize global price service to ensure real-time price updates
+      if (!priceService.isConnected()) {
+        try {
+          await priceService.initialize();
+          console.debug("PerpetualsDialog: Price service initialized");
+        } catch (error) {
+          console.warn("PerpetualsDialog: Failed to initialize price service:", error);
+        }
+      }
+
       await loadPositions();
 
       // Reset chart state and enable fetching
@@ -2175,7 +1940,6 @@ const accumulatedBorrowFee = computed(() => {
 const liquidationPrice = computed(() => {
   const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0.85);
   const leverage = positionData.value.leverage;
-  const collateral = positionData.value.collateralAmount;
 
   // Include accumulated borrow fee in liquidation calculation
   const totalFees = 0.001 + accumulatedBorrowFee.value; // Opening fee + accumulated borrow fee
@@ -2219,15 +1983,18 @@ const openPosition = async () => {
 
   loading.value = true;
   try {
-    const openRequest: CreatePerpetualRequest = {
+    // Create Asset object - for ADA/USD we use native ADA
+    const asset: Asset = {
+      policyId: '', // Native ADA has empty policy_id
+      assetName: '', // Native ADA has empty asset_name
+    };
+
+    const openPositionRequest: CreatePerpetualRequest = {
       address: walletAddress,
-      asset: {
-        name: positionData.value.asset,
-        // TODO: Add policyId and assetName if needed
-      },
+      asset,
       collateralAmount: positionData.value.collateralAmount,
       leverage: positionData.value.leverage,
-      position: positionData.value.position,
+      position: positionData.value.position === 'LONG' ? 'long' : 'short',
       enteredPositionTime: Date.now(),
       // Include optional fields if they have values
       ...(positionData.value.stopLossPrice > 0 && {
@@ -2236,15 +2003,12 @@ const openPosition = async () => {
       ...(positionData.value.takeProfitPrice > 0 && {
         takeProfitPrice: positionData.value.takeProfitPrice,
       }),
-      // Add limit price for LIMIT orders
-      ...(positionData.value.orderType === "LIMIT" && {
-        limitPrice: positionData.value.limitPrice,
-      }),
     };
 
-    const strikeClient = createStrikeHttpClient();
-    await strikeClient.openPosition(openRequest);
-
+    console.debug('[StrikeFinance]  Opening position with request:', openPositionRequest);
+    const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
+    const cbor: string = cborResponse.data;
+    console.log('[StrikeFinance] Open position response:', cbor);
     // Reset form after success
     positionData.value = {
       asset: "ADA/USD",
@@ -2267,44 +2031,72 @@ const openPosition = async () => {
 
 const closePosition = async (position: PerpetualPosition) => {
   if (!position.id || !position.outRef) {
-    console.error("Invalid position data for closing");
+    console.error("Invalid position data for closing - missing required fields:", {
+      hasId: !!position.id,
+      hasOutRef: !!position.outRef,
+      outRef: position.outRef
+    });
+    return;
+  }
+
+  if (!position.outRef.txHash || position.outRef.outputIndex === undefined) {
+    console.error("Invalid outRef data - missing txHash or outputIndex:", position.outRef);
     return;
   }
 
   closingPositions.value[position.id] = true;
   try {
+    // Validate and potentially convert timestamp
+    let validatedEnteredPositionTime = position.enteredPositionTime;
+
+    // Check if the timestamp is in milliseconds and convert to seconds if needed
+    if (validatedEnteredPositionTime > 9999999999) { // If the timestamp is > year 2001 in seconds, it's likely in milliseconds
+      console.debug('[StrikeFinance]  Converting enteredPositionTime from milliseconds to seconds:', validatedEnteredPositionTime, '->', Math.floor(validatedEnteredPositionTime / 1000));
+      validatedEnteredPositionTime = Math.floor(validatedEnteredPositionTime / 1000);
+    }
+
     const closeRequest: ClosePerpetualRequest = {
       address: loggedWallet.value?.baseAddress,
-      asset: position.asset,
+      asset: {
+        policyId: position.asset.policyId,
+        assetName: position.asset.assetName
+      },
       outRef: position.outRef,
+      positionSize: position.positionSize,
+      positionType: position.position,
+      collateralAmount: position.collateralAmount,
+      position: position.position,
+      enteredPrice: position.entryPrice,
+      pnl: position.pnl,
+      assetTicker: position.asset.ticker,
       enteredPositionTime: position.enteredPositionTime,
+      utxos: utxos.value
     };
+    const cborResponse: AxiosResponse<string> = await strikeFinanceApi.closePosition(closeRequest);
+    console.debug('[StrikeFinance]  Close position request successful');
 
-    const strikeClient = createStrikeHttpClient();
-    await strikeClient.closePosition(closeRequest);
-
-    // Reload positions after successful close
+    // Reload positions after a successful close
     await loadPositions();
   } catch (error) {
-    console.error("Failed to close position:", error);
+    console.error("[StrikeFinance]  Failed to close position - detailed error:", {
+      error,
+      errorMessage: (error as any)?.message,
+      errorResponse: (error as any)?.response?.data,
+      errorStatus: (error as any)?.response?.status,
+      position: position,
+      request: {
+        address: loggedWallet.value?.baseAddress,
+        asset: position.asset,
+        outRef: position.outRef,
+        enteredPositionTime: position.enteredPositionTime,
+      }
+    });
     // TODO: Show user-friendly error notification
   } finally {
     closingPositions.value[position.id] = false;
   }
 };
 
-const getStatusColor = (status?: string) => {
-  switch (status?.toUpperCase()) {
-    case "OPEN":
-      return "status-open";
-    case "CLOSED":
-      return "status-closed";
-    case "LIQUIDATED":
-      return "status-liquidated";
-    default:
-      return "status-unknown";
-  }
-};
 
 const getPositionTrendIcon = (position: any) => {
   // Use P&L with fees as primary indicator, fallback to unrealized P&L
@@ -2331,40 +2123,17 @@ const loadPositions = async () => {
     console.warn("No wallet address available");
     return;
   }
-
   loadingPositions.value = true;
-  
   try {
-    const strikeClient = createStrikeHttpClient();
-    const fetchedPositions = await strikeClient.getPositions(walletAddress);
-    // Store raw positions for reactive processing
-    rawPositions.value = fetchedPositions.map((position, index) => {
-      // Extract collateral amount from the API data structure
-      const collateralAmount =
-        position.collateral?.amount || position.collateralAmount || 0;
-
-      // Create base position object with required UI fields
-      const basePosition = {
-        // Use ALL original API data first
-        ...position,
-
-        // Add required UI fields without overriding API data
-        id: position.outRef?.txHash || `position-${index}`,
-        address: walletAddress,
-
-        // Use API collateral structure but also provide legacy field for display
-        collateralAmount: collateralAmount,
-
-        // Ensure we have required fields for UI
-        enteredPositionTime: position.enteredPositionTime || Date.now(),
-        outRef: position.outRef || { txHash: `fake-${index}`, outputIndex: 0 },
-      };
-
-      return basePosition;
-    });
-    
+    console.debug('[StrikeFinance]  Loading positions for wallet:', walletAddress);
+    const res: AxiosResponse<PerpetualPosition[]> = await strikeFinanceApi.getPositions(walletAddress);
+    if (res.status !== 200) {
+      throw new Error(`Failed to load positions: ${res.statusText}`);
+    }
+    rawPositions.value = res.data
+    console.debug('[StrikeFinance]  Fetched positions from API:', rawPositions.value);
   } catch (error) {
-    console.error("Failed to load positions:", error?.message || error);
+    console.error("Failed to load positions:", (error as any)?.message || error);
     rawPositions.value = [];
   } finally {
     loadingPositions.value = false;
@@ -2380,7 +2149,7 @@ const onLogoError = (event: Event) => {
 
 onMounted(async () => {
   if (props.isOpen) {
-    loadPositions();
+    await loadPositions();
   }
 
   // Initialize chart data with real ADA data
@@ -2446,6 +2215,7 @@ onBeforeUnmount(() => {
 
 ::v-deep .v-text-field input[type="number"] {
   -moz-appearance: textfield !important;
+  appearance: textfield !important;
 }
 
 ::v-deep .v-text-field input::placeholder {
@@ -2766,38 +2536,16 @@ onBeforeUnmount(() => {
   color: #ffffff;
   letter-spacing: 0.2px;
 }
-
-/* Two-column layout */
-.two-column-layout {
-  display: flex;
-  gap: 16px;
-  width: 100%;
-}
-
-.positions-column {
-  flex: 1.2;
-  min-width: 0;
-  max-width: 600px;
-}
-
-.open-position-column {
-  flex: 0.8;
-  min-width: 280px;
-  max-width: 420px;
-}
-
 .column-title {
   color: #26fab0;
   font-size: 16px;
   font-weight: 600;
-  margin-bottom: 16px;
   margin-top: 0;
   letter-spacing: 0.3px;
 }
 
 .column-title.compact {
   font-size: 13px;
-  margin-bottom: 6px;
 }
 
 .perpetuals-title {
@@ -3039,11 +2787,6 @@ onBeforeUnmount(() => {
   min-height: 750px !important;
   max-height: 750px !important;
   overflow: hidden !important;
-}
-
-/* Allow scrolling in open position column */
-.open-position-column {
-  max-height: 700px !important;
 }
 
 /* Scrollable form content */

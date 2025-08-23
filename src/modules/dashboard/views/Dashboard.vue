@@ -191,7 +191,6 @@ import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { priceStore } from '@/stores/priceStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 
