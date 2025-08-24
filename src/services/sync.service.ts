@@ -61,7 +61,6 @@ export class SyncService {
         const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
 
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
-        console.debug("Epoch: ", epoch) // TODO new Epoch Animation
         await ablyService.publishToSyncChannel(this.walletBg.chain, this.walletBg.network, {
           chain: this.walletBg.chain,
           network: this.walletBg.network,
@@ -279,7 +278,7 @@ export class SyncService {
    * @param knownAddresses - Array of known addresses to sync keys for
    */
   async syncKeys(knownAddresses: string[]): Promise<any> {
-    
+
     if (!knownAddresses || knownAddresses.length === 0) {
       return null;
     }
@@ -292,9 +291,9 @@ export class SyncService {
         console.error('syncKeys error - No Addresses Table');
         throw new Error('No Addresses Table.');
       }
-      
+
       resolvedKeys = this.walletBg.resolvePathsForMissingAddresses(knownAddresses);
-      
+
       await db.transaction('rw', addressesTable, async () => {
         await addressesTable.clear();
         await addressesTable.put({
