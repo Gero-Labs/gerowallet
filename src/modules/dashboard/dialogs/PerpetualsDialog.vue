@@ -10,7 +10,7 @@
   >
     <v-card-text class="pt-1 dialog-content-container" style="z-index: 4">
       <v-row>
-        <v-col cols="7">
+        <v-col cols="8">
           <!-- ADA/USD Chart Header -->
           <div
             class="d-flex align-items-center justify-space-between"
@@ -460,7 +460,7 @@
             </v-data-table>
           </div>
         </v-col>
-        <v-col cols="5">
+        <v-col cols="4">
           <div
             class="d-flex align-items-center justify-space-between mb-2"
           >
