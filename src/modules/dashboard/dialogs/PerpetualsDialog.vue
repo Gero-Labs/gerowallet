@@ -1,5 +1,6 @@
 <template>
-  <BaseDialog
+  <div>
+    <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
     title="Strike Perpetuals"
@@ -103,7 +104,7 @@
               <template v-slot:[`header.pnlWithFees`]="{ header }">
                 <span style="padding: 0 8px">{{ header.text }}</span>
               </template>
-              <template v-slot:[`header.leverage`]="{ header }">
+              <template v-slot:[`header.collateral`]="{ header }">
                 <span style="padding: 0 8px">{{ header.text }}</span>
               </template>
               <template v-slot:[`header.actions`]="{ header }">
@@ -133,9 +134,10 @@
               </template>
               <template v-slot:[`item.asset`]="{ item }">
                 <div class="d-flex align-items-center pl-2">
-                    <span class="asset-name">{{
-                        item.asset?.ticker
-                      }}</span>
+                  <div class="asset-info d-flex flex-column justify-center">
+                    <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
+                    <div class="asset-leverage text-caption text--secondary text-center">{{ item.leverage }}x</div>
+                  </div>
                   <v-avatar
                     v-if="
                         item.pnl !== undefined ||
@@ -143,7 +145,7 @@
                       "
                     tile
                     size="16"
-                    class="ml-2"
+                    class="ml-2 align-self-center"
                   >
                     <v-img
                       :src="getPositionTrendIcon(item)"
@@ -431,12 +433,13 @@
                 <span v-else>-</span>
               </template>
 
-              <!-- Leverage column -->
-              <template v-slot:[`item.leverage`]="{ item }">
-                  <span v-if="item.leverage !== undefined"
-                  >{{ item.leverage }}x</span
-                  >
-                <span v-else>-</span>
+              <!-- Collateral column -->
+              <template v-slot:[`item.collateral`]="{ item }">
+                <div class="text-center">
+                  <span class="font-weight-medium">
+                    ${{ getCollateralAmount(item) }}
+                  </span>
+                </div>
               </template>
 
               <!-- Actions column -->
@@ -950,7 +953,7 @@
                     ? "mdi-flash"
                     : "mdi-target"
                 }}</v-icon>
-              Open {{ positionData.position }} Position
+              {{ positionData.orderType === 'MARKET' ? 'Open' : 'Place Limit' }} {{ positionData.position }} {{ positionData.orderType === 'MARKET' ? 'Position' : 'Order' }}
             </v-btn>
           </div>
           <!-- End bottom section -->
@@ -969,6 +972,76 @@
       />
     </div>
   </BaseDialog>
+
+  <!-- Update Position Dialog -->
+  <v-dialog
+    v-model="updatePositionDialog"
+    max-width="400"
+    persistent
+  >
+    <v-card>
+      <v-card-title class="headline">
+        Update Position
+      </v-card-title>
+      
+      <v-card-text>
+        <div v-if="selectedPosition" class="mb-4">
+          <div class="position-info mb-3">
+            <v-chip 
+              :color="selectedPosition.position === 'Long' ? 'success' : 'error'"
+              small
+              class="mr-2"
+            >
+              {{ selectedPosition.position.toUpperCase() }}
+            </v-chip>
+            <span class="asset-name">{{ selectedPosition.asset?.ticker || 'ADA' }}</span>
+          </div>
+          
+          <v-text-field
+            v-model.number="updatePositionData.stopLossPrice"
+            label="Stop Loss Price (USD)"
+            type="number"
+            step="0.01"
+            min="0"
+            outlined
+            dense
+            prepend-inner-icon="mdi-stop-circle"
+            :placeholder="selectedPosition.stopLossPrice?.toString() || '0.00'"
+            class="mb-3"
+          />
+          
+          <v-text-field
+            v-model.number="updatePositionData.takeProfitPrice"
+            label="Take Profit Price (USD)"
+            type="number"
+            step="0.01"
+            min="0"
+            outlined
+            dense
+            prepend-inner-icon="mdi-target"
+            :placeholder="selectedPosition.takeProfitPrice?.toString() || '0.00'"
+          />
+        </div>
+      </v-card-text>
+      
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn
+          text
+          @click="updatePositionDialog = false"
+        >
+          Cancel
+        </v-btn>
+        <v-btn
+          color="primary"
+          @click="updatePosition"
+        >
+          Update
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -1781,6 +1854,16 @@ const tickerSymbol = computed(() => {
 
 const closingPositions = ref<Record<string, boolean>>({});
 const loadingPositions = ref(false);
+const limitOrders = ref<LimitOrder[]>([]);
+const loadingLimitOrders = ref(false);
+const cancellingOrders = ref<Record<string, boolean>>({});
+const activeTab = ref(0);
+const updatePositionDialog = ref(false);
+const selectedPosition = ref<PerpetualPosition | null>(null);
+const updatePositionData = ref({
+  stopLossPrice: 0,
+  takeProfitPrice: 0
+});
 
 // Component cleanup
 onBeforeUnmount(() => {
@@ -1841,11 +1924,11 @@ const positionHeaders = ref([
   },
   { text: "P&L", align: "center", sortable: true, value: "pnlWithFees", width: "42" },
   {
-    text: "Lvg.",
+    text: "Collateral",
     align: "center",
     sortable: true,
-    value: "leverage",
-    width: "42",
+    value: "collateral",
+    width: "60",
   },
   { text: "", align: "center", sortable: false, value: "actions", width: "26" },
 ]);
@@ -2170,6 +2253,179 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopChartUpdates();
 });
+
+// Load limit orders
+const loadLimitOrders = async () => {
+  const walletAddress = loggedWallet.value?.baseAddress;
+  if (!walletAddress) return;
+
+  loadingLimitOrders.value = true;
+  try {
+    const response = await strikeFinanceApi.getLimitOrders(walletAddress);
+    limitOrders.value = response.data;
+    console.debug('[StrikeFinance] Loaded limit orders:', limitOrders.value);
+  } catch (error) {
+    console.error('Failed to load limit orders:', error);
+    limitOrders.value = [];
+  } finally {
+    loadingLimitOrders.value = false;
+  }
+};
+
+// Cancel limit order
+const cancelLimitOrder = async (order: LimitOrder) => {
+  if (!order.id || !order.outRef) {
+    console.error('Invalid order data for cancelling');
+    return;
+  }
+
+  cancellingOrders.value[order.id] = true;
+  try {
+    const cancelRequest: CancelLimitOrderRequest = {
+      address: loggedWallet.value?.baseAddress,
+      asset: order.asset,
+      outRef: order.outRef
+    };
+
+    console.debug('[StrikeFinance] Cancelling limit order:', cancelRequest);
+    const cborResponse = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
+    console.log('[StrikeFinance] Cancel order response:', cborResponse.data);
+    
+    // Reload limit orders
+    await loadLimitOrders();
+  } catch (error) {
+    console.error('Failed to cancel limit order:', error);
+  } finally {
+    cancellingOrders.value[order.id] = false;
+  }
+};
+
+// Open update position dialog
+const openUpdatePositionDialog = (position: PerpetualPosition) => {
+  selectedPosition.value = position;
+  updatePositionData.value = {
+    stopLossPrice: position.stopLossPrice || 0,
+    takeProfitPrice: position.takeProfitPrice || 0
+  };
+  updatePositionDialog.value = true;
+};
+
+// Update position
+const updatePosition = async () => {
+  if (!selectedPosition.value) return;
+
+  try {
+    const updateRequest: UpdatePositionRequest = {
+      address: loggedWallet.value?.baseAddress,
+      asset: selectedPosition.value.asset,
+      outRef: selectedPosition.value.outRef,
+      side: selectedPosition.value.position.toLowerCase(),
+      ...(updatePositionData.value.stopLossPrice > 0 && {
+        stopLossPrice: updatePositionData.value.stopLossPrice
+      }),
+      ...(updatePositionData.value.takeProfitPrice > 0 && {
+        takeProfitPrice: updatePositionData.value.takeProfitPrice
+      })
+    };
+
+    console.debug('[StrikeFinance] Updating position:', updateRequest);
+    const cborResponse = await strikeFinanceApi.updatePosition(updateRequest);
+    console.log('[StrikeFinance] Update position response:', cborResponse.data);
+    
+    // Close dialog and reload positions
+    updatePositionDialog.value = false;
+    await loadPositions();
+  } catch (error) {
+    console.error('Failed to update position:', error);
+  }
+};
+
+// Get collateral amount in USD (based on entry price)
+const getCollateralAmount = (item: any) => {
+  // Debug: Log collateral calculation data
+  console.log('🔍 Collateral USD Debug:', {
+    entryPrice: item.entryPrice,
+    rawEnteredAtUsdPrice: item.rawEnteredAtUsdPrice,
+    
+    // ADA amounts
+    rawCollateralAssetAmount: item.rawCollateralAssetAmount,
+    collateralAmount: item.collateralAmount,
+    collateralSizeAda: item.collateralSizeAda,
+    currentPositionValueAda: item.currentPositionValueAda,
+    
+    // Check for any USD collateral fields
+    collateralUsd: item.collateralUsd,
+    initialCollateralUsd: item.initialCollateralUsd,
+    collateralValueUsd: item.collateralValueUsd,
+    
+    // Position data
+    positionSize: item.positionSize,
+    leverage: item.leverage
+  });
+
+  // Get the entry price (price when position was opened)
+  let entryPrice = 0;
+  if (item.entryPrice) {
+    entryPrice = Number(item.entryPrice);
+  } else if (item.rawEnteredAtUsdPrice) {
+    entryPrice = Number(item.rawEnteredAtUsdPrice);
+  }
+
+  // Get the collateral amount in ADA
+  let collateralAda = 0;
+  
+  // Try different ADA collateral fields
+  const adaCandidates = [
+    item.collateralSizeAda,
+    item.currentPositionValueAda,
+    item.rawCollateralAssetAmount ? Number(item.rawCollateralAssetAmount) / 1000000 : null,
+    item.initialCollateral,
+    item.collateralAmount,
+    item.collateral
+  ];
+
+  for (const candidate of adaCandidates) {
+    if (candidate !== undefined && candidate !== null && candidate > 0) {
+      collateralAda = Number(candidate);
+      console.log('✅ Found collateral ADA:', collateralAda);
+      break;
+    }
+  }
+
+  // Calculate USD value: collateral ADA × entry price
+  if (collateralAda > 0 && entryPrice > 0) {
+    const collateralUsd = collateralAda * entryPrice;
+    console.log(`✅ Calculated collateral USD: ${collateralAda} ADA × $${entryPrice} = $${collateralUsd.toFixed(2)}`);
+    return collateralUsd.toFixed(2);
+  }
+
+  // Fallback: check if there's already a USD collateral field
+  const usdCandidates = [
+    item.collateralUsd,
+    item.initialCollateralUsd,
+    item.collateralValueUsd
+  ];
+
+  for (const candidate of usdCandidates) {
+    if (candidate !== undefined && candidate !== null && candidate > 0) {
+      console.log('✅ Using direct USD collateral field:', candidate);
+      return Number(candidate).toFixed(2);
+    }
+  }
+  
+  console.log('❌ Cannot calculate USD collateral - missing ADA amount or entry price');
+  return '0.00';
+};
+
+// Get status color for limit orders
+const getStatusColor = (status: string) => {
+  switch (status?.toLowerCase()) {
+    case 'pending': return 'warning';
+    case 'filled': return 'success';
+    case 'cancelled': return 'error';
+    default: return 'grey';
+  }
+};
 </script>
 
 <style scoped>

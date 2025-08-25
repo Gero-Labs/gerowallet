@@ -41,19 +41,45 @@ export interface CreatePerpetualRequest {
   takeProfitPrice?: number;
 }
 
+export interface CreateLimitOrderRequest {
+  address: string;
+  asset: Asset;
+  collateralAmount: number;
+  leverage: number;
+  position: string; // 'long' | 'short'
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  limitUSDPrice: number;
+}
+
+export interface UpdatePositionRequest {
+  address: string;
+  asset: Asset;
+  outRef: OutRef;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  side: string;
+}
+
+export interface CancelLimitOrderRequest {
+  address: string;
+  asset: Asset;
+  outRef: OutRef;
+}
+
 export interface ClosePerpetualRequest {
   address: string;
   asset: Asset;
   outRef: OutRef;
-  positionSize: number;
-  positionType: string;
-  collateralAmount: number;
-  position: string;
-  enteredPrice: number;
-  pnl: number;
-  assetTicker: string;
-  enteredPositionTime: number;
-  utxos: any[];
+  positionSize?: number;
+  positionType?: string;
+  collateralAmount?: number;
+  position?: string;
+  enteredPrice?: number;
+  pnl?: number;
+  assetTicker?: string;
+  enteredPositionTime?: number;
+  utxos?: any[];
 }
 
 export interface PerpetualRequestWrapper<T> {
@@ -84,6 +110,29 @@ export interface PerpetualPosition {
   rawLiquidationPrice: string;
   rawStopLossPrice?: string;
   rawTakeProfitPrice?: string;
+}
+
+export interface LimitOrder {
+  id: string;
+  address: string;
+  asset: Asset;
+  collateralAmount: number;
+  leverage: number;
+  position: 'Long' | 'Short';
+  limitUSDPrice: number;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  outRef: OutRef;
+  status: 'pending' | 'filled' | 'cancelled';
+  createdTime: number;
+}
+
+export interface PoolInfo {
+  totalLiquidity: string;
+  availableLiquidity: string;
+  utilization: number;
+  borrowRate: number;
+  fundingRate: number;
 }
 
 /**
@@ -121,6 +170,58 @@ export default {
     return await axiosInstance.get('/api/strike/perpetuals/getPositions', {
       params: { address }
     });
+  },
+
+  /**
+   * Open a new perpetual limit order
+   * @param request - Create limit order request
+   * @returns Transaction CBOR string
+   */
+  async openLimitOrder(request: CreateLimitOrderRequest): Promise<AxiosResponse<string>> {
+    return await axiosInstance.post('/api/strike/perpetuals/openLimitOrder', {
+      request
+    });
+  },
+
+  /**
+   * Cancel an existing limit order
+   * @param request - Cancel limit order request
+   * @returns Transaction CBOR string
+   */
+  async cancelLimitOrder(request: CancelLimitOrderRequest): Promise<AxiosResponse<string>> {
+    return await axiosInstance.post('/api/strike/perpetuals/cancelLimitOrder', {
+      request
+    });
+  },
+
+  /**
+   * Update stop loss and take profit for an existing position
+   * @param request - Update position request
+   * @returns Transaction CBOR string
+   */
+  async updatePosition(request: UpdatePositionRequest): Promise<AxiosResponse<string>> {
+    return await axiosInstance.post('/api/strike/perpetuals/updatePosition', {
+      request
+    });
+  },
+
+  /**
+   * Get all limit orders for an address
+   * @param address - User's wallet address
+   * @returns Array of limit orders
+   */
+  async getLimitOrders(address: string): Promise<AxiosResponse<LimitOrder[]>> {
+    return await axiosInstance.get('/api/strike/perpetuals/getLimitOrders', {
+      params: { address }
+    });
+  },
+
+  /**
+   * Get pool information V2
+   * @returns Pool information
+   */
+  async getPoolInfoV2(): Promise<AxiosResponse<PoolInfo>> {
+    return await axiosInstance.get('/api/strike/perpetuals/getPoolInfoV2');
   },
 
   /**
