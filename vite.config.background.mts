@@ -13,7 +13,15 @@ export default defineConfig({
     watch: {
       usePolling: true,
       interval: 1000,
-      ignored: ['**/DumpStack.log.tmp', '**/DumpStack.log', '**/*.tmp', '**/node_modules/**', '**/.git/**']
+      ignored: [
+        '**/DumpStack.log.tmp', 
+        '**/DumpStack.log', 
+        '**/*.tmp', 
+        '**/*.log.tmp',
+        '**/node_modules/**', 
+        '**/.git/**',
+        'D:\\DumpStack.log.tmp'
+      ]
     }
   },
   define: {

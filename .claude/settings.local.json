@@ -14,7 +14,8 @@
       "Bash(grep:*)",
       "Bash(curl:*)",
       "WebFetch(domain:api.kraken.com)",
-      "WebFetch(domain:docs.kraken.com)"
+      "WebFetch(domain:docs.kraken.com)",
+      "Bash(tasklist:*)"
     ],
     "deny": []
   }
