@@ -30,30 +30,6 @@ async function stubIndexHtml() {
   }
 }
 
-/**
- * Copy PNG files from src/assets/public to extension/public
- */
-async function copyPublicAssets() {
-  const srcDir = r('src/assets/public')
-  const destDir = r('extension/public')
-  
-  await fs.ensureDir(destDir)
-  
-  try {
-    const files = await fs.readdir(srcDir)
-    const pngFiles = files.filter(file => file.endsWith('.png'))
-    
-    for (const file of pngFiles) {
-      const srcPath = r(`src/assets/public/${file}`)
-      const destPath = r(`extension/public/${file}`)
-      await fs.copy(srcPath, destPath)
-      log('PRE', `copied ${file}`)
-    }
-  } catch (error) {
-    log('PRE', `Error copying public assets: ${error}`)
-  }
-}
-
 function writeManifest() {
   execSync('npx esno ./scripts/manifest.ts', { stdio: 'inherit' })
 }
@@ -62,7 +38,6 @@ writeManifest()
 
 if (isDev) {
   stubIndexHtml()
-  copyPublicAssets()
   chokidar.watch(r('src/**/*.html'))
     .on('change', () => {
       stubIndexHtml()
@@ -78,6 +53,5 @@ if (isDev) {
     let data = await fs.readFile(r(`extension/options/index.html`), 'utf-8')
     await fs.writeFile(r(`extension/index.html`), data, 'utf-8')
     await fs.remove(r(`extension/options`))
-    await copyPublicAssets()
   })();
 }
