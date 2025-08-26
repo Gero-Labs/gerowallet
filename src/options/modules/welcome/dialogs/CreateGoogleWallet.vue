@@ -1,3 +1,130 @@
+<script setup lang="ts">
+import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
+import { Theme } from '@/models/types';
+import rules from '@/utils/rules';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GeroStore from '@/stores/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+
+
+interface NewWallet {
+  name: string;
+  icon: string;
+  theme: string;
+  password: string;
+  confirmPassword: string;
+  termsChecked: boolean;
+  recoverPasswordChecked: boolean;
+  chain: string;
+  network: any;
+}
+
+interface Props {
+  isOpen: boolean;
+  persistent: boolean;
+  googleAccount: { };
+  tokens: {
+    idToken: string,
+    accessToken: string,
+  };
+  network: any;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits(['close']);
+
+const vmProxy = getCurrentInstance()!.proxy as any
+const router = vmProxy.$router;
+
+const form = ref();
+const show1 = ref(false);
+const show2 = ref(false);
+const valid = ref<boolean>(false);
+const creatingWalletLoader = ref(false);
+const persistent = ref(false);
+
+let newWallet = reactive<NewWallet>({
+  name: '',
+  icon: '',
+  theme: Theme.GERO,
+  password: '',
+  confirmPassword: '',
+  termsChecked: false,
+  recoverPasswordChecked: false,
+  chain: props.network?.blockchain,
+  network: props.network?.network
+});
+
+watch(() => props.isOpen, (newValue, _oldValue) => {
+  if (!newValue) {
+    resetDialog();
+  }
+})
+
+watch(() => props.googleAccount, (newValue, _oldValue) => {
+  newWallet.name = newValue['email']?.split('@')[0];
+  newWallet.icon = newValue['picture'];
+})
+
+onMounted(() => {
+  if (props.googleAccount) {
+    newWallet.name = props.googleAccount['email']?.split('@')[0];
+    newWallet.icon = props.googleAccount['picture'];
+  }
+})
+
+const walletCreation = async (): Promise<void> => {
+  creatingWalletLoader.value = true;
+  try {
+    const wallet = await GeroStore.createNewGoogleWallet(
+      newWallet.name,
+      newWallet.icon,
+      newWallet.theme,
+      newWallet.password,
+      newWallet.chain,
+      newWallet.network,
+      props.tokens.idToken
+    );
+    emit('close');
+    await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    }).then(() => {
+      nextTick(() => {
+        resetDialog();
+        router.push('/')
+      })
+    });
+  } catch (error) {
+    console.error('Error creating wallet:', error);
+  } finally {
+    creatingWalletLoader.value = false;
+  }
+};
+
+const resetDialog = (): void => {
+  newWallet = {
+    name: '',
+    icon: '',
+    theme: Theme.GERO,
+    password: '',
+    confirmPassword: '',
+    termsChecked: false,
+    recoverPasswordChecked: false,
+    chain: props.network?.chain,
+    network: props.network?.network
+  };
+  valid.value = false;
+  creatingWalletLoader.value = false;
+  persistent.value = false;
+  nextTick(() => {
+    vmProxy.$refs.form.resetValidation();
+  })
+};
+</script>
+
 <template>
   <BaseDialog
     title="Google Wallet Set Up"
@@ -108,131 +235,3 @@
     </v-card-actions>
   </BaseDialog>
 </template>
-<script setup lang="ts">
-import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
-import { Theme } from '@/models/types';
-import rules from '@/utils/rules';
-import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import GeroStore from '@/stores/geroStore';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
-
-
-interface NewWallet {
-  name: string;
-  icon: string;
-  theme: string;
-  password: string;
-  confirmPassword: string;
-  termsChecked: boolean;
-  recoverPasswordChecked: boolean;
-  chain: string;
-  network: any;
-}
-
-interface Props {
-  isOpen: boolean;
-  persistent: boolean;
-  googleAccount: { };
-  tokens: {
-    idToken: string,
-    accessToken: string,
-  };
-  network: any;
-}
-
-const props = defineProps<Props>();
-
-const emit = defineEmits(['close']);
-
-const vmProxy = getCurrentInstance()!.proxy as any
-const router = vmProxy.$router;
-
-const form = ref();
-const show1 = ref(false);
-const show2 = ref(false);
-const valid = ref<boolean>(false);
-const creatingWalletLoader = ref(false);
-const persistent = ref(false);
-
-let newWallet = reactive<NewWallet>({
-  name: '',
-  icon: '',
-  theme: Theme.GERO,
-  password: '',
-  confirmPassword: '',
-  termsChecked: false,
-  recoverPasswordChecked: false,
-  chain: props.network?.chain,
-  network: props.network?.network
-});
-
-watch(() => props.isOpen, (newValue, _oldValue) => {
-  if (!newValue) {
-    resetDialog();
-  }
-})
-
-watch(() => props.googleAccount, (newValue, _oldValue) => {
-  newWallet.name = newValue['email']?.split('@')[0];
-  newWallet.icon = newValue['picture'];
-})
-
-onMounted(() => {
-  if (props.googleAccount) {
-    newWallet.name = props.googleAccount['email']?.split('@')[0];
-    newWallet.icon = props.googleAccount['picture'];
-  }
-})
-
-const walletCreation = async (): Promise<void> => {
-  creatingWalletLoader.value = true;
-  try {
-    const wallet = await GeroStore.createNewGoogleWallet(
-      newWallet.name,
-      newWallet.icon,
-      newWallet.theme,
-      newWallet.password,
-      newWallet.chain,
-      newWallet.network,
-      props.tokens.idToken
-    );
-    emit('close');
-    await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.LOGIN,
-      data: { wallet },
-    }).then(() => {
-      nextTick(() => {
-        resetDialog();
-        router.push('/')
-      })
-    });
-  } catch (error) {
-    console.error('Error creating wallet:', error);
-  } finally {
-    creatingWalletLoader.value = false;
-  }
-};
-
-const resetDialog = (): void => {
-  newWallet = {
-    name: '',
-    icon: '',
-    theme: Theme.GERO,
-    password: '',
-    confirmPassword: '',
-    termsChecked: false,
-    recoverPasswordChecked: false,
-    chain: props.network?.chain,
-    network: props.network?.network
-  };
-  valid.value = false;
-  creatingWalletLoader.value = false;
-  persistent.value = false;
-  nextTick(() => {
-    vmProxy.$refs.form.resetValidation();
-  })
-};
-</script>
-<style>
-</style>
