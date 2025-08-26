@@ -36,7 +36,7 @@
             <v-list-item two-line class="px-0 py-1" style="height: 55px">
               <v-list-item-content class="px-0 py-1">
                 <v-list-item-title class="activity-title">
-                  <span class="activity-text">{{ getStatus(item) }}</span>
+                  <span class="activity-text">{{ getDisplayStatus(item) }}</span>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
                   <v-tooltip top>
@@ -173,7 +173,7 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
-import { stakingStore } from '@/stores/stakingStore';
+import stakingStoreActions from '@/stores/stakingStore';
 
 const props = defineProps({
   selectedTransaction: {
@@ -192,7 +192,6 @@ const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
-const { pools } = toRefs(stakingStore);
 
 const activityHeaders = ref([
   { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
@@ -252,6 +251,108 @@ const transactions = computed(() => {
   return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
+// Store for transaction statuses with loaded pool data
+const transactionStatuses = ref<Record<string, string>>({});
+
+// Get status for transaction, loading pool data from API if needed
+const getTransactionStatus = async (item: any) => {
+  const txId = item.id;
+
+  const statuses = [];
+  if (item.body?.certificates?.length > 0) {
+    for (const certificate of item.body.certificates) {
+      switch (certificate.__typename) {
+        case Cardano.CertificateType.StakeRegistrationDelegation:
+        case Cardano.CertificateType.StakeDelegation:
+          // Always load pool from API by ID
+          const pool = await getPoolByIdFromApi(certificate.poolId);
+          if (pool && pool.ticker) {
+            statuses.push('Delegating to ' + pool.ticker);
+          } else {
+            statuses.push('Delegating to Pool');
+          }
+          break;
+        case Cardano.CertificateType.StakeDeregistration:
+          statuses.push('Stake Deregistration');
+          break;
+        case Cardano.CertificateType.RegisterDelegateRepresentative:
+          statuses.push('DRep Registration');
+          break;
+        case Cardano.CertificateType.VoteDelegation:
+          statuses.push('Vote Delegation');
+          break;
+        case Cardano.CertificateType.UnregisterDelegateRepresentative:
+          statuses.push('DRep Deregistration');
+          break;
+      }
+    }
+  }
+
+  if (item.receivedAmount - item.sentAmount > 0) {
+    if (!item.body?.certificates) {
+      statuses.push('Received Funds');
+    }
+  } else {
+    if (!item.body?.certificates) {
+      statuses.push('Sent Funds');
+    }
+  }
+
+  const status = statuses.join(', ');
+  transactionStatuses.value[txId] = status;
+  return status;
+};
+
+// Get status for display (synchronous, uses cached status if available)
+const getDisplayStatus = (item: any) => {
+  const txId = item.id;
+
+  // If we have a cached status, use it
+  if (transactionStatuses.value[txId]) {
+    return transactionStatuses.value[txId];
+  }
+
+  // Otherwise, load it asynchronously and return basic status for now
+  getTransactionStatus(item);
+
+  // Return basic status while loading
+  const statuses = [];
+  if (item.body?.certificates?.length > 0) {
+    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
+      switch (certificate.__typename) {
+        case Cardano.CertificateType.StakeRegistrationDelegation:
+        case Cardano.CertificateType.StakeDelegation:
+          statuses.push('Delegating to Pool');
+          break;
+        case Cardano.CertificateType.StakeDeregistration:
+          statuses.push('Stake Deregistration');
+          break;
+        case Cardano.CertificateType.RegisterDelegateRepresentative:
+          statuses.push('DRep Registration');
+          break;
+        case Cardano.CertificateType.VoteDelegation:
+          statuses.push('Vote Delegation');
+          break;
+        case Cardano.CertificateType.UnregisterDelegateRepresentative:
+          statuses.push('DRep Deregistration');
+          break;
+      }
+    });
+  }
+
+  if (item.receivedAmount - item.sentAmount > 0) {
+    if (!item.body?.certificates) {
+      statuses.push('Received Funds');
+    }
+  } else {
+    if (!item.body?.certificates) {
+      statuses.push('Sent Funds');
+    }
+  }
+
+  return statuses.join(', ');
+};
+
 // Load more transactions
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
@@ -296,6 +397,8 @@ const resetInfiniteScroll = () => {
   currentIndex.value = 0;
   hasReachedEnd.value = false;
   currentPage.value = 1;
+
+  transactionStatuses.value = {};
 
   if (props.isFullList) {
     loadMoreTransactions();
@@ -395,43 +498,17 @@ const handleTransactionModalClose = () => {
   transactionInfo.value = null;
 };
 
-const getStatus = item => {
-  const statuses = [];
-  if (item.body?.certificates?.length > 0) {
-    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
-      switch (certificate.__typename) {
-        case Cardano.CertificateType.StakeRegistrationDelegation:
-        case Cardano.CertificateType.StakeDelegation:
-          const pool = pools.value.find(p => p.id === certificate.poolId);
-          if (pool) {
-            statuses.push('Delegating to ' + pool.ticker);
-          }
-          break;
-        case Cardano.CertificateType.StakeDeregistration:
-          statuses.push('Stake Deregistration');
-          break;
-        case Cardano.CertificateType.RegisterDelegateRepresentative:
-          statuses.push('DRep Registration');
-          break;
-        case Cardano.CertificateType.VoteDelegation:
-          statuses.push('Vote Delegation');
-          break;
-        case Cardano.CertificateType.UnregisterDelegateRepresentative:
-          statuses.push('DRep Deregistration');
-          break;
-      }
-    });
+// Load pool details by ID from API
+const getPoolByIdFromApi = async (poolId: string) => {
+  if (!poolId) return null;
+
+  try {
+    await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
+    return stakingStoreActions.state.currentPool;
+  } catch (error) {
+    console.error('Error loading pool by ID:', error);
+    return null;
   }
-  if (item.receivedAmount - item.sentAmount > 0) {
-    if (!item.body?.certificates) {
-      statuses.push('Received Funds');
-    }
-  } else {
-    if (!item.body?.certificates) {
-      statuses.push('Sent Funds');
-    }
-  }
-  return statuses.join(', ');
 };
 
 const isWithdrawal = item => {
@@ -456,9 +533,9 @@ const isStakeRegistration = item => {
 const getColor = item => {
   if (item.status === 'Pending') {
     return '#FEC84B';
-  } else if (getStatus(item).includes('Received') || item.ada > 0) {
+  } else if (getDisplayStatus(item).includes('Received') || item.ada > 0) {
     return '#47cd89';
-  } else if (getStatus(item).includes('Sent') || item.ada < 0) {
+  } else if (getDisplayStatus(item).includes('Sent') || item.ada < 0) {
     return '#F97066';
   }
   return '';
