@@ -36,7 +36,7 @@
             <v-list-item two-line class="px-0 py-1" style="height: 55px">
               <v-list-item-content class="px-0 py-1">
                 <v-list-item-title class="activity-title">
-                  <span class="activity-text">{{ getStatus(item) }}</span>
+                  <span class="activity-text">{{ getTransactionStatus(item) }}</span>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
                   <v-tooltip top>
@@ -124,8 +124,8 @@
                 <span class="ml-2">Loading more transactions...</span>
               </td>
             </tr>
-                        <!-- End of list indicator for infinite scroll -->
-            <tr v-else-if="props.isFullList && hasReachedEnd" class="no-hover">
+            <!-- End of list indicator for infinite scroll -->
+            <tr v-else-if="props.isFullList && hasReachedEnd && !search" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <span class="text-caption text--secondary">
                   {{ displayedTransactions.length > 0 ? 'No more transactions to load' : 'No transactions found' }}
@@ -144,7 +144,7 @@
                 <v-pagination
                   v-model="currentPage"
                   :length="Math.ceil(transactions.length / itemsPerPage)"
-                  :total-visible="5"
+                  :total-visible="7"
                   circle
                   class="compact-pagination ma-0"
                   @input="handlePageChange"
@@ -173,6 +173,7 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
+import stakingStoreActions from '@/stores/stakingStore';
 
 const props = defineProps({
   selectedTransaction: {
@@ -189,7 +190,7 @@ const emit = defineEmits(['row-click']);
 
 const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { assets, pools } = toRefs(networkStore);
+const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
 const activityHeaders = ref([
@@ -210,6 +211,7 @@ const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
 const intersectionTarget = ref<HTMLElement | null>(null);
 const intersectionObserver = ref<IntersectionObserver | null>(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
 // Pagination variables (for non-full list mode)
 const currentPage = ref<number>(1);
@@ -220,7 +222,7 @@ const itemsPerPage = computed(() => {
 // Items per batch for lazy loading
 const itemsPerBatch = computed(() => {
   if (!props.isFullList) {
-    return itemsPerPage.value; // Используем пагинацию если не полный список
+    return itemsPerPage.value;
   }
   return state.value === '/transactions' ? 20 : 10;
 });
@@ -249,6 +251,121 @@ const transactions = computed(() => {
   return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
+// Store for transaction statuses with loaded pool data
+const transactionStatuses = ref<Record<string, string>>({});
+
+// Preload statuses for displayed transactions
+const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
+  const promises = transactions.map(async (item) => {
+    const txId = item.id;
+    
+    // Skip if already loaded
+    if (transactionStatuses.value[txId]) {
+      return;
+    }
+
+    // Load status with pool data
+    const statuses = [];
+    
+    if (item.body?.certificates?.length > 0) {
+      for (const certificate of item.body.certificates) {
+        const status = await processCertificate(certificate, true);
+        if (status) statuses.push(status);
+      }
+    }
+
+    addFundTransferStatus(item, statuses);
+    
+    const finalStatus = statuses.join(', ');
+    transactionStatuses.value[txId] = finalStatus;
+  });
+
+  await Promise.all(promises);
+};
+
+// Get transaction status (reactive)
+const getTransactionStatus = (item: any): string => {
+  const txId = item.id;
+
+  // Return cached status or basic status as fallback
+  return transactionStatuses.value[txId] || buildBasicStatus(item);
+};
+
+// Certificate type to status mapping
+const getCertificateBaseStatus = (certificateType: string): string => {
+  switch (certificateType) {
+    case Cardano.CertificateType.StakeRegistrationDelegation:
+    case Cardano.CertificateType.StakeDelegation:
+      return 'Delegating to Pool';
+    case Cardano.CertificateType.StakeDeregistration:
+      return 'Stake Deregistration';
+    case Cardano.CertificateType.RegisterDelegateRepresentative:
+      return 'DRep Registration';
+    case Cardano.CertificateType.VoteDelegation:
+      return 'Vote Delegation';
+    case Cardano.CertificateType.UnregisterDelegateRepresentative:
+      return 'DRep Deregistration';
+    default:
+      return '';
+  }
+};
+
+// Process single certificate and return status
+const processCertificate = async (certificate: Cardano.Certificate, loadPoolData = false): Promise<string> => {
+  const baseStatus = getCertificateBaseStatus(certificate.__typename);
+  
+  // For delegation certificates, try to get enhanced status with pool ticker
+  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation || 
+       certificate.__typename === Cardano.CertificateType.StakeDelegation) && loadPoolData) {
+    const pool = await getPoolByIdFromApi(certificate.poolId);
+    if (pool && pool.ticker) {
+      return 'Delegating to ' + pool.ticker;
+    }
+  }
+  
+  return baseStatus;
+};
+
+// Add fund transfer status if applicable
+const addFundTransferStatus = (item: any, statuses: string[]): void => {
+  if (item.receivedAmount - item.sentAmount > 0) {
+    if (!item.body?.certificates) {
+      statuses.push('Received Funds');
+    }
+  } else {
+    if (!item.body?.certificates) {
+      statuses.push('Sent Funds');
+    }
+  }
+};
+
+// Build basic transaction status without pool API data
+const buildBasicStatus = (item: any): string => {
+  const statuses = [];
+  
+  if (item.body?.certificates?.length > 0) {
+    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
+      const status = getCertificateBaseStatus(certificate.__typename);
+      if (status) statuses.push(status);
+    });
+  }
+
+  addFundTransferStatus(item, statuses);
+  return statuses.join(', ');
+};
+
+const getPoolByIdFromApi = async (poolId: string) => {
+  if (!poolId) return null;
+
+  try {
+    await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
+    return stakingStoreActions.state.currentPool;
+  } catch (error) {
+    console.error('Error loading pool by ID:', error);
+    return null;
+  }
+};
+
 // Load more transactions
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
@@ -260,10 +377,12 @@ const loadMoreTransactions = async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
+  let newTransactions = [];
+
   if (props.isFullList) {
     // Infinite scroll mode
     const endIndex = currentIndex.value + itemsPerBatch.value;
-    const newTransactions = transactions.value.slice(currentIndex.value, endIndex);
+    newTransactions = transactions.value.slice(currentIndex.value, endIndex);
 
     displayedTransactions.value.push(...newTransactions);
     currentIndex.value = endIndex;
@@ -276,52 +395,80 @@ const loadMoreTransactions = async () => {
     // Pagination mode
     const start = (currentPage.value - 1) * itemsPerPage.value;
     const end = start + itemsPerPage.value;
-    displayedTransactions.value = transactions.value.slice(start, end);
-    
+    newTransactions = transactions.value.slice(start, end);
+    displayedTransactions.value = newTransactions;
+
     // Check if we've reached the end
     if (end >= transactions.value.length) {
       hasReachedEnd.value = true;
     }
   }
 
+  // Preload statuses for new transactions and wait for completion
+  if (newTransactions.length > 0) {
+    await preloadTransactionStatuses(newTransactions);
+  }
+
   isLoadingMore.value = false;
 };
 
 // Reset infinite scroll when search changes
-const resetInfiniteScroll = () => {
+const resetInfiniteScroll = async () => {
   displayedTransactions.value = [];
   currentIndex.value = 0;
   hasReachedEnd.value = false;
-  currentPage.value = 1; // Сброс пагинации
-  
+  currentPage.value = 1;
+
+  // Clear cached transaction statuses
+  transactionStatuses.value = {};
+
   if (props.isFullList) {
-    loadMoreTransactions();
+    await loadMoreTransactions();
   } else {
-    // Если не полный список, загружаем первую страницу
-    loadMoreTransactions();
+    await loadMoreTransactions();
   }
 };
 
 // Watch for search term changes to reset infinite scroll
 watch(
   () => search.value,
-  () => {
-    resetInfiniteScroll();
+  async () => {
+    await resetInfiniteScroll();
   }
 );
 
 // Watch for transactions changes to reset infinite scroll
 watch(
   () => transactions.value,
-  () => {
-    resetInfiniteScroll();
+  async () => {
+    await resetInfiniteScroll();
+
+    // Recreate intersection observer after reset
+    if (props.isFullList) {
+      if (intersectionObserver.value) {
+        intersectionObserver.value.disconnect();
+      }
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setupIntersectionObserver();
+    }
   },
   { deep: true }
 );
 
 // Setup intersection observer for infinite scroll
 const setupIntersectionObserver = () => {
-  if (!intersectionTarget.value || !props.isFullList) return;
+  if (!intersectionTarget.value || !props.isFullList) {
+    return;
+  }
+
+  // Disconnect existing observer
+  if (intersectionObserver.value) {
+    intersectionObserver.value.disconnect();
+  }
+
+  // Find the scrollable container
+  const scrollContainer = intersectionTarget.value.closest('.table-container');
 
   intersectionObserver.value = new IntersectionObserver(
     entries => {
@@ -332,61 +479,45 @@ const setupIntersectionObserver = () => {
       });
     },
     {
+      root: scrollContainer, // Use the scrollable container as root
       rootMargin: '100px', // Start loading when 100px away from the target
-      threshold: 0.1,
+      threshold: [0, 0.1, 1.0], // Multiple thresholds for better detection
     }
   );
 
   intersectionObserver.value.observe(intersectionTarget.value);
 };
 
+// Fallback scroll handler
+const handleScroll = () => {
+  if (!scrollContainer.value || !props.isFullList || isLoadingMore.value || hasReachedEnd.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value;
+  const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 100; // 100px threshold
+
+  if (scrolledToBottom) {
+    loadMoreTransactions();
+  }
+};
+
+// Setup scroll fallback
+const setupScrollFallback = () => {
+  if (!props.isFullList) return;
+
+  const container = document.querySelector('.table-container') as HTMLElement;
+  if (container) {
+    scrollContainer.value = container;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+  }
+};
+
 const handleOnTransactionsRowClick = row => {
   transactionInfo.value = row;
-  console.log('transactionInfo', row);
   emit('row-click', row);
 };
 
 const handleTransactionModalClose = () => {
   transactionInfo.value = null;
-};
-
-const getStatus = item => {
-  const statuses = [];
-  if (item.body?.certificates?.length > 0) {
-    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
-      switch (certificate.__typename) {
-        case Cardano.CertificateType.StakeRegistrationDelegation:
-        case Cardano.CertificateType.StakeDelegation:
-          const pool = pools.value[certificate.poolId];
-          if (pool) {
-            statuses.push('Delegating to ' + pool.ticker);
-          }
-          break;
-        case Cardano.CertificateType.StakeDeregistration:
-          statuses.push('Stake Deregistration');
-          break;
-        case Cardano.CertificateType.RegisterDelegateRepresentative:
-          statuses.push('DRep Registration');
-          break;
-        case Cardano.CertificateType.VoteDelegation:
-          statuses.push('Vote Delegation');
-          break;
-        case Cardano.CertificateType.UnregisterDelegateRepresentative:
-          statuses.push('DRep Deregistration');
-          break;
-      }
-    });
-  }
-  if (item.receivedAmount - item.sentAmount > 0) {
-    if (!item.body?.certificates) {
-      statuses.push('Received Funds');
-    }
-  } else {
-    if (!item.body?.certificates) {
-      statuses.push('Sent Funds');
-    }
-  }
-  return statuses.join(', ');
 };
 
 const isWithdrawal = item => {
@@ -411,9 +542,9 @@ const isStakeRegistration = item => {
 const getColor = item => {
   if (item.status === 'Pending') {
     return '#FEC84B';
-  } else if (getStatus(item).includes('Received') || item.ada > 0) {
+  } else if (getTransactionStatus(item).includes('Received') || item.ada > 0) {
     return '#47cd89';
-  } else if (getStatus(item).includes('Sent') || item.ada < 0) {
+  } else if (getTransactionStatus(item).includes('Sent') || item.ada < 0) {
     return '#F97066';
   }
   return '';
@@ -427,24 +558,31 @@ const getRowClass = item => {
 };
 
 // Handle page change for pagination
-const handlePageChange = (page: number) => {
+const handlePageChange = async (page: number) => {
   currentPage.value = page;
   hasReachedEnd.value = false;
-  loadMoreTransactions();
+  await loadMoreTransactions();
 };
 
 // Lifecycle hooks
 onMounted(async () => {
   await nextTick();
+  await resetInfiniteScroll();
+
   if (props.isFullList) {
+    // Wait for DOM to fully render before setting up observers
+    await new Promise(resolve => setTimeout(resolve, 100));
     setupIntersectionObserver();
+    setupScrollFallback();
   }
-  resetInfiniteScroll();
 });
 
 onUnmounted(() => {
   if (intersectionObserver.value) {
     intersectionObserver.value.disconnect();
+  }
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('scroll', handleScroll);
   }
 });
 </script>
@@ -559,7 +697,7 @@ onUnmounted(() => {
 
 /* Table container styling */
 .table-container {
-  max-height: calc(100vh - 200px); /* Высота экрана минус отступы для заголовка и других элементов */
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -719,7 +857,7 @@ onUnmounted(() => {
   }
 
   .table-container {
-    max-height: calc(100vh - 150px); /* Меньший отступ для мобильных */
+    max-height: calc(100vh - 150px);
   }
 }
 </style>
