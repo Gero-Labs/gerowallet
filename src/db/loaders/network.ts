@@ -70,7 +70,12 @@ export class EpochParamsLoader extends BaseLoader {
         console.log('loading epochParams', epochParams)
         let defaultEpochParams;
         if (!epochParams) {
-          defaultEpochParams = networks.resolveNetwork(this.chain, this.network).protocolParams;
+          const resolvedNetwork = networks.resolveNetwork(this.chain, this.network);
+          if (!resolvedNetwork) {
+            console.error('❌ Failed to resolve network for chain:', this.chain, 'network:', this.network);
+            return; // Exit early if network cannot be resolved
+          }
+          defaultEpochParams = resolvedNetwork.protocolParams;
         }
         try {
           const protocolParametersByron = {

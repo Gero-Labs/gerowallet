@@ -126,11 +126,11 @@ const form = ref<any>(null);
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
-    for (const [rewardAddress, amount] of props.tx.body.withdrawals) {
-      if (rewardAddress === loggedWallet.value?.stakeAddress) {
-        withdrawalsAmount += Number(amount);
+    props.tx.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
+      if (withdrawal.stakeAddress === loggedWallet.value?.stakeAddress) {
+        withdrawalsAmount += Number(withdrawal.quantity.toString());
       }
-    }
+    });
   }
   return withdrawalsAmount;
 });
