@@ -1,47 +1,45 @@
 <script setup lang="ts">
-import { ref, getCurrentInstance } from 'vue';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
+import { ref, getCurrentInstance, computed, toRefs } from 'vue';
 import db from '@/db';
 import CreateGoogleWallet from '@/options/modules/welcome/dialogs/CreateGoogleWallet.vue';
 import { google } from '@/utils/assets';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import ZkFold from '@/shared/utils/zkFold';
+import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
+import networks from '@/utils/networks';
+
+type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
+
+interface Wallet {
+  id: string;
+  name: string;
+  chain: string;
+  network: string;
+  icon?: string;
+  type?: WalletTypeValue;
+}
 
 const props = defineProps<{
   selectedNetwork: any;
 }>();
 
+const { loggedWallet } = toRefs(walletStore);
+const { wallets } = toRefs(geroStore);
+
 const loadingGoogleLogin = ref(false);
 const googleLoginError = ref('');
-const accessToken = ref('');
-const idToken = ref('');
-const profile = ref({});
 const newGoogleWalletDialog = ref(false);
+const zkFold = new ZkFold();
 
 const googleLogin = async () => {
   try {
     loadingGoogleLogin.value = true;
-    const resp = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_WITH_GOOGLE,
-      data: {},
-    });
-    if (!resp || !resp['data'] || !resp['data']['success']) {
-      throw new Error(resp['error'] || 'Unknown error');
-    }
-    accessToken.value = resp['data']['tokens']['accessToken'];
-    idToken.value = resp['data']['tokens']['idToken'];
+    await zkFold.initConnection();
+    await zkFold.fetchProfile();
 
-    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken.value}` },
-    });
-    if (!profileResp.ok) {
-      throw new Error('Failed to fetch Google profile');
-    }
-    profile.value = await profileResp.json();
-    if (!profile.value['email_verified']) {
-      throw new Error('Google profile email is not verified');
-    }
-    const googleWallet = await db.getGoogleWalletWithEmail(profile.value['email']);
+    const googleWallet = await db.getGoogleWalletWithEmail(zkFold.profile.value['email']);
     if (!googleWallet) {
       newGoogleWalletDialog.value = true;
     } else {
@@ -59,7 +57,26 @@ const vmProxy = getCurrentInstance()!.proxy as any;
 
 const submitLogin = async (walletId: string): Promise<void> => {
   try {
-    console.log('submitLogin', walletId);
+    const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
+
+    await zkFold.login(wallet);
+
+    // Wait for storage synchronization to complete before navigation
+    // Poll for loggedWallet to be set (indicating login is complete)
+    const maxWaitTime = 5000; // 5 seconds max wait
+    const pollInterval = 50; // 50ms intervals
+    const startTime = Date.now();
+
+    while (!loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    if (!loggedWallet.value) {
+      console.error('❌ Login failed: Wallet not found in store after timeout');
+      return;
+    }
+
+    console.debug('✅ Login synchronized, wallet logged in:', !!loggedWallet.value);
   } catch (error) {
     console.error(error);
   }
@@ -70,25 +87,38 @@ const submitLogin = async (walletId: string): Promise<void> => {
     await vmProxy.$router.push('/');
   }
 };
+
+const accessToken = computed(() => zkFold.accessToken.value);
+const idToken = computed(() => zkFold.idToken.value);
+const profile = computed(() => zkFold.profile.value);
+
+console.log(props.selectedNetwork);
 </script>
 
 <template>
   <div class="google-btn-container">
-
     <GButton
       block
       outlined
       class="google-btn"
       large
-      @click="googleLogin"
+      @click:button="googleLogin"
       :loading="loadingGoogleLogin"
-      :disabled="!props.selectedNetwork?.zkFoldSupport"
+      
     >
       <v-avatar size="24" class="mr-2">
         <v-img :src="google" />
       </v-avatar>
       Google Sign In
-      <v-chip color="primary" outlined x-small class="px-1 ml-2" v-if="!props.selectedNetwork?.zkFoldSupport">Soon</v-chip>
+      <v-chip 
+        color="primary" 
+        outlined 
+        x-small 
+        class="px-1 ml-2" 
+        v-if="!props.selectedNetwork?.zkFoldSupport"
+        >
+        Soon
+      </v-chip>
     </GButton>
 
     <CreateGoogleWallet
@@ -103,7 +133,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
 </template>
 
 <style scoped>
-.google-btn-container{
+.google-btn-container {
   width: 100%;
 }
 .google-btn {

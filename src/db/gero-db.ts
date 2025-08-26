@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
+import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion, geroWalletDbName } from '@/db/schema';
 import * as bip39 from 'bip39';
 import { encrypt } from '@/shared/utils/crypto';
 import * as Crypto from '@cardano-sdk/crypto';
@@ -16,7 +16,7 @@ export async function getDb() {
     return cachedDb;
   }
 
-  const db: Dexie = new Dexie('GeroWalletDatabase');
+  const db: Dexie = new Dexie(geroWalletDbName);
 
   // Upgrade
   db.version(10).stores({

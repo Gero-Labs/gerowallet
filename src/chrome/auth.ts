@@ -1,26 +1,26 @@
 import browser, { Manifest } from 'webextension-polyfill';
+import { GoogleApi } from '@/api/google-api'
 
 type ManifestWithOAuth2 = Manifest.WebExtensionManifest & {
-  oauth2?: { client_id: string; scopes: string[] };
+  oauth2?: { client_id: string; client_secret: string; scopes: string[] };
 };
 
 const manifest: ManifestWithOAuth2 = browser.runtime.getManifest() as ManifestWithOAuth2;
 
-const { client_id, scopes }: { client_id: string; scopes: string[] } = manifest.oauth2!;
+const { client_id, client_secret, scopes }: { client_id: string; client_secret: string; scopes: string[] } = manifest.oauth2!;
 
 export async function signInWithGoogle(): Promise<{accessToken: string; idToken: string}> {
   const redirectUri: string = browser.identity.getRedirectURL();
-  const authUrl: URL = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authUrl.searchParams.set('client_id', client_id);
-  authUrl.searchParams.set('response_type', 'id_token token');
-  authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('scope', scopes.join(' '));
-  authUrl.searchParams.set('prompt', 'select_account');
-  authUrl.searchParams.set("nonce", Math.random().toString(36).substr(2));
+  console.log('redirectUri: ----> ', redirectUri);
+  const gapi = new GoogleApi(client_id, client_secret, scopes, redirectUri);
+  const authUrl: string = gapi.getAuthUrl();
+
+  console.log('authUrl: ----> ', authUrl);
+
   try {
     const resultUrl: string = await browser.identity.launchWebAuthFlow({
       interactive: true,
-      url: authUrl.toString(),
+      url: authUrl,
     });
 
     const hash: string = new URL(resultUrl).hash.substring(1);

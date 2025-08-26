@@ -12,6 +12,7 @@ dotenv.config({
 interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
   oauth2?: {
     client_id: string;
+    client_secret: string;
     scopes: string[];
   };
   key?: string;
@@ -21,6 +22,8 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
 const key = process.env.MANIFEST_KEY;
 //@ts-ignore
 const client_id = process.env.GOOGLE_CLIENT_ID;
+//@ts-ignore
+const client_secret = process.env.GOOGLE_CLIENT_SECRET;
 //@ts-ignore
 const isBeta: boolean = process.env.VITE_IS_BETA === 'true';
 
@@ -54,6 +57,7 @@ async function getManifest() {
     },
     oauth2: {
       client_id,
+      client_secret,
       scopes:[
         "openid",
         "profile",
