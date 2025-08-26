@@ -269,33 +269,43 @@ const getTransactionStatus = (item: any): string => {
   return buildBasicStatus(item);
 };
 
-// Build basic transaction status without pool API data
-const buildBasicStatus = (item: any): string => {
-  const statuses = [];
-  
-  if (item.body?.certificates?.length > 0) {
-    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
-      switch (certificate.__typename) {
-        case Cardano.CertificateType.StakeRegistrationDelegation:
-        case Cardano.CertificateType.StakeDelegation:
-          statuses.push('Delegating to Pool');
-          break;
-        case Cardano.CertificateType.StakeDeregistration:
-          statuses.push('Stake Deregistration');
-          break;
-        case Cardano.CertificateType.RegisterDelegateRepresentative:
-          statuses.push('DRep Registration');
-          break;
-        case Cardano.CertificateType.VoteDelegation:
-          statuses.push('Vote Delegation');
-          break;
-        case Cardano.CertificateType.UnregisterDelegateRepresentative:
-          statuses.push('DRep Deregistration');
-          break;
-      }
-    });
+// Certificate type to status mapping
+const getCertificateBaseStatus = (certificateType: string): string => {
+  switch (certificateType) {
+    case Cardano.CertificateType.StakeRegistrationDelegation:
+    case Cardano.CertificateType.StakeDelegation:
+      return 'Delegating to Pool';
+    case Cardano.CertificateType.StakeDeregistration:
+      return 'Stake Deregistration';
+    case Cardano.CertificateType.RegisterDelegateRepresentative:
+      return 'DRep Registration';
+    case Cardano.CertificateType.VoteDelegation:
+      return 'Vote Delegation';
+    case Cardano.CertificateType.UnregisterDelegateRepresentative:
+      return 'DRep Deregistration';
+    default:
+      return '';
   }
+};
 
+// Process single certificate and return status
+const processCertificate = async (certificate: Cardano.Certificate, loadPoolData = false): Promise<string> => {
+  const baseStatus = getCertificateBaseStatus(certificate.__typename);
+  
+  // For delegation certificates, try to get enhanced status with pool ticker
+  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation || 
+       certificate.__typename === Cardano.CertificateType.StakeDelegation) && loadPoolData) {
+    const pool = await getPoolByIdFromApi(certificate.poolId);
+    if (pool && pool.ticker) {
+      return 'Delegating to ' + pool.ticker;
+    }
+  }
+  
+  return baseStatus;
+};
+
+// Add fund transfer status if applicable
+const addFundTransferStatus = (item: any, statuses: string[]): void => {
   if (item.receivedAmount - item.sentAmount > 0) {
     if (!item.body?.certificates) {
       statuses.push('Received Funds');
@@ -305,7 +315,20 @@ const buildBasicStatus = (item: any): string => {
       statuses.push('Sent Funds');
     }
   }
+};
 
+// Build basic transaction status without pool API data
+const buildBasicStatus = (item: any): string => {
+  const statuses = [];
+  
+  if (item.body?.certificates?.length > 0) {
+    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
+      const status = getCertificateBaseStatus(certificate.__typename);
+      if (status) statuses.push(status);
+    });
+  }
+
+  addFundTransferStatus(item, statuses);
   return statuses.join(', ');
 };
 
@@ -322,43 +345,13 @@ const loadEnhancedStatus = async (item: any): Promise<void> => {
   
   if (item.body?.certificates?.length > 0) {
     for (const certificate of item.body.certificates) {
-      switch (certificate.__typename) {
-        case Cardano.CertificateType.StakeRegistrationDelegation:
-        case Cardano.CertificateType.StakeDelegation:
-          // Load pool from API by ID for enhanced status
-          const pool = await getPoolByIdFromApi(certificate.poolId);
-          if (pool && pool.ticker) {
-            statuses.push('Delegating to ' + pool.ticker);
-          } else {
-            statuses.push('Delegating to Pool');
-          }
-          break;
-        case Cardano.CertificateType.StakeDeregistration:
-          statuses.push('Stake Deregistration');
-          break;
-        case Cardano.CertificateType.RegisterDelegateRepresentative:
-          statuses.push('DRep Registration');
-          break;
-        case Cardano.CertificateType.VoteDelegation:
-          statuses.push('Vote Delegation');
-          break;
-        case Cardano.CertificateType.UnregisterDelegateRepresentative:
-          statuses.push('DRep Deregistration');
-          break;
-      }
+      const status = await processCertificate(certificate, true);
+      if (status) statuses.push(status);
     }
   }
 
-  if (item.receivedAmount - item.sentAmount > 0) {
-    if (!item.body?.certificates) {
-      statuses.push('Received Funds');
-    }
-  } else {
-    if (!item.body?.certificates) {
-      statuses.push('Sent Funds');
-    }
-  }
-
+  addFundTransferStatus(item, statuses);
+  
   const status = statuses.join(', ');
   transactionStatuses.value[txId] = status;
 };
