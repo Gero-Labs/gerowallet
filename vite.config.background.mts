@@ -9,18 +9,23 @@ import wasm from 'vite-plugin-wasm';
 export default defineConfig({
   ...sharedConfig,
   server: {
-    ...sharedConfig.server,
     watch: {
       usePolling: true,
       interval: 1000,
       ignored: [
         '**/DumpStack.log.tmp', 
-        '**/DumpStack.log', 
+        '**/DumpStack.log*', 
         '**/*.tmp', 
         '**/*.log.tmp',
+        '**/*.temp',
+        '**/dump*',
+        '**/temp/**',
+        '**/tmp/**',
         '**/node_modules/**', 
         '**/.git/**',
-        'D:\\DumpStack.log.tmp'
+        'D:\\DumpStack.log.tmp',
+        'D:\\DumpStack.log',
+        'D:\\*.tmp'
       ]
     }
   },
