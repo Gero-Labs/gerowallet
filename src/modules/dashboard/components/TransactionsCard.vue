@@ -254,19 +254,41 @@ const transactions = computed(() => {
 // Store for transaction statuses with loaded pool data
 const transactionStatuses = ref<Record<string, string>>({});
 
+// Preload statuses for displayed transactions
+const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
+  const promises = transactions.map(async (item) => {
+    const txId = item.id;
+    
+    // Skip if already loaded
+    if (transactionStatuses.value[txId]) {
+      return;
+    }
+
+    // Load status with pool data
+    const statuses = [];
+    
+    if (item.body?.certificates?.length > 0) {
+      for (const certificate of item.body.certificates) {
+        const status = await processCertificate(certificate, true);
+        if (status) statuses.push(status);
+      }
+    }
+
+    addFundTransferStatus(item, statuses);
+    
+    const finalStatus = statuses.join(', ');
+    transactionStatuses.value[txId] = finalStatus;
+  });
+
+  await Promise.all(promises);
+};
+
+// Get transaction status (reactive)
 const getTransactionStatus = (item: any): string => {
   const txId = item.id;
 
-  // If we have cached status, use it
-  if (transactionStatuses.value[txId]) {
-    return transactionStatuses.value[txId];
-  }
-
-  // Load enhanced status asynchronously
-  loadEnhancedStatus(item);
-
-  // Return basic status immediately
-  return buildBasicStatus(item);
+  // Return cached status or basic status as fallback
+  return transactionStatuses.value[txId] || buildBasicStatus(item);
 };
 
 // Certificate type to status mapping
@@ -332,30 +354,6 @@ const buildBasicStatus = (item: any): string => {
   return statuses.join(', ');
 };
 
-// Enhanced status with pool information (async)
-const loadEnhancedStatus = async (item: any): Promise<void> => {
-  const txId = item.id;
-  
-  // Skip if already loaded
-  if (transactionStatuses.value[txId]) {
-    return;
-  }
-
-  const statuses = [];
-  
-  if (item.body?.certificates?.length > 0) {
-    for (const certificate of item.body.certificates) {
-      const status = await processCertificate(certificate, true);
-      if (status) statuses.push(status);
-    }
-  }
-
-  addFundTransferStatus(item, statuses);
-  
-  const status = statuses.join(', ');
-  transactionStatuses.value[txId] = status;
-};
-
 const getPoolByIdFromApi = async (poolId: string) => {
   if (!poolId) return null;
 
@@ -379,10 +377,12 @@ const loadMoreTransactions = async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
+  let newTransactions = [];
+
   if (props.isFullList) {
     // Infinite scroll mode
     const endIndex = currentIndex.value + itemsPerBatch.value;
-    const newTransactions = transactions.value.slice(currentIndex.value, endIndex);
+    newTransactions = transactions.value.slice(currentIndex.value, endIndex);
 
     displayedTransactions.value.push(...newTransactions);
     currentIndex.value = endIndex;
@@ -395,7 +395,8 @@ const loadMoreTransactions = async () => {
     // Pagination mode
     const start = (currentPage.value - 1) * itemsPerPage.value;
     const end = start + itemsPerPage.value;
-    displayedTransactions.value = transactions.value.slice(start, end);
+    newTransactions = transactions.value.slice(start, end);
+    displayedTransactions.value = newTransactions;
 
     // Check if we've reached the end
     if (end >= transactions.value.length) {
@@ -403,11 +404,16 @@ const loadMoreTransactions = async () => {
     }
   }
 
+  // Preload statuses for new transactions and wait for completion
+  if (newTransactions.length > 0) {
+    await preloadTransactionStatuses(newTransactions);
+  }
+
   isLoadingMore.value = false;
 };
 
 // Reset infinite scroll when search changes
-const resetInfiniteScroll = () => {
+const resetInfiniteScroll = async () => {
   displayedTransactions.value = [];
   currentIndex.value = 0;
   hasReachedEnd.value = false;
@@ -417,17 +423,17 @@ const resetInfiniteScroll = () => {
   transactionStatuses.value = {};
 
   if (props.isFullList) {
-    loadMoreTransactions();
+    await loadMoreTransactions();
   } else {
-    loadMoreTransactions();
+    await loadMoreTransactions();
   }
 };
 
 // Watch for search term changes to reset infinite scroll
 watch(
   () => search.value,
-  () => {
-    resetInfiniteScroll();
+  async () => {
+    await resetInfiniteScroll();
   }
 );
 
@@ -435,7 +441,7 @@ watch(
 watch(
   () => transactions.value,
   async () => {
-    resetInfiniteScroll();
+    await resetInfiniteScroll();
 
     // Recreate intersection observer after reset
     if (props.isFullList) {
@@ -552,16 +558,16 @@ const getRowClass = item => {
 };
 
 // Handle page change for pagination
-const handlePageChange = (page: number) => {
+const handlePageChange = async (page: number) => {
   currentPage.value = page;
   hasReachedEnd.value = false;
-  loadMoreTransactions();
+  await loadMoreTransactions();
 };
 
 // Lifecycle hooks
 onMounted(async () => {
   await nextTick();
-  resetInfiniteScroll();
+  await resetInfiniteScroll();
 
   if (props.isFullList) {
     // Wait for DOM to fully render before setting up observers
