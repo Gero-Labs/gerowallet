@@ -35,50 +35,73 @@
             />
           </div>
 
-          <!-- My Positions Header -->
-          <div
-            class="d-flex align-items-center justify-space-between mb-2"
-          >
+          <!-- Trading Tabs -->
+          <div class="trading-tabs-container mb-2">
+            <v-tabs
+              v-model="activeTab"
+              background-color="transparent"
+              color="#26FAB0"
+              slider-color="#26FAB0"
+              height="32"
+              @change="onTabChange"
+            >
+              <v-tab class="tab-item">
+                <div class="d-flex align-items-center">
+                  <span class="tab-text">My Positions</span>
+                  <span v-if="positions.length > 0" class="tab-count ml-1">{{ positions.length }}</span>
+                </div>
+              </v-tab>
+              <v-tab class="tab-item">
+                <div class="d-flex align-items-center">
+                  <span class="tab-text">Limit Orders</span>
+                  <span v-if="limitOrders.length > 0" class="tab-count ml-1">{{ limitOrders.length }}</span>
+                </div>
+              </v-tab>
+              <v-tab class="tab-item">
+                <div class="d-flex align-items-center">
+                  <span class="tab-text">All Orders</span>
+                  <span v-if="history.length > 0" class="tab-count ml-1">{{ history.length }}</span>
+                </div>
+              </v-tab>
+            </v-tabs>
+
             <div class="d-flex align-items-center">
-              <h4 class="column-title compact">My Positions</h4>
               <v-btn
                 icon
                 x-small
-                @click="loadPositions"
-                :loading="loadingPositions"
-                class="refresh-btn-external ml-2"
+                @click="refreshCurrentTab"
+                :loading="isCurrentTabLoading"
+                class="refresh-btn-external"
               >
                 <v-icon x-small>mdi-reload</v-icon>
               </v-btn>
             </div>
-            <span v-if="positions.length > 0" class="positions-count">
-                {{ positions.length }} position{{
-                positions.length === 1 ? "" : "s"
-              }}
-              </span>
           </div>
 
-          <!-- Loading state -->
-          <div v-if="loadingPositions" class="loading-state">
-            <v-progress-circular
-              indeterminate
-              color="#26FAB0"
-              size="40"
-            />
-            <p class="mt-3">Loading positions...</p>
-          </div>
+          <v-tabs-items v-model="activeTab">
+            <!-- Positions Tab -->
+            <v-tab-item>
+              <!-- Loading state -->
+              <div v-if="loadingPositions" class="loading-state">
+                <v-progress-circular
+                  indeterminate
+                  color="#26FAB0"
+                  size="40"
+                />
+                <p class="mt-3">Loading positions...</p>
+              </div>
 
-          <!-- Empty state -->
-          <div v-else-if="positions.length === 0" class="empty-state">
-            <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-            <p class="mt-2">No open positions</p>
-            <p class="mt-1 text-caption">
-              Your perpetual positions will appear here
-            </p>
-          </div>
+              <!-- Empty state -->
+              <div v-else-if="positions.length === 0" class="empty-state">
+                <v-icon size="48" color="grey">mdi-chart-line</v-icon>
+                <p class="mt-2">No open positions</p>
+                <p class="mt-1 text-caption">
+                  Your perpetual positions will appear here
+                </p>
+              </div>
 
-          <!-- Positions table -->
-          <div v-else class="positions-table">
+              <!-- Positions table -->
+              <div v-else class="positions-table">
             <v-data-table
               dense
               class="transparent positions-data-table"
@@ -160,7 +183,7 @@
                 <v-chip
                   v-if="item.position"
                   :color="
-                      item.position.toUpperCase() === 'LONG'
+                      (item.position || '').toUpperCase() === 'LONG'
                         ? 'success'
                         : 'error'
                     "
@@ -168,12 +191,12 @@
                   label
                   class="ultra-compact-chip"
                   :style="
-                      item.position.toUpperCase() === 'LONG'
+                      (item.position || '').toUpperCase() === 'LONG'
                         ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
                         : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
                     "
                 >
-                  {{ item.position.toUpperCase() }}
+                  {{ (item.position || '').toUpperCase() }}
                 </v-chip>
               </template>
 
@@ -195,10 +218,10 @@
                         class="position-value-hover"
                       >
                         <div class="value-usd">
-                          ${{ item.currentPositionValueUsd.toFixed(2) }}
+                          ${{ item.currentPositionValueUsd?.toFixed(2) || '0.00' }}
                         </div>
                         <div class="value-ada">
-                          {{ item.currentPositionValueAda.toFixed(2) }}A
+                          {{ item.currentPositionValueAda?.toFixed(2) || '0.00' }}A
                         </div>
                       </div>
                     </template>
@@ -359,7 +382,7 @@
                             style="font-weight: 600"
                           >
                               <strong>
-                                ${{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees.toFixed(2) }}
+                                {{ formatCurrency(calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees || 0) }}
                               </strong>
                             </span>
                         </div>
@@ -380,7 +403,7 @@
                   class="price-values-compact"
                 >
                   <div class="entry-price">
-                    ${{ item.entryPrice.toFixed(4) }}
+                    ${{ item.entryPrice?.toFixed(4) || '0.0000' }}
                   </div>
                   <div
                     v-if="
@@ -389,7 +412,7 @@
                       "
                     class="mark-price"
                   >
-                    / ${{ item.markPrice.toFixed(4) }}
+                    / ${{ item.markPrice?.toFixed(4) || '0.0000' }}
                   </div>
                 </div>
                 <span v-else>-</span>
@@ -419,7 +442,7 @@
                   </v-avatar>
                   <div class="pnl-values-compact">
                     <div :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'">
-                      ${{ calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees.toFixed(0) }}
+                      {{ formatCurrency(calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees || 0) }}
                     </div>
                     <div
                       v-if="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFeesPercentage !== undefined"
@@ -461,7 +484,276 @@
                 </v-btn>
               </template>
             </v-data-table>
-          </div>
+              </div>
+            </v-tab-item>
+
+            <!-- Limit Orders Tab -->
+            <v-tab-item>
+              <!-- Loading state -->
+              <div v-if="loadingLimitOrders" class="loading-state">
+                <v-progress-circular
+                  indeterminate
+                  color="#26FAB0"
+                  size="40"
+                />
+                <p class="mt-3">Loading limit orders...</p>
+              </div>
+
+              <!-- Empty state -->
+              <div v-else-if="limitOrders.length === 0" class="empty-state">
+                <v-icon size="48" color="grey">mdi-target</v-icon>
+                <p class="mt-2">No limit orders</p>
+                <p class="mt-1 text-caption">
+                  Your pending limit orders will appear here
+                </p>
+              </div>
+
+              <!-- Limit Orders table -->
+              <div v-else class="positions-table">
+                <v-data-table
+                  dense
+                  class="transparent positions-data-table"
+                  :headers="limitOrderHeaders"
+                  :items="paginatedLimitOrders"
+                  :items-per-page="-1"
+                  hide-default-footer
+                  :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+                >
+                  <!-- Custom headers with padding -->
+                  <template v-slot:[`header.asset`]="{ header }">
+                    <span style="padding-left: 12px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.positionType`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.limitPrice`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.collateral`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.status`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.actions`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+
+                  <template v-slot:[`item.asset`]="{ item }">
+                    <div class="d-flex align-items-center pl-2">
+                      <div class="asset-info d-flex flex-column justify-center">
+                        <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
+                        <div class="asset-leverage text-caption text--secondary text-center">{{ item.leverage }}x</div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.positionType`]="{ item }">
+                    <v-chip
+                      v-if="item.position || item.type"
+                      :color="(item.position || item.type || '').toUpperCase() === 'LONG' ? 'success' : 'error'"
+                      x-small
+                      label
+                      class="ultra-compact-chip"
+                      :style="(item.position || item.type || '').toUpperCase() === 'LONG'
+                        ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
+                        : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'"
+                    >
+                      {{ (item.position || item.type || '').toUpperCase() }}
+                    </v-chip>
+                    <span v-else>-</span>
+                  </template>
+
+                  <template v-slot:[`item.limitPrice`]="{ item }">
+                    <div class="price-values-compact">
+                      <div class="entry-price">
+                        ${{ item.limitUSDPrice?.toFixed(2) || item.price?.toFixed(2) || '--' }}
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.collateral`]="{ item }">
+                    <div class="collateral-values-compact">
+                      <div class="collateral-usd">${{ item.collateralAmount?.toFixed(2) || '0.00' }}</div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.status`]="{ item }">
+                    <v-chip
+                      :color="getOrderStatusColor(item.status)"
+                      x-small
+                      label
+                      class="status-chip"
+                    >
+                      {{ (item.status || 'unknown').toUpperCase() }}
+                    </v-chip>
+                  </template>
+
+                  <template v-slot:[`item.actions`]="{ item }">
+                    <div class="d-flex justify-center">
+                      <v-btn
+                        v-if="item.status === 'pending'"
+                        x-small
+                        color="error"
+                        outlined
+                        @click="cancelLimitOrder(item)"
+                        class="action-btn-compact"
+                      >
+                        Cancel
+                      </v-btn>
+                    </div>
+                  </template>
+
+                  <template v-slot:body.append>
+                    <tr v-if="limitOrders.length > positionsPerPage" class="no-hover">
+                      <td :colspan="limitOrderHeaders.length" class="text-center pa-0 ma-0">
+                        <v-pagination
+                          v-model="currentLimitOrdersPage"
+                          :length="Math.ceil(limitOrders.length / positionsPerPage)"
+                          :total-visible="5"
+                          circle
+                          class="compact-pagination ma-0"
+                        ></v-pagination>
+                      </td>
+                    </tr>
+                  </template>
+                </v-data-table>
+              </div>
+            </v-tab-item>
+
+            <!-- History Tab -->
+            <v-tab-item>
+              <!-- Loading state -->
+              <div v-if="loadingHistory" class="loading-state">
+                <v-progress-circular
+                  indeterminate
+                  color="#26FAB0"
+                  size="40"
+                />
+                <p class="mt-3">Loading history...</p>
+              </div>
+
+              <!-- Empty state -->
+              <div v-else-if="history.length === 0" class="empty-state">
+                <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
+                <p class="mt-2">No orders found</p>
+                <p class="mt-1 text-caption">
+                  All your positions and orders will appear here
+                </p>
+              </div>
+
+              <!-- History table -->
+              <div v-else class="positions-table">
+                <v-data-table
+                  dense
+                  class="transparent positions-data-table"
+                  :headers="historyHeaders"
+                  :items="paginatedHistory"
+                  :items-per-page="-1"
+                  hide-default-footer
+                  :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+                >
+                  <!-- Custom headers with padding -->
+                  <template v-slot:[`header.asset`]="{ header }">
+                    <span style="padding-left: 12px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.positionType`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.entryPrice`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.finalPnl`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.status`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.closedTime`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+
+                  <template v-slot:[`item.asset`]="{ item }">
+                    <div class="d-flex align-items-center pl-2">
+                      <div class="asset-info d-flex flex-column justify-center">
+                        <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
+                        <div class="asset-leverage text-caption text--secondary text-center">{{ item.leverage }}x</div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.positionType`]="{ item }">
+                    <v-chip
+                      v-if="item.position || item.type"
+                      :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
+                      x-small
+                      label
+                      class="ultra-compact-chip"
+                      :style="(item.position || item.type)?.toUpperCase() === 'LONG'
+                        ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
+                        : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'"
+                    >
+                      {{ (item.position || item.type)?.toUpperCase() }}
+                    </v-chip>
+                  </template>
+
+                  <template v-slot:[`item.entryPrice`]="{ item }">
+                    <div class="price-values-compact">
+                      <div class="entry-price">${{ (item.entryPrice || item.price)?.toFixed(2) || '0.00' }}</div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.finalPnl`]="{ item }">
+                    <div class="d-flex align-items-center justify-center">
+                      <v-avatar tile size="10" class="mr-1 trend-icon-centered">
+                        <v-img
+                          :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
+                          alt="trend"
+                        />
+                      </v-avatar>
+                      <div class="pnl-values-compact">
+                        <div :class="(item.pnl || 0) >= 0 ? 'profit' : 'loss'">
+                          {{ formatCurrency(item.pnl || 0) }}
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-slot:[`item.status`]="{ item }">
+                    <v-chip
+                      :color="getPositionStatusColor(item.status)"
+                      x-small
+                      label
+                      class="status-chip"
+                    >
+                      {{ (item.status || 'unknown').toUpperCase() }}
+                    </v-chip>
+                  </template>
+
+                  <template v-slot:[`item.closedTime`]="{ item }">
+                    <div class="text-caption">
+                      {{ item.enteredPositionTime ? formatDate(item.enteredPositionTime) : '-' }}
+                    </div>
+                  </template>
+
+                  <template v-slot:body.append>
+                    <tr v-if="history.length > positionsPerPage" class="no-hover">
+                      <td :colspan="historyHeaders.length" class="text-center pa-0 ma-0">
+                        <v-pagination
+                          v-model="currentHistoryPage"
+                          :length="Math.ceil(history.length / positionsPerPage)"
+                          :total-visible="5"
+                          circle
+                          class="compact-pagination ma-0"
+                        ></v-pagination>
+                      </td>
+                    </tr>
+                  </template>
+                </v-data-table>
+              </div>
+            </v-tab-item>
+          </v-tabs-items>
+
         </v-col>
         <v-col cols="4">
           <div
@@ -527,9 +819,7 @@
             </div>
           </div>
 
-          <!-- Scrollable form content -->
-          <div class="form-content-scrollable flex-grow-1">
-            <!-- Step 1: Position Direction -->
+          <!-- Step 1: Position Direction -->
             <div class="form-section compact">
               <div class="form-label compact">Position Direction</div>
               <v-btn-toggle
@@ -602,7 +892,27 @@
               v-if="positionData.orderType === 'LIMIT'"
               class="form-section compact"
             >
-              <div class="form-label compact">Limit Price</div>
+              <div class="form-label compact">
+                Limit Price
+                <v-tooltip top content-class="custom-tooltip">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-icon 
+                      small 
+                      class="ml-1" 
+                      v-bind="attrs" 
+                      v-on="on"
+                      color="grey"
+                    >
+                      mdi-help-circle-outline
+                    </v-icon>
+                  </template>
+                  <span>
+                    Price at which your limit order executes. 
+                    Long: Set below current price. 
+                    Short: Set above current price.
+                  </span>
+                </v-tooltip>
+              </div>
               <v-card
                 class="input-card compact"
                 outlined
@@ -823,13 +1133,9 @@
                 </v-expansion-panel>
               </v-expansion-panels>
             </div>
-          </div>
-          <!-- End scrollable form content -->
 
-          <!-- Bottom section - always at bottom -->
-          <div class="bottom-section">
-            <!-- Position Summary -->
-            <div class="form-section compact">
+          <!-- Position Summary -->
+          <div class="form-section compact mt-3">
               <v-card
                 flat
                 class="position-summary-card compact"
@@ -934,9 +1240,10 @@
                   </div>
                 </v-card-text>
               </v-card>
-            </div>
+          </div>
 
-            <!-- Open Position Button -->
+          <!-- Open Position Button -->
+          <div class="mt-3">
             <v-btn
               color="primary"
               block
@@ -956,7 +1263,6 @@
               {{ positionData.orderType === 'MARKET' ? 'Open' : 'Place Limit' }} {{ positionData.position }} {{ positionData.orderType === 'MARKET' ? 'Position' : 'Order' }}
             </v-btn>
           </div>
-          <!-- End bottom section -->
         </v-col>
       </v-row>
     </v-card-text>
@@ -1051,7 +1357,7 @@ import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
-import type { Asset, ClosePerpetualRequest, CreatePerpetualRequest, PerpetualPosition } from '@/api/strike-finance.api';
+import type { Asset, ClosePerpetualRequest, CreatePerpetualRequest, PerpetualPosition, LimitOrder, CancelLimitOrderRequest, UpdatePositionRequest } from '@/api/strike-finance.api';
 import strikeFinanceApi from '@/api/strike-finance.api';
 import type { IChartApi, Time } from 'lightweight-charts';
 import { priceService, priceStore } from '@/stores/priceStore';
@@ -1745,6 +2051,29 @@ const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
 
 const onChartReady = (chartInstance: IChartApi) => {
   chart.value = chartInstance;
+  
+  // Immediately resize chart to proper dimensions
+  setTimeout(() => {
+    if (chart.value) {
+      try {
+        const chartContainer = document.querySelector('.chart-section');
+        if (chartContainer) {
+          const containerWidth = chartContainer.clientWidth;
+          const containerHeight = 160;
+          
+          console.debug("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
+          
+          chart.value.applyOptions({
+            width: containerWidth,
+            height: containerHeight,
+          });
+          chart.value.timeScale().fitContent();
+        }
+      } catch (error) {
+        console.warn("PerpetualsDialog: Failed initial chart resize:", error);
+      }
+    }
+  }, 50); // Quick resize after chart ready
 };
 
 // Update chart data periodically (every 30 seconds)
@@ -1858,12 +2187,17 @@ const limitOrders = ref<LimitOrder[]>([]);
 const loadingLimitOrders = ref(false);
 const cancellingOrders = ref<Record<string, boolean>>({});
 const activeTab = ref(0);
+const history = ref<PerpetualPosition[]>([]);
+const loadingHistory = ref(false);
+const currentLimitOrdersPage = ref(1);
+const currentHistoryPage = ref(1);
 const updatePositionDialog = ref(false);
 const selectedPosition = ref<PerpetualPosition | null>(null);
 const updatePositionData = ref({
   stopLossPrice: 0,
   takeProfitPrice: 0
 });
+
 
 // Component cleanup
 onBeforeUnmount(() => {
@@ -1879,6 +2213,30 @@ const paginatedPositions = computed(() => {
   const start = (currentPositionsPage.value - 1) * positionsPerPage.value;
   const end = start + positionsPerPage.value;
   return positions.value.slice(start, end);
+});
+
+// Computed for paginated limit orders
+const paginatedLimitOrders = computed(() => {
+  const start = (currentLimitOrdersPage.value - 1) * positionsPerPage.value;
+  const end = start + positionsPerPage.value;
+  return limitOrders.value.slice(start, end);
+});
+
+// Computed for paginated history
+const paginatedHistory = computed(() => {
+  const start = (currentHistoryPage.value - 1) * positionsPerPage.value;
+  const end = start + positionsPerPage.value;
+  return history.value.slice(start, end);
+});
+
+// Computed for loading state based on active tab
+const isCurrentTabLoading = computed(() => {
+  switch (activeTab.value) {
+    case 0: return loadingPositions.value;
+    case 1: return loadingLimitOrders.value;
+    case 2: return loadingHistory.value;
+    default: return false;
+  }
 });
 
 const positionData = ref({
@@ -1933,6 +2291,92 @@ const positionHeaders = ref([
   { text: "", align: "center", sortable: false, value: "actions", width: "26" },
 ]);
 
+// Limit Order Headers
+const limitOrderHeaders = ref([
+  {
+    text: "Asset",
+    align: "start",
+    sortable: true,
+    value: "asset",
+    width: "25",
+  },
+  {
+    text: "Side",
+    align: "center", 
+    sortable: true,
+    value: "positionType",
+    width: "20",
+  },
+  {
+    text: "Price",
+    align: "center",
+    sortable: true,
+    value: "limitPrice",
+    width: "22",
+  },
+  {
+    text: "Collateral",
+    align: "center",
+    sortable: true,
+    value: "collateral",
+    width: "25",
+  },
+  {
+    text: "Status",
+    align: "center",
+    sortable: true,
+    value: "status",
+    width: "20",
+  },
+  { text: "", align: "center", sortable: false, value: "actions", width: "15" },
+]);
+
+// History Headers
+const historyHeaders = ref([
+  {
+    text: "Asset",
+    align: "start",
+    sortable: true,
+    value: "asset",
+    width: "20",
+  },
+  {
+    text: "Side",
+    align: "center",
+    sortable: true,
+    value: "positionType", 
+    width: "15",
+  },
+  {
+    text: "Entry Price",
+    align: "center",
+    sortable: true,
+    value: "entryPrice",
+    width: "20",
+  },
+  {
+    text: "Final P&L",
+    align: "center",
+    sortable: true,
+    value: "finalPnl",
+    width: "20",
+  },
+  {
+    text: "Status",
+    align: "center",
+    sortable: true,
+    value: "status",
+    width: "15",
+  },
+  {
+    text: "Date",
+    align: "center",
+    sortable: true,
+    value: "closedTime",
+    width: "20",
+  },
+]);
+
 // Computed properties
 const availableAdaBalance = computed(() => {
   // Get ADA balance from the wallet store (simplified - you might need to access the actual balance)
@@ -1948,40 +2392,88 @@ const availableAdaBalance = computed(() => {
   return "0.00";
 });
 
+
 watch(
   () => props.isOpen,
   async (newVal) => {
     if (newVal) {
-      console.debug("PerpetualsDialog: Dialog opened, initializing chart data");
+      console.debug("PerpetualsDialog: Dialog opened, optimizing load sequence");
 
-      // Initialize global price service to ensure real-time price updates
-      if (!priceService.isConnected()) {
-        try {
-          await priceService.initialize();
-          console.debug("PerpetualsDialog: Price service initialized");
-        } catch (error) {
-          console.warn("PerpetualsDialog: Failed to initialize price service:", error);
+      // Start positions loading immediately for the main tab
+      const positionsPromise = loadPositions();
+
+      // Start background tasks in parallel
+      const backgroundTasks = Promise.allSettled([
+        // Generate chart data
+        (async () => {
+          try {
+            chartData.value = await generateChartData();
+            console.debug("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
+          } catch (error) {
+            console.error("Failed to initialize chart data:", error);
+            chartData.value = generateSimpleOHLCData();
+          }
+        })(),
+        // Price service initialization (non-blocking)
+        (async () => {
+          if (!priceService.isConnected()) {
+            try {
+              await priceService.initialize();
+              console.debug("PerpetualsDialog: Price service initialized");
+            } catch (error) {
+              console.warn("PerpetualsDialog: Failed to initialize price service:", error);
+            }
+          }
+        })(),
+        // Load secondary tab data
+        loadLimitOrders(),
+        loadHistory()
+      ]);
+
+      // Enable chart after a brief delay to ensure component is ready
+      setTimeout(async () => {
+        await nextTick();
+        shouldFetchChartData.value = true;
+        console.debug("PerpetualsDialog: Enabled chart data fetching");
+        startChartUpdates();
+      }, 10);
+
+      // Handle chart resize with proper dimensions
+      setTimeout(() => {
+        if (chart.value) {
+          try {
+            // Get the actual chart container dimensions
+            const chartContainer = document.querySelector('.chart-section');
+            if (chartContainer) {
+              const containerWidth = chartContainer.clientWidth;
+              const containerHeight = 160; // Fixed height as specified
+              
+              console.debug("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
+              
+              chart.value.applyOptions({
+                width: containerWidth,
+                height: containerHeight,
+              });
+              chart.value.timeScale().fitContent();
+              console.debug("PerpetualsDialog: Chart resized successfully");
+            }
+          } catch (error) {
+            console.warn("PerpetualsDialog: Failed to resize chart:", error);
+          }
         }
-      }
+      }, 100); // Increased delay to ensure container is ready
 
-      await loadPositions();
+      // Wait for positions (main tab) to complete
+      await positionsPromise;
+      
+      // Let background tasks complete without blocking UI
+      backgroundTasks.catch(() => {}); // Silent catch for background tasks
 
-      // Reset chart state and enable fetching
-      shouldFetchChartData.value = false; // Reset first
-      chartData.value = []; // Clear any cached data
-
-      // Use nextTick to ensure the chart component sees the reset
-      await nextTick();
-
-      // Now enable fetching - this will trigger the chart component to fetch fresh data
-      shouldFetchChartData.value = true;
-      console.debug("PerpetualsDialog: Enabled chart data fetching");
-
-      startChartUpdates(); // Start real-time chart updates when dialog opens
+      console.debug("PerpetualsDialog: Fast load sequence completed");
     } else {
       console.debug("PerpetualsDialog: Dialog closed, stopping updates");
-      shouldFetchChartData.value = false; // Disable fetching when closed
-      stopChartUpdates(); // Stop chart updates when dialog closes
+      shouldFetchChartData.value = false;
+      stopChartUpdates();
     }
   }
 );
@@ -1998,49 +2490,73 @@ watch(
   }
 );
 
+// Debounced calculations for performance
+let leverageCalculationTimeout: NodeJS.Timeout | null = null;
+const debouncedPositionSize = ref('0.00');
+const debouncedNotionalValue = ref('0.00');
+const debouncedLiquidationPrice = ref('$0.0000');
+
+const updateDebouncedCalculations = () => {
+  if (leverageCalculationTimeout) clearTimeout(leverageCalculationTimeout);
+  
+  leverageCalculationTimeout = setTimeout(() => {
+    // Position size calculation
+    const posSize = (positionData.value.collateralAmount * positionData.value.leverage).toFixed(2);
+    debouncedPositionSize.value = posSize;
+    
+    // Notional value calculation
+    const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0);
+    const positionSizeAda = Number(posSize);
+    debouncedNotionalValue.value = (positionSizeAda * currentAdaPrice).toFixed(2);
+    
+    // Liquidation price calculation
+    const leverage = positionData.value.leverage;
+    const totalFees = 0.001 + accumulatedBorrowFee.value;
+    const adjustedLiquidationMargin = 0.9 / leverage + totalFees;
+    
+    if (positionData.value.position === "LONG") {
+      const liqPrice = currentAdaPrice * (1 - adjustedLiquidationMargin);
+      debouncedLiquidationPrice.value = `$${liqPrice.toFixed(4)}`;
+    } else {
+      const liqPrice = currentAdaPrice * (1 + adjustedLiquidationMargin);
+      debouncedLiquidationPrice.value = `$${liqPrice.toFixed(4)}`;
+    }
+  }, 50); // 50ms debounce for smooth UI updates
+};
+
+// Fast computed for immediate slider response
 const positionSize = computed(() => {
-  return (
-    positionData.value.collateralAmount * positionData.value.leverage
-  ).toFixed(2);
+  return debouncedPositionSize.value;
 });
 
 const notionalValue = computed(() => {
-  const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0);
-  const positionSizeAda = Number(positionSize.value);
-  return (positionSizeAda * currentAdaPrice).toFixed(2);
-});
-
-// Real-time accumulated borrow fee calculation
-const accumulatedBorrowFee = computed(() => {
-  // Use trigger to ensure reactivity updates every minute
-  borrowFeeUpdateTrigger.value; // Access to trigger reactivity
-
-  const hourlyBorrowFeeRate = 0.00001; // ~0.001% hourly rate
-  const enteredTime = Date.now() - 2 * 60 * 60 * 1000; // Example: 2 hours ago for demo
-  return calculateAccumulatedBorrowFee(hourlyBorrowFeeRate, enteredTime);
+  return debouncedNotionalValue.value;
 });
 
 const liquidationPrice = computed(() => {
-  const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0.85);
-  const leverage = positionData.value.leverage;
-
-  // Include accumulated borrow fee in liquidation calculation
-  const totalFees = 0.001 + accumulatedBorrowFee.value; // Opening fee + accumulated borrow fee
-  const adjustedLiquidationMargin = 0.9 / leverage + totalFees;
-
-  if (positionData.value.position === "LONG") {
-    const liqPrice = currentAdaPrice * (1 - adjustedLiquidationMargin);
-    return `$${liqPrice.toFixed(4)}`;
-  } else {
-    const liqPrice = currentAdaPrice * (1 + adjustedLiquidationMargin);
-    return `$${liqPrice.toFixed(4)}`;
-  }
+  return debouncedLiquidationPrice.value;
 });
 
-// Leverage input synchronization
+// Real-time accumulated borrow fee calculation (cached)
+const accumulatedBorrowFee = computed(() => {
+  borrowFeeUpdateTrigger.value; // Access to trigger reactivity
+  const hourlyBorrowFeeRate = 0.00001;
+  const enteredTime = Date.now() - 2 * 60 * 60 * 1000;
+  return calculateAccumulatedBorrowFee(hourlyBorrowFeeRate, enteredTime);
+});
+
+// Leverage input synchronization with debounced calculations
 const onLeverageSliderChange = () => {
-  // Update only when slider changes - no need for input synchronization
+  updateDebouncedCalculations();
 };
+
+// Watch for collateral amount changes to update calculations
+watch(
+  () => positionData.value.collateralAmount,
+  () => {
+    updateDebouncedCalculations();
+  }
+);
 
 const canOpenPosition = computed(() => {
   const hasRequiredFields =
@@ -2091,7 +2607,7 @@ const openPosition = async () => {
     console.debug('[StrikeFinance]  Opening position with request:', openPositionRequest);
     const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
     const cbor: string = cborResponse.data;
-    console.log('[StrikeFinance] Open position response:', cbor);
+    console.debug('[StrikeFinance] Open position response:', cbor);
     // Reset form after success
     positionData.value = {
       asset: "ADA/USD",
@@ -2223,6 +2739,103 @@ const loadPositions = async () => {
   }
 };
 
+
+// Load history (all positions and limit orders)
+const loadHistory = async () => {
+  const walletAddress = loggedWallet.value?.baseAddress;
+
+  if (!walletAddress) {
+    console.warn("No wallet address available for history");
+    return;
+  }
+  loadingHistory.value = true;
+  try {
+    console.debug('[StrikeFinance] Loading all orders for wallet:', walletAddress);
+    
+    // Load both positions and limit orders concurrently
+    const [positionsRes, limitOrdersRes] = await Promise.all([
+      strikeFinanceApi.getPositions(walletAddress),
+      strikeFinanceApi.getLimitOrders(walletAddress)
+    ]);
+    
+    const allPositions = positionsRes.data || [];
+    const allLimitOrders = limitOrdersRes.data || [];
+    
+    // Combine positions and limit orders into one array
+    // Add a 'type' field to distinguish between them
+    const combinedOrders = [
+      ...allPositions.map(pos => ({ ...pos, orderType: 'position' })),
+      ...allLimitOrders.map(order => ({ ...order, orderType: 'limit' }))
+    ];
+    
+    history.value = combinedOrders;
+    
+    console.debug('[StrikeFinance] All orders loaded:', {
+      positions: allPositions.length,
+      limitOrders: allLimitOrders.length, 
+      total: combinedOrders.length
+    });
+    
+    console.debug('[StrikeFinance] Status breakdown:', 
+      combinedOrders.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {})
+    );
+    
+  } catch (error) {
+    console.error("Failed to load history:", (error as any)?.message || error);
+    history.value = [];
+  } finally {
+    loadingHistory.value = false;
+  }
+};
+
+// Tab change handler
+const onTabChange = (tabIndex: number) => {
+  activeTab.value = tabIndex;
+  // Data is already loaded on mount, so just track the active tab
+  console.debug('[StrikeFinance] Switching to tab:', tabIndex);
+};
+
+// Refresh current tab
+const refreshCurrentTab = () => {
+  switch (activeTab.value) {
+    case 0: loadPositions(); break;
+    case 1: loadLimitOrders(); break;
+    case 2: loadHistory(); break;
+  }
+};
+
+// Helper functions for status colors
+const getOrderStatusColor = (status: string) => {
+  switch (status?.toLowerCase()) {
+    case 'pending': return 'warning';
+    case 'filled': return 'success';
+    case 'cancelled': return 'error';
+    default: return 'grey';
+  }
+};
+
+const getPositionStatusColor = (status: string) => {
+  switch (status?.toLowerCase()) {
+    case 'open': 
+    case 'active': return 'primary';      // Blue for active positions
+    case 'closed': 
+    case 'completed': return 'success';   // Green for completed positions  
+    case 'liquidated': return 'error';    // Red for liquidated positions
+    case 'pending': return 'warning';     // Orange for pending positions
+    case 'cancelled': 
+    case 'canceled': return 'grey';       // Grey for cancelled orders
+    default: return 'grey';               // Grey for unknown statuses
+  }
+};
+
+// Format date helper
+const formatDate = (timestamp: number) => {
+  return new Date(timestamp).toLocaleString();
+};
+
 // Logo error handler
 const onLogoError = (event: Event) => {
   console.warn("Strike Finance logo failed to load, hiding logo");
@@ -2231,8 +2844,16 @@ const onLogoError = (event: Event) => {
 };
 
 onMounted(async () => {
+  // Initialize debounced calculations
+  updateDebouncedCalculations();
+
   if (props.isOpen) {
-    await loadPositions();
+    // Load all tab data to show correct badge counts immediately
+    await Promise.allSettled([
+      loadPositions(),
+      loadLimitOrders(),
+      loadHistory()
+    ]);
   }
 
   // Initialize chart data with real ADA data
@@ -2248,6 +2869,14 @@ onMounted(async () => {
     // Fallback to simple price data
     chartData.value = generateSimpleOHLCData();
   }
+
+  // Enable chart after a brief delay to ensure component is ready
+  setTimeout(async () => {
+    await nextTick();
+    shouldFetchChartData.value = true;
+    console.debug("PerpetualsDialog: Enabled chart data fetching");
+    startChartUpdates();
+  }, 100);
 });
 
 onBeforeUnmount(() => {
@@ -2264,6 +2893,21 @@ const loadLimitOrders = async () => {
     const response = await strikeFinanceApi.getLimitOrders(walletAddress);
     limitOrders.value = response.data;
     console.debug('[StrikeFinance] Loaded limit orders:', limitOrders.value);
+    console.debug('[StrikeFinance] Limit orders data structure:', limitOrders.value.map(order => ({
+      id: order.id,
+      position: order.position,
+      asset: order.asset,
+      status: order.status,
+      limitUSDPrice: order.limitUSDPrice,
+      // Check for alternative price field names
+      allFields: Object.keys(order),
+      priceFields: Object.keys(order).filter(key => key.toLowerCase().includes('price'))
+    })));
+    
+    // Log first order completely to see all available fields
+    if (limitOrders.value.length > 0) {
+      console.debug('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
+    }
   } catch (error) {
     console.error('Failed to load limit orders:', error);
     limitOrders.value = [];
@@ -2289,7 +2933,7 @@ const cancelLimitOrder = async (order: LimitOrder) => {
 
     console.debug('[StrikeFinance] Cancelling limit order:', cancelRequest);
     const cborResponse = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
-    console.log('[StrikeFinance] Cancel order response:', cborResponse.data);
+    console.debug('[StrikeFinance] Cancel order response:', cborResponse.data);
     
     // Reload limit orders
     await loadLimitOrders();
@@ -2330,7 +2974,7 @@ const updatePosition = async () => {
 
     console.debug('[StrikeFinance] Updating position:', updateRequest);
     const cborResponse = await strikeFinanceApi.updatePosition(updateRequest);
-    console.log('[StrikeFinance] Update position response:', cborResponse.data);
+    console.debug('[StrikeFinance] Update position response:', cborResponse.data);
     
     // Close dialog and reload positions
     updatePositionDialog.value = false;
@@ -2342,27 +2986,6 @@ const updatePosition = async () => {
 
 // Get collateral amount in USD (based on entry price)
 const getCollateralAmount = (item: any) => {
-  // Debug: Log collateral calculation data
-  console.log('🔍 Collateral USD Debug:', {
-    entryPrice: item.entryPrice,
-    rawEnteredAtUsdPrice: item.rawEnteredAtUsdPrice,
-    
-    // ADA amounts
-    rawCollateralAssetAmount: item.rawCollateralAssetAmount,
-    collateralAmount: item.collateralAmount,
-    collateralSizeAda: item.collateralSizeAda,
-    currentPositionValueAda: item.currentPositionValueAda,
-    
-    // Check for any USD collateral fields
-    collateralUsd: item.collateralUsd,
-    initialCollateralUsd: item.initialCollateralUsd,
-    collateralValueUsd: item.collateralValueUsd,
-    
-    // Position data
-    positionSize: item.positionSize,
-    leverage: item.leverage
-  });
-
   // Get the entry price (price when position was opened)
   let entryPrice = 0;
   if (item.entryPrice) {
@@ -2387,7 +3010,6 @@ const getCollateralAmount = (item: any) => {
   for (const candidate of adaCandidates) {
     if (candidate !== undefined && candidate !== null && candidate > 0) {
       collateralAda = Number(candidate);
-      console.log('✅ Found collateral ADA:', collateralAda);
       break;
     }
   }
@@ -2395,7 +3017,6 @@ const getCollateralAmount = (item: any) => {
   // Calculate USD value: collateral ADA × entry price
   if (collateralAda > 0 && entryPrice > 0) {
     const collateralUsd = collateralAda * entryPrice;
-    console.log(`✅ Calculated collateral USD: ${collateralAda} ADA × $${entryPrice} = $${collateralUsd.toFixed(2)}`);
     return collateralUsd.toFixed(2);
   }
 
@@ -2408,12 +3029,10 @@ const getCollateralAmount = (item: any) => {
 
   for (const candidate of usdCandidates) {
     if (candidate !== undefined && candidate !== null && candidate > 0) {
-      console.log('✅ Using direct USD collateral field:', candidate);
       return Number(candidate).toFixed(2);
     }
   }
   
-  console.log('❌ Cannot calculate USD collateral - missing ADA amount or entry price');
   return '0.00';
 };
 
@@ -2426,6 +3045,9 @@ const getStatusColor = (status: string) => {
     default: return 'grey';
   }
 };
+
+
+
 </script>
 
 <style scoped>
@@ -2842,6 +3464,8 @@ const getStatusColor = (status: string) => {
   letter-spacing: 0.3px !important;
   padding: 2px 1px !important;
   height: 28px !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
 }
 
 .positions-data-table >>> tbody tr {
@@ -2851,6 +3475,33 @@ const getStatusColor = (status: string) => {
 
 .positions-data-table >>> tbody tr:hover {
   background: rgba(38, 250, 176, 0.03) !important;
+}
+
+/* Override the v-tabs-items dark theme background */
+.trading-tabs-container >>> .theme--dark.v-tabs-items {
+  background: none !important;
+  background-color: transparent !important;
+}
+
+.trading-tabs-container >>> .v-tabs-items.theme--dark {
+  background: none !important;
+  background-color: transparent !important;
+}
+
+>>> .theme--dark.v-tabs-items {
+  background: none !important;
+  background-color: transparent !important;
+}
+
+>>> .v-tabs-items.theme--dark {
+  background: none !important;
+  background-color: transparent !important;
+}
+
+/* Target v-tabs-items specifically */
+>>> .v-tabs-items {
+  background: none !important;
+  background-color: transparent !important;
 }
 
 .positions-data-table >>> tbody td {
@@ -3028,6 +3679,7 @@ const getStatusColor = (status: string) => {
   overflow: hidden !important;
 }
 
+
 ::v-deep .v-dialog .v-card {
   overflow: hidden !important;
   position: relative !important;
@@ -3045,23 +3697,7 @@ const getStatusColor = (status: string) => {
   overflow: hidden !important;
 }
 
-/* Scrollable form content */
-.form-content-scrollable {
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  flex: 1 !important;
-  min-height: 0 !important;
-}
 
-/* Bottom section always at bottom */
-.bottom-section {
-  flex-shrink: 0 !important;
-  margin-top: auto !important;
-  background: rgba(255, 255, 255, 0.02);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 12px;
-  border-radius: 0 0 8px 8px;
-}
 
 /* Dialog footer positioning */
 .dialog-footer {
@@ -3424,6 +4060,47 @@ const getStatusColor = (status: string) => {
   padding-top: 4px !important;
 }
 
+/* Custom tooltip with liquid glass effect (same as assets filters) */
+>>> .v-tooltip__content {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  z-index: 9999 !important;
+}
+
+>>> .custom-tooltip {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-radius: 12px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  padding: 12px !important;
+}
+
+/* Target the tooltip wrapper directly */
+>>> .v-tooltip__content.custom-tooltip {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  z-index: 9999 !important;
+}
+
 /* Fees tooltip */
 .fees-btn {
   color: #9ca3af !important;
@@ -3601,5 +4278,100 @@ const getStatusColor = (status: string) => {
   background: linear-gradient(135deg, #1de89a 0%, #26fab0 100%) !important;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(38, 250, 176, 0.3) !important;
+}
+
+/* Tab styles */
+.trading-tabs-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.trading-tabs-container >>> .v-tabs {
+  flex: 1;
+}
+
+.tab-item {
+  min-width: auto !important;
+  padding: 0 12px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+}
+
+.tab-text {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tab-count {
+  background: rgba(38, 250, 176, 0.2);
+  color: #26FAB0;
+  border-radius: 10px;
+  padding: 1px 4px;
+  font-size: 9px;
+  font-weight: 600;
+  min-width: 16px;
+  text-align: center;
+}
+
+.trading-tabs-container >>> .v-tab {
+  color: #9ca3af !important;
+  transition: color 0.3s ease !important;
+}
+
+.trading-tabs-container >>> .v-tab--active {
+  color: #26FAB0 !important;
+}
+
+.trading-tabs-container >>> .v-tabs-slider {
+  background-color: #26FAB0 !important;
+  height: 2px !important;
+}
+
+/* Status chip styles */
+.status-chip {
+  font-size: 8px !important;
+  height: 18px !important;
+  padding: 0 6px !important;
+  font-weight: 600 !important;
+}
+
+/* Custom status chip colors */
+.status-chip.primary {
+  background: linear-gradient(135deg, rgba(33, 150, 243, 0.2) 0%, rgba(33, 150, 243, 0.1) 100%) !important;
+  color: #2196f3 !important;
+  border: 1px solid rgba(33, 150, 243, 0.3) !important;
+}
+
+.status-chip.success {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important;
+  color: #10b981 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.status-chip.error {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important;
+  color: #ef4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.status-chip.warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%) !important;
+  color: #f59e0b !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.status-chip.grey {
+  background: linear-gradient(135deg, rgba(156, 163, 175, 0.2) 0%, rgba(156, 163, 175, 0.1) 100%) !important;
+  color: #9ca3af !important;
+  border: 1px solid rgba(156, 163, 175, 0.3) !important;
+}
+
+.action-btn-compact {
+  font-size: 10px !important;
+  height: 20px !important;
+  padding: 0 8px !important;
+  min-width: auto !important;
 }
 </style>

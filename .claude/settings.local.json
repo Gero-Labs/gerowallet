@@ -15,7 +15,8 @@
       "Bash(curl:*)",
       "WebFetch(domain:api.kraken.com)",
       "WebFetch(domain:docs.kraken.com)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }
