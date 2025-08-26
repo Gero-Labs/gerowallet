@@ -124,7 +124,7 @@
                 <span class="ml-2">Loading more transactions...</span>
               </td>
             </tr>
-                        <!-- End of list indicator for infinite scroll -->
+            <!-- End of list indicator for infinite scroll -->
             <tr v-else-if="props.isFullList && hasReachedEnd" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <span class="text-caption text--secondary">
@@ -144,7 +144,7 @@
                 <v-pagination
                   v-model="currentPage"
                   :length="Math.ceil(transactions.length / itemsPerPage)"
-                  :total-visible="5"
+                  :total-visible="7"
                   circle
                   class="compact-pagination ma-0"
                   @input="handlePageChange"
@@ -173,6 +173,7 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
+import { stakingStore } from '@/stores/stakingStore';
 
 const props = defineProps({
   selectedTransaction: {
@@ -189,8 +190,9 @@ const emit = defineEmits(['row-click']);
 
 const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { assets, pools } = toRefs(networkStore);
+const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+const { pools } = toRefs(stakingStore);
 
 const activityHeaders = ref([
   { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
@@ -210,6 +212,7 @@ const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
 const intersectionTarget = ref<HTMLElement | null>(null);
 const intersectionObserver = ref<IntersectionObserver | null>(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
 // Pagination variables (for non-full list mode)
 const currentPage = ref<number>(1);
@@ -220,7 +223,7 @@ const itemsPerPage = computed(() => {
 // Items per batch for lazy loading
 const itemsPerBatch = computed(() => {
   if (!props.isFullList) {
-    return itemsPerPage.value; // Используем пагинацию если не полный список
+    return itemsPerPage.value;
   }
   return state.value === '/transactions' ? 20 : 10;
 });
@@ -277,7 +280,7 @@ const loadMoreTransactions = async () => {
     const start = (currentPage.value - 1) * itemsPerPage.value;
     const end = start + itemsPerPage.value;
     displayedTransactions.value = transactions.value.slice(start, end);
-    
+
     // Check if we've reached the end
     if (end >= transactions.value.length) {
       hasReachedEnd.value = true;
@@ -292,12 +295,11 @@ const resetInfiniteScroll = () => {
   displayedTransactions.value = [];
   currentIndex.value = 0;
   hasReachedEnd.value = false;
-  currentPage.value = 1; // Сброс пагинации
-  
+  currentPage.value = 1;
+
   if (props.isFullList) {
     loadMoreTransactions();
   } else {
-    // Если не полный список, загружаем первую страницу
     loadMoreTransactions();
   }
 };
@@ -313,15 +315,35 @@ watch(
 // Watch for transactions changes to reset infinite scroll
 watch(
   () => transactions.value,
-  () => {
+  async () => {
     resetInfiniteScroll();
+
+    // Recreate intersection observer after reset
+    if (props.isFullList) {
+      if (intersectionObserver.value) {
+        intersectionObserver.value.disconnect();
+      }
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setupIntersectionObserver();
+    }
   },
   { deep: true }
 );
 
 // Setup intersection observer for infinite scroll
 const setupIntersectionObserver = () => {
-  if (!intersectionTarget.value || !props.isFullList) return;
+  if (!intersectionTarget.value || !props.isFullList) {
+    return;
+  }
+
+  // Disconnect existing observer
+  if (intersectionObserver.value) {
+    intersectionObserver.value.disconnect();
+  }
+
+  // Find the scrollable container
+  const scrollContainer = intersectionTarget.value.closest('.table-container');
 
   intersectionObserver.value = new IntersectionObserver(
     entries => {
@@ -332,17 +354,40 @@ const setupIntersectionObserver = () => {
       });
     },
     {
+      root: scrollContainer, // Use the scrollable container as root
       rootMargin: '100px', // Start loading when 100px away from the target
-      threshold: 0.1,
+      threshold: [0, 0.1, 1.0], // Multiple thresholds for better detection
     }
   );
 
   intersectionObserver.value.observe(intersectionTarget.value);
 };
 
+// Fallback scroll handler
+const handleScroll = () => {
+  if (!scrollContainer.value || !props.isFullList || isLoadingMore.value || hasReachedEnd.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value;
+  const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 100; // 100px threshold
+
+  if (scrolledToBottom) {
+    loadMoreTransactions();
+  }
+};
+
+// Setup scroll fallback
+const setupScrollFallback = () => {
+  if (!props.isFullList) return;
+
+  const container = document.querySelector('.table-container') as HTMLElement;
+  if (container) {
+    scrollContainer.value = container;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+  }
+};
+
 const handleOnTransactionsRowClick = row => {
   transactionInfo.value = row;
-  console.log('transactionInfo', row);
   emit('row-click', row);
 };
 
@@ -357,7 +402,7 @@ const getStatus = item => {
       switch (certificate.__typename) {
         case Cardano.CertificateType.StakeRegistrationDelegation:
         case Cardano.CertificateType.StakeDelegation:
-          const pool = pools.value[certificate.poolId];
+          const pool = pools.value.find(p => p.id === certificate.poolId);
           if (pool) {
             statuses.push('Delegating to ' + pool.ticker);
           }
@@ -436,15 +481,22 @@ const handlePageChange = (page: number) => {
 // Lifecycle hooks
 onMounted(async () => {
   await nextTick();
-  if (props.isFullList) {
-    setupIntersectionObserver();
-  }
   resetInfiniteScroll();
+
+  if (props.isFullList) {
+    // Wait for DOM to fully render before setting up observers
+    await new Promise(resolve => setTimeout(resolve, 100));
+    setupIntersectionObserver();
+    setupScrollFallback();
+  }
 });
 
 onUnmounted(() => {
   if (intersectionObserver.value) {
     intersectionObserver.value.disconnect();
+  }
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('scroll', handleScroll);
   }
 });
 </script>
@@ -559,7 +611,7 @@ onUnmounted(() => {
 
 /* Table container styling */
 .table-container {
-  max-height: calc(100vh - 200px); /* Высота экрана минус отступы для заголовка и других элементов */
+  max-height: calc(100vh - 200px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -719,7 +771,7 @@ onUnmounted(() => {
   }
 
   .table-container {
-    max-height: calc(100vh - 150px); /* Меньший отступ для мобильных */
+    max-height: calc(100vh - 150px);
   }
 }
 </style>
