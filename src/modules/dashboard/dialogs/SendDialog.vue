@@ -211,6 +211,7 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
+import { signTransactionWithLedger, buildWitnessFromLedger } from '@/shared/utils/ledgerCardanoSdk';
 
 interface Props {
   isOpen: boolean;
@@ -397,17 +398,6 @@ const signTx = async (): Promise<boolean> => {
     console.log('Signing send transaction');
     console.log('Transaction:', tx.value);
 
-    // First, verify password via a background message
-    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
-
-    if (!passwordVerification.data.isValid) {
-      enableToolTip();
-      return false;
-    }
-
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     console.log('Serialized transaction CBOR:', txCbor.value);
@@ -472,45 +462,83 @@ const submitTx = async () => {
   }
 };
 
-async function signAndSubmitTx() {
-  if (isSubmit.value) {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      await submitTx();
+const signLedgerTx = async () => {
+  txSubmitLoading.value = true;
+  try {
+    console.log('Signing transaction with Ledger hardware wallet');
+    
+    if (!tx.value) {
+      throw new Error('No transaction to sign');
     }
-  } else {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Auto-submit for send transactions (unlike staking where user might want to review)
-      await submitTx();
-    } else if (loggedWallet.value?.type === WalletType.Keystone) {
-      if (qrCode.value) {
-        qrCode.value = null; // Clear the QRCode instance
-        if (vmProxy.$refs.qrCode)
-          vmProxy.$refs.qrCode.innerHTML = '';
-      }
 
-      // TODO: Update Keystone flow to work with Cardano JS SDK transactions
-      // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
-      // type.value = ur.type;
-      // cbor.value = Buffer.from(ur.cbor).toString('hex');
-      // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
-      // console.log('');
-      // overlay.value = true;
-      // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
-      // Vue.nextTick(() => {
-      //   qrCode.value.append(vmProxy.$refs.qrCode);
-      // });
-      // console.log('qrCode');
-    } else {
-      // Hardware wallets (Ledger, etc.)
-      const isValid: boolean = await signTx();
-      if (isValid) {
-        await submitTx();
-      }
+    // Serialize the transaction for submission
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+    
+    // Sign the transaction using Ledger
+    const witness = await signTransactionWithLedger({
+      tx: tx.value,
+      accountIndex: 0, // TODO: Get actual account index from wallet
+      isUsb: !isBT.value,
+      addresses: keys.value,
+      knownAddresses: [] // TODO: Build known addresses from wallet context
+    });
+
+    // Convert witness to hex format for submission
+    txWitnesses.value = buildWitnessFromLedger(witness);
+    
+    console.log('Transaction signed successfully with Ledger');
+    
+    // Submit the transaction
+    await submitTx();
+  } catch (e) {
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+async function signAndSubmitTx() {
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
+
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      return;
     }
+    const isValid: boolean = await signTx();
+    if (!isValid) {
+      return;
+    }
+    // Auto-submit for sending transactions (unlike staking where a user might want to review)
+    await submitTx();
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
+    if (qrCode.value) {
+      qrCode.value = null; // Clear the QRCode instance
+      if (vmProxy.$refs.qrCode)
+        vmProxy.$refs.qrCode.innerHTML = '';
+    }
+
+    // TODO: Update Keystone flow to work with Cardano JS SDK transactions
+    // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
+    // type.value = ur.type;
+    // cbor.value = Buffer.from(ur.cbor).toString('hex');
+    // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
+    // console.log('');
+    // overlay.value = true;
+    // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
+    // Vue.nextTick(() => {
+    //   qrCode.value.append(vmProxy.$refs.qrCode);
+    // });
+    // console.log('qrCode');
+  } else if (loggedWallet.value?.type === WalletType.Ledger) {
+    // Ledger Hardware Wallet Signing
+    await signLedgerTx();
+  } else {
+
   }
 }
 
@@ -521,7 +549,7 @@ async function buildTx(sendTokens) {
 
   const recipientAddress = sendData.value.recipientAddress;
 
-  // Build assets map for Cardano JS SDK
+  // Build asset map for Cardano JS SDK
   const assetsMap = new Map<Cardano.AssetId, bigint>();
   let coinsAmount = BigInt(0);
 
