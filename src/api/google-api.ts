@@ -23,11 +23,11 @@ export class GoogleApi {
         const params = new URLSearchParams({
             client_id: this.clientId,
             redirect_uri: this.redirectURI,
-            response_type: 'code',
+            response_type: 'id_token token',
             scope: this.scopes.join(' '),
-            access_type: 'offline',
+            prompt: 'select_account',
             include_granted_scopes: 'true',
-            state: this.state
+            nonce: this.state
         });
 
         const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
