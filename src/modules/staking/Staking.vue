@@ -463,7 +463,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
-import { useDebounce } from '@vueuse/core';
+import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { Cardano } from '@cardano-sdk/core';
@@ -479,7 +479,6 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
 const { epochParams, tip } = toRefs(networkStore);
-const { pools } = toRefs(stakingStore.state);
 
 const {
   pools: paginatedPools,
@@ -512,12 +511,16 @@ const pledgeMet = computed({
 
 // Create a debounced search value that will trigger the actual search
 const searchInput = ref(poolsFilters.value.search);
-const debouncedSearch = useDebounce(searchInput, 500); // 500ms debounce
 
-// Watch the debounced search value to trigger API calls
-watch(debouncedSearch, newValue => {
-  stakingStore.updateFilters({ search: newValue });
+// Create a debounced function to update search
+const debouncedUpdateSearch = debounce((value: string) => {
+  stakingStore.updateFilters({ search: value });
   reloadWithFilters(); // Reload with new filters
+}, 500); // 500ms debounce
+
+// Watch searchInput and trigger the debounced update
+watch(searchInput, newValue => {
+  debouncedUpdateSearch(newValue);
 });
 
 const search = computed({

@@ -43,14 +43,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs } from 'vue';
-import { buildTx } from '@/shared/utils/builder';
-import {
-  Address, Transaction,
-  TransactionOutput,
-  TransactionOutputs,
-  TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { assetsToValue, toUTxO } from '@/shared/utils/converter';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -59,14 +52,16 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { MessageTypes } from '@/models/MessageTypes';
+import { HexBlob } from '@cardano-sdk/util';
 
 // Define emits
 const emit = defineEmits(['close']);
 
 // Get reactive store properties
-const { loggedWallet, utxos, collateral } = toRefs(walletStore);
-const { tip } = toRefs(networkStore);
+const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
+const { tip, epochParams } = toRefs(networkStore);
 
 
 // Reactive data
@@ -78,46 +73,80 @@ const headers = ref([
 
 const collateralCandidate = computed<any>(() => {
   if (collateral.value) {
-    const res = [collateral.value].map((utxo: Cardano.Utxo) => ({
+    return [collateral.value].map((utxo: Cardano.Utxo) => ({
       utxo: `${utxo[0].txId}#${utxo[0].index}`,
       address: utxo[1].address,
       balance: utxo[1].value.coins.toString()
     }));
-    console.log('Collateral', res);
-    return res;
   }
   return [];
 });
 
 // Methods
 const setCollateral = async () => {
-  const outputs = TransactionOutputs.new();
-  outputs.add(TransactionOutput.new(Address.from_bech32(loggedWallet.value.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
-  const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-  utxos.value.forEach((utxo: any) => transactionUnspentOutputs.add(toUTxO(utxo)));
-  const txBody = buildTx(loggedWallet.value, outputs, transactionUnspentOutputs, tip.value.slot, loggedWallet.value.baseAddress);
-  const tx = Transaction.new(txBody, TransactionWitnessSet.new());
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
 
-  const res: any = await Messaging.sendToBackground({
-    method: METHOD.signTx,
-    data: { tx: tx.to_hex(), partialSign: true },
-  });
+    // Create a collateral output of 5 ADA
+    const collateralOutput: Cardano.TxOut = {
+      address: loggedWallet.value.baseAddress as Cardano.PaymentAddress,
+      value: {
+        coins: BigInt(5000000) // 5 ADA
+      }
+    };
 
-  if (res.data) {
-    const signedTx = Transaction.new(
-      tx.body(),
-      TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
-      undefined // TODO Transaction metadata
-    );
-    const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
-    console.log(txId);
-    snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
-    emit('close');
-    //TODO Wait for Collateral to load up in UI
-  } else if (res.error) {
-    snackbar.setError(res.error.info);
+    // Build the transaction using the modern SDK
+    const txData = await buildCardanoTransaction({
+      outputs: [collateralOutput],
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value
+    });
+
+    // Convert to CBOR for signing
+    const transaction: Serialization.Transaction = Serialization.Transaction.fromCore(txData)
+    const txCbor = transaction.toCbor();
+
+    const signaturesRes: any = await Messaging.sendToBackground({
+      method: METHOD.signTx,
+      data: { tx: txCbor, partialSign: true },
+    });
+    console.log('signaturesRes', signaturesRes)
+    if (signaturesRes.error) {
+      snackbar.setError(signaturesRes.error.info)
+    } else {
+      console.log(signaturesRes)
+      const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
+      const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
+      await submit(newTx.toCbor())
+    }
+  } catch (error) {
+    console.error('Error building collateral transaction:', error);
+    snackbar.setError('Failed to build collateral transaction');
   }
 };
+
+const submit = async (cborHex: string) => {
+  const submitResult = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_TX,
+    data: {
+      txCbor: cborHex,
+      witnessHex: null,
+      utxos: utxos.value
+    }
+  }) as { data: { txId?: string; error?: string } };
+  if (submitResult.data.error) {
+    throw new Error(submitResult.data.error);
+  }
+  const txId = submitResult.data.txId;
+  snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
+  console.log(txId)
+  emit('close')
+}
 </script>
 
 <style scoped>
