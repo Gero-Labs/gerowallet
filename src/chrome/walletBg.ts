@@ -188,7 +188,7 @@ export class WalletBg {
 
   async setUtxosAndAddresses(transactions: any[]) {
     console.debug('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
-    
+
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {
@@ -203,7 +203,7 @@ export class WalletBg {
     const addresses: Set<string> = new Set<string>();
     addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
-    
+
     console.debug('🔍 Processing transactions for UTXOs...');
     for (const transaction of transactions) {
       for (const inp of transaction.body.inputs) {
@@ -225,15 +225,6 @@ export class WalletBg {
           if (address === outAddress || stakeAddress === outAddress) {
             addresses.add(out.address);
             const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
-            console.debug(`💰 Creating UTXO: ${utxoId}`);
-            console.debug(`  Address: ${out.address}`);
-            console.debug(`  Coins: ${out.value?.coins || 'undefined'}`);
-            console.debug(`  Assets:`, out.value?.assets ? `${out.value.assets.size} assets` : 'undefined assets');
-            if (out.value?.assets && out.value.assets.size > 0) {
-              out.value.assets.forEach((amount, assetId) => {
-                console.debug(`    Asset ${assetId}: ${amount}`);
-              });
-            }
             utxos.set(utxoId, [
               {
                 txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
@@ -862,7 +853,7 @@ export class WalletBg {
       // Sign with each required key
       for (const signer of requiredSigners) {
         console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
-        
+
         const privateKey = accountPrivateKey.derive(signer.derivationPath);
         const rawPublicKey = privateKey.toRawKey().toPublic();
 

@@ -67,6 +67,7 @@ export class EpochParamsLoader extends BaseLoader {
     return this.createSubscription(
       () => blockchainDB.table('epoch_params').orderBy('epoch').last(),
       (epochParams: any) => {
+        console.log('loading epochParams', epochParams)
         let defaultEpochParams;
         if (!epochParams) {
           defaultEpochParams = networks.resolveNetwork(this.chain, this.network).protocolParams;
@@ -158,6 +159,7 @@ export class EpochParamsLoader extends BaseLoader {
             dRepInactivityPeriod: epochParams?.drep_activity ? Cardano.EpochNo(epochParams.drep_activity) : undefined,
             minFeeRefScriptCostPerByte: epochParams?.min_fee_ref_script_cost_per_byte,
           };
+          console.log('setEpochParams', newProtocolParamsInAlonzo)
           NetworkStore.setEpochParams({
             ...protocolParametersByron,
             ...newProtocolParamsInShelley,

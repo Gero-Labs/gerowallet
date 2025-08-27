@@ -78,20 +78,31 @@ function broadcastFromBackground(updates: Partial<NetworkStore>) {
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Also persist to storage as fallback
-    chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || {
-        assets: {},
-        epochParams: null,
-        tip: null,
-        price: {},
-        tickerStatisticsIntervalId: null,
-        genesis: null
-      };
+    // Also persist to storage as fallback - use current local state as base instead of storage
+    try {
+      // Use current local store state as the base to avoid race conditions
+      const current = networkStore;
+      const finalState = { ...current, ...serializedUpdates };
+      
       chrome.storage.local.set({
-        [STORE_NAME]: { ...current, ...serializedUpdates }
+        [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
+          if (typeof value === 'bigint') {
+            return value.toString();
+          } else if (value instanceof Map) {
+            return Array.from(value.entries()).reduce((obj, [key, value]) => {
+              obj[key] = value;
+              return obj;
+            }, {});
+          } else if (value instanceof Set) {
+            return Array.from(value);
+          } else {
+            return value;
+          }
+        }))
       });
-    });
+    } catch (error) {
+      console.error('Failed to persist network store to storage:', Object.keys(updates), error);
+    }
   }
 }
 
