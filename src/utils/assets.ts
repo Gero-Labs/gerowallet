@@ -66,12 +66,12 @@ import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
 import guardarian from '@/modules/dashboard/assets/guardarian.svg'
 import moonpay from '@/modules/dashboard/assets/moonpay.svg'
-import welcomeVideo from '@/assets/video/welcome.mp4'
-import blogSS from '@/shared/assets/welcome/blog.png'
-import newDesignSS from '@/shared/assets/welcome/new_design.png'
-import cashbackSS from '@/shared/assets/welcome/cashback.png'
-import governanceSS from '@/shared/assets/welcome/governance.png'
-import cardanoShieldSS from '@/shared/assets/welcome/cardano_shield.png'
+import welcomeImage from '@/shared/assets/welcome/welcome.png'
+import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
+import geroCardSS from '@/shared/assets/welcome/gero_card.png'
+import perpetualsSS from '@/shared/assets/welcome/perpetuals.png'
+import multisigSS from '@/shared/assets/welcome/multisig.png'
+import cashbackNewSS from '@/shared/assets/welcome/cashback_new.png'
 import riskLow from '@/assets/img/cardano-shield/risk-low.svg'
 import riskMedium from '@/assets/img/cardano-shield/risk-medium.svg'
 import riskHigh from '@/assets/img/cardano-shield/risk-high.svg'
@@ -200,13 +200,13 @@ export default {
   geroDashboardApex,
   guardarian,
   moonpay,
-  welcomeVideo,
-  blogSS,
-  newDesignSS,
-  cashbackSS,
-  governanceSS,
+  welcomeImage,
   dao,
-  cardanoShieldSS,
+  improvedUxSS,
+  geroCardSS,
+  perpetualsSS,
+  multisigSS,
+  cashbackNewSS,
   giftSvg,
   pendingSvg,
   piggyBankSvg,
