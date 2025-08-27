@@ -337,7 +337,7 @@ const computedValues = computed(() => {
     // Add other asset values if they have USD/ADA pricing data
   }
 
-  const totalValue = assetsValue + collectibles + lpsValue;
+  const totalValue = portfolio.value.adaValue;
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
