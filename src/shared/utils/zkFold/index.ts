@@ -1,13 +1,17 @@
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { ref } from 'vue';
+import { Backend } from './Backend';
 
 const GOOGLE_URL_USERINFO = 'https://www.googleapis.com/oauth2/v3/userinfo';
+const ZKFOLD_BACKEND_URL = 'https://api.wallet.zkfold.io';
+const ZKFOLD_API_KEY = '123456';
 
 export class ZkFold {
   public accessToken = ref('');
   public idToken = ref('');
   public profile = ref({});
+  public zkFoldBackend = null;
 
   public async initConnection(): Promise<void> {
     try {
@@ -24,6 +28,11 @@ export class ZkFold {
       console.error(error);
     }
     return;
+  }
+
+  public async backend() {
+    this.zkFoldBackend = new Backend(ZKFOLD_BACKEND_URL, ZKFOLD_API_KEY);
+    return this.zkFoldBackend;
   }
 
   public async fetchProfile() {

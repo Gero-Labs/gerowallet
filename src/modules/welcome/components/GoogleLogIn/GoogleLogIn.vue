@@ -92,7 +92,7 @@ const accessToken = computed(() => zkFold.accessToken.value);
 const idToken = computed(() => zkFold.idToken.value);
 const profile = computed(() => zkFold.profile.value);
 
-console.log(props.selectedNetwork);
+console.log('Selected Network:', props.selectedNetwork);
 </script>
 
 <template>

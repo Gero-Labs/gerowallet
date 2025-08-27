@@ -1,5 +1,5 @@
 import browser, { Manifest } from 'webextension-polyfill';
-import { GoogleApi } from '@/api/google-api'
+import { GoogleApi } from '@/api/google-api';
 
 type ManifestWithOAuth2 = Manifest.WebExtensionManifest & {
   oauth2?: { client_id: string; client_secret: string; scopes: string[] };
