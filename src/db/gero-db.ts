@@ -1,13 +1,9 @@
 import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion, geroWalletDbName } from '@/db/schema';
 import * as bip39 from 'bip39';
-import { encrypt } from '@/shared/utils/crypto';
-import * as Crypto from '@cardano-sdk/crypto';
-import { HARDENED, CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
-import { bech32, bech32m } from 'bech32';
+import { Currency, WalletType } from '@/models/types';
 import { clearDbCache } from '@/db/wallet-db';
-import { encryptPrivateKey } from '@/chrome/serialization';
-import { resolvePrivateKey } from '@/shared/utils/resolver';
+import { addNewGeroWallet, generateEncryptedWalletData, generateDeterministicSeed, generateWalletKeysFromSeed } from '@/db/helpers';
 
 let cachedDb: Dexie | null = null;
 
@@ -113,7 +109,7 @@ export async function getAllWallets() {
   return walletsMap;
 }
 
-export async function createNewWalletDb(walletId: number|string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
+export async function createNewWalletDb(walletId: number | string, hasEncryptedMnemonic: boolean, isRestore: boolean = false) {
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
   const db = new Dexie(walletName);
   db.version(walletDBVersion).stores(walletDBSchema)
@@ -153,45 +149,27 @@ export async function createNewWallet(name, icon, theme, mnemonic: string, passw
     isRestore = false;
     mnemonic = bip39.generateMnemonic(256);
   }
-  const encryptedMnemonic: string = encrypt(mnemonic, password);
-  const rootKey: Crypto.Bip32PrivateKey = resolvePrivateKey(mnemonic);
-  const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
-  const accountIndex = 0;
-  const bip32Ed25519: Crypto.Bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
-  const xpubHex: Crypto.Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(rootKey.derive([WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + accountIndex]).hex());
-  let words: number[]
-  try {
-    words = bech32.toWords(Buffer.from(xpubHex, 'hex'))
-  } catch (e) {
-    words = bech32m.toWords(Buffer.from(xpubHex, 'hex'));
-  }
-  const publicKey = bech32.encode('xpub', words, 120);
 
-  const db: Dexie = await getDb();
-  let order = await getLatestWalletByOrder();
-  if (order == null) {
-    order = 1;
-  } else {
-    order++;
-  }
-  const walletId = await db['wallets'].add({
+  const { encryptedPrivateKey, encryptedMnemonic, publicKey } = await generateEncryptedWalletData(mnemonic, password);
+  const passwordLastUpdate = new Date();
+  const walletId = await addNewGeroWallet({
     name,
     icon,
     type: WalletType.Normal,
     theme,
-    order,
     encryptedPrivateKey,
     encryptedMnemonic,
     publicKey,
-    passwordLastUpdate: new Date(),
+    passwordLastUpdate,
     chain,
     network
   });
+
   await createNewWalletDb(walletId, !!encryptedMnemonic, isRestore);
   return walletId;
 }
 
-export async function  createNewHardwareWallet(wallet: any) {
+export async function createNewHardwareWallet(wallet: any) {
   const db: Dexie = await getDb();
   let order = await getLatestWalletByOrder();
   if (order == null) {
@@ -216,27 +194,50 @@ export async function createNewGoogleWallet(name: string, icon: string, theme: s
   } else {
     order++;
   }
+  
+  // Validate and parse JWT token
   const parts = jwt.split(".");
+  if (parts.length !== 3) {
+    throw new Error('Invalid JWT token format');
+  }
+  
   const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
   const userId = payload.email;
+  
+  if (!userId || !payload.email_verified) {
+    throw new Error('Invalid or unverified Google account');
+  }
+
+  // Generate deterministic wallet keys from Google user ID + password
+  // This approach provides:
+  // 1. Deterministic key derivation (same user + password = same keys)
+  // 2. User password protection
+  // 3. Backup/recovery capability
+  const deterministicSeed = await generateDeterministicSeed(userId, password);
+  const { encryptedPrivateKey, publicKey } = await generateWalletKeysFromSeed(deterministicSeed, password);
+  
   const walletId = await db['wallets'].add({
     name,
     icon,
     type: WalletType.Google,
     theme,
     order,
-    encryptedPrivateKey: null,
-    publicKey: null,
+    encryptedPrivateKey,
+    publicKey,
     passwordLastUpdate: new Date(),
     chain,
     network,
     userId,
+    // Store additional Google-specific metadata
+    googleJwtIssuer: payload.iss,
+    googleAccountCreatedAt: new Date(),
   });
-  await createNewWalletDb(walletId, false);
+  
+  await createNewWalletDb(walletId, true, false); // hasEncryptedMnemonic=true for Google wallets
   return walletId;
 }
 
-export async function deleteWallet(walletId: number|string) {
+export async function deleteWallet(walletId: number | string) {
   const db: Dexie = await getDb();
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
   const numericWalletId = typeof walletId === 'number' ? walletId : parseInt(walletId);
@@ -292,4 +293,83 @@ export async function updatePrivateKeyAndMnemonic(
   }
 
   await db['wallets'].update(walletId, updateData);
+}
+
+/**
+ * Recover Google wallet by re-deriving keys from user credentials
+ * This allows users to recover their wallet if they remember their Google account and password
+ * @param userId - Google user email/ID
+ * @param password - User's spending password
+ * @param chain - Blockchain (e.g., 'Cardano')
+ * @param network - Network (e.g., 'Mainnet')
+ */
+export async function recoverGoogleWallet(
+  userId: string, 
+  password: string, 
+  chain: string, 
+  network: string
+): Promise<{ walletId: number; keys: { encryptedPrivateKey: string; publicKey: string } }> {
+  const db: Dexie = await getDb();
+  
+  // Check if wallet already exists
+  const existingWallet = await db['wallets'].where('userId').equals(userId).first();
+  if (existingWallet) {
+    throw new Error('Wallet already exists for this Google account');
+  }
+  
+  // Re-derive keys using the same deterministic process
+  const deterministicSeed = await generateDeterministicSeed(userId, password);
+  const { encryptedPrivateKey, publicKey } = await generateWalletKeysFromSeed(deterministicSeed, password);
+  
+  // Create recovered wallet
+  let order = await getLatestWalletByOrder();
+  if (order == null) {
+    order = 1;
+  } else {
+    order++;
+  }
+  
+  const walletId = await db['wallets'].add({
+    name: userId.split('@')[0], // Use email prefix as default name
+    icon: '', // Default icon
+    type: WalletType.Google,
+    theme: 'gero',
+    order,
+    encryptedPrivateKey,
+    publicKey,
+    passwordLastUpdate: new Date(),
+    chain,
+    network,
+    userId,
+    googleAccountRecoveredAt: new Date(),
+  });
+  
+  await createNewWalletDb(walletId, true, true); // isRestore=true for recovered wallets
+  
+  return { walletId, keys: { encryptedPrivateKey, publicKey } };
+}
+
+/**
+ * Validate Google wallet credentials without creating a wallet
+ * This can be used to verify credentials before wallet creation/recovery
+ * @param userId - Google user email/ID
+ * @param password - User's spending password
+ * @param existingPublicKey - Optional: compare against existing public key for validation
+ */
+export async function validateGoogleWalletCredentials(
+  userId: string, 
+  password: string, 
+  existingPublicKey?: string
+): Promise<{ isValid: boolean; publicKey: string }> {
+  try {
+    const deterministicSeed = await generateDeterministicSeed(userId, password);
+    const { publicKey } = await generateWalletKeysFromSeed(deterministicSeed, password);
+    
+    const isValid = existingPublicKey ? publicKey === existingPublicKey : true;
+    
+    return { isValid, publicKey };
+  } catch (error) {
+    console.error('Error validating Google wallet credentials:', error);
+    return { isValid: false, publicKey: '' };
+  }
 }
