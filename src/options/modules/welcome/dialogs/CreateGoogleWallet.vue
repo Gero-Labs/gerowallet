@@ -23,7 +23,7 @@ interface NewWallet {
 interface Props {
   isOpen: boolean;
   persistent: boolean;
-  googleAccount: { };
+  googleAccount: {};
   tokens: {
     idToken: string,
     accessToken: string,
@@ -32,7 +32,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
 const emit = defineEmits(['close']);
 
 const vmProxy = getCurrentInstance()!.proxy as any
@@ -45,7 +44,7 @@ const valid = ref<boolean>(false);
 const creatingWalletLoader = ref(false);
 const persistent = ref(false);
 
-let newWallet = reactive<NewWallet>({
+let newWallet = ref<NewWallet>({
   name: '',
   icon: '',
   theme: Theme.GERO,
@@ -57,6 +56,7 @@ let newWallet = reactive<NewWallet>({
   network: props.network?.network
 });
 
+
 watch(() => props.isOpen, (newValue, _oldValue) => {
   if (!newValue) {
     resetDialog();
@@ -64,14 +64,14 @@ watch(() => props.isOpen, (newValue, _oldValue) => {
 })
 
 watch(() => props.googleAccount, (newValue, _oldValue) => {
-  newWallet.name = newValue['email']?.split('@')[0];
-  newWallet.icon = newValue['picture'];
+  newWallet.value.name = newValue['email']?.split('@')[0];
+  newWallet.value.icon = newValue['picture'];
 })
 
 onMounted(() => {
   if (props.googleAccount) {
-    newWallet.name = props.googleAccount['email']?.split('@')[0];
-    newWallet.icon = props.googleAccount['picture'];
+    newWallet.value.name = props.googleAccount['email']?.split('@')[0];
+    newWallet.value.icon = props.googleAccount['picture'];
   }
 })
 
@@ -79,12 +79,12 @@ const walletCreation = async (): Promise<void> => {
   creatingWalletLoader.value = true;
   try {
     const wallet = await GeroStore.createNewGoogleWallet(
-      newWallet.name,
-      newWallet.icon,
-      newWallet.theme,
-      newWallet.password,
-      newWallet.chain,
-      newWallet.network,
+      newWallet.value.name,
+      newWallet.value.icon,
+      newWallet.value.theme,
+      newWallet.value.password,
+      props.network?.blockchain,
+      props.network?.network,
       props.tokens.idToken
     );
     emit('close');
@@ -105,7 +105,7 @@ const walletCreation = async (): Promise<void> => {
 };
 
 const resetDialog = (): void => {
-  newWallet = {
+  newWallet.value = {
     name: '',
     icon: '',
     theme: Theme.GERO,
@@ -113,7 +113,7 @@ const resetDialog = (): void => {
     confirmPassword: '',
     termsChecked: false,
     recoverPasswordChecked: false,
-    chain: props.network?.chain,
+    chain: props.network?.blockchain,
     network: props.network?.network
   };
   valid.value = false;
@@ -126,17 +126,9 @@ const resetDialog = (): void => {
 </script>
 
 <template>
-  <BaseDialog
-    title="Google Wallet Set Up"
-    :subtitle="props.network?.title"
-    :is-open="props.isOpen"
-    @close="$emit('close')"
-    content-class="rounded-xxl dialogStyle"
-    scrollable
-    max-width="850"
-    :min-height="0"
-    :persistent="props.persistent"
-  >
+  <BaseDialog title="Google Wallet Set Up" :subtitle="props.network?.title" :is-open="props.isOpen"
+    @close="$emit('close')" content-class="rounded-xxl dialogStyle" scrollable max-width="850" :min-height="0"
+    :persistent="props.persistent">
     <v-card-text class="pa-0">
       <v-container class="pa-1 pb-2" style="max-width: 534px;">
         <v-form ref="form" v-model="valid">
@@ -146,10 +138,10 @@ const resetDialog = (): void => {
             </v-list-item-avatar>
             <v-list-item-content>
               <v-list-item-title>
-                {{ props.googleAccount['name']}}
+                {{ props.googleAccount['name'] }}
               </v-list-item-title>
               <v-list-item-subtitle>
-                {{ props.googleAccount['email']}}
+                {{ props.googleAccount['email'] }}
               </v-list-item-subtitle>
             </v-list-item-content>
             <v-list-item-avatar>
@@ -158,78 +150,36 @@ const resetDialog = (): void => {
           </v-list-item>
           <v-divider class="mb-2"></v-divider>
           <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.</h3>
-          <v-text-field
-            filled
-            dense
-            color="primary"
-            v-model="newWallet.name"
-            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-            label="Wallet Name"
-            placeholder="e.g. My New Wallet"
-            required
-          ></v-text-field>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your
+            wallet.</h3>
+          <v-text-field filled dense color="primary" v-model="newWallet.name"
+            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]" label="Wallet Name"
+            placeholder="e.g. My New Wallet" required></v-text-field>
           <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.</h3>
-          <v-text-field
-            filled
-            dense
-            color="primary"
-            v-model="newWallet.password"
-            :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
-            :type="show1 ? 'text' : 'password'"
-            label="Password"
-            required
-            :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-            @click:append="show1 = !show1"
-          ></v-text-field>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet
+            and make transactions.</h3>
+          <v-text-field filled dense color="primary" v-model="newWallet.password"
+            :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase, rules.containSpecialCharacter]"
+            :type="show1 ? 'text' : 'password'" label="Password" required
+            :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" @click:append="show1 = !show1"></v-text-field>
 
-          <v-text-field
-            filled
-            dense
-            color="primary"
-            v-model="newWallet.confirmPassword"
+          <v-text-field filled dense color="primary" v-model="newWallet.confirmPassword"
             :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
-            :type="show2 ? 'text' : 'password'"
-            label="Confirm Password"
-            required
-            :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
-            @click:append="show2 = !show2"
-          ></v-text-field>
+            :type="show2 ? 'text' : 'password'" label="Confirm Password" required
+            :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'" @click:append="show2 = !show2"></v-text-field>
 
-          <v-checkbox
-            class="mt-0"
-            dense
-            color="primary"
-            v-model="newWallet.termsChecked"
-            :rules="[rules.required()]"
-            label="I understand that Gero cannot recover this password for me."
-            required
-            hide-details
-          ></v-checkbox>
+          <v-checkbox class="mt-0" dense color="primary" v-model="newWallet.termsChecked" :rules="[rules.required()]"
+            label="I understand that Gero cannot recover this password for me." required hide-details></v-checkbox>
 
-          <v-checkbox
-            class="mt-0"
-            dense
-            color="primary"
-            v-model="newWallet.recoverPasswordChecked"
-            :rules="[rules.required()]"
-            label="I have read and agree to the Terms of Service."
-            required
-            hide-details
-          ></v-checkbox>
+          <v-checkbox class="mt-0" dense color="primary" v-model="newWallet.recoverPasswordChecked"
+            :rules="[rules.required()]" label="I have read and agree to the Terms of Service." required
+            hide-details></v-checkbox>
         </v-form>
       </v-container>
     </v-card-text>
     <v-card-actions class="justify-center">
-      <v-btn
-        style="color: black!important;"
-        class="geroButton"
-        variant="flat"
-        :loading="creatingWalletLoader"
-        :disabled="!valid || creatingWalletLoader"
-        @click="walletCreation"
-      >
+      <v-btn style="color: black!important;" class="geroButton" variant="flat" :loading="creatingWalletLoader"
+        :disabled="!valid || creatingWalletLoader" @click="walletCreation">
         CREATE WALLET
       </v-btn>
     </v-card-actions>

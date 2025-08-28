@@ -91,8 +91,6 @@ const submitLogin = async (walletId: string): Promise<void> => {
 const accessToken = computed(() => zkFold.accessToken.value);
 const idToken = computed(() => zkFold.idToken.value);
 const profile = computed(() => zkFold.profile.value);
-
-console.log('Selected Network:', props.selectedNetwork);
 </script>
 
 <template>
