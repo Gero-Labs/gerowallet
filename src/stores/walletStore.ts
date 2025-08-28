@@ -351,10 +351,7 @@ export default {
   logout() {
     console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
     
-    // Clear any active intervals before logout
-    if (walletStore.fiatRatesIntervalId) {
-      clearInterval(walletStore.fiatRatesIntervalId);
-    } 
+    }
     
     // Clear all data at once
     const clearedState: Partial<WalletStore> = {
