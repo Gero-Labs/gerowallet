@@ -150,63 +150,6 @@
         </template>
       </v-progress-linear>
     </template>
-    <template v-slot:[`item.actions`]="{ item }">
-      <div class="actions-container">
-        <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              icon
-              x-small
-              class="action-btn swap-action"
-              @click="openSwapDialog(item)"
-              :disabled="!canSwap(item)"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-img
-                :src="assets.swapSvg"
-                alt="Swap"
-                width="12"
-                height="12"
-                contain
-                style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
-              />
-            </v-btn>
-          </template>
-          <div class="action-tooltip-content">
-            <strong>Swap {{ item.name }}</strong>
-            <div v-if="!canSwap(item)" class="tooltip-warning">Not available on this network</div>
-          </div>
-        </v-tooltip>
-
-        <v-tooltip bottom :open-delay="300" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              icon
-              x-small
-              class="action-btn perpetuals-action"
-              @click="openPerpetualsDialog(item)"
-              :disabled="!canTradePerpetuals(item)"
-              v-bind="attrs"
-              v-on="on"
-            >
-              <v-img
-                :src="assets.barChart"
-                alt="Perpetuals"
-                width="12"
-                height="12"
-                contain
-                style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
-              />
-            </v-btn>
-          </template>
-          <div class="action-tooltip-content">
-            <strong>Trade {{ item.name }} Perpetuals</strong>
-            <div v-if="!canTradePerpetuals(item)" class="tooltip-warning">Only available on Cardano Mainnet</div>
-          </div>
-        </v-tooltip>
-      </div>
-    </template>
   </v-data-table>
 </template>
 
@@ -259,7 +202,6 @@ const headers = ref<any[]>([
   { text: 'Value', align: 'center', sortable: true, value: 'value', width: '88' },
   { text: 'M. Cap', align: 'center', sortable: true, value: 'mcap', width: '104' },
   { text: 'Allocation', align: 'center', sortable: true, value: 'allocation', width: '130' },
-  { text: 'Actions', align: 'center', sortable: false, value: 'actions', width: '100' },
 ]);
 
 // Pagination
@@ -500,33 +442,6 @@ const paginatedTokens = computed(() => {
 watch(() => props.searchTerm, () => {
   currentPage.value = 1;
 });
-
-// Action methods
-const canSwap = (item: any) => {
-  if (!loggedWallet.value) return false;
-  return networks.resolveSwapSupport(loggedWallet.value.chain, loggedWallet.value.network);
-};
-
-const canTradePerpetuals = (item: any) => {
-  if (!loggedWallet.value) return false;
-  // Only enable for supported tokens and networks
-  return loggedWallet.value.chain === 'CARDANO' &&
-         (loggedWallet.value.network === 'MAINNET' || loggedWallet.value.network === 'PREPROD');
-};
-
-const openSwapDialog = (item: any) => {
-  // Find the QuickActionsBox component and trigger swap dialog
-  // This requires emitting to parent or using global state
-  console.log('Opening swap dialog for token:', item.name);
-  // TODO: Implement swap dialog opening with pre-selected token
-};
-
-const openPerpetualsDialog = (item: any) => {
-  // Find the QuickActionsBox component and trigger perpetuals dialog
-  // This requires emitting to parent or using global state
-  console.log('Opening perpetuals dialog for token:', item.name);
-  // TODO: Implement perpetuals dialog opening with pre-selected token
-};
 </script>
 
 <style scoped>
@@ -608,72 +523,5 @@ const openPerpetualsDialog = (item: any) => {
 }
 .tokens-table {
   min-height: 316px;
-}
-
-.actions-container {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-btn {
-  border-radius: 6px !important;
-  transition: all 0.2s ease !important;
-  border: 1px solid transparent !important;
-}
-
-.action-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-}
-
-.swap-action {
-  background: linear-gradient(135deg, rgba(253, 162, 155, 0.08) 0%, rgba(253, 162, 155, 0.04) 100%) !important;
-  border-color: rgba(253, 162, 155, 0.3) !important;
-}
-
-.swap-action:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(253, 162, 155, 0.15) 0%, rgba(253, 162, 155, 0.08) 100%) !important;
-  border-color: rgba(253, 162, 155, 0.5) !important;
-}
-
-.perpetuals-action {
-  background: linear-gradient(135deg, rgba(183, 148, 244, 0.08) 0%, rgba(183, 148, 244, 0.04) 100%) !important;
-  border-color: rgba(183, 148, 244, 0.3) !important;
-}
-
-.perpetuals-action:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(183, 148, 244, 0.15) 0%, rgba(183, 148, 244, 0.08) 100%) !important;
-  border-color: rgba(183, 148, 244, 0.5) !important;
-}
-
-.action-btn:disabled {
-  opacity: 0.3 !important;
-  cursor: not-allowed !important;
-}
-
-.action-btn:disabled .v-img {
-  opacity: 0.5 !important;
-}
-
-/* Action tooltip content styling */
-.action-tooltip-content {
-  line-height: 1.4;
-  color: #ffffff !important;
-}
-
-.action-tooltip-content strong {
-  color: #ffffff !important;
-  font-size: 14px;
-  display: block;
-  margin-bottom: 4px;
-  font-weight: 600;
-}
-
-.tooltip-warning {
-  color: #f97066 !important;
-  font-size: 12px;
-  font-style: italic;
-  opacity: 0.9;
 }
 </style>
