@@ -167,7 +167,14 @@ function clearProcessedDomains() {
 
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
 const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
-setInterval(clearProcessedDomains, oneDayInMilliseconds);
+const domainCleanupInterval = setInterval(clearProcessedDomains, oneDayInMilliseconds);
+
+// Clean up on service worker termination
+self.addEventListener('beforeunload', () => {
+  if (domainCleanupInterval) {
+    clearInterval(domainCleanupInterval);
+  }
+});
 
 console.log('Background Loaded');
 

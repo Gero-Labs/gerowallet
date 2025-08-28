@@ -1,18 +1,12 @@
 <template>
   <v-card flat outlined class="liquid-glass compact-swap-widget fill-height d-flex flex-column">
-    <v-card-title class="pb-2">
-      Swap
-    </v-card-title>
+    <v-card-title class="pb-2"> Swap </v-card-title>
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column">
       <div class="flex-grow-1 d-flex flex-column">
-        <v-card-title class="pb-2 pt-0 px-3" style="font-size: 14px;">
+        <v-card-title class="pb-2 pt-0 px-3" style="font-size: 14px">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
-            <v-btn value="swap" x-small rounded>
-              SWAP
-            </v-btn>
-            <v-btn value="limit" x-small rounded disabled>
-              LIMIT
-            </v-btn>
+            <v-btn value="swap" x-small rounded> SWAP </v-btn>
+            <v-btn value="limit" x-small rounded disabled> LIMIT </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
           <v-btn icon x-small @click="refreshPrices">
@@ -25,31 +19,32 @@
         <v-card-text class="pb-0 px-3 pt-3 flex-grow-1 d-flex flex-column">
           <!-- Selling Section -->
           <div class="d-flex align-center justify-space-between mb-2">
-            <span style="color: #FDA29B; font-size: 12px; font-weight: 200;">Selling</span>
+            <span style="color: #fda29b; font-size: 12px; font-weight: 200">Selling</span>
             <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
           </div>
-          <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1F242F;">
+          <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1f242f">
             <v-card-text class="py-2 px-3">
               <div class="d-flex align-center">
-                <v-menu
-                  v-model="tokenMenuA"
-                  offset-y
-                  :close-on-content-click="false"
-                  max-height="400"
-                  min-width="300"
-                >
+                <v-menu v-model="tokenMenuA" offset-y :close-on-content-click="false" max-height="400" min-width="300">
                   <template v-slot:activator="{ on, attrs }">
-                    <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none;">
+                    <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none">
                       <v-avatar size="26" class="mr-2">
-                        <img v-if="selectedTokenA && selectedTokenA.img" :src="selectedTokenA.img" :alt="selectedTokenA.ticker" @error="(e) => e.target.src = assets.questionMarkDark" />
+                        <img
+                          v-if="selectedTokenA && selectedTokenA.img"
+                          :src="selectedTokenA.img"
+                          :alt="selectedTokenA.ticker"
+                          @error="e => (e.target.src = assets.questionMarkDark)"
+                        />
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
-                      <span style="font-size: 14px; font-weight: 500;">{{ selectedTokenA ? selectedTokenA.ticker : 'Select' }}</span>
+                      <span style="font-size: 14px; font-weight: 500">{{
+                        selectedTokenA ? selectedTokenA.ticker : 'Select'
+                      }}</span>
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
 
-                  <v-card style="background-color: #1a1a1a !important;">
+                  <v-card style="background-color: #1a1a1a !important">
                     <v-card-text class="pa-2">
                       <v-text-field
                         v-model="tokenSearchA"
@@ -66,7 +61,12 @@
 
                     <v-divider></v-divider>
 
-                    <v-list dense max-height="300" class="overflow-y-auto py-0" style="background-color: #1a1a1a !important;">
+                    <v-list
+                      dense
+                      max-height="300"
+                      class="overflow-y-auto py-0"
+                      style="background-color: #1a1a1a !important"
+                    >
                       <v-list-item
                         v-for="token in availableTokens"
                         :key="token.unit"
@@ -74,10 +74,7 @@
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img
-                            :src="token.img"
-                            @error="(e) => e.target.src = assets.questionMarkDark"
-                          ></v-img>
+                          <v-img :src="token.img" @error="e => (e.target.src = assets.questionMarkDark)"></v-img>
                         </v-list-item-avatar>
 
                         <v-list-item-content>
@@ -109,44 +106,51 @@
                   solo
                   class="text-right amount-input"
                   placeholder="0.00"
-                  style="max-width: 120px;"
+                  style="max-width: 120px"
                 ></v-text-field>
               </div>
             </v-card-text>
           </v-card>
 
           <!-- Swap Button -->
-          <v-btn icon small class="z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto; position: relative; top: 12px;">
+          <v-btn
+            icon
+            small
+            class="z-index-5 geroButton"
+            @click="switchPair"
+            style="height: 32px; width: 32px; margin: 8px auto; position: relative; top: 12px"
+          >
             <v-icon small color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
 
           <!-- Buying Section -->
           <div class="d-flex align-center justify-space-between mb-2">
-            <span style="color: #75E0A7; font-size: 12px; font-weight: 200;">Buying</span>
+            <span style="color: #75e0a7; font-size: 12px; font-weight: 200">Buying</span>
             <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
           </div>
-          <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1F242F;">
+          <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1f242f">
             <v-card-text class="py-2 px-3">
               <div class="d-flex align-center">
-                <v-menu
-                  v-model="tokenMenuB"
-                  offset-y
-                  :close-on-content-click="false"
-                  max-height="400"
-                  min-width="300"
-                >
+                <v-menu v-model="tokenMenuB" offset-y :close-on-content-click="false" max-height="400" min-width="300">
                   <template v-slot:activator="{ on, attrs }">
-                    <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none;">
+                    <v-btn text plain v-bind="attrs" v-on="on" class="pa-0" style="text-transform: none">
                       <v-avatar size="26" class="mr-2">
-                        <img v-if="selectedTokenB && selectedTokenB.img" :src="selectedTokenB.img" :alt="selectedTokenB.ticker" @error="(e) => e.target.src = assets.questionMarkDark" />
+                        <img
+                          v-if="selectedTokenB && selectedTokenB.img"
+                          :src="selectedTokenB.img"
+                          :alt="selectedTokenB.ticker"
+                          @error="e => (e.target.src = assets.questionMarkDark)"
+                        />
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
-                      <span style="font-size: 14px; font-weight: 500;">{{ selectedTokenB ? selectedTokenB.ticker : 'Select' }}</span>
+                      <span style="font-size: 14px; font-weight: 500">{{
+                        selectedTokenB ? selectedTokenB.ticker : 'Select'
+                      }}</span>
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
 
-                  <v-card style="background-color: #1a1a1a !important;">
+                  <v-card style="background-color: #1a1a1a !important">
                     <v-card-text class="pa-2">
                       <v-text-field
                         v-model="tokenSearchB"
@@ -163,7 +167,12 @@
 
                     <v-divider></v-divider>
 
-                    <v-list dense max-height="300" class="overflow-y-auto py-0" style="background-color: #1a1a1a !important;">
+                    <v-list
+                      dense
+                      max-height="300"
+                      class="overflow-y-auto py-0"
+                      style="background-color: #1a1a1a !important"
+                    >
                       <v-list-item
                         v-for="token in filteredTokenListB"
                         :key="token.unit"
@@ -171,10 +180,7 @@
                         class="token-list-item"
                       >
                         <v-list-item-avatar size="32">
-                          <v-img
-                            :src="token.img"
-                            @error="(e) => e.target.src = assets.questionMarkDark"
-                          ></v-img>
+                          <v-img :src="token.img" @error="e => (e.target.src = assets.questionMarkDark)"></v-img>
                         </v-list-item-avatar>
 
                         <v-list-item-content>
@@ -206,7 +212,7 @@
                   solo
                   class="text-right amount-input"
                   placeholder="0.00"
-                  style="max-width: 120px;"
+                  style="max-width: 120px"
                   readonly
                 ></v-text-field>
               </div>
@@ -214,7 +220,7 @@
           </v-card>
 
           <!-- Details Section -->
-          <div class="text-left mt-2 mb-auto" style="display: flex;">
+          <div class="text-left mt-2 mb-auto" style="display: flex">
             <v-btn text plain x-small class="px-0 no-opacity" :ripple="false" style="letter-spacing: normal" disabled>
               <v-avatar
                 color="primary"
@@ -237,7 +243,7 @@
         class="geroButton"
         @click="handleSwap"
         :disabled="!canSwap"
-        style="text-transform: capitalize;"
+        style="text-transform: capitalize"
       >
         {{ swapButtonText }}
       </v-btn>
@@ -246,7 +252,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, getCurrentInstance, onMounted } from 'vue';
+import { ref, computed, toRefs, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
+import { useIntervalFn } from '@vueuse/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
@@ -272,7 +279,6 @@ const tokenMenuB = ref(false);
 const tokenSearchA = ref('');
 const tokenSearchB = ref('');
 
-
 const isUpdating = ref<boolean>(false);
 const lastNonADATokenA = ref(null);
 const lastNonADATokenB = ref(null);
@@ -283,25 +289,25 @@ let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
   img: cardanoLogo,
-  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
   unit: '',
-  verified: true
+  verified: true,
 });
 
 let selectedTokenB = ref({
   name: 'GERO',
   ticker: 'GERO',
-  img: "https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp",
-  fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
+  img: 'https://storage.googleapis.com/dexhunter-images/tokens/10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f.webp',
+  fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
   decimals: 6,
   unit: '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f',
-  verified: true
-})
+  verified: true,
+});
 
 const price_ab = ref<number>(0);
 const price_ba = ref<number>(0);
@@ -331,9 +337,13 @@ const limitSplit = ref<number>(1);
 
 // Computed properties
 const canSwap = computed(() => {
-  return selectedTokenA.value && selectedTokenB.value &&
-         selectedTokenA.value.unit !== selectedTokenB.value.unit &&
-         amountA.value && Number(amountA.value) > 0;
+  return (
+    selectedTokenA.value &&
+    selectedTokenB.value &&
+    selectedTokenA.value.unit !== selectedTokenB.value.unit &&
+    amountA.value &&
+    Number(amountA.value) > 0
+  );
 });
 
 const swapButtonText = computed(() => {
@@ -362,12 +372,12 @@ const availableTokens = computed(() => {
       };
       if (found) {
         if (selectedTokenB.value.unit === found.unit) {
-          selectedTokenB.value.balance = res.balance
+          selectedTokenB.value.balance = res.balance;
         } else if (selectedTokenA.value.unit === found.unit) {
-          selectedTokenA.value.balance = res.balance
+          selectedTokenA.value.balance = res.balance;
         }
       }
-      return res
+      return res;
     })
     .sort((a, b) => {
       //   const isPinnedA = pinnedTokens.includes(a['unit']);
@@ -385,13 +395,13 @@ const availableTokens = computed(() => {
       //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-  const result = [nativeToken, ...availableTokens]
-  console.log('availableTokens', result)
+  const result = [nativeToken, ...availableTokens];
+  console.log('availableTokens', result);
   return result;
 });
 
 // Methods
-const getTokenBalance = (token) => {
+const getTokenBalance = token => {
   if (!token || !tokens.value) return '0.00';
   const tokenData = tokens.value[token.unit];
   if (tokenData && tokenData.quantity) {
@@ -424,7 +434,6 @@ const openFullSwap = () => {
   }
 };
 
-
 const refreshPrices = () => {
   console.log('Refreshing prices...');
   // Add price refresh logic here
@@ -445,10 +454,11 @@ const getAllTokens = () => {
           unit,
           ticker: tok.metadata.ticker,
           name: tok.metadata.name || tok.metadata.ticker,
-          img: assets.resolveIcon(tok.metadata.logo || tok.metadata.image || tok.metadata.icon) || assets.questionMarkDark,
+          img:
+            assets.resolveIcon(tok.metadata.logo || tok.metadata.image || tok.metadata.icon) || assets.questionMarkDark,
           decimals: tok.decimals || 6,
           owned: true,
-          quantity: tok.quantity || 0
+          quantity: tok.quantity || 0,
         });
       }
     });
@@ -460,7 +470,7 @@ const getAllTokens = () => {
         ...token,
         decimals: 6,
         owned: false,
-        quantity: 0
+        quantity: 0,
       });
     }
   });
@@ -477,10 +487,11 @@ const filteredTokenListA = computed(() => {
   }
 
   const search = tokenSearchA.value.toLowerCase();
-  return allTokens.filter(token =>
-    token.ticker.toLowerCase().includes(search) ||
-    token.name.toLowerCase().includes(search) ||
-    token.unit.toLowerCase().includes(search)
+  return allTokens.filter(
+    token =>
+      token.ticker.toLowerCase().includes(search) ||
+      token.name.toLowerCase().includes(search) ||
+      token.unit.toLowerCase().includes(search)
   );
 });
 
@@ -492,15 +503,16 @@ const filteredTokenListB = computed(() => {
   }
 
   const search = tokenSearchB.value.toLowerCase();
-  return allTokens.filter(token =>
-    token.ticker.toLowerCase().includes(search) ||
-    token.name.toLowerCase().includes(search) ||
-    token.unit.toLowerCase().includes(search)
+  return allTokens.filter(
+    token =>
+      token.ticker.toLowerCase().includes(search) ||
+      token.name.toLowerCase().includes(search) ||
+      token.unit.toLowerCase().includes(search)
   );
 });
 
 // Format balance for display
-const formatBalance = (token) => {
+const formatBalance = token => {
   if (!token.owned || !token.quantity) return '0';
   const balance = Number(token.quantity) / Math.pow(10, token.decimals);
   return balance > 0.01 ? balance.toFixed(2) : balance.toFixed(6);
@@ -528,7 +540,7 @@ const performPeriodicEstimate = async () => {
 
   if (lastFunctionCalled.value === 'estimate') {
     const quantity = selectedTokenA.value.quantity || '0';
-    const amount = Number(quantity.toString().replaceAll(',', ''))
+    const amount = Number(quantity.toString().replaceAll(',', ''));
     if (amount === 0) {
       await estimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
     } else {
@@ -536,56 +548,67 @@ const performPeriodicEstimate = async () => {
     }
   } else if (lastFunctionCalled.value === 'reverseEstimate') {
     const quantity = selectedTokenB.value.quantity || '0';
-    const amount = Number(quantity.toString().replaceAll(',', ''))
+    const amount = Number(quantity.toString().replaceAll(',', ''));
     if (amount === 0) {
       await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, 1, false);
     } else {
       await reverseEstimate(selectedTokenA.value.unit, selectedTokenB.value.unit, amount, true);
     }
   }
-}
+};
 
 const estimate = (token_in, token_out, amount_in, update) => {
   if (!loggedWallet.value) {
-    return
+    return;
   }
   if (!token_in && !token_out) {
-    return
+    return;
   }
   if (!amount_in) {
-    total_output_without_slippage.value = 0
+    total_output_without_slippage.value = 0;
     return;
   } else if (isNaN(amount_in)) {
     return;
   }
   const slippage = slippageRef.value === 'unlimited' ? '-1' : Number(slippageRef.value).toString();
-  dexHunterApi.estimate(amount_in, token_in, token_out, Number(slippage), blacklisted_dexes.value).then(res => {
-    poolError.value = false;
-    const data = res.data;
-    price_ab.value = data.net_price_reverse;
-    price_ba.value = data.net_price;
-    if (update) {
-      total_output_without_slippage.value = data.total_output_without_slippage
-      splits.value = data.splits
-      estimation.value = data
-      if (swapType.value !== 'limit') {
-        selectedTokenB.value.quantity = filters.toCurrency(total_output_without_slippage.value, false, selectedTokenB.value.decimals, '', '', false, 0);
+  dexHunterApi
+    .estimate(amount_in, token_in, token_out, Number(slippage), blacklisted_dexes.value)
+    .then(res => {
+      poolError.value = false;
+      const data = res.data;
+      price_ab.value = data.net_price_reverse;
+      price_ba.value = data.net_price;
+      if (update) {
+        total_output_without_slippage.value = data.total_output_without_slippage;
+        splits.value = data.splits;
+        estimation.value = data;
+        if (swapType.value !== 'limit') {
+          selectedTokenB.value.quantity = filters.toCurrency(
+            total_output_without_slippage.value,
+            false,
+            selectedTokenB.value.decimals,
+            '',
+            '',
+            false,
+            0
+          );
+        }
       }
-    }
-  }).catch((_e) => {
-    poolError.value = true
-  });
-}
+    })
+    .catch(_e => {
+      poolError.value = true;
+    });
+};
 
 const reverseEstimate = async (token_in, token_out, amount_out, update) => {
   if (!loggedWallet.value) {
-    return
+    return;
   }
   if (!token_in && !token_out) {
-    return
+    return;
   }
   if (!amount_out) {
-    total_input_without_slippage.value = 0
+    total_input_without_slippage.value = 0;
     return;
   } else if (isNaN(amount_out)) {
     return;
@@ -593,43 +616,69 @@ const reverseEstimate = async (token_in, token_out, amount_out, update) => {
   const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
   try {
     const res = await dexHunterApi.reverseEstimate(amount_out, token_in, token_out, slippage, blacklisted_dexes.value);
-    poolError.value = false
+    poolError.value = false;
     price_ab.value = res.net_price_reverse;
     price_ba.value = res.net_price;
     if (update) {
-      total_input_without_slippage.value = res.total_input_without_slippage
-      splits.value = res.splits
-      estimation.value = res
-      selectedTokenA.value.quantity = filters.toCurrency(total_input_without_slippage.value, false, selectedTokenA.value.decimals, '', '', false, 0);
+      total_input_without_slippage.value = res.total_input_without_slippage;
+      splits.value = res.splits;
+      estimation.value = res;
+      selectedTokenA.value.quantity = filters.toCurrency(
+        total_input_without_slippage.value,
+        false,
+        selectedTokenA.value.decimals,
+        '',
+        '',
+        false,
+        0
+      );
     }
   } catch (e) {
-    poolError.value = true
+    poolError.value = true;
   }
-}
+};
 
 const averagePrice = (token_in, token_out) => {
   if (!loggedWallet.value) {
-    return
+    return;
   }
   if (!token_in && !token_out) {
-    return
+    return;
   }
-  dexHunterApi.getAveragePrice(token_in, token_out).then(res => {
-    price_ab2.value = res.price_ab;
-    price_ba2.value = res.price_ba;
-    limit.value = structuredClone(price_ba2.value).toString()
-    console.log(limit.value)
-  }).catch(() => {
-    // console.log(e)
-  });
-}
+  dexHunterApi
+    .getAveragePrice(token_in, token_out)
+    .then(res => {
+      price_ab2.value = res.price_ab;
+      price_ba2.value = res.price_ba;
+      limit.value = structuredClone(price_ba2.value).toString();
+      console.log(limit.value);
+    })
+    .catch(() => {
+      // console.log(e)
+    });
+};
 
+const { pause: pauseEstimate, resume: resumeEstimate } = useIntervalFn(
+  () => {
+    performPeriodicEstimate();
+  },
+  10000,
+  { immediate: false }
+);
 
 // Initialize with default tokens
 onMounted(async () => {
-  await averagePrice(!selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit, !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit);
-  intervalId.value = setInterval(performPeriodicEstimate, 10000); // Set interval to call estimate every 5 seconds
-})
+  await averagePrice(
+    !selectedTokenA.value.unit ? selectedTokenA.value.ticker : selectedTokenA.value.unit,
+    !selectedTokenB.value.unit ? selectedTokenB.value.ticker : selectedTokenB.value.unit
+  );
+  resumeEstimate();
+});
+
+onBeforeUnmount(() => {
+  pauseEstimate();
+  intervalId.value = null;
+});
 </script>
 
 <style scoped>
@@ -637,7 +686,6 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
 }
-
 
 .geroButton {
   background: linear-gradient(45deg, #00c7f3, #00ffd1) !important;
@@ -658,7 +706,7 @@ onMounted(async () => {
   animation: metronome-animation 1.5s ease-in-out infinite;
   background-color: currentColor;
   bottom: 0;
-  content: "";
+  content: '';
   left: 0;
   opacity: 0;
   position: absolute;
