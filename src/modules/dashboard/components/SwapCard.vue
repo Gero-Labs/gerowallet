@@ -659,9 +659,7 @@ const averagePrice = (token_in, token_out) => {
 };
 
 const { pause: pauseEstimate, resume: resumeEstimate } = useIntervalFn(
-  () => {
-    performPeriodicEstimate();
-  },
+  performPeriodicEstimate,
   10000,
   { immediate: false }
 );
