@@ -68,52 +68,41 @@ import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx 
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
-  import('/@vite/client')
+  import('/@vite/client').catch(console.error)
   // load latest content script
-  import('./contentScriptHMR')
+  import('./contentScriptHMR').catch(console.error)
 }
 
 loadConfig().then(() => {
   console.log('Gero Config loaded')
 })
-loadWallets().then(() => {
+loadWallets().then(async () => {
   console.log('Wallets loaded')
 
   // Wait for wallet store to be hydrated from Chrome storage
-  hydrateWalletStore().then(() => {
-    console.log('Wallet store hydrated, checking for logged wallet...');
+  await hydrateWalletStore();
+  console.log('Wallet store hydrated, checking for logged wallet...');
 
-    if (walletStore.loggedWallet) {
-      console.log('Login in wallet: ', walletStore.loggedWallet.name);
-      walletManager.login(walletStore.loggedWallet).catch(error => {
-        console.error('Failed to login wallet:', error);
-        Loading.setLoading(false);
-      });
-    } else {
-      console.log('No logged wallet found after hydration');
-      Loading.setLoading(false)
-    }
-  }).catch(error => {
-    console.error('Failed to hydrate wallet store:', error);
-    Loading.setLoading(false);
-  });
-}).catch(error => {
-  console.error('Failed to load wallets:', error);
-  Loading.setLoading(false);
+  if (walletStore.loggedWallet) {
+    console.log('Login in wallet: ', walletStore.loggedWallet.name);
+    await walletManager.login(walletStore.loggedWallet);
+  } else {
+    console.log('No logged wallet found after hydration');
+    Loading.setLoading(false)
+  }
 });
 
 //@ts-ignore
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
-// Initialize cashback background without top-level await
-bringInitBackground({
-  isEnabledByDefault: true,
-  identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-  apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-  cashbackPagePath: '/index.html#/cashback'
-}).catch(error => {
-  console.error('Failed to initialize bring background:', error);
-});
+(async () => {
+  await bringInitBackground({
+    isEnabledByDefault: true,
+    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
+    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
+    cashbackPagePath: '/index.html#/cashback'
+  })
+})();
 
 // Initialize background store messaging (the import alone initializes it)
 console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
