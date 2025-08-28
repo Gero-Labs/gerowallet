@@ -1,44 +1,3 @@
-<script setup lang="ts">
-import { ref, computed, toRefs } from 'vue';
-import networks from '@/utils/networks';
-import assets from '@/utils/assets';
-import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
-import { WalletType } from '@/models/types';
-import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
-import CreateOrImportSeedPhrase from '@/options/modules/welcome/components/CreateOrImportSeedPhrase.vue';
-import { geroStore } from '@/stores/geroStore';
-import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
-import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
-
-const createOrImportSeedPhrase = ref<boolean>(false);
-const selectedNetwork = ref<any>(null);
-
-const { wallets } = toRefs(geroStore);
-
-const disableCreateOrImportSeedPhrase = (): void => {
-  createOrImportSeedPhrase.value = false;
-};
-const onNetworkChanged = (network: any) => {
-  selectedNetwork.value = network;
-};
-const enableCreateOrImportSeedPhrase = (): void => {
-  createOrImportSeedPhrase.value = true;
-};
-
-const availableWallets = computed(() => {
-  return Object.values(wallets.value)?.filter(
-    (wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
-  );
-});
-
-const welcomeBg = computed(() => {
-  if (selectedNetwork.value?.blockchain?.includes('Apex')) {
-    return assets.apexBg;
-  }
-  return assets.cardanoBg;
-});
-</script>
-
 <template>
   <div class="welcome-root">
     <!-- Full-width crisp background image -->
@@ -86,7 +45,46 @@ const welcomeBg = computed(() => {
     </div>
   </div>
 </template>
+<script setup lang="ts">
+import { ref, computed, toRefs } from 'vue';
+import networks from '@/utils/networks';
+import assets from '@/utils/assets';
+import NoWalletsWelcomeCard from '@/options/modules/welcome/components/NoWalletsWelcomeCard.vue';
+import { WalletType } from '@/models/types';
+import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
+import CreateOrImportSeedPhrase from '@/options/modules/welcome/components/CreateOrImportSeedPhrase.vue';
+import { geroStore } from '@/stores/geroStore';
+import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
+import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 
+const createOrImportSeedPhrase = ref<boolean>(false);
+const selectedNetwork = ref<any>(null);
+
+const { wallets } = toRefs(geroStore);
+
+const disableCreateOrImportSeedPhrase = (): void => {
+  createOrImportSeedPhrase.value = false;
+};
+const onNetworkChanged = (network: any) => {
+  selectedNetwork.value = network;
+};
+const enableCreateOrImportSeedPhrase = (): void => {
+  createOrImportSeedPhrase.value = true;
+};
+
+const availableWallets = computed(() => {
+  return Object.values(wallets.value)?.filter(
+    (wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
+  );
+});
+
+const welcomeBg = computed(() => {
+  if (selectedNetwork.value?.blockchain?.includes('Apex')) {
+    return assets.apexBg;
+  }
+  return assets.cardanoBg;
+});
+</script>
 <style scoped>
 .welcome-root {
   position: fixed;

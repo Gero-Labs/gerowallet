@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent-override" flat style="width: 100%; margin: auto; max-width: 520px; justify-items: center;">
+  <v-card class="liquid-glass transparent-override" flat style="width: 100%; margin: auto; max-width: 520px; justify-items: center;">
     <v-list class="transparent" dense nav style="width: inherit;">
       <v-list-item class="mb-6 py-2" @click="createWalletDialog = true" >
         <v-list-item-avatar size="50" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 14px; background-color: #13161B">
@@ -41,7 +41,7 @@
         </v-list-item-content>
       </v-list-item>
     </v-list>
-    <v-divider class="my-4" style="width: 100%"></v-divider>
+    <v-divider class="mt-4" style="width: 100%"></v-divider>
     <v-btn text @click="back">
       <v-icon>
         mdi-arrow-left

@@ -39,7 +39,6 @@
         </a>
       </div>
     </v-card>
-
     <div class="tx-footer" v-if="amount.txFee">
       <template>
         Tx Fee<span class="ml-1"> {{ toCurrency(0 - amount?.txFee, true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
