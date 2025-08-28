@@ -23,8 +23,7 @@ export const sharedConfig: UserConfig = {
       'cbor': r('src/shims/cbor.js'),
       stream: r('src/shims/stream.js'),
       util: 'util',
-      'pbkdf2': r('src/shims/pbkdf2.js'),
-      'events': r('src/shims/events.js'),
+      'pbkdf2': 'pbkdf2/browser.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
@@ -60,7 +59,7 @@ export const sharedConfig: UserConfig = {
         global: true,
         process: true,
       },
-      include: ['crypto', 'buffer', 'stream', 'util', 'os', 'path'],
+      include: ['crypto', 'buffer', 'events', 'stream', 'util', 'os', 'path', 'pbkdf2'],
     }),
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
@@ -103,8 +102,7 @@ export const sharedConfig: UserConfig = {
     exclude: [
       'vue-demi',
       '@emurgo/cardano-serialization-lib-browser',
-      'cbor',
-      'events'
+      'cbor'
     ],
     esbuildOptions: {
       plugins: [],
