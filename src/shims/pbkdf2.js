@@ -1,19 +1,19 @@
-// Import the actual pbkdf2 implementations
-import * as pbkdf2Package from 'pbkdf2';
+// Shim for pbkdf2 to provide correct exports for browser environment
+// This normalizes the pbkdf2 exports for @cardano-sdk/crypto
 
-// Get the functions from the package
-const pbkdf2Async = pbkdf2Package.pbkdf2;
-const pbkdf2SyncImpl = pbkdf2Package.pbkdf2Sync;
+// Import the full pbkdf2 module and extract what we need
+import * as pbkdf2Module from 'pbkdf2';
 
-// Export the functions
-export const pbkdf2Sync = pbkdf2SyncImpl;
-export const pbkdf2 = pbkdf2Async;
+// Get the actual functions - handle different export structures
+const pbkdf2Func = pbkdf2Module.pbkdf2 || pbkdf2Module.default?.pbkdf2;
+const pbkdf2SyncFunc = pbkdf2Module.pbkdf2Sync || pbkdf2Module.default?.pbkdf2Sync || pbkdf2Func;
 
-// Create pbkdf2 module interface
-const pbkdf2Module = {
-  pbkdf2: pbkdf2Async,
-  pbkdf2Sync: pbkdf2SyncImpl,
+// Named exports - this is what @cardano-sdk/crypto expects
+export const pbkdf2 = pbkdf2Func;
+export const pbkdf2Sync = pbkdf2SyncFunc;
+
+// Default export for compatibility
+export default {
+  pbkdf2: pbkdf2Func,
+  pbkdf2Sync: pbkdf2SyncFunc
 };
-
-// Default export
-export default pbkdf2Module;
