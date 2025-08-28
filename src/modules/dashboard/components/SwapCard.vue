@@ -675,9 +675,6 @@ onMounted(async () => {
   resumeEstimate();
 });
 
-onBeforeUnmount(() => {
-  pauseEstimate();
-  intervalId.value = null;
 });
 </script>
 
