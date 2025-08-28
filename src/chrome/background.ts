@@ -76,33 +76,44 @@ if (import.meta.hot) {
 loadConfig().then(() => {
   console.log('Gero Config loaded')
 })
-loadWallets().then(async () => {
+loadWallets().then(() => {
   console.log('Wallets loaded')
 
   // Wait for wallet store to be hydrated from Chrome storage
-  await hydrateWalletStore();
-  console.log('Wallet store hydrated, checking for logged wallet...');
+  hydrateWalletStore().then(() => {
+    console.log('Wallet store hydrated, checking for logged wallet...');
 
-  if (walletStore.loggedWallet) {
-    console.log('Login in wallet: ', walletStore.loggedWallet.name);
-    await walletManager.login(walletStore.loggedWallet);
-  } else {
-    console.log('No logged wallet found after hydration');
-    Loading.setLoading(false)
-  }
+    if (walletStore.loggedWallet) {
+      console.log('Login in wallet: ', walletStore.loggedWallet.name);
+      walletManager.login(walletStore.loggedWallet).catch(error => {
+        console.error('Failed to login wallet:', error);
+        Loading.setLoading(false);
+      });
+    } else {
+      console.log('No logged wallet found after hydration');
+      Loading.setLoading(false)
+    }
+  }).catch(error => {
+    console.error('Failed to hydrate wallet store:', error);
+    Loading.setLoading(false);
+  });
+}).catch(error => {
+  console.error('Failed to load wallets:', error);
+  Loading.setLoading(false);
 });
 
 //@ts-ignore
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
-(async () => {
-  await bringInitBackground({
-    isEnabledByDefault: true,
-    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-    cashbackPagePath: '/index.html#/cashback'
-  })
-})();
+// Initialize cashback background without top-level await
+bringInitBackground({
+  isEnabledByDefault: true,
+  identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
+  apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
+  cashbackPagePath: '/index.html#/cashback'
+}).catch(error => {
+  console.error('Failed to initialize bring background:', error);
+});
 
 // Initialize background store messaging (the import alone initializes it)
 console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
