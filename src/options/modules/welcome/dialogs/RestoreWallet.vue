@@ -289,32 +289,8 @@ const valid2 = ref<boolean>(false);
 const creatingWalletLoader = ref<boolean>(false);
 const persistent = ref<boolean>(false);
 const seedPhraseLength = ref<string>('24');
-const recoverySeedPhrase = ref<string[]>([
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-]);
+const emptySeedPhrase: string[] = Array(Number(seedPhraseLength.value)).fill('');
+const recoverySeedPhrase = ref<string[]>(emptySeedPhrase);
 
 // Computed properties
 const seedToStr = computed(() => {
@@ -437,32 +413,7 @@ const resetDialog = () => {
   };
   valid2.value = false;
   creatingWalletLoader.value = false;
-  recoverySeedPhrase.value = [
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-  ];
+  recoverySeedPhrase.value = emptySeedPhrase;
   persistent.value = false;
 };
 
