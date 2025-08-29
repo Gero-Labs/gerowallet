@@ -1,11 +1,15 @@
 <template>
   <div style="position: relative; z-index: 1; align-content: center; height: 212px" class="text-center justify-center">
-    <div v-if="chartData && chartData.length > 0 && !loading" class="portfolio-value-display">
+    <div v-if="hasAnyChartData && !globalLoading" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
           <div class="portfolio-label">Portfolio</div>
           <div class="portfolio-amount-row">
-            <div class="portfolio-amount" @click="toggleCurrency">
+            <div
+              class="portfolio-amount"
+              @click="toggleCurrency"
+              :class="{ clickable: availableCurrencies.length > 1 }"
+            >
               {{ formatPortfolioValue() }}
             </div>
             <div class="address-section" v-if="shortenAddress">
@@ -47,60 +51,16 @@
               </v-tab>
             </v-tabs>
           </div>
-
-          <!-- Series Toggle Buttons (next to date picker) -->
-          <!-- COMMENTED OUT: Dual-axis functionality
-          <div class="series-toggle-buttons">
-            <v-btn-toggle
-              v-model="activeSeriesToggle"
-              background-color="transparent"
-              multiple
-              dense
-              class="series-toggle compact"
-            >
-              <v-btn
-                x-small
-                :value="'ada'"
-                :color="showAda ? (isApex ? '#dc753e' : '#00c7f3') : 'grey'"
-                @click="toggleAdaSeries"
-                class="toggle-btn compact"
-              >
-                {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }}
-              </v-btn>
-              <v-btn
-                x-small
-                :value="'usd'"
-                :color="showUsd ? '#4CAF50' : 'grey'"
-                @click="toggleUsdSeries"
-                class="toggle-btn compact"
-              >
-                USD
-              </v-btn>
-              <v-btn
-                x-small
-                :color="showDualAxis ? (isApex ? '#dc753e' : '#00c7f3') : 'grey'"
-                @click="toggleDualAxis"
-                class="toggle-btn dual-axis-btn compact"
-                :disabled="!showAda || !showUsd"
-              >
-                <v-icon x-small>mdi-chart-line</v-icon>
-              </v-btn>
-            </v-btn-toggle>
-          </div>
-          -->
         </div>
       </div>
     </div>
-    <v-progress-circular v-if="loading" :indeterminate="true"></v-progress-circular>
-    <div id="highstock-chart" v-show="chartData && chartData.length > 0 && !loading" style="margin-top: 40px"></div>
-    <v-card-text
-      v-if="!chartData || (chartData.length === 0 && !loading)"
-      style="font-size: 20px; align-content: center"
-    >
-      <v-avatar size="24" v-if="!loading">
+    <v-progress-circular v-if="globalLoading" :indeterminate="true"></v-progress-circular>
+    <div id="highstock-chart" v-show="hasAnyChartData && !globalLoading" style="margin-top: 40px"></div>
+    <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
+      <v-avatar size="24">
         <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
       </v-avatar>
-      <span v-else>There seems to be no data in this wallet</span>
+      <span>There seems to be no data in this wallet</span>
     </v-card-text>
   </div>
 </template>
@@ -117,7 +77,7 @@ import CopyButton from '@/shared/components/CopyButton.vue';
 
 // Currency Types
 enum CurrencyType {
-  NATIVE = 'NATIVE', // ADA/APEX etc - зависит от сети
+  ADA = 'ADA', // ADA/APEX etc - depends on network
   USD = 'USD',
   EUR = 'EUR',
 }
@@ -125,13 +85,13 @@ enum CurrencyType {
 interface CurrencyConfig {
   symbol: string;
   displayName: string;
-  color?: string; // Optional: используем primaryColor если не указан
+  color?: string; // Optional: use primaryColor if not specified
 }
 
 // Currency Configuration
 const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
-  [CurrencyType.NATIVE]: {
-    symbol: '', // Будет определено динамически
+  [CurrencyType.ADA]: {
+    symbol: '', // Will be defined dynamically
     displayName: 'Native Currency',
   },
   [CurrencyType.USD]: {
@@ -176,6 +136,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  progressiveLoading: {
+    type: Boolean,
+    default: false,
+  },
+  firstLoadedCurrency: {
+    type: String,
+    default: null,
+  },
 });
 
 // Load tab preference from localStorage or default to WEEK (7D)
@@ -200,7 +168,7 @@ const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLab
 const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
-const selectedCurrency = ref<CurrencyType>(CurrencyType.NATIVE); // Current selected currency
+const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
 
 const tabs = {
   YEAR: { value: 'YEAR', label: '12M', vsLabel: 'vs last year' },
@@ -253,6 +221,38 @@ const shortenAddress = computed(() => {
   return loggedWallet.value?.baseAddress ? filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
 });
 
+// Progressive loading computed properties
+const hasAnyChartData = computed(() => {
+  return (
+    (props.chartData && props.chartData.length > 0) ||
+    (props.chartDataUsd && props.chartDataUsd.length > 0) ||
+    (props.chartDataEur && props.chartDataEur.length > 0)
+  );
+});
+
+const firstAvailableCurrency = computed(() => {
+  // Return the first currency that has data, in priority order
+  if (props.chartData && props.chartData.length > 0) {
+    return CurrencyType.ADA;
+  }
+  if (props.chartDataUsd && props.chartDataUsd.length > 0) {
+    return CurrencyType.USD;
+  }
+  if (props.chartDataEur && props.chartDataEur.length > 0) {
+    return CurrencyType.EUR;
+  }
+  return null;
+});
+
+const globalLoading = computed(() => {
+  // If progressive loading is enabled, only show loading when no data is available yet
+  if (props.progressiveLoading) {
+    return props.loading && !hasAnyChartData.value;
+  }
+  // Original behavior: show loading state
+  return props.loading;
+});
+
 // Currency system computed properties
 const nativeCurrencySymbol = computed(() => {
   return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -260,7 +260,7 @@ const nativeCurrencySymbol = computed(() => {
 
 const currentCurrencyConfig = computed(() => {
   const config = { ...currencyConfigs[selectedCurrency.value] };
-  if (selectedCurrency.value === CurrencyType.NATIVE) {
+  if (selectedCurrency.value === CurrencyType.ADA) {
     config.symbol = nativeCurrencySymbol.value;
     config.displayName = `${nativeCurrencySymbol.value} Balance`;
   }
@@ -273,7 +273,7 @@ const activeChartData = computed(() => {
       return props.chartDataUsd || [];
     case CurrencyType.EUR:
       return props.chartDataEur || [];
-    case CurrencyType.NATIVE:
+    case CurrencyType.ADA:
     default:
       return props.chartData || [];
   }
@@ -285,21 +285,33 @@ const activePortfolioValue = computed(() => {
       return props.portfolioValueUsd;
     case CurrencyType.EUR:
       return props.portfolioValueEur;
-    case CurrencyType.NATIVE:
+    case CurrencyType.ADA:
     default:
       return props.portfolioValueAda;
   }
 });
 
 const availableCurrencies = computed(() => {
-  const currencies = [CurrencyType.NATIVE];
+  const currencies = [];
 
+  // Add ADA if we have native data
+  if ((props.chartData && props.chartData.length > 0) || props.portfolioValueAda > 0) {
+    currencies.push(CurrencyType.ADA);
+  }
+
+  // Add USD if we have USD data
   if ((props.chartDataUsd && props.chartDataUsd.length > 0) || props.portfolioValueUsd > 0) {
     currencies.push(CurrencyType.USD);
   }
 
+  // Add EUR if we have EUR data
   if ((props.chartDataEur && props.chartDataEur.length > 0) || props.portfolioValueEur > 0) {
     currencies.push(CurrencyType.EUR);
+  }
+
+  // If no currencies available yet but progressive loading, default to ADA
+  if (currencies.length === 0 && props.progressiveLoading) {
+    currencies.push(CurrencyType.ADA);
   }
 
   return currencies;
@@ -320,9 +332,45 @@ const formatPortfolioValue = (): string => {
 
 const toggleCurrency = (): void => {
   const availableCurrs = availableCurrencies.value;
+  if (availableCurrs.length === 0) return;
+
   const currentIndex = availableCurrs.indexOf(selectedCurrency.value);
   const nextIndex = (currentIndex + 1) % availableCurrs.length;
-  selectedCurrency.value = availableCurrs[nextIndex];
+  const nextCurrency = availableCurrs[nextIndex];
+
+  selectedCurrency.value = nextCurrency;
+
+
+};
+
+const selectCurrency = (currency: CurrencyType): void => {
+  selectedCurrency.value = currency;
+};
+
+const getCurrencyLabel = (currency: CurrencyType): string => {
+  switch (currency) {
+    case CurrencyType.ADA:
+      return nativeCurrencySymbol.value;
+    case CurrencyType.USD:
+      return 'USD';
+    case CurrencyType.EUR:
+      return 'EUR';
+    default:
+      return 'Unknown';
+  }
+};
+
+const convertStringToCurrencyType = (currencyString: string): CurrencyType | null => {
+  switch (currencyString) {
+    case 'ADA':
+      return CurrencyType.ADA;
+    case 'USD':
+      return CurrencyType.USD;
+    case 'EUR':
+      return CurrencyType.EUR;
+    default:
+      return null;
+  }
 };
 
 // COMMENTED OUT: Dual-axis toggle functions
@@ -505,7 +553,7 @@ const loadChart = () => {
     return;
   }
 
-  console.log('Loading chart with', selectedCurrency.value, 'data, length:', activeData.length);
+
 
   // Initial Y-axis will auto-scale, then be updated by time filtering
   const axisRange = null; // Let Highcharts auto-scale initially
@@ -525,7 +573,7 @@ const loadChart = () => {
     }
     chartInstance.value = null;
   }
-  
+
   // Force garbage collection hint
   if (window.gc) {
     try {
@@ -801,7 +849,12 @@ const arraysEqual = (a, b) => {
 };
 
 const isDisabled = tabItem => {
-  if (!props.chartData || !Array.isArray(props.chartData) || props.chartData.length === 0 || !props.chartData[props.chartData.length - 1]) {
+  if (
+    !props.chartData ||
+    !Array.isArray(props.chartData) ||
+    props.chartData.length === 0 ||
+    !props.chartData[props.chartData.length - 1]
+  ) {
     return true;
   }
   const lastTxTime = props.chartData[props.chartData.length - 1][0];
@@ -964,31 +1017,18 @@ watch(
   { deep: true }
 );
 
-// Watch currency chart data
+// Watch currency chart data with immediate response to any data changes
 watch(
   () => [props.chartData, props.chartDataUsd, props.chartDataEur],
   (newValues, oldValues) => {
     // Handle case where values might be undefined initially
-    if (!newValues || !oldValues) {
-      // If new values exist and not loading, try to load chart
-      if (newValues && !props.loading) {
-        const activeData = activeChartData.value;
-        if (activeData && activeData.length > 0) {
-          loadChart();
-          console.log('Chart data initial load:', selectedCurrency.value, 'length:', activeData.length);
-
-          setTimeout(() => {
-            handleTabClick(tab.value);
-          }, 100);
-        }
-      }
-      return;
-    }
+    if (!newValues) return;
 
     // Safe destructuring with default values
     const [newChartData = [], newChartDataUsd = [], newChartDataEur = []] = newValues;
-    const [oldChartData = [], oldChartDataUsd = [], oldChartDataEur = []] = oldValues;
+    const [oldChartData = [], oldChartDataUsd = [], oldChartDataEur = []] = oldValues || [[], [], []];
 
+    // Skip if no actual data changes
     if (
       arraysEqual(newChartData, oldChartData) &&
       arraysEqual(newChartDataUsd, oldChartDataUsd) &&
@@ -997,20 +1037,50 @@ watch(
       return;
     }
 
-    // Только обновляем график если не в состоянии загрузки
-    if (!props.loading) {
-      const activeData = activeChartData.value;
-      if (activeData && activeData.length > 0) {
-        loadChart();
-        console.log('Chart data updated:', selectedCurrency.value, 'length:', activeData.length);
 
-        // Apply the current time range filter after chart loads with new data
-        setTimeout(() => {
-          handleTabClick(tab.value);
-        }, 100);
+
+    // Progressive loading logic: update chart when any data becomes available
+    if (props.progressiveLoading) {
+      // Use the first loaded currency from the composable (the one that actually loaded first)
+      const firstLoadedString = props.firstLoadedCurrency;
+      const firstLoaded = firstLoadedString ? convertStringToCurrencyType(firstLoadedString) : null;
+      const currentData = activeChartData.value;
+
+      // Switch to the first currency that actually loaded (from loading order)
+      if (firstLoaded) {
+        // If we don't have a current selection or current selection has no data, switch immediately
+        if (!currentData || currentData.length === 0) {
+          selectCurrency(firstLoaded);
+        }
+        // Also switch if a new currency loaded first and our current selection has no data
+        else if (selectedCurrency.value !== firstLoaded && (!currentData || currentData.length === 0)) {
+          selectCurrency(firstLoaded);
+        }
+      }
+
+      // Always update chart if we have any data (parallel loading mode)
+      if (hasAnyChartData.value) {
+        const activeData = activeChartData.value;
+        if (activeData && activeData.length > 0) {
+          loadChart();
+
+          setTimeout(() => {
+            handleTabClick(tab.value);
+          }, 50);
+        }
       }
     } else {
-      console.log('Skipping chart update while loading...');
+      // Original logic: only update chart when not loading
+      if (!props.loading) {
+        const activeData = activeChartData.value;
+        if (activeData && activeData.length > 0) {
+          loadChart();
+
+          setTimeout(() => {
+            handleTabClick(tab.value);
+          }, 100);
+        }
+              }
     }
   },
   { deep: true, immediate: true }
@@ -1047,7 +1117,7 @@ onBeforeUnmount(() => {
     }
     chartInstance.value = null;
   }
-  
+
   // Clear any event listeners to prevent memory leaks
   const chartContainer = document.getElementById('highstock-chart');
   if (chartContainer) {
@@ -1058,15 +1128,18 @@ onBeforeUnmount(() => {
 watch(
   () => props.loading,
   (newVal, oldVal) => {
-    // Когда loading завершается (false), инициализируем график
+    // Skip this watch if progressive loading is enabled (handled by chart data watch)
+    if (props.progressiveLoading) return;
+
+    // When loading finishes (false), initialize chart
     if (oldVal && !newVal) {
-      console.log('Loading finished, initializing chart...');
-      const hasAnyData = (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) || 
-                         (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) || 
-                         (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+      const hasAnyData =
+        (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) ||
+        (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) ||
+        (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
 
       if (hasAnyData) {
-        // Небольшая задержка чтобы DOM обновился
+        // Small delay for DOM to update
         setTimeout(() => {
           loadChart();
           handleTabClick(tab.value);
@@ -1092,23 +1165,39 @@ onMounted(() => {
     tab.value = tabs.WEEK;
   }
 
-  // Только инициализируем график если данные уже есть И loading завершен
-  if (!props.loading) {
-    const hasAnyData = (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) || 
-                       (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) || 
-                       (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+  // Progressive loading: wait for data to arrive and let the watcher handle it
+  if (props.progressiveLoading) {
 
-    if (hasAnyData) {
-      console.log('Data available on mount, loading chart...');
-      setTimeout(() => {
-        loadChart();
-        handleTabClick(tab.value);
-      }, 100);
-    } else {
-      console.log('No data available on mount');
+    // Only initialize if data is already available on mount
+    if (hasAnyChartData.value) {
+      const firstLoadedString = props.firstLoadedCurrency;
+      const firstLoaded = firstLoadedString
+        ? convertStringToCurrencyType(firstLoadedString)
+        : firstAvailableCurrency.value;
+
+      if (firstLoaded) {
+        selectCurrency(firstLoaded);
+        setTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 50);
+      }
     }
   } else {
-    console.log('Still loading on mount, waiting for completion...');
+    // Original logic: only initialize when data is available AND loading is complete
+    if (!props.loading) {
+      const hasAnyData =
+        (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) ||
+        (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) ||
+        (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+
+      if (hasAnyData) {
+        setTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 100);
+      }
+    }
   }
 });
 </script>
@@ -1156,12 +1245,26 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 600;
   color: #ffffff;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
   transition: opacity 0.2s ease;
 }
 
-.portfolio-amount:hover {
+.portfolio-amount.clickable {
+  cursor: pointer;
+}
+
+.portfolio-amount.clickable:hover {
   opacity: 0.8;
+}
+
+.currency-switch-icon {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.portfolio-amount.clickable:hover .currency-switch-icon {
+  opacity: 1;
 }
 
 .address-section {
@@ -1201,21 +1304,15 @@ onMounted(() => {
   align-items: center;
 }
 
-/* Series Toggle Buttons (next to date picker) */
-.series-toggle-buttons {
+/* Currency indicator for progressive loading */
+.currency-indicator {
   display: flex;
   align-items: center;
 }
 
-.series-toggle {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  border-radius: 4px !important;
-  overflow: hidden;
-}
-
-.series-toggle.compact {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 3px !important;
+.currency-chip {
+  font-size: 0.75rem !important;
+  height: 24px !important;
 }
 
 .toggle-btn {
