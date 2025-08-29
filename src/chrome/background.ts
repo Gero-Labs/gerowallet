@@ -166,13 +166,17 @@ function clearProcessedDomains() {
 }
 
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
-const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
-const domainCleanupInterval = setInterval(clearProcessedDomains, oneDayInMilliseconds);
+// const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
-// Clean up on service worker termination
-self.addEventListener('beforeunload', () => {
-  if (domainCleanupInterval) {
-    clearInterval(domainCleanupInterval);
+// Use Chrome alarms API for reliable cleanup in service workers
+chrome.alarms.create('clearProcessedDomains', { 
+  delayInMinutes: 24 * 60, // 24 hours
+  periodInMinutes: 24 * 60 // repeat every 24 hours
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'clearProcessedDomains') {
+    clearProcessedDomains();
   }
 });
 
