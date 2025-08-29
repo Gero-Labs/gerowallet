@@ -1,4 +1,4 @@
-import { getPortfolioDb } from '@/db/wallet-db';
+import { getDb } from '@/db/wallet-db';
 import tapToolsApi from '@/api/tap-tools-api';
 import { walletStore } from '@/stores/walletStore';
 
@@ -18,6 +18,17 @@ export interface PortfolioCacheOptions {
 
 const DEFAULT_CACHE_TIME = 4 * 60 * 60 * 1000; // 4 hours
 
+/**
+ * Get wallet database for current logged wallet
+ */
+async function getWalletDb(): Promise<any> {
+  const walletId = walletStore.loggedWallet?.id;
+  if (!walletId) {
+    throw new Error('No wallet logged in');
+  }
+  return await getDb(walletId);
+}
+
 export class PortfolioCacheService {
   private cacheTimeMs: number;
   private enableCache: boolean;
@@ -36,7 +47,7 @@ export class PortfolioCacheService {
     }
 
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       const now = Date.now();
       
       // Try composite index first, fallback to individual queries if schema mismatch
@@ -101,7 +112,7 @@ export class PortfolioCacheService {
     }
 
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       const now = Date.now();
       const expiresAt = now + this.cacheTimeMs;
 
@@ -131,7 +142,7 @@ export class PortfolioCacheService {
    */
   async removeCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<void> {
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       
       // Try composite index first, fallback to individual queries if schema mismatch
       try {
@@ -159,7 +170,7 @@ export class PortfolioCacheService {
    */
   async clearAddressCache(address: string): Promise<void> {
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       await db.table('portfolio_charts').where('address').equals(address).delete();
     } catch (error) {
       console.error('Error clearing address cache:', error);
@@ -183,7 +194,7 @@ export class PortfolioCacheService {
    */
   async cleanupExpiredCache(address: string): Promise<number> {
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       const now = Date.now();
       const expiredEntries = await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).toArray();
       
@@ -298,7 +309,7 @@ export class PortfolioCacheService {
     }
 
     try {
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       
       // Load cache data in parallel for better performance
       const [cachedAda, cachedUsd, cachedEur] = await Promise.all([
@@ -414,7 +425,7 @@ export class PortfolioCacheService {
           eur: { hasData: false, dataPoints: 0, expiresAt: null },
         };
       }
-      const db = await getPortfolioDb(address);
+      const db = await getWalletDb();
       const now = Date.now();
 
       // Load data for all currencies
