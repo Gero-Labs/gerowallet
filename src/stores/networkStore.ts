@@ -171,6 +171,11 @@ export default {
 
   // Utility method to reset state
   reset() {
+    // Clear any active intervals before reset
+    if (networkStore.tickerStatisticsIntervalId) {
+      clearInterval(networkStore.tickerStatisticsIntervalId);
+    }
+    
     const resetState: NetworkStore = {
       assets: {},
       epochParams: null,
