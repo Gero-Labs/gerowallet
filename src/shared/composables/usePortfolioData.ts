@@ -2,13 +2,13 @@ import { ref, computed } from 'vue';
 import { PortfolioCacheService } from '@/db/portfolio-cache';
 
 interface UsePortfolioDataOptions {
-  cacheTimeMs?: number; // Cache time in milliseconds, default 4 hours
+  cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing
   enableCache?: boolean; // Enable/disable caching
 }
 
 export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const {
-    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours
+    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours default
     enableCache = true,
   } = options;
 

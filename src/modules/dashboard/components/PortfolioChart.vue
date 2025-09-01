@@ -1,6 +1,6 @@
 <template>
   <div style="position: relative; z-index: 1; align-content: center; height: 212px" class="text-center justify-center">
-    <div v-if="hasAnyChartData && !globalLoading" class="portfolio-value-display">
+    <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
           <div class="portfolio-label">Portfolio</div>
@@ -46,7 +46,6 @@
                 :key="`${tabItem.value}_${index}`"
                 style="font-size: 10px; letter-spacing: normal; min-width: 50px"
                 @click="handleTabClick(tabItem)"
-                :disabled="isDisabled(tabItem)"
                 >{{ tabItem.label }}
               </v-tab>
             </v-tabs>
@@ -54,8 +53,8 @@
         </div>
       </div>
     </div>
-    <v-progress-circular v-if="globalLoading" :indeterminate="true"></v-progress-circular>
-    <div id="highstock-chart" v-show="hasAnyChartData && !globalLoading" style="margin-top: 40px"></div>
+    <v-progress-circular v-if="!isReadyToRender" :indeterminate="true"></v-progress-circular>
+    <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
         <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
@@ -67,6 +66,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
 import Highstock from 'highcharts/highstock';
+import isEqual from 'lodash/isEqual';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
@@ -154,6 +154,9 @@ const loadPortfolioTabSetting = (): string => {
     return 'WEEK';
   }
 };
+const isReadyToRender = computed(() => {
+  return hasAnyChartData.value && !globalLoading.value;
+});
 
 // Save tab preference to localStorage
 const savePortfolioTabSetting = (tabValue: string): void => {
@@ -169,6 +172,9 @@ const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
+const isRendering = ref(false); // Prevent multiple simultaneous renders
+const chartKey = ref(0); // Force chart re-render when changed
+const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
 
 const tabs = {
   YEAR: { value: 'YEAR', label: '12M', vsLabel: 'vs last year' },
@@ -339,25 +345,10 @@ const toggleCurrency = (): void => {
   const nextCurrency = availableCurrs[nextIndex];
 
   selectedCurrency.value = nextCurrency;
-
-
 };
 
 const selectCurrency = (currency: CurrencyType): void => {
   selectedCurrency.value = currency;
-};
-
-const getCurrencyLabel = (currency: CurrencyType): string => {
-  switch (currency) {
-    case CurrencyType.ADA:
-      return nativeCurrencySymbol.value;
-    case CurrencyType.USD:
-      return 'USD';
-    case CurrencyType.EUR:
-      return 'EUR';
-    default:
-      return 'Unknown';
-  }
 };
 
 const convertStringToCurrencyType = (currencyString: string): CurrencyType | null => {
@@ -436,12 +427,35 @@ const createChartSeries = (): any[] => {
   const seriesColor = primaryColor.value;
 
   if (activeData && activeData.length > 0) {
+    // Validate data format
+    const validData = activeData.filter(point => {
+      return (
+        Array.isArray(point) &&
+        point.length >= 2 &&
+        typeof point[0] === 'number' &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[0]) &&
+        !isNaN(point[1])
+      );
+    });
+
+    if (validData.length === 0) {
+      console.warn('No valid data points found for chart');
+      return series;
+    }
+
+    if (validData.length !== activeData.length) {
+      console.warn(`Filtered out ${activeData.length - validData.length} invalid data points`);
+    }
+
     series.push({
       type: 'areaspline',
       name: config.displayName,
-      data: activeData,
-      showInLegend: false, // Hide legend for single series
+      data: validData,
+      showInLegend: false,
       color: seriesColor,
+      connectNulls: false,
+      gapSize: 5,
       marker: {
         symbol: 'circle',
         enabled: false,
@@ -459,7 +473,6 @@ const createChartSeries = (): any[] => {
     });
   }
 
-  console.log('Total series created:', series.length, 'for', selectedCurrency.value, config.displayName);
   return series;
 };
 
@@ -546,14 +559,23 @@ const createChartSeries = (): any[] => {
 //   return series;
 // };
 const loadChart = () => {
+  // Prevent multiple simultaneous renders and too frequent calls
+  const now = Date.now();
+  if (isRendering.value || now - lastLoadTime.value < 100) {
+    return;
+  }
+  lastLoadTime.value = now;
+
   const activeData = activeChartData.value;
   const config = currentCurrencyConfig.value;
+
+
 
   if (!activeData || !activeData.length) {
     return;
   }
 
-
+  isRendering.value = true;
 
   // Initial Y-axis will auto-scale, then be updated by time filtering
   const axisRange = null; // Let Highcharts auto-scale initially
@@ -561,7 +583,23 @@ const loadChart = () => {
   // Ensure the chart container is visible before rendering
   const chartContainer = document.getElementById('highstock-chart');
   if (!chartContainer || chartContainer.style.display === 'none') {
+    isRendering.value = false;
     return;
+  }
+
+  // Additional check for container visibility and force proper sizing
+  const containerRect = chartContainer.getBoundingClientRect();
+  if (containerRect.width === 0 || containerRect.height === 0) {
+    // Try to trigger a layout reflow
+    chartContainer.style.width = '100%';
+    chartContainer.style.height = '184px';
+
+    // Recheck after setting explicit dimensions
+    const newRect = chartContainer.getBoundingClientRect();
+    if (newRect.width === 0 || newRect.height === 0) {
+      isRendering.value = false;
+      return;
+    }
   }
 
   // Destroy existing chart instance before creating a new one
@@ -598,6 +636,23 @@ const loadChart = () => {
 
   const currency = config.symbol;
   const data = {
+    lang: {
+      months: [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ],
+      shortMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    },
     accessibility: {
       enabled: false,
     },
@@ -678,6 +733,7 @@ const loadChart = () => {
       // }
     },
     xAxis: {
+      type: 'datetime',
       crosshair: true,
       allowDecimals: false,
       title: {
@@ -689,7 +745,10 @@ const loadChart = () => {
           fontFamily: 'Inter',
           color: '#fff',
         },
+        overflow: 'justify',
       },
+      ordinal: false,
+      minTickInterval: 3600 * 1000, // 1 hour minimum to prevent crowding
       // COMMENTED OUT: Dual-axis Y-axis update events
       // events: {
       //   // Handle drag selection only (no wheel zoom)
@@ -819,57 +878,52 @@ const loadChart = () => {
     series: createChartSeries(),
     useUTC: true,
   };
-  chartInstance.value = Highstock.stockChart('highstock-chart', data as any);
 
-  // Completely disable wheel events on chart container (reuse existing chartContainer variable)
-  if (chartContainer) {
-    chartContainer.addEventListener(
-      'wheel',
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-      },
-      { passive: false }
-    );
-  }
-};
+  try {
+    // Validate chart container exists
+    const container = document.getElementById('highstock-chart');
+    if (!container) {
+      console.error('Chart container not found');
+      return;
+    }
 
-const arraysEqual = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
+    // Validate series data
+    const series = createChartSeries();
+    if (!series || series.length === 0) {
+      console.warn('No chart series data available');
+      return;
+    }
 
-  for (let i = 0; i < a.length; ++i) {
-    if (Array.isArray(a[i]) && Array.isArray(b[i])) {
-      if (!arraysEqual(a[i], b[i])) return false;
-    } else if (a[i] !== b[i]) return false;
-  }
-  return true;
-};
+    chartInstance.value = Highstock.stockChart('highstock-chart', data as any);
 
-const isDisabled = tabItem => {
-  if (
-    !props.chartData ||
-    !Array.isArray(props.chartData) ||
-    props.chartData.length === 0 ||
-    !props.chartData[props.chartData.length - 1]
-  ) {
-    return true;
+    // Force chart reflow to fix size issues after re-render
+    setTimeout(() => {
+      if (chartInstance.value && chartInstance.value.reflow && typeof chartInstance.value.reflow === 'function') {
+        try {
+          chartInstance.value.reflow();
+        } catch (reflowError) {
+          console.warn('Chart reflow failed:', reflowError);
+        }
+      }
+    }, 100);
+
+    // Completely disable wheel events on chart container (reuse existing chartContainer variable)
+    if (chartContainer) {
+      chartContainer.addEventListener(
+        'wheel',
+        e => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        { passive: false }
+      );
+    }
+  } catch (error) {
+    console.error('Error creating chart:', error);
+  } finally {
+    // Always reset rendering flag
+    isRendering.value = false;
   }
-  const lastTxTime = props.chartData[props.chartData.length - 1][0];
-  if (tabItem.value === 'DAY') {
-    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 1;
-  } else if (tabItem.value === 'WEEK') {
-    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 7;
-  } else if (tabItem.value === 'MONTH') {
-    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 30;
-  } else if (tabItem.value === 'QUARTER') {
-    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 90;
-  } else if (tabItem.value === 'YEAR') {
-    return (new Date().getTime() - lastTxTime) / 1000 / 24 / 60 / 60 > 365;
-  }
-  return false;
 };
 
 const handleTabClick = tabItem => {
@@ -1028,16 +1082,24 @@ watch(
     const [newChartData = [], newChartDataUsd = [], newChartDataEur = []] = newValues;
     const [oldChartData = [], oldChartDataUsd = [], oldChartDataEur = []] = oldValues || [[], [], []];
 
-    // Skip if no actual data changes
-    if (
-      arraysEqual(newChartData, oldChartData) &&
-      arraysEqual(newChartDataUsd, oldChartDataUsd) &&
-      arraysEqual(newChartDataEur, oldChartDataEur)
-    ) {
-      return;
+    // Check if the currently active currency data has changed
+    let activeDataChanged = false;
+    switch (selectedCurrency.value) {
+      case CurrencyType.ADA:
+        activeDataChanged = !isEqual(newChartData, oldChartData);
+        break;
+      case CurrencyType.USD:
+        activeDataChanged = !isEqual(newChartDataUsd, oldChartDataUsd);
+        break;
+      case CurrencyType.EUR:
+        activeDataChanged = !isEqual(newChartDataEur, oldChartDataEur);
+        break;
     }
 
-
+        // Skip if no actual data changes for the active currency
+    if (!activeDataChanged && !props.progressiveLoading) {
+      return;
+    }
 
     // Progressive loading logic: update chart when any data becomes available
     if (props.progressiveLoading) {
@@ -1058,54 +1120,84 @@ watch(
         }
       }
 
-      // Always update chart if we have any data (parallel loading mode)
-      if (hasAnyChartData.value) {
+      // Only update chart if active currency data changed or we have new data for current currency
+      if (activeDataChanged && hasAnyChartData.value) {
         const activeData = activeChartData.value;
-        if (activeData && activeData.length > 0) {
-          loadChart();
+        if (activeData && activeData.length > 0 && !isRendering.value) {
+          // Force chart rerender for timeline issues
+          chartKey.value += 1;
 
           setTimeout(() => {
-            handleTabClick(tab.value);
-          }, 50);
+            loadChart();
+            setTimeout(() => {
+              handleTabClick(tab.value);
+              // Additional reflow to ensure proper sizing
+              if (
+                chartInstance.value &&
+                chartInstance.value.reflow &&
+                typeof chartInstance.value.reflow === 'function'
+              ) {
+                try {
+                  chartInstance.value.reflow();
+                } catch (reflowError) {
+                  console.warn('Chart reflow failed in watch:', reflowError);
+                }
+              }
+            }, 100);
+          }, 150); // Longer delay for full rerender
         }
       }
     } else {
-      // Original logic: only update chart when not loading
-      if (!props.loading) {
+      // Original logic: only update chart when not loading and active data changed
+      if (!props.loading && activeDataChanged) {
         const activeData = activeChartData.value;
-        if (activeData && activeData.length > 0) {
-          loadChart();
-
+        if (activeData && activeData.length > 0 && !isRendering.value) {
           setTimeout(() => {
-            handleTabClick(tab.value);
-          }, 100);
+            loadChart();
+            setTimeout(() => {
+              handleTabClick(tab.value);
+            }, 100);
+          }, 10);
         }
-              }
+      }
     }
   },
   { deep: true, immediate: true }
 );
 
-// COMMENTED OUT: Dual-axis wallet watching
 // Simple wallet watching for single chart
 watch(
   loggedWallet,
-  () => {
-    if (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) {
-      loadChart();
-
-      // Apply the current time range filter after wallet change
+  (newWallet, oldWallet) => {
+    // Only reload if wallet actually changed
+    if (
+      newWallet?.baseAddress !== oldWallet?.baseAddress &&
+      props.chartData &&
+      Array.isArray(props.chartData) &&
+      props.chartData.length > 0 &&
+      !isRendering.value
+    ) {
       setTimeout(() => {
-        handleTabClick(tab.value);
+        loadChart();
+        setTimeout(() => {
+          handleTabClick(tab.value);
+        }, 100);
       }, 100);
     }
   },
-  { deep: true }
+  { deep: false } // Only watch top-level changes
 );
 
 watch(selectedCurrency, () => {
-  loadChart();
-  handleTabClick(tab.value);
+  // Only reload chart if not already rendering
+  if (!isRendering.value) {
+    setTimeout(() => {
+      loadChart();
+      setTimeout(() => {
+        handleTabClick(tab.value);
+      }, 50);
+    }, 50);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -1167,7 +1259,6 @@ onMounted(() => {
 
   // Progressive loading: wait for data to arrive and let the watcher handle it
   if (props.progressiveLoading) {
-
     // Only initialize if data is already available on mount
     if (hasAnyChartData.value) {
       const firstLoadedString = props.firstLoadedCurrency;
@@ -1204,6 +1295,9 @@ onMounted(() => {
 <style scoped>
 #highstock-chart {
   min-height: 184px;
+  width: 100%;
+  height: 184px;
+  position: relative;
 }
 
 /* Portfolio Value Display */
