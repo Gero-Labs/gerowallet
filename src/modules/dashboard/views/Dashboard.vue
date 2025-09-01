@@ -356,7 +356,6 @@ const {
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
-  loadMissingData,
   loadDataProgressively,
   refreshPortfolioData,
   getCacheStats,
