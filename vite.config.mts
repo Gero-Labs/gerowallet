@@ -22,6 +22,7 @@ export const sharedConfig: UserConfig = {
       'cbor': r('src/shims/cbor.js'),
       'stream': r('src/shims/stream.js'),
       'util': 'util',
+      'pbkdf2': 'pbkdf2/browser.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue', '.mts'],
   },
@@ -67,6 +68,15 @@ export const sharedConfig: UserConfig = {
       resolveId(id) {
         if (id === 'cbor') {
           return r('src/shims/cbor.js');
+        }
+        return null;
+      },
+    },
+    {
+      name: 'pbkdf2-fix-dev',
+      resolveId(id) {
+        if (id === 'pbkdf2') {
+          return r('src/shims/pbkdf2.js');
         }
         return null;
       },
