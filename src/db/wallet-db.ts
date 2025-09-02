@@ -1,13 +1,10 @@
 import Dexie, { DexieError } from 'dexie';
 import { 
   walletDBSchema, 
-  walletDBVersion,
-  portfolioDBSchema,
-  portfolioDBVersion
+  walletDBVersion
 } from '@/db/schema';
 
 const dbCache: Map<string, Dexie> = new Map();
-const portfolioDbCache: Map<string, Dexie> = new Map();
 
 export async function getDb(id: number): Promise<Dexie> {
     const dbName = 'wallet-' + id;
@@ -108,27 +105,6 @@ export function clearDbCache(id: number) {
   }
 }
 
-// Portfolio database functions
-export async function getPortfolioDb(address: string): Promise<Dexie> {
-  const dbName = `portfolio_${address}`;
-  
-  if (portfolioDbCache.has(dbName)) {
-    return portfolioDbCache.get(dbName)!;
-  }
-  
-  const db: Dexie = new Dexie(dbName);
-  db.version(portfolioDBVersion).stores(portfolioDBSchema);
-  await db.open();
-  portfolioDbCache.set(dbName, db);
-  return db;
-}
-
-export function clearPortfolioDbCache(address: string) {
-  const dbName = `portfolio_${address}`;
-  const db = portfolioDbCache.get(dbName);
-  if (db) {
-    db.close();
-    portfolioDbCache.delete(dbName);
-  }
-}
+// Note: Portfolio data is now stored directly in wallet databases
+// Old portfolio_* databases will be migrated during upgrade
 

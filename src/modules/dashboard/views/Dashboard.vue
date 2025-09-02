@@ -39,7 +39,9 @@
                     :portfolio-value-ada="computedValues.totalValue"
                     :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
                     :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
-                    :loading="loadingTxs"
+                    :loading="portfolioLoading"
+                    :progressive-loading="true"
+                    :first-loaded-currency="firstLoadedCurrency"
                   />
                 </v-card-text>
               </v-card>
@@ -84,7 +86,9 @@
                 :portfolio-value-ada="computedValues.totalValue"
                 :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
                 :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
-                :loading="loadingTxs"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
               />
             </v-card-text>
           </v-card>
@@ -352,10 +356,11 @@ const {
   usdData: usdChartData,
   eurData: eurChartData,
   isLoading: portfolioLoading,
-  loadMissingData,
+  loadDataProgressively,
   refreshPortfolioData,
   getCacheStats,
   getCacheStatus,
+  firstLoadedCurrency,
 } = portfolioComposable;
 
 const computeChartData = computed(() => {
@@ -439,9 +444,9 @@ const showDebitCardInfo = () => {
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
-  const router = instance?.proxy?.$router;
-  if (router && router.currentRoute.path !== '/cashback') {
-    router.push('/cashback');
+  const proxy = instance?.proxy as any;
+  if (proxy && proxy.$router && proxy.$route.path !== '/cashback') {
+    proxy.$router.push('/cashback');
   }
 };
 
@@ -533,31 +538,23 @@ defineExpose({
   refreshPortfolioChart,
   getPortfolioCacheInfo,
 });
-// Watch for wallet changes to reload portfolio data with smart caching
+// Watch for wallet changes to reload portfolio data with parallel loading
 watch(
   () => loggedWallet.value?.baseAddress,
   async (newAddress, oldAddress) => {
     if (newAddress && newAddress !== oldAddress) {
       try {
-        // Load missing data only (smart caching) with timeout to prevent memory issues
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Portfolio data loading timeout')), 30000)
-        );
-
-        await Promise.race([
-          loadMissingData(newAddress),
-          timeoutPromise
-        ]);
+        // Start parallel loading immediately (don't await - let it run in background)
+        loadDataProgressively(newAddress).catch(error => {
+          console.warn('Portfolio data loading failed:', error);
+        });
       } catch (error) {
-        console.warn('Portfolio data loading failed or timed out:', error);
-        // Continue with empty data rather than crashing
+        console.warn('Failed to start portfolio data loading:', error);
       }
     }
   },
   { immediate: true } // Load data on mount
 );
-
-
 </script>
 <style scoped>
 .transactions-table {
