@@ -22,7 +22,6 @@ export const sharedConfig: UserConfig = {
       'cbor': r('src/shims/cbor.js'),
       'stream': r('src/shims/stream.js'),
       'util': 'util',
-      'pbkdf2': 'pbkdf2/browser.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue', '.mts'],
   },
