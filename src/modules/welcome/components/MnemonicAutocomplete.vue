@@ -32,9 +32,9 @@ const search = ref('');
 
 const englishWords = computed(() => {
   if (search.value) {
-    return bip39.wordlists.english.filter(item => item.startsWith(search.value.toLowerCase()));
+    return bip39.wordlists['english'].filter(item => item.startsWith(search.value.toLowerCase()));
   }
-  return bip39.wordlists.english;
+  return bip39.wordlists['english'];
 });
 
 const handleTab = (event: KeyboardEvent) => {
