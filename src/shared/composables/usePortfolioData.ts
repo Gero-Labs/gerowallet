@@ -2,13 +2,13 @@ import { ref, computed } from 'vue';
 import { PortfolioCacheService } from '@/db/portfolio-cache';
 
 interface UsePortfolioDataOptions {
-  cacheTimeMs?: number; // Cache time in milliseconds, default 4 hours
+  cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing
   enableCache?: boolean; // Enable/disable caching
 }
 
 export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const {
-    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours
+    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours default
     enableCache = true,
   } = options;
 
@@ -27,10 +27,18 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const adaData = ref<any[]>([]);
   const usdData = ref<any[]>([]);
   const eurData = ref<any[]>([]);
+  
+  // Track loading order
+  const loadingOrder = ref<Array<'ADA' | 'USD' | 'EUR'>>([]);
 
   // Computed loading state
   const isLoading = computed(() => {
     return loadingAda.value || loadingUsd.value || loadingEur.value;
+  });
+
+  // Get first loaded currency
+  const firstLoadedCurrency = computed(() => {
+    return loadingOrder.value.length > 0 ? loadingOrder.value[0] : null;
   });
 
   // Load portfolio data for specific currency
@@ -114,8 +122,8 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     }
   };
 
-  const cleanupExpiredCache = async (): Promise<number> => {
-    return await cacheService.cleanupExpiredCache();
+  const cleanupExpiredCache = async (address: string): Promise<number> => {
+    return await cacheService.cleanupExpiredCache(address);
   };
 
   const getCacheStats = async () => {
@@ -155,6 +163,59 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
       loadingAda.value = false;
       loadingUsd.value = false;
       loadingEur.value = false;
+    }
+  };
+
+  // Progressive loading - loads all currencies in parallel, showing results as they become available
+  const loadDataProgressively = async (address: string): Promise<void> => {
+    if (!address) {
+      console.warn('No address provided for progressive loading');
+      return;
+    }
+
+
+
+    // Reset loading order and set all loading states to true
+    loadingOrder.value = [];
+    loadingAda.value = true;
+    loadingUsd.value = true;
+    loadingEur.value = true;
+
+    // Load all currencies in parallel
+    const currencies: Array<'ADA' | 'USD' | 'EUR'> = ['ADA', 'USD', 'EUR'];
+    
+    const loadPromises = currencies.map(async (currency) => {
+      try {
+
+        const data = await loadPortfolioData(address, currency);
+        
+        // Track loading order and update the corresponding ref immediately
+        if (!loadingOrder.value.includes(currency)) {
+          loadingOrder.value.push(currency);
+        }
+        
+        const isFirst = loadingOrder.value.length === 1;
+        
+        if (currency === 'ADA') {
+          adaData.value = data;
+        } else if (currency === 'USD') {
+          usdData.value = data;
+        } else if (currency === 'EUR') {
+          eurData.value = data;
+        }
+        
+        return { currency, data, success: true };
+      } catch (error) {
+        console.error(`❌ Error loading ${currency} portfolio data:`, error);
+        return { currency, data: [], success: false, error };
+      }
+    });
+
+    // Wait for all promises to complete (but data is updated as each one finishes)
+    try {
+      await Promise.allSettled(loadPromises);
+    } catch (error) {
+      console.error('Error in parallel loading:', error);
     }
   };
 
@@ -201,12 +262,17 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     loadingUsd,
     loadingEur,
     isLoading,
+    
+    // Loading order tracking
+    loadingOrder,
+    firstLoadedCurrency,
 
     // Methods
     loadPortfolioData,
     loadAllPortfolioData,
     refreshPortfolioData,
     loadMissingData,
+    loadDataProgressively,
     forceLoadCurrencyData,
 
     // Cache management
