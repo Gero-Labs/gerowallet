@@ -1,14 +1,13 @@
 import wasm from 'vite-plugin-wasm';
 import { defineConfig, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
-import { VuetifyResolver } from "unplugin-vue-components/resolvers";
-import Components from "unplugin-vue-components/vite";
+import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
-// import { viteImagemin } from 'vite-plugin-imagemin';
 
 export const sharedConfig: UserConfig = {
   root: r('src'),
@@ -17,21 +16,21 @@ export const sharedConfig: UserConfig = {
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
-      buffer: 'buffer',
+      'buffer': 'buffer',
       '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
-      stream: r('src/shims/stream.js'),
-      util: 'util',
+      'stream': r('src/shims/stream.js'),
+      'util': 'util',
       'pbkdf2': 'pbkdf2/browser.js',
     },
-    extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
+    extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue', '.mts'],
   },
   define: {
-    global: 'window',
-    __DEV__: isDev,
-    __NAME__: JSON.stringify(packageJson.name),
-    APP_VERSION: JSON.stringify(packageJson.version),
+    'global': 'window',
+    '__DEV__': isDev,
+    '__NAME__': JSON.stringify(packageJson.name),
+    'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
@@ -52,14 +51,13 @@ export const sharedConfig: UserConfig = {
       dts: true,
     }),
     wasm(), // Enable WebAssembly support
-    // topLevelAwait(), // Temporarily disabled due to array length error
     nodePolyfills({
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
-      include: ['crypto', 'buffer', 'events', 'stream', 'util', 'os', 'path', 'pbkdf2'],
+      include: ['crypto', 'buffer', 'events', 'stream', 'util', 'os', 'path'],
     }),
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
@@ -67,15 +65,14 @@ export const sharedConfig: UserConfig = {
     }),
     {
       name: 'cbor-fix-dev',
-      resolveId(id, importer) {
+      resolveId(id) {
         if (id === 'cbor') {
           return r('src/shims/cbor.js');
         }
         return null;
-      }
+      },
     },
     // TODO: Add image optimization later
-    // !isDev && viteImagemin({...}),
   ],
   optimizeDeps: {
     include: [
@@ -98,15 +95,13 @@ export const sharedConfig: UserConfig = {
       'bip39',
       'blake2b',
       'crypto-ts',
+      'pinia',
+      'events',
     ],
-    exclude: [
-      'vue-demi',
-      '@emurgo/cardano-serialization-lib-browser',
-      'cbor'
-    ],
+    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
     esbuildOptions: {
       plugins: [],
-      target: 'es2020',
+      target: 'es2022',
       minify: false,
       treeShaking: false, // Disable for speed
       platform: 'browser',
@@ -119,13 +114,9 @@ export const sharedConfig: UserConfig = {
       },
     },
     force: false, // Enable caching
-    holdUntilCrawlEnd: false, // Don't wait for all files
   },
   worker: {
-    plugins: [
-      wasm(),
-      // topLevelAwait() // Temporarily disabled
-    ]
+    plugins: [wasm()],
   },
   server: {
     hmr: {
@@ -150,8 +141,8 @@ export const sharedConfig: UserConfig = {
     rollupOptions: {
       output: {
         manualChunks: undefined, // Disable manual chunking for faster builds
-      }
-    }
+      },
+    },
   },
 };
 
@@ -168,8 +159,8 @@ export default defineConfig(({ command }) => {
       watch: {
         usePolling: true,
         interval: 1000,
-        ignored: ['C:/DumpStack.log.tmp']
-      }
+        ignored: ['C:/DumpStack.log.tmp'],
+      },
     },
     build: {
       minify: false, // Disable minification for speed
@@ -205,11 +196,11 @@ export default defineConfig(({ command }) => {
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
-                dest: 'extension/assets'
+                dest: 'extension/assets',
               },
             ],
             hook: 'writeBundle',
-            copySync: false, // Async copying
+            copySync: false,
             flatten: false,
           }) as any,
           {
@@ -219,9 +210,9 @@ export default defineConfig(({ command }) => {
                 return r('src/shims/cbor.js');
               }
               return null;
-            }
-          }
-        ]
+            },
+          },
+        ],
       },
     },
     test: {

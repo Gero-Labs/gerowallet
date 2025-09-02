@@ -16,9 +16,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     assetsDir: '.',
-    watch: isDev
-      ? {}
-      : undefined,
+    watch: isDev ? {} : undefined,
     outDir: r('extension/content'),
     cssCodeSplit: false,
     emptyOutDir: false,
