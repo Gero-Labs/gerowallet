@@ -350,6 +350,7 @@ export default {
 
   logout() {
     console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
+    
     // Clear all data at once
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
@@ -380,6 +381,12 @@ export default {
 
   clearForWalletSwitch() {
     console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
+    
+    // Clear any active intervals before switching wallets
+    if (walletStore.fiatRatesIntervalId) {
+      clearInterval(walletStore.fiatRatesIntervalId);
+    }
+    
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
     const clearedState: Partial<WalletStore> = {
@@ -392,7 +399,8 @@ export default {
       collections: {},
       rewards: [],
       contacts: {},
-      connectedDapps: []
+      connectedDapps: [],
+      fiatRatesIntervalId: null
     };
 
     // Apply to local state

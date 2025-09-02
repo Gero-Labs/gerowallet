@@ -340,6 +340,16 @@ export class WalletManager {
         }
       }
 
+      // Stop sync intervals before clearing wallet data
+      try {
+        if (this.walletBg) {
+          this.walletBg.endSync();
+          console.debug('WalletBg sync intervals cleared during logout');
+        }
+      } catch (syncError) {
+        console.warn('Failed to end sync during logout:', syncError);
+      }
+
       // Clear wallet store data
       try {
         WalletStore.logout();

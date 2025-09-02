@@ -8,6 +8,11 @@ const WalletType = {
   Google: 'Google',
 };
 
+export type NetworkScheme = {
+  blockchain: string;
+  network: string;
+};
+
 const Theme = {
   GERO: 'gero',
 };
@@ -21,7 +26,7 @@ const purpose = {
 
 const coin_type = {
   cardano: 1815,
-}
+};
 
 const CoreAddressTypes = {
   CARDANO_LEGACY: 0,
@@ -70,7 +75,7 @@ enum Provider {
   UNDEFINED,
   KOIOS,
   BLOCKFROST,
-  YACI
+  YACI,
 }
 
 const Blockchain = {
@@ -118,17 +123,17 @@ export type DataSignature = {
 };
 
 export type Paginate = {
-  page: number,
-  limit: number,
+  page: number;
+  limit: number;
 };
 
 export type PaginateError = {
-  maxSize: number,
+  maxSize: number;
 };
 
 export type CollateralParams = {
   amount: string | number;
-}
+};
 
 export type WalletInstance = {
   experimental: ExperimentalFeatures;
@@ -151,11 +156,11 @@ export type ExperimentalFeatures = {
   signTxs?(txs: string[], partialSign: boolean): Promise<string[]>;
 };
 export type Extension = {
-  cip: number
-}
+  cip: number;
+};
 export type Extensions = {
-  extensions: Extension[]
-}
+  extensions: Extension[];
+};
 
 const Currency = {
   AUD: { short: 'aud', description: 'Australian Dollar', symbol: 'A$' },
@@ -184,7 +189,7 @@ export type TxOutput = {
 export type Withdrawal = {
   address: string;
   amount: string;
-}
+};
 
 export const DEFAULT_TTL: number = 14400;
 
@@ -192,54 +197,54 @@ export type Proof = {
   pi_a: string[];
   pi_b: string[][];
   pi_c: string[];
-  protocol: string,
-  curve: string,
-}
+  protocol: string;
+  curve: string;
+};
 
 export type UTxO = {
   tx_hash: string;
   tx_index: number;
   payment_addr: {
     bech32: string;
-  }
+  };
   asset_list: {
-    policy_id: string,
-    asset_name: string,
-    quantity: string
-  }[],
+    policy_id: string;
+    asset_name: string;
+    quantity: string;
+  }[];
   reference_script: {
-    hash: string,
-    size: number,
-    type: string,
-    bytes: string,
-    value: any
-  },
-  stake_addr: string,
-  datum_hash: string,
+    hash: string;
+    size: number;
+    type: string;
+    bytes: string;
+    value: any;
+  };
+  stake_addr: string;
+  datum_hash: string;
   inline_datum: {
-    bytes: string,
-    value: any
-  },
-  value: string
-}
+    bytes: string;
+    value: any;
+  };
+  value: string;
+};
 
 export type Tip = {
-  time: number,
-  height: number,
-  hash: string,
-  slot: number,
-  epoch: number,
-  epoch_slot: number,
-  slot_leader: string,
-  size: number,
-  tx_count: number,
-  output: string,
-  fees: string,
-  block_vrf: string,
-  previous_block: string,
-  next_block: string,
-  confirmations: number
-}
+  time: number;
+  height: number;
+  hash: string;
+  slot: number;
+  epoch: number;
+  epoch_slot: number;
+  slot_leader: string;
+  size: number;
+  tx_count: number;
+  output: string;
+  fees: string;
+  block_vrf: string;
+  previous_block: string;
+  next_block: string;
+  confirmations: number;
+};
 
 export {
   purpose,
@@ -256,7 +261,7 @@ export {
   Network,
   ERROR,
   Currency,
-  coin_type
+  coin_type,
 };
 
 // ============================================================================
@@ -346,24 +351,24 @@ export interface Keys {
     cred: string;
     path: string;
   }[];
-  "drep129": {
+  drep129: {
     address: string;
     cred: string;
     path: string;
   }[];
-  "payment": {
-    address: string;
-    cred: string;
-    path: string;
-    used: boolean;
-  }[];
-  "script": {
+  payment: {
     address: string;
     cred: string;
     path: string;
     used: boolean;
   }[];
-  "stake": {
+  script: {
+    address: string;
+    cred: string;
+    path: string;
+    used: boolean;
+  }[];
+  stake: {
     address: string;
     cred: string;
     path: string;
@@ -393,4 +398,3 @@ export interface PaginationParams {
   sort_by?: string;
   sort_direction?: string;
 }
-

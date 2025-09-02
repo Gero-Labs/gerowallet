@@ -1037,50 +1037,45 @@ export class WalletBg {
   async startSync() {
     this.endSync();
 
-    try {
-      const tickerStatistics = await this.api.fetchTickerStatistics();
-      NetworkStore.setPrice(tickerStatistics);
-    } catch (err) {
-      // Ignore ticker statistics errors
-    }
+    const updateTickerStatistics = async () => {
+      try {
+        const tickerStatistics = await this.api.fetchTickerStatistics();
+        NetworkStore.setPrice(tickerStatistics);
+      } catch (err) {
+        // Ignore ticker statistics errors
+      }
+    };
+
+    const updateFiatRates = async () => {
+      try {
+        const fiatRates = await this.api.fetchFiatRates();
+        WalletStore.setFiatRates(fiatRates);
+      } catch (err) {
+        // Ignore fiat rates errors
+      }
+    };
+
     if (!NetworkStore.state.tickerStatisticsIntervalId) {
-      NetworkStore.setTickerStatisticsIntervalId(
-        setInterval(async () => {
-          try {
-            const tickerStatistics = await this.api.fetchTickerStatistics();
-            NetworkStore.setPrice(tickerStatistics);
-          } catch (err) {
-            // Ignore ticker statistics errors
-          }
-        }, 20000)
-      );
+      await updateTickerStatistics();
+      NetworkStore.setTickerStatisticsIntervalId(setInterval(updateTickerStatistics, 20000));
     }
 
-    // Fiat Rates
-    try {
-      const fiatRates = await this.api.fetchFiatRates();
-      WalletStore.setFiatRates(fiatRates);
-    } catch (err) {
-      // Ignore fiat rates errors
-    }
     if (!WalletStore.state.fiatRatesIntervalId) {
-      WalletStore.setFiatRatesIntervalId(
-        setInterval(async () => {
-          try {
-            const fiatRates = await this.api.fetchFiatRates();
-            WalletStore.setFiatRates(fiatRates);
-          } catch (err) {
-            // Ignore fiat rates errors
-          }
-        }, 14400000)
-      );
+      await updateFiatRates();
+      WalletStore.setFiatRatesIntervalId(setInterval(updateFiatRates, 14400000));
     }
   }
 
   endSync() {
-    clearInterval(WalletStore.state.fiatRatesIntervalId);
-    WalletStore.setFiatRatesIntervalId(null);
-    NetworkStore.setTickerStatisticsIntervalId(null);
+    if (WalletStore.state.fiatRatesIntervalId) {
+      clearInterval(WalletStore.state.fiatRatesIntervalId);
+      WalletStore.setFiatRatesIntervalId(null);
+    }
+
+    if (NetworkStore.state.tickerStatisticsIntervalId) {
+      clearInterval(NetworkStore.state.tickerStatisticsIntervalId);
+      NetworkStore.setTickerStatisticsIntervalId(null);
+    }
   }
 }
 
