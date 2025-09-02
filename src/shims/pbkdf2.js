@@ -1,19 +1,15 @@
-// Import the actual pbkdf2 implementations
-import * as pbkdf2Package from 'pbkdf2';
+// Simple pbkdf2 re-export with pbkdf2Sync stub
+import { pbkdf2 as pbkdf2Async } from 'pbkdf2/browser.js';
 
-// Get the functions from the package
-const pbkdf2Async = pbkdf2Package.pbkdf2;
-const pbkdf2SyncImpl = pbkdf2Package.pbkdf2Sync;
-
-// Export the functions
-export const pbkdf2Sync = pbkdf2SyncImpl;
 export const pbkdf2 = pbkdf2Async;
 
-// Create pbkdf2 module interface
-const pbkdf2Module = {
-  pbkdf2: pbkdf2Async,
-  pbkdf2Sync: pbkdf2SyncImpl,
-};
+// pbkdf2Sync is not available in browser version, so we provide a stub
+export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
+  throw new Error('pbkdf2Sync is not available in browser environment. Use pbkdf2 (async) instead.');
+}
 
 // Default export
-export default pbkdf2Module;
+export default {
+  pbkdf2: pbkdf2Async,
+  pbkdf2Sync
+};
