@@ -404,7 +404,6 @@ export default {
     if (walletStore.fiatRatesIntervalId) {
       clearInterval(walletStore.fiatRatesIntervalId);
       walletStore.fiatRatesIntervalId = null;
-      console.debug('🧹 Cleared fiat rates interval during wallet switch');
     }
 
     // Clear all wallet-specific data immediately during wallet switching
