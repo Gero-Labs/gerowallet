@@ -12,6 +12,8 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": true,
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "strictNullChecks": false,
     "strictFunctionTypes": true,
@@ -33,10 +35,7 @@
     "jsx": "preserve",
     "target": "ES2020",
     "module": "ESNext",
-    "types": [
-      "chrome",
-      "vite/client"
-    ],
+    "types": ["chrome", "vite/client"],
     "paths": {
       "@/*": ["src/*"]
     },
