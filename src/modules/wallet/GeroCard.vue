@@ -4,6 +4,7 @@
     <div class="status-controls">
       <div class="dropdown-container">
         <select v-model="currentStatus" @change="setStatus(currentStatus)" class="status-dropdown">
+          <option value="auth">Unauthenticated</option>
           <option value="new">New User</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
@@ -11,7 +12,7 @@
       </div>
     </div>
 
-    <component :is="section" />
+    <component :is="section" @auth-complete="handleAuthComplete" />
   </div>
 </template>
 
@@ -19,6 +20,7 @@
 import { ref, onBeforeMount, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
 import { useMockCardData } from '@/models/card-example';
+import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
@@ -27,12 +29,19 @@ import geroStore from '@/stores/geroStore';
 const store = geroStore;
 const { initializeMockData } = useMockCardData();
 
-const section = ref(OrderCardSection);
-const currentStatus = ref('new' as 'new' | 'pending' | 'approved');
+const section = ref(KaiserexAuthPage);
+const currentStatus = ref('auth' as 'auth' | 'new' | 'pending' | 'approved');
 
 // Determine status based on user data and card data
 const determineStatus = computed(() => {
-  // If no user info, show order card section
+  // First check if user has authenticated with Kaiserex
+  const isKaiserexAuthenticated = localStorage.getItem('kaiserexRegistered') === 'true';
+  
+  if (!isKaiserexAuthenticated) {
+    return 'auth'; // Show auth page first
+  }
+
+  // If no user info but authenticated with Kaiserex, show order card section
   if (!cardStore.state.userInfo) {
     return 'new';
   }
@@ -51,24 +60,31 @@ const determineStatus = computed(() => {
   return 'new';
 });
 
-const setStatus = (status: 'new' | 'pending' | 'approved') => {
+const setStatus = (status: 'auth' | 'new' | 'pending' | 'approved') => {
   currentStatus.value = status;
 
   // Clear existing data
   cardStore.state.userInfo = null;
   cardStore.state.cardData = null;
   localStorage.removeItem('kycStatus');
+  localStorage.removeItem('kaiserexRegistered');
 
   // Set data based on status
   switch (status) {
+    case 'auth':
+      // No authentication - show auth page
+      break;
     case 'new':
-      // No data needed
+      // Authenticated but no KYC data - show order page
+      localStorage.setItem('kaiserexRegistered', 'true');
       break;
     case 'pending':
+      localStorage.setItem('kaiserexRegistered', 'true');
       cardStore.state.userInfo = { email: 'test@example.com' };
       localStorage.setItem('kycStatus', 'pending');
       break;
     case 'approved':
+      localStorage.setItem('kaiserexRegistered', 'true');
       cardStore.state.userInfo = { email: 'test@example.com' };
       cardStore.state.cardData = {
         pan: '**** **** **** 1234',
@@ -86,8 +102,12 @@ const setActiveStatus = () => {
   console.log('Current status:', status);
   console.log('User info:', cardStore.state.userInfo);
   console.log('Card data:', cardStore.state.cardData);
+  console.log('Kaiserex authenticated:', localStorage.getItem('kaiserexRegistered') === 'true');
 
   switch (status) {
+    case 'auth':
+      section.value = KaiserexAuthPage;
+      break;
     case 'new':
       section.value = OrderCardSection;
       break;
@@ -98,7 +118,7 @@ const setActiveStatus = () => {
       section.value = HomeSection;
       break;
     default:
-      section.value = OrderCardSection;
+      section.value = KaiserexAuthPage;
   }
 };
 
@@ -120,11 +140,24 @@ onBeforeMount(async () => {
   setActiveStatus();
 });
 
+// Handle auth completion from KaiserexAuthPage
+const handleAuthComplete = () => {
+  console.log('Kaiserex authentication completed');
+  // Re-evaluate status after authentication
+  if (!import.meta.env.DEV) {
+    setActiveStatus();
+  } else {
+    // In dev mode, switch to 'new' status
+    currentStatus.value = 'new';
+    setStatus('new');
+  }
+};
+
 // Watch for changes in user data and update status
 import { watch } from 'vue';
 
 watch(
-  [() => cardStore.state.userInfo, () => cardStore.state.cardData],
+  [() => cardStore.state.userInfo, () => cardStore.state.cardData, () => localStorage.getItem('kaiserexRegistered')],
   () => {
     if (!import.meta.env.DEV) {
       console.log('User data changed, updating status...');
@@ -144,7 +177,11 @@ watch(
   gap: 32px;
   width: 100%;
   height: 100%;
-  padding: 32px;
+  
+  // Only add padding for non-auth pages (auth page handles its own layout)
+  &:not(:has(.kaiserex-auth-page)) {
+    padding: 32px;
+  }
 }
 
 .status-controls {
