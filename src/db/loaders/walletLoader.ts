@@ -152,107 +152,59 @@ export class TransactionsLoader extends BaseLoader {
         Loading.setLoadingTxs(true);
         try {
           let transactions: any = [];
-          if (newTransactions) {
-            let currentStake: string = '';
-            let currentAddress: string = '';
-            if (this.walletContext.isEnterpriseAddress()) {
-              currentAddress = this.walletContext.baseAddress;
-            } else {
-              currentStake = this.walletContext.stakeAddress;
-            }
+          if (newTransactions?.length) {
+            const isEnterpriseAddress = this.walletContext.isEnterpriseAddress();
+            const currentAddress = isEnterpriseAddress ? this.walletContext.baseAddress : '';
+            const currentStake = !isEnterpriseAddress ? this.walletContext.stakeAddress : '';
+            const networkId = this.walletContext.networkId();
+            const network = networks.resolveNetwork(this.walletContext.chain, this.walletContext.network);
+            
+            const nativeAssetMetadata = {
+              decimals: 6,
+              description: network?.currencyDescription,
+              logo: network?.currencyImage,
+              name: network?.currencyName,
+              ticker: network?.currencyTicker,
+            };
 
-            transactions = newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp)
-              .map((tx) => {
-                let sentAmount: number = 0;
-                let receivedAmount: number = 0;
-                const sentAssets: any = {};
-                const receivedAssets: any = {};
+            newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp);
 
-                tx.utxo?.inputs.forEach(input => {
-                  if ((input.address === currentAddress || toStakeAddress(input.address, this.walletContext.networkId()) === currentStake) && !input.data_hash) {
-                    const value = input.amount.find(amount => amount.unit === 'lovelace');
-                    const asset_list = input.amount.filter(amount => amount.unit !== 'lovelace');
-                    if (value) {
-                      sentAmount += +value.quantity;
-                    }
-                    if (asset_list.length > 0) {
-                      asset_list.forEach(asset => {
-                        if (sentAssets[asset.unit]) {
-                          sentAssets[asset.unit].quantity += Number(asset.quantity);
-                        } else {
-                          sentAssets[asset.unit] = structuredClone(asset);
-                          sentAssets[asset.unit].quantity = Number(sentAssets[asset.unit].quantity);
-                        }
-                      });
-                    }
-                  }
-                });
+            transactions = newTransactions.map((tx) => {
+              let sentAmount = 0;
+              let receivedAmount = 0;
+              const sentAssets = new Map<string, any>();
+              const receivedAssets = new Map<string, any>();
 
-                tx.utxo?.outputs.forEach(output => {
-                  if ((output.address === currentAddress || toStakeAddress(output.address, this.walletContext.networkId()) === currentStake) && !output.datum_hash) {
-                    const value = output.amount.find(amount => amount.unit === 'lovelace');
-                    const asset_list = output.amount.filter(amount => amount.unit !== 'lovelace');
-                    if (value) {
-                      receivedAmount += +value.quantity;
-                    }
-
-                    if (asset_list.length > 0) {
-                      asset_list.forEach(asset => {
-                        if (receivedAssets[asset.unit]) {
-                          receivedAssets[asset.unit].quantity += Number(asset.quantity);
-                        } else {
-                          receivedAssets[asset.unit] = structuredClone(asset);
-                          receivedAssets[asset.unit].quantity = Number(receivedAssets[asset.unit].quantity);
-                        }
-                      });
-                    }
-                  }
-                });
-
-                const totalAmount = receivedAmount - sentAmount;
-                const assets: any = {...sentAssets};
-                const refAssets = {...sentAssets};
-                Object.values(receivedAssets).forEach((receivedAsset: any) => {
-                  if (assets[receivedAsset.unit]) {
-                    assets[receivedAsset.unit].quantity -= Number(receivedAsset.quantity);
-                    if (assets[receivedAsset.unit].quantity === 0) delete assets[receivedAsset.unit];
-                  } else {
-                    assets[receivedAsset.unit] = receivedAsset;
-                  }
-                });
-
-                const refAssetsCopy = {...refAssets};
-                Object.values(refAssets).forEach((asset: any) => {
-                  if (Number(refAssetsCopy[asset.unit].quantity) === 0) {
-                    delete refAssetsCopy[asset.unit];
-                  }
-                });
-
-                const network = networks.resolveNetwork(this.walletContext.chain, this.walletContext.network);
-                const nativeAsset = {
-                  unit: "lovelace",
-                  policy_id: "",
-                  asset_name: "lovelace",
-                  quantity: totalAmount,
-                  metadata: {
-                    decimals: 6,
-                    description: network?.currencyDescription,
-                    logo: network?.currencyImage,
-                    name: network?.currencyName,
-                    ticker: network?.currencyTicker,
-                  }
-                };
-
-                return {
-                  ...tx,
-                  sentAmount,
-                  receivedAmount,
-                  sentAssets: Object.values(sentAssets),
-                  receivedAssets: Object.values(receivedAssets),
-                  ada: totalAmount,
-                  assets: [nativeAsset, ...Object.values(assets)]
-                };
+              this.processUtxos(tx.utxo?.inputs, currentAddress, currentStake, networkId, true, sentAssets, (amount) => {
+                sentAmount += amount;
               });
+
+              this.processUtxos(tx.utxo?.outputs, currentAddress, currentStake, networkId, false, receivedAssets, (amount) => {
+                receivedAmount += amount;
+              });
+
+              const totalAmount = receivedAmount - sentAmount;
+              
+              const finalAssets = this.calculateFinalAssets(sentAssets, receivedAssets);
+              
+              const nativeAsset = {
+                unit: "lovelace",
+                policy_id: "",
+                asset_name: "lovelace",
+                quantity: totalAmount,
+                metadata: nativeAssetMetadata
+              };
+
+              return {
+                ...tx,
+                sentAmount,
+                receivedAmount,
+                sentAssets: Array.from(sentAssets.values()),
+                receivedAssets: Array.from(receivedAssets.values()),
+                ada: totalAmount,
+                assets: [nativeAsset, ...finalAssets]
+              };
+            });
           }
           WalletStore.setTransactions(transactions);
           
@@ -273,5 +225,79 @@ export class TransactionsLoader extends BaseLoader {
         console.error('Failed to fetch transactions:', error);
       }
     );
+  }
+
+  private processUtxos(
+    utxos: any[] | undefined,
+    currentAddress: string,
+    currentStake: string,
+    networkId: number,
+    isSent: boolean,
+    assetsMap: Map<string, any>,
+    addLovelace: (amount: number) => void
+  ): void {
+    if (!utxos?.length) return;
+
+    for (let i = 0; i < utxos.length; i++) {
+      const utxo = utxos[i];
+      const isOwnAddress = utxo.address === currentAddress || 
+        toStakeAddress(utxo.address, networkId) === currentStake;
+      
+      if (!isOwnAddress || (isSent && utxo.data_hash) || (!isSent && utxo.datum_hash)) {
+        continue;
+      }
+
+      const amounts = utxo.amount;
+      if (!amounts?.length) continue;
+
+      for (let j = 0; j < amounts.length; j++) {
+        const amount = amounts[j];
+        if (amount.unit === 'lovelace') {
+          addLovelace(Number(amount.quantity));
+        } else {
+          this.updateAssetMap(assetsMap, amount);
+        }
+      }
+    }
+  }
+
+  private updateAssetMap(assetsMap: Map<string, any>, asset: any): void {
+    const existing = assetsMap.get(asset.unit);
+    if (existing) {
+      existing.quantity += Number(asset.quantity);
+    } else {
+      assetsMap.set(asset.unit, {
+        ...asset,
+        quantity: Number(asset.quantity)
+      });
+    }
+  }
+
+  private calculateFinalAssets(sentAssets: Map<string, any>, receivedAssets: Map<string, any>): any[] {
+    const finalAssets: any[] = [];
+    const processedUnits = new Set<string>();
+
+    sentAssets.forEach((sentAsset, unit) => {
+      const receivedAsset = receivedAssets.get(unit);
+      const quantity = receivedAsset 
+        ? sentAsset.quantity - receivedAsset.quantity 
+        : sentAsset.quantity;
+      
+      if (quantity !== 0) {
+        finalAssets.push({
+          ...sentAsset,
+          quantity
+        });
+      }
+      processedUnits.add(unit);
+    });
+
+    receivedAssets.forEach((receivedAsset, unit) => {
+      if (!processedUnits.has(unit)) {
+        finalAssets.push(receivedAsset);
+      }
+    });
+
+    return finalAssets;
   }
 }
