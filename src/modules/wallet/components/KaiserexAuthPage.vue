@@ -217,12 +217,18 @@ const handleLogin = () => {
 };
 
 const handleLoginSubmit = () => {
+  // Set authentication status using the wallet status system
   localStorage.setItem('kaiserexRegistered', 'true');
+  
+  // Emit auth completion to trigger state update
   showLoginForm.value = false;
   emit('auth-complete');
 };
 
 const handleRegistrationComplete = () => {
+  // Set authentication status
+  localStorage.setItem('kaiserexRegistered', 'true');
+  
   showRegistrationModal.value = false;
   emit('auth-complete');
 };
@@ -605,7 +611,6 @@ const handleRegistrationComplete = () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 24px; // Match the auth-option padding
   justify-content: space-between; // Distribute content evenly
 }
 
