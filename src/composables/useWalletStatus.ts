@@ -1,167 +1,202 @@
-import { computed, watch, onMounted } from 'vue';
-import walletStatusStore, { type WalletStatusState, type KYCStatus } from '@/stores/modules/walletStatus';
-import cardStore from '@/stores/modules/card';
+import { computed, onMounted } from 'vue'
+import cardStore from '@/stores/modules/card'
 
 /**
- * Composable for managing wallet authentication and KYC status
- * Integrates with existing card store for seamless state management
+ * SIMPLE composable for wallet status management
+ * Uses only ONE card store - no complexity!
  */
 export function useWalletStatus() {
-  // Reactive state from wallet status store
-  const currentState = computed(() => walletStatusStore.computed.currentState.value);
-  const isLoading = computed(() => walletStatusStore.state.isLoading);
-  const error = computed(() => walletStatusStore.state.error);
-  const kycStatus = computed(() => walletStatusStore.state.kycStatus);
-  const isKaiserexAuthenticated = computed(() => walletStatusStore.state.isKaiserexAuthenticated);
+  // ============================================================================
+  // COMPUTED PROPERTIES - ALL FROM ONE STORE!
+  // ============================================================================
+  
+  // Core state
+  const currentState = computed(() => cardStore.currentState)
+  const isLoading = computed(() => cardStore.state.loading?.initialize || false)
+  const error = computed(() => cardStore.state.walletStatus?.error || null)
+  const loadingMessage = computed(() => cardStore.state.walletStatus?.loadingMessage || '')
+  
+  // Authentication state
+  const isKaiserexAuthenticated = computed(() => cardStore.state.walletStatus?.isKaiserexAuthenticated || false)
+  
+  // KYC state
+  const kycStatus = computed(() => cardStore.state.walletStatus?.kycStatus || 'not_started')
+  const kycData = computed(() => cardStore.state.walletStatus?.kycData || null)
+  
+  // Card data
+  const isCardAuthenticated = computed(() => cardStore.isAuthenticated)
+  const hasUserInfo = computed(() => !!cardStore.state.userInfo)
+  const hasCardData = computed(() => !!cardStore.state.cardData)
+  
+  // State-specific computed properties for component visibility
+  const showAuthPage = computed(() => currentState.value === 'auth')
+  const showNewUserFlow = computed(() => currentState.value === 'new')
+  const showPendingKYC = computed(() => currentState.value === 'pending')
+  const showApprovedHome = computed(() => currentState.value === 'approved')
+  const showLoadingState = computed(() => currentState.value === 'loading' || isLoading.value)
+  const showErrorState = computed(() => currentState.value === 'error' || !!error.value)
+  
+  /**
+   * Initialize card store
+   */
+  async function initialize(wallet?: any): Promise<void> {
+    await cardStore.initialize(wallet)
+  }
 
-  // Card store integration
-  const isCardAuthenticated = computed(() => cardStore.isAuthenticated);
-  const hasUserInfo = computed(() => !!cardStore.state.userInfo);
-  const hasCardData = computed(() => !!cardStore.state.cardData);
-  const cardLoading = computed(() => cardStore.state.loading);
+  /**
+   * Set Kaiserex authentication status
+   */
+  function setKaiserexAuthentication(isAuthenticated: boolean): void {
+    cardStore.setKaiserexAuthentication(isAuthenticated)
+  }
 
-  // Combined status checks
-  const canProceedToNext = computed(() => walletStatusStore.actions.canProceedToNext());
-  const nextAction = computed(() => walletStatusStore.actions.getNextAction());
+  /**
+   * Set KYC status with optional data
+   */
+  function setKYCStatus(status: string, data?: any): void {
+    cardStore.setKYCStatus(status, data)
+  }
 
-  // State-specific computed properties
-  const showAuthPage = computed(() => currentState.value === 'auth');
-  const showNewUserFlow = computed(() => currentState.value === 'new');
-  const showPendingKYC = computed(() => currentState.value === 'pending');
-  const showApprovedHome = computed(() => currentState.value === 'approved');
-  const showLoading = computed(() => currentState.value === 'loading' || isLoading.value);
+  /**
+   * Set error state
+   */
+  function setError(errorMessage: string): void {
+    cardStore.setError(errorMessage)
+  }
 
-  // Actions
-  const initialize = async () => {
-    await walletStatusStore.actions.initialize();
-  };
+  /**
+   * Clear error state
+   */
+  function clearError(): void {
+    cardStore.clearError()
+  }
 
-  const setKaiserexAuthentication = (isAuthenticated: boolean) => {
-    walletStatusStore.actions.setKaiserexAuthentication(isAuthenticated);
-  };
+  /**
+   * Clear all data (logout)
+   */
+  async function clearAll(): Promise<void> {
+    await cardStore.logout()
+  }
 
-  const setKYCStatus = (status: KYCStatus, data?: any) => {
-    walletStatusStore.actions.setKYCStatus(status, data);
-  };
+  /**
+   * Handle authentication completion from KaiserexAuthPage
+   */
+  async function handleAuthComplete(): Promise<void> {
+    console.log('🔐 Kaiserex authentication completed')
+    setKaiserexAuthentication(true)
+    clearError()
+  }
 
-  const setLoading = (loading: boolean, message?: string) => {
-    walletStatusStore.actions.setLoading(loading, message);
-  };
+  /**
+   * Handle KYC completion
+   */
+  async function handleKYCComplete(status: string = 'pending', data?: any): Promise<void> {
+    console.log('📋 KYC process completed with status:', status)
+    setKYCStatus(status, data)
+  }
 
-  const setError = (errorMessage: string | null) => {
-    walletStatusStore.actions.setError(errorMessage);
-  };
-
-  const clearAll = () => {
-    walletStatusStore.actions.clearAll();
-  };
-
-  const forceState = (state: WalletStatusState) => {
-    walletStatusStore.actions.forceState(state);
-  };
-
-  // Handle auth completion from KaiserexAuthPage
-  const handleAuthComplete = async () => {
-    console.log('🔐 Kaiserex authentication completed');
-    setKaiserexAuthentication(true);
-    
-    // If in development mode, you might want to set mock state
-    if (import.meta.env.DEV) {
-      // Optional: Set development state or let the computed state handle it
-    }
-  };
-
-  // Handle KYC completion
-  const handleKYCComplete = (status: KYCStatus = 'pending') => {
-    console.log('📋 KYC process completed with status:', status);
-    setKYCStatus(status, {
-      submittedAt: new Date().toISOString()
-    });
-  };
-
-  // Watch for changes in card store and update wallet status accordingly
-  watch(
-    [() => cardStore.state.userInfo, () => cardStore.state.cardData, () => cardStore.isAuthenticated],
-    () => {
-      // Re-evaluate state when card data changes
-      // The computed state will automatically update
+  // ============================================================================
+  // DEVELOPMENT HELPERS - SIMPLE!
+  // ============================================================================
+  
+  const devHelpers = process.env['NODE_ENV'] === 'development' ? {
+    /**
+     * Test authentication state
+     */
+    testAuthState(): void {
+      setKaiserexAuthentication(false)
     },
-    { deep: true }
-  );
 
+    /**
+     * Test new user state
+     */
+    testNewState(): void {
+      setKaiserexAuthentication(true)
+      setKYCStatus('not_started')
+    },
+
+    /**
+     * Test pending KYC state
+     */
+    testPendingState(): void {
+      setKaiserexAuthentication(true)
+      setKYCStatus('pending')
+    },
+
+    /**
+     * Test approved state
+     */
+    testApprovedState(): void {
+      setKaiserexAuthentication(true)
+      setKYCStatus('approved')
+    },
+
+    /**
+     * Simulate KYC approval
+     */
+    simulateKYCApproval(): void {
+      setKYCStatus('approved')
+    },
+
+    /**
+     * Clear development data
+     */
+    clearDevData(): void {
+      clearError()
+    },
+  } : {}
+
+  // ============================================================================
+  // LIFECYCLE
+  // ============================================================================
+  
   // Auto-initialize on mount
   onMounted(async () => {
-    await initialize();
-  });
+    await initialize()
+  })
 
-  // Development helpers
-  const devHelpers = import.meta.env.DEV ? {
-    // Development-only methods for testing different states
-    setDevState: (state: WalletStatusState) => {
-      console.warn(`[DEV] Setting wallet state to: ${state}`);
-      forceState(state);
-    },
-    
-    simulateKYCApproval: () => {
-      console.warn('[DEV] Simulating KYC approval');
-      setKYCStatus('approved', {
-        approvedAt: new Date().toISOString()
-      });
-    },
-    
-    simulateKYCRejection: (reason: string = 'Document verification failed') => {
-      console.warn('[DEV] Simulating KYC rejection');
-      setKYCStatus('rejected', {
-        rejectedAt: new Date().toISOString(),
-        rejectionReason: reason
-      });
-    },
-
-    clearDevData: () => {
-      console.warn('[DEV] Clearing all development data');
-      clearAll();
-      localStorage.removeItem('kaiserexRegistered');
-      localStorage.removeItem('kycStatus');
-      localStorage.removeItem('kycData');
-    }
-  } : {};
-
+  // ============================================================================
+  // RETURN COMPOSABLE API - SIMPLE!
+  // ============================================================================
+  
   return {
-    // State
+    // Core state
     currentState,
     isLoading,
     error,
-    kycStatus,
+    loadingMessage,
+    
+    // Authentication state
     isKaiserexAuthenticated,
     
-    // Card store integration
+    // KYC state
+    kycStatus,
+    kycData,
+    
+    // Card data
     isCardAuthenticated,
     hasUserInfo,
     hasCardData,
-    cardLoading,
     
-    // Combined status
-    canProceedToNext,
-    nextAction,
-    
-    // State checks
+    // Component visibility
     showAuthPage,
     showNewUserFlow,
     showPendingKYC,
     showApprovedHome,
-    showLoading,
+    showLoadingState,
+    showErrorState,
     
     // Actions
     initialize,
     setKaiserexAuthentication,
     setKYCStatus,
-    setLoading,
     setError,
+    clearError,
     clearAll,
     handleAuthComplete,
     handleKYCComplete,
     
     // Development helpers (only in dev mode)
-    ...devHelpers
-  };
+    ...devHelpers,
+  }
 }

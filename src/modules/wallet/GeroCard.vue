@@ -1,280 +1,257 @@
 <template>
   <div class="gero-wallet">
-    <!-- Status Dropdown (Development Only) -->
+    <!-- Development Status Controls (Development Only) -->
     <div class="status-controls" v-if="isDev">
       <div class="dropdown-container">
         <select v-model="currentStatus" @change="setStatus(currentStatus)" class="status-dropdown">
-          <option value="auth">Unauthenticated</option>
-          <option value="new">New User</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
+          <option value="auth">🔐 Unauthenticated</option>
+          <option value="new">🆕 New User</option>
+          <option value="pending">⏳ Pending KYC</option>
+          <option value="approved">✅ Approved</option>
         </select>
-        <div class="debug-info" style="margin-top: 10px; font-size: 12px; color: #666;">
-          <div>Current State: <strong>{{ currentState }}</strong></div>
-          <div>KYC Status: <strong>{{ kycStatus }}</strong></div>
-          <div>Kaiserex Auth: <strong>{{ isKaiserexAuthenticated }}</strong></div>
-          <div>Has User Info: <strong>{{ hasUserInfo }}</strong></div>
-          <div>Has Card Data: <strong>{{ hasCardData }}</strong></div>
+
+        <!-- Debug Information Panel -->
+        <div class="debug-info">
+          <div><strong>Current State:</strong> {{ currentState }}</div>
+          <div><strong>KYC Status:</strong> {{ kycStatus }}</div>
+          <div><strong>Kaiserex Auth:</strong> {{ isKaiserexAuthenticated }}</div>
+          <div><strong>Has User Info:</strong> {{ hasUserInfo }}</div>
+          <div><strong>Has Card Data:</strong> {{ hasCardData }}</div>
         </div>
-        <div style="margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
-          <button @click="testAuthState" style="padding: 5px 8px; font-size: 11px;">
-            🔐 Auth
-          </button>
-          <button @click="testNewState" style="padding: 5px 8px; font-size: 11px;">
-            🆕 New
-          </button>
-          <button @click="testPendingState" style="padding: 5px 8px; font-size: 11px;">
-            ⏳ Pending
-          </button>
-          <button @click="testApprovedState" style="padding: 5px 8px; font-size: 11px;">
-            ✅ Approved
-          </button>
+
+        <!-- Development Test Buttons -->
+        <div class="dev-buttons">
+          <button @click="testAuthState" :class="{ active: currentState === 'auth' }">🔐 Auth</button>
+          <button @click="testNewState" :class="{ active: currentState === 'new' }">🆕 New</button>
+          <button @click="testPendingState" :class="{ active: currentState === 'pending' }">⏳ Pending</button>
+          <button @click="testApprovedState" :class="{ active: currentState === 'approved' }">✅ Approved</button>
         </div>
       </div>
     </div>
 
-    <component :is="section" @auth-complete="handleAuthComplete" />
+    <!-- Loading State -->
+    <div v-if="showLoadingState" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p class="loading-message">{{ loadingMessage || 'Loading your wallet...' }}</p>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="showErrorState" class="error-container">
+      <div class="error-icon">⚠️</div>
+      <h3 class="error-title">Something went wrong</h3>
+      <p class="error-message">{{ error || 'An unexpected error occurred' }}</p>
+      <button @click="handleRetry" class="retry-button">Try Again</button>
+    </div>
+
+    <!-- Main Content -->
+    <component
+      v-else
+      :is="currentComponent"
+      @auth-complete="handleAuthComplete"
+      @kyc-complete="handleKYCComplete"
+      @error="handleError"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeMount, computed, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';
 import { useMockCardData } from '@/models/card-example';
-import { useWalletStatus } from '@/composables/useWalletStatus';
+import geroStore from '@/stores/geroStore';
+
+// Import components
 import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
-import geroStore from '@/stores/geroStore';
 
-const store = geroStore;
-const { initializeMockData } = useMockCardData();
+// ============================================================================
+// COMPOSABLES AND STORES
+// ============================================================================
 
-// Use the new wallet status composable
 const {
   currentState,
+  error,
+  loadingMessage,
   kycStatus,
   isKaiserexAuthenticated,
   hasUserInfo,
   hasCardData,
-  showAuthPage,
-  showNewUserFlow, 
-  showPendingKYC,
-  showApprovedHome,
-  showLoading,
-  handleAuthComplete,
-  setKaiserexAuthentication,
-  setKYCStatus,
-  clearAll,
-  // Development helpers (only available in dev mode)
-  setDevState,
-  simulateKYCApproval,
-  simulateKYCRejection,
-  clearDevData
+  showLoadingState,
+  showErrorState,
+  initialize,
+  handleAuthComplete: onAuthComplete,
+  handleKYCComplete: onKYCComplete,
+  setError,
+  clearError,
+  // Development helpers
+  clearDevData,
+  testAuthState,
+  testNewState,
+  testPendingState,
+  testApprovedState,
 } = useWalletStatus();
+const geroStoreInstance = geroStore;
+const { initializeMockData } = useMockCardData();
 
-const section = ref(KaiserexAuthPage);
-const currentStatus = ref('auth' as 'auth' | 'new' | 'pending' | 'approved');
-const isDev = import.meta.env.DEV;
+// ============================================================================
+// LOCAL STATE
+// ============================================================================
 
-// Determine status based on user data and card data
-const determineStatus = computed(() => {
-  // First check if user has authenticated with Kaiserex
-  const isKaiserexAuthenticated = localStorage.getItem('kaiserexRegistered') === 'true';
-  
-  if (!isKaiserexAuthenticated) {
-    return 'auth'; // Show auth page first
-  }
+const currentStatus = ref<'auth' | 'new' | 'pending' | 'approved'>('auth');
+const isDev = process.env['NODE_ENV'] === 'development';
 
-  // If no user info but authenticated with Kaiserex, show order card section
-  if (!cardStore.state.userInfo) {
-    return 'new';
-  }
-
-  // If user exists but no card data, show pending section
-  if ((cardStore.state.userInfo && !cardStore.state.cardData) || localStorage.getItem('kycStatus') === 'pending') {
-    return 'pending';
-  }
-
-  // If user and card data exist, show home section
-  if (cardStore.state.userInfo && cardStore.state.cardData) {
-    localStorage.removeItem('kycStatus');
-    return 'approved';
-  }
-
-  return 'new';
-});
-
-const setStatus = (status: 'auth' | 'new' | 'pending' | 'approved') => {
-  currentStatus.value = status;
-
-  if (import.meta.env.DEV) {
-    // In development, use the new wallet status store
-    switch (status) {
-      case 'auth':
-        clearDevData?.();
-        setDevState?.('auth');
-        break;
-      case 'new':
-        clearDevData?.();
-        setKaiserexAuthentication(true);
-        setDevState?.('new');
-        break;
-      case 'pending':
-        clearDevData?.();
-        setKaiserexAuthentication(true);
-        cardStore.state.userInfo = { email: 'test@example.com' };
-        setKYCStatus('pending');
-        setDevState?.('pending');
-        break;
-      case 'approved':
-        clearDevData?.();
-        setKaiserexAuthentication(true);
-        cardStore.state.userInfo = { email: 'test@example.com' };
-        cardStore.state.cardData = {
-          pan: '**** **** **** 1234',
-          currentBalance: '1000.00',
-          currency: 'EUR',
-        };
-        simulateKYCApproval?.();
-        setDevState?.('approved');
-        break;
-    }
-  }
-
-  setActiveStatus();
-};
-
-/**
- * Development testing utilities for wallet states
- * Each function simulates a specific user scenario
- */
-const WalletStateTester = {
-  /**
-   * Test Rule 1: No authentication token
-   * Expected: KaiserexAuthPage
-   */
-  testAuthState: () => {
-    setKaiserexAuthentication(false);
-  },
-
-  /**
-   * Test Rule 2: Has token but KYC not started
-   * Expected: OrderCardSection
-   */
-  testNewState: () => {
-    setKaiserexAuthentication(true);
-    setKYCStatus('not_started');
-  },
-
-  /**
-   * Test Rule 3: Has token and KYC pending
-   * Expected: PendingSection
-   */
-  testPendingState: () => {
-    setKaiserexAuthentication(true);
-    setKYCStatus('pending');
-  },
-
-  /**
-   * Test Rule 4: Has token and KYC approved
-   * Expected: HomeSection
-   */
-  testApprovedState: () => {
-    setKaiserexAuthentication(true);
-    
-    // Ensure required data exists for approved state
-    if (!cardStore.state.userInfo) {
-      cardStore.state.userInfo = { email: 'test@example.com' };
-    }
-    if (!cardStore.state.cardData) {
-      cardStore.state.cardData = { cardNumber: '****1234' };
-    }
-    
-    setKYCStatus('approved');
-  }
-};
-
-// Expose test functions
-const { testAuthState, testNewState, testPendingState, testApprovedState } = WalletStateTester;
+// ============================================================================
+// COMPUTED PROPERTIES
+// ============================================================================
 
 /**
  * Component mapping for wallet states
- * Each state corresponds to a specific user flow
+ * Each state corresponds to a specific user flow as per WALLET_STATE_ARCHITECTURE.md
  */
 const WALLET_COMPONENTS = {
-  auth: KaiserexAuthPage,     // Authentication required
-  new: OrderCardSection,      // Order Gero Card
-  pending: PendingSection,    // KYC under review
-  approved: HomeSection,      // Full wallet access
-  loading: null,             // Keep current component
+  auth: KaiserexAuthPage, // Authentication required
+  new: OrderCardSection, // Order Gero Card
+  pending: PendingSection, // KYC under review
+  approved: HomeSection, // Full wallet access
+  loading: null, // Keep current component
+  error: null, // Error handled in template
 } as const;
 
 /**
- * Updates the active component based on current wallet state
- * Uses centralized state from walletStatusStore
+ * Determine the current component to display based on wallet state
  */
-const setActiveStatus = () => {
-  const walletState = currentState.value;
-  
-  // Map state to component
-  const targetComponent = WALLET_COMPONENTS[walletState];
-  
-  if (targetComponent) {
-    section.value = targetComponent;
-  } else if (walletState === 'loading') {
-    // Keep current component during loading
-  } else {
-    // Fallback to auth for unknown states
-    section.value = KaiserexAuthPage;
-  }
-};
-
-onBeforeMount(async () => {
-  // Initialize mock data in development
-  if (import.meta.env.DEV) {
-    console.log('Initializing mock data in GeroWallet...');
-    await initializeMockData();
-  } else {
-    // Use real API in production
-    console.log('Initializing real API in GeroWallet...');
-    // Get the first available wallet or pass null if no wallets
-    const wallets = Object.values(store.state.wallets);
-    const wallet = wallets.length > 0 ? wallets[0] : null;
-    await cardStore.initialize(wallet);
-  }
-
-  // Set active status after data is loaded
-  setActiveStatus();
-  
-  // Force initialize wallet status store
-  setTimeout(() => {
-    setActiveStatus();
-  }, 100);
+const currentComponent = computed(() => {
+  const state = currentState.value;
+  return WALLET_COMPONENTS[state] || KaiserexAuthPage;
 });
 
-// Handle auth completion is now handled by the composable
-// const handleAuthComplete is imported from useWalletStatus
+// ============================================================================
+// EVENT HANDLERS
+// ============================================================================
 
-// Watch for changes in user data and update status
-
-// Watch for changes in wallet status and update component
-watch(
-  () => currentState.value,
-  (newState, oldState) => {
-    setActiveStatus();
+/**
+ * Handle authentication completion
+ */
+async function handleAuthComplete(): Promise<void> {
+  try {
+    await onAuthComplete();
+    clearError();
+  } catch (error) {
+    console.error('Authentication completion failed:', error);
+    handleError('Authentication failed. Please try again.');
   }
-);
+}
 
-// Watch for changes in card store data and update status
-watch(
-  [() => cardStore.state.userInfo, () => cardStore.state.cardData, () => localStorage.getItem('kaiserexRegistered')],
-  () => {
-    setActiveStatus();
-  },
-  { deep: true }
-);
+/**
+ * Handle KYC completion
+ */
+async function handleKYCComplete(status: string = 'pending', data?: any): Promise<void> {
+  try {
+    await onKYCComplete(status as any, data);
+    clearError();
+  } catch (error) {
+    console.error('KYC completion failed:', error);
+    handleError('KYC submission failed. Please try again.');
+  }
+}
+
+/**
+ * Handle errors from child components
+ */
+function handleError(errorMessage: string): void {
+  setError(errorMessage);
+}
+
+/**
+ * Handle retry action from error state
+ */
+async function handleRetry(): Promise<void> {
+  clearError();
+
+  try {
+    // Get the first available wallet or pass null if no wallets
+    const wallets = Object.values(geroStoreInstance.state.wallets);
+    const wallet = wallets.length > 0 ? wallets[0] : null;
+
+    if (isDev) {
+      await initializeMockData();
+    } else {
+      await cardStore.initialize(wallet);
+    }
+  } catch (error) {
+    console.error('Retry failed:', error);
+    handleError('Failed to retry. Please refresh the page.');
+  }
+}
+
+// ============================================================================
+// DEVELOPMENT HELPERS
+// ============================================================================
+
+/**
+ * Set development status for testing different states
+ */
+function setStatus(status: typeof currentStatus.value): void {
+  if (!isDev) return;
+
+  currentStatus.value = status;
+  clearDevData?.();
+
+  switch (status) {
+    case 'auth':
+      testAuthState?.();
+      break;
+    case 'new':
+      testNewState?.();
+      break;
+    case 'pending':
+      testPendingState?.();
+      break;
+    case 'approved':
+      testApprovedState?.();
+      break;
+  }
+}
+
+
+
+// ============================================================================
+// WATCHERS
+// ============================================================================
+
+/**
+ * Watch for changes in wallet status and update dropdown
+ */
+watch(currentState, newState => {
+  if (isDev) {
+    currentStatus.value = newState as any;
+  }
+});
+
+// ============================================================================
+// LIFECYCLE
+// ============================================================================
+
+onMounted(async () => {
+  try {
+    if (isDev) {
+      console.log('🚀 Initializing Gero Wallet in development mode');
+      await initializeMockData();
+    } else {
+      console.log('🚀 Initializing Gero Wallet in production mode');
+      // Get the first available wallet or pass null if no wallets
+      const wallets = Object.values(geroStoreInstance.state.wallets);
+      const wallet = wallets.length > 0 ? wallets[0] : null;
+      await initialize(wallet);
+    }
+  } catch (error) {
+    console.error('Failed to initialize Gero Wallet:', error);
+    handleError('Failed to initialize wallet. Please refresh the page.');
+  }
+});
 </script>
 
 <style lang="scss" scoped>
@@ -286,26 +263,125 @@ watch(
   gap: 32px;
   width: 100%;
   height: 100%;
-  
+
   // Only add padding for non-auth pages (auth page handles its own layout)
   &:not(:has(.kaiserex-auth-page)) {
     padding: 32px;
   }
 }
 
+// ============================================================================
+// LOADING STATE
+// ============================================================================
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  padding: 40px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left: 4px solid #00c7f3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 24px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-message {
+  color: #cecfd2;
+  font-size: 16px;
+  margin: 0;
+}
+
+// ============================================================================
+// ERROR STATE
+// ============================================================================
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  padding: 40px;
+}
+
+.error-icon {
+  font-size: 64px;
+  margin-bottom: 24px;
+}
+
+.error-title {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.error-message {
+  color: #cecfd2;
+  font-size: 16px;
+  margin: 0 0 32px 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.retry-button {
+  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+  border: none;
+  border-radius: 8px;
+  color: #0c0e12;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 199, 243, 0.3);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// ============================================================================
+// DEVELOPMENT CONTROLS
+// ============================================================================
+
 .status-controls {
   position: fixed;
   bottom: 16px;
   right: 16px;
   z-index: 1000;
-  background: rgba(12, 17, 29, 0.8);
+  background: rgba(12, 17, 29, 0.95);
   border: 1px solid #1f242f;
-  border-radius: 4px;
-  padding: 4px 8px;
-  backdrop-filter: blur(8px);
-  opacity: 0.6;
+  border-radius: 8px;
+  padding: 12px;
+  backdrop-filter: blur(12px);
+  opacity: 0.8;
   transition: opacity 0.2s ease;
-  font-size: 10px;
+  font-size: 11px;
+  max-width: 280px;
 
   &:hover {
     opacity: 1;
@@ -313,27 +389,20 @@ watch(
 
   .dropdown-container {
     display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .dropdown-label {
-    color: #cecfd2;
-    font-size: 10px;
-    font-weight: 500;
-    white-space: nowrap;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .status-dropdown {
     background: #1f242f;
     border: 1px solid #2a3038;
-    border-radius: 3px;
+    border-radius: 4px;
     color: #fff;
-    font-size: 10px;
-    padding: 2px 6px;
+    font-size: 11px;
+    padding: 6px 8px;
     outline: none;
     cursor: pointer;
-    min-width: 80px;
+    width: 100%;
 
     &:focus {
       border-color: #00c7f3;
@@ -342,8 +411,96 @@ watch(
     option {
       background: #1f242f;
       color: #fff;
-      font-size: 10px;
     }
+  }
+
+  .debug-info {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    font-size: 10px;
+    line-height: 1.4;
+
+    div {
+      color: #cecfd2;
+      margin-bottom: 2px;
+
+      strong {
+        color: #00c7f3;
+      }
+    }
+  }
+
+  .dev-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+
+    button {
+      padding: 4px 8px;
+      font-size: 10px;
+      background: #2a3038;
+      border: 1px solid #3a4048;
+      border-radius: 3px;
+      color: #cecfd2;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background: #3a4048;
+        border-color: #4a5058;
+      }
+
+      &.active {
+        background: #00c7f3;
+        border-color: #00c7f3;
+        color: #0c0e12;
+        font-weight: 600;
+      }
+
+      &.error-btn {
+        background: #dc3545;
+        border-color: #dc3545;
+        color: #fff;
+
+        &:hover {
+          background: #c82333;
+          border-color: #c82333;
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// RESPONSIVE DESIGN
+// ============================================================================
+
+@media (max-width: 768px) {
+  .gero-wallet {
+    padding: 16px;
+    gap: 24px;
+  }
+
+  .status-controls {
+    bottom: 8px;
+    right: 8px;
+    max-width: 240px;
+    padding: 8px;
+  }
+
+  .loading-container,
+  .error-container {
+    min-height: 300px;
+    padding: 24px;
+  }
+
+  .error-title {
+    font-size: 20px;
+  }
+
+  .error-message {
+    font-size: 14px;
   }
 }
 </style>
