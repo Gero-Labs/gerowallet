@@ -65,6 +65,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
+import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';
 import filters from '@/shared/utils/filters';
@@ -175,6 +176,12 @@ const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selecte
 const isRendering = ref(false); // Prevent multiple simultaneous renders
 const chartKey = ref(0); // Force chart re-render when changed
 const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
+
+// VueUse-powered timeout management - automatic cleanup!
+const createTimeout = (callback: Function, delay: number) => {
+  const { start } = useTimeoutFn(callback, delay, { immediate: false });
+  start();
+};
 
 const tabs = {
   YEAR: { value: 'YEAR', label: '12M', vsLabel: 'vs last year' },
@@ -897,7 +904,7 @@ const loadChart = () => {
     chartInstance.value = Highstock.stockChart('highstock-chart', data as any);
 
     // Force chart reflow to fix size issues after re-render
-    setTimeout(() => {
+    createTimeout(() => {
       if (chartInstance.value && chartInstance.value.reflow && typeof chartInstance.value.reflow === 'function') {
         try {
           chartInstance.value.reflow();
@@ -1127,9 +1134,9 @@ watch(
           // Force chart rerender for timeline issues
           chartKey.value += 1;
 
-          setTimeout(() => {
+          createTimeout(() => {
             loadChart();
-            setTimeout(() => {
+            createTimeout(() => {
               handleTabClick(tab.value);
               // Additional reflow to ensure proper sizing
               if (
@@ -1152,9 +1159,9 @@ watch(
       if (!props.loading && activeDataChanged) {
         const activeData = activeChartData.value;
         if (activeData && activeData.length > 0 && !isRendering.value) {
-          setTimeout(() => {
+          createTimeout(() => {
             loadChart();
-            setTimeout(() => {
+            createTimeout(() => {
               handleTabClick(tab.value);
             }, 100);
           }, 10);
@@ -1177,9 +1184,9 @@ watch(
       props.chartData.length > 0 &&
       !isRendering.value
     ) {
-      setTimeout(() => {
+      createTimeout(() => {
         loadChart();
-        setTimeout(() => {
+        createTimeout(() => {
           handleTabClick(tab.value);
         }, 100);
       }, 100);
@@ -1191,16 +1198,17 @@ watch(
 watch(selectedCurrency, () => {
   // Only reload chart if not already rendering
   if (!isRendering.value) {
-    setTimeout(() => {
+    createTimeout(() => {
       loadChart();
-      setTimeout(() => {
+      createTimeout(() => {
         handleTabClick(tab.value);
       }, 50);
     }, 50);
   }
 });
 
-onBeforeUnmount(() => {
+// VueUse automatically handles timeout cleanup, but we still need chart cleanup
+tryOnBeforeUnmount(() => {
   if (chartInstance.value) {
     try {
       chartInstance.value.destroy();
@@ -1232,7 +1240,7 @@ watch(
 
       if (hasAnyData) {
         // Small delay for DOM to update
-        setTimeout(() => {
+        createTimeout(() => {
           loadChart();
           handleTabClick(tab.value);
         }, 50);
@@ -1268,7 +1276,7 @@ onMounted(() => {
 
       if (firstLoaded) {
         selectCurrency(firstLoaded);
-        setTimeout(() => {
+        createTimeout(() => {
           loadChart();
           handleTabClick(tab.value);
         }, 50);
@@ -1283,7 +1291,7 @@ onMounted(() => {
         (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
 
       if (hasAnyData) {
-        setTimeout(() => {
+        createTimeout(() => {
           loadChart();
           handleTabClick(tab.value);
         }, 100);
