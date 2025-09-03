@@ -326,6 +326,17 @@ export class WalletManager {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
       }
 
+      // Clean up store messaging service
+      try {
+        const { storeMessaging } = await import('@/services/storeMessaging.service');
+        if (storeMessaging && typeof storeMessaging.destroy === 'function') {
+          storeMessaging.destroy();
+          console.log('Store messaging service cleaned up successfully');
+        }
+      } catch (storeMessagingError) {
+        console.warn('Failed to cleanup store messaging service during logout:', storeMessagingError);
+      }
+
       // Note: Don't send logout message to background since this method
       // is already called FROM the background logout handler
 
