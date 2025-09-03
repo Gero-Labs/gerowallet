@@ -119,10 +119,22 @@ class AblyService {
 
   public close(): void {
     try {
+      // Remove all connection listeners first to prevent memory leaks
+      if (this.client?.connection) {
+        this.client.connection.off(); // Remove all listeners
+      }
+      
       this.unsubscribeAll();
-      this.client.connection?.close();
+      
+      // Force close connection
+      if (this.client.connection?.state !== 'closed') {
+        this.client.connection?.close();
+      }
       this.client.close();
+      
+      // Clear references to prevent memory leaks
       this.api = null;
+      this.authParams = null;
       
       // Clear any pending message chunks
       messageReconstructionService.clearAll();
@@ -396,7 +408,18 @@ class AblyService {
 
   public unsubscribeAll(): void {
     this.subscribedChannels.forEach((channel: Ably.RealtimeChannel) => {
-      channel.unsubscribe();
+      try {
+        // Remove all channel event listeners
+        channel.off();
+        // Unsubscribe from all messages
+        channel.unsubscribe();
+        // Detach channel to free resources
+        if (channel.state === 'attached') {
+          channel.detach();
+        }
+      } catch (error) {
+        console.warn('Error cleaning up channel:', error);
+      }
     });
     this.subscribedChannels.clear();
   }
