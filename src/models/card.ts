@@ -100,6 +100,7 @@ export interface CardLoadingState {
   cardBalance: boolean;
   cardHistory: boolean;
   auth: boolean;
+  initialize: boolean;
 }
 
 export interface CardErrorState {
@@ -110,6 +111,7 @@ export interface CardErrorState {
   cardBalance: string | null;
   cardHistory: string | null;
   auth: string | null;
+  initialize: string | null;
 }
 
 export interface CardState {
@@ -129,6 +131,16 @@ export interface CardState {
   cardHistory: HistoryResponse | null;
   totalDeposits: number;
   activities: Activity[];
+
+  // Wallet status integration - ALL IN ONE!
+  walletStatus: {
+    currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
+    isKaiserexAuthenticated: boolean;
+    kycStatus: 'not_started' | 'pending' | 'approved' | 'rejected' | 'expired';
+    kycData: any;
+    loadingMessage: string;
+    error: string | null;
+  };
 
   // Loading states
   loading: CardLoadingState;
