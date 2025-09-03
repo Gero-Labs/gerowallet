@@ -1,7 +1,7 @@
 <template>
   <div class="gero-wallet">
     <!-- Status Dropdown (Development Only) -->
-    <div class="status-controls">
+    <div class="status-controls" v-if="isDev">
       <div class="dropdown-container">
         <select v-model="currentStatus" @change="setStatus(currentStatus)" class="status-dropdown">
           <option value="auth">Unauthenticated</option>
@@ -9,6 +9,27 @@
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
         </select>
+        <div class="debug-info" style="margin-top: 10px; font-size: 12px; color: #666;">
+          <div>Current State: <strong>{{ currentState }}</strong></div>
+          <div>KYC Status: <strong>{{ kycStatus }}</strong></div>
+          <div>Kaiserex Auth: <strong>{{ isKaiserexAuthenticated }}</strong></div>
+          <div>Has User Info: <strong>{{ hasUserInfo }}</strong></div>
+          <div>Has Card Data: <strong>{{ hasCardData }}</strong></div>
+        </div>
+        <div style="margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
+          <button @click="testAuthState" style="padding: 5px 8px; font-size: 11px;">
+            🔐 Auth
+          </button>
+          <button @click="testNewState" style="padding: 5px 8px; font-size: 11px;">
+            🆕 New
+          </button>
+          <button @click="testPendingState" style="padding: 5px 8px; font-size: 11px;">
+            ⏳ Pending
+          </button>
+          <button @click="testApprovedState" style="padding: 5px 8px; font-size: 11px;">
+            ✅ Approved
+          </button>
+        </div>
       </div>
     </div>
 
@@ -17,9 +38,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeMount, computed } from 'vue';
+import { ref, onBeforeMount, computed, watch } from 'vue';
 import cardStore from '@/stores/modules/card';
 import { useMockCardData } from '@/models/card-example';
+import { useWalletStatus } from '@/composables/useWalletStatus';
 import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
@@ -29,8 +51,32 @@ import geroStore from '@/stores/geroStore';
 const store = geroStore;
 const { initializeMockData } = useMockCardData();
 
+// Use the new wallet status composable
+const {
+  currentState,
+  kycStatus,
+  isKaiserexAuthenticated,
+  hasUserInfo,
+  hasCardData,
+  showAuthPage,
+  showNewUserFlow, 
+  showPendingKYC,
+  showApprovedHome,
+  showLoading,
+  handleAuthComplete,
+  setKaiserexAuthentication,
+  setKYCStatus,
+  clearAll,
+  // Development helpers (only available in dev mode)
+  setDevState,
+  simulateKYCApproval,
+  simulateKYCRejection,
+  clearDevData
+} = useWalletStatus();
+
 const section = ref(KaiserexAuthPage);
 const currentStatus = ref('auth' as 'auth' | 'new' | 'pending' | 'approved');
+const isDev = import.meta.env.DEV;
 
 // Determine status based on user data and card data
 const determineStatus = computed(() => {
@@ -63,62 +109,125 @@ const determineStatus = computed(() => {
 const setStatus = (status: 'auth' | 'new' | 'pending' | 'approved') => {
   currentStatus.value = status;
 
-  // Clear existing data
-  cardStore.state.userInfo = null;
-  cardStore.state.cardData = null;
-  localStorage.removeItem('kycStatus');
-  localStorage.removeItem('kaiserexRegistered');
-
-  // Set data based on status
-  switch (status) {
-    case 'auth':
-      // No authentication - show auth page
-      break;
-    case 'new':
-      // Authenticated but no KYC data - show order page
-      localStorage.setItem('kaiserexRegistered', 'true');
-      break;
-    case 'pending':
-      localStorage.setItem('kaiserexRegistered', 'true');
-      cardStore.state.userInfo = { email: 'test@example.com' };
-      localStorage.setItem('kycStatus', 'pending');
-      break;
-    case 'approved':
-      localStorage.setItem('kaiserexRegistered', 'true');
-      cardStore.state.userInfo = { email: 'test@example.com' };
-      cardStore.state.cardData = {
-        pan: '**** **** **** 1234',
-        currentBalance: '1000.00',
-        currency: 'EUR',
-      };
-      break;
+  if (import.meta.env.DEV) {
+    // In development, use the new wallet status store
+    switch (status) {
+      case 'auth':
+        clearDevData?.();
+        setDevState?.('auth');
+        break;
+      case 'new':
+        clearDevData?.();
+        setKaiserexAuthentication(true);
+        setDevState?.('new');
+        break;
+      case 'pending':
+        clearDevData?.();
+        setKaiserexAuthentication(true);
+        cardStore.state.userInfo = { email: 'test@example.com' };
+        setKYCStatus('pending');
+        setDevState?.('pending');
+        break;
+      case 'approved':
+        clearDevData?.();
+        setKaiserexAuthentication(true);
+        cardStore.state.userInfo = { email: 'test@example.com' };
+        cardStore.state.cardData = {
+          pan: '**** **** **** 1234',
+          currentBalance: '1000.00',
+          currency: 'EUR',
+        };
+        simulateKYCApproval?.();
+        setDevState?.('approved');
+        break;
+    }
   }
 
   setActiveStatus();
 };
 
-const setActiveStatus = () => {
-  const status = import.meta.env.DEV ? currentStatus.value : determineStatus.value;
-  console.log('Current status:', status);
-  console.log('User info:', cardStore.state.userInfo);
-  console.log('Card data:', cardStore.state.cardData);
-  console.log('Kaiserex authenticated:', localStorage.getItem('kaiserexRegistered') === 'true');
+/**
+ * Development testing utilities for wallet states
+ * Each function simulates a specific user scenario
+ */
+const WalletStateTester = {
+  /**
+   * Test Rule 1: No authentication token
+   * Expected: KaiserexAuthPage
+   */
+  testAuthState: () => {
+    setKaiserexAuthentication(false);
+  },
 
-  switch (status) {
-    case 'auth':
-      section.value = KaiserexAuthPage;
-      break;
-    case 'new':
-      section.value = OrderCardSection;
-      break;
-    case 'pending':
-      section.value = PendingSection;
-      break;
-    case 'approved':
-      section.value = HomeSection;
-      break;
-    default:
-      section.value = KaiserexAuthPage;
+  /**
+   * Test Rule 2: Has token but KYC not started
+   * Expected: OrderCardSection
+   */
+  testNewState: () => {
+    setKaiserexAuthentication(true);
+    setKYCStatus('not_started');
+  },
+
+  /**
+   * Test Rule 3: Has token and KYC pending
+   * Expected: PendingSection
+   */
+  testPendingState: () => {
+    setKaiserexAuthentication(true);
+    setKYCStatus('pending');
+  },
+
+  /**
+   * Test Rule 4: Has token and KYC approved
+   * Expected: HomeSection
+   */
+  testApprovedState: () => {
+    setKaiserexAuthentication(true);
+    
+    // Ensure required data exists for approved state
+    if (!cardStore.state.userInfo) {
+      cardStore.state.userInfo = { email: 'test@example.com' };
+    }
+    if (!cardStore.state.cardData) {
+      cardStore.state.cardData = { cardNumber: '****1234' };
+    }
+    
+    setKYCStatus('approved');
+  }
+};
+
+// Expose test functions
+const { testAuthState, testNewState, testPendingState, testApprovedState } = WalletStateTester;
+
+/**
+ * Component mapping for wallet states
+ * Each state corresponds to a specific user flow
+ */
+const WALLET_COMPONENTS = {
+  auth: KaiserexAuthPage,     // Authentication required
+  new: OrderCardSection,      // Order Gero Card
+  pending: PendingSection,    // KYC under review
+  approved: HomeSection,      // Full wallet access
+  loading: null,             // Keep current component
+} as const;
+
+/**
+ * Updates the active component based on current wallet state
+ * Uses centralized state from walletStatusStore
+ */
+const setActiveStatus = () => {
+  const walletState = currentState.value;
+  
+  // Map state to component
+  const targetComponent = WALLET_COMPONENTS[walletState];
+  
+  if (targetComponent) {
+    section.value = targetComponent;
+  } else if (walletState === 'loading') {
+    // Keep current component during loading
+  } else {
+    // Fallback to auth for unknown states
+    section.value = KaiserexAuthPage;
   }
 };
 
@@ -138,31 +247,31 @@ onBeforeMount(async () => {
 
   // Set active status after data is loaded
   setActiveStatus();
+  
+  // Force initialize wallet status store
+  setTimeout(() => {
+    setActiveStatus();
+  }, 100);
 });
 
-// Handle auth completion from KaiserexAuthPage
-const handleAuthComplete = () => {
-  console.log('Kaiserex authentication completed');
-  // Re-evaluate status after authentication
-  if (!import.meta.env.DEV) {
-    setActiveStatus();
-  } else {
-    // In dev mode, switch to 'new' status
-    currentStatus.value = 'new';
-    setStatus('new');
-  }
-};
+// Handle auth completion is now handled by the composable
+// const handleAuthComplete is imported from useWalletStatus
 
 // Watch for changes in user data and update status
-import { watch } from 'vue';
 
+// Watch for changes in wallet status and update component
+watch(
+  () => currentState.value,
+  (newState, oldState) => {
+    setActiveStatus();
+  }
+);
+
+// Watch for changes in card store data and update status
 watch(
   [() => cardStore.state.userInfo, () => cardStore.state.cardData, () => localStorage.getItem('kaiserexRegistered')],
   () => {
-    if (!import.meta.env.DEV) {
-      console.log('User data changed, updating status...');
-      setActiveStatus();
-    }
+    setActiveStatus();
   },
   { deep: true }
 );

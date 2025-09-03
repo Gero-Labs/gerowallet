@@ -106,6 +106,7 @@ const handleKaiserexComplete = () => {
 
 const setKYCStatus = () => {
   localStorage.setItem('kycStatus', 'pending');
+  
   showKYCModal.value = false;
   closeModal();
 };

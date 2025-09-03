@@ -244,7 +244,9 @@ const handleNext = () => {
     }
   } else if (currentStep.value === 2) {
     if (capturedPhoto.value) {
-      console.log('KYC submitted');
+      // Set KYC status to pending
+      localStorage.setItem('kycStatus', 'pending');
+      
       emit('complete', true);
       closeModal();
     } else {
