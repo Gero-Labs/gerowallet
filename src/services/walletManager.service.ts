@@ -40,6 +40,14 @@ export class WalletManager {
   }
 
   /**
+   * Get the current wallet background instance
+   * @returns WalletBg instance or null if not logged in
+   */
+  getWalletBg(): WalletBg | null {
+    return this.walletBg;
+  }
+
+  /**
    * Login with a wallet
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
@@ -82,6 +90,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          api: walletBg.api,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);

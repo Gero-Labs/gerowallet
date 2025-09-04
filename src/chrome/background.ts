@@ -1150,7 +1150,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
-        request.data.isUsb
+        request.data.mergeWitnesses || false
       );
       sendResponse({
         id: request.id,

@@ -21,6 +21,8 @@
         v-model="filtersMenu"
         :close-on-content-click="false"
         offset-y
+        eager
+        transition="none"
       >
         <template v-slot:activator="{ on, attrs }">
           <v-badge
@@ -431,4 +433,5 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
     flex: 1 1 auto !important;
   }
 }
+
 </style>

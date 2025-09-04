@@ -17,6 +17,7 @@
 import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 
 const width = ref<number>(2);
 const radius = ref<number>(0);
@@ -31,10 +32,17 @@ const intervalId = ref<number>(null);
 const { price } = toRefs(networkStore)
 
 const priceChange = computed(() => {
-  if (price.value?.priceChange) {
-    return Number(price.value.priceChange)
+  // Use Kraken WebSocket price change, fallback to network store
+  const krakenChange = priceStore.adaUsd?.priceChange;
+  const networkChange = price.value?.priceChange;
+  
+  if (krakenChange !== undefined && krakenChange !== null) {
+    return Number(krakenChange);
   }
-  return 0
+  if (networkChange) {
+    return Number(networkChange);
+  }
+  return 0;
 })
 
 const fetch = async () => {

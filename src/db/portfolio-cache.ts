@@ -27,7 +27,7 @@ async function getWalletDb(): Promise<any> {
   if (!walletId) {
     throw new Error('No wallet logged in');
   }
-  return await getDb(walletId);
+  return getDb(walletId);
 }
 
 export class PortfolioCacheService {
@@ -501,7 +501,7 @@ export class PortfolioCacheService {
     eurData: any[];
   }> {
     await this.clearAddressCache(address);
-    return await this.loadAllPortfolioData(address);
+    return this.loadAllPortfolioData(address);
   }
 
   /**
