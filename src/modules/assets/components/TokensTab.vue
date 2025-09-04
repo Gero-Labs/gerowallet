@@ -164,6 +164,7 @@ import { xerberusStore } from '@/stores/xerberusStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
+import { priceStore } from '@/stores/priceStore';
 import { get24hChange } from '@/shared/utils/resolver';
 
 // Props
@@ -318,7 +319,8 @@ const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
       token.risk = 'AAA';
-      token.price = Number(price.value?.lastPrice);
+      // Use Kraken WebSocket price for ADA, fallback to network store price
+      token.price = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
       let coinGeckoCurrency = 'cardano';
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
@@ -331,7 +333,8 @@ const tokensList = computed(() => {
       );
       token.value = quantity * token.price;
       token.allocation = token.value;
-      token.change = price.value?.priceChangePercent;
+      // Use Kraken WebSocket price change for ADA, fallback to network store
+      token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       token.risk = risks.value[token.fingerprint]?.risk;
       token.price = dexHunterTokens.value[token.unit]?.price;
@@ -409,11 +412,10 @@ const totalAllocation = computed(() => {
   if (tokensList.value.length === 1) {
     const token = tokensList.value[0];
     let res: any;
-    if (
-      token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
-    ) {
-      res =
-        Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * price.value?.lastPrice;
+    if (token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+      // Use Kraken WebSocket price for ADA, fallback to network store price
+      const adaPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
+      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice
     } else {
       res = token.value;
     }
@@ -437,12 +439,9 @@ const paginatedTokens = computed(() => {
 });
 
 // Watch for search term changes to reset pagination
-watch(
-  () => props.searchTerm,
-  () => {
-    currentPage.value = 1;
-  }
-);
+watch(() => props.searchTerm, () => {
+  currentPage.value = 1;
+});
 </script>
 
 <style scoped>

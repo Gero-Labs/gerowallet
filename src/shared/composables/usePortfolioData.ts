@@ -27,7 +27,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const adaData = ref<any[]>([]);
   const usdData = ref<any[]>([]);
   const eurData = ref<any[]>([]);
-  
+
   // Track loading order
   const loadingOrder = ref<Array<'ADA' | 'USD' | 'EUR'>>([]);
 
@@ -123,16 +123,16 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   };
 
   const cleanupExpiredCache = async (address: string): Promise<number> => {
-    return await cacheService.cleanupExpiredCache(address);
+    return cacheService.cleanupExpiredCache(address);
   };
 
   const getCacheStats = async () => {
-    return await cacheService.getCacheStats();
+    return cacheService.getCacheStats();
   };
 
   // New smart caching methods
   const getCacheStatus = async (address: string) => {
-    return await cacheService.getCacheStatus(address);
+    return cacheService.getCacheStatus(address);
   };
 
   const loadMissingData = async (address: string): Promise<void> => {
@@ -183,19 +183,19 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
     // Load all currencies in parallel
     const currencies: Array<'ADA' | 'USD' | 'EUR'> = ['ADA', 'USD', 'EUR'];
-    
+
     const loadPromises = currencies.map(async (currency) => {
       try {
 
         const data = await loadPortfolioData(address, currency);
-        
+
         // Track loading order and update the corresponding ref immediately
         if (!loadingOrder.value.includes(currency)) {
           loadingOrder.value.push(currency);
         }
-        
+
         const isFirst = loadingOrder.value.length === 1;
-        
+
         if (currency === 'ADA') {
           adaData.value = data;
         } else if (currency === 'USD') {
@@ -203,7 +203,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
         } else if (currency === 'EUR') {
           eurData.value = data;
         }
-        
+
         return { currency, data, success: true };
       } catch (error) {
         console.error(`❌ Error loading ${currency} portfolio data:`, error);
@@ -262,7 +262,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     loadingUsd,
     loadingEur,
     isLoading,
-    
+
     // Loading order tracking
     loadingOrder,
     firstLoadedCurrency,

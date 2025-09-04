@@ -14,6 +14,6 @@ export default {
     if (fingerprint === 'asset12ffdj8kk2w485sr7a5ekmjjdyecz8ps2cm5zed') {
       throw new Error('Asset not found')
     }
-    return await axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
+    return axiosInstance.get(`/api/risk/score/asset?fingerprint=${fingerprint}`);
   }
 }

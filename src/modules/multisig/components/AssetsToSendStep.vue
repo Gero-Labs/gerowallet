@@ -118,6 +118,7 @@
   import { ref, computed, watch, onMounted, toRefs } from 'vue';
   import { walletStore } from '@/stores/walletStore';
   import { networkStore } from '@/stores/networkStore';
+  import { priceStore } from '@/stores/priceStore';
   // import { multisigStore } from '@/stores/modules/multisig';
   import TokenSelector from '@/shared/components/TokenSelector.vue';
   import networks from '@/utils/networks';
@@ -203,7 +204,8 @@
 
   const getPrice = (token: Token) => {
     if (!token) return '';
-    let price = networkStore.price.lastPrice;
+    // Use Kraken WebSocket price for ADA, fallback to network store price
+    let price = priceStore.adaUsd?.lastPrice || networkStore.price.lastPrice;
     const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
     if (token.ticker !== nativeTicker) {
       price = token.last_price;

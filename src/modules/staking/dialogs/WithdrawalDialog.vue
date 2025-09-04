@@ -129,11 +129,11 @@ const form = ref<any>(null);
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
-    for (const [rewardAddress, amount] of props.tx.body.withdrawals) {
-      if (rewardAddress === loggedWallet.value?.stakeAddress) {
-        withdrawalsAmount += Number(amount);
+    props.tx.body.withdrawals.forEach((withdrawal) => {
+      if (withdrawal.stakeAddress === loggedWallet.value?.stakeAddress) {
+        withdrawalsAmount += Number(withdrawal.quantity);
       }
-    }
+    })
   }
   return withdrawalsAmount;
 });
@@ -182,7 +182,7 @@ const signWithdrawalTx = async () => {
           accountIndex: 0,
           utxos: utxos.value,
           addresses: keys.value, // Address mappings
-          isUsb: false
+          mergeWitnesses: false,
         }
       }) as { data: { witnesses?: any; error?: string } };
 

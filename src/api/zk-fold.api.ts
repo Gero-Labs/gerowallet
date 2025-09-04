@@ -11,6 +11,6 @@ const axiosInstance = axios.create({
 
 export default {
   async walletAddress(gmail: string) {
-    return await axiosInstance.get(`/api/zkfold/walletAddress/${encodeURIComponent(gmail)}`);
+    return axiosInstance.get(`/api/zkfold/walletAddress/${encodeURIComponent(gmail)}`);
   }
 }
