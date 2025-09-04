@@ -49,7 +49,7 @@ export class SyncService {
         }
         const prevAccountInfo = await this.walletBg.getAccountInfo();
         const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
-        const from = latestTxBlockHeight || 0
+        const from = latestTxBlockHeight + 1 || 0
         let address: string;
         if (this.walletBg.isEnterpriseAddress()) {
           address = this.walletBg.baseAddress;
@@ -181,7 +181,7 @@ export class SyncService {
         res = await this.api.getAccountInfo(this.walletBg.stakeAddress);
       }
       if (res) {
-        return await this.walletBg.setAccountInfo(res);
+        return this.walletBg.setAccountInfo(res);
       }
     } catch (e) {
       // console.log(e);

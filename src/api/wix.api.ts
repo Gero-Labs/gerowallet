@@ -15,9 +15,9 @@ export default {
     if (nextPage) {
       url += `&paging.cursor=${nextPage}`
     }
-    return await axiosInstance.get(url);
+    return axiosInstance.get(url);
   },
   async getPostMetrics(postId: string): Promise<any> {
-    return await axiosInstance.get(`/api/blog/posts/${postId}/metrics`);
+    return axiosInstance.get(`/api/blog/posts/${postId}/metrics`);
   }
 }

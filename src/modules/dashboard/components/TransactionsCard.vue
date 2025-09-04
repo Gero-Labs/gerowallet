@@ -112,7 +112,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4">
-                {{ filters.toCurrency(item.ada * price?.lastPrice, true, 0, '$', '', false, 6) }}
+                {{ filters.toCurrency(item.ada * adaPrice, true, 0, '$', '', false, 6) }}
               </div>
             </div>
           </template>
@@ -173,6 +173,7 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 
 const props = defineProps({
@@ -192,6 +193,9 @@ const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+
+// Use Kraken WebSocket price for ADA, fallback to network store price
+const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 
 const activityHeaders = ref([
   { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
@@ -258,7 +262,7 @@ const transactionStatuses = ref<Record<string, string>>({});
 const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
   const promises = transactions.map(async (item) => {
     const txId = item.id;
-    
+
     // Skip if already loaded
     if (transactionStatuses.value[txId]) {
       return;
@@ -266,7 +270,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 
     // Load status with pool data
     const statuses = [];
-    
+
     if (item.body?.certificates?.length > 0) {
       for (const certificate of item.body.certificates) {
         const status = await processCertificate(certificate, true);
@@ -275,7 +279,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
     }
 
     addFundTransferStatus(item, statuses);
-    
+
     const finalStatus = statuses.join(', ');
     transactionStatuses.value[txId] = finalStatus;
   });
@@ -313,16 +317,16 @@ const getCertificateBaseStatus = (certificateType: string): string => {
 // Process single certificate and return status
 const processCertificate = async (certificate: Cardano.Certificate, loadPoolData = false): Promise<string> => {
   const baseStatus = getCertificateBaseStatus(certificate.__typename);
-  
+
   // For delegation certificates, try to get enhanced status with pool ticker
-  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation || 
+  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
        certificate.__typename === Cardano.CertificateType.StakeDelegation) && loadPoolData) {
     const pool = await getPoolByIdFromApi(certificate.poolId);
     if (pool && pool.ticker) {
       return 'Delegating to ' + pool.ticker;
     }
   }
-  
+
   return baseStatus;
 };
 
@@ -342,7 +346,7 @@ const addFundTransferStatus = (item: any, statuses: string[]): void => {
 // Build basic transaction status without pool API data
 const buildBasicStatus = (item: any): string => {
   const statuses = [];
-  
+
   if (item.body?.certificates?.length > 0) {
     item.body.certificates.forEach((certificate: Cardano.Certificate) => {
       const status = getCertificateBaseStatus(certificate.__typename);

@@ -5,10 +5,9 @@ import {
   Bip32PrivateKey,
   Ed25519PrivateKey,
   Ed25519PublicKey,
-  Ed25519PublicKeyHex,
-  Ed25519SignatureHex,
   Hash28ByteBase16,
 } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
 import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
@@ -72,7 +71,7 @@ import {
 } from '@/shared/utils/converter';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
-import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
 
 let blockchainDb: Dexie = null;
@@ -137,6 +136,8 @@ export class WalletBg {
 
   unsubscribeAll() {
     this.loaderFactory.unsubscribeAll();
+    // CRITICAL: Clear all intervals and alarms during cleanup
+    this.endSync();
   }
 
   networkId(): number {
@@ -776,7 +777,7 @@ export class WalletBg {
    * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference
    * @param addresses - Address mappings (key-value pairs of addresses)
-   * @param isUsb - USB connection flag for hardware wallets
+   * @param mergeWitnesses - Whether to merge existing witnesses into the transaction
    * @returns Promise with witness set hex string
    */
   async signTx(
@@ -786,7 +787,7 @@ export class WalletBg {
     accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
-    isUsb?: boolean
+    mergeWitnesses: boolean = false,
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -821,14 +822,14 @@ export class WalletBg {
 
       const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
 
-      // Derive account private key
-      const accountPrivateKey = rootPrivateKey.derive([
+      // Derive an account private key
+      const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
         WalletTypePurpose.CIP1852,
         CoinTypes.CARDANO,
         HARDENED + accountIndex,
       ]);
 
-      // Create signature map for the witness
+      // Create a signature map for the witness
       const signatures = new Map<string, string>();
 
       // Analyze transaction to determine required signatures
@@ -852,17 +853,11 @@ export class WalletBg {
       for (const signer of requiredSigners) {
         console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
 
-        const privateKey = accountPrivateKey.derive(signer.derivationPath);
-        const rawPublicKey = privateKey.toRawKey().toPublic();
+        const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
+        const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
 
-        // Create transaction hash for signing
-        const txBodyHash = computeTxHash(transaction.body);
-        const txBodyHashBytes = Buffer.from(txBodyHash, 'hex');
-
-        console.debug(`  Transaction hash: ${txBodyHash}`);
-
-        // Sign the transaction hash
-        const signature = privateKey.toRawKey().sign(txBodyHashBytes);
+        // Sign the transaction hash as a HexBlob type
+        const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
 
         // Use the raw public key bytes (32 bytes) for the witness map, not the extended key
         const rawPublicKeyBytes = rawPublicKey.bytes();
@@ -871,7 +866,7 @@ export class WalletBg {
         console.debug(`  Public key: ${rawPublicKeyHex}`);
         console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
 
-        signatures.set(rawPublicKeyHex as Ed25519PublicKeyHex, signature.hex() as Ed25519SignatureHex);
+        signatures.set(rawPublicKey.hex(), signature.hex());
       }
 
       console.debug(`🔏 Total signatures created: ${signatures.size}`);
@@ -880,14 +875,22 @@ export class WalletBg {
         console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
       });
 
-      // Create witness set - ensure signatures map is properly set
+      // Create a witness set - ensure a signature map is properly set
       const witness: Cardano.Witness = {
         signatures: new Map(signatures), // Create a new Map to ensure it's properly set
-        scripts: transaction.witness?.scripts,
-        datums: transaction.witness?.datums,
-        redeemers: transaction.witness?.redeemers,
-        bootstrap: transaction.witness?.bootstrap,
       };
+      if (mergeWitnesses) {
+        // Merge existing signatures with new ones
+        if (transaction.witness?.signatures) {
+          transaction.witness.signatures.forEach((sig, pubKey) => {
+            witness.signatures.set(pubKey, sig);
+          });
+        }
+        witness.scripts = transaction.witness?.scripts
+        witness.datums = transaction.witness?.datums
+        witness.redeemers = transaction.witness?.redeemers
+        witness.bootstrap = transaction.witness?.bootstrap
+      }
 
       // Serialize witness to CBOR hex
       const witnessHex = serializeWitness(witness);
