@@ -8,7 +8,7 @@
 1. Have Using DockerDesktop or Rancher Desktop installed
 2. Pull the image from DockerHub:
 ```
-docker pull skyhawkofficial/gero:gerowallet-backend-v1.76
+docker pull skyhawkofficial/gero:gerowallet-backend-v1.137
 ```
 3. Run the container
 ```
