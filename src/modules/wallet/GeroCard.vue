@@ -2,7 +2,7 @@
   <div class="gero-card-coming-soon">
     <!-- Background image with blend effect -->
     <div class="background-layer"></div>
-    
+
     <!-- Floating Elements behind content -->
     <div class="floating-elements">
       <div class="floating-card card-1"></div>
@@ -12,7 +12,7 @@
       <div class="floating-card card-5"></div>
       <div class="floating-card card-6"></div>
     </div>
-    
+
     <!-- Main Content Container -->
     <div class="content-container">
       <!-- Liquid Glass Card -->
@@ -20,9 +20,9 @@
         <!-- 3D Debit Card Section -->
         <div class="debit-card-container">
           <div class="debit-card-glow"></div>
-          <div class="debit-card-3d-wrapper" 
-               @mousemove="handleCardMouseMove" 
-               @mouseleave="handleCardMouseLeave" 
+          <div class="debit-card-3d-wrapper"
+               @mousemove="handleCardMouseMove"
+               @mouseleave="handleCardMouseLeave"
                :style="debitCardStyle">
             <img
               src="@/assets/front_card_no_mcx2.png"
@@ -37,7 +37,7 @@
           Gero Card
           <span class="gradient-text">Coming Soon</span>
         </h1>
-        
+
         <p class="coming-soon-description">
           Get ready to seamlessly bridge your digital assets with everyday purchases.
         </p>
@@ -182,7 +182,6 @@ $text-secondary: #cecfd2;
   justify-content: center;
   background: transparent;
   overflow: hidden;
-  padding-left: 150px;
 }
 
 // Background Layer
@@ -222,7 +221,7 @@ $text-secondary: #cecfd2;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 24px;
   padding: 24px;
-  box-shadow: 
+  box-shadow:
     0 20px 40px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     0 0 80px rgba(0, 199, 243, 0.1);
@@ -270,7 +269,7 @@ $text-secondary: #cecfd2;
   height: auto;
   border-radius: 16px;
   animation: float 5s ease-in-out infinite;
-  box-shadow: 
+  box-shadow:
     0 20px 40px rgba(0, 199, 243, 0.3),
     0 0 60px rgba(0, 199, 243, 0.2);
 }
@@ -394,7 +393,7 @@ $text-secondary: #cecfd2;
   -webkit-backdrop-filter: blur(15px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
-  box-shadow: 
+  box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   opacity: 0.3;
