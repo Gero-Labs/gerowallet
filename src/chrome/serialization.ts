@@ -510,7 +510,7 @@ export async function focusOrCreatePopup(url: string, width: number, height: num
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
   const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain);
   const networkEnum: string = Object.keys(Network).find(key => Network[key] === network);
-  return await fetch(`${baseUrl}/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
+  return fetch(`${baseUrl}/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: tx
@@ -518,7 +518,7 @@ export async function submitTx(tx: string, chain: string, network: string): Prom
 }
 
 export const urlScan = async (url: string) => {
-  return await fetch(`${baseUrl}/api/url/scan?url=${url}`, {
+  return fetch(`${baseUrl}/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });

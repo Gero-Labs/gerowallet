@@ -933,6 +933,6 @@ export default {
     if (!version) {
       throw new Error('Cardano app is closed');
     }
-    return await ledger.signMessage(messageData);
+    return ledger.signMessage(messageData);
   },
 };

@@ -594,7 +594,7 @@ export function analyzeTransactionForSignatures(
     if (utxo) {
       const outputAddress = utxo[1].address;
 
-      // The addresses parameter is actually the keys object from wallet store
+      // The addresses parameter is actually the keys object from the wallet store
       // It has structure: { payment: [addressObj], change: [addressObj], stake: [addressObj], ... }
       let foundAddressInfo = null;
 
@@ -616,7 +616,7 @@ export function analyzeTransactionForSignatures(
         });
       } else {
         // This should not happen if the wallet store is properly populated
-        // But fallback to external 0 as last resort
+        // But fallback to external 0 as a last resort
         requiredSigners.push({
           derivationPath: [ChainDerivations.EXTERNAL, 0],
           type: 'payment'
@@ -630,7 +630,7 @@ export function analyzeTransactionForSignatures(
     console.debug('🔍 Analyzing certificates for required signatures:');
     for (const certificate of transaction.body.certificates) {
       console.debug(`  Certificate type: ${certificate.__typename}`);
-      
+
       if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
           certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
           certificate.__typename === Cardano.CertificateType.StakeDelegation ||
@@ -665,21 +665,48 @@ export function analyzeTransactionForSignatures(
 
   // Check for required signers field
   if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
+    console.debug('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
     for (const keyHash of transaction.body.requiredExtraSignatures) {
-      // Try to match the key hash to our known keys
-      const paymentKeyHash = paymentKeyExternal(0).hash().hex();
-      const stakeKeyHash = stakeKey().hash().hex();
+      console.debug(`🔍 Looking for required key hash: ${keyHash}`);
+      let foundMatch = false;
 
-      if (keyHash === Hash28ByteBase16(paymentKeyHash)) {
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.EXTERNAL, 0],
-          type: 'payment'
-        });
-      } else if (keyHash === Hash28ByteBase16(stakeKeyHash)) {
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-          type: 'stake'
-        });
+      // Search through all known addresses in the wallet store keys
+      const addressTypes = ['payment', 'change', 'stake'];
+
+      for (const addressType of addressTypes) {
+        if (foundMatch) break;
+
+        const addressArray = addresses[addressType];
+        if (addressArray && Array.isArray(addressArray)) {
+          for (const addressInfo of addressArray) {
+            if (addressInfo && (addressInfo.cred)) {
+              console.debug(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
+              // Compare key hash directly from wallet store
+              // Use cred field if keyHash is not available (this is the actual field name in WalletStore)
+              if (keyHash === addressInfo.cred) {
+                const pathArray = parseDerivationPath(addressInfo.path);
+                console.debug(`🔍 Full parsed path: [${pathArray.join(',')}]`);
+                console.debug(`🔍 Should be: [0, 0] for external address index 0`);
+                requiredSigners.push({
+                  derivationPath: pathArray,
+                  type: addressType === 'stake' ? 'stake' : 'payment'
+                });
+                foundMatch = true;
+                console.debug(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Log if we couldn't find a matching key
+      if (!foundMatch) {
+        console.warn(`Could not find wallet key for required signature: ${keyHash}`);
+        console.debug('Available address types:', Object.keys(addresses));
+        console.debug('Payment addresses:', addresses.payment?.map(a => ({ keyHash: a.cred, path: a.path })));
+        console.debug('Change addresses:', addresses.change?.map(a => ({ keyHash: a.cred, path: a.path })));
+        console.debug('Stake addresses:', addresses.stake?.map(a => ({ keyHash: a.cred, path: a.path })));
       }
     }
   }

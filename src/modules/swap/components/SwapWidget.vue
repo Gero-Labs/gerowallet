@@ -672,7 +672,7 @@ const prepareSwap = async () => {
     console.log('txCbor', txCbor)
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign },
+      data: { tx: txCbor, partialSign, mergeWitnesses: false },
     });
     console.log('signaturesRes', signaturesRes)
     if (signaturesRes.error) {
