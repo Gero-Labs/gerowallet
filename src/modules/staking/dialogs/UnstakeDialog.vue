@@ -33,7 +33,7 @@
           </v-col>
           <v-col :cols="cols">
             <h4>Total</h4>
-            <h4><strong>{{ toCurrency(withdrawals+depositFee-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
+            <h4><strong>{{ filters.toCurrency(Number(withdrawals)+Number(depositFee)-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
             <v-tooltip
@@ -93,6 +93,7 @@ import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 
 const props = defineProps({
   isOpen: {
@@ -110,6 +111,7 @@ const emit = defineEmits(['close']);
 
 const { toCurrency } = filters;
 const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+const { epochParams } = toRefs(networkStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -126,47 +128,23 @@ const form = ref<any>(null);
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
-    for (const [rewardAddress, amount] of props.tx.body.withdrawals) {
-      if (rewardAddress === loggedWallet.value?.stakeAddress) {
-        withdrawalsAmount += Number(amount);
+    props.tx.body.withdrawals.forEach((withdrawal) => {
+      if (withdrawal.stakeAddress === loggedWallet.value?.stakeAddress) {
+        withdrawalsAmount += Number(withdrawal.quantity);
       }
-    }
+    })
   }
   return withdrawalsAmount;
 });
 
 const depositFee = computed(() => {
-  if (!props.tx?.body) return 0;
-
-  let totalAdaOutput = 0;
-
-  // Calculate input amounts
-  if (props.tx.body.inputs) {
-    for (const input of props.tx.body.inputs) {
-      const utxo = utxos.value?.find((utxo: Cardano.Utxo) =>
-        utxo[0].txId === input.txId && utxo[0].index === input.index
-      );
-      if (utxo) {
-        totalAdaOutput -= Number(utxo[1].value.coins);
-      }
-    }
-  }
-
-  // Calculate output amounts
-  if (props.tx.body.outputs) {
-    for (const output of props.tx.body.outputs) {
-      totalAdaOutput += Number(output.value.coins);
-    }
-  }
-
-  // Check if this is a deregistration (returns deposit)
   const hasDeregistrationCert = props.tx.body.certificates?.some(
-    cert => cert.__typename === Cardano.CertificateType.StakeDeregistration
+    cert => cert.__typename === Cardano.CertificateType.StakeDeregistration ||
+      cert.__typename === Cardano.CertificateType.Unregistration
   );
 
   if (hasDeregistrationCert) {
-    // For deregistration, the deposit is returned (negative fee)
-    return totalAdaOutput + Number(props.tx.body.fee) - withdrawals.value;
+    return epochParams.value.stakeKeyDeposit;
   }
 
   return 0;
@@ -216,7 +194,7 @@ const signUnStakeTx = async () => {
           accountIndex: 0,
           utxos: utxos.value,
           addresses: keys.value, // Address mappings
-          isUsb: false
+          mergeWitnesses: false,
         }
       }) as { data: { witnesses?: any; error?: string } };
 

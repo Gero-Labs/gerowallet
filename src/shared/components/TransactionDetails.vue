@@ -137,7 +137,7 @@
                         <v-chip pill class="pl-0" outlined color="#FF8E8E" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
-                              :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)"
+                              :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
                               contain
                             >
                               <template v-slot:placeholder>
@@ -158,7 +158,7 @@
                               false,
                               6,
                               '',
-                              ' ' + networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network),
+                              ' ' + networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network),
                               false,
                               6
                             )
@@ -229,7 +229,7 @@
                         <v-chip pill class="pl-0" outlined color="#00DFF3" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
-                              :src="networks.resolveCurrencyImage(loggedWallet.chain, loggedWallet.network)"
+                              :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
                               contain
                             >
                               <template v-slot:placeholder>
@@ -250,7 +250,7 @@
                               false,
                               6,
                               '',
-                              ' ' + networks.resolveCurrencyTicker(loggedWallet.chain, loggedWallet.network),
+                              ' ' + networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network),
                               false,
                               6
                             )
@@ -953,7 +953,7 @@ const shrink = () => {
 
 const resolvePoolMeta = async (poolId: string) => {
   if (poolId) {
-    const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value.chain, loggedWallet.value.network)
+    const pool = await blockchainApi.getPoolById(poolId, loggedWallet.value?.chain, loggedWallet.value?.network)
     if (pool) {
       currentPoolMeta.value = JSON.parse(pool.pool_extended_info)?.info;
     } else {

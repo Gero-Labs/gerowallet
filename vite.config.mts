@@ -127,15 +127,6 @@ export const sharedConfig: UserConfig = {
       // topLevelAwait() // Temporarily disabled
     ]
   },
-  server: {
-    hmr: {
-      overlay: false,
-      clientPort: port,
-    },
-    fs: {
-      allow: ['..'],
-    },
-  },
   esbuild: {
     target: 'es2022',
     keepNames: isDev,
@@ -163,12 +154,30 @@ export default defineConfig(({ command }) => {
       port,
       hmr: {
         host: 'localhost',
+        overlay: false,
+        clientPort: port,
       },
       origin: `http://localhost:${port}`,
+      fs: {
+        allow: ['..'],
+      },
       watch: {
         usePolling: true,
         interval: 1000,
-        ignored: ['C:/DumpStack.log.tmp']
+        ignored: [
+          '**/DumpStack.log.tmp',
+          '**/DumpStack.log*',
+          '**/*.tmp',
+          '**/*.temp',
+          '**/dump*',
+          '**/temp/**',
+          '**/tmp/**',
+          '**/node_modules/**',
+          '**/.git/**',
+          'D:\\DumpStack.log.tmp',
+          'D:\\DumpStack.log',
+          'D:\\*.tmp'
+        ]
       }
     },
     build: {
