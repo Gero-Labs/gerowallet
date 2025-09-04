@@ -12,11 +12,11 @@ const blockchainDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
   const dbName = `${chain}_${network}`;
-  
+
   if (blockchainDbCache.has(dbName)) {
     return blockchainDbCache.get(dbName)!;
   }
-  
+
   try {
     const db: Dexie = new Dexie(dbName);
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
@@ -63,7 +63,7 @@ export default {
     try {
       // Attempt to open the database
       const db: Dexie = new Dexie(dbName);
-      return await db.open();
+      return db.open();
     } catch (error: DexieError | any) {
       console.log(error)
       if (error.name === 'NoSuchDatabaseError') {
@@ -80,12 +80,12 @@ export default {
   },
   setBlockchainDBVersionSchema(db: Dexie) {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
-  }, 
+  },
   setWalletDBVersionSchema(db: Dexie) {
     console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
   },
   async checkIfDbExists(dbName: string) {
-    return await Dexie.exists(dbName);
+    return Dexie.exists(dbName);
   }
 };

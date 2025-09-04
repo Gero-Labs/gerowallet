@@ -472,15 +472,11 @@
                   text
                   x-small
                   @click="closePosition(item)"
-                  :loading="closingPositions[item.id]"
-                  class="close-position-btn-compact"
-                  :disabled="closingPositions[item.id]"
+                  :loading="closingPositions[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
+                  class="close-position-btn-compact mr-1"
+                  :disabled="closingPositions[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
                 >
-                  <v-icon x-small>{{
-                      closingPositions[item.id]
-                        ? "mdi-loading mdi-spin"
-                        : "mdi-close"
-                    }}</v-icon>
+                  <v-icon x-small>mdi-close</v-icon>
                 </v-btn>
               </template>
             </v-data-table>
@@ -597,9 +593,11 @@
                         color="error"
                         outlined
                         @click="cancelLimitOrder(item)"
-                        class="action-btn-compact"
+                        :loading="cancellingOrders[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
+                        class="close-position-btn-compact mr-1"
+                        :disabled="cancellingOrders[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
                       >
-                        Cancel
+                        <v-icon x-small>mdi-close</v-icon>
                       </v-btn>
                     </div>
                   </template>
@@ -896,10 +894,10 @@
                 Limit Price
                 <v-tooltip top content-class="custom-tooltip">
                   <template v-slot:activator="{ on, attrs }">
-                    <v-icon 
-                      small 
-                      class="ml-1" 
-                      v-bind="attrs" 
+                    <v-icon
+                      small
+                      class="ml-1"
+                      v-bind="attrs"
                       v-on="on"
                       color="grey"
                     >
@@ -907,8 +905,8 @@
                     </v-icon>
                   </template>
                   <span>
-                    Price at which your limit order executes. 
-                    Long: Set below current price. 
+                    Price at which your limit order executes.
+                    Long: Set below current price.
                     Short: Set above current price.
                   </span>
                 </v-tooltip>
@@ -949,7 +947,7 @@
             <!-- Step 3: Collateral Amount -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between">
-                <div class="form-label compact">Collateral Amount</div>
+                <div class="form-label compact">Collateral</div>
                 <span class="available-balance compact"
                 >Available: {{ availableAdaBalance }} ADA</span
                 >
@@ -1001,8 +999,9 @@
                 </div>
               </div>
               <v-slider
+                hide-details
                 v-model="positionData.leverage"
-                :min="1"
+                :min="1.1"
                 :max="15"
                 :step="0.1"
                 thumb-label
@@ -1066,9 +1065,7 @@
                         <v-card-text class="pa-1">
                           <div class="input-container">
                             <v-text-field
-                              v-model.number="
-                                  positionData.takeProfitPrice
-                                "
+                              v-model="positionData.takeProfitPrice"
                               placeholder="0.0000"
                               dense
                               flat
@@ -1107,7 +1104,7 @@
                         <v-card-text class="pa-1">
                           <div class="input-container">
                             <v-text-field
-                              v-model.number="positionData.stopLossPrice"
+                              v-model="positionData.stopLossPrice"
                               placeholder="0.0000"
                               dense
                               flat
@@ -1260,7 +1257,7 @@
                     ? "mdi-flash"
                     : "mdi-target"
                 }}</v-icon>
-              {{ positionData.orderType === 'MARKET' ? 'Open' : 'Place Limit' }} {{ positionData.position }} {{ positionData.orderType === 'MARKET' ? 'Position' : 'Order' }}
+              {{ buttonText }}
             </v-btn>
           </div>
         </v-col>
@@ -1289,22 +1286,22 @@
       <v-card-title class="headline">
         Update Position
       </v-card-title>
-      
+
       <v-card-text>
         <div v-if="selectedPosition" class="mb-4">
           <div class="position-info mb-3">
-            <v-chip 
+            <v-chip
               :color="selectedPosition.position === 'Long' ? 'success' : 'error'"
               small
               class="mr-2"
             >
               {{ selectedPosition.position.toUpperCase() }}
             </v-chip>
-            <span class="asset-name">{{ selectedPosition.asset?.ticker || 'ADA' }}</span>
+            <span class="asset-name">{{ selectedPosition.asset.asset?.ticker || 'ADA' }}</span>
           </div>
-          
+
           <v-text-field
-            v-model.number="updatePositionData.stopLossPrice"
+            v-model="updatePositionData.stopLossPrice"
             label="Stop Loss Price (USD)"
             type="number"
             step="0.01"
@@ -1315,9 +1312,9 @@
             :placeholder="selectedPosition.stopLossPrice?.toString() || '0.00'"
             class="mb-3"
           />
-          
+
           <v-text-field
-            v-model.number="updatePositionData.takeProfitPrice"
+            v-model="updatePositionData.takeProfitPrice"
             label="Take Profit Price (USD)"
             type="number"
             step="0.01"
@@ -1329,7 +1326,7 @@
           />
         </div>
       </v-card-text>
-      
+
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn
@@ -1357,11 +1354,24 @@ import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
-import type { Asset, ClosePerpetualRequest, CreatePerpetualRequest, PerpetualPosition, LimitOrder, CancelLimitOrderRequest, UpdatePositionRequest } from '@/api/strike-finance.api';
+import {
+  Asset,
+  ClosePerpetualRequest,
+  CreatePerpetualRequest,
+  PerpetualPosition,
+  LimitOrder,
+  CancelLimitOrderRequest,
+  UpdatePositionRequest,
+  CreateLimitOrderRequest,
+} from '@/api/strike-finance.api';
 import strikeFinanceApi from '@/api/strike-finance.api';
 import type { IChartApi, Time } from 'lightweight-charts';
 import { priceService, priceStore } from '@/stores/priceStore';
 import { AxiosResponse } from 'axios';
+import { Messaging } from '@/chrome/messaging';
+import { METHOD } from '@/chrome/config';
+import snackbar from '@/plugins/snackbar';
+import { MessageTypes } from '@/models/MessageTypes';
 
 interface CandlestickDataPoint {
   time: Time;
@@ -1377,7 +1387,7 @@ const props = defineProps<{
 
 const emit = defineEmits(["close"]);
 
-const { loggedWallet, utxos, tokens } = toRefs(walletStore);
+const { loggedWallet, tokens, utxos } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 
 // Use global Kraken price store, fallback to network price
@@ -1542,7 +1552,7 @@ const formatCurrency = (value: number) => {
   return value < 0 ? `-$${formattedValue}` : `$${formattedValue}`;
 };
 
-// Format price with minimum digits - exactly matching React component
+// Format price with minimum digits - exactly matching the React component
 const formatPriceWithMinDigits = (price: number): string => {
   if (price === 0 || !isFinite(price) || isNaN(price)) return "0.0000";
 
@@ -1559,7 +1569,7 @@ const formatPriceWithMinDigits = (price: number): string => {
   const priceStr = price.toFixed(20); // Use high precision to avoid rounding
   const [, decimalPart = ""] = priceStr.split(".");
 
-  // Find the first non-zero digit in decimal part
+  // Find the first non-zero digit in the decimal part
   let firstNonZeroIndex = -1;
   for (let i = 0; i < decimalPart.length; i++) {
     if (decimalPart[i] !== "0") {
@@ -1817,14 +1827,14 @@ const findLiquidationPrice = (
 const processPositionData = (position: any) => {
   const result: any = {};
 
-  // Use Kraken WebSocket ADA price as current price for perpetuals (more accurate for trading)
+  // Use Kraken WebSocket ADA price as the current price for perpetuals (more accurate for trading)
   if (perpetualsPrice.value?.lastPrice) {
     result.currentPrice = Number(perpetualsPrice.value.lastPrice);
   } else if (position.currentPrice !== undefined) {
     result.currentPrice = Number(position.currentPrice);
   }
 
-  // Use mark price from API if available, otherwise fallback to current price
+  // Use mark price from API if available, otherwise fallback to the current price
   if (position.markPrice !== undefined) {
     result.markPrice = Number(position.markPrice);
   } else if (result.currentPrice) {
@@ -1983,7 +1993,7 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
     }
   } else {
     // For other tokens, use TapTools/DexHunter
-    return await fetchTokenHistoryFromDexHunter(ticker);
+    return fetchTokenHistoryFromDexHunter(ticker);
   }
 };
 
@@ -2003,7 +2013,7 @@ const fetchTokenHistoryFromDexHunter = async (
   }
 };
 
-// Generate simple OHLC data based on current ADA price
+// Generate simple OHLC data based on the current ADA price
 const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
   const data: CandlestickDataPoint[] = [];
   const now = Date.now();
@@ -2051,7 +2061,7 @@ const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
 
 const onChartReady = (chartInstance: IChartApi) => {
   chart.value = chartInstance;
-  
+
   // Immediately resize chart to proper dimensions
   setTimeout(() => {
     if (chart.value) {
@@ -2060,9 +2070,9 @@ const onChartReady = (chartInstance: IChartApi) => {
         if (chartContainer) {
           const containerWidth = chartContainer.clientWidth;
           const containerHeight = 160;
-          
+
           console.debug("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
-          
+
           chart.value.applyOptions({
             width: containerWidth,
             height: containerHeight,
@@ -2152,10 +2162,10 @@ const positions = computed(() => {
   }
 
   return rawPositions.value.map((position, index) => {
-    // Re-process position data with current price
+    // Re-process position data with the current price
     const processedData = processPositionData(position);
 
-    // Return enhanced position with updated calculations
+    // Return an enhanced position with updated calculations
     const enhanced = {
       ...position,
       ...processedData,
@@ -2178,7 +2188,7 @@ const positions = computed(() => {
 
 // Ticker symbol for the chart (extracted from the trading pair)
 const tickerSymbol = computed(() => {
-  return "ADA"; // Default to ADA can be made dynamic based on selected asset
+  return "ADA"; // Default to ADA can be made dynamic based on the selected asset
 });
 
 const closingPositions = ref<Record<string, boolean>>({});
@@ -2187,7 +2197,7 @@ const limitOrders = ref<LimitOrder[]>([]);
 const loadingLimitOrders = ref(false);
 const cancellingOrders = ref<Record<string, boolean>>({});
 const activeTab = ref(0);
-const history = ref<PerpetualPosition[]>([]);
+const history = ref<any[]>([]);
 const loadingHistory = ref(false);
 const currentLimitOrdersPage = ref(1);
 const currentHistoryPage = ref(1);
@@ -2229,7 +2239,7 @@ const paginatedHistory = computed(() => {
   return history.value.slice(start, end);
 });
 
-// Computed for loading state based on active tab
+// Computed for loading state based on the active tab
 const isCurrentTabLoading = computed(() => {
   switch (activeTab.value) {
     case 0: return loadingPositions.value;
@@ -2242,7 +2252,7 @@ const isCurrentTabLoading = computed(() => {
 const positionData = ref({
   asset: "ADA/USD",
   collateralAmount: 0,
-  leverage: 1,
+  leverage: 1.1,
   position: "LONG",
   orderType: "MARKET", // MARKET or LIMIT
   limitPrice: 0,
@@ -2250,7 +2260,7 @@ const positionData = ref({
   takeProfitPrice: 0,
 });
 
-// Table headers for positions - ultra compact for more space
+// Table headers for positions - ultra-compact for more space
 const positionHeaders = ref([
   {
     text: "Asset",
@@ -2302,7 +2312,7 @@ const limitOrderHeaders = ref([
   },
   {
     text: "Side",
-    align: "center", 
+    align: "center",
     sortable: true,
     value: "positionType",
     width: "20",
@@ -2344,7 +2354,7 @@ const historyHeaders = ref([
     text: "Side",
     align: "center",
     sortable: true,
-    value: "positionType", 
+    value: "positionType",
     width: "15",
   },
   {
@@ -2430,7 +2440,7 @@ watch(
         loadHistory()
       ]);
 
-      // Enable chart after a brief delay to ensure component is ready
+      // Enable the chart after a brief delay to ensure the component is ready
       setTimeout(async () => {
         await nextTick();
         shouldFetchChartData.value = true;
@@ -2447,9 +2457,9 @@ watch(
             if (chartContainer) {
               const containerWidth = chartContainer.clientWidth;
               const containerHeight = 160; // Fixed height as specified
-              
+
               console.debug("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
-              
+
               chart.value.applyOptions({
                 width: containerWidth,
                 height: containerHeight,
@@ -2461,12 +2471,12 @@ watch(
             console.warn("PerpetualsDialog: Failed to resize chart:", error);
           }
         }
-      }, 100); // Increased delay to ensure container is ready
+      }, 100); // Increased delay to ensure the container is ready
 
       // Wait for positions (main tab) to complete
       await positionsPromise;
-      
-      // Let background tasks complete without blocking UI
+
+      // Let background tasks complete without blocking the UI
       backgroundTasks.catch(() => {}); // Silent catch for background tasks
 
       console.debug("PerpetualsDialog: Fast load sequence completed");
@@ -2498,22 +2508,22 @@ const debouncedLiquidationPrice = ref('$0.0000');
 
 const updateDebouncedCalculations = () => {
   if (leverageCalculationTimeout) clearTimeout(leverageCalculationTimeout);
-  
+
   leverageCalculationTimeout = setTimeout(() => {
     // Position size calculation
     const posSize = (positionData.value.collateralAmount * positionData.value.leverage).toFixed(2);
     debouncedPositionSize.value = posSize;
-    
+
     // Notional value calculation
     const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0);
     const positionSizeAda = Number(posSize);
     debouncedNotionalValue.value = (positionSizeAda * currentAdaPrice).toFixed(2);
-    
+
     // Liquidation price calculation
     const leverage = positionData.value.leverage;
     const totalFees = 0.001 + accumulatedBorrowFee.value;
     const adjustedLiquidationMargin = 0.9 / leverage + totalFees;
-    
+
     if (positionData.value.position === "LONG") {
       const liqPrice = currentAdaPrice * (1 - adjustedLiquidationMargin);
       debouncedLiquidationPrice.value = `$${liqPrice.toFixed(4)}`;
@@ -2562,7 +2572,8 @@ const canOpenPosition = computed(() => {
   const hasRequiredFields =
     positionData.value.asset &&
     positionData.value.collateralAmount > 0 &&
-    positionData.value.leverage >= 1;
+    positionData.value.collateralAmount * perpetualsPrice.value?.lastPrice > 20 &&
+    positionData.value.leverage > 1;
 
   // Additional validation for LIMIT orders
   if (positionData.value.orderType === "LIMIT") {
@@ -2570,6 +2581,22 @@ const canOpenPosition = computed(() => {
   }
 
   return hasRequiredFields;
+});
+
+const buttonText = computed(() => {
+  const currentAdaPrice = Number(perpetualsPrice.value?.lastPrice || 0);
+  const collateralValueUsd = positionData.value.collateralAmount * currentAdaPrice;
+
+  // Check if collateral is greater than $0 but less than $20
+  if (positionData.value.collateralAmount > 0 && collateralValueUsd < 20) {
+    const adaNeededFor20 = currentAdaPrice > 0 ? (20 / currentAdaPrice).toFixed(2) : '0.00';
+    return `Min value is $20 (${adaNeededFor20} ADA)`;
+  }
+
+  // Default button text based on order type and position
+  const orderAction = positionData.value.orderType === 'MARKET' ? 'Open' : 'Place Limit';
+  const orderSuffix = positionData.value.orderType === 'MARKET' ? 'Position' : 'Order';
+  return `${orderAction} ${positionData.value.position} ${orderSuffix}`;
 });
 
 const openPosition = async () => {
@@ -2582,33 +2609,105 @@ const openPosition = async () => {
 
   loading.value = true;
   try {
-    // Create Asset object - for ADA/USD we use native ADA
-    const asset: Asset = {
-      policyId: '', // Native ADA has empty policy_id
-      assetName: '', // Native ADA has empty asset_name
-    };
+    if (positionData.value.orderType === 'MARKET') {
+      await openMarketPosition(walletAddress);
+    } else {
+      await openLimitPosition(walletAddress);
+    }
+  } catch (error: any) {
+    if (error.name === 'AxiosError') {
+      snackbar.setError(error.response?.data?.error || error.message);
+    } else {
+      console.error("Failed to open position:", error);
+      snackbar.setError(`Failed to open position: ${error.message}`);
+    }
+    // TODO: Show user-friendly error notification
+  } finally {
+    loading.value = false;
+  }
+};
 
-    const openPositionRequest: CreatePerpetualRequest = {
-      address: walletAddress,
-      asset,
-      collateralAmount: positionData.value.collateralAmount,
-      leverage: positionData.value.leverage,
-      position: positionData.value.position === 'LONG' ? 'long' : 'short',
-      enteredPositionTime: Date.now(),
-      // Include optional fields if they have values
-      ...(positionData.value.stopLossPrice > 0 && {
-        stopLossPrice: positionData.value.stopLossPrice,
-      }),
-      ...(positionData.value.takeProfitPrice > 0 && {
-        takeProfitPrice: positionData.value.takeProfitPrice,
-      }),
-    };
+const openMarketPosition = async (walletAddress: string) => {
+  const asset: Asset = {
+    policyId: '', // Native ADA has empty policy_id
+    assetName: '', // Native ADA has empty asset_name
+  };
 
-    console.debug('[StrikeFinance]  Opening position with request:', openPositionRequest);
-    const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
-    const cbor: string = cborResponse.data;
-    console.debug('[StrikeFinance] Open position response:', cbor);
-    // Reset form after success
+  const openPositionRequest: CreatePerpetualRequest = {
+    address: walletAddress,
+    asset,
+    collateralAmount: positionData.value.collateralAmount,
+    leverage: positionData.value.leverage,
+    position: positionData.value.position === 'LONG' ? 'Long' : 'Short',
+    enteredPositionTime: Date.now(),
+    stopLossPrice: positionData.value.stopLossPrice,
+    takeProfitPrice: positionData.value.takeProfitPrice,
+  };
+
+  console.debug('[StrikeFinance] Opening position with request:', openPositionRequest);
+  const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
+  const txCbor: string = cborResponse.data['cbor'];
+
+  // Sign the transaction with partial signing to add user's witness
+  const signaturesRes: any = await Messaging.sendToBackground({
+    method: METHOD.signTx,
+    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+  });
+  if (signaturesRes.error) {
+    snackbar.setError(signaturesRes.error.info)
+  } else {
+    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
+    const txId = txResponse.data['txHash'];
+    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+    console.log(txId)
+    positionData.value = {
+      asset: "ADA/USD",
+      collateralAmount: 0,
+      leverage: 1,
+      position: "LONG",
+      orderType: "LIMIT",
+      limitPrice: 0,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+    };
+    await loadPositions();
+  }
+}
+
+const openLimitPosition = async (walletAddress: string) => {
+  const asset: Asset = {
+    policyId: '', // Native ADA has empty policy_id
+    assetName: '', // Native ADA has empty asset_name
+  };
+
+  const openPositionRequest: CreateLimitOrderRequest = {
+    address: walletAddress,
+    asset,
+    collateralAmount: positionData.value.collateralAmount,
+    leverage: positionData.value.leverage,
+    position: positionData.value.position === 'LONG' ? 'Long' : 'Short',
+    stopLossPrice: positionData.value.stopLossPrice,
+    takeProfitPrice: positionData.value.takeProfitPrice,
+    limitUSDPrice: positionData.value.limitPrice,
+  };
+
+  console.debug('[StrikeFinance] Opening limit position with request:', openPositionRequest);
+  const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openLimitOrder(openPositionRequest);
+  const txCbor: string = cborResponse.data['cbor'];
+
+  // Sign the transaction with partial signing to add user's witness
+  const signaturesRes: any = await Messaging.sendToBackground({
+    method: METHOD.signTx,
+    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+  });
+  if (signaturesRes.error) {
+    snackbar.setError(signaturesRes.error.info)
+  } else {
+    // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
+    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
+    const txId = txResponse.data['txHash'];
+    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+    console.log(txId)
     positionData.value = {
       asset: "ADA/USD",
       collateralAmount: 0,
@@ -2619,19 +2718,13 @@ const openPosition = async () => {
       stopLossPrice: 0,
       takeProfitPrice: 0,
     };
-    await loadPositions();
-  } catch (error) {
-    console.error("Failed to open position:", error);
-    // TODO: Show user-friendly error notification
-  } finally {
-    loading.value = false;
+    await loadLimitOrders();
   }
-};
+}
 
 const closePosition = async (position: PerpetualPosition) => {
-  if (!position.id || !position.outRef) {
+  if (!position.outRef) {
     console.error("Invalid position data for closing - missing required fields:", {
-      hasId: !!position.id,
       hasOutRef: !!position.outRef,
       outRef: position.outRef
     });
@@ -2643,37 +2736,37 @@ const closePosition = async (position: PerpetualPosition) => {
     return;
   }
 
-  closingPositions.value[position.id] = true;
+  closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = true;
   try {
-    // Validate and potentially convert timestamp
-    let validatedEnteredPositionTime = position.enteredPositionTime;
-
-    // Check if the timestamp is in milliseconds and convert to seconds if needed
-    if (validatedEnteredPositionTime > 9999999999) { // If the timestamp is > year 2001 in seconds, it's likely in milliseconds
-      console.debug('[StrikeFinance]  Converting enteredPositionTime from milliseconds to seconds:', validatedEnteredPositionTime, '->', Math.floor(validatedEnteredPositionTime / 1000));
-      validatedEnteredPositionTime = Math.floor(validatedEnteredPositionTime / 1000);
-    }
-
     const closeRequest: ClosePerpetualRequest = {
       address: loggedWallet.value?.baseAddress,
       asset: {
-        policyId: position.asset.policyId,
-        assetName: position.asset.assetName
+        policyId: position.asset.asset.policyId,
+        assetName: position.asset.asset.assetName
       },
-      outRef: position.outRef,
-      positionSize: position.positionSize,
-      positionType: position.position,
-      collateralAmount: position.collateralAmount,
-      position: position.position,
-      enteredPrice: position.entryPrice,
-      pnl: position.pnl,
-      assetTicker: position.asset.ticker,
-      enteredPositionTime: position.enteredPositionTime,
-      utxos: utxos.value
+      outRef: {
+        txHash: position.outRef.txHash,
+        outputIndex: position.outRef.outputIndex,
+      },
     };
     const cborResponse: AxiosResponse<string> = await strikeFinanceApi.closePosition(closeRequest);
-    console.debug('[StrikeFinance]  Close position request successful');
+    const txCbor: string = cborResponse.data['cbor'];
 
+    // Sign the transaction with partial signing to add user's witness
+    const signaturesRes: any = await Messaging.sendToBackground({
+      method: METHOD.signTx,
+      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    });
+    if (signaturesRes.error) {
+      snackbar.setError(signaturesRes.error.info)
+    } else {
+      // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
+      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
+      const txId = txResponse.data['txHash'];
+      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+      console.log(txId)
+      //TODO remove position
+    }
     // Reload positions after a successful close
     await loadPositions();
   } catch (error) {
@@ -2690,15 +2783,31 @@ const closePosition = async (position: PerpetualPosition) => {
         enteredPositionTime: position.enteredPositionTime,
       }
     });
-    // TODO: Show user-friendly error notification
+    snackbar.setError('Failed to Close Position');
   } finally {
-    closingPositions.value[position.id] = false;
+    closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = false;
   }
 };
 
+const submit = async (cborHex: string) => {
+  const submitResult = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_TX,
+    data: {
+      txCbor: cborHex,
+      witnessHex: null,
+      utxos: utxos.value
+    }
+  }) as { data: { txId?: string; error?: string } };
+  if (submitResult.data.error) {
+    throw new Error(submitResult.data.error);
+  }
+  const txId = submitResult.data.txId;
+  snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+  console.log(txId)
+}
 
 const getPositionTrendIcon = (position: any) => {
-  // Use P&L with fees as primary indicator, fallback to unrealized P&L
+  // Use P&L with fees as the primary indicator, fallback to unrealized P&L
   const pnlValue =
     position.pnl !== undefined ? position.pnl : position.unrealizedPnl;
 
@@ -2751,38 +2860,38 @@ const loadHistory = async () => {
   loadingHistory.value = true;
   try {
     console.debug('[StrikeFinance] Loading all orders for wallet:', walletAddress);
-    
+
     // Load both positions and limit orders concurrently
     const [positionsRes, limitOrdersRes] = await Promise.all([
       strikeFinanceApi.getPositions(walletAddress),
       strikeFinanceApi.getLimitOrders(walletAddress)
     ]);
-    
+
     const allPositions = positionsRes.data || [];
     const allLimitOrders = limitOrdersRes.data || [];
-    
+
     // Combine positions and limit orders into one array
     // Add a 'type' field to distinguish between them
     const combinedOrders = [
       ...allPositions.map(pos => ({ ...pos, orderType: 'position' })),
       ...allLimitOrders.map(order => ({ ...order, orderType: 'limit' }))
     ];
-    
+
     history.value = combinedOrders;
-    
+
     console.debug('[StrikeFinance] All orders loaded:', {
       positions: allPositions.length,
-      limitOrders: allLimitOrders.length, 
+      limitOrders: allLimitOrders.length,
       total: combinedOrders.length
     });
-    
-    console.debug('[StrikeFinance] Status breakdown:', 
+
+    console.debug('[StrikeFinance] Status breakdown:',
       combinedOrders.reduce((acc, item) => {
         acc[item.status] = (acc[item.status] || 0) + 1;
         return acc;
       }, {})
     );
-    
+
   } catch (error) {
     console.error("Failed to load history:", (error as any)?.message || error);
     history.value = [];
@@ -2798,7 +2907,7 @@ const onTabChange = (tabIndex: number) => {
   console.debug('[StrikeFinance] Switching to tab:', tabIndex);
 };
 
-// Refresh current tab
+// Refresh the current tab
 const refreshCurrentTab = () => {
   switch (activeTab.value) {
     case 0: loadPositions(); break;
@@ -2819,13 +2928,13 @@ const getOrderStatusColor = (status: string) => {
 
 const getPositionStatusColor = (status: string) => {
   switch (status?.toLowerCase()) {
-    case 'open': 
+    case 'open':
     case 'active': return 'primary';      // Blue for active positions
-    case 'closed': 
-    case 'completed': return 'success';   // Green for completed positions  
+    case 'closed':
+    case 'completed': return 'success';   // Green for completed positions
     case 'liquidated': return 'error';    // Red for liquidated positions
     case 'pending': return 'warning';     // Orange for pending positions
-    case 'cancelled': 
+    case 'cancelled':
     case 'canceled': return 'grey';       // Grey for cancelled orders
     default: return 'grey';               // Grey for unknown statuses
   }
@@ -2870,7 +2979,7 @@ onMounted(async () => {
     chartData.value = generateSimpleOHLCData();
   }
 
-  // Enable chart after a brief delay to ensure component is ready
+  // Enable the chart after a brief delay to ensure the component is ready
   setTimeout(async () => {
     await nextTick();
     shouldFetchChartData.value = true;
@@ -2903,7 +3012,7 @@ const loadLimitOrders = async () => {
       allFields: Object.keys(order),
       priceFields: Object.keys(order).filter(key => key.toLowerCase().includes('price'))
     })));
-    
+
     // Log first order completely to see all available fields
     if (limitOrders.value.length > 0) {
       console.debug('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
@@ -2916,35 +3025,51 @@ const loadLimitOrders = async () => {
   }
 };
 
-// Cancel limit order
 const cancelLimitOrder = async (order: LimitOrder) => {
-  if (!order.id || !order.outRef) {
+  if (!order.outRef) {
     console.error('Invalid order data for cancelling');
     return;
   }
-
-  cancellingOrders.value[order.id] = true;
+  cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = true;
+  const cancelRequest: CancelLimitOrderRequest = {
+    address: loggedWallet.value?.baseAddress,
+    asset: {
+      policyId: order.asset.asset.policyId,
+      assetName: order.asset.asset.assetName,
+    },
+    outRef: {
+      txHash: order.outRef.txHash,
+      outputIndex: order.outRef.outputIndex,
+    }
+  };
   try {
-    const cancelRequest: CancelLimitOrderRequest = {
-      address: loggedWallet.value?.baseAddress,
-      asset: order.asset,
-      outRef: order.outRef
-    };
-
-    console.debug('[StrikeFinance] Cancelling limit order:', cancelRequest);
-    const cborResponse = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
-    console.debug('[StrikeFinance] Cancel order response:', cborResponse.data);
-    
+    const cborResponse: AxiosResponse<string> = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
+    const txCbor: string = cborResponse.data['cbor'];
+    // Sign the transaction with partial signing to add user's witness
+    const signaturesRes: any = await Messaging.sendToBackground({
+      method: METHOD.signTx,
+      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    });
+    if (signaturesRes.error) {
+      snackbar.setError(signaturesRes.error.info)
+    } else {
+      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
+      const txId = txResponse.data['txHash'];
+      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+      console.log(txId)
+      //TODO remove order
+    }
     // Reload limit orders
     await loadLimitOrders();
-  } catch (error) {
-    console.error('Failed to cancel limit order:', error);
+  } catch (error: any) {
+    console.error("[StrikeFinance] Failed to cancel limit order", error);
+    snackbar.setError(`Failed to Cancel Limit Order ${error.message}`);
   } finally {
-    cancellingOrders.value[order.id] = false;
+    cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = false;
   }
 };
 
-// Open update position dialog
+// Open the update position dialog
 const openUpdatePositionDialog = (position: PerpetualPosition) => {
   selectedPosition.value = position;
   updatePositionData.value = {
@@ -2961,7 +3086,7 @@ const updatePosition = async () => {
   try {
     const updateRequest: UpdatePositionRequest = {
       address: loggedWallet.value?.baseAddress,
-      asset: selectedPosition.value.asset,
+      asset: selectedPosition.value.asset.asset,
       outRef: selectedPosition.value.outRef,
       side: selectedPosition.value.position.toLowerCase(),
       ...(updatePositionData.value.stopLossPrice > 0 && {
@@ -2975,8 +3100,8 @@ const updatePosition = async () => {
     console.debug('[StrikeFinance] Updating position:', updateRequest);
     const cborResponse = await strikeFinanceApi.updatePosition(updateRequest);
     console.debug('[StrikeFinance] Update position response:', cborResponse.data);
-    
-    // Close dialog and reload positions
+
+    // Close the dialog and reload positions
     updatePositionDialog.value = false;
     await loadPositions();
   } catch (error) {
@@ -2996,7 +3121,7 @@ const getCollateralAmount = (item: any) => {
 
   // Get the collateral amount in ADA
   let collateralAda = 0;
-  
+
   // Try different ADA collateral fields
   const adaCandidates = [
     item.collateralSizeAda,
@@ -3032,26 +3157,12 @@ const getCollateralAmount = (item: any) => {
       return Number(candidate).toFixed(2);
     }
   }
-  
+
   return '0.00';
 };
-
-// Get status color for limit orders
-const getStatusColor = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'pending': return 'warning';
-    case 'filled': return 'success';
-    case 'cancelled': return 'error';
-    default: return 'grey';
-  }
-};
-
-
-
 </script>
 
 <style scoped>
-/* Compact widget matching SwapWidget */
 .compact-perpetuals-widget {
   height: 100% !important;
   background-color: transparent !important;
@@ -3488,18 +3599,7 @@ const getStatusColor = (status: string) => {
   background-color: transparent !important;
 }
 
->>> .theme--dark.v-tabs-items {
-  background: none !important;
-  background-color: transparent !important;
-}
-
->>> .v-tabs-items.theme--dark {
-  background: none !important;
-  background-color: transparent !important;
-}
-
-/* Target v-tabs-items specifically */
->>> .v-tabs-items {
+.v-tabs-items {
   background: none !important;
   background-color: transparent !important;
 }
@@ -4060,47 +4160,6 @@ const getStatusColor = (status: string) => {
   padding-top: 4px !important;
 }
 
-/* Custom tooltip with liquid glass effect (same as assets filters) */
->>> .v-tooltip__content {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  z-index: 9999 !important;
-}
-
->>> .custom-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  padding: 12px !important;
-}
-
-/* Target the tooltip wrapper directly */
->>> .v-tooltip__content.custom-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-  z-index: 9999 !important;
-}
-
 /* Fees tooltip */
 .fees-btn {
   color: #9ca3af !important;
@@ -4278,6 +4337,25 @@ const getStatusColor = (status: string) => {
   background: linear-gradient(135deg, #1de89a 0%, #26fab0 100%) !important;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(38, 250, 176, 0.3) !important;
+}
+/* Disabled state styling */
+.open-position-btn.enhanced:disabled,
+.open-position-btn.enhanced.v-btn--disabled {
+  background: #454545 !important;
+  color: #c3c3c3 !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+.open-position-btn.enhanced:disabled .v-icon,
+.open-position-btn.enhanced.v-btn--disabled .v-icon {
+  color: #9e9e9e !important;
+}
+.open-position-btn.enhanced.short-position:disabled,
+.open-position-btn.enhanced.short-position.v-btn--disabled {
+  background: #e0e0e0 !important;
+  color: #9e9e9e !important;
 }
 
 /* Tab styles */

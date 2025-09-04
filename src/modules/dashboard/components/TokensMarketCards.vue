@@ -498,7 +498,7 @@ const getTokenLogoFromAPI = async (token: any) => {
   // Try Charli3 API for logo
   if (token.currency) {
     const fullAssetId = token.currency;
-    return await Charli3API.getTokenLogo(fullAssetId);
+    return Charli3API.getTokenLogo(fullAssetId);
   }
 
   return null;

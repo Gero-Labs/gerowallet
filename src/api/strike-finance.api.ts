@@ -71,15 +71,6 @@ export interface ClosePerpetualRequest {
   address: string;
   asset: Asset;
   outRef: OutRef;
-  positionSize?: number;
-  positionType?: string;
-  collateralAmount?: number;
-  position?: string;
-  enteredPrice?: number;
-  pnl?: number;
-  assetTicker?: string;
-  enteredPositionTime?: number;
-  utxos?: any[];
 }
 
 export interface PerpetualRequestWrapper<T> {
@@ -89,7 +80,9 @@ export interface PerpetualRequestWrapper<T> {
 export interface PerpetualPosition {
   id: string;
   address: string;
-  asset: Asset;
+  asset: {
+    asset: Asset
+  };
   collateralAmount: number;
   positionSize: number;
   leverage: number;
@@ -115,7 +108,9 @@ export interface PerpetualPosition {
 export interface LimitOrder {
   id: string;
   address: string;
-  asset: Asset;
+  asset: {
+    asset: Asset
+  };
   collateralAmount: number;
   leverage: number;
   position: 'Long' | 'Short';
@@ -139,13 +134,21 @@ export interface PoolInfo {
  * Strike Finance API service
  */
 export default {
+
+  async submitTx(cbor: string, witness: string): Promise<AxiosResponse<string>> {
+    return axiosInstance.post('/api/strike/perpetuals/submit', {
+      cbor,
+      witness
+    });
+  },
+
   /**
    * Open a new perpetual position
    * @param request - Create perpetual position request
    * @returns Transaction CBOR string
    */
   async openPosition(request: CreatePerpetualRequest): Promise<AxiosResponse<string>> {
-    return await axiosInstance.post('/api/strike/perpetuals/openPosition', {
+    return axiosInstance.post('/api/strike/perpetuals/openPosition', {
       request
     });
   },
@@ -156,7 +159,7 @@ export default {
    * @returns Transaction CBOR string
    */
   async closePosition(request: ClosePerpetualRequest): Promise<AxiosResponse<string>> {
-      return await axiosInstance.post('/api/strike/perpetuals/closePosition', {
+      return axiosInstance.post('/api/strike/perpetuals/closePosition', {
         request
       });
   },
@@ -167,7 +170,7 @@ export default {
    * @returns Array of perpetual positions
    */
   async getPositions(address: string): Promise<AxiosResponse<PerpetualPosition[]>> {
-    return await axiosInstance.get('/api/strike/perpetuals/getPositions', {
+    return axiosInstance.get('/api/strike/perpetuals/getPositions', {
       params: { address }
     });
   },
@@ -178,7 +181,7 @@ export default {
    * @returns Transaction CBOR string
    */
   async openLimitOrder(request: CreateLimitOrderRequest): Promise<AxiosResponse<string>> {
-    return await axiosInstance.post('/api/strike/perpetuals/openLimitOrder', {
+    return axiosInstance.post('/api/strike/perpetuals/openLimitOrder', {
       request
     });
   },
@@ -189,7 +192,7 @@ export default {
    * @returns Transaction CBOR string
    */
   async cancelLimitOrder(request: CancelLimitOrderRequest): Promise<AxiosResponse<string>> {
-    return await axiosInstance.post('/api/strike/perpetuals/cancelLimitOrder', {
+    return axiosInstance.post('/api/strike/perpetuals/cancelLimitOrder', {
       request
     });
   },
@@ -200,7 +203,7 @@ export default {
    * @returns Transaction CBOR string
    */
   async updatePosition(request: UpdatePositionRequest): Promise<AxiosResponse<string>> {
-    return await axiosInstance.post('/api/strike/perpetuals/updatePosition', {
+    return axiosInstance.post('/api/strike/perpetuals/updatePosition', {
       request
     });
   },
@@ -211,7 +214,7 @@ export default {
    * @returns Array of limit orders
    */
   async getLimitOrders(address: string): Promise<AxiosResponse<LimitOrder[]>> {
-    return await axiosInstance.get('/api/strike/perpetuals/getLimitOrders', {
+    return axiosInstance.get('/api/strike/perpetuals/getLimitOrders', {
       params: { address }
     });
   },
@@ -221,7 +224,7 @@ export default {
    * @returns Pool information
    */
   async getPoolInfoV2(): Promise<AxiosResponse<PoolInfo>> {
-    return await axiosInstance.get('/api/strike/perpetuals/getPoolInfoV2');
+    return axiosInstance.get('/api/strike/perpetuals/getPoolInfoV2');
   },
 
   /**

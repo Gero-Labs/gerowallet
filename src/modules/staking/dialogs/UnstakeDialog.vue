@@ -194,7 +194,7 @@ const signUnStakeTx = async () => {
           accountIndex: 0,
           utxos: utxos.value,
           addresses: keys.value, // Address mappings
-          isUsb: false
+          mergeWitnesses: false,
         }
       }) as { data: { witnesses?: any; error?: string } };
 

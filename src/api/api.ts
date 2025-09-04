@@ -23,7 +23,7 @@ export class Api {
   }
 
   async ablyToken(baseAddress: string) {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`
     );
   }
@@ -129,7 +129,7 @@ export class Api {
   }
 
   async getTransactionsCbor(txHashes: string[]) {
-    return await this.axiosInstance.post(
+    return this.axiosInstance.post(
       `/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
       txHashes
     );
@@ -139,11 +139,11 @@ export class Api {
 
   async getAssetsInfo(units: string[]) {
     const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`;
-    return await this.axiosInstance.post(url, units);
+    return this.axiosInstance.post(url, units);
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
     );
   }
@@ -169,13 +169,13 @@ export class Api {
   }
 
   async getGenesis() {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
     );
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
     );
   }
