@@ -154,7 +154,7 @@
                   :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}"
                   v-else-if="!isNaN(Number(price.replaceAll(',', '')))"
                 >
-                  {{ '~$' + price
+                  {{ '~' + getCurrencySymbol() + convertUsdToEur(Number(price.replaceAll(',', ''))).toFixed(2)
                   }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B"
                     >mdi-alert-rhombus-outline</v-icon
                   >
@@ -190,6 +190,7 @@ import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 const props = defineProps({
   title: {
@@ -251,6 +252,7 @@ const props = defineProps({
 const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 
 const { loggedWallet } = toRefs(walletStore);
+const { convertUsdToEur, getCurrencySymbol } = useCurrencyConverter();
 
 const selectTokenDialog = ref<boolean>(false);
 const amount = ref('');
