@@ -10,6 +10,6 @@ const axiosInstance = axios.create({
 });
 export default {
   async historicalCandles(unit: string): Promise<any> {
-    return await axiosInstance.get(`/api/prices/historical/candles?symbol=${unit}&resolution=1h&from=${parseInt(String((Date.now() - 86400000) / 1000))}`);
+    return axiosInstance.get(`/api/prices/historical/candles?symbol=${unit}&resolution=1h&from=${parseInt(String((Date.now() - 86400000) / 1000))}`);
   },
 }

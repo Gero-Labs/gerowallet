@@ -12,7 +12,7 @@ const axiosInstance = axios.create({
 
 export default {
   async getSwapTokens(query?: string) {
-    return await axiosInstance.get(`/api/v2/swap/tokens${query ? '?query='+query : ''}`);
+    return axiosInstance.get(`/api/v2/swap/tokens${query ? '?query='+query : ''}`);
   },
   async getAssetData(tokenId: string) {
     try {
@@ -47,7 +47,7 @@ export default {
       token_out,
       blacklisted_dexes,
     }
-    return await axiosInstance.post(`/api/v2/swap/estimate`, requestBody);
+    return axiosInstance.post(`/api/v2/swap/estimate`, requestBody);
   },
   async reverseEstimate(amount_out: number, token_in: string, token_out: string, slippage: number, blacklisted_dexes: string[], referrer: string = 'DEXHUNTER'): Promise<any> {
     if (token_in === 'lovelace') {
@@ -102,9 +102,9 @@ export default {
     return data
   },
   async getAllBlacklistPolicies(): Promise<any> {
-    return await axiosInstance.get(`/api/assets/blacklist`);
+    return axiosInstance.get(`/api/assets/blacklist`);
   },
   async mCap(unit: string): Promise<any> {
-    return await axiosInstance.get(`/api/v2/mcap/${unit}`);
+    return axiosInstance.get(`/api/v2/mcap/${unit}`);
   }
 }

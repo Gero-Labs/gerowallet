@@ -37,8 +37,7 @@ import {
   Vkeywitness,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { blake2b, blake2bHex } from 'blakejs';
-import { bech32 } from 'bech32';
+import { blake2bHex } from 'blakejs';
 import {
   AlgorithmId,
   BigNum as BigNum2,
@@ -48,7 +47,7 @@ import {
   Headers,
   HeaderMap,
   Label,
-  ProtectedHeaderMap, KeyType, COSEKey, COSESign1, Int, CurveType,
+  ProtectedHeaderMap, KeyType, COSEKey, Int, CurveType,
 } from '@emurgo/cardano-message-signing-browser';
 
 import {
@@ -61,7 +60,7 @@ import { Buffer } from 'buffer';
 import cbor from 'cbor';
 import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { Cardano, util, Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -89,32 +88,6 @@ export function toValue(assets, lovelace) {
   });
   const value = Value.new(BigNum.from_str(lovelace));
   if (assets.length > 0 || !lovelace) value.set_multiasset(multiAsset);
-  return value;
-}
-
-export function toUTxO2(utxo: Cardano.Utxo): TransactionUnspentOutput {
-  return TransactionUnspentOutput.new(
-    TransactionInput.new(TransactionHash.from_hex(utxo[0].txId), utxo[0].index),
-    TransactionOutput.new(Address.from_bech32(utxo[1].address), toValue2(utxo[1].value.coins, utxo[1].value.assets))
-  );
-}
-
-export function toValue2(lovelace: Cardano.Lovelace, assets?: Cardano.TokenMap): Value {
-  const value: Value = Value.new(BigNum.from_str(lovelace.toString()));
-  if (assets) {
-    const multiAsset: MultiAsset = MultiAsset.new();
-    const policies: any[] = [...new Set(Object.keys(assets).map((assetId: string) => Cardano.AssetId.getPolicyId(assetId)))];
-    policies.forEach((policy) => {
-      const policyAssets = Object.entries(assets).filter(mapEntry =>
-        Cardano.AssetId.getPolicyId(mapEntry[0]) === policy);
-      const assetsValue: Assets = Assets.new();
-      policyAssets.forEach((asset) => {
-        assetsValue.insert(AssetName.new(util.hexToBytes(Cardano.AssetId.getAssetName(asset[0]))), BigNum.from_str(asset[1]));
-      });
-      multiAsset.insert(ScriptHash.from_bytes(util.hexToBytes(policy)), assetsValue);
-    });
-    value.set_multiasset(multiAsset);
-  }
   return value;
 }
 
@@ -149,16 +122,6 @@ export const assetsToValue = (assets) => {
   return value;
 };
 
-export function getColor(value) {
-  if (value > 100) {
-    value = 100
-  }
-  value = value / 100
-  //value from 0 to 1
-  const hue = ((1 - value) * 120).toString(10);
-  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-}
-
 export function getArtists(artists) {
   if (artists !== undefined && Array.isArray(artists)) {
     return artists.join(', ');
@@ -170,17 +133,6 @@ export function formatTime(secs: number): string {
   const minutes = Math.floor(secs / 60) || 0;
   const seconds = (secs - minutes * 60) || 0;
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-}
-
-export function unitToFingerprint(unit) {
-  const policyIdBytes = Buffer.from(unit.slice(0,56), 'hex');
-  const assetNameBytes = Buffer.from(unit.slice(56), 'hex');
-  const combined = Buffer.concat([policyIdBytes, assetNameBytes]);
-  // Perform Blake2b-160 hash on the combined bytes
-  const hash = blake2b(combined, null, 20);
-  // Encode the result as Bech32
-  const words = bech32.toWords(hash);
-  return bech32.encode('asset', words)
 }
 
 export function stringToHex(input: string) {
@@ -283,13 +235,6 @@ export const createCOSEKeyHex = (pubKeyBytes) => {
   freeCSLObjects(free);
   return keyHex;
 };
-
-export function verifyData(data: { key: string; signature: string }, address2: string, payload2: string) {
-  const coseSign1_verify = COSESign1.from_bytes(toHexBuffer(data.signature));
-  const signedSigStruc_verify = coseSign1_verify.signed_data();
-  const isSame = toHexString(signedSigStruc_verify.payload()) === payload2;
-  return isSame;
-}
 
 export const safeFreeCSLObject = (obj2) => {
   if (obj2 && obj2.free) {
@@ -960,13 +905,13 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
   if (tx.body?.inputs) {
     tx.body.inputs.forEach((input: any) => {
       // Try to find the corresponding UTXO from provided UTXOs
-      const utxo = utxos.find((utxo: any) => 
+      const utxo = utxos.find((utxo: any) =>
         utxo[0].txId === input.txId && utxo[0].index === input.index
       );
-      
+
       let address = '';
       let amount: any[] = [];
-      
+
       if (utxo) {
         // Use the actual UTXO data
         address = utxo[1].address;
@@ -974,7 +919,7 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
           unit: 'lovelace',
           quantity: Number(utxo[1].value.coins)
         }];
-        
+
         if (utxo[1].value.assets && utxo[1].value.assets.size > 0) {
           utxo[1].value.assets.forEach((quantity: bigint, assetId: string) => {
             amount.push({
@@ -984,7 +929,7 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
           });
         }
       }
-      
+
       inputs.push({
         tx_hash: input.txId,
         output_index: input.index,
