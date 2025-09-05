@@ -181,7 +181,7 @@ export class SyncService {
         res = await this.api.getAccountInfo(this.walletBg.stakeAddress);
       }
       if (res) {
-        return await this.walletBg.setAccountInfo(res);
+        return this.walletBg.setAccountInfo(res);
       }
     } catch (e) {
       // console.log(e);
