@@ -28,7 +28,7 @@
                 </v-list-item-title>
                 <v-list-item-subtitle style="display: flex; align-items: center;">
                   <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? Number(eligible.totalEstimatedUsd).toLocaleString('en-US', {maximumFractionDigits: 2}) : 0, false, 2, '$', '', false, 0) }}</span>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? convertUsdToEur(Number(eligible.totalEstimatedUsd)) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -44,7 +44,7 @@
                 </v-list-item-title>
                 <v-list-item-subtitle style="display: flex; align-items: center;">
                   <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? pending.totalEstimatedUsd : 0, false, 2, '$', '', false, 0) }}</span>
+                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? convertUsdToEur(pending.totalEstimatedUsd) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -166,8 +166,10 @@ import HowItWorksDialog from '@/modules/cashback/dialogs/HowItWorksDialog.vue';
 import { bringStore } from '@/stores/bringStore';
 import cashbackApi from '@/api/cashback-api';
 import assets from '@/utils/assets';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 const { bringCache } = toRefs(bringStore);
+const { convertUsdToEur, getCurrencySymbol } = useCurrencyConverter();
 
 const isIntersecting = ref(false);
 const selectedCategoryIndex = ref(0);

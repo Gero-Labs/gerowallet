@@ -119,23 +119,11 @@ class AblyService {
 
   public close(): void {
     try {
-      // Remove all connection listeners first to prevent memory leaks
-      if (this.client?.connection) {
-        this.client.connection.off(); // Remove all listeners
-      }
-      
       this.unsubscribeAll();
-      
-      // Force close connection
-      if (this.client.connection?.state !== 'closed') {
-        this.client.connection?.close();
-      }
+      this.client.connection?.close();
       this.client.close();
-      
-      // Clear references to prevent memory leaks
       this.api = null;
-      this.authParams = null;
-      
+
       // Clear any pending message chunks
       messageReconstructionService.clearAll();
     } catch (e) {
@@ -276,7 +264,7 @@ class AblyService {
                   try {
                     const chunk = JSON.parse(msg.data);
                     console.debug('📦 Received SYNC_CHUNK on private channel:', chunk);
-                    
+
                     const reconstructedMessage = messageReconstructionService.processChunk(chunk);
                     if (reconstructedMessage) {
                       // Message is complete, handle based on original message type
@@ -408,18 +396,7 @@ class AblyService {
 
   public unsubscribeAll(): void {
     this.subscribedChannels.forEach((channel: Ably.RealtimeChannel) => {
-      try {
-        // Remove all channel event listeners
-        channel.off();
-        // Unsubscribe from all messages
-        channel.unsubscribe();
-        // Detach channel to free resources
-        if (channel.state === 'attached') {
-          channel.detach();
-        }
-      } catch (error) {
-        console.warn('Error cleaning up channel:', error);
-      }
+      channel.unsubscribe();
     });
     this.subscribedChannels.clear();
   }
