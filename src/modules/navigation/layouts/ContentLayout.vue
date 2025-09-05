@@ -111,7 +111,7 @@
                   </v-tooltip>
 
                   <!-- Notifications Menu (preserved from current version) -->
-                  <v-menu offset-y :close-on-content-click="false" nudge-left="75" nudge-top="-10">
+                  <v-menu offset-y :close-on-content-click="false" nudge-left="75" nudge-top="-10" eager transition="none">
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
                         <v-icon size="20">mdi-bell-outline</v-icon>

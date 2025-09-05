@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(dir D:GeroReposgitReposgeroFrontgerowalletvite.config*.mts)",
+      "Bash(rm:*)",
+      "WebFetch(domain:app.strikefinance.org)",
+      "Bash(git add:*)",
+      "Bash(sed:*)",
+      "Bash(npm run dev:*)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:api.kraken.com)",
+      "WebFetch(domain:docs.kraken.com)",
+      "Bash(tasklist:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }

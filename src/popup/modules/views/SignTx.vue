@@ -273,7 +273,7 @@ const swapDetails = computed(() => {
   const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
     return { amount: token.amount, currency: token.name, id: token.id };
   });
-
+  console.log('receiveTokens: ', receiveTokens);
   const foundAda = receiveTokens.find(token => token.name === 'cardano');
   const totalReceive = foundAda ? foundAda.amount : 0;
   const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
@@ -319,6 +319,7 @@ const sign = async () => {
     try {
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
+      const mergeWitnesses = request.value?.data?.mergeWitnesses;
       const witnessResult = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: {
@@ -328,7 +329,7 @@ const sign = async () => {
           accountIndex: 0,
           utxos: utxos.value,
           addresses: keys.value,
-          isUsb: !isBT.value
+          mergeWitnesses: mergeWitnesses || false,
         }
       }) as { data: { witnesses?: any; error?: string } };
 
@@ -382,6 +383,7 @@ const init = async () => {
   request.value = await controller.value.requestData();
   if (request.value?.data?.tx) {
     txCbor = request.value?.data?.tx;
+    console.log(txCbor);
   }
   if (txCbor) {
     console.log(txCbor);
