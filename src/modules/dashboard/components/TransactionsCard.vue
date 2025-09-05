@@ -112,7 +112,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4">
-                {{ filters.toCurrency(item.ada * price?.lastPrice, true, 0, '$', '', false, 6) }}
+                {{ filters.toCurrency(convertUsdToEur(item.ada * price?.lastPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
@@ -174,6 +174,7 @@ import { loadingState } from '@/stores/loading';
 import { Cardano } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
 import stakingStoreActions from '@/stores/stakingStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 const props = defineProps({
   selectedTransaction: {
@@ -192,6 +193,8 @@ const { transactions: txs, loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
+
+const { convertUsdToEur, getCurrencySymbol } = useCurrencyConverter();
 
 const activityHeaders = ref([
   { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
