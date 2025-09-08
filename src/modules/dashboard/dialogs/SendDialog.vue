@@ -210,8 +210,8 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
-import { signTransactionWithLedger, buildWitnessFromLedger } from '@/shared/utils/ledgerCardanoSdk';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import ledgerUtils from '@/shared/utils/ledger';
 
 interface Props {
   isOpen: boolean;
@@ -259,6 +259,11 @@ const isSubmit = ref<boolean>(false);
 const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
+
+// Debug watcher for Bluetooth toggle
+watch(isBT, (newValue) => {
+  console.log('isBT changed to:', newValue);
+}, { immediate: true });
 const overlay = ref<boolean>(false);
 // const type = ref<string>('');
 // const cbor = ref<string>('');
@@ -465,29 +470,26 @@ const submitTx = async () => {
 const signLedgerTx = async () => {
   txSubmitLoading.value = true;
   try {
-    console.log('Signing transaction with Ledger hardware wallet');
-    
+    console.log('Signing transaction with modern Ledger approach');
+    console.log('Using Bluetooth connection:', isBT.value);
+
     if (!tx.value) {
       throw new Error('No transaction to sign');
     }
-
-    // Serialize the transaction for submission
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    
-    // Sign the transaction using Ledger
-    const witness = await signTransactionWithLedger({
-      tx: tx.value,
-      accountIndex: 0, // TODO: Get actual account index from wallet
-      isUsb: !isBT.value,
-      addresses: keys.value,
-      knownAddresses: [] // TODO: Build known addresses from wallet context
-    });
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      tx.value,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
 
-    // Convert witness to hex format for submission
-    txWitnesses.value = buildWitnessFromLedger(witness);
-    
-    console.log('Transaction signed successfully with Ledger');
-    
     // Submit the transaction
     await submitTx();
   } catch (e) {
