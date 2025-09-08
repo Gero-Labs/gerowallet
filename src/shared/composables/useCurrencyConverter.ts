@@ -37,7 +37,7 @@ export function useCurrencyConverter() {
   const currentCurrency = computed(() => walletStore.config?.currency || 'usd');
   const shouldConvert = computed(() => currentCurrency.value !== 'usd');
 
-  const convertUsdToEur = (usdAmount: number): number => {
+  const convertFiat = (usdAmount: number): number => {
     if (!usdAmount || usdAmount === 0) {
       return 0;
     }
@@ -74,7 +74,7 @@ export function useCurrencyConverter() {
 
 
   return {
-    convertUsdToEur,
+    convertFiat,
     usdToEurRate,
     loading,
     error,
