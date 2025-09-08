@@ -124,11 +124,11 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
-
+import ledgerUtils from '@/shared/utils/ledger';
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
@@ -320,35 +320,55 @@ const sign = async () => {
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
       const mergeWitnesses = request.value?.data?.mergeWitnesses;
-      const witnessResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: {
-          txCbor: txCbor,
-          partialSign: partialSign,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          utxos: utxos.value,
-          addresses: keys.value,
-          mergeWitnesses: mergeWitnesses || false,
+      if (loggedWallet.value.type === WalletType.Normal) {
+        const witnessResult = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.SIGN_TX,
+          data: {
+            txCbor: txCbor,
+            partialSign: partialSign,
+            password: spendingPassword.value,
+            accountIndex: 0,
+            utxos: utxos.value,
+            addresses: keys.value,
+            mergeWitnesses: mergeWitnesses || false,
+          }
+        }) as { data: { witnesses?: any; error?: string } };
+
+        console.log('Transaction signed successfully:', witnessResult);
+
+        if (witnessResult.data.error) {
+          throw new Error(witnessResult.data.error);
         }
-      }) as { data: { witnesses?: any; error?: string } };
 
-      console.log('Transaction signed successfully:', witnessResult);
-
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      console.log('Signed transaction witness:', witnessResult.data.witnesses);
-      witnesses.value = witnessResult.data.witnesses;
-      if (txAutoSubmit.value) {
-        await confirm();
+        console.log('Signed transaction witness:', witnessResult.data.witnesses);
+        witnesses.value = witnessResult.data.witnesses;
+        if (txAutoSubmit.value) {
+          await confirm();
+        }
+      } else if (loggedWallet.value.type === WalletType.Ledger) {
+        const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+        const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+          tx,
+          keys.value,
+          utxos.value,
+          !isBT.value, // isUsb flag (inverted from isBT)
+          networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+        );
+        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+          signatures,
+        })
+        console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+        witnesses.value = transactionWitnessSet.toCbor();
+        if (txAutoSubmit.value) {
+          await confirm();
+        }
       }
     } catch (e: any) {
       console.log(e);
       snackbar.setError(e);
+    } finally {
+      txSignLoading.value = false;
     }
-    txSignLoading.value = false;
   };
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
@@ -383,7 +403,6 @@ const init = async () => {
   request.value = await controller.value.requestData();
   if (request.value?.data?.tx) {
     txCbor = request.value?.data?.tx;
-    console.log(txCbor);
   }
   if (txCbor) {
     console.log(txCbor);

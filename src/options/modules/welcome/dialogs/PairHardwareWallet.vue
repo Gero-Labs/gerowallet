@@ -63,7 +63,7 @@
                                 cols="12"
                                 sm="4"
                                 xs="12"
-                                class="pa-2"
+                                class="pa-0"
                               >
                                 <v-item v-slot="{ active, toggle }" :value="item.name">
                                   <v-hover>
@@ -72,23 +72,22 @@
                                         flat
                                         height="150"
                                         class="justify-center text-center pa-4 shadow"
-                                        :style="$vuetify.theme.isDark ? { backgroundColor: '#00000080', alignContent: 'center' } : { backgroundColor: '#ffffff80', alignContent: 'center'}"
+                                        :style="{ backgroundColor: '#00000080', alignContent: 'center' }"
                                         @click="toggle"
                                         :disabled="!item.enabled"
                                       >
-                                        <div style="height: 90px; align-content: center;" >
+                                        <div style="align-content: center;" >
                                           <img
-                                            :src="$vuetify.theme.isDark ? item.icon : item.dark"
-                                            style="margin: auto; width: 130px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
+                                            :src="item.icon"
+                                            style="margin: auto; width: 130px; height: 50px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
                                             :alt="item.name"
                                           />
                                         </div>
-
-                                        <v-card-subtitle class="pa-0">
+                                        <v-card-subtitle class="pt-1 pb-1">
                                           {{ item.support }}
                                         </v-card-subtitle>
-                                        <v-card-subtitle v-if="!item.enabled">
-                                          <v-chip color="red">Soon</v-chip>
+                                        <v-card-subtitle class="pa-0">
+                                          <v-chip color="red" small v-if="!item.enabled">Soon</v-chip>
                                         </v-card-subtitle>
                                         <v-scroll-y-transition>
                                           <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
@@ -146,6 +145,14 @@
                   >
                     <b>Instructions</b>
                     <div v-if="walletType === WalletType.Ledger">
+                      <ul class="text-left" style="line-height: 1.5" >
+                        <li>Setup your {{walletType}} hardware wallet if it's new.</li>
+                        <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
+                        <li>Unlock the hardware wallet by entering your pin code on the device.</li>
+                        <li>Open the Cardano app on the hardware wallet.</li>
+                      </ul>
+                    </div>
+                    <div v-if="walletType === WalletType.Trezor">
                       <ul class="text-left" style="line-height: 1.5" >
                         <li>Setup your {{walletType}} hardware wallet if it's new.</li>
                         <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
@@ -324,24 +331,27 @@
 <script setup lang="ts">
 import { ref, getCurrentInstance, computed, nextTick } from 'vue';
 import rules from "@/utils/rules";
-import { Network, purpose, Theme, WalletType } from '@/models/types';
+import { purpose, Theme, WalletType } from '@/models/types';
 import ledger from "@/shared/utils/ledger";
 import hardwareLoading from "@/plugins/hardwareLoading";
-import { getKeystonePublicKeyUR, parseMultiAccounts } from '@/shared/utils/keystone';
+import { getKeystonePublicKeyUR,
+  // parseMultiAccounts
+} from '@/shared/utils/keystone';
 import QRCodeStyling from 'qr-code-styling';
-import { Bip32PublicKey } from '@emurgo/cardano-serialization-lib-browser';
-import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-const props = defineProps({
-  dialog: {
-    type: Boolean,
-    default: false,
-    network: Network
-  },
+import trezor from '@/shared/utils/trezor';
+
+interface Props {
+  dialog: boolean;
+  network: any;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  dialog: false,
 });
 
 const emit = defineEmits(['dialogChange']);
@@ -355,6 +365,7 @@ const newWallet = ref({
   icon: '',
   publicKey: '',
   termsChecked: false,
+  keys: [],
 });
 const valid2 = ref(false);
 const valid3 = ref(false);
@@ -365,7 +376,7 @@ const persistent = ref(false);
 const qrCode = ref(undefined);
 const keystoneScan = ref(false);
 const qrCodeRef = ref(null);
-const form3Ref = ref(null);
+const form3 = ref(null);
 
 const walletTypes = [
   {
@@ -410,25 +421,25 @@ const dialogLocal = computed({
   },
 });
 
-const onDecode = (result) => {
-  const multiAccounts = parseMultiAccounts(result);
-  newWallet.value.name = multiAccounts.device
-  newWallet.value.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
-  newWallet.value.xfp = multiAccounts.masterFingerprint
-  newWallet.value.keys = multiAccounts.keys
-  snackbar.fireSuccess("Keystone QR code successfully scanned.")
-  step.value++;
-  keystoneScan.value = false
-};
+// const onDecode = (result) => {
+//   const multiAccounts = parseMultiAccounts(result);
+//   newWallet.value.name = multiAccounts.device
+//   newWallet.value.publicKey = Bip32PublicKey.from_hex(multiAccounts.keys[0].publicKey + multiAccounts.keys[0].chainCode).to_bech32();
+//   newWallet.value.xfp = multiAccounts.masterFingerprint
+//   newWallet.value.keys = multiAccounts.keys
+//   snackbar.fireSuccess("Keystone QR code successfully scanned.")
+//   step.value++;
+//   keystoneScan.value = false
+// };
 
-const onInit = (promise) => {
-  promise.then(() => {
-    console.log("Camera initialized successfully");
-  })
-    .catch((error) => {
-      console.error("Camera initialization failed:", error);
-    });
-};
+// const onInit = (promise) => {
+//   promise.then(() => {
+//     console.log("Camera initialized successfully");
+//   })
+//     .catch((error) => {
+//       console.error("Camera initialization failed:", error);
+//     });
+// };
 
 const nextStep = () => {
   if (walletType.value === WalletType.Keystone) {
@@ -453,7 +464,6 @@ const backToStepOne = () => {
 
 const walletCreationStep2 = async () => {
   if (walletType.value === WalletType.Ledger) {
-    console.log('ledger')
     persistent.value = true
     hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
     hardwareLoading.setLoading(true)
@@ -472,6 +482,18 @@ const walletCreationStep2 = async () => {
     } catch (e) {
       console.log(e)
     }
+  } else if (walletType.value === WalletType.Trezor) {
+    persistent.value = true;
+    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setLoading(true)
+    const index = 0
+    try {
+      const path = `m/${purpose.hdwallet}'/1815'/${index}'`
+      const coldWalletProps = await trezor.initTrezor(path)
+      console.log(coldWalletProps)
+    } catch (e) {
+      console.log(e)
+    }
   } else if (walletType.value === WalletType.Keystone) {
     keystoneScan.value = true
     if (qrCode.value) {
@@ -486,13 +508,13 @@ const walletCreationStep2 = async () => {
 
 const walletCreationStep3 = async () => {
   try {
-    if (form3Ref.value.validate()) {
+    if (form3.value.validate()) {
       creatingWalletLoader.value = true
       const wallet = await GeroStore.createNewHardwareWallet({
         ...newWallet.value,
         type: walletType.value,
         theme: Theme.GERO,
-        chain: props.network.chain,
+        chain: props.network.blockchain,
         network: props.network.network
       })
       dialogLocal.value = false
@@ -506,8 +528,8 @@ const walletCreationStep3 = async () => {
         })
       });
     }
-  } catch (e) {
-    console.error('Error creating wallet:', error);
+  } catch (e: any) {
+    console.error('Error creating wallet:', e);
   } finally {
     creatingWalletLoader.value = false
   }
@@ -526,6 +548,7 @@ const resetDialog = () => {
     icon: '',
     publicKey: '',
     termsChecked: false,
+    keys: [],
   }
   valid2.value = false
   valid3.value = false

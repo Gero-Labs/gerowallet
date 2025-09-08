@@ -59,6 +59,8 @@ export default defineConfig({
         compress: {
           keep_fnames: true,
           sequences: false,
+          unsafe_arrows: false,
+          unsafe_methods: false,
         },
       },
     }),
@@ -99,6 +101,16 @@ export default defineConfig({
                 chunk.code = chunk.code.replace(
                   /null && null\.tagName\.toUpperCase\(\) === 'SCRIPT' && null\.src \|\| document\.baseURI/g,
                   'self.location.href'
+                );
+                // Fix `this instanceof` patterns that cause errors in service workers
+                chunk.code = chunk.code.replace(
+                  /if \(this instanceof (\w+)\)/g,
+                  'if (typeof this !== "undefined" && this instanceof $1)'
+                );
+                // Fix the specific getAugmentedNamespace anonymous function pattern
+                chunk.code = chunk.code.replace(
+                  /var a = \/\* @__PURE__ \*\/ __name\(function (\w+)\(\) \{[\s\S]*?\}, "a"\);/g,
+                  'var a = /* @__PURE__ */ __name(function $1() { try { if (typeof this !== "undefined" && this instanceof $1) { return Reflect.construct(f, arguments, this.constructor); } return f.apply(this, arguments); } catch(e) { return f.apply(this, arguments); } }, "a");'
                 );
               }
             }

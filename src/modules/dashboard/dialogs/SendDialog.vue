@@ -210,7 +210,8 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import ledgerUtils from '@/shared/utils/ledger';
 
 interface Props {
   isOpen: boolean;
@@ -258,6 +259,11 @@ const isSubmit = ref<boolean>(false);
 const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
+
+// Debug watcher for Bluetooth toggle
+watch(isBT, (newValue) => {
+  console.log('isBT changed to:', newValue);
+}, { immediate: true });
 const overlay = ref<boolean>(false);
 // const type = ref<string>('');
 // const cbor = ref<string>('');
@@ -397,17 +403,6 @@ const signTx = async (): Promise<boolean> => {
     console.log('Signing send transaction');
     console.log('Transaction:', tx.value);
 
-    // First, verify password via a background message
-    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
-
-    if (!passwordVerification.data.isValid) {
-      enableToolTip();
-      return false;
-    }
-
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     console.log('Serialized transaction CBOR:', txCbor.value);
@@ -472,45 +467,80 @@ const submitTx = async () => {
   }
 };
 
-async function signAndSubmitTx() {
-  if (isSubmit.value) {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      await submitTx();
-    }
-  } else {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      const isValid: boolean = await signTx();
-      if (!isValid) {
-        return;
-      }
-      // Auto-submit for send transactions (unlike staking where user might want to review)
-      await submitTx();
-    } else if (loggedWallet.value?.type === WalletType.Keystone) {
-      if (qrCode.value) {
-        qrCode.value = null; // Clear the QRCode instance
-        if (vmProxy.$refs.qrCode)
-          vmProxy.$refs.qrCode.innerHTML = '';
-      }
+const signLedgerTx = async () => {
+  txSubmitLoading.value = true;
+  try {
+    console.log('Signing transaction with modern Ledger approach');
+    console.log('Using Bluetooth connection:', isBT.value);
 
-      // TODO: Update Keystone flow to work with Cardano JS SDK transactions
-      // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
-      // type.value = ur.type;
-      // cbor.value = Buffer.from(ur.cbor).toString('hex');
-      // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
-      // console.log('');
-      // overlay.value = true;
-      // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
-      // Vue.nextTick(() => {
-      //   qrCode.value.append(vmProxy.$refs.qrCode);
-      // });
-      // console.log('qrCode');
-    } else {
-      // Hardware wallets (Ledger, etc.)
-      const isValid: boolean = await signTx();
-      if (isValid) {
-        await submitTx();
-      }
+    if (!tx.value) {
+      throw new Error('No transaction to sign');
     }
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      tx.value,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+
+    // Submit the transaction
+    await submitTx();
+  } catch (e) {
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+async function signAndSubmitTx() {
+  if (loggedWallet.value?.type === WalletType.Normal) {
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
+
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      return;
+    }
+    const isValid: boolean = await signTx();
+    if (!isValid) {
+      return;
+    }
+    // Auto-submit for sending transactions (unlike staking where a user might want to review)
+    await submitTx();
+  } else if (loggedWallet.value?.type === WalletType.Keystone) {
+    if (qrCode.value) {
+      qrCode.value = null; // Clear the QRCode instance
+      if (vmProxy.$refs.qrCode)
+        vmProxy.$refs.qrCode.innerHTML = '';
+    }
+
+    // TODO: Update Keystone flow to work with Cardano JS SDK transactions
+    // const ur = createKeystoneSignRequest(tx.value, loggedWallet.value, utxos.value, keys.value);
+    // type.value = ur.type;
+    // cbor.value = Buffer.from(ur.cbor).toString('hex');
+    // qrCodeOptions(UREncoder.encodeSinglePart(ur), 430);
+    // console.log('');
+    // overlay.value = true;
+    // qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450));
+    // Vue.nextTick(() => {
+    //   qrCode.value.append(vmProxy.$refs.qrCode);
+    // });
+    // console.log('qrCode');
+  } else if (loggedWallet.value?.type === WalletType.Ledger) {
+    // Ledger Hardware Wallet Signing
+    await signLedgerTx();
+  } else {
+
   }
 }
 
@@ -521,7 +551,7 @@ async function buildTx(sendTokens) {
 
   const recipientAddress = sendData.value.recipientAddress;
 
-  // Build assets map for Cardano JS SDK
+  // Build asset map for Cardano JS SDK
   const assetsMap = new Map<Cardano.AssetId, bigint>();
   let coinsAmount = BigInt(0);
 
