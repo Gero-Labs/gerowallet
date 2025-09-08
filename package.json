@@ -37,15 +37,21 @@
     "@bringweb3/chrome-extension-kit": "^1.4.4",
     "@cardano-foundation/cardano-verify-datasignature": "^1.0.11",
     "@cardano-foundation/ledgerjs-hw-app-cardano": "^7.1.4",
-    "@cardano-sdk/core": "^0.46.2",
-    "@cardano-sdk/tx-construction": "^0.27.4",
+    "@cardano-sdk/core": "^0.46.9",
+    "@cardano-sdk/hardware-ledger": "^0.16.17",
+    "@cardano-sdk/hardware-trezor": "^0.7.27",
+    "@cardano-sdk/tx-construction": "^0.28.7",
+    "@cardano-sdk/web-extension": "^0.39.29",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
     "@emurgo/cardano-serialization-lib-browser": "^12.1.0",
     "@emurgo/cip14-js": "^3.0.1",
     "@keystonehq/keystone-sdk": "^0.8.0",
-    "@ledgerhq/hw-transport-web-ble": "^6.29.2",
-    "@ledgerhq/hw-transport-webusb": "^6.29.2",
+    "@ledgerhq/devices": "^8.5.1",
+    "@ledgerhq/hw-transport-web-ble": "^6.29.9",
+    "@ledgerhq/hw-transport-webusb": "^6.29.9",
     "@mdi/font": "^7.4.47",
+    "@trezor/connect-web": "^9.6.2",
+    "@trezor/connect-webextension": "^9.6.2",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",
     "ably": "^2.11.0",
@@ -155,6 +161,12 @@
     "vuetify-loader": "^1.9.2",
     "webextension-polyfill": "^0.12.0",
     "webpack-bundle-analyzer": "^4.10.2"
+  },
+  "overrides": {
+    "@cardano-sdk/hardware-trezor": {
+      "@trezor/connect": "9.6.2",
+      "@trezor/connect-web": "9.6.2"
+    }
   },
   "browserslist": [
     "> 1%",
