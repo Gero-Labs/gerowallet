@@ -252,7 +252,7 @@ const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
 
-const { convertUsdToEur, getCurrencySymbol } = useCurrencyConverter();
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
@@ -274,7 +274,7 @@ const geroPrice = computed(() => {
     return 'GERO';
   }
   if (geroToken?.price && geroToken.price > 0) {
-    return convertUsdToEur(geroToken.price).toFixed(6);
+    return convertFiat(geroToken.price).toFixed(6);
   }
   return 'GERO';
 });
