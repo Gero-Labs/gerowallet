@@ -48,7 +48,7 @@ loadConfig().then(() => {
 loadWallets().then(async () => {
   console.log('Wallets loaded')
 
-  // Wait for wallet store to be hydrated from Chrome storage
+  // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
   console.log('Wallet store hydrated, checking for logged wallet...');
 

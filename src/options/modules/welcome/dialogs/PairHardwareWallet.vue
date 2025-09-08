@@ -63,7 +63,7 @@
                                 cols="12"
                                 sm="4"
                                 xs="12"
-                                class="pa-2"
+                                class="pa-0"
                               >
                                 <v-item v-slot="{ active, toggle }" :value="item.name">
                                   <v-hover>
@@ -76,19 +76,18 @@
                                         @click="toggle"
                                         :disabled="!item.enabled"
                                       >
-                                        <div style="height: 90px; align-content: center;" >
+                                        <div style="align-content: center;" >
                                           <img
                                             :src="item.icon"
-                                            style="margin: auto; width: 130px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
+                                            style="margin: auto; width: 130px; height: 50px; filter: invert(100%) sepia(20%) saturate(2%) hue-rotate(213deg) brightness(112%) contrast(101%);"
                                             :alt="item.name"
                                           />
                                         </div>
-
-                                        <v-card-subtitle class="pa-0">
+                                        <v-card-subtitle class="pt-1 pb-1">
                                           {{ item.support }}
                                         </v-card-subtitle>
-                                        <v-card-subtitle v-if="!item.enabled">
-                                          <v-chip color="red">Soon</v-chip>
+                                        <v-card-subtitle class="pa-0">
+                                          <v-chip color="red" small v-if="!item.enabled">Soon</v-chip>
                                         </v-card-subtitle>
                                         <v-scroll-y-transition>
                                           <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
@@ -146,6 +145,14 @@
                   >
                     <b>Instructions</b>
                     <div v-if="walletType === WalletType.Ledger">
+                      <ul class="text-left" style="line-height: 1.5" >
+                        <li>Setup your {{walletType}} hardware wallet if it's new.</li>
+                        <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
+                        <li>Unlock the hardware wallet by entering your pin code on the device.</li>
+                        <li>Open the Cardano app on the hardware wallet.</li>
+                      </ul>
+                    </div>
+                    <div v-if="walletType === WalletType.Trezor">
                       <ul class="text-left" style="line-height: 1.5" >
                         <li>Setup your {{walletType}} hardware wallet if it's new.</li>
                         <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
@@ -336,6 +343,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import trezor from '@/shared/utils/trezor';
 
 interface Props {
   dialog: boolean;
@@ -456,7 +464,6 @@ const backToStepOne = () => {
 
 const walletCreationStep2 = async () => {
   if (walletType.value === WalletType.Ledger) {
-    console.log('ledger')
     persistent.value = true
     hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
     hardwareLoading.setLoading(true)
@@ -472,6 +479,18 @@ const walletCreationStep2 = async () => {
         newWallet.value.keys = coldWalletProps.keys
         step.value = 3
       }
+    } catch (e) {
+      console.log(e)
+    }
+  } else if (walletType.value === WalletType.Trezor) {
+    persistent.value = true;
+    hardwareLoading.setText("Please follow the instructions in the Cardano app on<br>your "+walletType.value+" device to complete the pairing process.")
+    hardwareLoading.setLoading(true)
+    const index = 0
+    try {
+      const path = `m/${purpose.hdwallet}'/1815'/${index}'`
+      const coldWalletProps = await trezor.initTrezor(path)
+      console.log(coldWalletProps)
     } catch (e) {
       console.log(e)
     }
