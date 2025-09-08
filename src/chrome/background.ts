@@ -1,34 +1,3 @@
-self.addEventListener('unhandledrejection', (event) => {
-  // Check if it's an Ably channel access error (which we handle gracefully)
-  if (event.reason && event.reason.message && event.reason.message.includes('Channel denied access')) {
-    console.warn('Prevented unhandled Ably channel access rejection:', event.reason.message);
-    event.preventDefault(); // Prevent the unhandled rejection from being logged as an error
-    return;
-  }
-
-  // For other unhandled rejections, log but don't prevent (so we can still see real issues)
-  console.warn('Unhandled promise rejection:', event.reason);
-});
-
-self.addEventListener('online', () => {
-  console.log('Network is online');
-  // You can dispatch custom events or use a global state manager
-});
-
-self.addEventListener('offline', () => {
-  console.log('Network is offline');
-  // Handle offline state
-});
-
-// For Service Worker lifecycle events
-self.addEventListener('install', (event) => {
-  console.log('Service Worker installing', event);
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated', event);
-});
-
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -79,7 +48,7 @@ loadConfig().then(() => {
 loadWallets().then(async () => {
   console.log('Wallets loaded')
 
-  // Wait for wallet store to be hydrated from Chrome storage
+  // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
   console.log('Wallet store hydrated, checking for logged wallet...');
 

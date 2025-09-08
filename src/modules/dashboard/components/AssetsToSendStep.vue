@@ -190,7 +190,7 @@ const collections = computed(() => {
 
 watch(props.value, (newVal, oldVal) => {
   if (newVal !== oldVal) {
-    selectedTokens.value = newVal.selectedTokens
+    selectedTokens.value = newVal['selectedTokens']
   }
 }, {
   deep: true

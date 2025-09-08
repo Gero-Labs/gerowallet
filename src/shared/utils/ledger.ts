@@ -2,57 +2,29 @@ import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import BluetoothTransport from '@ledgerhq/hw-transport-web-ble';
 import {
   Ada,
-  AddressType,
-  CertificateType,
-  CredentialParamsType, DatumType, DRepParamsType,
+  AddressType as LedgerAddressType,
   GetExtendedPublicKeysResponse,
   GetVersionResponse,
-  SignedTransactionData,
   SignMessageResponse,
-  TransactionSigningMode,
-  TxInput,
-  TxOutput,
-  TxOutputDestinationType,
-  TxOutputFormat, TxRequiredSignerType, VoteOption, VoterType,
+  TxOutputFormat,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { ChainDerivations, coin_type, CoinTypes, HARDENED, purpose, WalletTypePurpose } from '@/models/types';
+import { CoinTypes, HARDENED, Key, Keys, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
+import { Bip32PublicKey, CertificateKind } from '@emurgo/cardano-serialization-lib-browser';
 import {
-  Address,
-  AssetName,
-  Assets,
-  BaseAddress,
-  Bip32PublicKey,
-  CborContainerType,
-  CertificateKind,
-  Certificates, CommitteeColdResign, CommitteeHotAuth,
-  DRepDeregistration, DRepKind, DRepRegistration, DRepUpdate,
-  Ed25519KeyHashes,
-  FixedTransaction,
-  MultiAsset,
-  ScriptHash, StakeDelegation, StakeDeregistration, StakeRegistration,
-  TransactionInputs,
-  TransactionOutputs, VoteDelegation, VotingProcedures,
-  Withdrawals,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { Buffer } from 'buffer';
-import { MessageAddressFieldType, MessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+  MessageAddressFieldType,
+  MessageData,
+} from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import Transport from '@ledgerhq/hw-transport';
-import {
-  assembleWitnesses,
-  generateLedgerMetadata,
-  generateLedgerMetadataFromHash,
-  generateLedgerMintBundle, generateLedgerOwnedAddress,
-  getAddressCredentials, getDecodedCbor, getOwnedCred,
-  getPlutusHVB, getRewardAddressFromCred,
-  hasConwaySetTag,
-  hdPathToArray,
-  isCatalystVotingRegistrationMetadata,
-  isSameArray, isScriptStakeAddress,
-  toHexString,
-} from '@/shared/utils/converter';
-import { WalletBg } from '@/chrome/walletBg';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { hdPathToArray } from '@/chrome/serialization';
+import { NetworkInfo } from '@/utils/networks';
+import * as Crypto from '@cardano-sdk/crypto';
+import { LedgerTxTransformerContext, LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
+import { util } from '@cardano-sdk/key-management';
+import { GroupedAddress, AddressType, KeyRole, AccountKeyDerivationPath, CommunicationType } from '@cardano-sdk/key-management';
+
 Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -106,7 +78,7 @@ export default {
     try {
       let version: GetVersionResponse;
       await Promise.race([
-        timeout(10000, null), // 10000 = the maximum time to wait
+        timeout(10000, null), // 10,000 = the maximum time to wait
         (async (): Promise<void> => {
           version = await ledger.getVersion();
         })(),
@@ -145,20 +117,37 @@ export default {
     }
   },
   async connectViaBT(): Promise<Transport> {
+    console.log('[LEDGER-BT] Starting Bluetooth connection process...');
+
     const isSupported = await BluetoothTransport.isSupported();
+    console.log('[LEDGER-BT] Bluetooth support check:', isSupported);
+
     if (isSupported) {
       if (this._transportClose) {
+        console.log('[LEDGER-BT] Closing existing transport...');
         await this._transportClose;
       }
       if (this._transport && this._transportType === 'WebBLE') {
+        console.log('[LEDGER-BT] Reusing existing Bluetooth transport');
         return this._transport;
       }
-      const transport: Transport = await BluetoothTransport.create(12e3);
-      transport.on('disconnect', () => {
-        this.setActiveTransport(null, null);
-      });
-      this.setActiveTransport(transport, 'WebBLE');
-      return transport;
+
+      console.log('[LEDGER-BT] Creating new Bluetooth transport...');
+      try {
+        const transport: Transport = await BluetoothTransport.create(12e3);
+        console.log('[LEDGER-BT] Bluetooth transport created successfully:', transport);
+
+        transport.on('disconnect', () => {
+          console.log('[LEDGER-BT] Bluetooth transport disconnected');
+          this.setActiveTransport(null, null);
+        });
+
+        this.setActiveTransport(transport, 'WebBLE');
+        return transport;
+      } catch (error) {
+        console.error('[LEDGER-BT] Bluetooth transport creation failed:', error);
+        throw error;
+      }
     } else {
       throw new Error('Bluetooth not supported by Ledger device or platform. Please check bluetooth connection and/or choose another connection method in wallet settings.');
     }
@@ -173,738 +162,45 @@ export default {
   },
 
   async txToLedger(
-    tx: FixedTransaction,
-    wallet: WalletBg,
-    creds: Set<any>,
-    index: number = 0,
-    addresses: any,
-    usedUtxos?: any[],
-    isUsb?: boolean,
-  ): Promise<string> {
-    const txBody = tx.body();
-    const address: Address = Address.from_bech32(wallet.baseAddress);
-    // const network= networks.resolveNetwork(appWallet.chain, appWallet.network);
-    const credList = Array.from(creds).map(el => {
-      return {
-        cred: el.cred,
-        address: el.address,
-        path: hdPathToArray(el.path)
-      }
-    })
-    const accountData = {
-      // state: {
-      //   networkId: network.networkId
-      // },
-      account: {
-        pub: wallet.publicKey,
-        path: [purpose.hdwallet, coin_type.cardano, index]
-      },
-      keys: {
-        payment: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 0),
-        stake: [{
-          cred: BaseAddress.from_address(address).stake_cred().to_keyhash().to_hex(),
-          path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'/${ChainDerivations.CHIMERIC_ACCOUNT}/0`
-        }],
-        change: Object.values(addresses).filter(address => hdPathToArray(address['path'])[3] === 1),
-        script: [],
-        drep: [],
-        cc_cold: [],
-        cc_hot: []
-      }
+    tx: Cardano.Tx,
+    keys: Keys,
+    utxos: Cardano.Utxo[],
+    isUsb: boolean,
+    network: NetworkInfo
+  ): Promise<Cardano.Signatures> {
+    const deserializedTx: Serialization.Transaction = Serialization.Transaction.fromCore(tx)
+    const txBody: Cardano.TxBody = tx.body;
+    const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
+    const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
+    const txInKeyPathMap = await util.createTxInKeyPathMap(txBody, knownAddresses, inputResolver);
+    const ledgerTxTransformerContext: LedgerTxTransformerContext = {
+      chainId: Cardano.ChainIds.Mainnet,
+      accountIndex: 0,
+      outputsFormat: tx.body.outputs.map(_out => TxOutputFormat.MAP_BABBAGE),
+      collateralReturnFormat: TxOutputFormat.MAP_BABBAGE,
+      txInKeyPathMap,
+      knownAddresses,
     }
-    // const credList = [
-    //   {
-    //     cred: BaseAddress.from_address(address).payment_cred().to_keyhash().to_hex(),
-    //     path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 0, 0]
-    //   },
-    //   {
-    //     cred: RewardAddress.from_address(stakeAddress).payment_cred().to_keyhash().to_hex(),
-    //     path: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, HARDENED + index, 2, 0]
-    //   }]
-    // Process Inputs
-    const inputs = this.generateLedgerInputs(accountData, txBody.inputs(), usedUtxos);
-    // Collateral Inputs
-    const collateralInputs = txBody.collateral() ? this.generateLedgerInputs(accountData, txBody.collateral(), usedUtxos) : null;
-    // Reference Inputs
-    const referenceInputs = txBody.reference_inputs() ? this.generateLedgerInputs(accountData, txBody.reference_inputs(), usedUtxos) : null;
-    // Process Outputs
-    const outputs: TxOutput[] = this.generateLedgerOutputs(accountData, tx, tx.body().outputs());
-    // Collateral Output
-    let collateralOutput = null;
-    if (txBody.collateral_return()) {
-      const collateralOutputs = TransactionOutputs.new();
-      collateralOutputs.add(txBody.collateral_return());
-      collateralOutput = this.generateLedgerOutputs(accountData, tx, collateralOutputs);
-    }
-    // Additional Witness Paths
-    const additionalWitnessPaths = this.generateAdditionalWitnessPaths(credList, inputs, collateralInputs, referenceInputs);
-
-    const lTx = {
-      network: {
-        // protocolMagic: network.networkParams?.networkMagic,
-        networkId: 1,
-      },
-      inputs,
-      outputs,
-      fee: txBody.fee().to_str(),
-    };
-
-    if (txBody.ttl()) {
-      lTx['ttl'] = txBody.ttl().toString();
-    }
-    if (txBody.donation()) {
-      lTx['donation'] = txBody.donation();
-    }
-    if (collateralInputs) {
-      lTx['collateralInputs'] = collateralInputs;
-    }
-    if (referenceInputs) {
-      lTx['referenceInputs'] = referenceInputs;
-    }
-    if (collateralOutput) {
-      lTx['collateralOutput'] = collateralOutput;
-    }
-    if (txBody.total_collateral() != null) {
-      lTx['totalCollateral'] = txBody.total_collateral();
-    }
-    if (txBody.withdrawals()) {
-      lTx['withdrawals'] = this.generateLedgerWithdrawals(accountData, txBody.withdrawals());
-    }
-    if (txBody.certs()) {
-      lTx['certificates'] = this.generateLedgerCertificates(accountData, txBody.certs());
-    }
-    if (tx.auxiliary_data() && isCatalystVotingRegistrationMetadata(tx.auxiliary_data())) {
-      lTx['auxiliaryData'] = generateLedgerMetadata(accountData, tx.auxiliary_data());
-    } else if (txBody.auxiliary_data_hash()) {
-      lTx['auxiliaryData'] = generateLedgerMetadataFromHash(txBody.auxiliary_data_hash());
-    }
-    if (txBody.mint()) {
-      lTx['mint'] = generateLedgerMintBundle(txBody.mint());
-    }
-    if (txBody.script_data_hash() != null) {
-      lTx['scriptDataHashHex'] = txBody.script_data_hash().to_hex();
-    }
-    if (txBody.validity_start_interval() != null) {
-      lTx['validityIntervalStart'] = txBody.validity_start_interval().toString();
-    }
-    if (txBody.required_signers()) {
-      lTx['requiredSigners'] = this.generateRequiredSigners(accountData, txBody.required_signers());
-    }
-    if (txBody.network_id()) {
-      lTx['includeNetworkId'] = true;
-    }
-    if (txBody.voting_procedures()) {
-      lTx['votingProcedures'] = this.generateLedgerVotingProcedures(accountData, txBody.voting_procedures());
-    }
-    let signingMode;
-    if (!!collateralInputs || !!tx.witness_set().redeemers() || !!txBody.reference_inputs()) {
-      signingMode = TransactionSigningMode.PLUTUS_TRANSACTION;
-    } else if (additionalWitnessPaths.some((path3) => path3[0] === (HARDENED + purpose.multisig) || path3[0] === (HARDENED + purpose.minting))) {
-      signingMode = TransactionSigningMode.MULTISIG_TRANSACTION;
-    } else {
-      signingMode = TransactionSigningMode.ORDINARY_TRANSACTION;
-    }
-    const req = {
-      signingMode,
-      tx: lTx,
-      options: {
-        tagCborSets: hasConwaySetTag(tx),
-      },
-    };
-    if (additionalWitnessPaths.length > 0) {
-      req['additionalWitnessPaths'] = additionalWitnessPaths;
-    }
-    const fullTx = JSON.parse(JSON.stringify(req));
-
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
     await this.ensureLedgerVersion(ledger);
 
-    const response: SignedTransactionData = await ledger.signTransaction(fullTx);
-    return assembleWitnesses(accountData, response);
-  },
-  generateAdditionalWitnessPaths(credList, inputs, collaterals: TxInput[], refInputs: TxInput[]) {
-    const additionalWitnessPaths = [];
-    for (const cred of credList) {
-      const hardenedPath = cred.path;
-      if (additionalWitnessPaths.some((i2) => isSameArray(i2, hardenedPath))) {
-        continue;
-      }
-      const isPartOfInputs = inputs.some((item) => item.path && isSameArray(item.path, hardenedPath));
-      const isPartOfCollaterals = collaterals ? collaterals.some((item) => item.path && isSameArray(item.path, hardenedPath)) : false;
-      const isPartOfRefInputs = refInputs ? refInputs.some((item) => item.path && isSameArray(item.path, hardenedPath)) : false;
-      if (!isPartOfInputs && !isPartOfCollaterals && !isPartOfRefInputs) {
-        additionalWitnessPaths.push(hardenedPath);
-      }
-    }
-    return additionalWitnessPaths;
-  },
-  generateLedgerWithdrawals(accountData2, withdrawals: Withdrawals) {
-    const ledgerWithdrawals = [];
-    for (let i = 0 ; i < withdrawals.keys().len() ; i++) {
-      const rewardAddress = withdrawals.keys().get(i);
-      const amount = withdrawals.get(rewardAddress)
-      const cred = getAddressCredentials(rewardAddress.to_address().to_bech32());
-      const stakeCred = getOwnedCred([accountData2.keys], cred.stakeCred, "stake");
-      if (stakeCred) {
-        ledgerWithdrawals.push({
-          stakeCredential: {
-            type: CredentialParamsType.KEY_PATH,
-            keyPath: hdPathToArray(stakeCred.path)
-          },
-          amount: amount.to_str()
-        });
-      } else if (cred.stakeCred) {
-        ledgerWithdrawals.push({
-          stakeCredential: isScriptStakeAddress(rewardAddress) ? {
-            type: CredentialParamsType.SCRIPT_HASH,
-            scriptHashHex: cred.stakeCred
-          } : {
-            type: CredentialParamsType.KEY_HASH,
-            keyHashHex: cred.stakeCred
-          },
-          amount: amount.to_str()
-        });
-      }
-    }
-    return ledgerWithdrawals.length === 0 ? void 0 : ledgerWithdrawals;
-  },
-  generateRequiredSigners(accountData2, requiredSigners: Ed25519KeyHashes) {
-    const requiredSignerList = [];
-    for (let i = 0 ; i < requiredSigners.len() ; i++) {
-      const requiredSigner = requiredSigners.get(i).to_hex()
-      const cred = getOwnedCred([accountData2.keys], requiredSigner);
-      if (cred) {
-        requiredSignerList.push({
-          type: TxRequiredSignerType.PATH,
-          path: hdPathToArray(cred.path)
-        });
-      } else {
-        requiredSignerList.push({
-          type: TxRequiredSignerType.HASH,
-          hashHex: requiredSigner
-        });
-      }
-    }
-    return requiredSignerList;
-  },
-  generateLedgerCertificates(accountData2, certificates: Certificates) {
-    const ledgerCertificate = [];
-    const networkId2 = accountData2.state.networkId;
-    for (let i = 0 ; i < certificates.len() ; i++) {
-      const cert = certificates.get(i)
-      switch (cert.kind()) {
-        case CertificateKind.StakeRegistration: {
-          const regCert: StakeRegistration = cert.as_stake_registration();
-          const cred: string = regCert.stake_credential().to_keyhash().to_hex();
-          const addr: string = getRewardAddressFromCred(cred, networkId2);
-          const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
-          const ledgerRegCert = {
-            type: regCert.coin() ? CertificateType.STAKE_REGISTRATION_CONWAY : CertificateType.STAKE_REGISTRATION,
-            params: {
-              stakeCredential: ownedCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedCred.path)
-              } : isScriptStakeAddress(addr) ? {
-                type: CredentialParamsType.SCRIPT_HASH,
-                scriptHashHex: cred
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: cred
-              }
-            }
-          };
-          if (regCert.coin()) {
-            ledgerRegCert.params['deposit'] = regCert.coin().to_str();
-          }
-          ledgerCertificate.push(ledgerRegCert);
-          break;
-        }
-        case CertificateKind.StakeDeregistration: {
-          const deregCert: StakeDeregistration = cert.as_stake_deregistration();
-          const cred: string = deregCert.stake_credential().to_keyhash().to_hex();
-          const addr: string = getRewardAddressFromCred(cred, networkId2);
-          const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
-          const ledgerDeregCert = {
-            type: deregCert.coin() ? CertificateType.STAKE_DEREGISTRATION_CONWAY : CertificateType.STAKE_DEREGISTRATION,
-            params: {
-              stakeCredential: ownedCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedCred.path)
-              } : isScriptStakeAddress(addr) ? {
-                type: CredentialParamsType.SCRIPT_HASH,
-                scriptHashHex: cred
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: cred
-              }
-            }
-          };
-          if (deregCert.coin()) {
-            ledgerDeregCert.params['deposit'] = deregCert.coin().to_str();
-          }
-          ledgerCertificate.push(ledgerDeregCert);
-          break;
-        }
-        case CertificateKind.StakeDelegation: {
-          const delegation2: StakeDelegation = cert.as_stake_delegation();
-          const cred: string = delegation2.stake_credential().to_keyhash().to_hex();
-          const addr: string = getRewardAddressFromCred(cred, networkId2);
-          const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
-          ledgerCertificate.push({
-            type: CertificateType.STAKE_DELEGATION,
-            params: {
-              stakeCredential: ownedCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedCred.path)
-              } : isScriptStakeAddress(addr) ? {
-                type: CredentialParamsType.SCRIPT_HASH,
-                scriptHashHex: cred
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: cred
-              },
-              poolKeyHashHex: delegation2.pool_keyhash().to_hex()
-            }
-          });
-          break;
-        }
-        case CertificateKind.PoolRegistration:
-        case CertificateKind.PoolRetirement:
-          throw new Error("Error: generateLedgerCertificates: pool registration / retire cert no supported yet.");
-        case CertificateKind.VoteDelegation: {
-          const delegation2: VoteDelegation = cert.as_vote_delegation();
-          const cred: string = delegation2.stake_credential().to_keyhash().to_hex();
-          const addr: string = getRewardAddressFromCred(cred, networkId2);
-          const drep = delegation2.drep();
-          const ownedCred = getOwnedCred([accountData2.keys], cred, "stake");
-          const ledgerVoteDel = {
-            type: CertificateType.VOTE_DELEGATION,
-            params: {
-              stakeCredential: ownedCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedCred.path)
-              } : isScriptStakeAddress(addr) ? {
-                type: CredentialParamsType.SCRIPT_HASH,
-                scriptHashHex: cred
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: cred
-              }
-            }
-          };
-          switch (drep.kind()) {
-            case DRepKind.AlwaysAbstain: {
-              ledgerVoteDel.params['dRep'] = {
-                type: DRepParamsType.ABSTAIN
-              };
-            }
-            break
-            case DRepKind.AlwaysNoConfidence: {
-              ledgerVoteDel.params['dRep'] = {
-                type: DRepParamsType.NO_CONFIDENCE
-              };
-            }
-            break;
-            case DRepKind.KeyHash: {
-              const keyHash = drep.to_key_hash().to_hex();
-              const ownedDRepCred = keyHash ? getOwnedCred([accountData2.keys], keyHash, "drep") : null;
-              if (ownedDRepCred) {
-                ledgerVoteDel.params['dRep'] = {
-                  type: DRepParamsType.KEY_PATH,
-                  keyPath: hdPathToArray(ownedDRepCred.path)
-                };
-              } else {
-                ledgerVoteDel.params['dRep'] = {
-                  type: DRepParamsType.KEY_HASH,
-                  keyHashHex: keyHash
-                };
-              }
-            }
-            break;
-            case DRepKind.ScriptHash: {
-              ledgerVoteDel.params['dRep'] = {
-                type: DRepParamsType.SCRIPT_HASH,
-                scriptHashHex: drep.to_script_hash().to_hex()
-              };
-            }
-            break;
-          }
-          ledgerCertificate.push(ledgerVoteDel);
-          break;
-        }
-        case CertificateKind.CommitteeHotAuth: {
-          const committeeHotAuth: CommitteeHotAuth = cert.as_committee_hot_auth();
-          const coldKey = committeeHotAuth.committee_cold_credential().to_keyhash().to_hex();
-          const hotKey = committeeHotAuth.committee_hot_credential().to_keyhash().to_hex();
-          const ownedColdCred = getOwnedCred([accountData2.keys], coldKey, "cc_cold");
-          const ownedHotCred = getOwnedCred([accountData2.keys], hotKey, "cc_hot");
-          const ledgerCommitteeHotAuth = {
-            type: CertificateType.AUTHORIZE_COMMITTEE_HOT,
-            params: {
-              coldCredential: ownedColdCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedColdCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedColdCred
-              },
-              hotCredential: ownedHotCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedHotCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedHotCred
-              }
-            }
-          };
-          ledgerCertificate.push(ledgerCommitteeHotAuth);
-          break;
-        }
-        case CertificateKind.CommitteeColdResign: {
-          const committeeHColdResign: CommitteeColdResign = cert.as_committee_cold_resign();
-          const coldKey: string = committeeHColdResign.committee_cold_credential().to_keyhash().to_hex()
-          const ownedColdCred = getOwnedCred([accountData2.keys], coldKey, "cc_cold");
-          const ledgerCommitteeColdResign = {
-            type: CertificateType.RESIGN_COMMITTEE_COLD,
-            params: {
-              coldCredential: ownedColdCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedColdCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedColdCred
-              }
-            }
-          };
-          if (committeeHColdResign.anchor()) {
-            ledgerCommitteeColdResign.params['anchor'] = {
-              url: committeeHColdResign.anchor().url().url(),
-              hashHex: committeeHColdResign.anchor().anchor_data_hash().to_hex()
-            };
-          }
-          ledgerCertificate.push(ledgerCommitteeColdResign);
-          break;
-        }
-        case CertificateKind.DRepRegistration: {
-          const drepRegistration: DRepRegistration = cert.as_drep_registration();
-          const cred: string = drepRegistration.voting_credential().to_keyhash().to_hex();
-          const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
-          const ledgerDRepRegistration = {
-            type: CertificateType.DREP_REGISTRATION,
-            params: {
-              dRepCredential: ownedDRepCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedDRepCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedDRepCred
-              },
-              deposit: drepRegistration.coin().to_str()
-            }
-          };
-          if (drepRegistration.anchor()) {
-            ledgerDRepRegistration.params['anchor'] = {
-              url: drepRegistration.anchor().url().url(),
-              hashHex: drepRegistration.anchor().anchor_data_hash().to_hex()
-            };
-          }
-          ledgerCertificate.push(ledgerDRepRegistration);
-          break;
-        }
-        case CertificateKind.DRepUpdate: {
-          const drepUpdate: DRepUpdate = cert.as_drep_update();
-          const cred: string = drepUpdate.voting_credential().to_keyhash().to_hex();
-          const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
-          const ledgerDRepUpdate = {
-            type: CertificateType.DREP_UPDATE,
-            params: {
-              dRepCredential: ownedDRepCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedDRepCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedDRepCred
-              }
-            }
-          };
-          if (drepUpdate.anchor()) {
-            ledgerDRepUpdate.params['anchor'] = {
-              url: drepUpdate.anchor().url().url(),
-              hashHex: drepUpdate.anchor().anchor_data_hash().to_hex()
-            };
-          }
-          ledgerCertificate.push(ledgerDRepUpdate);
-          break;
-        }
-        case CertificateKind.DRepDeregistration: {
-          const drepDeregistration: DRepDeregistration = cert.as_drep_deregistration();
-          const cred = drepDeregistration.voting_credential().to_keyhash().to_hex();
-          const ownedDRepCred = getOwnedCred([accountData2.keys], cred, "drep");
-          const ledgerDRepdrepDeregistration = {
-            type: CertificateType.DREP_DEREGISTRATION,
-            params: {
-              dRepCredential: ownedDRepCred ? {
-                type: CredentialParamsType.KEY_PATH,
-                keyPath: hdPathToArray(ownedDRepCred.path)
-              } : {
-                type: CredentialParamsType.KEY_HASH,
-                keyHashHex: ownedDRepCred
-              },
-              deposit: drepDeregistration.coin().to_str()
-            }
-          };
-          ledgerCertificate.push(ledgerDRepdrepDeregistration);
-          break;
-        }
-        default:
-          throw new Error(`generateLedgerCertificates: unsupported certificate type`);
-      }
-    }
-    return ledgerCertificate;
-  },
-  generateLedgerVotingProcedures(accountData2, votingProcedure: VotingProcedures) {
-    const ledgerVotingProcedures = [];
-    const procedureList = votingProcedure.to_js_value()
-    for (const procedure of procedureList) {
-      let voter = void 0;
-      const voterType = Object.keys(procedure.voter)[0];
-      switch (voterType) {
-        case 'ConstitutionalCommitteeHotKey': {
-          const ccHotKey = procedure.voter['ConstitutionalCommitteeHotKey'];
-          const cred = Object.values(ccHotKey)[0];
-          const ownedCred = getOwnedCred([accountData2.keys], cred, 'cc_hot');
-          if (ownedCred) {
-            voter = {
-              type: VoterType.COMMITTEE_KEY_PATH,
-              keyPath: hdPathToArray(ownedCred.path),
-            };
-          } else if (Object.keys(ccHotKey)[0] === 'Key') {
-            voter = {
-              type: VoterType.COMMITTEE_KEY_HASH,
-              keyHashHex: cred,
-            };
-          } else {
-            voter = {
-              type: VoterType.COMMITTEE_SCRIPT_HASH,
-              scriptHashHex: cred,
-            };
-          }
-          break;
-        }
-        case 'DRep': {
-          const drep = procedure.voter['DRep'];
-          const cred = Object.values(drep)[0];
-          const ownedCred = getOwnedCred([accountData2.keys], cred, 'drep');
-          if (ownedCred) {
-            voter = {
-              type: VoterType.DREP_KEY_PATH,
-              keyPath: hdPathToArray(ownedCred.path),
-            };
-          } else if (Object.keys(drep)[0] === 'Key') {
-            voter = {
-              type: VoterType.DREP_KEY_HASH,
-              keyHashHex: cred,
-            };
-          } else {
-            voter = {
-              type: VoterType.DREP_SCRIPT_HASH,
-              scriptHashHex: cred,
-            };
-          }
-          break;
-        }
-        case 'StakingPool': {
-          voter = {
-            type: VoterType.STAKE_POOL_KEY_HASH,
-            keyHashHex: procedure.voter['StakingPool'],
-          };
-          break;
-        }
-        default:
-          throw new Error(`generateLedgerVotingProcedures: unsupported voter type: ${voterType}`);
-      }
-      const votingProcedure = {
-        voter,
-        votes: [],
-      };
-      for (const vote of procedure.votes) {
-        let voteOption;
-        if (vote.voting_procedure.vote === 'No') {
-          voteOption = VoteOption.NO;
-        } else if (vote.voting_procedure.vote === 'Yes') {
-          voteOption = VoteOption.YES;
-        } else {
-          voteOption = VoteOption.ABSTAIN;
-        }
-        const ledgerVote = {
-          govActionId: {
-            txHashHex: vote.action_id.transaction_id,
-            govActionIndex: vote.action_id.index,
-          },
-          votingProcedure: {
-            vote: voteOption,
-          },
-        };
-        if (vote.voting_procedure.anchor) {
-          ledgerVote.votingProcedure['anchor'] = {
-            url: vote.voting_procedure.anchor.anchor_url,
-            hashHex: vote.voting_procedure.anchor.anchor_data_hash,
-          };
-        }
-        votingProcedure.votes.push(ledgerVote);
-      }
-      ledgerVotingProcedures.push(votingProcedure);
-    }
-    return ledgerVotingProcedures;
+    const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
+      chainId: ledgerTxTransformerContext.chainId,
+      accountIndex: ledgerTxTransformerContext.accountIndex,
+      communicationType: CommunicationType.Web
+    }, {
+      bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
+      logger: console
+    });
+    return await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+      knownAddresses,
+      txInKeyPathMap,
+    })
   },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();
     if (!version) throw new Error('Cardano app is closed');
-  },
-  generateLedgerInputs(accountData2, inputs: TransactionInputs, utxoList) {
-    const ledgerInputs = [];
-    for (let i = 0 ; i < inputs.len() ; i++) {
-      const input = inputs.get(i)
-      const utxo3 = utxoList.find((u2) => u2.tx_hash === input.transaction_id().to_hex() && u2.tx_index === input.index());
-      const cred = utxo3 ? getAddressCredentials(utxo3.payment_addr.bech32) : null;
-      const key3 = cred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
-      ledgerInputs.push({
-        txHashHex: input.transaction_id().to_hex(),
-        outputIndex: input.index(),
-        path: key3 ? hdPathToArray(key3.path) : null
-      });
-    }
-    return ledgerInputs;
-  },
-  generateLedgerTokenBundle(multiAsset: MultiAsset) {
-    let tokenBundle = undefined;
-
-    if (multiAsset) {
-      tokenBundle = [];
-      for (let j = 0; j < multiAsset.keys().len(); j++) {
-        const policy: ScriptHash = multiAsset.keys().get(j);
-        const assets: Assets = multiAsset.get(policy);
-        const tokens = [];
-        for (let k = 0; k < assets.keys().len(); k++) {
-          const assetName: AssetName = assets.keys().get(k);
-          const amount = assets.get(assetName).to_str();
-          tokens.push({
-            assetNameHex: Buffer.from(assetName.name()).toString('hex'),
-            amount,
-          });
-        }
-        // sort canonical
-        tokens.sort((a, b): number => {
-          if (a.assetNameHex.length == b.assetNameHex.length) {
-            return a.assetNameHex > b.assetNameHex ? 1 : -1;
-          } else if (a.assetNameHex.length > b.assetNameHex.length) return 1;
-          else return -1;
-        });
-        tokenBundle.push({
-          policyIdHex: policy.to_hex(),
-          tokens,
-        });
-      }
-    }
-    return tokenBundle;
-  },
-  generateLedgerOutputs(accountData2, tx2: FixedTransaction, outputs: TransactionOutputs) {
-    let _a;
-    const ledgerOutputs = [];
-    for (let i = 0; i < outputs.len() ; i++) {
-      const output2 = outputs.get(i);
-      const outputJs = output2.to_js_value()
-      const cred = getAddressCredentials(output2.address().to_bech32(), null, true);
-      if (!cred) {
-        throw new Error("unable to parse output address: " + output2.address().to_bech32());
-      }
-      const paymentCred = cred.paymentCred ? getOwnedCred([accountData2.keys], cred.paymentCred) : null;
-      let out;
-      let format2 = TxOutputFormat.ARRAY_LEGACY;
-      // let isBabbage = false
-      if (output2.serialization_format() === CborContainerType.Map) {
-        format2 = TxOutputFormat.MAP_BABBAGE;
-        // isBabbage = true
-      }
-      try {
-        if (paymentCred) {
-          out = {
-            format: format2,
-            destination: {
-              type: TxOutputDestinationType.DEVICE_OWNED,
-              params: generateLedgerOwnedAddress(accountData2, paymentCred, cred.stakeCred)
-            },
-            amount: output2.amount().coin().to_str()
-          };
-        }
-      } catch (err2) {
-        //
-      }
-      if (!out) {
-        out = {
-          format: format2,
-          destination: {
-            type: TxOutputDestinationType.THIRD_PARTY,
-            params: {
-              addressHex: toHexString(cred.addressBytes)
-            }
-          },
-          amount: output2.amount().coin().to_str()
-        };
-      }
-      if (output2.amount().multiasset()) {
-        out.tokenBundle = this.generateLedgerTokenBundle(output2.amount().multiasset());
-      }
-      let plutusScriptBytes
-      if (outputJs.script_ref) {
-        const cslPlutusScript = output2.script_ref();
-        const decodedPlutusScript: any = getDecodedCbor(toHexString(cslPlutusScript.to_bytes()));
-        plutusScriptBytes = ((_a = decodedPlutusScript == null ? void 0 : decodedPlutusScript.value) == null ? void 0 : _a.value) ?? cslPlutusScript.to_bytes();
-        let script = null;
-        if (plutusScriptBytes) {
-          script = toHexString(plutusScriptBytes);
-        } else {
-          script = outputJs.script_ref["PlutusScript"] ?? outputJs.script_ref["NativeScript"] ?? null;
-        }
-        if (script && typeof script === "string") {
-          out = {
-            ...out,
-            referenceScriptHex: script
-          };
-        }
-      }
-      const hvb = getPlutusHVB(outputJs.plutus_data);
-      if (output2.plutus_data()) {
-        hvb.bytes = toHexString(output2.plutus_data().to_bytes());
-      }
-      if (hvb.bytes) {
-        out = {
-          ...out,
-          datum: {
-            type: DatumType.INLINE,
-            datumHex: hvb.bytes
-          }
-        };
-      } else if (hvb.hash) {
-        if (format2 === TxOutputFormat.MAP_BABBAGE) {
-          out = {
-            ...out,
-            datum: {
-              type: DatumType.HASH,
-              datumHashHex: hvb.hash
-            }
-          };
-        } else {
-          out = {
-            ...out,
-            datumHashHex: hvb.hash
-          };
-        }
-      }
-      ledgerOutputs.push(out);
-    }
-    return ledgerOutputs;
   },
   async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean): Promise<SignMessageResponse> {
     const messageData: MessageData = {
@@ -914,7 +210,7 @@ export default {
       preferHexDisplay: false,
       addressFieldType: MessageAddressFieldType.ADDRESS,
       address: {
-        type: AddressType.REWARD_KEY,
+        type: LedgerAddressType.REWARD_KEY,
         params: {
           stakingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, accountIndex + HARDENED, 2, 0],
         },
@@ -934,5 +230,118 @@ export default {
       throw new Error('Cardano app is closed');
     }
     return ledger.signMessage(messageData);
+  },
+
+  /**
+   * Create GroupedAddress[] from a Keys object for Ledger transaction context
+   * Maps wallet keys to the format expected by LedgerTxTransformerContext
+   */
+  createKnownAddressesFromKeys(keys: Keys, network: NetworkInfo): GroupedAddress[] {
+    const knownAddresses: GroupedAddress[] = [];
+
+    // Process payment addresses (External)
+    keys.payment.forEach((key: Key, _arrayIndex: number) => {
+      if (key.address && key.path) {
+        try {
+          const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
+          const pathArray = hdPathToArray(key.path);
+          const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
+
+          knownAddresses.push({
+            type: AddressType.External, // Payment addresses are external
+            index: derivationIndex,
+            networkId,
+            accountIndex: 0, // Assuming account 0 could be parameterized
+            address: key.address as Cardano.PaymentAddress,
+            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
+          });
+        } catch (error) {
+          console.warn(`[LEDGER] Failed to process payment address ${key.address}:`, error);
+        }
+      }
+    });
+
+    // Process change addresses (Internal)
+    keys.change.forEach((key: Key, _arrayIndex: number) => {
+      if (key.address && key.path) {
+        try {
+          const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
+          const pathArray = hdPathToArray(key.path);
+          const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
+
+          knownAddresses.push({
+            type: AddressType.Internal, // Change addresses are internal
+            index: derivationIndex,
+            networkId,
+            accountIndex: 0, // Assuming account 0 could be parameterized
+            address: key.address as Cardano.PaymentAddress,
+            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
+          });
+        } catch (error) {
+          console.warn(`[LEDGER] Failed to process change address ${key.address}:`, error);
+        }
+      }
+    });
+
+    console.debug('[LEDGER] Created known addresses:', knownAddresses.length);
+    return knownAddresses;
+  },
+
+  /**
+   * Get a stake key derivation path for a payment address
+   */
+  getStakeKeyDerivationPath(paymentKey: Key, stakeKeys: Key[]): AccountKeyDerivationPath | undefined {
+    try {
+      // Find the associated stake key for this payment address
+      const paymentAddress = Cardano.Address.fromString(paymentKey.address);
+
+      if (paymentAddress.getType() === Cardano.AddressType.BasePaymentKeyStakeKey ||
+          paymentAddress.getType() === Cardano.AddressType.BasePaymentScriptStakeKey) {
+
+        // For base addresses, we need to provide a stake key derivation path
+        // Since asReward() is returning undefined, let's use the first available stake key
+        if (stakeKeys && stakeKeys.length > 0 && stakeKeys[0].path) {
+          const pathArray = hdPathToArray(stakeKeys[0].path);
+          return {
+            role: KeyRole.Stake,
+            index: pathArray[pathArray.length - 1] // Last element is the index
+          } as AccountKeyDerivationPath;
+        }
+      }
+
+      return undefined; // No stake key derivation path for enterprise addresses
+    } catch (error) {
+      console.warn('[LEDGER] Failed to get stake key derivation path:', error);
+      return undefined;
+    }
+  },
+
+  /**
+   * Create InputResolver from UTXO set for transaction input resolution
+   * This allows the Ledger transaction context to resolve transaction inputs
+   */
+  createInputResolver(utxos: Cardano.Utxo[]): Cardano.InputResolver {
+    return {
+      resolveInput: async (txIn: Cardano.TxIn): Promise<Cardano.TxOut | null> => {
+        try {
+          // Find the UTXO that matches the transaction input
+          const utxo: Cardano.Utxo = utxos.find(([hydratedTxIn, _txOut]) =>
+            hydratedTxIn.txId === txIn.txId && hydratedTxIn.index === txIn.index
+          );
+
+          if (utxo) {
+            return utxo[1]; // Return the TxOut part of the UTXO
+          }
+
+          console.warn('[LEDGER] Could not resolve input:', txIn);
+          return null;
+        } catch (error) {
+          console.error('[LEDGER] Error resolving input:', error);
+          return null;
+        }
+      }
+    };
   },
 };

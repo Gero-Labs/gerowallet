@@ -331,49 +331,22 @@ export interface Activity {
   status: string;
 }
 
+export interface Key {
+  address?: string;
+  cred: string;
+  path: string;
+  used?: boolean;
+}
+
 export interface Keys {
-  ccCold: {
-    cred: string;
-    path: string;
-  }[];
-  ccHot: {
-    cred: string;
-    path: string;
-  }[];
-  change: {
-    address: string;
-    cred: string;
-    path: string;
-    used: boolean;
-  }[];
-  drep105: {
-    address: string;
-    cred: string;
-    path: string;
-  }[];
-  drep129: {
-    address: string;
-    cred: string;
-    path: string;
-  }[];
-  payment: {
-    address: string;
-    cred: string;
-    path: string;
-    used: boolean;
-  }[];
-  script: {
-    address: string;
-    cred: string;
-    path: string;
-    used: boolean;
-  }[];
-  stake: {
-    address: string;
-    cred: string;
-    path: string;
-    used: boolean;
-  }[];
+  ccCold: Key[];
+  ccHot: Key[];
+  change: Key[];
+  drep105: Key[];
+  drep129: Key[];
+  payment: Key[];
+  script: Key[];
+  stake: Key[];
 }
 
 // Pagination interfaces

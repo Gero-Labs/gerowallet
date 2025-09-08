@@ -89,12 +89,14 @@ import filters from '@/shared/utils/filters';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import ledgerUtils from '@/shared/utils/ledger';
+import networks from '@/utils/networks';
 
 const props = defineProps({
   isOpen: {
@@ -112,7 +114,7 @@ const emit = defineEmits(['close']);
 
 const { toCurrency } = filters;
 
-const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+const { loggedWallet, utxos, keys, account, config } = toRefs(walletStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -125,15 +127,18 @@ const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
 const form = ref<any>(null);
+const txCbor = ref<string>('');
+const txWitnesses = ref(null);
+const isSubmit = ref(false);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
-    props.tx.body.withdrawals.forEach((withdrawal) => {
+    props.tx.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
       if (withdrawal.stakeAddress === loggedWallet.value?.stakeAddress) {
-        withdrawalsAmount += Number(withdrawal.quantity);
+        withdrawalsAmount += Number(withdrawal.quantity.toString());
       }
-    })
+    });
   }
   return withdrawalsAmount;
 });
@@ -149,34 +154,33 @@ const enableToolTip = () => {
   }, 3000);
 };
 
-const signWithdrawalTx = async () => {
-  const signAndReturnTx = async () => {
-    loading.value = true;
-    try {
-      console.log('Signing Cardano JS SDK withdrawal transaction');
-      console.log('Transaction:', props.tx);
+const signTx = async (): Promise<boolean> => {
+  loading.value = true;
+  try {
+    console.log('Signing Cardano JS SDK withdrawal transaction');
+    console.log('Transaction:', props.tx);
 
-      // First, verify password via a background message
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+    // First, verify password via a background message
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
 
-      if (!passwordVerification.data.isValid) {
-        enableToolTip();
-        loading.value = false;
-        return;
-      }
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      loading.value = false;
+      return false;
+    }
 
-      // Serialize the Cardano.Tx to CBOR for Chrome messaging
-      const txCbor = serializeCardanoJsSdkTx(props.tx);
-      console.log('Serialized transaction CBOR:', txCbor);
+    // Serialize the Cardano.Tx to CBOR for Chrome messaging
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    console.log('Serialized transaction CBOR:', txCbor.value);
 
-      // Sign the transaction via background message
+      // Sign the transaction via a background message
       const witnessResult = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: {
-          txCbor: txCbor, // Pass serialized CBOR instead of the object
+          txCbor: txCbor.value, // Pass serialized CBOR instead of the object
           partialSign: false,
           password: spendingPassword.value,
           accountIndex: 0,
@@ -186,43 +190,125 @@ const signWithdrawalTx = async () => {
         }
       }) as { data: { witnesses?: any; error?: string } };
 
-      console.log('Transaction signed successfully:', witnessResult);
+    console.log('Transaction signed successfully:', witnessResult);
 
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      console.log('Signed transaction witness:', witnessResult.data.witnesses);
-
-      // Submit the transaction with original CBOR and witness
-      // Let the background script combine them properly
-      const submitResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SUBMIT_TX,
-        data: {
-          txCbor: txCbor,
-          witnessHex: witnessResult.data.witnesses,
-          utxos: utxos.value
-        }
-      }) as { data: { txId?: string; error?: string } };
-
-      if (submitResult.data.error) {
-        throw new Error(submitResult.data.error);
-      }
-
-      snackbar.fireSuccess(`Withdrawal Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
-      emit('close');
-    } catch (e) {
-      console.error('Error signing withdrawal transaction:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
     }
+
+    console.log('Signed transaction witness:', witnessResult.data.witnesses);
+    txWitnesses.value = witnessResult.data.witnesses;
+    return true;
+  } catch (e) {
+    console.error('Error signing withdrawal transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    return false;
+  } finally {
+    loading.value = false
+  }
+}
+
+const signLedgerTx = async () => {
+  loading.value = true;
+  try {
+    if (!props.tx) {
+      throw new Error('No transaction to sign');
+    }
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      props.tx,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+    return true;
+  } catch (e) {
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    return false;
+  } finally {
     loading.value = false;
-  };
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    if (form.value.validate()) {
-      await signAndReturnTx();
+  }
+};
+
+const submitTx = async () => {
+  try {
+    loading.value = true
+    // Submit the transaction with the original CBOR and witness
+    // Let the background script combine them properly
+    const submitResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor.value,
+        witnessHex: txWitnesses.value,
+        utxos: utxos.value
+      }
+    }) as { data: { txId?: string; error?: string } };
+
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
     }
+
+    snackbar.fireSuccess(`Withdrawal Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    emit('close');
+  } catch (e) {
+    console.error('Error submitting withdrawal transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+  } finally {
+    loading.value = false;
+  }
+}
+
+const signWithdrawalTx = async () => {
+  if (isSubmit.value) {
+    await submitTx();
   } else {
-    await signAndReturnTx();
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      if (form.value.validate()) {
+        const isValid: boolean = await signTx();
+        if (!isValid) {
+          return;
+        }
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
+          isSubmit.value = true;
+        }
+      }
+      // TODO: Keystone hardware wallet signing flow - currently disabled
+      // This would generate a QR code for the Keystone device to scan and sign
+      // } else if (loggedWallet.value?.type === WalletType.Keystone) {
+      //   if (qrCode.value) {
+      //     qrCode.value = null;
+      //     if (qrCodeRef.value)
+      //       qrCodeRef.value.innerHTML = '';
+      //   }
+      //
+      //   const ur = createKeystoneSignRequest(props.tx, loggedWallet.value, utxos.value, keys.value)
+      //   type.value = ur.type
+      //   cbor.value = Buffer.from(ur.cbor).toString('hex')
+      //   qrCode.value = new QRCodeStyling(qrCodeOptions(UREncoder.encodeSinglePart(ur), 450))
+      //   overlay.value = true
+      //   nextTick(() => {
+      //     qrCode.value.append(qrCodeRef.value);
+      //   });
+    } else if (loggedWallet.value?.type === WalletType.Ledger) {
+      const isValid: boolean = await signLedgerTx();
+      if (!isValid) {
+        return;
+      }
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
+        isSubmit.value = true;
+      }
+    }
   }
 }
 
