@@ -78,6 +78,7 @@ export default {
       swapSupport: true,
       buySupport: true,
       zkFoldSupport: false,
+      perpetualsSupport: true,
       networkParams: {
         networkMagic: 764824073
       }
@@ -115,6 +116,7 @@ export default {
       swapSupport: false,
       buySupport: false,
       zkFoldSupport: false,
+      perpetualsSupport: false,
       networkParams: {
         networkMagic: 1
       }
@@ -153,6 +155,7 @@ export default {
       swapSupport: false,
       buySupport: false,
       zkFoldSupport: false,
+      perpetualsSupport: false,
       networkParams: {
         networkMagic: 764824073
       }
@@ -178,6 +181,7 @@ export default {
       swapSupport: false,
       buySupport: false,
       zkFoldSupport: false,
+      perpetualsSupport: false,
       networkParams: {
         networkMagic: 1
       }
@@ -263,6 +267,12 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.buySupport
+  },
+  resolvePerpetualsSupport(chain: string, network: string): boolean {
+    if (!chain || !network) {
+      return false
+    }
+    return this.resolveNetwork(chain, network)?.perpetualsSupport
   },
   resolveNetworkMagic(chain: string, network: string): number {
     return this.resolveNetwork(chain, network)?.networkParams?.networkMagic || 0;

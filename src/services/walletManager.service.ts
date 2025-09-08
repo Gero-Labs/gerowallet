@@ -40,6 +40,14 @@ export class WalletManager {
   }
 
   /**
+   * Get the current wallet background instance
+   * @returns WalletBg instance or null if not logged in
+   */
+  getWalletBg(): WalletBg | null {
+    return this.walletBg;
+  }
+
+  /**
    * Login with a wallet
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
@@ -82,6 +90,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          api: walletBg.api,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -326,6 +335,17 @@ export class WalletManager {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
       }
 
+      // Clean up store messaging service
+      try {
+        const { storeMessaging } = await import('@/services/storeMessaging.service');
+        if (storeMessaging && typeof storeMessaging.destroy === 'function') {
+          storeMessaging.destroy();
+          console.log('Store messaging service cleaned up successfully');
+        }
+      } catch (storeMessagingError) {
+        console.warn('Failed to cleanup store messaging service during logout:', storeMessagingError);
+      }
+
       // Note: Don't send logout message to background since this method
       // is already called FROM the background logout handler
 
@@ -338,6 +358,16 @@ export class WalletManager {
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
         }
+      }
+
+      // Stop sync intervals before clearing wallet data
+      try {
+        if (this.walletBg) {
+          this.walletBg.endSync();
+          console.debug('WalletBg sync intervals cleared during logout');
+        }
+      } catch (syncError) {
+        console.warn('Failed to end sync during logout:', syncError);
       }
 
       // Clear wallet store data

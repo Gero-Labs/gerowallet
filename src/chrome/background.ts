@@ -37,9 +37,9 @@ import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx 
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
-  import('/@vite/client')
+  import('/@vite/client').catch(console.error)
   // load latest content script
-  import('./contentScriptHMR')
+  import('./contentScriptHMR').catch(console.error)
 }
 
 loadConfig().then(() => {
@@ -135,8 +135,19 @@ function clearProcessedDomains() {
 }
 
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
-const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
-setInterval(clearProcessedDomains, oneDayInMilliseconds);
+// const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
+
+// Use Chrome alarms API for reliable cleanup in service workers
+chrome.alarms.create('clearProcessedDomains', { 
+  delayInMinutes: 24 * 60, // 24 hours
+  periodInMinutes: 24 * 60 // repeat every 24 hours
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'clearProcessedDomains') {
+    clearProcessedDomains();
+  }
+});
 
 console.log('Background Loaded');
 
@@ -1108,7 +1119,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
-        request.data.isUsb
+        request.data.mergeWitnesses || false
       );
       sendResponse({
         id: request.id,

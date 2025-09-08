@@ -84,10 +84,10 @@
               <v-tooltip top :open-delay="500" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ filters.toCurrency(item.price, false, 4, '$', '', true, 0) }}
+                    {{ filters.toCurrency(convertFiat(item.price), false, 4, getCurrencySymbol(), '', true, 0) }}
                   </span>
                 </template>
-                {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
+                {{ filters.toCurrency(convertFiat(item.price), false, 6, getCurrencySymbol(), '', false, 0) }}
               </v-tooltip>
             </span>
           </v-list-item-title>
@@ -118,10 +118,10 @@
         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(item.value, false, 3, '$', '', true, 0) }}
+              {{ filters.toCurrency(convertFiat(item.value), false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
-          {{ filters.toCurrency(item.value, false, 6, '$', '', false, 0) }}
+          {{ filters.toCurrency(convertFiat(item.value), false, 6, getCurrencySymbol(), '', false, 0) }}
         </v-tooltip>
       </span>
     </template>
@@ -129,10 +129,10 @@
       <v-tooltip top :open-delay="500" v-if="item.mcap" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(Number(item.mcap), false, 2, '$', '', true, 0) }}
+            {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
-        {{ filters.toCurrency(Number(item.mcap), false, 4, '$', '', false, 0) }}
+        {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 4, getCurrencySymbol(), '', false, 0) }}
       </v-tooltip>
       <span v-else>N/A</span>
     </template>
@@ -164,7 +164,9 @@ import { xerberusStore } from '@/stores/xerberusStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
+import { priceStore } from '@/stores/priceStore';
 import { get24hChange } from '@/shared/utils/resolver';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 // Props
 interface Props {
@@ -192,6 +194,8 @@ const { risks } = toRefs(xerberusStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
+
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Headers for the data table
 const headers = ref<any[]>([
@@ -318,7 +322,8 @@ const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
       token.risk = 'AAA';
-      token.price = Number(price.value?.lastPrice);
+      // Use Kraken WebSocket price for ADA, fallback to network store price
+      token.price = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
       let coinGeckoCurrency = 'cardano';
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
@@ -331,7 +336,8 @@ const tokensList = computed(() => {
       );
       token.value = quantity * token.price;
       token.allocation = token.value;
-      token.change = price.value?.priceChangePercent;
+      // Use Kraken WebSocket price change for ADA, fallback to network store
+      token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       token.risk = risks.value[token.fingerprint]?.risk;
       token.price = dexHunterTokens.value[token.unit]?.price;
@@ -409,11 +415,10 @@ const totalAllocation = computed(() => {
   if (tokensList.value.length === 1) {
     const token = tokensList.value[0];
     let res: any;
-    if (
-      token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
-    ) {
-      res =
-        Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * price.value?.lastPrice;
+    if (token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+      // Use Kraken WebSocket price for ADA, fallback to network store price
+      const adaPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
+      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice
     } else {
       res = token.value;
     }
@@ -437,12 +442,9 @@ const paginatedTokens = computed(() => {
 });
 
 // Watch for search term changes to reset pagination
-watch(
-  () => props.searchTerm,
-  () => {
-    currentPage.value = 1;
-  }
-);
+watch(() => props.searchTerm, () => {
+  currentPage.value = 1;
+});
 </script>
 
 <style scoped>

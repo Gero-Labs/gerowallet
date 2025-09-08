@@ -30,7 +30,7 @@ class StoreMessagingService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000; // Start with 1 second
-  private connectionPromise: Promise<void> | null = null;
+  private reconnectTimeouts = new Set<NodeJS.Timeout>(); // Track reconnect timeouts
 
   constructor() {
     // Auto-initialize on construction - don't await to avoid blocking
@@ -96,7 +96,8 @@ class StoreMessagingService {
         // Re-subscribe to stores after successful connection
         if (this.subscribedStores.size > 0) {
           // Re-subscribe in next tick to avoid blocking
-          setTimeout(() => {
+          const resubscribeTimeoutId = setTimeout(() => {
+            this.reconnectTimeouts.delete(resubscribeTimeoutId);
             this.subscribedStores.forEach(storeName => {
               this.sendMessage({
                 type: 'STORE_SUBSCRIBE',
@@ -105,6 +106,7 @@ class StoreMessagingService {
             });
             console.debug(`📡 Re-subscribed to ${this.subscribedStores.size} stores`);
           }, 100);
+          this.reconnectTimeouts.add(resubscribeTimeoutId);
         }
         
         resolve();
@@ -130,11 +132,13 @@ class StoreMessagingService {
     
     console.debug(`📡 Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
     
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
+      this.reconnectTimeouts.delete(timeoutId);
       this.connect().catch(error => {
         console.error('❌ Reconnection failed:', error);
       });
     }, delay);
+    this.reconnectTimeouts.add(timeoutId);
   }
 
   /**
@@ -179,12 +183,14 @@ class StoreMessagingService {
     this.subscribedStores.add(storeName);
 
     // Notify background that we're interested in this store (non-blocking)
-    setTimeout(() => {
+    const subscribeTimeoutId = setTimeout(() => {
+      this.reconnectTimeouts.delete(subscribeTimeoutId);
       this.sendMessage({
         type: 'STORE_SUBSCRIBE',
         storeName
       });
     }, 0);
+    this.reconnectTimeouts.add(subscribeTimeoutId);
 
     // Return unsubscribe function
     return () => {
@@ -232,6 +238,34 @@ class StoreMessagingService {
     this.port = null;
     this.reconnectAttempts = 0;
     return this.connect();
+  }
+
+  /**
+   * Clean up all connections and timeouts to prevent memory leaks
+   */
+  public destroy(): void {
+    console.debug('🧹 Destroying store messaging service');
+    
+    // Clear all reconnect timeouts
+    this.reconnectTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+    this.reconnectTimeouts.clear();
+    
+    // Disconnect port if connected
+    if (this.port) {
+      try {
+        this.port.disconnect();
+      } catch (error) {
+        console.warn('Error disconnecting port:', error);
+      }
+      this.port = null;
+    }
+    
+    // Clear all subscribers
+    this.subscribers.clear();
+    this.subscribedStores.clear();
+    
+    // Reset connection state
+    this.reconnectAttempts = 0;
   }
 }
 
