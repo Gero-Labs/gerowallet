@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
+import { Api } from '@/api/api';
 import { walletStore } from '@/stores/walletStore';
 
 const usdToEurRate = ref<number>(1);
@@ -7,7 +7,10 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const rateLoaded = ref(false);
 
+
 export function useCurrencyConverter() {
+  const api = new Api(walletStore.loggedWallet, walletStore.loggedWallet.provider);
+
   const loadExchangeRate = async () => {
     if (loading.value || rateLoaded.value) return;
 
@@ -15,10 +18,10 @@ export function useCurrencyConverter() {
     error.value = null;
 
     try {
-      const response = await axios.get('https://api.fxratesapi.com/latest?base=USD&symbols=EUR', { timeout: 10000 });
+      const fiatRates = await api.fetchFiatRates();
 
-      if (response.data?.rates?.EUR) {
-        usdToEurRate.value = response.data.rates.EUR;
+      if (fiatRates?.eur) {
+        usdToEurRate.value = fiatRates.eur;
         rateLoaded.value = true;
       } else {
         throw new Error('EUR rate not found in API response');
