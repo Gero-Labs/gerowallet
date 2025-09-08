@@ -176,19 +176,19 @@ const signTx = async (): Promise<boolean> => {
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     console.log('Serialized transaction CBOR:', txCbor.value);
 
-    // Sign the transaction via a background message
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor.value, // Pass serialized CBOR instead of the object
-        partialSign: false,
-        password: spendingPassword.value,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value, // Address mappings
-        isUsb: false
-      }
-    }) as { data: { witnesses?: any; error?: string } };
+      // Sign the transaction via a background message
+      const witnessResult = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SIGN_TX,
+        data: {
+          txCbor: txCbor.value, // Pass serialized CBOR instead of the object
+          partialSign: false,
+          password: spendingPassword.value,
+          accountIndex: 0,
+          utxos: utxos.value,
+          addresses: keys.value, // Address mappings
+          mergeWitnesses: false,
+        }
+      }) as { data: { witnesses?: any; error?: string } };
 
     console.log('Transaction signed successfully:', witnessResult);
 

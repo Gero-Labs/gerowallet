@@ -41,6 +41,7 @@ class KaiserExServiceImpl implements KaiserExService {
   codeVerifier?: string;
   completeCallback?: (tokenData: KaiserExTokenData) => void;
   KaiserExWindow?: Window | null;
+  checkClosedTimeouts = new Set<NodeJS.Timeout>();
 
   loginUrl(codeChallenge: string): string {
     const params = new URLSearchParams({
@@ -110,15 +111,29 @@ class KaiserExServiceImpl implements KaiserExService {
               if (!authCompleted) {
                 // Clean up the message listener
                 window.removeEventListener("message", boundListener);
+                // Clear any remaining timeouts
+                this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+                this.checkClosedTimeouts.clear();
                 // Reject the auth promise to trigger the error handler in Dashboard
                 reject(new Error('Authentication window was closed by user'));
               } else {
+                // Clear timeouts on successful completion
+                this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+                this.checkClosedTimeouts.clear();
               }
             } else {
-              setTimeout(checkClosed, 1000);
+              const timeoutId = setTimeout(() => {
+                this.checkClosedTimeouts.delete(timeoutId);
+                checkClosed();
+              }, 1000);
+              this.checkClosedTimeouts.add(timeoutId);
             }
           };
-          setTimeout(checkClosed, 1000);
+          const initialTimeoutId = setTimeout(() => {
+            this.checkClosedTimeouts.delete(initialTimeoutId);
+            checkClosed();
+          }, 1000);
+          this.checkClosedTimeouts.add(initialTimeoutId);
         }
       });
     });
@@ -174,21 +189,61 @@ class KaiserExServiceImpl implements KaiserExService {
     })
       .then(response => response.json())
       .then(async (data: KaiserExTokenData) => {
+        // Mark authentication as completed
+        if ((this as any)._markAuthCompleted) {
+          (this as any)._markAuthCompleted();
+        }
+        
+        // Clean up all resources
+        this.cleanup();
+        
         if (this.completeCallback) {
           this.completeCallback(data);
         }
         // Resolve the auth promise
         if ((this as any)._authResolve) {
           (this as any)._authResolve();
+          delete (this as any)._authResolve;
+          delete (this as any)._authReject;
         }
       })
       .catch(error => {
         console.error('KaiserEx token exchange error:', error);
+        
+        // Clean up all resources
+        this.cleanup();
+        
         // Reject the auth promise
         if ((this as any)._authReject) {
           (this as any)._authReject(error);
+          delete (this as any)._authResolve;
+          delete (this as any)._authReject;
         }
       });
+  }
+
+  /**
+   * Clean up all resources to prevent memory leaks
+   */
+  private cleanup(): void {
+    // Clear all timeouts
+    this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+    this.checkClosedTimeouts.clear();
+
+    // Clean up the message listener
+    if ((this as any)._boundListener) {
+      window.removeEventListener("message", (this as any)._boundListener);
+      delete (this as any)._boundListener;
+    }
+
+    // Close the popup window
+    if (this.KaiserExWindow) {
+      this.KaiserExWindow.close();
+      this.KaiserExWindow = null;
+    }
+
+    // Clear completion callback
+    delete (this as any)._markAuthCompleted;
   }
 }
 

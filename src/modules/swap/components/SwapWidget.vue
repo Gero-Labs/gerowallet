@@ -179,6 +179,7 @@ import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 import filters from '@/shared/utils/filters';
 import networks, { cardanoLogo } from '@/utils/networks';
 import debounce from 'lodash/debounce';
@@ -505,7 +506,8 @@ const getPrice = (token) => {
   if (!token || !token.quantity) return '';
   const multiplier = token.ticker === 'ADA' ? 1 : price_ba.value;
   const quantity = (token.quantity || '0').toString().replaceAll(',', '');
-  const lastPrice = price.value?.lastPrice || 0;
+  // Use Kraken WebSocket price for ADA, fallback to network store price
+  const lastPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
 
   return (Number(quantity) * multiplier * lastPrice).toLocaleString('en-US');
 }
@@ -670,7 +672,7 @@ const prepareSwap = async () => {
     console.log('txCbor', txCbor)
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign },
+      data: { tx: txCbor, partialSign, mergeWitnesses: false },
     });
     console.log('signaturesRes', signaturesRes)
     if (signaturesRes.error) {

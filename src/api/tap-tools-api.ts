@@ -15,7 +15,13 @@ export default {
   async getPortfolio(stakeAddress: string): Promise<any> {
     return axiosInstance.get(`/api/wallet/portfolio/positions?address=${stakeAddress}`);
   },
-  async getPortfolioTrendedValue(stakeAddress: string, currency: string = 'USD'): Promise<any> {
-    return axiosInstance.get(`/api/wallet/value/trended?address=${stakeAddress}&timeframe=1y&quote=${currency}`);
+  async getPortfolioTrendedValue(
+    stakeAddress: string,
+    currency: string = 'USD',
+    timeframe: string = 'all'
+  ): Promise<any> {
+    return axiosInstance.get(
+      `/api/wallet/value/trended?address=${stakeAddress}&timeframe=${timeframe}&quote=${currency}`
+    );
   },
 };
