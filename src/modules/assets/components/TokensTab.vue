@@ -84,10 +84,10 @@
               <v-tooltip top :open-delay="500" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on">
-                    {{ filters.toCurrency(item.price, false, 4, '$', '', true, 0) }}
+                    {{ filters.toCurrency(convertFiat(item.price), false, 4, getCurrencySymbol(), '', true, 0) }}
                   </span>
                 </template>
-                {{ filters.toCurrency(item.price, false, 6, '$', '', false, 0) }}
+                {{ filters.toCurrency(convertFiat(item.price), false, 6, getCurrencySymbol(), '', false, 0) }}
               </v-tooltip>
             </span>
           </v-list-item-title>
@@ -118,10 +118,10 @@
         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(item.value, false, 3, '$', '', true, 0) }}
+              {{ filters.toCurrency(convertFiat(item.value), false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
-          {{ filters.toCurrency(item.value, false, 6, '$', '', false, 0) }}
+          {{ filters.toCurrency(convertFiat(item.value), false, 6, getCurrencySymbol(), '', false, 0) }}
         </v-tooltip>
       </span>
     </template>
@@ -129,10 +129,10 @@
       <v-tooltip top :open-delay="500" v-if="item.mcap" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(Number(item.mcap), false, 2, '$', '', true, 0) }}
+            {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
-        {{ filters.toCurrency(Number(item.mcap), false, 4, '$', '', false, 0) }}
+        {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 4, getCurrencySymbol(), '', false, 0) }}
       </v-tooltip>
       <span v-else>N/A</span>
     </template>
@@ -166,6 +166,7 @@ import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { priceStore } from '@/stores/priceStore';
 import { get24hChange } from '@/shared/utils/resolver';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 // Props
 interface Props {
@@ -193,6 +194,8 @@ const { risks } = toRefs(xerberusStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
+
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Headers for the data table
 const headers = ref<any[]>([
