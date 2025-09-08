@@ -56,7 +56,7 @@
                         :style="{ color: primaryColor }"
                         >GERO</span
                       >
-                      <span class="gero-price" style="font-size: 10px; color: #fff">${{ geroPrice }}</span>
+                      <span class="gero-price" style="font-size: 10px; color: #fff">{{ getCurrencySymbol() }}{{ geroPrice }}</span>
                     </div>
                   </div>
 
@@ -240,6 +240,7 @@ import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
@@ -250,6 +251,8 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
+
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
@@ -268,10 +271,10 @@ const isSwapDialogOpen = computed(() => swapDialog.value);
 const geroPrice = computed(() => {
   const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
   if (!geroToken) {
-    // TODO Add Gero Token
+    return 'GERO';
   }
-  if (geroToken?.price) {
-    return geroToken.price.toFixed(6);
+  if (geroToken?.price && geroToken.price > 0) {
+    return convertFiat(geroToken.price).toFixed(6);
   }
   return 'GERO';
 });
