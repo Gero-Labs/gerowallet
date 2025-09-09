@@ -11,7 +11,6 @@ import {
 import { CoinTypes, HARDENED, Key, Keys, WalletTypePurpose } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import { Bip32PublicKey, CertificateKind } from '@emurgo/cardano-serialization-lib-browser';
 import {
   MessageAddressFieldType,
   MessageData,
@@ -24,8 +23,9 @@ import * as Crypto from '@cardano-sdk/crypto';
 import { LedgerTxTransformerContext, LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
 import { util } from '@cardano-sdk/key-management';
 import { GroupedAddress, AddressType, KeyRole, AccountKeyDerivationPath, CommunicationType } from '@cardano-sdk/key-management';
+import { Bip32PublicKey } from '@cardano-sdk/crypto';
+import { bech32 } from 'bech32';
 
-Object.values(CertificateKind).filter((v2) => isNaN(Number(v2)));
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
     setTimeout(() => {
@@ -61,7 +61,9 @@ export default {
       const ledgerKeys: GetExtendedPublicKeysResponse = await ledger.getExtendedPublicKeys({
         paths: [pathArray],
       });
-      const hwPublicKey: string = Bip32PublicKey.from_hex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex).to_bech32();
+      const bip32PublicKey: Bip32PublicKey = Bip32PublicKey.fromHex(ledgerKeys[0].publicKeyHex + ledgerKeys[0].chainCodeHex);
+      const words = bech32.toWords(bip32PublicKey.bytes());
+      const hwPublicKey = bech32.encode('xpub', words, 1023);
       const keys = [{
         chainCode: ledgerKeys[0].chainCodeHex,
         path: path,
@@ -69,6 +71,7 @@ export default {
       }];
       return { productName, version, hwPublicKey, keys };
     } catch (error: any) {
+      console.log('[LEDGER] Error initializing Ledger:', error);
       snackbar.setError(error.message);
       this.usbDevice = undefined;
     }
@@ -152,7 +155,7 @@ export default {
       throw new Error('Bluetooth not supported by Ledger device or platform. Please check bluetooth connection and/or choose another connection method in wallet settings.');
     }
   },
-  setActiveTransport(transport: Transport, type) {
+  setActiveTransport(transport: Transport, type: string) {
     this._transportClose = null;
     this._transport = transport;
     this._transportType = type;
@@ -295,7 +298,7 @@ export default {
   getStakeKeyDerivationPath(paymentKey: Key, stakeKeys: Key[]): AccountKeyDerivationPath | undefined {
     try {
       // Find the associated stake key for this payment address
-      const paymentAddress = Cardano.Address.fromString(paymentKey.address);
+      const paymentAddress: Cardano.Address = Cardano.Address.fromString(paymentKey.address);
 
       if (paymentAddress.getType() === Cardano.AddressType.BasePaymentKeyStakeKey ||
           paymentAddress.getType() === Cardano.AddressType.BasePaymentScriptStakeKey) {
