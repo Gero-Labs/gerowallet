@@ -129,6 +129,7 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
+import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
@@ -357,15 +358,27 @@ const sign = async () => {
         const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
           signatures,
         })
-        console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+        console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
         witnesses.value = transactionWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
         }
       }
     } catch (e: any) {
-      console.log(e);
-      snackbar.setError(e);
+      if (e instanceof DeviceStatusError) {
+        const error: DeviceStatusError = e;
+        switch (error.code) {
+          case 0x5515:
+          case 0x6E11:
+            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            break;
+          default:
+            snackbar.setError('Ledger device error: ' + error.message);
+        }
+      } else {
+        console.log(e);
+        snackbar.setError(e);
+      }
     } finally {
       txSignLoading.value = false;
     }

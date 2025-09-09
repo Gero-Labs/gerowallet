@@ -493,8 +493,7 @@ const signLedgerTx = async () => {
     // Submit the transaction
     await submitTx();
   } catch (e) {
-    console.error('Error signing with Ledger:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    ledgerUtils.ledgerErrorHandling(e);
   } finally {
     txSubmitLoading.value = false;
   }

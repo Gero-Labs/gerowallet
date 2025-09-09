@@ -34,6 +34,7 @@ export interface NetworkInfo {
   swapSupport: boolean;
   buySupport: boolean;
   zkFoldSupport: boolean;
+  perpetualsSupport: boolean;
   networkParams: {
     networkMagic: number;
   }

@@ -97,6 +97,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
+import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 const props = defineProps({
   isOpen: {
@@ -225,12 +226,11 @@ const signLedgerTx = async () => {
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
     })
-    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
     return true;
   } catch (e) {
-    console.error('Error signing with Ledger:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    ledgerUtils.ledgerErrorHandling(e)
     return false;
   } finally {
     loading.value = false;

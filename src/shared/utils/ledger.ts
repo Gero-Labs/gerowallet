@@ -2,7 +2,7 @@ import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import BluetoothTransport from '@ledgerhq/hw-transport-web-ble';
 import {
   Ada,
-  AddressType as LedgerAddressType,
+  AddressType as LedgerAddressType, DeviceStatusError,
   GetExtendedPublicKeysResponse,
   GetVersionResponse,
   SignMessageResponse,
@@ -17,7 +17,7 @@ import {
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import Transport from '@ledgerhq/hw-transport';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { hdPathToArray } from '@/chrome/serialization';
+import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
 import { NetworkInfo } from '@/utils/networks';
 import * as Crypto from '@cardano-sdk/crypto';
 import { LedgerTxTransformerContext, LedgerKeyAgent } from '@cardano-sdk/hardware-ledger';
@@ -256,7 +256,7 @@ export default {
             networkId,
             accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
-            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
           });
         } catch (error) {
@@ -272,14 +272,14 @@ export default {
           const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
           const pathArray = hdPathToArray(key.path);
           const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
-
+          console.log('[LEDGER] Processing change address:', Cardano.Address.fromString(keys.stake[0].address).toBech32());
           knownAddresses.push({
             type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
             networkId,
             accountIndex: 0, // Assuming account 0 could be parameterized
             address: key.address as Cardano.PaymentAddress,
-            rewardAccount: Cardano.RewardAddress.fromAddress(Cardano.Address.fromString(keys.stake[0].address)),
+            rewardAccount: toStakeAddress(key.address, networkId) as Cardano.RewardAccount,
             stakeKeyDerivationPath: this.getStakeKeyDerivationPath(key, keys.stake)
           });
         } catch (error) {
@@ -309,7 +309,7 @@ export default {
           const pathArray = hdPathToArray(stakeKeys[0].path);
           return {
             role: KeyRole.Stake,
-            index: pathArray[pathArray.length - 1] // Last element is the index
+            index: pathArray[pathArray.length - 1] // The last element is the index
           } as AccountKeyDerivationPath;
         }
       }
@@ -347,4 +347,20 @@ export default {
       }
     };
   },
+  ledgerErrorHandling(e: any) {
+    if (e instanceof DeviceStatusError) {
+      const error: DeviceStatusError = e;
+      switch (error.code) {
+        case 0x5515:
+        case 0x6E11:
+          snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+          break;
+        default:
+          snackbar.setError('Ledger device error: ' + error.message);
+      }
+    } else {
+      console.error('Error signing with Ledger:', e);
+      snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    }
+  }
 };

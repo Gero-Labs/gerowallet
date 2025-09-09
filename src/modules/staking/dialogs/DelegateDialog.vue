@@ -352,11 +352,11 @@ const depositFee = computed(() => {
       totalAdaOutput += Number(output.value.coins);
     }
   }
-  const registrationCert = props.tx.body.certificates?.find(
+  const registrationCert: any = props.tx.body.certificates?.find(
     cert => cert.__typename === Cardano.CertificateType.StakeRegistration || cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
   );
 
-  return registrationCert ? Number(registrationCert?.deposit) : 0;
+  return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -498,8 +498,7 @@ const signLedgerTx = async () => {
     txWitnesses.value = transactionWitnessSet.toCbor();
     return true;
   } catch (e) {
-    console.error('Error signing with Ledger:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    ledgerUtils.ledgerErrorHandling(e);
     return false;
   } finally {
     loading.value = false;
