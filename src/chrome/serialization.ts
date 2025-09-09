@@ -77,7 +77,8 @@ export function toStakeCredential(address: Cardano.Address): Cardano.Credential 
 }
 
 export function toStakeAddress(addressBech32: string, networkId: Cardano.NetworkId): string {
-  if (Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentKeyStakeKey) {
+  if (Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentKeyStakeKey &&
+      Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentScriptStakeKey) {
     return undefined;
   }
   const stakeCredential: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(addressBech32));

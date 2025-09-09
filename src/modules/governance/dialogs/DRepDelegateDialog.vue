@@ -171,7 +171,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, account, keys } = toRefs(walletStore);
+const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -335,12 +335,11 @@ const signLedgerTx = async () => {
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
     })
-    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
     return true;
   } catch (e) {
-    console.error('Error signing with Ledger:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    ledgerUtils.ledgerErrorHandling(e)
     return false;
   } finally {
     loading.value = false;
@@ -380,7 +379,12 @@ const signAndSubmitDelegationTx = async () => {
       if (!isSubmit.value) {
         // Sign the transaction
         const success = await signTx();
-        if (success) {
+        if (!success) {
+          return;
+        }
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
           isSubmit.value = true;
         }
       } else {
@@ -394,7 +398,12 @@ const signAndSubmitDelegationTx = async () => {
   } else if (loggedWallet.value?.type === WalletType.Ledger) {
     if (!isSubmit.value) {
       const success = await signLedgerTx();
-      if (success) {
+      if (!success) {
+        return;
+      }
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
         isSubmit.value = true;
       }
     } else {
