@@ -1,7 +1,7 @@
 <template>
   <v-data-table
     dense
-    class="transparent tokens-table"
+    class="transparent tokens-table adaptive-height"
     :headers="headers"
     :items="paginatedTokens"
     :sort-by.sync="sortOptions.by"
@@ -10,6 +10,7 @@
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :custom-sort="customSort"
+    :style="{ minHeight: tableHeight + 'px' }"
   >
     <template v-slot:body.append>
       <tr v-if="tokensList.length > 6" class="no-hover">
@@ -126,7 +127,7 @@
       </span>
     </template>
     <template v-slot:[`item.mcap`]="{ item }">
-      <v-tooltip top :open-delay="500" v-if="item.mcap" content-class="custom-tooltip">
+      <v-tooltip v-if="item.mcap" top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
             {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 2, getCurrencySymbol(), '', true, 0) }}
@@ -175,6 +176,7 @@ interface Props {
   hideUnverified?: boolean;
   hideUnrated?: boolean;
   searchTerm?: string;
+  containerHeight?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -182,6 +184,7 @@ const props = withDefaults(defineProps<Props>(), {
   hideUnverified: false,
   hideUnrated: false,
   searchTerm: '',
+  containerHeight: 348,
 });
 
 // Emits
@@ -441,6 +444,9 @@ const paginatedTokens = computed(() => {
   return tokensList.value.slice(start, end);
 });
 
+// Use the shared container height from parent
+const tableHeight = computed(() => props.containerHeight);
+
 // Watch for search term changes to reset pagination
 watch(() => props.searchTerm, () => {
   currentPage.value = 1;
@@ -524,7 +530,17 @@ watch(() => props.searchTerm, () => {
 .token-name-hover:hover {
   opacity: 0.8;
 }
-.tokens-table {
-  min-height: 316px;
+.tokens-table.adaptive-height {
+  transition: min-height 0.3s ease;
+  overflow: visible;
+}
+
+.tokens-table.adaptive-height >>> .v-data-table__wrapper {
+  overflow: visible;
+  min-height: unset;
+}
+
+.tokens-table >>> tbody {
+  transition: height 0.2s ease;
 }
 </style>
