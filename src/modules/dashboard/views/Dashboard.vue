@@ -194,6 +194,7 @@ import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/componen
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
@@ -472,6 +473,9 @@ const handleReceiveKaiserExToken = async () => {
         type: 'success',
         text: `Token received successfully! Token: ${tokenData.access_token}`,
       };
+      console.log(tokenData);
+      // Use the proper method to set tokens
+      cardStore.setKaiserExTokens(tokenData);
       kaiserExLoading.value = false;
     });
   } catch (error) {

@@ -28,9 +28,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { useMockCardData } from '@/models/card-example';
-import geroStore from '@/stores/geroStore';
-import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
 import ChartSection from '../components/dashboard/ChartSection.vue';
@@ -38,24 +35,17 @@ import RecentTransactionsSection from '../components/dashboard/RecentTransaction
 import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
-
-const { initializeMockData } = useMockCardData();
-
+import { walletStore } from '@/stores/walletStore';
 // ADA to EUR conversion rate (hardcoded)
 const ADA_TO_EUR_RATE = 0.65;
-
-// Computed properties for formatted data
-const userName = computed(() => {
-  if (cardStore.state.userInfo?.email) {
-    return cardStore.state.userInfo.email.split('@')[0]; // Extract name from email
-  }
-  return 'User';
+onMounted(() => {
+  cardStore.fetchCardBalance(walletStore.loggedWallet);
+  cardStore.fetchCardHistory(walletStore.loggedWallet);
 });
 
 const cardBalanceFormatted = computed(() => {
   if (cardStore.state.cardBalance?.currentBalance) {
     const amount = cardStore.state.cardBalance.currentBalance.amount;
-    const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
     return `${amount.toFixed(2)}`;
   }
   return '€0.00';
@@ -101,29 +91,8 @@ const cardHistoryRecords = computed(() => {
   return records;
 });
 
-// Initialize data
-onMounted(async () => {
-  console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
-  console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
-  
-  if (import.meta.env.DEV) {
-    // Use mock data in development
-    console.log('Initializing mock data...');
-    await initializeMockData();
-    console.log('Mock data initialized');
-  } else {
-    // Use real API in production
-    console.log('Initializing real API...');
-    await cardStore.initialize(geroStore.state.wallets);
-    console.log('Real API initialized');
-  }
-  
-  console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);
-});
-
 const handleFilter = () => {
   console.log('Filter clicked');
-  // Handle filter action
 };
 </script>
 
