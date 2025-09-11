@@ -309,9 +309,6 @@ export interface WalletState {
   
   // Error handling
   error: WalletError | null
-  
-  // Development
-  isDevelopmentMode: boolean
 }
 
 // ============================================================================

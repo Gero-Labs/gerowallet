@@ -251,7 +251,8 @@ import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
-
+import { receiveKaiserExToken } from '@/services/kaiserEx.service';
+import cardStore from '@/stores/modules/card';
 const emit = defineEmits<{
   (e: 'auth-complete'): void;
 }>();
@@ -263,6 +264,7 @@ const username = ref('');
 const password = ref('');
 const twoFACode = ref(['', '', '', '', '', '']);
 const twoFAError = ref('');
+const kaiserExLoading = ref(false);
 
 const isCodeComplete = computed(() => {
   return twoFACode.value.every(digit => digit.length === 1 && /\d/.test(digit));
@@ -272,8 +274,18 @@ const handleRegister = () => {
   showRegistrationModal.value = true;
 };
 
-const handleLogin = () => {
-  showLoginForm.value = true;
+const handleLogin = async () => {
+  try {
+    await receiveKaiserExToken(tokenData => {
+      console.log(tokenData);
+      // Use the proper method to set tokens
+      cardStore.setKaiserExTokens(tokenData);
+      kaiserExLoading.value = false;
+    });
+  } catch (error) {
+    console.error('❌ Failed to receive KaiserEx token:', error);
+    kaiserExLoading.value = false;
+  }
 };
 
 const handleLoginSubmit = () => {

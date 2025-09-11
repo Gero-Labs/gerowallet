@@ -1,8 +1,10 @@
 import Vue from 'vue';
 import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory } from '@/models/card';
+import type { KaiserExTokenData } from '@/services/kaiserEx.service';
 import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
+import { walletStore } from '@/stores/walletStore';
 
 export const cardStore = Vue.observable<CardState>({
   // Auth
@@ -43,7 +45,7 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'not_started' as 'not_started' | 'pending' | 'approved' | 'rejected' | 'expired',
+    kycStatus: 'unverified' as 'unverified' | 'pending' | 'approved' | 'rejected',
     kycData: null as any,
     loadingMessage: '',
     error: null as string | null,
@@ -158,7 +160,7 @@ const cardStoreInstance = {
 
       await storeTokens(tokens);
     } catch (error) {
-      await this.logout();
+      await cardStoreInstance.logout();
       throw error;
     }
   },
@@ -214,7 +216,14 @@ export default {
   // Auth Getters
   get isAuthenticated() {
     if (!cardStore.accessToken || !cardStore.tokenExpiry) return false;
-    return Date.now() < cardStore.tokenExpiry;
+    const isValid = Date.now() < cardStore.tokenExpiry;
+
+    // Auto-logout if token expired
+    if (!isValid && cardStore.accessToken) {
+      this.logout();
+    }
+
+    return isValid;
   },
 
   // Card Getters
@@ -246,39 +255,38 @@ export default {
   // Wallet Status Getters - ALL IN ONE STORE!
   get currentState() {
     const { walletStatus } = cardStore;
-    
-    // Safety check - if walletStatus doesn't exist, return loading
+
     if (!walletStatus) {
       return 'loading';
     }
-    
-    // System loading state
+
     if (cardStore.loading.initialize) {
       return 'loading';
     }
 
-    // Error state
     if (walletStatus.error) {
       return 'error';
     }
 
-    // Rule 1: Authentication gate - no token means no access
-    const hasValidToken = walletStatus.isKaiserexAuthenticated;
-    if (!hasValidToken) {
-      return 'auth'; // → KaiserexAuthPage
+    if (!this.isAuthenticated) {
+      return 'auth';
     }
 
-    // User is authenticated, determine flow based on KYC status
     switch (walletStatus.kycStatus) {
-      case 'not_started':
-        return 'new'; // → OrderCardSection
-      case 'pending': 
-        return 'pending'; // → PendingSection
+      case 'unverified':
+        return 'new';
+      case 'pending':
+        return 'pending';
       case 'approved':
-        return 'approved'; // → HomeSection
+        if (cardStore.cardData?.card_uuid) {
+          return 'approved';
+        } else if (!cardStore.cardData?.card_uuid) {
+          return 'pending';
+        } else {
+          return 'new';
+        }
       case 'rejected':
-      case 'expired':
-        return 'auth'; // → KaiserexAuthPage (with error context)
+        return 'auth';
       default:
         return 'new';
     }
@@ -309,6 +317,41 @@ export default {
   },
 
   // Auth methods
+  setKaiserExTokens(tokens: KaiserExTokenData): void {
+    const store = cardStore;
+    store.accessToken = tokens.access_token;
+    store.refreshToken = null; // KaiserEx doesn't provide refresh token
+    store.tokenExpiry = Date.now() + (tokens.expires_in || 3600) * 1000;
+
+    persist({
+      accessToken: store.accessToken,
+      refreshToken: store.refreshToken,
+      tokenExpiry: store.tokenExpiry,
+    });
+
+    // Also store in chrome storage for persistence
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({
+        kaiserex_access_token: tokens.access_token,
+        kaiserex_refresh_token: null,
+        kaiserex_token_expiry: store.tokenExpiry,
+      });
+    }
+
+    // Set authentication status
+    this.setKaiserexAuthentication(true);
+
+    // Ensure KYC status is set to not_started for new users
+    if (
+      cardStore.walletStatus.kycStatus !== 'unverified' &&
+      cardStore.walletStatus.kycStatus !== 'pending' &&
+      cardStore.walletStatus.kycStatus !== 'approved'
+    ) {
+      cardStore.walletStatus.kycStatus = 'unverified';
+      persist({ walletStatus: cardStore.walletStatus });
+    }
+  },
+
   async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
     cardStore.loading.auth = true;
     cardStore.errors.auth = null;
@@ -320,7 +363,6 @@ export default {
         code,
         codeVerifier,
       });
-
       const tokens: AuthTokens = response.data;
       cardStore.accessToken = tokens.access_token;
       cardStore.refreshToken = tokens.refresh_token;
@@ -344,60 +386,11 @@ export default {
   },
 
   async refreshAccessToken(wallet: any): Promise<void> {
-    if (!cardStore.refreshToken) throw new Error('No refresh token available');
-
-    try {
-      const api = getCardApi(wallet);
-      const response = await api.axiosInstance.post('/api/token/refresh', {
-        refresh_token: cardStore.refreshToken,
-      });
-
-      const tokens: AuthTokens = response.data;
-      cardStore.accessToken = tokens.access_token;
-      cardStore.refreshToken = tokens.refresh_token;
-      cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
-
-      persist({
-        accessToken: cardStore.accessToken,
-        refreshToken: cardStore.refreshToken,
-        tokenExpiry: cardStore.tokenExpiry,
-      });
-
-      await storeTokens(tokens);
-    } catch (error) {
-      await this.logout();
-      throw error;
-    }
+    return cardStoreInstance.refreshAccessToken(wallet);
   },
 
   async logout(): Promise<void> {
-    cardStore.accessToken = null;
-    cardStore.refreshToken = null;
-    cardStore.tokenExpiry = null;
-    cardStore.userInfo = null;
-    cardStore.cardanoAddress = null;
-    cardStore.cardData = null;
-    cardStore.cardNumber = null;
-    cardStore.cardBalance = null;
-    cardStore.cardHistory = null;
-    cardStore.totalDeposits = 0;
-    cardStore.activities = [];
-
-    persist({
-      accessToken: cardStore.accessToken,
-      refreshToken: cardStore.refreshToken,
-      tokenExpiry: cardStore.tokenExpiry,
-      userInfo: cardStore.userInfo,
-      cardanoAddress: cardStore.cardanoAddress,
-      cardData: cardStore.cardData,
-      cardNumber: cardStore.cardNumber,
-      cardBalance: cardStore.cardBalance,
-      cardHistory: cardStore.cardHistory,
-      totalDeposits: cardStore.totalDeposits,
-      activities: cardStore.activities,
-    });
-
-    await clearStoredTokens();
+    return cardStoreInstance.logout();
   },
 
   // User methods
@@ -405,10 +398,9 @@ export default {
     cardStore.loading.userInfo = true;
     cardStore.errors.userInfo = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
-
     try {
       const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/user');
+      const response = await api.axiosInstance.get('/api/kaiserex/user');
       cardStore.userInfo = response.data;
       persist({ userInfo: cardStore.userInfo });
     } catch (error) {
@@ -428,7 +420,7 @@ export default {
 
     try {
       const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/cardano-address');
+      const response = await api.axiosInstance.get('/api/kaiserex/cardano-address');
       cardStore.cardanoAddress = response.data;
       persist({ cardanoAddress: cardStore.cardanoAddress });
     } catch (error) {
@@ -449,8 +441,9 @@ export default {
 
     try {
       const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card');
-      cardStore.cardData = response.data;
+      const response = await api.axiosInstance.get('/api/kaiserex/cards');
+      cardStore.cardData = response.data.data?.[0] || null;
+
       persist({ cardData: cardStore.cardData });
     } catch (error) {
       cardStore.errors.cardData = error instanceof Error ? error.message : 'Failed to fetch card data';
@@ -469,7 +462,7 @@ export default {
 
     try {
       const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card/number');
+      const response = await api.axiosInstance.get('/api/kaiserex/cards/number');
       cardStore.cardNumber = response.data;
       persist({ cardNumber: cardStore.cardNumber });
     } catch (error) {
@@ -483,13 +476,15 @@ export default {
   },
 
   async fetchCardBalance(wallet: any): Promise<void> {
+    if (!cardStore.cardData?.card_uuid) {
+      return;
+    }
     cardStore.loading.cardBalance = true;
     cardStore.errors.cardBalance = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
-
     try {
       const api = getCardApi(wallet);
-      const response = await api.axiosInstance.get('/api/card/balance');
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/balance/${cardStore.cardData?.card_uuid}`);
       cardStore.cardBalance = response.data;
       persist({ cardBalance: cardStore.cardBalance });
     } catch (error) {
@@ -502,7 +497,28 @@ export default {
     }
   },
 
+  async fetchUserKYCStatus(wallet: any): Promise<void> {
+    persist({ loading: cardStore.loading, errors: cardStore.errors });
+    try {
+      const api = getCardApi(wallet);
+      const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
+      cardStore.walletStatus.kycStatus = response.data.status.name;
+      //cardStore.walletStatus.kycStatus = 'approved';
+      persist({ walletStatus: cardStore.walletStatus });
+    } catch (error) {
+      cardStore.walletStatus.kycStatus = 'unverified';
+      persist({ walletStatus: cardStore.walletStatus });
+      persist({ errors: cardStore.errors });
+      throw error;
+    } finally {
+      persist({ loading: cardStore.loading });
+    }
+  },
+
   async fetchCardHistory(wallet: any, params: HistoryParams = {}): Promise<void> {
+    if (!cardStore.cardData?.card_uuid) {
+      return;
+    }
     cardStore.loading.cardHistory = true;
     cardStore.errors.cardHistory = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
@@ -516,7 +532,9 @@ export default {
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.size) queryParams.append('size', params.size.toString());
 
-      const url = `/api/card/history${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const url = `/api/kaiserex/cards/history/${cardStore.cardData?.card_uuid}${
+        queryParams.toString() ? `?${queryParams.toString()}` : ''
+      }`;
       const response = await api.axiosInstance.get(url);
       cardStore.cardHistory = response.data;
       persist({ cardHistory: cardStore.cardHistory });
@@ -530,28 +548,41 @@ export default {
     }
   },
 
+  async fetchKYCLink(wallet: any): Promise<any> {
+    try {
+      const api = getCardApi(wallet);
+      const response = await api.axiosInstance.get('/api/kaiserex/verification-link');
+
+      if (response.data && response.data.url) {
+        window.open(response.data.url, '_blank');
+        return { success: true, url: response.data.url, id: response.data.id };
+      }
+
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  async orderCard(wallet: any): Promise<any> {
+    try {
+      const api = getCardApi(wallet);
+      const response = await api.axiosInstance.post('/api/kaiserex/cards/order');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Wallet Status Methods - SIMPLE!
   setKaiserexAuthentication(isAuthenticated: boolean): void {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
-    
+
     if (isAuthenticated) {
       localStorage.setItem('kaiserexRegistered', 'true');
     } else {
       localStorage.removeItem('kaiserexRegistered');
     }
-    
-    persist({ walletStatus: cardStore.walletStatus });
-  },
-
-  setKYCStatus(status: string, data?: any): void {
-    cardStore.walletStatus.kycStatus = status as any;
-    cardStore.walletStatus.kycData = data || null;
-    
-    localStorage.setItem('kycStatus', status);
-    if (data) {
-      localStorage.setItem('kycData', JSON.stringify(data));
-    }
-    
     persist({ walletStatus: cardStore.walletStatus });
   },
 
@@ -566,31 +597,14 @@ export default {
   },
 
   // Initialize store
-  async initialize(wallet: any): Promise<void> {
+  async initialize(): Promise<void> {
     cardStore.loading.initialize = true;
     cardStore.errors.initialize = null;
-    
+
     try {
-      // Load Kaiserex auth status
       const kaiserexAuth = localStorage.getItem('kaiserexRegistered') === 'true';
       cardStore.walletStatus.isKaiserexAuthenticated = kaiserexAuth;
-      
-      // Load KYC status
-      const kycStatus = localStorage.getItem('kycStatus');
-      if (kycStatus) {
-        cardStore.walletStatus.kycStatus = kycStatus as any;
-      }
-      
-      const kycData = localStorage.getItem('kycData');
-      if (kycData) {
-        try {
-          cardStore.walletStatus.kycData = JSON.parse(kycData);
-        } catch (e) {
-          localStorage.removeItem('kycData');
-        }
-      }
 
-      // Load stored tokens
       if (typeof chrome !== 'undefined' && chrome.storage) {
         const result = await chrome.storage.local.get([
           'kaiserex_access_token',
@@ -605,30 +619,31 @@ export default {
         }
       }
 
-      if (this.isAuthenticated && wallet) {
+      if (this.isAuthenticated && walletStore.loggedWallet) {
         try {
-          // Preload essential data
           await Promise.all([
-            this.fetchUserInfo(wallet),
-            this.fetchCardanoAddress(wallet),
-            this.fetchCardData(wallet),
-            this.fetchCardBalance(wallet),
+            this.fetchUserInfo(walletStore.loggedWallet),
+            this.fetchUserKYCStatus(walletStore.loggedWallet),
+            this.fetchCardanoAddress(walletStore.loggedWallet),
+            this.fetchCardData(walletStore.loggedWallet),
           ]);
         } catch (error) {
-          console.error('Failed to load card data:', error);
           cardStore.errors.initialize = 'Failed to load card data';
         }
       }
     } catch (error) {
-      console.error('Failed to initialize card store:', error);
       cardStore.errors.initialize = 'Failed to initialize';
     } finally {
-      cardStore.loading.initialize = false;
-      persist({
-        loading: cardStore.loading,
-        errors: cardStore.errors,
-        walletStatus: cardStore.walletStatus,
-      });
+      try {
+        cardStore.loading.initialize = false;
+        persist({
+          loading: cardStore.loading,
+          errors: cardStore.errors,
+          walletStatus: cardStore.walletStatus,
+        });
+      } catch (persistError) {
+        cardStore.loading.initialize = false;
+      }
     }
   },
 
@@ -646,8 +661,8 @@ export default {
       cardStore.cardHistory = {
         history: {
           meta: { page: 1, records: 0, totalRecords: 0 },
-          records: []
-        }
+          records: [],
+        },
       };
     }
 
@@ -655,7 +670,7 @@ export default {
       reference: transactionId,
       amount: {
         amount: eurAmount,
-        currencyCode: 'EUR'
+        currencyCode: 'EUR',
       },
       createTime: new Date().toISOString(),
       settlementDate: new Date().toISOString(),
@@ -669,28 +684,24 @@ export default {
       acquireCountryCode: 'US',
       mcc: {
         code: '6012',
-        description: 'Financial Institution'
+        description: 'Financial Institution',
       },
       reversedAmount: {
         amount: 0,
-        currencyCode: 'EUR'
+        currencyCode: 'EUR',
       },
       narrative: {
-        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`
+        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`,
       },
       debit: false, // Credit transaction (adding money)
-      state: 'SETTLED'
+      state: 'SETTLED',
     };
 
     // Add to beginning of transactions array
     cardStore.cardHistory.history.records.unshift(newTransaction);
     cardStore.cardHistory.history.meta.records += 1;
     cardStore.cardHistory.history.meta.totalRecords += 1;
-    
-    console.log('💳 Transaction added to cardStore.cardHistory');
-    console.log('💳 Total records now:', cardStore.cardHistory.history.meta.totalRecords);
-    console.log('💳 First record:', cardStore.cardHistory.history.records[0]);
-    
+
     persist({ cardHistory: cardStore.cardHistory });
   },
 
@@ -703,7 +714,7 @@ export default {
       date: new Date().toLocaleDateString('en-GB', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
+        year: 'numeric',
       }),
       status: 'Completed',
     };
@@ -711,12 +722,7 @@ export default {
     // Add to beginning of activities array using Vue.set for reactivity
     const newActivities = [newActivity, ...cardStore.activities];
     Vue.set(cardStore, 'activities', newActivities);
-    
-    console.log('🎯 Activity added to cardStore.activities');
-    console.log('🎯 Total activities now:', cardStore.activities.length);
-    console.log('🎯 First activity:', cardStore.activities[0]);
-    console.log('🎯 All activities:', cardStore.activities);
-    
+
     persist({ activities: cardStore.activities });
   },
 
