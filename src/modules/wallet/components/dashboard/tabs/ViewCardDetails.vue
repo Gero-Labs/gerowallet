@@ -59,7 +59,6 @@
 import { ref, computed, onMounted } from 'vue';
 import { cardStore } from '../../../../../stores/modules/card';
 import geroStore from '../../../../../stores/geroStore';
-import { mockCardData, mockCardNumber } from '../../../../../models/card-mock';
 
 // Debug logging
 console.log('ViewCardDetails - cardData:', cardStore.cardData);
@@ -78,13 +77,13 @@ const expiryDate = computed(() => {
   return `${month} / ${year}`;
 });
 
-// Get card data with fallback to mock data
+// Get card data from store
 const cardData = computed(() => {
-  return cardStore.cardData || mockCardData;
+  return cardStore.cardData;
 });
 
 const cardNumber = computed(() => {
-  return cardStore.cardNumber || mockCardNumber;
+  return cardStore.cardNumber;
 });
 
 const toggleCvvVisibility = () => {

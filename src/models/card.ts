@@ -23,9 +23,15 @@ export interface CardanoAddress {
 
 // Card Types
 export interface CardData {
+  uuid: string;
+  card_uuid: string;
   pan: string;
   currentBalance: string;
   currency: string;
+  status: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CardNumber {
@@ -136,7 +142,7 @@ export interface CardState {
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
-    kycStatus: 'not_started' | 'pending' | 'approved' | 'rejected' | 'expired';
+    kycStatus: 'unverified' | 'pending' | 'approved' | 'rejected';
     kycData: any;
     loadingMessage: string;
     error: string | null;
@@ -147,4 +153,4 @@ export interface CardState {
 
   // Error states
   errors: CardErrorState;
-} 
+}
