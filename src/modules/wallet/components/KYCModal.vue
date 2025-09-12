@@ -168,7 +168,7 @@ const startCamera = async () => {
     isCameraActive.value = false;
 
     let errorMessage = 'Unable to access camera. ';
-    if (error instanceof Error) {
+    if (error && typeof error === 'object' && 'message' in error) {
       if (error.name === 'NotAllowedError') {
         errorMessage += 'Please allow camera access in your browser settings.';
       } else if (error.name === 'NotFoundError') {
