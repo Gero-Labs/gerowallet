@@ -376,7 +376,7 @@ export default {
 
       await storeTokens(tokens);
     } catch (error) {
-      cardStore.errors.auth = error instanceof Error ? error.message : 'Authentication failed';
+      cardStore.errors.auth = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Authentication failed';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -404,7 +404,7 @@ export default {
       cardStore.userInfo = response.data;
       persist({ userInfo: cardStore.userInfo });
     } catch (error) {
-      cardStore.errors.userInfo = error instanceof Error ? error.message : 'Failed to fetch user info';
+      cardStore.errors.userInfo = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch user info';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -424,7 +424,7 @@ export default {
       cardStore.cardanoAddress = response.data;
       persist({ cardanoAddress: cardStore.cardanoAddress });
     } catch (error) {
-      cardStore.errors.cardanoAddress = error instanceof Error ? error.message : 'Failed to fetch Cardano address';
+      cardStore.errors.cardanoAddress = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch Cardano address';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -446,7 +446,7 @@ export default {
 
       persist({ cardData: cardStore.cardData });
     } catch (error) {
-      cardStore.errors.cardData = error instanceof Error ? error.message : 'Failed to fetch card data';
+      cardStore.errors.cardData = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -466,7 +466,7 @@ export default {
       cardStore.cardNumber = response.data;
       persist({ cardNumber: cardStore.cardNumber });
     } catch (error) {
-      cardStore.errors.cardNumber = error instanceof Error ? error.message : 'Failed to fetch card number';
+      cardStore.errors.cardNumber = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card number';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -488,7 +488,7 @@ export default {
       cardStore.cardBalance = response.data;
       persist({ cardBalance: cardStore.cardBalance });
     } catch (error) {
-      cardStore.errors.cardBalance = error instanceof Error ? error.message : 'Failed to fetch card balance';
+      cardStore.errors.cardBalance = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card balance';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -527,8 +527,23 @@ export default {
       const api = getCardApi(wallet);
       const queryParams = new URLSearchParams();
 
-      if (params.periodFrom) queryParams.append('periodFrom', params.periodFrom);
-      if (params.periodTo) queryParams.append('periodTo', params.periodTo);
+      // Set default period to last 90 days if not provided
+      const now = new Date();
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      
+      // Format dates as dd/mm/yyyy
+      const formatDate = (date: Date): string => {
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+      
+      const periodFrom = params.periodFrom || formatDate(ninetyDaysAgo);
+      const periodTo = params.periodTo || formatDate(now);
+
+      queryParams.append('periodFrom', periodFrom); 
+      queryParams.append('periodTo', periodTo);
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.size) queryParams.append('size', params.size.toString());
 
@@ -539,7 +554,7 @@ export default {
       cardStore.cardHistory = response.data;
       persist({ cardHistory: cardStore.cardHistory });
     } catch (error) {
-      cardStore.errors.cardHistory = error instanceof Error ? error.message : 'Failed to fetch card history';
+      cardStore.errors.cardHistory = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card history';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {

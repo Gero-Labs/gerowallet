@@ -213,7 +213,7 @@ const tryCoerce = <T,>(value: string | Cardano.PlutusData | undefined, ctor: (v:
   try {
     return ctor(value);
   } catch (error) {
-    console.warn(error instanceof Error ? error.message : error);
+    console.warn(error && typeof error === 'object' && 'message' in error ? String(error.message) : error);
     return undefined;
   }
 };
