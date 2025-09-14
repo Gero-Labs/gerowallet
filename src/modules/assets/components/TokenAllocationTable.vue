@@ -257,18 +257,41 @@ const collectiblesLength = computed(() => {
 const sharedContainerHeight = computed(() => {
   // Calculate height needed for assets tab
   const assetsCount = tokensCount.value;
+
+  // Special condition: If only ADA (single asset) and no collectibles, show single row
+  const hasOnlyADA = assetsCount === 1 &&
+    Object.values(tokens.value)[0]?.policy_id === '' &&
+    (Object.values(tokens.value)[0]?.name === 'Cardano' ||
+     Object.values(tokens.value)[0]?.metadata?.ticker === 'ADA');
+  const hasNoCollectibles = collectiblesLength.value === 0;
+
+  if (hasOnlyADA && hasNoCollectibles) {
+    // Single row only: header (48px) + 1 row (42px) = 90px total
+    // The spacing is handled by CSS padding, not added to container height
+    return 90;
+  }
+
   const assetsRows = Math.min(assetsCount, 6); // Max 6 items per page
-  const assetsHeight = 48 + (assetsRows * 50); // header + rows
-  
+  // Base height: header (48px) + rows (42px each - reduced from 50px)
+  // For pagination: only add space when there are more than 6 items
+  let assetsHeight;
+  if (assetsCount > 6) {
+    // With pagination: fixed height for 6 rows + pagination
+    assetsHeight = 48 + (6 * 42) + 44; // header + 6 rows + pagination = 344px
+  } else {
+    // Without pagination: just the rows we need
+    assetsHeight = 48 + (assetsRows * 42); // header + actual rows
+  }
+
   // Calculate height needed for collectibles tab
   const filteredCollectibles = collectibles.value.filter((collection: any) => {
     if (currentTab.value === 1 && searchTerm.value?.trim()) {
       const search = searchTerm.value.toLowerCase().trim();
       const nameMatch = collection.name?.toLowerCase().includes(search);
       const descMatch = collection.description && (
-        typeof collection.description === 'string' 
+        typeof collection.description === 'string'
           ? collection.description.toLowerCase().includes(search)
-          : Array.isArray(collection.description) 
+          : Array.isArray(collection.description)
             ? collection.description.join(' ').toLowerCase().includes(search)
             : false
       );
@@ -276,31 +299,34 @@ const sharedContainerHeight = computed(() => {
     }
     return true;
   });
-  
+
   const collectiblesCount = filteredCollectibles.length;
   let collectiblesHeight = 148; // minimum
-  
-  // Match collectibles height to equivalent asset rows
-  // 1 row of collectibles (cards) should equal about 2-3 asset rows in visual height
+
+  // Calculate collectibles height based on content and pagination needs
+  // Tighter height calculations to minimize empty space
   if (collectiblesCount === 0) {
-    collectiblesHeight = 148; // Minimum (2 asset rows)
-  } else if (collectiblesCount <= 7) {
-    // 1 row of collectibles = roughly same as 2-3 asset rows
-    // 2 assets = 148px, 3 assets = 198px
-    // So 1 row of collectibles should match the assets height when we have 2-3 assets
-    collectiblesHeight = 148; // Match 2 asset rows for 1 row of cards
+    collectiblesHeight = 148; // Minimum (equivalent to 2-3 asset rows)
   } else if (collectiblesCount <= 14) {
-    // 2 rows of collectibles without pagination
-    collectiblesHeight = 298; // Match 5 asset rows
+    // Up to 2 rows of collectibles without pagination
+    // Tighter height - just enough for cards + minimal padding
+    collectiblesHeight = 200; // Reduced further to eliminate gaps
   } else {
-    // 2 rows with pagination
-    collectiblesHeight = 348; // Match 6 asset rows
+    // More than 14 collectibles, needs pagination
+    // Tight gallery height + pagination space
+    collectiblesHeight = 200 + 44; // Gallery height + pagination = 244px
   }
-  
-  // Use the larger height to ensure no content is cut off
+
+  // Return consistent height across tabs to prevent jumpiness
+  // Special case: single ADA with no collectibles gets minimal height
+  if (hasOnlyADA && hasNoCollectibles) {
+    return 98;
+  }
+
+  // Use the larger height to ensure consistent UI across tab switches
   const maxContentHeight = Math.max(assetsHeight, collectiblesHeight);
-  
-  // Ensure minimum height of 148px (2 asset rows)
+
+  // Ensure minimum height
   return Math.max(148, maxContentHeight);
 })
 
@@ -373,14 +399,14 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 }
 
 .v-data-table.v-data-table tbody tr {
-  height: 50px !important;
-  max-height: 50px !important;
-  min-height: 50px !important;
+  height: 42px !important;
+  max-height: 42px !important;
+  min-height: 42px !important;
 }
 
 .v-data-table.v-data-table tbody tr td {
-  height: 50px !important;
-  max-height: 50px !important;
+  height: 42px !important;
+  max-height: 42px !important;
   padding-top: 0px !important;
   padding-bottom: 0px !important;
   line-height: 1 !important;

@@ -1,30 +1,18 @@
 <template>
-  <v-data-table
-    dense
-    class="transparent tokens-table adaptive-height"
-    :headers="headers"
-    :items="paginatedTokens"
-    :sort-by.sync="sortOptions.by"
-    :sort-desc.sync="sortOptions.desc"
-    :items-per-page="-1"
-    hide-default-footer
-    :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-    :custom-sort="customSort"
-    :style="{ minHeight: tableHeight + 'px' }"
-  >
-    <template v-slot:body.append>
-      <tr v-if="tokensList.length > 6" class="no-hover">
-        <td :colspan="headers.length" class="text-center pa-0 ma-0">
-          <v-pagination
-            v-model="currentPage"
-            :length="Math.ceil(tokensList.length / 6)"
-            :total-visible="6"
-            circle
-            class="compact-pagination ma-0"
-          ></v-pagination>
-        </td>
-      </tr>
-    </template>
+  <div class="tokens-table-container" :style="{ height: tableHeight + 'px', position: 'relative' }">
+    <v-data-table
+      dense
+      class="transparent tokens-table adaptive-height"
+      :headers="headers"
+      :items="paginatedTokens"
+      :sort-by.sync="sortOptions.by"
+      :sort-desc.sync="sortOptions.desc"
+      :items-per-page="-1"
+      hide-default-footer
+      :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+      :custom-sort="customSort"
+      :style="{ height: tokensList.length > 6 ? 'calc(100% - 44px)' : '100%' }"
+    >
     <template v-slot:[`item.name`]="{ item }">
       <v-list-item dense class="px-0">
         <v-list-item-action class="my-0" style="margin-right: 16px !important">
@@ -152,6 +140,16 @@
       </v-progress-linear>
     </template>
   </v-data-table>
+    <div v-if="tokensList.length > 6" class="pagination-container">
+      <v-pagination
+        v-model="currentPage"
+        :length="Math.ceil(tokensList.length / 6)"
+        :total-visible="6"
+        circle
+        class="compact-pagination ma-0"
+      ></v-pagination>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -542,5 +540,34 @@ watch(() => props.searchTerm, () => {
 
 .tokens-table >>> tbody {
   transition: height 0.2s ease;
+}
+
+/* Add balanced margin between header and table content */
+.tokens-table >>> thead tr th {
+  padding-bottom: 4px !important;
+}
+
+.tokens-table >>> tbody tr:first-child td {
+  padding-top: 4px !important;
+}
+
+/* Container for table and pagination */
+.tokens-table-container {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Pagination container positioned at bottom */
+.pagination-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
 }
 </style>

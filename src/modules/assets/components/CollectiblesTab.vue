@@ -1,9 +1,8 @@
 <template>
   <!-- NFT Gallery Container -->
-  <div class="nft-gallery-container adaptive-container" :style="{ minHeight: containerHeight + 'px' }">
-    <!-- Dynamic height container to match assets table -->
-    <div class="gallery-wrapper">
-      <!-- Grid View -->
+  <div class="collectibles-container" :style="{ height: containerHeight + 'px', position: 'relative' }">
+    <!-- Grid View Container -->
+    <div class="gallery-content" :style="{ height: totalPages > 1 ? 'calc(100% - 44px)' : '100%' }">
       <div class="gallery-grid px-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
         <v-card
           v-for="collection in paginatedCollectibles"
@@ -43,18 +42,19 @@
           </div>
         </v-card>
       </div>
-
-      <!-- Pagination for gallery views -->
-      <div v-if="totalPages > 1" class="text-center mb-2">
-        <v-pagination
-          v-model="collectiblesPage"
-          :length="totalPages"
-          :total-visible="5"
-          circle
-          class="compact-pagination"
-        ></v-pagination>
-      </div>
     </div>
+
+    <!-- Pagination positioned at bottom -->
+    <div v-if="totalPages > 1" class="pagination-container">
+      <v-pagination
+        v-model="collectiblesPage"
+        :length="totalPages"
+        :total-visible="5"
+        circle
+        class="compact-pagination"
+      ></v-pagination>
+    </div>
+
     <TokensDialog @close="closeDialog" :modalData="dialogData" />
   </div>
 </template>
@@ -136,7 +136,22 @@ const cardSize = computed(() => {
 });
 
 const gridSizeClass = computed(() => {
-  return 'grid-7-cols'; // 7 columns for large screens
+  const totalItems = sortedCollectibles.value.length;
+
+  // Dynamic grid based on number of items and screen size
+  if (totalItems <= 2) {
+    return 'grid-2-cols'; // 2 columns for 1-2 items
+  } else if (totalItems <= 3) {
+    return 'grid-3-cols'; // 3 columns for 3 items
+  } else if (totalItems <= 4) {
+    return 'grid-4-cols'; // 4 columns for 4 items
+  } else if (totalItems <= 5) {
+    return 'grid-5-cols'; // 5 columns for 5 items
+  } else if (totalItems <= 6) {
+    return 'grid-6-cols'; // 6 columns for 6 items
+  } else {
+    return 'grid-7-cols'; // 7 columns for 7+ items
+  }
 });
 
 const dynamicItemsPerPage = computed(() => itemsPerPage);
@@ -228,26 +243,32 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* NFT Gallery Liquid Glass Effects */
-.nft-gallery-container {
+/* Collectibles Container */
+.collectibles-container {
+  display: flex;
+  flex-direction: column;
   position: relative;
-  z-index: 1;
-  transition: min-height 0.3s ease, height 0.3s ease;
+  overflow: hidden;
 }
 
-.nft-gallery-container.adaptive-container {
-  min-height: 148px;
-  height: auto;
-  overflow: visible;
+.gallery-content {
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-.gallery-wrapper {
-  transition: height 0.3s ease;
-  height: 100%;
+/* Pagination container positioned at bottom */
+.pagination-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 2;
 }
 
 .liquid-glass-card,
@@ -358,11 +379,20 @@ onUnmounted(() => {
   display: grid;
   gap: 10px;
   transition: all 0.3s ease;
-  align-content: center; /* Center cards vertically in available space */
-  padding-top: 8px;
-  padding-bottom: 8px;
+  align-content: start; /* Align cards to top to reduce empty space */
+  justify-content: center; /* Center grid when fewer items */
+  padding-top: 4px;
+  padding-bottom: 4px;
   height: 100%;
   box-sizing: border-box;
+}
+
+.grid-2-cols {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-3-cols {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .grid-4-cols {
