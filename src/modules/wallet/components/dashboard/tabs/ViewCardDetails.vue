@@ -7,32 +7,31 @@
 
     <div v-else class="form-container">
       <div class="form-row">
-        <div class="input-full">
+        <!-- <div class="input-full">
           <label class="input-label">Name on card</label>
           <div class="card-number-input">
             <span class="card-number-text">{{ cardData?.pan || 'Loading...' }}</span>
           </div>
-        </div>
+        </div> -->
         <div class="input-full small-input">
           <label class="input-label">Expiry</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ expiryDate }}</span>
+            <span class="cvv-text">{{ cardDetailsFull?.expiryDate || 'Loading...' }}</span>
           </div>
         </div>
       </div>
-
       <div class="form-row">
         <div class="input-full">
           <label class="input-label">Card number</label>
           <div class="card-number-input">
             <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-            <span class="card-number-text">{{ cardNumber?.number || 'Loading...' }}</span>
+            <span class="card-number-text">{{ cardDetailsFull?.pan || 'Loading...' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
           <label class="input-label">CVV</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ showCvv ? '123' : '•••' }}</span>
+            <span class="cvv-text">{{ showCvv ? cardDetailsFull?.cvc2 : '•••' }}</span>
             <v-btn icon small class="eye-btn" @click="toggleCvvVisibility">
               <v-icon small>{{ showCvv ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -44,7 +43,7 @@
         <div class="pin-container">
           <label class="input-label">PIN</label>
           <div class="pin-input">
-            <span class="pin-text">{{ showPin ? '1234' : '••••' }}</span>
+            <span class="pin-text">{{ showPin ? cardDetailsFull?.pin : '••••' }}</span>
             <v-btn icon small class="eye-btn" @click="togglePinVisibility">
               <v-icon small>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>
@@ -57,33 +56,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { cardStore } from '../../../../../stores/modules/card';
-import geroStore from '../../../../../stores/geroStore';
-
-// Debug logging
-console.log('ViewCardDetails - cardData:', cardStore.cardData);
-console.log('ViewCardDetails - cardNumber:', cardStore.cardNumber);
+import cardStoreModule, { cardStore } from '@/stores/modules/card';
 
 const showCvv = ref(false);
 const showPin = ref(false);
 const loading = ref(true);
-
-// Generate expiry date (in real app this would come from API)
-const expiryDate = computed(() => {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() + 2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const year = date.getFullYear().toString().slice(-2);
-  return `${month} / ${year}`;
-});
 
 // Get card data from store
 const cardData = computed(() => {
   return cardStore.cardData;
 });
 
-const cardNumber = computed(() => {
-  return cardStore.cardNumber;
+const cardDetailsFull = computed(() => {
+  return { ...cardStore.cardDetails, ...cardStore.cardPin } as any;
 });
 
 const toggleCvvVisibility = () => {
@@ -96,25 +81,17 @@ const togglePinVisibility = () => {
 
 // Initialize card data when component mounts
 onMounted(async () => {
+  console.log('ViewCardDetails - Card data:', cardData.value);
   try {
     console.log('ViewCardDetails - Initializing card data...');
     loading.value = true;
-
-    const wallet = geroStore.state.wallets;
-    if (wallet) {
-      // For now, just use mock data since the API is not ready
-      console.log('ViewCardDetails - Using mock data for development');
-      console.log('ViewCardDetails - Card data initialized:', {
-        cardData: cardStore.cardData,
-        cardNumber: cardStore.cardNumber,
-      });
-    } else {
-      console.warn('ViewCardDetails - No wallet available for initialization');
-    }
+    await cardStoreModule.fetchCardDetails(cardData.value?.card_uuid);
+    await cardStoreModule.fetchCardPin(cardData.value?.card_uuid);
   } catch (error) {
     console.error('ViewCardDetails - Failed to initialize card data:', error);
   } finally {
     loading.value = false;
+    console.log('ViewCardDetails - Card data loaded: 12312', cardData.value);
   }
 });
 </script>

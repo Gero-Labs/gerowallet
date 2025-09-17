@@ -15,7 +15,7 @@
           </tr>
         </thead>
 
-        <tbody>
+        <tbody v-if="formattedTransactions.length > 0">
           <tr v-for="transaction in formattedTransactions" :key="transaction.id" class="table-row">
             <td class="table-cell date-cell">{{ transaction.date }}</td>
             <td class="table-cell transaction-cell">
@@ -53,8 +53,10 @@
         </tbody>
       </table>
     </div>
-
-    <div class="pagination-container">
+    <div v-if="formattedTransactions.length === 0">
+      <div class="empty-state-title">No transactions yet</div>
+    </div>
+    <div v-if="formattedTransactions.length > 0" class="pagination-container">
       <div class="pagination-wrapper">
         <v-btn
           variant="text"
@@ -103,6 +105,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const emit = defineEmits(['orderCard']);
 
 // Transform API transactions to UI format
 const formattedTransactions = computed(() => {
@@ -236,6 +240,12 @@ const handlePageChange = (page: number | string) => {
   }
   // Ignore clicks on ellipsis
 };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const handleOrderCard = () => {
+  // Emit event to parent component to handle card ordering
+  emit('orderCard');
+};
 </script>
 
 <style lang="scss" scoped>
@@ -260,6 +270,17 @@ const handlePageChange = (page: number | string) => {
     line-height: 1.4;
     color: $text-primary;
     margin: 0;
+  }
+
+  .empty-state-title {
+    padding: $spacing-2xl;
+    font-family: $font-family-primary;
+    font-weight: $font-weight-semibold;
+    font-size: $font-size-base;
+    line-height: 1.4;
+    color: $text-primary;
+    margin: 0;
+    text-align: center !important;
   }
 
   .table-container {

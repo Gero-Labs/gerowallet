@@ -18,10 +18,13 @@ export const cardStore = Vue.observable<CardState>({
 
   // Card data
   cardData: null,
+  cardDetails: null,
+  cardPin: null,
   cardNumber: null,
   cardBalance: null,
   cardHistory: null,
   totalDeposits: 0,
+
   activities: [
     {
       id: 1,
@@ -45,7 +48,7 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'unverified' as 'unverified' | 'pending' | 'approved' | 'rejected',
+    kycStatus: 'not_started' as 'not_started' | 'pending' | 'approved' | 'rejected',
     kycData: null as any,
     loadingMessage: '',
     error: null as string | null,
@@ -68,6 +71,8 @@ export const cardStore = Vue.observable<CardState>({
     userInfo: null,
     cardanoAddress: null,
     cardData: null,
+    cardDetails: null,
+    cardPin: null,
     cardNumber: null,
     cardBalance: null,
     cardHistory: null,
@@ -172,6 +177,8 @@ const cardStoreInstance = {
     cardStore.userInfo = null;
     cardStore.cardanoAddress = null;
     cardStore.cardData = null;
+    cardStore.cardDetails = null;
+    cardStore.cardPin = null;
     cardStore.cardNumber = null;
     cardStore.cardBalance = null;
     cardStore.cardHistory = null;
@@ -185,6 +192,8 @@ const cardStoreInstance = {
       userInfo: cardStore.userInfo,
       cardanoAddress: cardStore.cardanoAddress,
       cardData: cardStore.cardData,
+      cardDetails: cardStore.cardDetails,
+      cardPin: cardStore.cardPin,
       cardNumber: cardStore.cardNumber,
       cardBalance: cardStore.cardBalance,
       cardHistory: cardStore.cardHistory,
@@ -245,11 +254,11 @@ export default {
   },
 
   get cardHistoryRecords() {
-    return cardStore.cardHistory?.history.records || [];
+    return cardStore.cardHistory?.records || [];
   },
 
   get cardHistoryMeta() {
-    return cardStore.cardHistory?.history.meta || null;
+    return cardStore.cardHistory?.meta || null;
   },
 
   // Wallet Status Getters - ALL IN ONE STORE!
@@ -317,17 +326,11 @@ export default {
   },
 
   // Auth methods
-  setKaiserExTokens(tokens: KaiserExTokenData): void {
+  async setKaiserExTokens(tokens: KaiserExTokenData): Promise<void> {
     const store = cardStore;
     store.accessToken = tokens.access_token;
     store.refreshToken = null; // KaiserEx doesn't provide refresh token
     store.tokenExpiry = Date.now() + (tokens.expires_in || 3600) * 1000;
-
-    persist({
-      accessToken: store.accessToken,
-      refreshToken: store.refreshToken,
-      tokenExpiry: store.tokenExpiry,
-    });
 
     // Also store in chrome storage for persistence
     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -337,19 +340,15 @@ export default {
         kaiserex_token_expiry: store.tokenExpiry,
       });
     }
-
+    console.log('setKaiserExTokens', tokens);
     // Set authentication status
-    this.setKaiserexAuthentication(true);
+    await this.setKaiserexAuthentication(true);
 
-    // Ensure KYC status is set to not_started for new users
-    if (
-      cardStore.walletStatus.kycStatus !== 'unverified' &&
-      cardStore.walletStatus.kycStatus !== 'pending' &&
-      cardStore.walletStatus.kycStatus !== 'approved'
-    ) {
-      cardStore.walletStatus.kycStatus = 'unverified';
-      persist({ walletStatus: cardStore.walletStatus });
-    }
+    persist({
+      accessToken: store.accessToken,
+      refreshToken: store.refreshToken,
+      tokenExpiry: store.tokenExpiry,
+    });
   },
 
   async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
@@ -376,7 +375,8 @@ export default {
 
       await storeTokens(tokens);
     } catch (error) {
-      cardStore.errors.auth = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Authentication failed';
+      cardStore.errors.auth =
+        error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Authentication failed';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -404,7 +404,8 @@ export default {
       cardStore.userInfo = response.data;
       persist({ userInfo: cardStore.userInfo });
     } catch (error) {
-      cardStore.errors.userInfo = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch user info';
+      cardStore.errors.userInfo =
+        error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch user info';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -424,7 +425,10 @@ export default {
       cardStore.cardanoAddress = response.data;
       persist({ cardanoAddress: cardStore.cardanoAddress });
     } catch (error) {
-      cardStore.errors.cardanoAddress = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch Cardano address';
+      cardStore.errors.cardanoAddress =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch Cardano address';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -446,7 +450,8 @@ export default {
 
       persist({ cardData: cardStore.cardData });
     } catch (error) {
-      cardStore.errors.cardData = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
+      cardStore.errors.cardData =
+        error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -466,7 +471,10 @@ export default {
       cardStore.cardNumber = response.data;
       persist({ cardNumber: cardStore.cardNumber });
     } catch (error) {
-      cardStore.errors.cardNumber = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card number';
+      cardStore.errors.cardNumber =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch card number';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -488,7 +496,10 @@ export default {
       cardStore.cardBalance = response.data;
       persist({ cardBalance: cardStore.cardBalance });
     } catch (error) {
-      cardStore.errors.cardBalance = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card balance';
+      cardStore.errors.cardBalance =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch card balance';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -527,22 +538,22 @@ export default {
       const api = getCardApi(wallet);
       const queryParams = new URLSearchParams();
 
-      // Set default period to last 90 days if not provided
+      // Set default period to last 60 days if not provided
       const now = new Date();
-      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      
+      const ninetyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
       // Format dates as dd/mm/yyyy
       const formatDate = (date: Date): string => {
         const day = date.getDate().toString().padStart(2, '0');
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
         const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
+        return `${day}.${month}.${year}`;
       };
-      
+
       const periodFrom = params.periodFrom || formatDate(ninetyDaysAgo);
       const periodTo = params.periodTo || formatDate(now);
 
-      queryParams.append('periodFrom', periodFrom); 
+      queryParams.append('periodFrom', periodFrom);
       queryParams.append('periodTo', periodTo);
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.size) queryParams.append('size', params.size.toString());
@@ -554,7 +565,10 @@ export default {
       cardStore.cardHistory = response.data;
       persist({ cardHistory: cardStore.cardHistory });
     } catch (error) {
-      cardStore.errors.cardHistory = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card history';
+      cardStore.errors.cardHistory =
+        error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Failed to fetch card history';
       persist({ errors: cardStore.errors });
       throw error;
     } finally {
@@ -590,11 +604,12 @@ export default {
   },
 
   // Wallet Status Methods - SIMPLE!
-  setKaiserexAuthentication(isAuthenticated: boolean): void {
+  async setKaiserexAuthentication(isAuthenticated: boolean): Promise<void> {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
-
+    console.log('setKaiserexAuthentication', isAuthenticated);
     if (isAuthenticated) {
       localStorage.setItem('kaiserexRegistered', 'true');
+      await this.initialize();
     } else {
       localStorage.removeItem('kaiserexRegistered');
     }
@@ -670,14 +685,26 @@ export default {
       persist({ cardBalance: cardStore.cardBalance, totalDeposits: cardStore.totalDeposits });
     }
   },
+  async fetchCardPin(cardUuid: string): Promise<void> {
+    const api = getCardApi(walletStore.loggedWallet);
+    const response = await api.axiosInstance.get(`/api/kaiserex/cards/pin/${cardUuid}`);
+    cardStore.cardPin = response.data;
+    persist({ cardPin: cardStore.cardPin });
+    return response.data;
+  },
+  async fetchCardDetails(cardUuid: string): Promise<void> {
+    const api = getCardApi(walletStore.loggedWallet);
+    const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
+    cardStore.cardDetails = response.data;
+    persist({ cardDetails: cardStore.cardDetails });
+    return response.data;
+  },
 
   addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string): void {
     if (!cardStore.cardHistory) {
       cardStore.cardHistory = {
-        history: {
-          meta: { page: 1, records: 0, totalRecords: 0 },
-          records: [],
-        },
+        meta: { page: 1, records: 0, totalRecords: 0 },
+        records: [],
       };
     }
 
@@ -713,9 +740,9 @@ export default {
     };
 
     // Add to beginning of transactions array
-    cardStore.cardHistory.history.records.unshift(newTransaction);
-    cardStore.cardHistory.history.meta.records += 1;
-    cardStore.cardHistory.history.meta.totalRecords += 1;
+    cardStore.cardHistory.records.unshift(newTransaction);
+    cardStore.cardHistory.meta.records += 1;
+    cardStore.cardHistory.meta.totalRecords += 1;
 
     persist({ cardHistory: cardStore.cardHistory });
   },
@@ -741,6 +768,24 @@ export default {
     persist({ activities: cardStore.activities });
   },
 
+  async blockCard(): Promise<void> {
+    try {
+      const api = getCardApi(walletStore.loggedWallet);
+      await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/block`);
+      await this.fetchCardData(walletStore.loggedWallet);
+    } catch (error) {
+      throw error;
+    }
+  },
+  async unblockCard(): Promise<void> {
+    try {
+      const api = getCardApi(walletStore.loggedWallet);
+      await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/unblock`);
+      await this.fetchCardData(walletStore.loggedWallet);
+    } catch (error) {
+      throw error;
+    }
+  },
   // State getter for compatibility
   get state() {
     return cardStore;

@@ -33,11 +33,11 @@
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '€' : '₳' }}</span>
-          <input 
-            v-model="firstInputValue" 
-            type="number" 
-            placeholder="0" 
-            class="custom-input" 
+          <input
+            v-model="firstInputValue"
+            type="number"
+            placeholder="0"
+            class="custom-input"
             @input="handleFirstInput"
             @focus="handleInputFocus"
           />
@@ -47,7 +47,7 @@
 
       <!-- Switch Button -->
       <div class="switch-button">
-        <v-btn icon class="switch-icon" @click="switchCurrencies">
+        <v-btn icon class="switch-icon" @click="() => {}">
           <v-icon color="white" size="20">mdi-swap-vertical</v-icon>
         </v-btn>
       </div>
@@ -59,11 +59,11 @@
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '₳' : '€' }}</span>
-          <input 
-            v-model="secondInputValue" 
-            type="number" 
-            placeholder="0" 
-            class="custom-input" 
+          <input
+            v-model="secondInputValue"
+            type="number"
+            placeholder="0"
+            class="custom-input"
             @input="handleSecondInput"
             @focus="handleInputFocus"
           />
@@ -116,25 +116,25 @@ const adaBalance = computed(() => {
 
 // Computed values for inputs based on switch state
 const firstInputValue = computed({
-  get: () => isSwitched.value ? eurAmount.value : adaAmount.value,
+  get: () => (isSwitched.value ? eurAmount.value : adaAmount.value),
   set: (value: string) => {
     if (isSwitched.value) {
       eurAmount.value = value;
     } else {
       adaAmount.value = value;
     }
-  }
+  },
 });
 
 const secondInputValue = computed({
-  get: () => isSwitched.value ? adaAmount.value : eurAmount.value,
+  get: () => (isSwitched.value ? adaAmount.value : eurAmount.value),
   set: (value: string) => {
     if (isSwitched.value) {
       adaAmount.value = value;
     } else {
       eurAmount.value = value;
     }
-  }
+  },
 });
 
 const handleInputFocus = (event: Event) => {
@@ -151,7 +151,7 @@ const handleFirstInput = () => {
 
   isUpdatingFromFirst.value = true;
   const firstValue = parseFloat(firstInputValue.value) || 0;
-  
+
   if (isSwitched.value) {
     // First input is EUR, second should be ADA
     adaAmount.value = (firstValue / EXCHANGE_RATE).toFixed(2);
@@ -159,7 +159,7 @@ const handleFirstInput = () => {
     // First input is ADA, second should be EUR
     eurAmount.value = (firstValue * EXCHANGE_RATE).toFixed(2);
   }
-  
+
   isUpdatingFromFirst.value = false;
 
   const emitData = {
@@ -175,7 +175,7 @@ const handleSecondInput = () => {
 
   isUpdatingFromSecond.value = true;
   const secondValue = parseFloat(secondInputValue.value) || 0;
-  
+
   if (isSwitched.value) {
     // Second input is ADA, first should be EUR
     eurAmount.value = (secondValue * EXCHANGE_RATE).toFixed(2);
@@ -183,7 +183,7 @@ const handleSecondInput = () => {
     // Second input is EUR, first should be ADA
     adaAmount.value = (secondValue / EXCHANGE_RATE).toFixed(2);
   }
-  
+
   isUpdatingFromSecond.value = false;
 
   const emitData = {
@@ -326,7 +326,7 @@ watch(
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75E0A7;
+  color: #75e0a7;
 }
 
 .amount-section {
@@ -386,7 +386,7 @@ watch(
   margin-left: -10px;
   width: 100%;
   min-width: 0;
-  
+
   &::placeholder {
     color: $text-secondary;
     opacity: 0.7;
