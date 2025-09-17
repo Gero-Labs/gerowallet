@@ -19,7 +19,6 @@
       <div class="right-column">
         <ChartSection @filter="handleFilter" />
         <ExchangeRateSection />
-        <RecentActivitiesSection />
       </div>
     </div>
   </div>
@@ -32,7 +31,6 @@ import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
 import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
-import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
 import { walletStore } from '@/stores/walletStore';
@@ -83,8 +81,7 @@ const totalDepositAda = computed(() => {
 });
 
 const cardHistoryRecords = computed(() => {
-  const records = cardStore.state.cardHistory?.history.records || [];
-  console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
+  const records = cardStore.state.cardHistory?.records || [];
   if (records.length > 0) {
     console.log('🏠 First record:', records[0]);
   }

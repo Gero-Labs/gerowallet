@@ -1,8 +1,8 @@
 import wasm from 'vite-plugin-wasm';
 import { defineConfig, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
-import { VuetifyResolver } from "unplugin-vue-components/resolvers";
-import Components from "unplugin-vue-components/vite";
+import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
@@ -17,21 +17,21 @@ export const sharedConfig: UserConfig = {
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
-      buffer: 'buffer',
+      'buffer': 'buffer',
       '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
-      stream: r('src/shims/stream.js'),
-      util: 'util',
+      'stream': r('src/shims/stream.js'),
+      'util': 'util',
       'pbkdf2': 'pbkdf2/browser.js',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
   define: {
-    global: 'window',
-    __DEV__: isDev,
-    __NAME__: JSON.stringify(packageJson.name),
-    APP_VERSION: JSON.stringify(packageJson.version),
+    'global': 'window',
+    '__DEV__': isDev,
+    '__NAME__': JSON.stringify(packageJson.name),
+    'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
@@ -72,7 +72,7 @@ export const sharedConfig: UserConfig = {
           return r('src/shims/cbor.js');
         }
         return null;
-      }
+      },
     },
     // TODO: Add image optimization later
     // !isDev && viteImagemin({...}),
@@ -99,11 +99,7 @@ export const sharedConfig: UserConfig = {
       'blake2b',
       'crypto-ts',
     ],
-    exclude: [
-      'vue-demi',
-      '@emurgo/cardano-serialization-lib-browser',
-      'cbor'
-    ],
+    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
     esbuildOptions: {
       plugins: [],
       target: 'es2020',
@@ -125,7 +121,7 @@ export const sharedConfig: UserConfig = {
     plugins: [
       wasm(),
       // topLevelAwait() // Temporarily disabled
-    ]
+    ],
   },
   server: {
     hmr: {
@@ -150,8 +146,8 @@ export const sharedConfig: UserConfig = {
     rollupOptions: {
       output: {
         manualChunks: undefined, // Disable manual chunking for faster builds
-      }
-    }
+      },
+    },
   },
 };
 
@@ -168,13 +164,17 @@ export default defineConfig(({ command }) => {
       watch: {
         usePolling: true,
         interval: 1000,
-        ignored: ['C:/DumpStack.log.tmp']
-      }
+        ignored: ['C:/DumpStack.log.tmp', 'C:/DumpStack.log'],
+      },
     },
     build: {
       minify: false, // Disable minification for speed
       target: 'es2022',
-      watch: isDev ? {} : undefined,
+      watch: isDev
+        ? {
+            ignored: ['C:/DumpStack.log.tmp', 'C:/DumpStack.log'],
+          }
+        : undefined,
       outDir: r('extension'),
       assetsDir: 'assets',
       emptyOutDir: false,
@@ -205,7 +205,7 @@ export default defineConfig(({ command }) => {
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
-                dest: 'extension/assets'
+                dest: 'extension/assets',
               },
             ],
             hook: 'writeBundle',
@@ -219,9 +219,9 @@ export default defineConfig(({ command }) => {
                 return r('src/shims/cbor.js');
               }
               return null;
-            }
-          }
-        ]
+            },
+          },
+        ],
       },
     },
     test: {
