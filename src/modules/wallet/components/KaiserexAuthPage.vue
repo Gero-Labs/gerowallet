@@ -97,7 +97,8 @@
             
             <div class="option-action">
               <SecondaryButton 
-                text="Sign In" 
+                :text="kaiserExLoading ? 'Signing In...' : 'Sign In'" 
+                :disabled="kaiserExLoading"
                 @click="handleLogin"
                 class="full-width"
               />
@@ -172,7 +173,7 @@
                 <label class="form-label">Verification Code</label>
                 <div class="code-input-container">
                   <input 
-                    v-for="(digit, index) in twoFACode"
+                    v-for="(_, index) in twoFACode"
                     :key="index"
                     :ref="`codeInput${index}`"
                     v-model="twoFACode[index]"
@@ -192,9 +193,9 @@
               
               <div class="form-actions">
                 <GradientButton 
-                  text="Verify" 
+                  :text="kaiserExLoading ? 'Verifying...' : 'Verify'" 
                   @click="handleTwoFASubmit"
-                  :disabled="!isCodeComplete"
+                  :disabled="!isCodeComplete || kaiserExLoading"
                   class="full-width"
                 />
               </div>
@@ -276,11 +277,28 @@ const handleRegister = () => {
 
 const handleLogin = async () => {
   try {
-    await receiveKaiserExToken(tokenData => {
-      console.log(tokenData);
-      // Use the proper method to set tokens
-      cardStore.setKaiserExTokens(tokenData);
-      kaiserExLoading.value = false;
+    kaiserExLoading.value = true;
+    
+    // Wrap receiveKaiserExToken in a Promise to ensure proper async handling
+    await new Promise((resolve, reject) => {
+      receiveKaiserExToken( async tokenData => {
+        console.log('handleLogin', tokenData);
+
+        try {
+          console.log('handleLogin', tokenData);
+          console.log('Token received:', tokenData);
+          // Use the proper method to set tokens
+          await cardStore.setKaiserExTokens(tokenData);
+          // Set authentication status in localStorage
+          localStorage.setItem('kaiserexRegistered', 'true');
+          kaiserExLoading.value = false;
+          // Emit auth completion
+          emit('auth-complete');
+          resolve(tokenData);
+        } catch (error) {
+          reject(error);
+        }
+      });
     });
   } catch (error) {
     console.error('❌ Failed to receive KaiserEx token:', error);
@@ -341,7 +359,7 @@ const handleCodeKeydown = (event: KeyboardEvent, index: number) => {
   }
 };
 
-const handleTwoFASubmit = () => {
+const handleTwoFASubmit = async () => {
   if (!isCodeComplete.value) {
     twoFAError.value = 'Please enter all 6 digits';
     return;
@@ -352,17 +370,35 @@ const handleTwoFASubmit = () => {
   
   // For demo purposes, accept any 6-digit code or specific test code
   if (enteredCode.length === 6) {
-    // Set authentication status
-    localStorage.setItem('kaiserexRegistered', 'true');
-    
-    // Reset forms
-    show2FAForm.value = false;
-    showLoginForm.value = false;
-    twoFACode.value = ['', '', '', '', '', ''];
-    twoFAError.value = '';
-    
-    // Emit auth completion
-    emit('auth-complete');
+    try {
+      // Simulate getting token after 2FA verification
+      await new Promise((resolve, reject) => {
+        receiveKaiserExToken(tokenData => {
+          try {
+            console.log('2FA verification successful, token received:', tokenData);
+            // Use the proper method to set tokens
+            cardStore.setKaiserExTokens(tokenData);
+            // Set authentication status
+            localStorage.setItem('kaiserexRegistered', 'true');
+            
+            // Reset forms
+            show2FAForm.value = false;
+            showLoginForm.value = false;
+            twoFACode.value = ['', '', '', '', '', ''];
+            twoFAError.value = '';
+            
+            // Emit auth completion
+            emit('auth-complete');
+            resolve(tokenData);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('❌ Failed to receive KaiserEx token after 2FA:', error);
+      twoFAError.value = 'Authentication failed. Please try again.';
+    }
   } else {
     twoFAError.value = 'Invalid verification code. Please try again.';
     twoFACode.value = ['', '', '', '', '', ''];

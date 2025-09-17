@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { sharedConfig } from './vite.config.mts';
+import { sharedConfig } from './vite.config.mjs';
 import { isDev, r } from './scripts/utils';
 import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';

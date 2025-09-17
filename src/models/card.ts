@@ -31,6 +31,7 @@ export interface CardData {
   status: string;
   type: string;
   createdAt: string;
+  card_status: 'TEMPORARY_BLOCKED' | 'ACTIVE';
   updatedAt: string;
 }
 
@@ -80,14 +81,12 @@ export interface CardTransactionHistory {
 }
 
 export interface HistoryResponse {
-  history: {
-    meta: {
-      page: number;
-      records: number;
-      totalRecords: number;
-    };
-    records: CardTransactionHistory[];
+  meta: {
+    page: number;
+    records: number;
+    totalRecords: number;
   };
+  records: CardTransactionHistory[];
 }
 
 export interface HistoryParams {
@@ -113,11 +112,23 @@ export interface CardErrorState {
   userInfo: string | null;
   cardanoAddress: string | null;
   cardData: string | null;
+  cardDetails: string | null;
+  cardPin: string | null;
   cardNumber: string | null;
   cardBalance: string | null;
   cardHistory: string | null;
   auth: string | null;
   initialize: string | null;
+}
+
+export interface CardDetails {
+  pan: string;
+  expiryDate: string;
+  cvc2: string;
+}
+
+export interface CardPin {
+  pin: string;
 }
 
 export interface CardState {
@@ -132,12 +143,13 @@ export interface CardState {
 
   // Card data
   cardData: CardData | null;
+  cardDetails: CardDetails | null;
+  cardPin: CardPin | null;
   cardNumber: CardNumber | null;
   cardBalance: CardBalance | null;
   cardHistory: HistoryResponse | null;
   totalDeposits: number;
   activities: Activity[];
-
   // Wallet status integration - ALL IN ONE!
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
