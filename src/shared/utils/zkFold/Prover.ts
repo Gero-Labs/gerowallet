@@ -126,7 +126,7 @@ export class Prover {
 
             } catch (error) {
                 console.error('Error checking status:', error);
-                return null as any;
+                throw error;
             }
         }
 
