@@ -5,6 +5,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
+import priceService from '@/stores/priceStore';
 
 interface WhitelistedEntry {
   domain: string;
@@ -107,7 +108,7 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
     if ('keys' in updates) {
       console.debug('📤 Broadcasting keys update:', updates.keys ? 'keys present' : 'keys null');
     }
-    
+
     // Serialize data for broadcasting (handle BigInt, Maps, etc.)
     const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
       if (typeof value === 'bigint') {
@@ -123,7 +124,7 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
         return value;
       }
     }));
-    
+
     // Check if keys survived serialization
     if ('keys' in updates && 'keys' in serializedUpdates) {
       console.debug('📤 Keys after serialization:', serializedUpdates.keys ? 'keys present' : 'keys null');
@@ -137,12 +138,12 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
       // Use current local store state as the base to avoid race conditions
       const current = walletStore;
       const finalState = { ...current, ...serializedUpdates };
-      
+
       // Log if keys are being stored
       if ('keys' in serializedUpdates) {
         console.debug('💾 Storing keys to chrome.storage:', finalState.keys ? 'keys present' : 'keys null');
       }
-      
+
       chrome.storage.local.set({
         [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
           if (typeof value === 'bigint') {
@@ -169,6 +170,13 @@ export default {
   setLoggedWallet(loggedWallet: any) {
     walletStore.loggedWallet = loggedWallet;
     broadcastFromBackground({ loggedWallet });
+
+    // Initialize price service when wallet is set
+    if (loggedWallet) {
+      priceService.initialize().catch(error => {
+        console.error('Failed to initialize price service:', error);
+      });
+    }
   },
 
   setAccount(account: any) {
@@ -350,7 +358,10 @@ export default {
 
   logout() {
     console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
-    
+
+    // Disconnect price service
+    priceService.disconnect();
+
     // Clear all data at once
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
@@ -381,12 +392,20 @@ export default {
 
   clearForWalletSwitch() {
     console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
-    
-    // Clear any active intervals before switching wallets
+
+    // Reconnect price service for the new wallet context
+    priceService.disconnect();
+
+    // CRITICAL: Clear all Chrome alarms to prevent memory leaks during wallet switching
+    chrome.alarms.clearAll();
+    console.debug('🧹 Cleared all Chrome alarms during wallet switch');
+
+    // Clear intervals to prevent memory leaks
     if (walletStore.fiatRatesIntervalId) {
       clearInterval(walletStore.fiatRatesIntervalId);
+      walletStore.fiatRatesIntervalId = null;
     }
-    
+
     // Clear all wallet-specific data immediately during wallet switching
     // This prevents cross-wallet data contamination
     const clearedState: Partial<WalletStore> = {
@@ -403,7 +422,7 @@ export default {
       fiatRatesIntervalId: null
     };
 
-    // Apply to local state
+    // Apply to a local state
     Object.assign(walletStore, clearedState);
 
     // Clear loading state
@@ -416,12 +435,12 @@ export default {
   // Expose the observable state
   state: walletStore,
 
-  // Utility method to get current state snapshot
+  // Utility method to get the current state snapshot
   getSnapshot(): WalletStore {
     return { ...walletStore };
   },
 
-  // Utility method to check if wallet is logged in
+  // Utility method to check if a wallet is logged in
   isLoggedIn(): boolean {
     return walletStore.loggedWallet !== null;
   },

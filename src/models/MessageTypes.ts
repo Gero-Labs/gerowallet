@@ -7,4 +7,5 @@ export enum MessageTypes {
   LOGIN = 'LOGIN',
   LOGOUT = 'LOGOUT',
   RESYNC = 'RESYNC',
+  CONNECT_TREZOR = 'CONNECT_TREZOR',
 }

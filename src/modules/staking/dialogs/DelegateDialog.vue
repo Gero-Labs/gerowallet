@@ -271,7 +271,8 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import filters from '@/shared/utils/filters';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import ledgerUtils from '@/shared/utils/ledger';
 
 const props = defineProps({
   isOpen: {
@@ -351,11 +352,11 @@ const depositFee = computed(() => {
       totalAdaOutput += Number(output.value.coins);
     }
   }
-  const registrationCert = props.tx.body.certificates?.find(
+  const registrationCert: any = props.tx.body.certificates?.find(
     cert => cert.__typename === Cardano.CertificateType.StakeRegistration || cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
   );
 
-  return registrationCert ? Number(registrationCert?.deposit) : 0;
+  return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -437,14 +438,14 @@ const signTx = async (): Promise<boolean> => {
     if (!passwordVerification.data.isValid) {
       enableToolTip();
       loading.value = false;
-      return;
+      return false;
     }
 
     // Serialize the Cardano.Tx to CBOR for Chrome messaging
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     console.log('Serialized transaction CBOR:', txCbor.value);
 
-    // Sign the transaction via background message
+    // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -454,7 +455,7 @@ const signTx = async (): Promise<boolean> => {
         accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value, // Address mappings
-        isUsb: false
+        mergeWitnesses: false,
       }
     }) as { data: { witnesses?: any; error?: string } };
 
@@ -473,6 +474,34 @@ const signTx = async (): Promise<boolean> => {
     return false;
   } finally {
     loading.value = false
+  }
+};
+
+const signLedgerTx = async () => {
+  loading.value = true;
+  try {
+    if (!props.tx) {
+      throw new Error('No transaction to sign');
+    }
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      props.tx,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+    return true;
+  } catch (e) {
+    ledgerUtils.ledgerErrorHandling(e);
+    return false;
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -506,9 +535,7 @@ const submitTx = async () => {
 
 const signDelegationTx = async () => {
   if (isSubmit.value) {
-    if (loggedWallet.value?.type === WalletType.Normal) {
-      await submitTx();
-    }
+    await submitTx();
   } else {
     if (loggedWallet.value?.type === WalletType.Normal) {
       if (formRef.value.validate()) {
@@ -539,6 +566,16 @@ const signDelegationTx = async () => {
       //   nextTick(() => {
       //     qrCode.value.append(qrCodeRef.value);
       //   });
+    } else if (loggedWallet.value?.type === WalletType.Ledger) {
+      const isValid: boolean = await signLedgerTx();
+      if (!isValid) {
+        return;
+      }
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
+        isSubmit.value = true;
+      }
     }
   }
 };

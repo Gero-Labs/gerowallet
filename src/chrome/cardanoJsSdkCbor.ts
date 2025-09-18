@@ -4,7 +4,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
- * 
+ *
  * This utility provides functions to convert between Cardano JS SDK transaction objects
  * and CBOR hex strings for compatibility with the existing signing infrastructure.
  */
@@ -22,25 +22,25 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
       if (value instanceof Map) return Object.fromEntries(value);
       return value;
     }, 2));
-    
+
     // Validate transaction structure before serialization
     if (!tx.body) {
       throw new Error('Transaction body is missing');
     }
-    
+
     if (!tx.body.inputs || tx.body.inputs.length === 0) {
       throw new Error('Transaction inputs are missing or empty');
     }
-    
+
     if (!tx.body.outputs || tx.body.outputs.length === 0) {
       throw new Error('Transaction outputs are missing or empty');
     }
-    
+
     // Log certificates if they exist
     if (tx.body.certificates && tx.body.certificates.length > 0) {
       console.log('Transaction certificates:', tx.body.certificates);
     }
-    
+
     // Use Cardano JS SDK's built-in serialization
     const serializedTx = Serialization.Transaction.fromCore(tx);
     const cborHex = serializedTx.toCbor();
@@ -65,7 +65,7 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
 export function deserializeCardanoJsSdkTx(cborHex: string): Cardano.Tx {
   try {
     console.log('Deserializing CBOR hex string:', cborHex);
-    
+
     // Use Cardano JS SDK's built-in deserialization
     const serializedTx = Serialization.Transaction.fromCbor(HexBlob(cborHex));
     return serializedTx.toCore();
@@ -83,7 +83,7 @@ export function deserializeCardanoJsSdkTx(cborHex: string): Cardano.Tx {
 export function serializeTxBody(txBody: Cardano.TxBody): string {
   try {
     console.log('Serializing transaction body:', txBody);
-    
+
     // Use Cardano JS SDK's built-in serialization
     const serializedTxBody = Serialization.TransactionBody.fromCore(txBody);
     return serializedTxBody.toCbor();
@@ -98,41 +98,17 @@ export function serializeTxBody(txBody: Cardano.TxBody): string {
  * @param txBody - The transaction body
  * @returns Transaction hash as hex string
  */
-export function computeTxHash(txBody: Cardano.TxBody): Cardano.TransactionId {
+export function computeTxBodyHash(txBody: Cardano.TxBody): Cardano.TransactionId {
   try {
     console.log('Computing transaction hash for body:', txBody);
-    
+
     // Use Cardano JS SDK's built-in transaction body serialization and hashing
     const serializedTxBody = Serialization.TransactionBody.fromCore(txBody);
-    const bodyHash = serializedTxBody.hash();
-    return Cardano.TransactionId(bodyHash);
+    return serializedTxBody.hash();
   } catch (error) {
     console.error('Error computing transaction hash:', error);
     throw new Error(`Failed to compute transaction hash: ${getErrorMessage(error)}`);
   }
-}
-
-/**
- * Creates a properly formatted transaction for signing from a transaction body
- * @param txBody - The transaction body
- * @param witness - Optional existing witness set
- * @returns Complete Cardano JS SDK transaction ready for signing
- */
-export function createSignableTransaction(
-  txBody: Cardano.TxBody,
-  witness?: Cardano.Witness
-): Cardano.Tx {
-  const txId = computeTxHash(txBody);
-  
-  return {
-    id: txId,
-    body: txBody,
-    witness: witness || {
-      signatures: new Map()
-    } as Cardano.Witness,
-    auxiliaryData: undefined,
-    isValid: true
-  };
 }
 
 /**
@@ -144,7 +120,7 @@ export function extractStakeCredentialsFromCertificates(
   certificates: Cardano.Certificate[]
 ): string[] {
   const stakeCredentials: string[] = [];
-  
+
   for (const cert of certificates) {
     if (cert.__typename === Cardano.CertificateType.StakeRegistration ||
         cert.__typename === Cardano.CertificateType.StakeDeregistration ||
@@ -156,7 +132,7 @@ export function extractStakeCredentialsFromCertificates(
     }
     // Add more certificate types as needed
   }
-  
+
   return stakeCredentials;
 }
 
@@ -169,7 +145,7 @@ export function serializeWitness(witness: Cardano.Witness): string {
   try {
     console.log('Serializing witness:', witness);
     console.log('Witness signatures map size:', witness.signatures?.size);
-    
+
     // Debug: Log each signature entry
     if (witness.signatures) {
       console.log('Witness signatures entries:');
@@ -177,7 +153,7 @@ export function serializeWitness(witness: Cardano.Witness): string {
         console.log(`- Key: ${key}, Sig: ${sig.substring(0, 20)}...`);
       });
     }
-    
+
     // Use Cardano JS SDK's built-in serialization
     const serializedWitness = Serialization.TransactionWitnessSet.fromCore(witness);
     return serializedWitness.toCbor();
@@ -204,7 +180,7 @@ export function serializeWitness(witness: Cardano.Witness): string {
 export function deserializeWitness(witnessHex: string): Cardano.Witness {
   try {
     console.log('Deserializing witness hex string:', witnessHex);
-    
+
     // Use Cardano JS SDK's built-in deserialization
     const serializedWitness = Serialization.TransactionWitnessSet.fromCbor(HexBlob(witnessHex));
     return serializedWitness.toCore();
@@ -231,25 +207,25 @@ export class BrowserTxConstruction {
       // Linear fee calculation: fee = a * size + b
       const minFeeA = BigInt(protocolParams.minFeeCoefficient);
       const minFeeB = BigInt(protocolParams.minFeeConstant);
-      
+
       // Estimate transaction size based on inputs, outputs, and certificates
       // These are conservative estimates based on CBOR encoding sizes
       const inputsSize = tx.body.inputs.length * 180; // ~180 bytes per input
-      const outputsSize = tx.body.outputs.length * 50;  // ~50 bytes per output  
+      const outputsSize = tx.body.outputs.length * 50;  // ~50 bytes per output
       const certificatesSize = (tx.body.certificates?.length || 0) * 50; // ~50 bytes per certificate
       const baseSize = 300; // Base transaction overhead (includes headers, etc.)
-      
+
       const estimatedSize = BigInt(baseSize + inputsSize + outputsSize + certificatesSize);
-      
+
       const calculatedFee = minFeeB + (minFeeA * estimatedSize);
-      
+
       console.debug('Fee calculation:', {
         minFeeA: minFeeA.toString(),
-        minFeeB: minFeeB.toString(), 
+        minFeeB: minFeeB.toString(),
         estimatedSize: estimatedSize.toString(),
         calculatedFee: calculatedFee.toString()
       });
-      
+
       return calculatedFee;
     } catch (error) {
       console.error('Error calculating minimum fee:', error);
@@ -271,13 +247,13 @@ export class BrowserTxConstruction {
       const baseUtxoSize = 160; // Base UTXO size in bytes (address + value)
       const addressSize = output.address.length / 2; // Address is hex, so divide by 2 for bytes
       const assetSize = output.value.assets?.size ? (output.value.assets.size * 50) : 0; // ~50 bytes per asset
-      
+
       // Additional overhead for CBOR encoding
       const encodingOverhead = 20;
-      
+
       const totalSize = BigInt(baseUtxoSize + addressSize + assetSize + encodingOverhead);
       const minAda = totalSize * coinsPerUtxoByte;
-      
+
       console.debug('MinAda calculation:', {
         address: output.address,
         addressSize,
@@ -286,7 +262,7 @@ export class BrowserTxConstruction {
         coinsPerUtxoByte: coinsPerUtxoByte.toString(),
         minAda: minAda.toString()
       });
-      
+
       // Ensure minimum is at least 1 ADA
       const minimumAda = BigInt(1000000); // 1 ADA in lovelace
       return minAda > minimumAda ? minAda : minimumAda;
@@ -296,4 +272,7 @@ export class BrowserTxConstruction {
       return BigInt(1000000);
     }
   }
+}
+
+export class computeTxHash {
 }

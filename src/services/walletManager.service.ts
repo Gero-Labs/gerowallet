@@ -40,6 +40,14 @@ export class WalletManager {
   }
 
   /**
+   * Get the current wallet background instance
+   * @returns WalletBg instance or null if not logged in
+   */
+  getWalletBg(): WalletBg | null {
+    return this.walletBg;
+  }
+
+  /**
    * Login with a wallet
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
@@ -82,6 +90,7 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
+          api: walletBg.api,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -324,6 +333,17 @@ export class WalletManager {
         }
       } catch (ablyError) {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
+      }
+
+      // Clean up store messaging service
+      try {
+        const { storeMessaging } = await import('@/services/storeMessaging.service');
+        if (storeMessaging && typeof storeMessaging.destroy === 'function') {
+          storeMessaging.destroy();
+          console.log('Store messaging service cleaned up successfully');
+        }
+      } catch (storeMessagingError) {
+        console.warn('Failed to cleanup store messaging service during logout:', storeMessagingError);
       }
 
       // Note: Don't send logout message to background since this method

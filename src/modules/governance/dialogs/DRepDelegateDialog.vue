@@ -137,7 +137,7 @@ import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import networks from "@/utils/networks";
 import snackbar from '@/plugins/snackbar';
@@ -152,6 +152,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { MessageTypes } from '@/models/MessageTypes';
+import ledgerUtils from '@/shared/utils/ledger';
 
 const props = defineProps({
   isOpen: {
@@ -170,7 +171,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const { loggedWallet, utxos, account, keys } = toRefs(walletStore);
+const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -285,7 +286,7 @@ const signTx = async (): Promise<boolean> => {
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     console.log('Serialized transaction CBOR:', txCbor.value);
 
-    // Sign the transaction via background message
+    // Sign the transaction via a background message
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
@@ -295,7 +296,7 @@ const signTx = async (): Promise<boolean> => {
         accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value, // Address mappings
-        isUsb: !isBT.value
+        mergeWitnesses: false,
       }
     }) as { data: { witnesses?: any; error?: string } };
 
@@ -314,6 +315,34 @@ const signTx = async (): Promise<boolean> => {
     return false;
   } finally {
     loading.value = false
+  }
+};
+
+const signLedgerTx = async () => {
+  loading.value = true;
+  try {
+    if (!props.tx) {
+      throw new Error('No transaction to sign');
+    }
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      props.tx,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+    return true;
+  } catch (e) {
+    ledgerUtils.ledgerErrorHandling(e)
+    return false;
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -347,10 +376,15 @@ const submitTx = async () => {
 const signAndSubmitDelegationTx = async () => {
   if (loggedWallet.value?.type === WalletType.Normal) {
     if (form.value?.validate()) {
-      if(!isSubmit.value) {
+      if (!isSubmit.value) {
         // Sign the transaction
         const success = await signTx();
-        if (success) {
+        if (!success) {
+          return;
+        }
+        if (config.value?.txAutoSubmit) {
+          await submitTx();
+        } else {
           isSubmit.value = true;
         }
       } else {
@@ -361,11 +395,15 @@ const signAndSubmitDelegationTx = async () => {
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
     // TODO: Keystone hardware wallet support needs reimplementation with Cardano JS SDK
     snackbar.setError('Keystone wallet support is coming soon for DRep delegation');
-  } else {
-    // For Ledger and Trezor wallets
-    if(!isSubmit.value) {
-      const success = await signTx();
-      if (success) {
+  } else if (loggedWallet.value?.type === WalletType.Ledger) {
+    if (!isSubmit.value) {
+      const success = await signLedgerTx();
+      if (!success) {
+        return;
+      }
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
         isSubmit.value = true;
       }
     } else {
