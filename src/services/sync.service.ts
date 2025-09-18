@@ -34,7 +34,6 @@ export class SyncService {
         tip = await this.api.getTip();
       }
       const lastSyncInfo = await this.walletBg.getLastSyncInfo();
-      console.log('lastSyncInfo', lastSyncInfo)
       if (!lastSyncInfo) {
         LoadingState.setRestoring(true);
         try {
@@ -50,7 +49,7 @@ export class SyncService {
         }
         const prevAccountInfo = await this.walletBg.getAccountInfo();
         const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
-        const from = latestTxBlockHeight || 0
+        const from = latestTxBlockHeight + 1 || 0
         let address: string;
         if (this.walletBg.isEnterpriseAddress()) {
           address = this.walletBg.baseAddress;
@@ -62,7 +61,6 @@ export class SyncService {
         const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
 
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
-        console.debug("Epoch: ", epoch) // TODO new Epoch Animation
         await ablyService.publishToSyncChannel(this.walletBg.chain, this.walletBg.network, {
           chain: this.walletBg.chain,
           network: this.walletBg.network,
@@ -183,7 +181,7 @@ export class SyncService {
         res = await this.api.getAccountInfo(this.walletBg.stakeAddress);
       }
       if (res) {
-        return await this.walletBg.setAccountInfo(res);
+        return this.walletBg.setAccountInfo(res);
       }
     } catch (e) {
       // console.log(e);
@@ -280,6 +278,7 @@ export class SyncService {
    * @param knownAddresses - Array of known addresses to sync keys for
    */
   async syncKeys(knownAddresses: string[]): Promise<any> {
+
     if (!knownAddresses || knownAddresses.length === 0) {
       return null;
     }
@@ -289,9 +288,12 @@ export class SyncService {
       const db: any = await this.walletBg.getDb();
       const addressesTable = db.table('addresses');
       if (!addressesTable) {
+        console.error('syncKeys error - No Addresses Table');
         throw new Error('No Addresses Table.');
       }
+
       resolvedKeys = this.walletBg.resolvePathsForMissingAddresses(knownAddresses);
+
       await db.transaction('rw', addressesTable, async () => {
         await addressesTable.clear();
         await addressesTable.put({
@@ -325,35 +327,7 @@ export class SyncService {
     return null;
   }
 
-  /**
-   * Get staking pools data
-   */
-  async getStakingPools() {
-    try {
-      const res = await this.api.getAllPools();
-      if (res) {
-        return res;
-      }
-    } catch (e) {
-      console.debug(e);
-    }
-    return null;
-  }
 
-  /**
-   * Get DReps (Delegated Representatives) data
-   */
-  async getDReps() {
-    try {
-      const res = await this.api.getAllDReps();
-      if (res) {
-        return res;
-      }
-    } catch (e) {
-      console.debug(e);
-    }
-    return null;
-  }
 
   /**
    * Get the block height of the latest transaction

@@ -1,43 +1,46 @@
 <template>
   <!-- NFT Gallery Container -->
-  <div class="nft-gallery-container">
-    <!-- Fixed height container to match assets table -->
-    <div>
+  <div class="nft-gallery-container adaptive-container" :style="{ minHeight: containerHeight + 'px' }">
+    <!-- Dynamic height container to match assets table -->
+    <div class="gallery-wrapper">
       <!-- Grid View -->
-      <div class="gallery-grid px-3 pb-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
-      <v-card
-        v-for="collection in paginatedCollectibles"
-        :key="collection.id || collection.name"
-        class="nft-collection-card liquid-glass-card"
-        @click="handleOnRowClick(collection)"
-      >
-        <!-- Image Container -->
-        <div class="card-image-container" :style="{ height: cardSize + 'px' }">
-          <v-img
-            :src="collection.img"
-            :alt="collection.name"
-            :aspect-ratio="1"
-            class="collection-image"
-            :gradient="collection.isScam ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%' : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'"
-          >
-            <!-- Overlay badges -->
-            <div class="card-badges">
-              <v-chip small outlined class="quantity-chip">
-                {{ Number(collection.quantity || 1).toLocaleString() }} items
-              </v-chip>
-              <v-chip v-if="collection.isScam" small color="error">
-                <v-icon left x-small>mdi-alert-decagram</v-icon>
-                Scam
-              </v-chip>
-            </div>
+      <div class="gallery-grid px-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
+        <v-card
+          v-for="collection in paginatedCollectibles"
+          :key="collection.id || collection.name"
+          class="nft-collection-card liquid-glass-card"
+          @click="handleOnRowClick(collection)"
+        >
+          <!-- Image Container -->
+          <div class="card-image-container" :style="{ height: cardSize + 'px' }">
+            <v-img
+              :src="collection.img"
+              :alt="collection.name"
+              :aspect-ratio="1"
+              class="collection-image"
+              :gradient="
+                collection.isScam
+                  ? 'to bottom, transparent 60%, rgba(249, 112, 102, 0.8) 100%'
+                  : 'to bottom, transparent 60%, rgba(0,0,0,0.8) 100%'
+              "
+            >
+              <!-- Overlay badges -->
+              <div class="card-badges">
+                <v-chip small outlined class="quantity-chip">
+                  {{ Number(collection.quantity || 1).toLocaleString() }} items
+                </v-chip>
+                <v-chip v-if="collection.isScam" small color="error">
+                  <v-icon left x-small>mdi-alert-decagram</v-icon>
+                  Scam
+                </v-chip>
+              </div>
+            </v-img>
+          </div>
 
-          </v-img>
-        </div>
-
-        <!-- Card Content with Liquid Glass Effect -->
-        <div class="card-content-overlay">
-          <h3 class="collection-name-glass">{{ collection.name }}</h3>
-        </div>
+          <!-- Card Content with Liquid Glass Effect -->
+          <div class="card-content-overlay">
+            <h3 class="collection-name-glass">{{ collection.name }}</h3>
+          </div>
         </v-card>
       </div>
 
@@ -66,12 +69,14 @@ interface Props {
   hideScam?: boolean;
   searchTerm?: string;
   sortBy?: string;
+  containerHeight?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   hideScam: false,
   searchTerm: '',
-  sortBy: 'name'
+  sortBy: 'name',
+  containerHeight: 348,
 });
 
 // Emits
@@ -85,6 +90,9 @@ const collectiblesPage = ref<number>(1);
 const dialogData = ref<any>(null);
 const screenWidth = ref<number>(window.innerWidth);
 
+// Pagination settings
+const itemsPerPage = 14; // 2 rows of 7 items
+
 // Methods
 const handleOnRowClick = (collection: any) => {
   dialogData.value = collection;
@@ -92,128 +100,116 @@ const handleOnRowClick = (collection: any) => {
 
 const closeDialog = () => {
   dialogData.value = null;
-}
+};
 
 // Computed properties
 const collectibles = computed(() => {
-  let res = Object.values(collections.value).filter((collection: any) => collection.items.every(item => !item.metadata))
+  let res = Object.values(collections.value).filter((collection: any) =>
+    collection.items.every(item => !item.metadata)
+  );
   if (res && props.hideScam) {
-    res = res.filter((collection: any) => !collection.isScam)
+    res = res.filter((collection: any) => !collection.isScam);
   }
-  return res
+  return res;
 });
 
 const sortOptionsDropdown = computed(() => [
   { text: 'Name (A-Z)', value: 'name' },
   { text: 'Name (Z-A)', value: 'name_desc' },
   { text: 'Quantity (High-Low)', value: 'quantity_desc' },
-  { text: 'Quantity (Low-High)', value: 'quantity' }
+  { text: 'Quantity (Low-High)', value: 'quantity' },
 ]);
 
 const cardSize = computed(() => {
+  // Dynamically size cards based on available height
+  const baseSize = props.containerHeight <= 200 ? 80 : 110;
+  
   if (screenWidth.value <= 480) {
-    return 90; // Very small screens
+    return baseSize - 10;
   } else if (screenWidth.value <= 768) {
-    return 100; // Small screens
+    return baseSize;
   } else if (screenWidth.value <= 1200) {
-    return 115; // Medium screens
+    return baseSize + 10;
   } else {
-    return 126; // Large screens - 10% smaller than original 140px
+    return baseSize + 20;
   }
 });
 
 const gridSizeClass = computed(() => {
-  if (screenWidth.value <= 480) {
-    return 'grid-4-cols'; // 4 columns for very small screens
-  } else if (screenWidth.value <= 768) {
-    return 'grid-5-cols'; // 5 columns for small screens
-  } else if (screenWidth.value <= 1200) {
-    return 'grid-5-cols'; // 5 columns for medium screens
-  } else {
-    return 'grid-6-cols'; // 6 columns for large screens
-  }
+  return 'grid-7-cols'; // 7 columns for large screens
 });
 
-const dynamicItemsPerPage = computed(() => {
-  // Always enforce exactly 2 rows maximum
-  if (screenWidth.value <= 480) {
-    // Very small screens: smaller cards allow more per row, 2 rows max = 8 items
-    return 8;
-  } else if (screenWidth.value <= 768) {
-    // Small screens: 5 items per row, 2 rows max = 10 items
-    return 10;
-  } else if (screenWidth.value <= 1200) {
-    // Medium screens: 5 items per row, 2 rows max = 10 items
-    return 10;
-  } else {
-    // Large screens: 6 items per row, 2 rows max = 12 items
-    return 12;
-  }
-});
+const dynamicItemsPerPage = computed(() => itemsPerPage);
+
+// Use the shared container height from parent
+const containerHeight = computed(() => props.containerHeight);
 
 const sortedCollectibles = computed(() => {
-  if (!collectibles.value) return []
+  if (!collectibles.value) return [];
 
-  let sorted: any[] = [...collectibles.value]
+  let sorted: any[] = [...collectibles.value];
 
   // Apply search filter using prop instead of local ref
   if (props.searchTerm && props.searchTerm.trim()) {
-    const searchTerm = props.searchTerm.toLowerCase().trim()
+    const searchTerm = props.searchTerm.toLowerCase().trim();
     sorted = sorted.filter((collection: any) => {
       // Search in name
       if (collection.name && collection.name.toLowerCase().includes(searchTerm)) {
-        return true
+        return true;
       }
 
       // Search in description
       if (collection.description) {
-        let descriptionText = ''
+        let descriptionText = '';
         if (typeof collection.description === 'string') {
-          descriptionText = collection.description
+          descriptionText = collection.description;
         } else if (Array.isArray(collection.description)) {
-          descriptionText = collection.description.join(' ')
+          descriptionText = collection.description.join(' ');
         }
         if (descriptionText.toLowerCase().includes(searchTerm)) {
-          return true
+          return true;
         }
       }
 
-      return false
-    })
+      return false;
+    });
   }
 
   // Then apply sorting
   switch (props.sortBy) {
     case 'name_desc':
-      sorted.sort((a, b) => b.name.localeCompare(a.name))
-      break
+      sorted.sort((a, b) => b.name.localeCompare(a.name));
+      break;
     case 'quantity':
-      sorted.sort((a, b) => (a.quantity || 0) - (b.quantity || 0))
-      break
+      sorted.sort((a, b) => (a.quantity || 0) - (b.quantity || 0));
+      break;
     case 'quantity_desc':
-      sorted.sort((a, b) => (b.quantity || 0) - (a.quantity || 0))
-      break
+      sorted.sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
+      break;
     default: // 'name'
-      sorted.sort((a, b) => a.name.localeCompare(b.name))
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  return sorted
+  return sorted;
 });
 
 const paginatedCollectibles: any = computed(() => {
-  const start = (collectiblesPage.value - 1) * dynamicItemsPerPage.value
-  const end = start + dynamicItemsPerPage.value
-  return sortedCollectibles.value.slice(start, end)
+  const start = (collectiblesPage.value - 1) * dynamicItemsPerPage.value;
+  const end = start + dynamicItemsPerPage.value;
+  return sortedCollectibles.value.slice(start, end);
 });
 
 const totalPages = computed(() => {
-  return Math.ceil(sortedCollectibles.value.length / dynamicItemsPerPage.value)
+  return Math.ceil(sortedCollectibles.value.length / dynamicItemsPerPage.value);
 });
 
 // Watch for search changes to reset pagination
-watch(() => props.searchTerm, () => {
-  collectiblesPage.value = 1
-});
+watch(
+  () => props.searchTerm,
+  () => {
+    collectiblesPage.value = 1;
+  }
+);
 
 // Resize handler
 const handleResize = () => {
@@ -236,6 +232,22 @@ onUnmounted(() => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
+  transition: min-height 0.3s ease, height 0.3s ease;
+}
+
+.nft-gallery-container.adaptive-container {
+  min-height: 148px;
+  height: auto;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-wrapper {
+  transition: height 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .liquid-glass-card,
@@ -344,7 +356,13 @@ onUnmounted(() => {
 /* Gallery Grid Layouts */
 .gallery-grid {
   display: grid;
-  gap: 16px;
+  gap: 10px;
+  transition: all 0.3s ease;
+  align-content: center; /* Center cards vertically in available space */
+  padding-top: 8px;
+  padding-bottom: 8px;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .grid-4-cols {
@@ -440,7 +458,6 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-
 .gallery-controls .v-text-field .v-input__prepend-inner {
   align-self: center !important;
   margin-top: 0 !important;
@@ -504,5 +521,7 @@ onUnmounted(() => {
 .sort-select-small.v-text-field--outlined.v-input--dense:not(.v-text-field--solo) .v-input__append-inner {
   margin-top: 4px !important;
 }
+.grid-7-cols {
+  grid-template-columns: repeat(7, 1fr);
+}
 </style>
-

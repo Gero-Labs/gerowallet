@@ -2,7 +2,8 @@
  * KaiserEx OAuth Service
  * Handles PKCE authentication flow for KaiserEx token reception
  */
-const backendUrl = import.meta.env['VITE_BACKEND_URL'];
+const viteBackendUrl = import.meta.env['VITE_BACKEND_URL'];
+const backendUrl = 'https://api.dev.kaiserex.cybro.cz';
 
 export interface KaiserExTokenData {
   access_token: string;
@@ -29,9 +30,7 @@ export interface KaiserExService {
 }
 
 class KaiserExServiceImpl implements KaiserExService {
-  baseUrl = `${backendUrl}/api/kaiserex`;
-  // The actual OAuth domain that sends the message
-  oauthDomain = 'https://api.dev.kaiserex.cybro.cz';
+  baseUrl = `${backendUrl}`;
 
   options = {
     width: 800,
@@ -42,6 +41,7 @@ class KaiserExServiceImpl implements KaiserExService {
   codeVerifier?: string;
   completeCallback?: (tokenData: KaiserExTokenData) => void;
   KaiserExWindow?: Window | null;
+  checkClosedTimeouts = new Set<NodeJS.Timeout>();
 
   loginUrl(codeChallenge: string): string {
     const params = new URLSearchParams({
@@ -73,73 +73,104 @@ class KaiserExServiceImpl implements KaiserExService {
   }
 
   async auth(completeCallback?: (tokenData: KaiserExTokenData) => void): Promise<void> {
-    if (completeCallback) this.completeCallback = completeCallback;
+    return new Promise((resolve, reject) => {
+      if (completeCallback) this.completeCallback = completeCallback;
 
-    console.log('[KaiserEx] Starting OAuth flow...');
-    const { codeVerifier, codeChallenge } = await this.generatePKCE();
-    this.codeVerifier = codeVerifier;
-    console.log('[KaiserEx] Generated PKCE - codeChallenge:', codeChallenge);
+      this.generatePKCE().then(({ codeVerifier, codeChallenge }) => {
+        this.codeVerifier = codeVerifier;
 
-    const url = this.loginUrl(codeChallenge);
-    console.log('[KaiserEx] Opening OAuth URL:', url);
-    console.log('[KaiserEx] Expected message origin:', this.oauthDomain);
+        const url = this.loginUrl(codeChallenge);
 
-    if (this.options.asWindow) {
-      this.KaiserExWindow = window.open(
-        url,
-        "oauthWindow",
-        `width=${this.options.width},height=${this.options.height}`
-      );
-    } else {
-      this.KaiserExWindow = window.open(url, "oauthWindow");
-    }
+        if (this.options.asWindow) {
+          this.KaiserExWindow = window.open(
+            url,
+            "oauthWindow",
+            `width=${this.options.width},height=${this.options.height}`
+          );
+        } else {
+          this.KaiserExWindow = window.open(url, "oauthWindow");
+        }
 
-    console.log('[KaiserEx] Popup window opened, waiting for OAuth callback message...');
 
-    // Bind the message listener to this instance
-    const boundListener = this.oauthCodeMessageListener.bind(this);
-    window.addEventListener("message", boundListener);
-    console.log('[KaiserEx] Message listener registered');
+        // Bind the message listener to this instance
+        const boundListener = this.oauthCodeMessageListener.bind(this);
+        window.addEventListener("message", boundListener);
 
-    // Store the bound listener for cleanup
-    (this as any)._boundListener = boundListener;
+        // Store the bound listener for cleanup
+        (this as any)._boundListener = boundListener;
+        (this as any)._authResolve = resolve;
+        (this as any)._authReject = reject;
+
+        // Monitor popup window closure to reject the promise (but only if auth hasn't completed)
+        if (this.KaiserExWindow) {
+          let authCompleted = false;
+          (this as any)._markAuthCompleted = () => { authCompleted = true; };
+
+          const checkClosed = () => {
+            if (this.KaiserExWindow?.closed) {
+              if (!authCompleted) {
+                // Clean up the message listener
+                window.removeEventListener("message", boundListener);
+                // Clear any remaining timeouts
+                this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+                this.checkClosedTimeouts.clear();
+                // Reject the auth promise to trigger the error handler in Dashboard
+                reject(new Error('Authentication window was closed by user'));
+              } else {
+                // Clear timeouts on successful completion
+                this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+                this.checkClosedTimeouts.clear();
+              }
+            } else {
+              const timeoutId = setTimeout(() => {
+                this.checkClosedTimeouts.delete(timeoutId);
+                checkClosed();
+              }, 1000);
+              this.checkClosedTimeouts.add(timeoutId);
+            }
+          };
+          const initialTimeoutId = setTimeout(() => {
+            this.checkClosedTimeouts.delete(initialTimeoutId);
+            checkClosed();
+          }, 1000);
+          this.checkClosedTimeouts.add(initialTimeoutId);
+        }
+      });
+    });
   }
 
   async oauthCodeMessageListener(message: MessageEvent): Promise<void> {
-    console.log('[KaiserEx] Received postMessage from origin:', message.origin);
-    console.log('[KaiserEx] Message data:', message.data);
-    
+
     // Accept messages from either the KaiserEx OAuth domain or backend (for local development)
     const allowedOrigins = [
-      this.oauthDomain,
+      this.baseUrl,
       'http://localhost:8081', // Local backend
-      'http://localhost:8080', // Alternative local backend port
-      window.location.origin // Allow same origin for development
+      window.location.origin // Allow the same origin for development
     ];
-    
-    console.log('[KaiserEx] Allowed origins:', allowedOrigins);
-    
+
+
     if (!allowedOrigins.includes(message.origin)) {
       console.warn('[KaiserEx] ❌ Rejected message from unauthorized origin:', message.origin);
       console.warn('[KaiserEx] Expected one of:', allowedOrigins);
       return;
     }
-    
-    console.log('[KaiserEx] ✅ Origin validated');
-    
+
+
     if (message.data.type === "OAUTH_CODE") {
-      console.log('[KaiserEx] OAuth code received:', message.data.code);
       const code = message.data.code;
+
+      // Mark auth as completed to prevent race condition with window close detection
+      if ((this as any)._markAuthCompleted) {
+        (this as any)._markAuthCompleted();
+      }
+
       if (this.KaiserExWindow) {
         this.KaiserExWindow.close();
-        console.log('[KaiserEx] Popup window closed');
       }
       // Remove the event listener
       window.removeEventListener("message", (this as any)._boundListener);
-      console.log('[KaiserEx] Starting token exchange...');
       this.issueToken(code);
     } else {
-      console.log('[KaiserEx] Message type is not OAUTH_CODE, ignoring');
     }
   }
 
@@ -149,7 +180,7 @@ class KaiserExServiceImpl implements KaiserExService {
       codeVerifier: this.codeVerifier,
     };
     // Use backend proxy for token exchange
-    fetch(this.baseUrl + '/api/token', {
+    fetch( `${viteBackendUrl}/api/kaiserex/api/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -158,14 +189,61 @@ class KaiserExServiceImpl implements KaiserExService {
     })
       .then(response => response.json())
       .then(async (data: KaiserExTokenData) => {
+        // Mark authentication as completed
+        if ((this as any)._markAuthCompleted) {
+          (this as any)._markAuthCompleted();
+        }
+        
+        // Clean up all resources
+        this.cleanup();
+        
         if (this.completeCallback) {
           this.completeCallback(data);
+        }
+        // Resolve the auth promise
+        if ((this as any)._authResolve) {
+          (this as any)._authResolve();
+          delete (this as any)._authResolve;
+          delete (this as any)._authReject;
         }
       })
       .catch(error => {
         console.error('KaiserEx token exchange error:', error);
-        throw error;
+        
+        // Clean up all resources
+        this.cleanup();
+        
+        // Reject the auth promise
+        if ((this as any)._authReject) {
+          (this as any)._authReject(error);
+          delete (this as any)._authResolve;
+          delete (this as any)._authReject;
+        }
       });
+  }
+
+  /**
+   * Clean up all resources to prevent memory leaks
+   */
+  private cleanup(): void {
+    // Clear all timeouts
+    this.checkClosedTimeouts.forEach(id => clearTimeout(id));
+    this.checkClosedTimeouts.clear();
+
+    // Clean up the message listener
+    if ((this as any)._boundListener) {
+      window.removeEventListener("message", (this as any)._boundListener);
+      delete (this as any)._boundListener;
+    }
+
+    // Close the popup window
+    if (this.KaiserExWindow) {
+      this.KaiserExWindow.close();
+      this.KaiserExWindow = null;
+    }
+
+    // Clear completion callback
+    delete (this as any)._markAuthCompleted;
   }
 }
 

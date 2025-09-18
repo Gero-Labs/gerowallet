@@ -2,7 +2,7 @@ import Dexie, { DexieError } from 'dexie';
 import { blockChainDBSchema, blockChainDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import { getDb } from './gero-db';
 
-let db: Dexie = null;
+let db: Dexie = null
 const blockchainDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
@@ -42,44 +42,6 @@ export function clearBlockchainDbCache(chain: string, network: string) {
   }
 }
 
-/**
- * Set staking pools data in blockchain database
- * Used by alarm-based refresh mechanism
- */
-export async function setStakingPools(chain: string, network: string, stakingPoolsData: any[]): Promise<void> {
-  const blockchainDB = await getBlockchainDb(chain, network);
-  if (!blockchainDB) {
-    throw new Error('Failed to get blockchain database');
-  }
-
-  if (stakingPoolsData && stakingPoolsData.length > 0) {
-    const poolsTable = blockchainDB.table('pools');
-    await poolsTable.bulkPut(stakingPoolsData);
-    console.debug(`✅ Staking pools stored in database (${stakingPoolsData.length} pools)`);
-  } else {
-    console.warn('⚠️ No staking pools data to store');
-  }
-}
-
-/**
- * Set DReps data in blockchain database
- * Used by alarm-based refresh mechanism
- */
-export async function setDReps(chain: string, network: string, drepsData: any[]): Promise<void> {
-  const blockchainDB = await getBlockchainDb(chain, network);
-  if (!blockchainDB) {
-    throw new Error('Failed to get blockchain database');
-  }
-
-  if (drepsData && drepsData.length > 0) {
-    const drepsTable = blockchainDB.table('dreps');
-    await drepsTable.bulkPut(drepsData);
-    console.debug(`✅ DReps stored in database (${drepsData.length} DReps)`);
-  } else {
-    console.warn('⚠️ No DReps data to store');
-  }
-}
-
 export default {
   async getAllWallets() {
     return db['wallets'].toArray();
@@ -104,7 +66,7 @@ export default {
     try {
       // Attempt to open the database
       const db: Dexie = new Dexie(dbName);
-      return await db.open();
+      return db.open();
     } catch (error: DexieError | any) {
       console.log(error);
       if (error.name === 'NoSuchDatabaseError') {

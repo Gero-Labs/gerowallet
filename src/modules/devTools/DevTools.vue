@@ -17,7 +17,7 @@
                 </v-textarea>
               </v-col>
               <v-col cols="6" class="px-3">
-                {{txJson}}
+                <pre style="white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 400px; overflow-y: auto;">{{txJson}}</pre>
               </v-col>
             </v-row>
           </v-card-text>
@@ -39,7 +39,7 @@
                 </v-textarea>
               </v-col>
               <v-col cols="6" class="px-3">
-                {{ witnessSetJson }}
+                <pre style="white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 400px; overflow-y: auto;">{{ witnessSetJson }}</pre>
               </v-col>
             </v-row>
           </v-card-text>
@@ -162,9 +162,10 @@
 import { ref, computed, watch } from 'vue';
 import { Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 
 const txCborHex = ref<string>('')
-const tx = ref<Serialization.Transaction>(null)
+const tx = ref<Cardano.Tx>(null)
 const witnessSetCborHex = ref<string>('')
 const witnesses = ref<Serialization.TransactionWitnessSet>(null)
 const addressHex = ref<string>('')
@@ -174,14 +175,19 @@ const addressInHex = ref(null)
 const messageDataText = ref<string>('')
 const messageDataHex = ref(null)
 const utxoCbor = ref<string>('')
-const utxoJson = ref<[Cardano.TxIn, Cardano.TxOut]>()
+const utxo = ref<[Cardano.TxIn, Cardano.TxOut]>()
 const lovelace = ref<string>('')
 const value = ref<string>('')
 
 const txJson = computed(() => {
   let res = ''
   if (tx.value) {
-    return tx.value.toCore()
+    return JSON.stringify(tx.value, (key, value) => {
+      if (typeof value === 'bigint') return value.toString();
+      if (value instanceof Map) return Object.fromEntries(value);
+      if (value instanceof Set) return Array.from(value);
+      return value;
+    }, 2)
   }
   return res
 })
@@ -189,33 +195,105 @@ const txJson = computed(() => {
 const witnessSetJson = computed(() => {
   let res = ''
   if (witnesses.value) {
-    return witnesses.value.toCore();
+    return JSON.stringify(witnesses.value.toCore(), (key, value) => {
+      if (typeof value === 'bigint') return value.toString();
+      if (value instanceof Map) return Object.fromEntries(value);
+      if (value instanceof Set) return Array.from(value);
+      return value;
+    }, 2)
+  }
+  return res
+})
+
+const utxoJson = computed(() => {
+  let res = ''
+  if (utxo.value) {
+    return JSON.stringify(utxo.value, (key, value) => {
+      if (typeof value === 'bigint') return value.toString();
+      if (value instanceof Map) return Object.fromEntries(value);
+      if (value instanceof Set) return Array.from(value);
+      return value;
+    }, 2)
   }
   return res
 })
 
 watch(txCborHex, (val: string) => {
-  tx.value = Serialization.Transaction.fromCbor(Serialization.TxCBOR(val))
+  try {
+    if (val) {
+      tx.value = deserializeCardanoJsSdkTx(val)
+    } else {
+      tx.value = null
+    }
+  } catch (error) {
+    console.error('Error deserializing tx CBOR:', error)
+    tx.value = null
+  }
 })
 
 watch(witnessSetCborHex, (val: string) => {
-  witnesses.value = Serialization.TransactionWitnessSet.fromCbor(HexBlob(val))
+  try {
+    if (val) {
+      witnesses.value = Serialization.TransactionWitnessSet.fromCbor(HexBlob(val))
+    } else {
+      witnesses.value = null
+    }
+  } catch (error) {
+    console.error('Error deserializing witness set CBOR:', error)
+    witnesses.value = null
+  }
 })
 
 watch(addressHex, (val: string) => {
-  address.value = Cardano.Address.fromBytes(HexBlob(val)).toBech32()
+  try {
+    if (val) {
+      address.value = Cardano.Address.fromBytes(HexBlob(val)).toBech32()
+    } else {
+      address.value = ''
+    }
+  } catch (error) {
+    console.error('Error converting address hex:', error)
+    address.value = ''
+  }
 })
 
 watch(addressBech32, (val: string) => {
-  addressInHex.value = Cardano.Address.fromBech32(val).toBytes().toString()
+  try {
+    if (val) {
+      addressInHex.value = Cardano.Address.fromBech32(val).toBytes().toString()
+    } else {
+      addressInHex.value = ''
+    }
+  } catch (error) {
+    console.error('Error converting bech32 address:', error)
+    addressInHex.value = ''
+  }
 })
 
 watch(messageDataText, (val: string) => {
-  messageDataHex.value = util.utf8ToHex(val).toString()
+  try {
+    if (val) {
+      messageDataHex.value = util.utf8ToHex(val).toString()
+    } else {
+      messageDataHex.value = ''
+    }
+  } catch (error) {
+    console.error('Error converting text to hex:', error)
+    messageDataHex.value = ''
+  }
 })
 
 watch(utxoCbor, (val: string) => {
-  utxoJson.value = Serialization.TransactionUnspentOutput.fromCbor(HexBlob(val)).toCore()
+  try {
+    if (val) {
+      utxo.value = Serialization.TransactionUnspentOutput.fromCbor(HexBlob(val)).toCore()
+    } else {
+      utxo.value = undefined
+    }
+  } catch (error) {
+    console.error('Error deserializing UTXO CBOR:', error)
+    utxo.value = undefined
+  }
 })
 
 watch(lovelace, (val: string) => {

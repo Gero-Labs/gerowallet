@@ -21,19 +21,19 @@
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
             </h4>
-            <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
+            <h4><strong>{{ filters.toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>Deposit Fee Return</h4>
-            <h4><strong>{{ toCurrency(depositFee) }}</strong></h4>
+            <h4><strong>{{ filters.toCurrency(depositFee) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Tx Fee</h4>
-            <h4><strong>{{ toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
+            <h4><strong>{{ filters.toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
             <h4>Total</h4>
-            <h4><strong>{{ toCurrency(withdrawals+depositFee-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
+            <h4><strong>{{ filters.toCurrency(Number(withdrawals)+Number(depositFee)-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
             <v-tooltip
@@ -72,7 +72,7 @@
               </v-card-subtitle>
             </div>
             <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Unstake
+              {{ isSubmit ? 'Submit' : 'Unstake' }}
             </v-btn>
           </v-col>
         </v-row>
@@ -87,12 +87,15 @@ import filters from '@/shared/utils/filters';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import ledgerUtils from '@/shared/utils/ledger';
+import networks from '@/utils/networks';
 
 const props = defineProps({
   isOpen: {
@@ -109,7 +112,8 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const { toCurrency } = filters;
-const { loggedWallet, utxos, keys, account } = toRefs(walletStore);
+const { loggedWallet, utxos, keys, account, config } = toRefs(walletStore);
+const { epochParams } = toRefs(networkStore);
 
 const loading = ref(false);
 const spendingPassword = ref('');
@@ -122,51 +126,30 @@ const valid = ref(false);
 const passwordRules = ref([rules.required()]);
 const isBT = ref(false);
 const form = ref<any>(null);
+const txCbor = ref<string>('');
+const txWitnesses = ref(null);
+const isSubmit = ref(false);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
   if (props.tx?.body?.withdrawals) {
-    for (const [rewardAddress, amount] of props.tx.body.withdrawals) {
-      if (rewardAddress === loggedWallet.value?.stakeAddress) {
-        withdrawalsAmount += Number(amount);
+    props.tx.body.withdrawals.forEach((withdrawal: Cardano.Withdrawal) => {
+      if (withdrawal.stakeAddress === loggedWallet.value?.stakeAddress) {
+        withdrawalsAmount += Number(withdrawal.quantity.toString());
       }
-    }
+    });
   }
   return withdrawalsAmount;
 });
 
 const depositFee = computed(() => {
-  if (!props.tx?.body) return 0;
-
-  let totalAdaOutput = 0;
-
-  // Calculate input amounts
-  if (props.tx.body.inputs) {
-    for (const input of props.tx.body.inputs) {
-      const utxo = utxos.value?.find((utxo: Cardano.Utxo) =>
-        utxo[0].txId === input.txId && utxo[0].index === input.index
-      );
-      if (utxo) {
-        totalAdaOutput -= Number(utxo[1].value.coins);
-      }
-    }
-  }
-
-  // Calculate output amounts
-  if (props.tx.body.outputs) {
-    for (const output of props.tx.body.outputs) {
-      totalAdaOutput += Number(output.value.coins);
-    }
-  }
-
-  // Check if this is a deregistration (returns deposit)
   const hasDeregistrationCert = props.tx.body.certificates?.some(
-    cert => cert.__typename === Cardano.CertificateType.StakeDeregistration
+    cert => cert.__typename === Cardano.CertificateType.StakeDeregistration ||
+      cert.__typename === Cardano.CertificateType.Unregistration
   );
 
   if (hasDeregistrationCert) {
-    // For deregistration, the deposit is returned (negative fee)
-    return totalAdaOutput + Number(props.tx.body.fee) - withdrawals.value;
+    return epochParams.value.stakeKeyDeposit;
   }
 
   return 0;
@@ -183,80 +166,145 @@ const enableToolTip = () => {
   }, 3000);
 };
 
-const signUnStakeTx = async () => {
-  const signAndReturnTx = async () => {
-    loading.value = true;
-    try {
-      console.log('Signing Cardano JS SDK unstake transaction');
-      console.log('Transaction:', props.tx);
+const signTx = async (): Promise<boolean> => {
+  loading.value = true;
+  try {
+    console.log('Signing Cardano JS SDK unstake transaction');
+    console.log('Transaction:', props.tx);
 
-      // First verify password via background message
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+    // First, verify password via a background message
+    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: spendingPassword.value }
+    }) as { data: { isValid: boolean; error?: string } };
 
-      if (!passwordVerification.data.isValid) {
-        enableToolTip();
-        loading.value = false;
-        return;
-      }
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      loading.value = false;
+      return false;
+    }
 
-      // Serialize the Cardano.Tx to CBOR for Chrome messaging
-      const txCbor = serializeCardanoJsSdkTx(props.tx);
-      console.log('Serialized transaction CBOR:', txCbor);
+    // Serialize the Cardano.Tx to CBOR for Chrome messaging
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    console.log('Serialized transaction CBOR:', txCbor.value);
 
       // Sign the transaction via background message
       const witnessResult = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: {
-          txCbor: txCbor, // Pass serialized CBOR instead of the object
+          txCbor: txCbor.value, // Pass serialized CBOR instead of the object
           partialSign: false,
           password: spendingPassword.value,
           accountIndex: 0,
           utxos: utxos.value,
           addresses: keys.value, // Address mappings
-          isUsb: false
+          mergeWitnesses: false,
         }
       }) as { data: { witnesses?: any; error?: string } };
 
-      console.log('Transaction signed successfully:', witnessResult);
+    console.log('Transaction signed successfully:', witnessResult);
 
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      console.log('Signed transaction witness:', witnessResult.data.witnesses);
-
-      // Submit the transaction with the original CBOR and witness
-      // Let the background script combine them properly
-      const submitResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SUBMIT_TX,
-        data: {
-          txCbor: txCbor,
-          witnessHex: witnessResult.data.witnesses,
-          utxos: utxos.value
-        }
-      }) as { data: { txId?: string; error?: string } };
-
-      if (submitResult.data.error) {
-        throw new Error(submitResult.data.error);
-      }
-
-      snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
-      emit('close');
-    } catch (e) {
-      console.error('Error signing unstake transaction:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    if (witnessResult.data.error) {
+      throw new Error(witnessResult.data.error);
     }
+
+    console.log('Signed transaction witness:', witnessResult.data.witnesses);
+    txWitnesses.value = witnessResult.data.witnesses;
+    return true;
+  } catch (e) {
+    console.error('Error signing unstake transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    return false;
+  } finally {
+    loading.value = false
+  }
+}
+
+const signLedgerTx = async () => {
+  loading.value = true;
+  try {
+    if (!props.tx) {
+      throw new Error('No transaction to sign');
+    }
+    txCbor.value = serializeCardanoJsSdkTx(props.tx);
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      props.tx,
+      keys.value,
+      utxos.value,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+    );
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    })
+    console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
+    txWitnesses.value = transactionWitnessSet.toCbor();
+    return true;
+  } catch (e) {
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+    return false;
+  } finally {
     loading.value = false;
-  };
-  if (loggedWallet.value?.type === WalletType.Normal) {
-    if (form.value.validate()) {
-      await signAndReturnTx();
+  }
+};
+
+const submitTx = async () => {
+  try {
+    loading.value = true
+    const submitResult = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor: txCbor.value,
+        witnessHex: txWitnesses.value,
+        utxos: utxos.value
+      }
+    }) as { data: { txId?: string; error?: string } };
+    if (submitResult.data.error) {
+      throw new Error(submitResult.data.error);
     }
+    snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    emit('close');
+  } catch (e) {
+    console.error('Error submitting unstake transaction:', e);
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+  } finally {
+    loading.value = false
+    isSubmit.value = false
+  }
+}
+
+const signUnStakeTx = async () => {
+  if (isSubmit.value) {
+    await submitTx();
   } else {
-    await signAndReturnTx();
+    if (loggedWallet.value?.type === WalletType.Normal) {
+      if (form.value?.validate()) {
+        if (!isSubmit.value) {
+          const success = await signTx();
+          if (!success) {
+            return;
+          }
+          if (config.value?.txAutoSubmit) {
+            await submitTx();
+          } else {
+            isSubmit.value = true;
+          }
+        } else {
+          await submitTx();
+        }
+      }
+    } else if (loggedWallet.value?.type === WalletType.Ledger) {
+      const isValid: boolean = await signLedgerTx();
+      if (!isValid) {
+        return;
+      }
+      if (config.value?.txAutoSubmit) {
+        await submitTx();
+      } else {
+        isSubmit.value = true;
+      }
+    }
   }
 };
 

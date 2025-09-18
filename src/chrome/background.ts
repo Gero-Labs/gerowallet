@@ -1,34 +1,3 @@
-self.addEventListener('unhandledrejection', (event) => {
-  // Check if it's an Ably channel access error (which we handle gracefully)
-  if (event.reason && event.reason.message && event.reason.message.includes('Channel denied access')) {
-    console.warn('Prevented unhandled Ably channel access rejection:', event.reason.message);
-    event.preventDefault(); // Prevent the unhandled rejection from being logged as an error
-    return;
-  }
-
-  // For other unhandled rejections, log but don't prevent (so we can still see real issues)
-  console.warn('Unhandled promise rejection:', event.reason);
-});
-
-self.addEventListener('online', () => {
-  console.log('Network is online');
-  // You can dispatch custom events or use a global state manager
-});
-
-self.addEventListener('offline', () => {
-  console.log('Network is offline');
-  // Handle offline state
-});
-
-// For Service Worker lifecycle events
-self.addEventListener('install', (event) => {
-  console.log('Service Worker installing', event);
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated', event);
-});
-
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -68,9 +37,9 @@ import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx 
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
-  import('/@vite/client')
+  import('/@vite/client').catch(console.error)
   // load latest content script
-  import('./contentScriptHMR')
+  import('./contentScriptHMR').catch(console.error)
 }
 
 loadConfig().then(() => {
@@ -79,7 +48,7 @@ loadConfig().then(() => {
 loadWallets().then(async () => {
   console.log('Wallets loaded')
 
-  // Wait for wallet store to be hydrated from Chrome storage
+  // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
   console.log('Wallet store hydrated, checking for logged wallet...');
 
@@ -166,8 +135,19 @@ function clearProcessedDomains() {
 }
 
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
-const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
-setInterval(clearProcessedDomains, oneDayInMilliseconds);
+// const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
+
+// Use Chrome alarms API for reliable cleanup in service workers
+chrome.alarms.create('clearProcessedDomains', { 
+  delayInMinutes: 24 * 60, // 24 hours
+  periodInMinutes: 24 * 60 // repeat every 24 hours
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'clearProcessedDomains') {
+    clearProcessedDomains();
+  }
+});
 
 console.log('Background Loaded');
 
@@ -1139,7 +1119,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         request.data.utxos,
         request.data.addresses,
-        request.data.isUsb
+        request.data.mergeWitnesses || false
       );
       sendResponse({
         id: request.id,

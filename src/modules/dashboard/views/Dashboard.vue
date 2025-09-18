@@ -1,6 +1,5 @@
 <template>
   <v-layout column>
-
     <!-- Show comprehensive empty state when wallet has no tokens -->
     <template v-if="isWalletEmpty">
       <v-row no-gutters>
@@ -21,137 +20,165 @@
 
     <!-- Regular dashboard content when wallet has tokens -->
     <template v-else>
-    <!-- Combined row for Cardano with metrics + chart + carousel -->
-    <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
-      <!-- Left side: Chart and Market Data stacked -->
-      <v-col cols="12" xl="9" lg="9" md="12" sm="12">
-        <!-- Chart row -->
-        <v-row no-gutters>
-          <v-col cols="12" class="pa-2">
-            <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
-              <v-card-text>
-                <PortfolioChart
-                  :chart-data="computeChartData.adaData"
-                  :chart-data-usd="computeChartData.usdData"
-                  :portfolio-value-ada="computedValues.totalValue"
-                  :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                />
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
+      <!-- Combined row for Cardano with metrics + chart + carousel -->
+      <v-row no-gutters v-if="loggedWallet?.network === Network.MAINNET && loggedWallet?.chain === Blockchain.CARDANO">
+        <!-- Left side: Chart and Market Data stacked -->
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12">
+          <!-- Chart row -->
+          <v-row no-gutters>
+            <v-col cols="12" class="pa-2">
+              <v-card
+                outlined
+                class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+              >
+                <v-card-text>
+                  <PortfolioChart
+                    :chart-data="computeChartData.adaData"
+                    :chart-data-usd="computeChartData.usdData"
+                    :chart-data-eur="computeChartData.eurData"
+                    :portfolio-value-ada="computedValues.totalValue"
+                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :loading="portfolioLoading"
+                    :progressive-loading="true"
+                    :first-loaded-currency="firstLoadedCurrency"
+                  />
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
 
-        <!-- Market Data Cards row -->
-        <v-row no-gutters>
-          <v-col cols="12" class="pa-2">
-            <TokensMarketCards />
-          </v-col>
-        </v-row>
-      </v-col>
+          <!-- Market Data Cards row -->
+          <v-row no-gutters>
+            <v-col cols="12" class="pa-2">
+              <TokensMarketCards />
+            </v-col>
+          </v-row>
+        </v-col>
 
-      <!-- Right side: Carousel spanning full height -->
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
-        <FeatureCarousel
-          :model-value="currentCarouselIndex"
-          @update:modelValue="currentCarouselIndex = $event"
-          :items="carouselItems"
-          :paused="carouselPaused"
-          :is-loading="isLoading"
-          :show-progress-bar="true"
-          carousel-class="feature-carousel dashboard-card feature-card-full-height"
-          @item-click="handleCarouselClick"
-        />
-      </v-col>
-    </v-row>
+        <!-- Right side: Carousel spanning full height -->
+        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+          <FeatureCarousel
+            :model-value="currentCarouselIndex"
+            @update:modelValue="currentCarouselIndex = $event"
+            :items="carouselItems"
+            :paused="carouselPaused"
+            :is-loading="isLoading"
+            :show-progress-bar="true"
+            carousel-class="feature-carousel dashboard-card feature-card-full-height"
+            @item-click="handleCarouselClick"
+          />
+        </v-col>
+      </v-row>
 
-    <!-- Separate chart row for non-Cardano wallets -->
-    <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
-      <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
-          <v-card-text>
-            <PortfolioChart
-              :chart-data="computeChartData.adaData"
-              :chart-data-usd="computeChartData.usdData"
-              :portfolio-value-ada="computedValues.totalValue"
-              :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-            />
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
-        <AssetsPieChart />
-      </v-col>
+      <!-- Separate chart row for non-Cardano wallets -->
+      <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
+        <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
+          <v-card
+            outlined
+            class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
+          >
+            <v-card-text>
+              <PortfolioChart
+                :chart-data="computeChartData.adaData"
+                :chart-data-usd="computeChartData.usdData"
+                :chart-data-eur="computeChartData.eurData"
+                :portfolio-value-ada="computedValues.totalValue"
+                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                :loading="portfolioLoading"
+                :progressive-loading="true"
+                :first-loaded-currency="firstLoadedCurrency"
+              />
+            </v-card-text>
+          </v-card>
+        </v-col>
+        <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
+          <AssetsPieChart />
+        </v-col>
 
-      <!-- Apex Carousel Card -->
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR">
-        <FeatureCarousel
-          :model-value="currentApexCarouselIndex"
-          @update:model-value="currentApexCarouselIndex = $event"
-          :items="apexCarouselItems"
-          :paused="apexCarouselPaused"
-          :is-loading="isLoading"
-          :show-progress-bar="false"
-          carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
-          wrapper-class="apex-carousel-wrapper"
-          @item-click="handleCarouselClick"
-          @mouse-enter="pauseApexCarousel"
-          @mouse-leave="resumeApexCarousel"
-        />
-      </v-col>
-    </v-row>
+        <!-- Apex Carousel Card -->
+        <v-col
+          cols="12"
+          xl="3"
+          lg="3"
+          md="12"
+          sm="12"
+          class="pa-2"
+          v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR"
+        >
+          <FeatureCarousel
+            :model-value="currentApexCarouselIndex"
+            @update:model-value="currentApexCarouselIndex = $event"
+            :items="apexCarouselItems"
+            :paused="apexCarouselPaused"
+            :is-loading="isLoading"
+            :show-progress-bar="false"
+            carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
+            wrapper-class="apex-carousel-wrapper"
+            @item-click="handleCarouselClick"
+            @mouse-enter="pauseApexCarousel"
+            @mouse-leave="resumeApexCarousel"
+          />
+        </v-col>
+      </v-row>
 
-    <!-- Token Allocation Table Row -->
-    <v-row no-gutters>
-      <v-col cols="12" class="pa-2">
-        <TokenAllocationTable />
-      </v-col>
-    </v-row>
+      <!-- Token Allocation Table Row -->
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <TokenAllocationTable />
+        </v-col>
+      </v-row>
 
-    <!-- Transactions and Staking Row + Swap Widget Column -->
-    <v-row no-gutters>
-      <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
-        <TransactionsCard style="min-height: 396px;"></TransactionsCard>
-      </v-col>
-      <v-col cols="12" :xl="isSwapEnabled ? 5 : 6" :lg="isSwapEnabled ? 5 : 6" md="6" sm="12" class="pa-2" v-if="isStakingEnabled">
-        <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
-        <NoTokensCard v-else></NoTokensCard>
-      </v-col>
-      <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
-        <SwapWidget class="fill-height" />
-      </v-col>
-      <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
+      <!-- Transactions and Staking Row + Swap Widget Column -->
+      <v-row no-gutters>
+        <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
+          <TransactionsCard style="min-height: 396px"></TransactionsCard>
+        </v-col>
+        <v-col
+          cols="12"
+          :xl="isSwapEnabled ? 5 : 6"
+          :lg="isSwapEnabled ? 5 : 6"
+          md="6"
+          sm="12"
+          class="pa-2"
+          v-if="isStakingEnabled"
+        >
+          <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
+          <NoTokensCard v-else></NoTokensCard>
+        </v-col>
+        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
+          <SwapWidget class="fill-height" />
+        </v-col>
+        <!-- <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2">
         <CashbackCard></CashbackCard>
       </v-col> -->
-    </v-row>
+      </v-row>
 
-    <!-- KaiserEx Token Reception -->
-    <v-row no-gutters>
-      <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-        <v-card outlined class="liquid-glass">
-          <v-card-title>KaiserEx Token Reception</v-card-title>
-          <v-card-text>
-            <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
-              Receive Token from KaiserEx
-            </v-btn>
-            <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
-              {{ kaiserExMessage.text }}
-            </v-alert>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+      <!-- KaiserEx Token Reception -->
+      <v-row no-gutters>
+        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
+          <v-card outlined class="liquid-glass">
+            <v-card-title>KaiserEx Token Reception</v-card-title>
+            <v-card-text>
+              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
+                Receive Token from KaiserEx
+              </v-btn>
+              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
+                {{ kaiserExMessage.text }}
+              </v-alert>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
 
-    <!-- Claim Dialog -->
-    <ClaimDialog
-      :show="showClaimDialog"
-      @close="showClaimDialog = false"
-    />
-
+      <!-- Claim Dialog -->
+      <ClaimDialog :show="showClaimDialog" @close="showClaimDialog = false" />
     </template>
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
 import EmptyStateHero from '../components/EmptyStateHero.vue';
@@ -171,6 +198,7 @@ import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 
+import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -179,12 +207,11 @@ import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
-const router = instance?.proxy.$router;
 
 // Store refs
 const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { portfolio, portfolioTrendedValue } = toRefs(tapToolsStore);
+const { portfolio } = toRefs(tapToolsStore);
 const showClaimDialog = ref(false);
 
 const kaiserExLoading = ref(false);
@@ -196,7 +223,7 @@ const currentApexCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
 const isLoading = ref(false);
-
+const loadingTxs = computed(() => portfolioLoading.value);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
@@ -206,7 +233,7 @@ const carouselItems = ref<CarouselItem[]>([
     logo: assets.logoStackedLight,
     logoAlt: 'NIGHT Logo',
     backgroundImage: assets.midnightImage,
-    action: 'openClaimDialog'
+    action: 'openClaimDialog',
   },
   {
     id: 'gero-debit-card',
@@ -217,7 +244,7 @@ const carouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.debitCardBgImage,
     cardImage: assets.debitCardImage,
     action: 'showDebitCardInfo',
-    type: 'debit-card' as const
+    type: 'debit-card' as const,
   },
   {
     id: 'ada-cashback',
@@ -228,8 +255,8 @@ const carouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.cashbackCarouselImage,
     cardImage: assets.cashbackImage,
     action: 'navigateToCashback',
-    type: 'ada-cashback' as const
-  }
+    type: 'ada-cashback' as const,
+  },
 ]);
 
 // Carousel items for Apex
@@ -241,7 +268,7 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.geroDashboardApex,
     logoAlt: 'Apex Fusion Logo',
     backgroundImage: assets.apexBgDashboard,
-    action: 'showApexWelcome'
+    action: 'showApexWelcome',
   },
   {
     id: 'apex-wallet',
@@ -250,7 +277,7 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.walletGeroApex,
     logoAlt: 'Apex Wallet Logo',
     backgroundImage: assets.apexImage,
-    action: 'showApexWallet'
+    action: 'showApexWallet',
   },
   {
     id: 'apex-features',
@@ -259,16 +286,18 @@ const apexCarouselItems = ref<CarouselItem[]>([
     logo: assets.apexSvg,
     logoAlt: 'Apex Features Logo',
     backgroundImage: assets.apexBgDashboard,
-    action: 'showApexFeatures'
-  }
+    action: 'showApexFeatures',
+  },
 ]);
 
 const isStakingEnabled = computed(() => {
   if (loggedWallet.value?.baseAddress) {
-    return Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
+    return (
+      Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !== Cardano.AddressType.EnterpriseScript
+    );
   }
   return false;
-})
+});
 
 const isSwapEnabled = computed(() => {
   return networks.resolveSwapSupport(loggedWallet.value.chain, loggedWallet.value.network);
@@ -284,61 +313,86 @@ const shouldBackup = computed(() => {
 });
 
 const computedValues = computed(() => {
-  let assetsValue = 0
+  let assetsValue = 0;
   if (portfolio.value?.positionsFt) {
     portfolio.value.positionsFt.forEach(position => {
-      assetsValue += position.adaValue
-    })
+      assetsValue += position.adaValue;
+    });
   }
-  let collectibles = 0
+  let collectibles = 0;
   if (portfolio.value?.positionsNft) {
     portfolio.value.positionsNft.forEach(position => {
-      collectibles += position.adaValue
-    })
+      collectibles += position.adaValue;
+    });
   }
-  let lpsValue = 0
+  let lpsValue = 0;
   if (portfolio.value?.positionsLp) {
     portfolio.value.positionsLp.forEach(position => {
-      lpsValue += position.adaValue
-    })
+      lpsValue += position.adaValue;
+    });
   }
 
   // Fallback for chains without portfolio API support (like Apex)
   if (account.value) {
     if (account.value.controlled_amount && account.value.controlled_amount > 0) {
       // Handle native tokens: 'lovelace' for Cardano, empty string '' for Apex
-      assetsValue += account.value.controlled_amount / 1000000 // Convert to main unit (ADA/APEX)
+      assetsValue += account.value.controlled_amount / 1000000; // Convert to main unit (ADA/APEX)
     }
     // Add other asset values if they have USD/ADA pricing data
   }
 
-  const totalValue = assetsValue + collectibles + lpsValue
-  return { totalValue, assetsValue, collectibles, lpsValue }
-})
+  const totalValue = portfolio.value.adaValue;
+  return { totalValue, assetsValue, collectibles, lpsValue };
+});
+
+// Initialize portfolio data composable with 4-hour cache
+const portfolioComposable = usePortfolioData({
+  cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
+  enableCache: true,
+});
+
+const {
+  adaData: adaChartData,
+  usdData: usdChartData,
+  eurData: eurChartData,
+  isLoading: portfolioLoading,
+  loadDataProgressively,
+  refreshPortfolioData,
+  getCacheStats,
+  getCacheStatus,
+  firstLoadedCurrency,
+} = portfolioComposable;
 
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
     return {
-      adaData: Array.isArray(portfolioTrendedValue.value) ? portfolioTrendedValue.value : [],
-      usdData: [],
-    }
+      adaData: adaChartData.value,
+      usdData: usdChartData.value,
+      eurData: eurChartData.value,
+    };
   }
-  console.log('Computing chart data for non-Cardano wallet...');
   // For other chains, calculate from transactions
-  let graphData = undefined
-  let currentBalance = 0
+  let graphData = undefined;
+  let usdData = undefined;
+  let eurData = undefined;
+  let currentBalance = 0;
   if (transactions.value) {
-    graphData = []
+    graphData = [];
+    usdData = [];
+    eurData = [];
     transactions.value.forEach(tx => {
-      currentBalance += tx.ada
-      graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000])
-    })
+      currentBalance += tx.ada;
+      graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
+      usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+      eurData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+    });
   }
   return {
     adaData: graphData || [],
-    usdData: [] // No historical USD data for non-mainnet
-  }
+    usdData: usdData || [],
+    eurData: eurData || [],
+  };
 });
 
 // Apex carousel methods
@@ -350,9 +404,8 @@ const resumeApexCarousel = () => {
   apexCarouselPaused.value = false;
 };
 
-
 const handleCarouselClick = (item: any) => {
-  switch(item.action) {
+  switch (item.action) {
     case 'openClaimDialog':
       openClaimDialog();
       break;
@@ -374,99 +427,134 @@ const handleCarouselClick = (item: any) => {
     case 'showApexFeatures':
       showApexFeatures();
       break;
-    default:
-      console.log('Carousel item clicked:', item.id);
   }
 };
 
 const openClaimDialog = () => {
-  console.log('Opening claim dialog...');
   showClaimDialog.value = true;
 };
 
 const showUpdateInfo = () => {
-  console.log('Showing update info...');
   // Add your update info logic here
 };
 
 const showDebitCardInfo = () => {
-  console.log('Showing debit card info...');
   // Add your debit card info logic here
 };
 
 const navigateToCashback = () => {
   // Only navigate if not already on the cashback page
-  if (router && router.currentRoute.path !== '/cashback') {
-    console.log('Navigating to cashback page...');
-    router.push('/cashback');
+  const proxy = instance?.proxy as any;
+  if (proxy && proxy.$router && proxy.$route.path !== '/cashback') {
+    proxy.$router.push('/cashback');
   }
 };
 
 const showApexWelcome = () => {
-  console.log('Welcome to Apex Fusion!');
   // Add your Apex welcome logic here
 };
 
 const showApexWallet = () => {
-  console.log('Showing Apex Wallet info...');
   // Add your Apex wallet logic here
 };
 
 const showApexFeatures = () => {
-  console.log('Showing Apex Features...');
   // Add your Apex features logic here
 };
-
 
 const handleReceiveKaiserExToken = async () => {
   kaiserExLoading.value = true;
   kaiserExMessage.value = null;
 
   try {
-    await receiveKaiserExToken((tokenData) => {
+    await receiveKaiserExToken(tokenData => {
       kaiserExMessage.value = {
         type: 'success',
-        text: `Token received successfully! Token: ${tokenData.access_token}`
+        text: `Token received successfully! Token: ${tokenData.access_token}`,
       };
       kaiserExLoading.value = false;
     });
   } catch (error) {
     kaiserExMessage.value = {
       type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
     kaiserExLoading.value = false;
+  } finally {
+    // Always ensure loading state is cleared, even if popup was manually closed
+    setTimeout(() => {
+      kaiserExLoading.value = false;
+    }, 1000);
   }
 };
 
 // Empty state handlers
 const handleBuyCrypto = () => {
-  console.log('Opening buy crypto dialog - emitting to parent');
   instance?.proxy?.$emit('open-buy-dialog');
 };
 
 const handleShowReceive = () => {
-  console.log('Opening receive dialog - emitting to parent');
   instance?.proxy?.$emit('open-receive-dialog');
 };
 
 const handleOpenLearn = () => {
-  console.log('Opening learning resources...');
   // Could open a modal with tutorials or redirect to docs
   window.open('https://docs.gerowallet.io', '_blank');
 };
 
 const handleStartTutorial = () => {
-  console.log('Starting interactive tutorial...');
   // Implement interactive tutorial
 };
 
 const handleBackupWallet = () => {
-  console.log('Backup wallet button clicked - emitting to parent');
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
+// Portfolio data loading is now handled by usePortfolioData composable
 
+// Utility function to refresh portfolio data
+const refreshPortfolioChart = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (address) {
+    await refreshPortfolioData(address);
+  }
+};
+
+// Utility function to get cache information (for debugging)
+const getPortfolioCacheInfo = async () => {
+  const address = loggedWallet.value?.baseAddress;
+  if (!address) {
+    return null;
+  }
+
+  const stats = await getCacheStats();
+  const status = await getCacheStatus(address);
+
+  return { stats, status };
+};
+
+// Expose functions for potential use
+defineExpose({
+  refreshPortfolioChart,
+  getPortfolioCacheInfo,
+});
+// Watch for wallet changes to reload portfolio data with parallel loading
+watch(
+  () => loggedWallet.value?.baseAddress,
+  async (newAddress, oldAddress) => {
+    if (newAddress && newAddress !== oldAddress) {
+      try {
+        // Start parallel loading immediately (don't await - let it run in background)
+        loadDataProgressively(newAddress).catch(error => {
+          console.warn('Portfolio data loading failed:', error);
+        });
+      } catch (error) {
+        console.warn('Failed to start portfolio data loading:', error);
+      }
+    }
+  },
+  { immediate: true } // Load data on mount
+);
 </script>
 <style scoped>
 .transactions-table {

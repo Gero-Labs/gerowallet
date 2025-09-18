@@ -40,6 +40,14 @@ export class WalletManager {
   }
 
   /**
+   * Get the current wallet background instance
+   * @returns WalletBg instance or null if not logged in
+   */
+  getWalletBg(): WalletBg | null {
+    return this.walletBg;
+  }
+
+  /**
    * Login with a wallet
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
@@ -81,7 +89,8 @@ export class WalletManager {
           encryptedMnemonic: walletBg?.encryptedMnemonic,
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
-          token: walletBg.token
+          token: walletBg.token,
+          api: walletBg.api,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
@@ -112,27 +121,35 @@ export class WalletManager {
    */
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
     LoadingState.setText('Setting up wallet address...');
-    const promises = []
+    const promises = [];
+
+    if (walletBg.type === WalletType.Google) {
+      promises.push(
+        zkFoldApi.walletAddress(walletBg.userId).then(res => {
+          if (res['status'] !== 200) {
+            throw new Error('Failed to get address');
+          }
+          walletBg.baseAddress = res['data']['address'];
+        })
+      );
+    }
 
     LoadingState.setText('Loading blockchain data...');
-    walletBg.loadGenesis()
-    const promises2: any[] = []
-    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams())
+    walletBg.loadGenesis();
+    const promises2: any[] = [];
+    promises2.push(walletBg.loadAssets(), walletBg.loadEpochParams());
     if (networks.resolveStakingSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(walletBg.loadPools())
-      promises2.push(walletBg.loadRewards())
+      promises2.push(walletBg.loadRewards());
     }
+
     if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(walletBg.loadDReps())
-    }
-    if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(DexHunterStore.loadTokens())
-      promises2.push(DexHunterStore.loadBlacklistPolicies())
+      promises2.push(DexHunterStore.loadTokens());
+      promises2.push(DexHunterStore.loadBlacklistPolicies());
     }
     if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-      promises2.push(BringStore.loadBringCache(walletBg.baseAddress))
+      promises2.push(BringStore.loadBringCache(walletBg.baseAddress));
     }
-    await Promise.all(promises2)
+    await Promise.all(promises2);
 
     LoadingState.setText('Loading wallet data...');
     promises.push(
@@ -141,8 +158,8 @@ export class WalletManager {
       walletBg.loadAccount(),
       walletBg.loadContacts(),
       walletBg.loadConnectedDapps(),
-      walletBg.loadTransactions(),
-    )
+      walletBg.loadTransactions()
+    );
 
     const chain = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network = Object.keys(Network).find(key => Network[key] === walletBg.network);
@@ -159,7 +176,7 @@ export class WalletManager {
       address,
       baseAddress: walletBg.baseAddress,
       stakeAddress: walletBg.stakeAddress,
-      isEnterpriseAddress: walletBg.isEnterpriseAddress()
+      isEnterpriseAddress: walletBg.isEnterpriseAddress(),
     });
 
     console.debug('🔐 Setting up Ably service for wallet switch:', {
@@ -168,7 +185,7 @@ export class WalletManager {
       network,
       address,
       baseAddress: walletBg.baseAddress,
-      stakeAddress: walletBg.stakeAddress
+      stakeAddress: walletBg.stakeAddress,
     });
     console.debug('🔐 Ably service current state before setup:', {
       connectionState: ablyService['client']?.connection?.state,
@@ -176,7 +193,7 @@ export class WalletManager {
       currentAuthParams: ablyService['authParams'],
       hasApi: !!ablyService['api'],
       apiChain: ablyService['api']?.chain,
-      apiNetwork: ablyService['api']?.network
+      apiNetwork: ablyService['api']?.network,
     });
 
     // Force close existing connection if any to ensure fresh authentication
@@ -188,7 +205,7 @@ export class WalletManager {
     console.debug('📡 New API instance details:', {
       chain: walletBg.api.chain,
       network: walletBg.api.network,
-      provider: walletBg.api.provider
+      provider: walletBg.api.provider,
     });
     console.debug('📡 Connecting to Ably service...');
     ablyService.connect();
@@ -201,7 +218,7 @@ export class WalletManager {
     // Additional check - wait for connection to be established
     const maxWaitTime = 10000; // 10-second max
     const startTime = Date.now();
-    while (ablyService['client']?.connection?.state !== 'connected' && (Date.now() - startTime) < maxWaitTime) {
+    while (ablyService['client']?.connection?.state !== 'connected' && Date.now() - startTime < maxWaitTime) {
       console.debug('⏳ Waiting for Ably connection... Current state:', ablyService['client']?.connection?.state);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -247,32 +264,35 @@ export class WalletManager {
 
     // Subscribe to group channel
     promises.push(
-      ablyService.subscribeToGroupChannel(chain, network, {
-        onTip: async (msg: Ably.InboundMessage) => {
-          try {
-            if (this.tipMutex.isLocked()) {
-              console.debug('⏳ Tip mutex is locked, skipping');
-              return;
+      ablyService
+        .subscribeToGroupChannel(chain, network, {
+          onTip: async (msg: Ably.InboundMessage) => {
+            try {
+              if (this.tipMutex.isLocked()) {
+                console.debug('⏳ Tip mutex is locked, skipping');
+                return;
+              }
+              const tip = JSON.parse(msg.data)?.data as Tip;
+              console.debug('TIP', tip);
+              if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
+                return;
+              }
+              this.tipMutex
+                .runExclusive(() => {
+                  walletBg.syncService.sync(tip);
+                })
+                .catch(err => {
+                  console.error('TIP processing failed', err);
+                });
+            } catch (e) {
+              console.error(e);
             }
-            const tip = JSON.parse(msg.data)?.data as Tip;
-            console.debug('TIP', tip);
-            if (ablyService.isTipProcessed(tip.hash) || !tip.epoch) {
-              return;
-            }
-            this.tipMutex.runExclusive(() => {
-              walletBg.syncService.sync(tip);
-            })
-              .catch(err => {
-                console.error('TIP processing failed', err);
-              });
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }).catch(error => {
-        console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably group channel fails
-      })
+          },
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
+          // Continue wallet initialization even if Ably group channel fails
+        })
     );
 
     // Wait for all initialization promises to complete
@@ -315,6 +335,17 @@ export class WalletManager {
         console.warn('Failed to cleanup Ably service during logout:', ablyError);
       }
 
+      // Clean up store messaging service
+      try {
+        const { storeMessaging } = await import('@/services/storeMessaging.service');
+        if (storeMessaging && typeof storeMessaging.destroy === 'function') {
+          storeMessaging.destroy();
+          console.log('Store messaging service cleaned up successfully');
+        }
+      } catch (storeMessagingError) {
+        console.warn('Failed to cleanup store messaging service during logout:', storeMessagingError);
+      }
+
       // Note: Don't send logout message to background since this method
       // is already called FROM the background logout handler
 
@@ -327,6 +358,16 @@ export class WalletManager {
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
         }
+      }
+
+      // Stop sync intervals before clearing wallet data
+      try {
+        if (this.walletBg) {
+          this.walletBg.endSync();
+          console.debug('WalletBg sync intervals cleared during logout');
+        }
+      } catch (syncError) {
+        console.warn('Failed to end sync during logout:', syncError);
       }
 
       // Clear wallet store data
@@ -353,11 +394,13 @@ export class WalletManager {
       // Dispatch logout event
       try {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('gero:logout', {
-            bubbles: true,
-            cancelable: true,
-            composed: false,
-          }));
+          window.dispatchEvent(
+            new CustomEvent('gero:logout', {
+              bubbles: true,
+              cancelable: true,
+              composed: false,
+            })
+          );
         }
       } catch (eventError) {
         console.warn('Failed to dispatch logout event:', eventError);
@@ -393,10 +436,10 @@ export class WalletManager {
    */
   private closeAllOtherExtensionPopups(): void {
     if (typeof chrome !== 'undefined' && chrome.windows) {
-      chrome.windows.getCurrent(function(currentWindow) {
+      chrome.windows.getCurrent(function (currentWindow) {
         const currentId = currentWindow.id;
-        chrome.windows.getAll(function(windows) {
-          windows.forEach(function(window) {
+        chrome.windows.getAll(function (windows) {
+          windows.forEach(function (window) {
             if (window.id !== currentId && window.type === 'popup') {
               chrome.windows.remove(window.id!);
             }

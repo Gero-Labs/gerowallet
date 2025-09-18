@@ -92,32 +92,32 @@ const swapDetails = computed(() => {
   if (!tx.value || !utxos.value || utxos.value.length === 0) {
     return null;
   }
-  
+
   const txBody = tx.value.body;
-  
+
   // Calculate input value from UTXOs
   let inputCoins = BigInt(0);
   const inputAssets = new Map<Cardano.AssetId, bigint>();
-  
+
   for (const input of txBody.inputs) {
-    const utxo = utxos.value.find((utxo: Cardano.Utxo) => 
+    const utxo = utxos.value.find((utxo: Cardano.Utxo) =>
       input.txId === utxo[0].txId && input.index === utxo[0].index
     );
     if (utxo) {
       inputCoins += BigInt(utxo[1].value.coins);
       if (utxo[1].value.assets) {
-        utxo[1].value.assets.forEach((amount, assetId) => {
+        Object.entries(utxo[1].value.assets).forEach(([assetId, amount]) => {
           const currentAmount = inputAssets.get(assetId) || BigInt(0);
           inputAssets.set(assetId, currentAmount + BigInt(amount));
         });
       }
     }
   }
-  
+
   // Calculate change output value (what stays in our wallet)
   let changeCoins = BigInt(0);
   const changeAssets = new Map<Cardano.AssetId, bigint>();
-  
+
   for (const output of txBody.outputs) {
     if (output.address === changeAddress.value) {
       changeCoins += BigInt(output.value.coins);
@@ -129,11 +129,11 @@ const swapDetails = computed(() => {
       }
     }
   }
-  
+
   // Calculate what we're giving away (input - change - fee)
   const fee = BigInt(txBody.fee);
   const giveCoins = inputCoins - changeCoins - fee;
-  
+
   const giveAssets: Array<{amount: string, currency: string, id: string}> = [];
   inputAssets.forEach((inputAmount, assetId) => {
     const changeAmount = changeAssets.get(assetId) || BigInt(0);
@@ -146,7 +146,7 @@ const swapDetails = computed(() => {
       });
     }
   });
-  
+
   const swapDetails = {
     give: {
       total: Number(giveCoins),
@@ -162,7 +162,7 @@ const swapDetails = computed(() => {
     recipient: recipient.value,
     txMetadata: tx.value.auxiliaryData,
   };
-  
+
   console.log('SwapDetails (Cardano JS SDK):', swapDetails);
   return swapDetails;
 })
@@ -182,7 +182,7 @@ async function scanTx(txData: Cardano.Tx) {
   risks.value.score = undefined;
   loading.value = true;
   tx.value = txData;
-  
+
   try {
     const cborHex = getCborHex();
     risks.value = await cardanoShieldApi.scanTx({
@@ -197,7 +197,7 @@ async function scanTx(txData: Cardano.Tx) {
       addressRisk: 'unknown',
     };
   }
-  
+
   loading.value = false;
 }
 </script>

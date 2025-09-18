@@ -124,11 +124,12 @@ import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
-
+import ledgerUtils from '@/shared/utils/ledger';
+import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
@@ -273,7 +274,7 @@ const swapDetails = computed(() => {
   const assetsGive = payTokens.filter(token => token.name !== 'cardano').map(token => {
     return { amount: token.amount, currency: token.name, id: token.id };
   });
-
+  console.log('receiveTokens: ', receiveTokens);
   const foundAda = receiveTokens.find(token => token.name === 'cardano');
   const totalReceive = foundAda ? foundAda.amount : 0;
   const assetsReceive = receiveTokens.filter(token => token.name !== 'cardano').map(token => {
@@ -319,35 +320,68 @@ const sign = async () => {
     try {
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
-      const witnessResult = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: {
-          txCbor: txCbor,
-          partialSign: partialSign,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          utxos: utxos.value,
-          addresses: keys.value,
-          isUsb: !isBT.value
+      const mergeWitnesses = request.value?.data?.mergeWitnesses;
+      if (loggedWallet.value.type === WalletType.Normal) {
+        const witnessResult = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.SIGN_TX,
+          data: {
+            txCbor: txCbor,
+            partialSign: partialSign,
+            password: spendingPassword.value,
+            accountIndex: 0,
+            utxos: utxos.value,
+            addresses: keys.value,
+            mergeWitnesses: mergeWitnesses || false,
+          }
+        }) as { data: { witnesses?: any; error?: string } };
+
+        console.log('Transaction signed successfully:', witnessResult);
+
+        if (witnessResult.data.error) {
+          throw new Error(witnessResult.data.error);
         }
-      }) as { data: { witnesses?: any; error?: string } };
 
-      console.log('Transaction signed successfully:', witnessResult);
-
-      if (witnessResult.data.error) {
-        throw new Error(witnessResult.data.error);
-      }
-
-      console.log('Signed transaction witness:', witnessResult.data.witnesses);
-      witnesses.value = witnessResult.data.witnesses;
-      if (txAutoSubmit.value) {
-        await confirm();
+        console.log('Signed transaction witness:', witnessResult.data.witnesses);
+        witnesses.value = witnessResult.data.witnesses;
+        if (txAutoSubmit.value) {
+          await confirm();
+        }
+      } else if (loggedWallet.value.type === WalletType.Ledger) {
+        const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+        const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+          tx,
+          keys.value,
+          utxos.value,
+          !isBT.value, // isUsb flag (inverted from isBT)
+          networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+        );
+        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+          signatures,
+        })
+        console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
+        witnesses.value = transactionWitnessSet.toCbor();
+        if (txAutoSubmit.value) {
+          await confirm();
+        }
       }
     } catch (e: any) {
-      console.log(e);
-      snackbar.setError(e);
+      if (e instanceof DeviceStatusError) {
+        const error: DeviceStatusError = e;
+        switch (error.code) {
+          case 0x5515:
+          case 0x6E11:
+            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            break;
+          default:
+            snackbar.setError('Ledger device error: ' + error.message);
+        }
+      } else {
+        console.log(e);
+        snackbar.setError(e);
+      }
+    } finally {
+      txSignLoading.value = false;
     }
-    txSignLoading.value = false;
   };
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {

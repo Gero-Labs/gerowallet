@@ -19,6 +19,7 @@ export const sharedConfig: UserConfig = {
       '@/': `${r('src')}/`,
       buffer: 'buffer',
       '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
+      '@emurgo/cardano-message-signing-nodejs': '@emurgo/cardano-message-signing-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
       stream: r('src/shims/stream.js'),
@@ -33,6 +34,8 @@ export const sharedConfig: UserConfig = {
     __NAME__: JSON.stringify(packageJson.name),
     APP_VERSION: JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+    TextDecoder: 'window.TextDecoder',
+    TextEncoder: 'window.TextEncoder',
   },
   plugins: [
     Vue({
@@ -58,8 +61,11 @@ export const sharedConfig: UserConfig = {
         Buffer: true,
         global: true,
         process: true,
+        TextDecoder: true,
+        TextEncoder: true,
       },
       include: ['crypto', 'buffer', 'events', 'stream', 'util', 'os', 'path', 'pbkdf2'],
+      protocolImports: true,
     }),
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
@@ -127,15 +133,6 @@ export const sharedConfig: UserConfig = {
       // topLevelAwait() // Temporarily disabled
     ]
   },
-  server: {
-    hmr: {
-      overlay: false,
-      clientPort: port,
-    },
-    fs: {
-      allow: ['..'],
-    },
-  },
   esbuild: {
     target: 'es2022',
     keepNames: isDev,
@@ -163,17 +160,29 @@ export default defineConfig(({ command }) => {
       port,
       hmr: {
         host: 'localhost',
+        overlay: false,
+        clientPort: port,
       },
       origin: `http://localhost:${port}`,
+      fs: {
+        allow: ['..'],
+      },
       watch: {
         usePolling: true,
         interval: 1000,
         ignored: [
           '**/DumpStack.log.tmp',
-          'C:/DumpStack.log.tmp',
-          '**/C:/DumpStack.log.tmp',
+          '**/DumpStack.log*',
+          '**/*.tmp',
+          '**/*.temp',
+          '**/dump*',
+          '**/temp/**',
+          '**/tmp/**',
           '**/node_modules/**',
-          '**/.git/**'
+          '**/.git/**',
+          'D:\\DumpStack.log.tmp',
+          'D:\\DumpStack.log',
+          'D:\\*.tmp'
         ]
       }
     },
