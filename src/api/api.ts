@@ -23,7 +23,7 @@ export class Api {
   }
 
   async ablyToken(baseAddress: string) {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/ably/token?chain=${this.chain}&network=${this.network}&address=${baseAddress}`
     );
   }
@@ -118,7 +118,6 @@ export class Api {
         `/api/transactions/info?chain=${this.chain}&network=${this.network}`,
         txHashes
       );
-      console.log('data:', data);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {
@@ -130,7 +129,7 @@ export class Api {
   }
 
   async getTransactionsCbor(txHashes: string[]) {
-    return await this.axiosInstance.post(
+    return this.axiosInstance.post(
       `/api/transactions/cbor?chain=${this.chain}&network=${this.network}&provider=${this.provider}`,
       txHashes
     );
@@ -140,11 +139,11 @@ export class Api {
 
   async getAssetsInfo(units: string[]) {
     const url: string = `/api/assets/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}`;
-    return await this.axiosInstance.post(url, units);
+    return this.axiosInstance.post(url, units);
   }
 
   async getDetailedAssetsInfo(policyId: string, assetName: string) {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/assets/detailedInfo?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
     );
   }
@@ -170,13 +169,13 @@ export class Api {
   }
 
   async getGenesis() {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/genesis?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
     );
   }
 
   async getEpochParameters(epochNo: number): Promise<any> {
-    return await this.axiosInstance.get(
+    return this.axiosInstance.get(
       `/api/epoch_params?chain=${this.chain}&network=${this.network}&provider=${this.provider}&epoch_no=${epochNo}`
     );
   }
@@ -250,6 +249,55 @@ export class Api {
       throw parseHttpError(error);
     }
   }
+
+  // Strike Finance Perpetuals API methods
+  strike = {
+    /**
+     * Get all perpetual positions for a wallet address
+     */
+    getPositions: async (address: string): Promise<any[]> => {
+      try {
+        const { data, status } = await this.axiosInstance.get(`/api/strike/perpetuals/getPositions`, {
+          params: { address }
+        });
+        if (status === 200) return data || [];
+        throw parseHttpError(data);
+      } catch (error: any | AxiosError) {
+        if (error.response?.status === 404) {
+          return [];
+        }
+        throw parseHttpError(error);
+      }
+    },
+
+    /**
+     * Open a new perpetual position
+     */
+    openPosition: async (request: any): Promise<string> => {
+      try {
+        const requestBody = { request };
+        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/openPosition`, requestBody);
+        if (status === 200) return data;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+
+    /**
+     * Close an existing perpetual position
+     */
+    closePosition: async (request: any): Promise<string> => {
+      try {
+        const requestBody = { request };
+        const { data, status } = await this.axiosInstance.post(`/api/strike/perpetuals/closePosition`, requestBody);
+        if (status === 200) return data;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+  };
 
   async getMember(memberId: string): Promise<any> {
     try {

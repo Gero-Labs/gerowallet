@@ -11,6 +11,6 @@ const axiosInstance = axios.create({
 
 export default {
   async checkClaim(address: string) {
-    return await axiosInstance.get(`/api/claim/check/cardano/${address}`);
+    return axiosInstance.get(`/api/claim/check/cardano/${address}`);
   },
 }

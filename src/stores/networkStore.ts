@@ -83,7 +83,7 @@ function broadcastFromBackground(updates: Partial<NetworkStore>) {
       // Use current local store state as the base to avoid race conditions
       const current = networkStore;
       const finalState = { ...current, ...serializedUpdates };
-      
+
       chrome.storage.local.set({
         [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
           if (typeof value === 'bigint') {
@@ -175,7 +175,7 @@ export default {
     if (networkStore.tickerStatisticsIntervalId) {
       clearInterval(networkStore.tickerStatisticsIntervalId);
     }
-    
+
     const resetState: NetworkStore = {
       assets: {},
       epochParams: null,

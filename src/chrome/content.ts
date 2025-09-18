@@ -140,36 +140,72 @@ async function injectBring() {
   });
 }
 
+// Store listener reference for cleanup
+let messageListener: ((message: any, sender: any, sendResponse: any) => void) | null = null;
+let windowLoadListener: (() => void) | null = null;
+
 if (shouldInject()) {
   injectScript();
   (async () => {
     await injectBring();
     Messaging.createProxyController();
+    
+    // Store listener reference for cleanup
+    messageListener = (message, _sender, _sendResponse) => {
+      if (message.action === 'showOverlay') {
+        showOverlay(message.url); // Show overlay on the specific tab with this URL
+      } else if (message.action === 'removeOverlay') {
+        const overlay: HTMLElement = document.getElementById('custom-overlay');
+        if (overlay) {
+          document.body.removeChild(overlay);
+        }
+      }
+    };
+    
+    chrome.runtime.onMessage.addListener(messageListener);
   })();
 }
-
-chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
-  if (message.action === 'showOverlay') {
-    showOverlay(message.url); // Show overlay on the specific tab with this URL
-  } else if (message.action === 'removeOverlay') {
-    const overlay: HTMLElement = document.getElementById('custom-overlay');
-    if (overlay) {
-      document.body.removeChild(overlay);
-    }
-  }
-});
 
 function showOverlay(url: string) {
   if (document.body) {
     appendOverlay(url);
   } else {
-    const onLoad = () => {
+    windowLoadListener = () => {
       appendOverlay(url);
-      window.removeEventListener('load', onLoad);
+      if (windowLoadListener) {
+        window.removeEventListener('load', windowLoadListener);
+        windowLoadListener = null;
+      }
     };
-    window.addEventListener('load', onLoad);
+    window.addEventListener('load', windowLoadListener);
   }
 }
+
+// Cleanup on page unload to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+  if (messageListener) {
+    chrome.runtime.onMessage.removeListener(messageListener);
+    messageListener = null;
+  }
+  
+  if (windowLoadListener) {
+    window.removeEventListener('load', windowLoadListener);
+    windowLoadListener = null;
+  }
+});
+
+// Also cleanup on page hide (for back/forward cache)
+window.addEventListener('pagehide', () => {
+  if (messageListener) {
+    chrome.runtime.onMessage.removeListener(messageListener);
+    messageListener = null;
+  }
+  
+  if (windowLoadListener) {
+    window.removeEventListener('load', windowLoadListener);
+    windowLoadListener = null;
+  }
+});
 
 function appendOverlay(url: string) {
   if (!document.getElementById('custom-overlay')) {

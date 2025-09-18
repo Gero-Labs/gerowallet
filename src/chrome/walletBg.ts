@@ -5,10 +5,9 @@ import {
   Bip32PrivateKey,
   Ed25519PrivateKey,
   Ed25519PublicKey,
-  Ed25519PublicKeyHex,
-  Ed25519SignatureHex,
   Hash28ByteBase16,
 } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
 import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
@@ -72,7 +71,7 @@ import {
 } from '@/shared/utils/converter';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
-import { computeTxHash, deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
 
 let blockchainDb: Dexie = null;
@@ -137,6 +136,8 @@ export class WalletBg {
 
   unsubscribeAll() {
     this.loaderFactory.unsubscribeAll();
+    // CRITICAL: Clear all intervals and alarms during cleanup
+    this.endSync();
   }
 
   networkId(): number {
@@ -209,7 +210,7 @@ export class WalletBg {
       }
       transaction.body.outputs.forEach((out, idx) => {
         let outAddress = out.address;
-        const outAddressType = Cardano.Address.fromString(outAddress).getType();
+        const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
         try {
           // TODO Support Byron Addresses
           if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
@@ -776,7 +777,7 @@ export class WalletBg {
    * @param accountIndex - Account index for derivation
    * @param utxos - UTXOs for reference
    * @param addresses - Address mappings (key-value pairs of addresses)
-   * @param isUsb - USB connection flag for hardware wallets
+   * @param mergeWitnesses - Whether to merge existing witnesses into the transaction
    * @returns Promise with witness set hex string
    */
   async signTx(
@@ -786,7 +787,7 @@ export class WalletBg {
     accountIndex: number,
     utxos: Cardano.Utxo[],
     addresses: Keys,
-    isUsb?: boolean
+    mergeWitnesses: boolean = false,
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -798,104 +799,94 @@ export class WalletBg {
       // Already a Cardano JS SDK transaction object
       transaction = txInput;
     }
+    // Decrypt private key
+    const decrypted = decrypt(this.encryptedPrivateKey, password);
+    const decodedHash = decryptWithPassword(password, JSON.parse(decrypted));
+    password = null;
 
-    // Handle different wallet types
-    if (this.type === WalletType.Ledger) {
-      // Ledger signing logic would go here
-      // For now, return empty witnesses to indicate hardware wallet integration needed
-      return { witnesses: '' };
-    } else if (this.type === WalletType.Trezor) {
-      // Trezor signing logic would go here
-      return { witnesses: '' };
-    } else {
-      // Software wallet signing using Cardano JS SDK
+    if (!decodedHash && partialSign === false) {
+      throw TxSignError.ProofGeneration;
+    }
 
-      // Decrypt private key
-      const decrypted = decrypt(this.encryptedPrivateKey, password);
-      const decodedHash = decryptWithPassword(password, JSON.parse(decrypted));
-      password = null;
+    const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
 
-      if (!decodedHash && partialSign === false) {
-        throw TxSignError.ProofGeneration;
-      }
-
-      const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
-
-      // Derive account private key
-      const accountPrivateKey = rootPrivateKey.derive([
+      // Derive an account private key
+      const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
         WalletTypePurpose.CIP1852,
         CoinTypes.CARDANO,
         HARDENED + accountIndex,
       ]);
 
-      // Create signature map for the witness
+      // Create a signature map for the witness
       const signatures = new Map<string, string>();
 
-      // Analyze transaction to determine required signatures
-      const requiredSigners = analyzeTransactionForSignatures(
-        transaction,
-        utxos,
-        addresses,
-        accountIndex,
-        this.stakeAddress,
-        this.paymentKeyExternal.bind(this),
-        this.stakeKey.bind(this)
-      );
+    // Analyze transaction to determine required signatures
+    const requiredSigners = analyzeTransactionForSignatures(
+      transaction,
+      utxos,
+      addresses,
+      accountIndex,
+      this.stakeAddress,
+      this.paymentKeyExternal.bind(this),
+      this.stakeKey.bind(this)
+    );
 
-      console.debug('🔍 Required signers analysis:');
-      console.debug(`  Found ${requiredSigners.length} required signers`);
-      requiredSigners.forEach((signer, index) => {
-        console.debug(`  Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
-      });
+    console.debug('🔍 Required signers analysis:');
+    console.debug(`  Found ${requiredSigners.length} required signers`);
+    requiredSigners.forEach((signer, index) => {
+      console.debug(`  Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
+    });
 
-      // Sign with each required key
-      for (const signer of requiredSigners) {
-        console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+    // Sign with each required key
+    for (const signer of requiredSigners) {
+      console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
 
-        const privateKey = accountPrivateKey.derive(signer.derivationPath);
-        const rawPublicKey = privateKey.toRawKey().toPublic();
+        const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
+        const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
 
-        // Create transaction hash for signing
-        const txBodyHash = computeTxHash(transaction.body);
-        const txBodyHashBytes = Buffer.from(txBodyHash, 'hex');
+        // Sign the transaction hash as a HexBlob type
+        const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
 
-        console.debug(`  Transaction hash: ${txBodyHash}`);
+      // Use the raw public key bytes (32 bytes) for the witness map, not the extended key
+      const rawPublicKeyBytes = rawPublicKey.bytes();
+      const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
 
-        // Sign the transaction hash
-        const signature = privateKey.toRawKey().sign(txBodyHashBytes);
+      console.debug(`  Public key: ${rawPublicKeyHex}`);
+      console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
 
-        // Use the raw public key bytes (32 bytes) for the witness map, not the extended key
-        const rawPublicKeyBytes = rawPublicKey.bytes();
-        const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
-
-        console.debug(`  Public key: ${rawPublicKeyHex}`);
-        console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
-
-        signatures.set(rawPublicKeyHex as Ed25519PublicKeyHex, signature.hex() as Ed25519SignatureHex);
+        signatures.set(rawPublicKey.hex(), signature.hex());
       }
 
-      console.debug(`🔏 Total signatures created: ${signatures.size}`);
-      console.debug('🔏 Signature map entries:');
-      signatures.forEach((sig, pubKey) => {
-        console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
-      });
+    console.debug(`🔏 Total signatures created: ${signatures.size}`);
+    console.debug('🔏 Signature map entries:');
+    signatures.forEach((sig, pubKey) => {
+      console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
+    });
 
-      // Create witness set - ensure signatures map is properly set
+      // Create a witness set - ensure a signature map is properly set
       const witness: Cardano.Witness = {
         signatures: new Map(signatures), // Create a new Map to ensure it's properly set
-        scripts: transaction.witness?.scripts,
-        datums: transaction.witness?.datums,
-        redeemers: transaction.witness?.redeemers,
-        bootstrap: transaction.witness?.bootstrap,
       };
+      if (mergeWitnesses) {
+        // Merge existing signatures with new ones
+        if (transaction.witness?.signatures) {
+          transaction.witness.signatures.forEach((sig, pubKey) => {
+            witness.signatures.set(pubKey, sig);
+          });
+        }
+        witness.scripts = transaction.witness?.scripts
+        witness.datums = transaction.witness?.datums
+        witness.redeemers = transaction.witness?.redeemers
+        witness.bootstrap = transaction.witness?.bootstrap
+      }
 
-      // Serialize witness to CBOR hex
-      const witnessHex = serializeWitness(witness);
+    // Serialize witness to CBOR hex
+    const witnessHex = serializeWitness(witness);
 
-      return {
-        witnesses: witnessHex,
-      };
-    }
+    return {
+      witnesses: witnessHex,
+    };
+
   }
 
   /**
