@@ -67,7 +67,7 @@ const gradientClass = computed(() =>
           block
           :class="['create-btn', isApex ? 'apexButton transition' : 'geroButton transition']"
           large
-          @click:button="enableCreateOrImportSeedPhrase"
+          @click="enableCreateOrImportSeedPhrase"
         >
           Create or Import Seed Phrase
         </GButton>

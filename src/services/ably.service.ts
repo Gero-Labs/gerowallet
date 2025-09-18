@@ -123,7 +123,7 @@ class AblyService {
       this.client.connection?.close();
       this.client.close();
       this.api = null;
-      
+
       // Clear any pending message chunks
       messageReconstructionService.clearAll();
     } catch (e) {
@@ -264,7 +264,7 @@ class AblyService {
                   try {
                     const chunk = JSON.parse(msg.data);
                     console.debug('📦 Received SYNC_CHUNK on private channel:', chunk);
-                    
+
                     const reconstructedMessage = messageReconstructionService.processChunk(chunk);
                     if (reconstructedMessage) {
                       // Message is complete, handle based on original message type

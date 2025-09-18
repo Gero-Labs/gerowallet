@@ -20,6 +20,7 @@
 import { computed, toRefs, watch, ref, onMounted } from 'vue';
 import networks from '@/utils/networks';
 import { networkStore } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 import { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
 
@@ -32,11 +33,20 @@ const ticker = ref<Object>({
   priceChangePercent: 0,
 })
 
-watch(price, (val) => {
+// Computed property for Kraken price with fallback to network store
+const krakenPrice = computed(() => {
+  return priceStore.adaUsd || {
+    lastPrice: price.value?.lastPrice || 0,
+    priceChange: price.value?.priceChange || 0,
+    priceChangePercentage: price.value?.priceChangePercent || 0
+  };
+});
+
+watch(krakenPrice, (val) => {
   ticker.value.prevPrice = ticker.value.lastPrice;
   ticker.value.lastPrice = val.lastPrice;
-  ticker.value.priceChange = Number(val.priceChange).toFixed(3);
-  ticker.value.priceChangePercent = Number(val.priceChangePercent).toFixed(2);
+  ticker.value.priceChange = Number(val.priceChange || 0).toFixed(3);
+  ticker.value.priceChangePercent = Number(val.priceChangePercentage || 0).toFixed(2);
 }, { deep: true })
 
 const currencyLogo = computed(() => {
@@ -44,9 +54,10 @@ const currencyLogo = computed(() => {
 })
 
 onMounted(() => {
+  const currentPrice = krakenPrice.value;
   ticker.value.prevPrice = ticker.value.lastPrice;
-  ticker.value.lastPrice = price.value.lastPrice;
-  ticker.value.priceChange = Number(price.value.priceChange).toFixed(3);
-  ticker.value.priceChangePercent = Number(price.value.priceChangePercent).toFixed(2);
+  ticker.value.lastPrice = currentPrice.lastPrice;
+  ticker.value.priceChange = Number(currentPrice.priceChange || 0).toFixed(3);
+  ticker.value.priceChangePercent = Number(currentPrice.priceChangePercentage || 0).toFixed(2);
 })
 </script>

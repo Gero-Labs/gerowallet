@@ -1,5 +1,8 @@
 import Dexie, { DexieError } from 'dexie';
-import { walletDBSchema, walletDBVersion } from '@/db/schema';
+import { 
+  walletDBSchema, 
+  walletDBVersion
+} from '@/db/schema';
 
 const dbCache: Map<string, Dexie> = new Map();
 
@@ -102,4 +105,6 @@ export function clearDbCache(id: number) {
   }
 }
 
+// Note: Portfolio data is now stored directly in wallet databases
+// Old portfolio_* databases will be migrated during upgrade
 

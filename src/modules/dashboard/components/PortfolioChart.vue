@@ -1,16 +1,24 @@
 <template>
   <div style="position: relative; z-index: 1; align-content: center; height: 212px" class="text-center justify-center">
-    <!-- Portfolio Value Display -->
-    <div v-if="chartData && chartData.length > 0" class="portfolio-value-display">
+    <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
           <div class="portfolio-label">Portfolio</div>
           <div class="portfolio-amount-row">
-            <div class="portfolio-amount" @click="toggleCurrency">
+            <div
+              class="portfolio-amount"
+              @click="toggleCurrency"
+              :class="{ clickable: availableCurrencies.length > 1 }"
+            >
               {{ formatPortfolioValue() }}
             </div>
             <div class="address-section" v-if="shortenAddress">
-              <CopyButton :avatar="assets.walletSvg" :title="shortenAddress"  :value="loggedWallet?.baseAddress || ''" x-small />
+              <CopyButton
+                :avatar="assets.walletSvg"
+                :title="shortenAddress"
+                :value="loggedWallet?.baseAddress || ''"
+                x-small
+              />
             </div>
           </div>
         </div>
@@ -38,84 +46,67 @@
                 :key="`${tabItem.value}_${index}`"
                 style="font-size: 10px; letter-spacing: normal; min-width: 50px"
                 @click="handleTabClick(tabItem)"
-                :disabled="isDisabled(tabItem)"
                 >{{ tabItem.label }}
               </v-tab>
             </v-tabs>
           </div>
-
-          <!-- Series Toggle Buttons (next to date picker) -->
-          <!-- COMMENTED OUT: Dual-axis functionality
-          <div class="series-toggle-buttons">
-            <v-btn-toggle
-              v-model="activeSeriesToggle"
-              background-color="transparent"
-              multiple
-              dense
-              class="series-toggle compact"
-            >
-              <v-btn
-                x-small
-                :value="'ada'"
-                :color="showAda ? (isApex ? '#dc753e' : '#00c7f3') : 'grey'"
-                @click="toggleAdaSeries"
-                class="toggle-btn compact"
-              >
-                {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }}
-              </v-btn>
-              <v-btn
-                x-small
-                :value="'usd'"
-                :color="showUsd ? '#4CAF50' : 'grey'"
-                @click="toggleUsdSeries"
-                class="toggle-btn compact"
-              >
-                USD
-              </v-btn>
-              <v-btn
-                x-small
-                :color="showDualAxis ? (isApex ? '#dc753e' : '#00c7f3') : 'grey'"
-                @click="toggleDualAxis"
-                class="toggle-btn dual-axis-btn compact"
-                :disabled="!showAda || !showUsd"
-              >
-                <v-icon x-small>mdi-chart-line</v-icon>
-              </v-btn>
-            </v-btn-toggle>
-          </div>
-          -->
         </div>
       </div>
     </div>
-
-    <div id="highstock-chart" v-show="chartData && chartData.length > 0" style="margin-top: 40px;"></div>
-    <v-card-text v-if="!chartData || chartData.length === 0" style="font-size: 20px;align-content: center;">
-      <v-avatar size="24" v-if="!loadingTxs">
-        <v-img
-          :src="assets.walletSvg"
-          alt="Wallet"
-        ></v-img>
+    <v-progress-circular v-if="!isReadyToRender" :indeterminate="true"></v-progress-circular>
+    <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
+    <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
+      <v-avatar size="24">
+        <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
       </v-avatar>
-      <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
-      <span v-else>There seems to be no data in this wallet</span>
+      <span>There seems to be no data in this wallet</span>
     </v-card-text>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from "vue";
-import Highstock from "highcharts/highstock";
-import filters from "@/shared/utils/filters";
+import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
+import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
+import Highstock from 'highcharts/highstock';
+import isEqual from 'lodash/isEqual';
+import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { loadingState } from '@/stores/loading';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
+// Currency Types
+enum CurrencyType {
+  ADA = 'ADA', // ADA/APEX etc - depends on network
+  USD = 'USD',
+  EUR = 'EUR',
+}
+
+interface CurrencyConfig {
+  symbol: string;
+  displayName: string;
+  color?: string; // Optional: use primaryColor if not specified
+}
+
+// Currency Configuration
+const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
+  [CurrencyType.ADA]: {
+    symbol: '', // Will be defined dynamically
+    displayName: 'Native Currency',
+  },
+  [CurrencyType.USD]: {
+    symbol: '$',
+    displayName: 'US Dollar',
+  },
+  [CurrencyType.EUR]: {
+    symbol: '€',
+    displayName: 'Euro',
+  },
+};
+
 const { loggedWallet } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
-const { loadingTxs } = toRefs(loadingState);
 
 const props = defineProps({
   chartData: {
@@ -123,6 +114,10 @@ const props = defineProps({
     default: () => [],
   },
   chartDataUsd: {
+    type: Array,
+    default: () => [],
+  },
+  chartDataEur: {
     type: Array,
     default: () => [],
   },
@@ -134,6 +129,22 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  portfolioValueEur: {
+    type: Number,
+    default: 0,
+  },
+  loading: {
+    type: Boolean,
+    default: true,
+  },
+  progressiveLoading: {
+    type: Boolean,
+    default: false,
+  },
+  firstLoadedCurrency: {
+    type: String,
+    default: null,
+  },
 });
 
 // Load tab preference from localStorage or default to WEEK (7D)
@@ -144,6 +155,9 @@ const loadPortfolioTabSetting = (): string => {
     return 'WEEK';
   }
 };
+const isReadyToRender = computed(() => {
+  return hasAnyChartData.value && !globalLoading.value;
+});
 
 // Save tab preference to localStorage
 const savePortfolioTabSetting = (tabValue: string): void => {
@@ -154,31 +168,61 @@ const savePortfolioTabSetting = (tabValue: string): void => {
   }
 };
 
-const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: "7D", vsLabel: "vs last week" });
+const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLabel: 'vs last week' });
 const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
-const showUsd = ref(false); // Toggle state for showing USD in portfolio value
+const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
+const isRendering = ref(false); // Prevent multiple simultaneous renders
+const chartKey = ref(0); // Force chart re-render when changed
+const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
+
+// VueUse-powered timeout management - automatic cleanup!
+const createTimeout = (callback: Function, delay: number) => {
+  const { start } = useTimeoutFn(callback, delay, { immediate: false });
+  start();
+};
 
 const tabs = {
-  YEAR: { value: "YEAR", label: "12M", vsLabel: "vs last year" },
-  QUARTER: { value: "QUARTER", label: "3M", vsLabel: "vs last quarter" },
-  MONTH: { value: "MONTH", label: "30D", vsLabel: "vs last month" },
-  WEEK: { value: "WEEK", label: "7D", vsLabel: "vs last week" },
-  DAY: { value: "DAY", label: "1D", vsLabel: "vs last day" },
+  YEAR: { value: 'YEAR', label: '12M', vsLabel: 'vs last year' },
+  QUARTER: { value: 'QUARTER', label: '3M', vsLabel: 'vs last quarter' },
+  MONTH: { value: 'MONTH', label: '30D', vsLabel: 'vs last month' },
+  WEEK: { value: 'WEEK', label: '7D', vsLabel: 'vs last week' },
+  DAY: { value: 'DAY', label: '1D', vsLabel: 'vs last day' },
 };
 
 // Computed properties
 const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-         loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
 const chartColors = computed(() => {
   if (isApex.value) {
-    return ['#dc753e', '#e67e22', '#d35400', '#f39c12', '#ff8c42', '#a0522d', '#cd853f', '#ff7f50', '#ffa500', '#ff6347'];
+    return [
+      '#dc753e',
+      '#e67e22',
+      '#d35400',
+      '#f39c12',
+      '#ff8c42',
+      '#a0522d',
+      '#cd853f',
+      '#ff7f50',
+      '#ffa500',
+      '#ff6347',
+    ];
   } else {
-    return ['#00DFF3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'];
+    return [
+      '#00DFF3',
+      '#155B75',
+      '#167dd6',
+      '#900C3F',
+      '#511849',
+      '#3D3D6B',
+      '#2A7B9B',
+      '#00BAAD',
+      '#57C785',
+      '#ADD45C',
+    ];
   }
 });
 
@@ -187,26 +231,144 @@ const primaryColor = computed(() => {
 });
 
 const shortenAddress = computed(() => {
-  return loggedWallet.value?.baseAddress ?
-    filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
+  return loggedWallet.value?.baseAddress ? filters.shortenStringWithEllipsis(loggedWallet.value.baseAddress, 14) : '';
 });
 
-// Portfolio value formatting with ADA/USD toggle
-const formatPortfolioValue = (): string => {
-  if (showUsd.value && props.portfolioValueUsd > 0) {
-    return filters.toCurrency(props.portfolioValueUsd, false, 2, '$', '', true, 0);
-  } else if (props.portfolioValueAda > 0) {
-    const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
-    return filters.toCurrency(props.portfolioValueAda, false, 2, currency, '', true, 0);
+// Progressive loading computed properties
+const hasAnyChartData = computed(() => {
+  return (
+    (props.chartData && props.chartData.length > 0) ||
+    (props.chartDataUsd && props.chartDataUsd.length > 0) ||
+    (props.chartDataEur && props.chartDataEur.length > 0)
+  );
+});
+
+const firstAvailableCurrency = computed(() => {
+  // Return the first currency that has data, in priority order
+  if (props.chartData && props.chartData.length > 0) {
+    return CurrencyType.ADA;
+  }
+  if (props.chartDataUsd && props.chartDataUsd.length > 0) {
+    return CurrencyType.USD;
+  }
+  if (props.chartDataEur && props.chartDataEur.length > 0) {
+    return CurrencyType.EUR;
+  }
+  return null;
+});
+
+const globalLoading = computed(() => {
+  // If progressive loading is enabled, only show loading when no data is available yet
+  if (props.progressiveLoading) {
+    return props.loading && !hasAnyChartData.value;
+  }
+  // Original behavior: show loading state
+  return props.loading;
+});
+
+// Currency system computed properties
+const nativeCurrencySymbol = computed(() => {
+  return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
+});
+
+const currentCurrencyConfig = computed(() => {
+  const config = { ...currencyConfigs[selectedCurrency.value] };
+  if (selectedCurrency.value === CurrencyType.ADA) {
+    config.symbol = nativeCurrencySymbol.value;
+    config.displayName = `${nativeCurrencySymbol.value} Balance`;
+  }
+  return config;
+});
+
+const activeChartData = computed(() => {
+  switch (selectedCurrency.value) {
+    case CurrencyType.USD:
+      return props.chartDataUsd || [];
+    case CurrencyType.EUR:
+      return props.chartDataEur || [];
+    case CurrencyType.ADA:
+    default:
+      return props.chartData || [];
+  }
+});
+
+const activePortfolioValue = computed(() => {
+  switch (selectedCurrency.value) {
+    case CurrencyType.USD:
+      return props.portfolioValueUsd;
+    case CurrencyType.EUR:
+      return props.portfolioValueEur;
+    case CurrencyType.ADA:
+    default:
+      return props.portfolioValueAda;
+  }
+});
+
+const availableCurrencies = computed(() => {
+  const currencies = [];
+
+  // Add ADA if we have native data
+  if ((props.chartData && props.chartData.length > 0) || props.portfolioValueAda > 0) {
+    currencies.push(CurrencyType.ADA);
   }
 
-  // Fallback with proper currency symbol
-  const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
-  return showUsd.value ? '$0.00' : `${currency}0`;
+  // Add USD if we have USD data
+  if ((props.chartDataUsd && props.chartDataUsd.length > 0) || props.portfolioValueUsd > 0) {
+    currencies.push(CurrencyType.USD);
+  }
+
+  // Add EUR if we have EUR data
+  if ((props.chartDataEur && props.chartDataEur.length > 0) || props.portfolioValueEur > 0) {
+    currencies.push(CurrencyType.EUR);
+  }
+
+  // If no currencies available yet but progressive loading, default to ADA
+  if (currencies.length === 0 && props.progressiveLoading) {
+    currencies.push(CurrencyType.ADA);
+  }
+
+  return currencies;
+});
+
+// Portfolio value formatting for any currency
+const formatPortfolioValue = (): string => {
+  const value = activePortfolioValue.value;
+  const config = currentCurrencyConfig.value;
+
+  if (value > 0) {
+    return filters.toCurrency(value, false, 2, config.symbol, '', true, 0);
+  }
+
+  // Fallback
+  return `${config.symbol}0.00`;
 };
 
 const toggleCurrency = (): void => {
-  showUsd.value = !showUsd.value;
+  const availableCurrs = availableCurrencies.value;
+  if (availableCurrs.length === 0) return;
+
+  const currentIndex = availableCurrs.indexOf(selectedCurrency.value);
+  const nextIndex = (currentIndex + 1) % availableCurrs.length;
+  const nextCurrency = availableCurrs[nextIndex];
+
+  selectedCurrency.value = nextCurrency;
+};
+
+const selectCurrency = (currency: CurrencyType): void => {
+  selectedCurrency.value = currency;
+};
+
+const convertStringToCurrencyType = (currencyString: string): CurrencyType | null => {
+  switch (currencyString) {
+    case 'ADA':
+      return CurrencyType.ADA;
+    case 'USD':
+      return CurrencyType.USD;
+    case 'EUR':
+      return CurrencyType.EUR;
+    default:
+      return null;
+  }
 };
 
 // COMMENTED OUT: Dual-axis toggle functions
@@ -263,20 +425,46 @@ const formatAxisNumber = (value: number, currency: string = ''): string => {
   return currency ? `${currency}${formattedValue}` : formattedValue;
 };
 
-// COMMENTED OUT: Dual-axis chart series creation
-// Create simple single-axis chart series (ADA only)
-const createChartSeries = (chartData: any[]): any[] => {
+// Create chart series based on selected currency
+const createChartSeries = (): any[] => {
   const series = [];
-  // Only show ADA data
-  if (chartData.length > 0) {
+
+  const activeData = activeChartData.value;
+  const config = currentCurrencyConfig.value;
+  const seriesColor = primaryColor.value;
+
+  if (activeData && activeData.length > 0) {
+    // Validate data format
+    const validData = activeData.filter(point => {
+      return (
+        Array.isArray(point) &&
+        point.length >= 2 &&
+        typeof point[0] === 'number' &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[0]) &&
+        !isNaN(point[1])
+      );
+    });
+
+    if (validData.length === 0) {
+      console.warn('No valid data points found for chart');
+      return series;
+    }
+
+    if (validData.length !== activeData.length) {
+      console.warn(`Filtered out ${activeData.length - validData.length} invalid data points`);
+    }
+
     series.push({
-      type: "areaspline",
-      name: "Portfolio Balance",
-      data: chartData,
-      showInLegend: false, // Hide legend for single series
-      color: primaryColor.value,
+      type: 'areaspline',
+      name: config.displayName,
+      data: validData,
+      showInLegend: false,
+      color: seriesColor,
+      connectNulls: false,
+      gapSize: 5,
       marker: {
-        symbol: "circle",
+        symbol: 'circle',
         enabled: false,
         radius: 3,
         lineWidth: 1,
@@ -285,14 +473,13 @@ const createChartSeries = (chartData: any[]): any[] => {
       fillColor: {
         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
         stops: [
-          [0.1, primaryColor.value + '33'],
-          [1, primaryColor.value + '00'],
+          [0.1, seriesColor + '33'],
+          [1, seriesColor + '00'],
         ],
       },
     });
   }
 
-  console.log('Total series created:', series.length);
   return series;
 };
 
@@ -378,15 +565,24 @@ const createChartSeries = (chartData: any[]): any[] => {
 //   console.log('Total series created:', series.length);
 //   return series;
 // };
-const loadChart = (newVal) => {
-  // COMMENTED OUT: Dual-axis functionality
-  // Simple single-axis chart with ADA data only
-  if (!newVal.length) {
+const loadChart = () => {
+  // Prevent multiple simultaneous renders and too frequent calls
+  const now = Date.now();
+  if (isRendering.value || now - lastLoadTime.value < 100) {
+    return;
+  }
+  lastLoadTime.value = now;
+
+  const activeData = activeChartData.value;
+  const config = currentCurrencyConfig.value;
+
+
+
+  if (!activeData || !activeData.length) {
     return;
   }
 
-  // Use only ADA data
-  const primaryData = newVal;
+  isRendering.value = true;
 
   // Initial Y-axis will auto-scale, then be updated by time filtering
   const axisRange = null; // Let Highcharts auto-scale initially
@@ -394,7 +590,23 @@ const loadChart = (newVal) => {
   // Ensure the chart container is visible before rendering
   const chartContainer = document.getElementById('highstock-chart');
   if (!chartContainer || chartContainer.style.display === 'none') {
+    isRendering.value = false;
     return;
+  }
+
+  // Additional check for container visibility and force proper sizing
+  const containerRect = chartContainer.getBoundingClientRect();
+  if (containerRect.width === 0 || containerRect.height === 0) {
+    // Try to trigger a layout reflow
+    chartContainer.style.width = '100%';
+    chartContainer.style.height = '184px';
+
+    // Recheck after setting explicit dimensions
+    const newRect = chartContainer.getBoundingClientRect();
+    if (newRect.width === 0 || newRect.height === 0) {
+      isRendering.value = false;
+      return;
+    }
   }
 
   // Destroy existing chart instance before creating a new one
@@ -405,6 +617,15 @@ const loadChart = (newVal) => {
       console.warn('Error destroying chart:', error);
     }
     chartInstance.value = null;
+  }
+
+  // Force garbage collection hint
+  if (window.gc) {
+    try {
+      window.gc();
+    } catch (e) {
+      // Ignore if gc is not available
+    }
   }
 
   // COMMENTED OUT: Dual-axis Y-axis update throttling
@@ -420,36 +641,53 @@ const loadChart = (newVal) => {
   //   }, 100); // Reduced frequency
   // };
 
-  const currency = networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
+  const currency = config.symbol;
   const data = {
+    lang: {
+      months: [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ],
+      shortMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    },
     accessibility: {
       enabled: false,
     },
     title: {
       useHTML: true,
       floating: true,
-      align: "left",
+      align: 'left',
       text: '',
       style: {
-        fontSize: "14px",
+        fontSize: '14px',
       },
     },
     chart: {
       spacingLeft: 0,
       spacingRight: 0,
-      backgroundColor: "transparent",
+      backgroundColor: 'transparent',
       height: 184,
       style: {
-        fontFamily: "Quicksand",
+        fontFamily: 'Quicksand',
       },
       zoomType: 'x', // Enable horizontal selection/dragging only
       panning: {
-        enabled: false // Disable panning completely
+        enabled: false, // Disable panning completely
       },
       zooming: {
         mouseWheel: {
-          enabled: false // Disable mouse wheel zooming
-        }
+          enabled: false, // Disable mouse wheel zooming
+        },
       },
     },
     rangeSelector: {
@@ -466,18 +704,18 @@ const loadChart = (newVal) => {
       enabled: false,
     },
     tooltip: {
-      backgroundColor: "rgb(12,14,18)",
-      borderColor: "#1F242F",
+      backgroundColor: 'rgb(12,14,18)',
+      borderColor: '#1F242F',
       style: {
-        fontFamily: "Inter",
-        color: "#fff",
+        fontFamily: 'Inter',
+        color: '#fff',
       },
       // COMMENTED OUT: Dual-axis tooltip
       shared: false,
-      formatter: function () {
+      formatter: function (this: any) {
         const formattedValue = filters.toCurrency(this.y, false, 2, currency, '', true, 0);
-        return `${new Date(this.key).toLocaleString()}<br> <b>${formattedValue}</b>`;
-      }
+        return `${new Date(this.x).toLocaleString()}<br> <b>${formattedValue}</b>`;
+      },
       // COMMENTED OUT: Original dual-axis tooltip
       // shared: showDualAxis.value,
       // formatter: function () {
@@ -502,18 +740,22 @@ const loadChart = (newVal) => {
       // }
     },
     xAxis: {
+      type: 'datetime',
       crosshair: true,
       allowDecimals: false,
       title: {
         enabled: false,
-        text: "Time",
+        text: 'Time',
       },
       labels: {
         style: {
-          fontFamily: "Inter",
-          color: "#fff",
+          fontFamily: 'Inter',
+          color: '#fff',
         },
+        overflow: 'justify',
       },
+      ordinal: false,
+      minTickInterval: 3600 * 1000, // 1 hour minimum to prevent crowding
       // COMMENTED OUT: Dual-axis Y-axis update events
       // events: {
       //   // Handle drag selection only (no wheel zoom)
@@ -533,18 +775,18 @@ const loadChart = (newVal) => {
       max: axisRange?.max,
       labels: {
         style: {
-          color: "#fff",
+          color: '#fff',
         },
-        formatter: function() {
+        formatter: function (this: any) {
           return formatAxisNumber(this.value, currency);
-        }
+        },
       },
       opposite: true,
       plotLines: [
         {
           value: 0,
           width: 1,
-          color: "#3d3d3d",
+          color: '#3d3d3d',
         },
       ],
     },
@@ -636,57 +878,62 @@ const loadChart = (newVal) => {
     // },
     colors: chartColors.value,
     legend: {
-      align: "right",
-      verticalAlign: "middle",
-      layout: "vertical",
+      align: 'right',
+      verticalAlign: 'middle',
+      layout: 'vertical',
     },
-    series: createChartSeries(primaryData),
+    series: createChartSeries(),
     useUTC: true,
   };
-  chartInstance.value = Highstock.stockChart("highstock-chart", data as any);
 
-  // Completely disable wheel events on chart container (reuse existing chartContainer variable)
-  if (chartContainer) {
-    chartContainer.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }, { passive: false });
+  try {
+    // Validate chart container exists
+    const container = document.getElementById('highstock-chart');
+    if (!container) {
+      console.error('Chart container not found');
+      return;
+    }
+
+    // Validate series data
+    const series = createChartSeries();
+    if (!series || series.length === 0) {
+      console.warn('No chart series data available');
+      return;
+    }
+
+    chartInstance.value = Highstock.stockChart('highstock-chart', data as any);
+
+    // Force chart reflow to fix size issues after re-render
+    createTimeout(() => {
+      if (chartInstance.value && chartInstance.value.reflow && typeof chartInstance.value.reflow === 'function') {
+        try {
+          chartInstance.value.reflow();
+        } catch (reflowError) {
+          console.warn('Chart reflow failed:', reflowError);
+        }
+      }
+    }, 100);
+
+    // Completely disable wheel events on chart container (reuse existing chartContainer variable)
+    if (chartContainer) {
+      chartContainer.addEventListener(
+        'wheel',
+        e => {
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        { passive: false }
+      );
+    }
+  } catch (error) {
+    console.error('Error creating chart:', error);
+  } finally {
+    // Always reset rendering flag
+    isRendering.value = false;
   }
 };
 
-const arraysEqual = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (a.length !== b.length) return false;
-
-  for (let i = 0; i < a.length; ++i) {
-    if (Array.isArray(a[i]) && Array.isArray(b[i])) {
-      return arraysEqual(a[i], b[i])
-    } else if (a[i] !== b[i]) return false;
-  }
-  return true;
-};
-
-const isDisabled = (tabItem) => {
-  if (!props.chartData || !props.chartData[props.chartData.length-1]) {
-    return true
-  }
-  const lastTxTime = props.chartData[props.chartData.length-1][0]
-  if (tabItem.value === 'DAY') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 1
-  } else if (tabItem.value === 'WEEK') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 7
-  } else if (tabItem.value === 'MONTH') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 30
-  } else if (tabItem.value === 'QUARTER') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 90
-  } else if (tabItem.value === 'YEAR') {
-    return (((new Date()).getTime() - lastTxTime) / 1000 / 24 / 60 / 60) > 365
-  }
-  return false
-};
-
-const handleTabClick = (tabItem) => {
+const handleTabClick = tabItem => {
   tab.value = tabItem;
 
   // Save tab preference to localStorage
@@ -705,7 +952,7 @@ const handleTabClick = (tabItem) => {
   } else if (tabItem.value === tabs.DAY.value) {
     start = new Date(start.setUTCHours(end.getUTCHours() - 24));
   } else {
-    start = new Date(Date.parse("27 Sep 2017 00:00:00 GMT"));
+    start = new Date(Date.parse('27 Sep 2017 00:00:00 GMT'));
   }
   const startUTC = Date.UTC(
     start.getUTCFullYear(),
@@ -818,50 +1065,189 @@ const handleTabClick = (tabItem) => {
 // };
 
 const generateTitleText = () => {
-  return ''
+  return '';
 };
-watch(price, (newVal) => {
-  lastPrice.value = newVal.lastPrice
-  if (chartInstance.value?.title) {
-    chartInstance.value.title.update({ text: generateTitleText() });
-  }
-}, { deep: true });
+watch(
+  price,
+  newVal => {
+    lastPrice.value = newVal.lastPrice;
+    if (chartInstance.value?.title) {
+      chartInstance.value.title.update({ text: generateTitleText() });
+    }
+  },
+  { deep: true }
+);
 
-// COMMENTED OUT: Dual-axis chart data watching
-// Simple single chart data watching (ADA only)
-watch(() => props.chartData, (newChartData, oldChartData) => {
-  if (arraysEqual(newChartData, oldChartData)) {
-    return;
-  }
-  loadChart(newChartData);
+// Watch currency chart data with immediate response to any data changes
+watch(
+  () => [props.chartData, props.chartDataUsd, props.chartDataEur],
+  (newValues, oldValues) => {
+    // Handle case where values might be undefined initially
+    if (!newValues) return;
 
-  // Apply the current time range filter after chart loads with new data
-  if (newChartData?.length > 0) {
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
-  }
-}, { deep: true });
+    // Safe destructuring with default values
+    const [newChartData = [], newChartDataUsd = [], newChartDataEur = []] = newValues;
+    const [oldChartData = [], oldChartDataUsd = [], oldChartDataEur = []] = oldValues || [[], [], []];
 
-// COMMENTED OUT: Dual-axis wallet watching
+    // Check if the currently active currency data has changed
+    let activeDataChanged = false;
+    switch (selectedCurrency.value) {
+      case CurrencyType.ADA:
+        activeDataChanged = !isEqual(newChartData, oldChartData);
+        break;
+      case CurrencyType.USD:
+        activeDataChanged = !isEqual(newChartDataUsd, oldChartDataUsd);
+        break;
+      case CurrencyType.EUR:
+        activeDataChanged = !isEqual(newChartDataEur, oldChartDataEur);
+        break;
+    }
+
+        // Skip if no actual data changes for the active currency
+    if (!activeDataChanged && !props.progressiveLoading) {
+      return;
+    }
+
+    // Progressive loading logic: update chart when any data becomes available
+    if (props.progressiveLoading) {
+      // Use the first loaded currency from the composable (the one that actually loaded first)
+      const firstLoadedString = props.firstLoadedCurrency;
+      const firstLoaded = firstLoadedString ? convertStringToCurrencyType(firstLoadedString) : null;
+      const currentData = activeChartData.value;
+
+      // Switch to the first currency that actually loaded (from loading order)
+      if (firstLoaded) {
+        // If we don't have a current selection or current selection has no data, switch immediately
+        if (!currentData || currentData.length === 0) {
+          selectCurrency(firstLoaded);
+        }
+        // Also switch if a new currency loaded first and our current selection has no data
+        else if (selectedCurrency.value !== firstLoaded && (!currentData || currentData.length === 0)) {
+          selectCurrency(firstLoaded);
+        }
+      }
+
+      // Only update chart if active currency data changed or we have new data for current currency
+      if (activeDataChanged && hasAnyChartData.value) {
+        const activeData = activeChartData.value;
+        if (activeData && activeData.length > 0 && !isRendering.value) {
+          // Force chart rerender for timeline issues
+          chartKey.value += 1;
+
+          createTimeout(() => {
+            loadChart();
+            createTimeout(() => {
+              handleTabClick(tab.value);
+              // Additional reflow to ensure proper sizing
+              if (
+                chartInstance.value &&
+                chartInstance.value.reflow &&
+                typeof chartInstance.value.reflow === 'function'
+              ) {
+                try {
+                  chartInstance.value.reflow();
+                } catch (reflowError) {
+                  console.warn('Chart reflow failed in watch:', reflowError);
+                }
+              }
+            }, 100);
+          }, 150); // Longer delay for full rerender
+        }
+      }
+    } else {
+      // Original logic: only update chart when not loading and active data changed
+      if (!props.loading && activeDataChanged) {
+        const activeData = activeChartData.value;
+        if (activeData && activeData.length > 0 && !isRendering.value) {
+          createTimeout(() => {
+            loadChart();
+            createTimeout(() => {
+              handleTabClick(tab.value);
+            }, 100);
+          }, 10);
+        }
+      }
+    }
+  },
+  { deep: true, immediate: true }
+);
+
 // Simple wallet watching for single chart
-watch(loggedWallet, () => {
-  if (props.chartData.length > 0) {
-    loadChart(props.chartData);
+watch(
+  loggedWallet,
+  (newWallet, oldWallet) => {
+    // Only reload if wallet actually changed
+    if (
+      newWallet?.baseAddress !== oldWallet?.baseAddress &&
+      props.chartData &&
+      Array.isArray(props.chartData) &&
+      props.chartData.length > 0 &&
+      !isRendering.value
+    ) {
+      createTimeout(() => {
+        loadChart();
+        createTimeout(() => {
+          handleTabClick(tab.value);
+        }, 100);
+      }, 100);
+    }
+  },
+  { deep: false } // Only watch top-level changes
+);
 
-    // Apply the current time range filter after wallet change
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
-  }
-}, { deep: true });
-
-onBeforeUnmount(() => {
-  if (chartInstance.value) {
-    chartInstance.value.destroy();
+watch(selectedCurrency, () => {
+  // Only reload chart if not already rendering
+  if (!isRendering.value) {
+    createTimeout(() => {
+      loadChart();
+      createTimeout(() => {
+        handleTabClick(tab.value);
+      }, 50);
+    }, 50);
   }
 });
 
+// VueUse automatically handles timeout cleanup, but we still need chart cleanup
+tryOnBeforeUnmount(() => {
+  if (chartInstance.value) {
+    try {
+      chartInstance.value.destroy();
+    } catch (error) {
+      console.warn('Error destroying chart:', error);
+    }
+    chartInstance.value = null;
+  }
+
+  // Clear any event listeners to prevent memory leaks
+  const chartContainer = document.getElementById('highstock-chart');
+  if (chartContainer) {
+    chartContainer.replaceWith(chartContainer.cloneNode(true));
+  }
+});
+
+watch(
+  () => props.loading,
+  (newVal, oldVal) => {
+    // Skip this watch if progressive loading is enabled (handled by chart data watch)
+    if (props.progressiveLoading) return;
+
+    // When loading finishes (false), initialize chart
+    if (oldVal && !newVal) {
+      const hasAnyData =
+        (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) ||
+        (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) ||
+        (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+
+      if (hasAnyData) {
+        // Small delay for DOM to update
+        createTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 50);
+      }
+    }
+  }
+);
 // COMMENTED OUT: Dual-axis onMounted
 // Simple single-axis chart mounting
 onMounted(() => {
@@ -879,21 +1265,47 @@ onMounted(() => {
     tab.value = tabs.WEEK;
   }
 
-  if (props.chartData.length > 0) {
-    loadChart(props.chartData);
+  // Progressive loading: wait for data to arrive and let the watcher handle it
+  if (props.progressiveLoading) {
+    // Only initialize if data is already available on mount
+    if (hasAnyChartData.value) {
+      const firstLoadedString = props.firstLoadedCurrency;
+      const firstLoaded = firstLoadedString
+        ? convertStringToCurrencyType(firstLoadedString)
+        : firstAvailableCurrency.value;
 
-    // Apply the initial time range filter after chart loads
-    setTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
+      if (firstLoaded) {
+        selectCurrency(firstLoaded);
+        createTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 50);
+      }
+    }
   } else {
-    console.log('No data to load chart');
+    // Original logic: only initialize when data is available AND loading is complete
+    if (!props.loading) {
+      const hasAnyData =
+        (props.chartData && Array.isArray(props.chartData) && props.chartData.length > 0) ||
+        (props.chartDataUsd && Array.isArray(props.chartDataUsd) && props.chartDataUsd.length > 0) ||
+        (props.chartDataEur && Array.isArray(props.chartDataEur) && props.chartDataEur.length > 0);
+
+      if (hasAnyData) {
+        createTimeout(() => {
+          loadChart();
+          handleTabClick(tab.value);
+        }, 100);
+      }
+    }
   }
 });
 </script>
 <style scoped>
 #highstock-chart {
   min-height: 184px;
+  width: 100%;
+  height: 184px;
+  position: relative;
 }
 
 /* Portfolio Value Display */
@@ -935,12 +1347,26 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 600;
   color: #ffffff;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
   transition: opacity 0.2s ease;
 }
 
-.portfolio-amount:hover {
+.portfolio-amount.clickable {
+  cursor: pointer;
+}
+
+.portfolio-amount.clickable:hover {
   opacity: 0.8;
+}
+
+.currency-switch-icon {
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.portfolio-amount.clickable:hover .currency-switch-icon {
+  opacity: 1;
 }
 
 .address-section {
@@ -980,21 +1406,15 @@ onMounted(() => {
   align-items: center;
 }
 
-/* Series Toggle Buttons (next to date picker) */
-.series-toggle-buttons {
+/* Currency indicator for progressive loading */
+.currency-indicator {
   display: flex;
   align-items: center;
 }
 
-.series-toggle {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  border-radius: 4px !important;
-  overflow: hidden;
-}
-
-.series-toggle.compact {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 3px !important;
+.currency-chip {
+  font-size: 0.75rem !important;
+  height: 24px !important;
 }
 
 .toggle-btn {

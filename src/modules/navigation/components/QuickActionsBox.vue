@@ -1,16 +1,16 @@
 <template>
   <div>
-    <div 
+    <div
       class="quick-actions-container"
       @mousemove="handleMouseMove"
       @mouseleave="handleMouseLeave"
     >
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
-        <v-btn 
+        <v-btn
           ref="buyButton"
-          class="expandable-button buy-button" 
-          color="#FFF59E1A" 
-          height="28" 
+          class="expandable-button buy-button"
+          color="#FFF59E1A"
+          height="28"
           @click="currentDialog = dialogs.BUY"
           :style="getButtonGlowStyle('buy')"
         >
@@ -24,13 +24,13 @@
           <span class="button-text">Buy / Sell</span>
         </v-btn>
       </div>
-      
+
       <div class="action-button-wrapper">
-        <v-btn 
+        <v-btn
           ref="sendButton"
-          class="expandable-button send-button" 
-          color="#00DFF31A" 
-          height="28" 
+          class="expandable-button send-button"
+          color="#00DFF31A"
+          height="28"
           @click="currentDialog = dialogs.SEND"
           :style="getButtonGlowStyle('send')"
         >
@@ -45,13 +45,13 @@
           <span class="button-text">Send</span>
         </v-btn>
       </div>
-      
+
       <div class="action-button-wrapper">
-        <v-btn 
+        <v-btn
           ref="receiveButton"
-          class="expandable-button receive-button" 
-          color="#75E0A71A" 
-          height="28" 
+          class="expandable-button receive-button"
+          color="#75E0A71A"
+          height="28"
           @click="currentDialog = dialogs.RECEIVE"
           :style="getButtonGlowStyle('receive')"
         >
@@ -66,13 +66,13 @@
           <span class="button-text">Receive</span>
         </v-btn>
       </div>
-      
+
       <div v-if="!isSwapDisabled" class="action-button-wrapper">
-        <v-btn 
+        <v-btn
           ref="swapButton"
-          class="expandable-button swap-button" 
-          color="#FDA29B1A" 
-          height="28" 
+          class="expandable-button swap-button"
+          color="#FDA29B1A"
+          height="28"
           @click="currentDialog = dialogs.SWAP"
           :style="getButtonGlowStyle('swap')"
         >
@@ -87,11 +87,33 @@
           <span class="button-text">Swap</span>
         </v-btn>
       </div>
+
+      <div v-if="!isPerpetualsDisabled" class="action-button-wrapper">
+        <v-btn
+          ref="perpetualsButton"
+          class="expandable-button perpetuals-button"
+          color="#B794F41A"
+          height="28"
+          @click="currentDialog = dialogs.PERPETUALS"
+          :style="getButtonGlowStyle('perpetuals')"
+        >
+          <v-avatar tile size="14">
+            <v-img
+              :src="assets.barChart"
+              alt="Perpetuals"
+              contain
+              style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
+            ></v-img>
+          </v-avatar>
+          <span class="button-text">Perpetuals</span>
+        </v-btn>
+      </div>
     </div>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog v-if="!isSwapDisabled" :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
+    <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="currentDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
   </div>
 </template>
 <script setup lang="ts">
@@ -100,12 +122,13 @@ import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
 import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
+import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 
 const { loggedWallet } = toRefs(walletStore);
-const instance = getCurrentInstance();
+const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentDialog = ref(null);
 const dialogs = ref<any>({
@@ -113,6 +136,7 @@ const dialogs = ref<any>({
   RECEIVE: 'RECEIVE',
   SWAP: 'SWAP',
   BUY: 'BUY',
+  PERPETUALS: 'PERPETUALS',
 });
 
 const mousePosition = ref<{x: number, y: number} | null>(null);
@@ -123,6 +147,7 @@ const buyButton = ref(null);
 const sendButton = ref(null);
 const receiveButton = ref(null);
 const swapButton = ref(null);
+const perpetualsButton = ref(null);
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {
@@ -138,11 +163,12 @@ const isSwapDisabled = computed(() => {
   return true;
 })
 
-const currencyTicker = computed(() => {
+const isPerpetualsDisabled = computed(() => {
+  // Enable for Cardano mainnet and preprod for testing
   if (loggedWallet.value) {
-    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+    return !networks.resolvePerpetualsSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
-  return '';
+  return true;
 })
 
 const closeDialog = () => {
@@ -152,12 +178,12 @@ const closeDialog = () => {
 const handleMouseMove = (event: MouseEvent) => {
   const container = event.currentTarget as HTMLElement;
   const containerRect = container.getBoundingClientRect();
-  
+
   mousePosition.value = {
     x: event.clientX - containerRect.left,
     y: event.clientY - containerRect.top
   };
-  
+
   updateButtonGlows();
 }
 
@@ -168,43 +194,43 @@ const handleMouseLeave = () => {
 
 const updateButtonGlows = () => {
   if (!mousePosition.value) return;
-  
-  const buttons = ['buy', 'send', 'receive', 'swap'];
+
+  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
   const newGlows: Record<string, any> = {};
-  
+
   buttons.forEach(buttonType => {
-    const buttonRef = (instance?.refs as any)?.[`${buttonType}Button`];
+    const buttonRef = (vmProxy?.$refs as any)?.[`${buttonType}Button`];
     if (buttonRef && buttonRef.$el) {
       const buttonRect = buttonRef.$el.getBoundingClientRect();
       const containerRect = buttonRef.$el.closest('.quick-actions-container').getBoundingClientRect();
-      
+
       // Check if mouse is directly over this button
       const mouseX = mousePosition.value!.x + containerRect.left;
       const mouseY = mousePosition.value!.y + containerRect.top;
-      
+
       const isMouseOverButton = (
         mouseX >= buttonRect.left &&
         mouseX <= buttonRect.right &&
         mouseY >= buttonRect.top &&
         mouseY <= buttonRect.bottom
       );
-      
+
       if (isMouseOverButton) {
         const buttonCenter = {
           x: buttonRect.left - containerRect.left + buttonRect.width / 2,
           y: buttonRect.top - containerRect.top + buttonRect.height / 2
         };
-        
+
         const distance = Math.sqrt(
-          Math.pow(mousePosition.value!.x - buttonCenter.x, 2) + 
+          Math.pow(mousePosition.value!.x - buttonCenter.x, 2) +
           Math.pow(mousePosition.value!.y - buttonCenter.y, 2)
         );
-        
+
         const angleRad = Math.atan2(
           mousePosition.value!.y - buttonCenter.y,
           mousePosition.value!.x - buttonCenter.x
         );
-        
+
         newGlows[buttonType] = {
           intensity: 0.8,
           angle: angleRad,
@@ -213,30 +239,31 @@ const updateButtonGlows = () => {
       }
     }
   });
-  
+
   buttonGlows.value = newGlows;
 }
 
 const getButtonGlowStyle = (buttonType: string) => {
   const glow = buttonGlows.value[buttonType];
   if (!glow) return {};
-  
+
   const colors: Record<string, string> = {
     buy: '#FFF59E',
-    send: '#00DFF3', 
+    send: '#00DFF3',
     receive: '#75E0A7',
-    swap: '#FDA29B'
+    swap: '#FDA29B',
+    perpetuals: '#B794F4'
   };
-  
+
   const color = colors[buttonType];
   const glowIntensity = glow.intensity;
-  
+
   const offsetX = Math.cos(glow.angle) * 4 * glowIntensity;
   const offsetY = Math.sin(glow.angle) * 4 * glowIntensity;
-  
+
   const shadowBlur = 8 + (glowIntensity * 12);
   const shadowSpread = glowIntensity * 2;
-  
+
   return {
     boxShadow: `inset ${offsetX}px ${offsetY}px ${shadowBlur}px ${shadowSpread}px ${color}${Math.round(glowIntensity * 60).toString(16).padStart(2, '0')}`,
     transition: 'box-shadow 0.1s ease-out'
@@ -282,7 +309,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   background: rgba(255, 255, 255, 0.08) !important;
   backdrop-filter: blur(20px) brightness(1.2) contrast(1.1);
   border: 0.5px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 
+  box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.12),
     0 1px 2px rgba(0, 0, 0, 0.08),
     inset 0 0 1px rgba(255, 255, 255, 0.3);
@@ -364,5 +391,15 @@ const getButtonGlowStyle = (buttonType: string) => {
 
 .swap-button .button-text {
   color: #FDA29B;
+}
+
+.perpetuals-button {
+  background: rgba(183, 148, 244, 0.12) !important;
+  border: 0.5px solid rgba(183, 148, 244, 0.4) !important;
+}
+
+
+.perpetuals-button .button-text {
+  color: #B794F4;
 }
 </style>

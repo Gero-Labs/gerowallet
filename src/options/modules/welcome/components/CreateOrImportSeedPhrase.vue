@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent-override" flat style="width: 100%; margin: auto; max-width: 520px; justify-items: center;">
+  <v-card class="liquid-glass transparent-override" flat style="width: 100%; margin: auto; max-width: 520px; justify-items: center;">
     <v-list class="transparent" dense nav style="width: inherit;">
       <v-list-item class="mb-6 py-2" @click="createWalletDialog = true" >
         <v-list-item-avatar size="50" class="my-0" rounded style="border: 1px solid #373A41; border-radius: 14px; background-color: #13161B">
@@ -9,7 +9,7 @@
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
             Create Wallet
           </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: anchor-center;">
+          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
             Set up a new wallet to manage your digital assets.
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -22,7 +22,7 @@
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
             Restore Wallet
           </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: anchor-center;">
+          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
             Restore a wallet using your recovery phrase.
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -35,13 +35,13 @@
           <v-list-item-title class="pb-1" style="font-size: 20px; font-weight: 600; word-wrap: break-word;">
             Pair Hardware Wallet
           </v-list-item-title>
-          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: anchor-center;">
+          <v-list-item-subtitle style="font-size: 16px;  display: flex; word-break: break-word;align-items: center;">
             Connect your hardware wallet.
           </v-list-item-subtitle>
         </v-list-item-content>
       </v-list-item>
     </v-list>
-    <v-divider class="my-4" style="width: 100%"></v-divider>
+    <v-divider class="mt-4" style="width: 100%"></v-divider>
     <v-btn text @click="back">
       <v-icon>
         mdi-arrow-left
@@ -50,7 +50,7 @@
     </v-btn>
     <CreateWallet :is-open="createWalletDialog" @close="createWalletDialog = false" :persistent="false" :network="props.network"></CreateWallet>
     <RestoreWallet :dialog="restoreWalletDialog" @dialogChange="restoreWalletDialogChange" :network="props.network"></RestoreWallet>
-    <PairHardwareWallet :dialog="pairHardwareWalletDialog" @dialogChange="pairHardwareWalletDialogChange"></PairHardwareWallet>
+    <PairHardwareWallet :dialog="pairHardwareWalletDialog" @dialogChange="pairHardwareWalletDialogChange" :network="props.network"></PairHardwareWallet>
   </v-card>
 </template>
 <script setup lang="ts">
@@ -59,10 +59,9 @@ import CreateWallet from '@/options/modules/welcome/dialogs/CreateWallet.vue';
 import PairHardwareWallet from '@/options/modules/welcome/dialogs/PairHardwareWallet.vue';
 import RestoreWallet from '@/options/modules/welcome/dialogs/RestoreWallet.vue';
 import { computed, ref } from 'vue';
-import { Network } from '@/models/types';
 
 interface Props {
-  network: Network;
+  network: any;
 }
 
 const props = defineProps<Props>();

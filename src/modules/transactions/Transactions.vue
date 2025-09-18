@@ -8,6 +8,7 @@
             @row-click="handleOnTransactionsRowClick"
             :selectedTransaction="transactionInfo"
             style=" width: 39%;"
+            :isFullList="true"
           />
           <v-card
             v-if="transactionInfo"

@@ -67,7 +67,7 @@ export async function getDb() {
   });
 
   db.version(geroDBVersion).stores(geroDBSchema)
-
+  
   await db.open().catch(err => {
     console.error(`Failed to open database: ${err.stack || err}`);
   });
