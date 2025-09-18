@@ -102,7 +102,7 @@ const profile = computed(() => zkFold.profile.value);
       large
       @click:button="googleLogin"
       :loading="loadingGoogleLogin"
-      
+      :disabled="!props.selectedNetwork?.zkFoldSupport"
     >
       <v-avatar size="24" class="mr-2">
         <v-img :src="google" />
