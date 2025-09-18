@@ -219,3 +219,25 @@ export interface ProofInput {
     piSignature: BigIntWrap,
     piTokenName: BigIntWrap,
 }
+
+/**
+ *  Google OAuth client credentials 
+ *
+ *  @property {string}      client_id         - Google OAuth client id
+ *  @property {string}      client_secret     - Google OAuth client secret
+ */
+export interface ClientCredentials {
+    client_id: string,
+    client_secret: string
+}
+
+/**
+ *  Transaction submission result
+ *
+ *  @property {string}      transaction_id    - Transaction ID
+ *  @property {string[]}    email_errors      - Email delivery errors, if any
+ */
+export interface SubmitTxResult {
+    transaction_id: string,
+    email_errors?: string[]
+}

@@ -2,7 +2,7 @@ import * as CSL from '@emurgo/cardano-serialization-lib-browser';
 import { Backend } from './Backend';
 import { UTxO, Output, BigIntWrap } from './Types';
 import { Prover } from './Prover';
-import { hexToBytes } from './Utils';
+import { hexToBytes, harden, getMatchingGoogleKey } from './Utils';
 
 /**
  * We support Bech32 addresses and Gmail-locked smart contracts.
@@ -231,7 +231,7 @@ export class Wallet {
             const payload = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
 
             const keyId = JSON.parse(header).kid;
-            const matchingKey = await getMatchingKey(keyId);
+            const matchingKey = await getMatchingGoogleKey(keyId);
             const signature = parts[2].replace(/-/g, '+').replace(/_/g, '/');
             const empi = {
                 piPubE: b64ToBn(matchingKey.e.replace(/-/g, '+').replace(/_/g, '/')),
@@ -241,7 +241,7 @@ export class Wallet {
             };
 
             const proofBytes = await this.prover.prove(empi);
-            const resp = await this.backend.createAndSendFunds(this.userId, header + '.' + payload, pubkeyHex, proofBytes, outs);
+            const resp = await this.backend.activateAndSendFunds(header + '.' + payload, pubkeyHex, proofBytes, outs);
             txHex = resp.transaction;
         }
         const transaction = CSL.FixedTransaction.from_bytes(hexToBytes(txHex));
@@ -251,20 +251,6 @@ export class Wallet {
         return await this.backend.submitTx(signedTxHex, emailRecipients);
     }
 
-}
-
-function harden(num: number): number {
-    return 0x80000000 + num;
-}
-
-async function getMatchingKey(keyId: string) {
-    const { keys } = await fetch('https://www.googleapis.com/oauth2/v3/certs').then((res) => res.json());
-    for (const k of keys) {
-        if (k.kid == keyId) {
-            return k;
-        }
-    }
-    return null;
 }
 
 

@@ -36,7 +36,7 @@ export class Backend {
     }
 
     /**
-     * Return wallet's address by email. The wallet can be not initialised, i.e. this function will return the adress for any email.
+     * Return wallet's address by email. The wallet can be not initialised, i.e. this function will return the address for any email.
      * @async
      * @param {string} email
      * @returns {CSL.Address}
@@ -50,52 +50,34 @@ export class Backend {
     }
 
     /**
-     * Check if a Gmail-based wallet has been initialised (i.e. the token minting transaction has been submitted).
+     * Get server settings including network and version information.
      * @async
-     * @param {string} email
-     * @param {string} pubKeyHash - Token name (the hash of a public key used to initialise the wallet)
-     * @returns {boolean}
+     * @returns {Settings}
      */
-    async isWalletInitialised(email: string, pubKeyHash: string): Promise<boolean> {
-        const { data } = await axios.post(`${this.url}/v0/wallet/is-initialized`, {
-            'email': email
-        }, this.headers()
-        );
-        if (!data.is_initialized) {
-            return false;
-        }
-        const tokenNames = data.is_initialized[1];
-        for (let i = 0; i < tokenNames.length; i++) {
-            if (tokenNames[i] == pubKeyHash) {
-                return true;
-            }
-        }
-        return false;
+    async getSettings(): Promise<{ network: string, version: string }> {
+        const { data } = await axios.get(`${this.url}/v0/settings`, this.headers());
+        return data;
     }
 
     /**
-     * Create a Gmail-based wallet.
+     * Activate a Smart Wallet.
      * This will create a minting transaction which should be signed and submitted.
      * @async
-     * @param {string} email
      * @param {string} jwt    - Base64url-decoded Google JSON web token without signature
-     * @param {string} paymenk_key_hash  - Token name (the hash of a public key used to initialise the wallet)
+     * @param {string} payment_key_hash  - Token name (the hash of a public key used to initialise the wallet)
      * @param {ProofBytes} proof_bytes   - Zero-knowledge proof that the user possesses a valid JWT
-     * @param {CSL.Address} fund_address - Address which wll fund the transaction (defaults to the wallet's address)
      * @returns {CreateWalletResponse}
      */
-    async createWallet(email: string, jwt: string, payment_key_hash: string, proof_bytes: ProofBytes, fund_address?: CSL.Address): Promise<CreateWalletResponse> {
+    async activateWallet(jwt: string, payment_key_hash: string, proof_bytes: ProofBytes): Promise<CreateWalletResponse> {
         const requestData = {
-            'email': email,
             'jwt': jwt,
             'payment_key_hash': payment_key_hash,
-            'proof_bytes': proof_bytes,
-            'fund_address': fund_address
+            'proof_bytes': proof_bytes
         };
 
         const payload = serialize(requestData);
 
-        const { data } = await axios.post(`${this.url}/v0/wallet/create`, payload,
+        const { data } = await axios.post(`${this.url}/v0/wallet/activate`, payload,
             this.headers({ 'Content-Type': 'application/json' })
         );
 
@@ -110,19 +92,17 @@ export class Backend {
     }
 
     /**
-     * Create a Gmail-based wallet and send funds from it.
+     * Activate a Smart Wallet and send funds from it.
      * This will create transaction which should be signed and submitted.
      * @async
-     * @param {string} email
      * @param {string} jwt    - Base64url-decoded Google JSON web token without signature
-     * @param {string} paymenk_key_hash  - Token name (the hash of a public key used to initialise the wallet)
+     * @param {string} payment_key_hash  - Token name (the hash of a public key used to initialise the wallet)
      * @param {ProofBytes} proof_bytes   - Zero-knowledge proof that the user possesses a valid JWT
      * @param {Output[]} outs            - Transaction outputs (where to send funds)
      * @returns {CreateWalletResponse}
      */
-    async createAndSendFunds(email: string, jwt: string, payment_key_hash: string, proof_bytes: ProofBytes, outs: Output[]): Promise<CreateWalletResponse> {
+    async activateAndSendFunds(jwt: string, payment_key_hash: string, proof_bytes: ProofBytes, outs: Output[]): Promise<CreateWalletResponse> {
         const requestData = {
-            'email': email,
             'jwt': jwt,
             'payment_key_hash': payment_key_hash,
             'proof_bytes': proof_bytes,
@@ -131,7 +111,7 @@ export class Backend {
 
         const payload = serialize(requestData);
 
-        const { data } = await axios.post(`${this.url}/v0/wallet/create-and-send-funds`, payload,
+        const { data } = await axios.post(`${this.url}/v0/wallet/activate-and-send-funds`, payload,
             this.headers({ 'Content-Type': 'application/json' })
         );
 
@@ -150,7 +130,7 @@ export class Backend {
      * @async
      * @param {string} email
      * @param {Output[]} outs            - Transaction outputs (where to send funds)
-     * @param {string} paymenk_key_hash  - Token name (the hash of a public key used to initialise the wallet)
+     * @param {string} payment_key_hash  - Token name (the hash of a public key used to initialise the wallet)
      * @returns {SendFundsResponse}
      */
     async sendFunds(email: string, outs: Output[], payment_key_hash: string): Promise<SendFundsResponse> {
@@ -176,15 +156,35 @@ export class Backend {
     }
 
     /**
+     * Add a verification key witness to an unsigned transaction and submit it.
+     * @async
+     * @param {string} unsigned_transaction - CBOR-encoded unsigned transaction
+     * @param {string} vkey_witness - CBOR-encoded verification key witness
+     * @param {string[]} email_recipients - List of email recipients for notifications
+     * @returns {SubmitTxResult} - Transaction ID and email delivery errors, if any
+     */
+    async addVkeyAndSubmit(unsigned_transaction: string, vkey_witness: string, email_recipients: string[] = []): Promise<string> {
+        const { data } = await axios.post(`${this.url}/v0/tx/add-vkey-and-submit`, {
+            unsigned_transaction: unsigned_transaction,
+            vkey_witness: vkey_witness,
+            email_recipients: email_recipients
+        }, this.headers());
+
+        return data;
+    }
+
+    /**
      * Submit a CBOR-encoded transaction. 
      * @async
-     * @param {string} tx
+     * @param {string} tx - CBOR-encoded transaction
+     * @param {string[]} email_recipients - List of email recipients for notifications
      * @returns {string} - Transaction ID
      */
     async submitTx(tx: string, email_recipients: string[] = []): Promise<string> {
-        const { data } = await axios.post(`${this.url}/v0/tx/submit`, { email_recipients: email_recipients, tx: tx },
-            this.headers()
-        );
+        const { data } = await axios.post(`${this.url}/v0/tx/submit`, { 
+            email_recipients: email_recipients, 
+            tx: tx 
+        }, this.headers());
 
         return data;
     }
@@ -223,6 +223,16 @@ export class Backend {
         }
 
         return result;
+    }
+
+    /**
+     * Get Google OAuth credentials 
+     * @async
+     * @returns {ClientCredentials}
+     */
+    async credentials(): Promise<{client_id: string, client_secret: string}> {
+        const { data } = await axios.get(`${this.url}/v0/oauth/credentials`, this.headers());
+        return data;
     }
 
 }

@@ -38,7 +38,7 @@ export default {
       transactionSupport:true,
       swapSupport: true,
       buySupport: true,
-      zkFoldSupport: false,
+      zkFoldSupport: true,
       networkParams: {
         networkMagic: 764824073
       }

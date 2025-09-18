@@ -36,3 +36,46 @@ export function bytesToBase64Url(bytes: Uint8Array): string {
     const base64 = btoa(String.fromCharCode(...bytes));
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
+
+/**
+ * Harden a derivation index for BIP32 key derivation
+ * @param num - Index to harden
+ * @returns Hardened index
+ */
+export function harden(num: number): number {
+    return 0x80000000 + num;
+}
+
+/**
+ * Convert base64 string to BigInt (from zkFold implementation)
+ * Based on: https://coolaj86.com/articles/bigints-and-base64-in-javascript/
+ * @param b64 - Base64 string
+ * @returns BigInt value
+ */
+export function b64ToBigInt(b64: string): bigint {
+    const bin = atob(b64);
+    const hex: string[] = [];
+
+    bin.split('').forEach(function (ch) {
+        let h = ch.charCodeAt(0).toString(16);
+        if (h.length % 2) { h = '0' + h; }
+        hex.push(h);
+    });
+
+    return BigInt('0x' + hex.join(''));
+}
+
+/**
+ * Get matching Google public key by key ID
+ * @param keyId - Key ID from JWT header
+ * @returns Matching public key or null
+ */
+export async function getMatchingGoogleKey(keyId: string) {
+    const { keys } = await fetch('https://www.googleapis.com/oauth2/v3/certs').then((res) => res.json());
+    for (const k of keys) {
+        if (k.kid == keyId) {
+            return k;
+        }
+    }
+    return null;
+}
