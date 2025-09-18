@@ -11,6 +11,6 @@ const axiosInstance = axios.create({
 
 export default {
   async resolve(handle: string) {
-    return await axiosInstance.get(`/handles/${handle}`);
+    return axiosInstance.get(`/handles/${handle}`);
   }
 }

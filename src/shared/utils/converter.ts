@@ -3,20 +3,13 @@ import {
   AssetName,
   Assets,
   AuxiliaryData,
-  AuxiliaryDataHash,
   BaseAddress,
   BigNum,
   Bip32PublicKey,
   ByronAddress,
-  Credential,
-  decode_metadatum_to_json_str,
   Ed25519KeyHash,
   Ed25519Signature,
-  EnterpriseAddress, FixedTransaction,
-  GeneralTransactionMetadata,
-  hash_plutus_data, make_vkey_witness,
-  MetadataJsonSchema,
-  MetadataList,
+  EnterpriseAddress, hash_plutus_data, make_vkey_witness,
   MultiAsset,
   NativeScript,
   NativeScripts,
@@ -37,8 +30,6 @@ import {
   Vkeywitness,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { blake2b, blake2bHex } from 'blakejs';
-import { bech32 } from 'bech32';
 import {
   AlgorithmId,
   BigNum as BigNum2,
@@ -48,20 +39,12 @@ import {
   Headers,
   HeaderMap,
   Label,
-  ProtectedHeaderMap, KeyType, COSEKey, COSESign1, Int, CurveType,
+  ProtectedHeaderMap, KeyType, COSEKey, Int, CurveType,
 } from '@emurgo/cardano-message-signing-browser';
-
-import {
-  AddressType,
-  CIP36VoteRegistrationFormat,
-  TxAuxiliaryDataType,
-  TxOutputDestinationType,
-} from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
-import cbor from 'cbor';
 import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { Cardano, util, Serialization } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -89,32 +72,6 @@ export function toValue(assets, lovelace) {
   });
   const value = Value.new(BigNum.from_str(lovelace));
   if (assets.length > 0 || !lovelace) value.set_multiasset(multiAsset);
-  return value;
-}
-
-export function toUTxO2(utxo: Cardano.Utxo): TransactionUnspentOutput {
-  return TransactionUnspentOutput.new(
-    TransactionInput.new(TransactionHash.from_hex(utxo[0].txId), utxo[0].index),
-    TransactionOutput.new(Address.from_bech32(utxo[1].address), toValue2(utxo[1].value.coins, utxo[1].value.assets))
-  );
-}
-
-export function toValue2(lovelace: Cardano.Lovelace, assets?: Cardano.TokenMap): Value {
-  const value: Value = Value.new(BigNum.from_str(lovelace.toString()));
-  if (assets) {
-    const multiAsset: MultiAsset = MultiAsset.new();
-    const policies: any[] = [...new Set(Object.keys(assets).map((assetId: string) => Cardano.AssetId.getPolicyId(assetId)))];
-    policies.forEach((policy) => {
-      const policyAssets = Object.entries(assets).filter(mapEntry =>
-        Cardano.AssetId.getPolicyId(mapEntry[0]) === policy);
-      const assetsValue: Assets = Assets.new();
-      policyAssets.forEach((asset) => {
-        assetsValue.insert(AssetName.new(util.hexToBytes(Cardano.AssetId.getAssetName(asset[0]))), BigNum.from_str(asset[1]));
-      });
-      multiAsset.insert(ScriptHash.from_bytes(util.hexToBytes(policy)), assetsValue);
-    });
-    value.set_multiasset(multiAsset);
-  }
   return value;
 }
 
@@ -149,16 +106,6 @@ export const assetsToValue = (assets) => {
   return value;
 };
 
-export function getColor(value) {
-  if (value > 100) {
-    value = 100
-  }
-  value = value / 100
-  //value from 0 to 1
-  const hue = ((1 - value) * 120).toString(10);
-  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-}
-
 export function getArtists(artists) {
   if (artists !== undefined && Array.isArray(artists)) {
     return artists.join(', ');
@@ -170,17 +117,6 @@ export function formatTime(secs: number): string {
   const minutes = Math.floor(secs / 60) || 0;
   const seconds = (secs - minutes * 60) || 0;
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-}
-
-export function unitToFingerprint(unit) {
-  const policyIdBytes = Buffer.from(unit.slice(0,56), 'hex');
-  const assetNameBytes = Buffer.from(unit.slice(56), 'hex');
-  const combined = Buffer.concat([policyIdBytes, assetNameBytes]);
-  // Perform Blake2b-160 hash on the combined bytes
-  const hash = blake2b(combined, null, 20);
-  // Encode the result as Bech32
-  const words = bech32.toWords(hash);
-  return bech32.encode('asset', words)
 }
 
 export function stringToHex(input: string) {
@@ -284,13 +220,6 @@ export const createCOSEKeyHex = (pubKeyBytes) => {
   return keyHex;
 };
 
-export function verifyData(data: { key: string; signature: string }, address2: string, payload2: string) {
-  const coseSign1_verify = COSESign1.from_bytes(toHexBuffer(data.signature));
-  const signedSigStruc_verify = coseSign1_verify.signed_data();
-  const isSame = toHexString(signedSigStruc_verify.payload()) === payload2;
-  return isSame;
-}
-
 export const safeFreeCSLObject = (obj2) => {
   if (obj2 && obj2.free) {
     if (obj2.__wbg_ptr > 0) {
@@ -393,29 +322,10 @@ export const isSameArray = (a1, a2) => {
   return a1.length === a2.length && a1.every((v2, i2) => v2 === a2[i2]);
 };
 
-export const hasConwaySetTag = (tx2: FixedTransaction) => {
-  const decodedTx = getDecodedCbor(tx2.to_hex());
-  const decodedTxBody = getDecodedTxBody(decodedTx);
-  for (const item of decodedTxBody) {
-    const key3 = item[0];
-    const value2 = item[1];
-    if (key3 === 0) {
-      return !Array.isArray(value2);
-    }
-  }
-  return false;
+export const hasConwaySetTag = (tx2: Cardano.Tx) => {
+  const tx: Serialization.Transaction = Serialization.Transaction.fromCore(tx2);
+  return tx.body().hasTaggedSets()
 };
-
-export const getDecodedCbor = (cborHex): Array<any> | null  => {
-  try {
-    return !cborHex ? null : cbor.decodeAllSync(Buffer.from(cborHex, 'hex'));
-  } catch (e) {
-    console.error("getDecodedCbor", e);
-  }
-  return null;
-};
-
-const getDecodedTxBody = (tx2) => tx2[0][0];
 
 export const isCatalystVotingRegistrationMetadata = (metadata: AuxiliaryData) => {
   const _metadata = metadata == null ? void 0 : metadata.metadata();
@@ -435,168 +345,6 @@ export const isCatalystVotingRegistrationMetadata = (metadata: AuxiliaryData) =>
     _metadata.free();
   }
   return false;
-};
-
-export function generateLedgerMetadataFromHash(metadataHash: AuxiliaryDataHash) {
-  return {
-    type: TxAuxiliaryDataType.ARBITRARY_HASH,
-    params: {
-      hashHex: metadataHash.to_hex()
-    }
-  };
-}
-
-const getCatalystRegistrationMetadata = (metadata) => {
-  const metaList = MetadataList.from_bytes(metadata.to_bytes());
-  const generalTxMeta = GeneralTransactionMetadata.from_bytes(metaList.get(0).to_bytes());
-  safeFreeCSLObject(metaList);
-  return generalTxMeta;
-};
-
-export function generateLedgerMetadata(accountData, metadata: AuxiliaryData) {
-  if (isCatalystVotingRegistrationMetadata(metadata)) {
-    const metadatum = getCatalystRegistrationMetadata(metadata).get(BigNum.from_str("61284"));
-    const catalyst_meta = JSON.parse(decode_metadatum_to_json_str(metadatum, MetadataJsonSchema.BasicConversions));
-    const votingPublicKey = catalyst_meta["1"];
-    const nonce2 = catalyst_meta["4"];
-    const rewardAddr = Address.from_hex(catalyst_meta["3"].replace(/^0x/, ""));
-    const rewardAddrBech32 = rewardAddr.to_bech32();
-    safeFreeCSLObject(rewardAddr);
-    const cred = getAddressCredentials(rewardAddrBech32);
-    const paymentCred = getOwnedCred([accountData.keys], cred.paymentCred);
-    const stakeCred = getOwnedCred([accountData.keys], cred.stakeCred, "stake");
-    if (!paymentCred || !stakeCred) {
-      throw new Error("Error: generateLedgerMetadata: reward address credentials not found");
-    }
-    const stakingKeyPath = hdPathToArray(stakeCred.path);
-    return {
-      type: TxAuxiliaryDataType.CIP36_REGISTRATION,
-      params: {
-        format: CIP36VoteRegistrationFormat.CIP_15,
-        voteKeyHex: votingPublicKey.replace(/^0x/, ""),
-        // voteKeyPath: BIP32Path;
-        // delegations: Array<CIP36VoteDelegation>;
-        stakingPath: stakingKeyPath,
-        paymentDestination: {
-          type: TxOutputDestinationType.DEVICE_OWNED,
-          params: generateLedgerOwnedAddress(accountData, paymentCred, stakeCred)
-        },
-        nonce: nonce2
-        // votingPurpose: bigint_like;
-      }
-    };
-  } else {
-    return {
-      type: TxAuxiliaryDataType.ARBITRARY_HASH,
-      params: {
-        hashHex: blake2bHex(Buffer.from(metadata.to_bytes()), void 0, 32)
-      }
-    };
-  }
-}
-
-export function generateLedgerMintBundle(mintList2) {
-  const assetGroup = [];
-  const sortedMintList = [...mintList2].sort((a2, b2) => a2[0].localeCompare(b2[0], "en-US"));
-  for (const mint of sortedMintList) {
-    const assetList = [];
-    const sortedAssetList = Object.entries(mint[1]).sort((a2, b2) => {
-      return a2[0].length === b2[0].length ? a2[0].localeCompare(b2[0], "en-US") : a2[0].length - b2[0].length;
-    });
-    for (const asset of sortedAssetList) {
-      assetList.push({
-        assetNameHex: asset[0],
-        amount: asset[1]
-      });
-    }
-    assetGroup.push({
-      policyIdHex: mint[0],
-      tokens: assetList
-    });
-  }
-  return assetGroup;
-}
-
-export const generateLedgerOwnedAddress = (accountData, paymentCred, stakeCred) => {
-  const _paymentCred = typeof paymentCred === "string" ? getOwnedCred([accountData.keys], paymentCred) : paymentCred;
-  const _stakeCred = typeof stakeCred === "string" ? getOwnedCred([accountData.keys], stakeCred, "stake") : stakeCred;
-  if (_paymentCred && _stakeCred) {
-    return {
-      type: AddressType.BASE_PAYMENT_KEY_STAKE_KEY,
-      params: {
-        spendingPath: hdPathToArray(_paymentCred.path),
-        stakingPath: hdPathToArray(_stakeCred.path)
-      }
-    };
-  } else if (_paymentCred && !stakeCred) {
-    return {
-      type: AddressType.ENTERPRISE_KEY,
-      params: {
-        spendingPath: hdPathToArray(_paymentCred.path)
-      }
-    };
-  } else if (_stakeCred && !paymentCred) {
-    return {
-      type: AddressType.REWARD_KEY,
-      params: {
-        stakingPath: hdPathToArray(_stakeCred.path)
-      }
-    };
-  }
-  throw new Error(`generateLedgerOwnedAddress: couldn't find cred for: paymentCred=${paymentCred}, stakeCred=${stakeCred}`);
-}
-
-export const getOwnedCred = (credList, cred, type2?) => {
-  if (!cred || !credList) return null;
-  let key3;
-  for (const creds of credList) {
-    switch (type2) {
-      case "payment":
-        key3 = creds.payment.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "change":
-        key3 = creds.change.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "stake":
-        key3 = creds.stake.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "script":
-        key3 = creds.script.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "drep":
-        key3 = creds.drep.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "cc_cold":
-        key3 = creds.cc_cold.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "cc_hot":
-        key3 = creds.cc_hot.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      default:
-        key3 = creds.payment.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.change.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.stake.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.script.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.drep.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.cc_cold.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.cc_hot.find((item) => item.cred === cred);
-        if (key3) return key3;
-    }
-  }
-  return null;
 };
 
 const getAddressBytes = (addrHexOrBech32) => {
@@ -769,47 +517,16 @@ const getPlutusDataJSONFromCSL = (cslPlutusData) => {
   return _json ?? null;
 };
 
-export const isScriptStakeAddress = (addrBech32) => {
-  let type2 = null;
-  try {
-    type2 = getAddressType(addrBech32);
-  } catch (error3) {
-    console.warn("Could not determine address type.", error3);
-    return false;
-  }
-  switch (type2) {
-    case 2:
-    case 3:
-    case 15:
+export const isScriptStakeAddress = (addrBech32: string): boolean => {
+  const address: Cardano.Address = Cardano.Address.fromString(addrBech32);
+  switch(address.getType()) {
+    case Cardano.AddressType.BasePaymentKeyStakeScript:
+    case Cardano.AddressType.BasePaymentScriptStakeScript:
+    case Cardano.AddressType.RewardScript:
       return true;
+    default:
+      return false;
   }
-  return false;
-};
-
-function getAddressType(addrBech32) {
-  const addrBytes = getAddressBytes(addrBech32);
-  if (!addrBytes) {
-    throw new Error('Could not parse address "' + addrBech32 + '".');
-  }
-  return (addrBytes[0] & 240) >> 4;
-}
-
-export const getRewardAddressFromCred = (stakeCred, network2: number) => {
-  const cslStakeCred = getCSLCredential(stakeCred);
-  const cslRewardAddr = RewardAddress.new(network2, cslStakeCred);
-  const cslAddr = cslRewardAddr.to_address();
-  const addr = cslAddr.to_bech32(void 0);
-  safeFreeCSLObject(cslAddr);
-  safeFreeCSLObject(cslRewardAddr);
-  safeFreeCSLObject(cslStakeCred);
-  return addr;
-};
-
-const getCSLCredential = (cred, _free?) => {
-  const cslKeyHash = Ed25519KeyHash.from_bytes(toHexBuffer(cred));
-  const cslCred = Credential.from_keyhash(cslKeyHash);
-  safeFreeCSLObject(cslKeyHash);
-  return cslCred;
 };
 
 export const assembleWitnesses = (accountData2, signedTxData) => {
@@ -960,13 +677,13 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
   if (tx.body?.inputs) {
     tx.body.inputs.forEach((input: any) => {
       // Try to find the corresponding UTXO from provided UTXOs
-      const utxo = utxos.find((utxo: any) => 
+      const utxo = utxos.find((utxo: any) =>
         utxo[0].txId === input.txId && utxo[0].index === input.index
       );
-      
+
       let address = '';
       let amount: any[] = [];
-      
+
       if (utxo) {
         // Use the actual UTXO data
         address = utxo[1].address;
@@ -974,7 +691,7 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
           unit: 'lovelace',
           quantity: Number(utxo[1].value.coins)
         }];
-        
+
         if (utxo[1].value.assets && utxo[1].value.assets.size > 0) {
           utxo[1].value.assets.forEach((quantity: bigint, assetId: string) => {
             amount.push({
@@ -984,7 +701,7 @@ export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
           });
         }
       }
-      
+
       inputs.push({
         tx_hash: input.txId,
         output_index: input.index,

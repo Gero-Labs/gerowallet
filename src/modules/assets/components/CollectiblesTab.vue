@@ -1,10 +1,10 @@
 <template>
   <!-- NFT Gallery Container -->
-  <div class="nft-gallery-container">
-    <!-- Fixed height container to match assets table -->
-    <div>
+  <div class="nft-gallery-container adaptive-container" :style="{ minHeight: containerHeight + 'px' }">
+    <!-- Dynamic height container to match assets table -->
+    <div class="gallery-wrapper">
       <!-- Grid View -->
-      <div class="gallery-grid px-3 pb-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
+      <div class="gallery-grid px-3" :class="gridSizeClass" :style="{ '--card-size': cardSize + 'px' }">
         <v-card
           v-for="collection in paginatedCollectibles"
           :key="collection.id || collection.name"
@@ -69,12 +69,14 @@ interface Props {
   hideScam?: boolean;
   searchTerm?: string;
   sortBy?: string;
+  containerHeight?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   hideScam: false,
   searchTerm: '',
   sortBy: 'name',
+  containerHeight: 348,
 });
 
 // Emits
@@ -87,6 +89,9 @@ const { collections } = toRefs(walletStore);
 const collectiblesPage = ref<number>(1);
 const dialogData = ref<any>(null);
 const screenWidth = ref<number>(window.innerWidth);
+
+// Pagination settings
+const itemsPerPage = 14; // 2 rows of 7 items
 
 // Methods
 const handleOnRowClick = (collection: any) => {
@@ -116,14 +121,17 @@ const sortOptionsDropdown = computed(() => [
 ]);
 
 const cardSize = computed(() => {
+  // Dynamically size cards based on available height
+  const baseSize = props.containerHeight <= 200 ? 80 : 110;
+  
   if (screenWidth.value <= 480) {
-    return 90; // Very small screens
+    return baseSize - 10;
   } else if (screenWidth.value <= 768) {
-    return 100; // Small screens
+    return baseSize;
   } else if (screenWidth.value <= 1200) {
-    return 115; // Medium screens
+    return baseSize + 10;
   } else {
-    return 130; // Large screens - 10% smaller than original 140px
+    return baseSize + 20;
   }
 });
 
@@ -131,9 +139,10 @@ const gridSizeClass = computed(() => {
   return 'grid-7-cols'; // 7 columns for large screens
 });
 
-const dynamicItemsPerPage = computed(() => {
-  return 14;
-});
+const dynamicItemsPerPage = computed(() => itemsPerPage);
+
+// Use the shared container height from parent
+const containerHeight = computed(() => props.containerHeight);
 
 const sortedCollectibles = computed(() => {
   if (!collectibles.value) return [];
@@ -223,6 +232,22 @@ onUnmounted(() => {
 .nft-gallery-container {
   position: relative;
   z-index: 1;
+  transition: min-height 0.3s ease, height 0.3s ease;
+}
+
+.nft-gallery-container.adaptive-container {
+  min-height: 148px;
+  height: auto;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-wrapper {
+  transition: height 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .liquid-glass-card,
@@ -331,7 +356,13 @@ onUnmounted(() => {
 /* Gallery Grid Layouts */
 .gallery-grid {
   display: grid;
-  gap: 16px;
+  gap: 10px;
+  transition: all 0.3s ease;
+  align-content: center; /* Center cards vertically in available space */
+  padding-top: 8px;
+  padding-bottom: 8px;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .grid-4-cols {

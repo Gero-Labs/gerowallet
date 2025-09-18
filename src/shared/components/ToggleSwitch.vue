@@ -65,14 +65,12 @@ const props = defineProps({
     default: '14px'
   }
 });
-const emit = defineEmits(['input'])
+const emit = defineEmits(['input', 'update:modelValue'])
 
 const toggleSwitch = (value: boolean) => {
-  if (!value) {
-    emit('input', false);
-  } else {
-    emit('input', true);
-  }
+  // Emit both events for Vue 2.7 compatibility
+  emit('input', value);
+  emit('update:modelValue', value);
 }
 
 const model = computed<boolean>({

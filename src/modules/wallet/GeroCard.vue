@@ -1,102 +1,58 @@
 <template>
   <div class="gero-wallet">
-    <!-- Loading State -->
-    <div v-if="showLoadingState" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p class="loading-message">{{ loadingMessage || 'Loading your wallet...' }}</p>
+    <!-- Status Dropdown (Development Only) -->
+    <div class="status-controls">
+      <div class="dropdown-container">
+        <select v-model="currentStatus" @change="setStatus(currentStatus)" class="status-dropdown">
+          <option value="new">New User</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Error State -->
-    <div v-else-if="showErrorState" class="error-container">
-      <div class="error-icon">⚠️</div>
-      <h3 class="error-title">Something went wrong</h3>
-      <p class="error-message">{{ error || 'An unexpected error occurred' }}</p>
-      <button @click="handleRetry" class="retry-button">Try Again</button>
-    </div>
-    <!-- Main Content -->
-    <component
-      v-else
-      :is="currentComponent"
-      @auth-complete="handleAuthComplete"
-      @kyc-complete="handleKYCComplete"
-      @error="handleError"
-    />
+    <component :is="section" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
-import { useWalletStatus } from '@/composables/useWalletStatus';
+import { ref, onBeforeMount, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
-import geroStore from '@/stores/geroStore';
-
-// Import components
-import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
+import { useMockCardData } from '@/models/card-example';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
-import { walletStore } from '@/stores/walletStore';
+import geroStore from '@/stores/geroStore';
 
-// ============================================================================
-// COMPOSABLES AND STORES
-// ============================================================================
+const store = geroStore;
+const { initializeMockData } = useMockCardData();
 
-const {
-  currentState,
-  error,
-  loadingMessage,
-  showLoadingState,
-  showErrorState,
-  initialize,
-  handleAuthComplete: onAuthComplete,
-  handleKYCComplete: onKYCComplete,
-  setError,
-  clearError,
-} = useWalletStatus();
+const section = ref(OrderCardSection);
+const currentStatus = ref('new' as 'new' | 'pending' | 'approved');
 
-const WALLET_COMPONENTS = {
-  auth: KaiserexAuthPage, // Authentication required
-  new: OrderCardSection, // Order Gero Card
-  pending: PendingSection, // KYC under review
-  approved: HomeSection, // Full wallet access
-  loading: null, // Keep current component
-  error: null, // Error handled in template
-} as const;
+// Determine status based on user data and card data
+const determineStatus = computed(() => {
+  // If no user info, show order card section
+  if (!cardStore.state.userInfo) {
+    return 'new';
+  }
 
-const currentComponent = computed(() => {
-  const state = currentState.value;
-  return WALLET_COMPONENTS[state] || KaiserexAuthPage;
+  // If user exists but no card data, show pending section
+  if ((cardStore.state.userInfo && !cardStore.state.cardData) || localStorage.getItem('kycStatus') === 'pending') {
+    return 'pending';
+  }
+
+  // If user and card data exist, show home section
+  if (cardStore.state.userInfo && cardStore.state.cardData) {
+    localStorage.removeItem('kycStatus');
+    return 'approved';
+  }
+
+  return 'new';
 });
 
-async function handleAuthComplete(): Promise<void> {
-  try {
-    await onAuthComplete();
-    clearError();
-  } catch (error) {
-    console.error('Authentication completion failed:', error);
-    handleError('Authentication failed. Please try again.');
-  }
-}
-
-/**
- * Handle KYC completion
- */
-async function handleKYCComplete(status: string = 'pending', data?: any): Promise<void> {
-  try {
-    await onKYCComplete(status as any, data);
-    clearError();
-  } catch (error) {
-    console.error('KYC completion failed:', error);
-    handleError('KYC submission failed. Please try again.');
-  }
-}
-
-/**
- * Handle errors from child components
- */
-function handleError(errorMessage: string): void {
-  setError(errorMessage);
-}
+const setStatus = (status: 'new' | 'pending' | 'approved') => {
+  currentStatus.value = status;
 
 /**
  * Handle retry action from error state
@@ -274,4 +230,5 @@ onMounted(async () => {
     font-size: 14px;
   }
 }
+
 </style>
