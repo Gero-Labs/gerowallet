@@ -70,11 +70,11 @@ export function parseBackendKeys(json: any[]): BackendKey[] {
     const arrayLength = json.length;
     for (let i = 0; i < arrayLength; i++) {
         const safe = {
-            pkbId: json[i].pkbId,
+            pkbId: json[i].id,
             pkbPublic: {
-                public_e: new BigIntWrap(json[i].pkbPublic.public_e),
-                public_n: new BigIntWrap(json[i].pkbPublic.public_n),
-                public_size: new BigIntWrap(json[i].pkbPublic.public_size),
+                public_e: new BigIntWrap(json[i].public.public_e),
+                public_n: new BigIntWrap(json[i].public.public_n),
+                public_size: new BigIntWrap(json[i].public.public_size),
             }
         }
         result.push(safe);
@@ -86,8 +86,7 @@ export function parseProofStatus(json: string): ProofBytes | string {
     const parser = JSONbig({ useNativeBigInt: true });
     const unsafe = parser.parse(json);
     if (unsafe.tag == "Completed") {
-        return parseProofBytes(unsafe.contents.presBytes) || "";
+        return parseProofBytes(unsafe.contents.bytes) || "";
     }
     return unsafe.tag;
-
 }

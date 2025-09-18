@@ -78,6 +78,26 @@ onMounted(() => {
 const walletCreation = async (): Promise<void> => {
   creatingWalletLoader.value = true;
   try {
+    // Use the improved zkFold service for wallet creation
+    const zkFold = new (await import('@/shared/utils/zkFold')).ZkFold();
+    
+    // Initialize connection if not already done
+    if (!zkFold.idToken.value) {
+      await zkFold.initConnection();
+      await zkFold.fetchProfile();
+    }
+
+    // Create the wallet using zkFold service
+    const walletResult = await zkFold.createWallet({
+      name: newWallet.value.name,
+      icon: newWallet.value.icon,
+      theme: newWallet.value.theme,
+      password: newWallet.value.password,
+      chain: props.network?.blockchain,
+      network: props.network?.network,
+    });
+
+    // Create wallet in local database (fallback to original method)
     const wallet = await GeroStore.createNewGoogleWallet(
       newWallet.value.name,
       newWallet.value.icon,
@@ -87,7 +107,10 @@ const walletCreation = async (): Promise<void> => {
       props.network?.network,
       props.tokens.idToken
     );
+
     emit('close');
+    
+    // Login with the newly created wallet
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
@@ -97,8 +120,42 @@ const walletCreation = async (): Promise<void> => {
         router.push('/')
       })
     });
+
+    console.log('✅ Google wallet created successfully:', {
+      walletId: wallet,
+      address: walletResult?.address
+    });
   } catch (error) {
-    console.error('Error creating wallet:', error);
+    console.error('❌ Error creating Google wallet:', error);
+    
+    // Fallback to original wallet creation method
+    try {
+      const wallet = await GeroStore.createNewGoogleWallet(
+        newWallet.value.name,
+        newWallet.value.icon,
+        newWallet.value.theme,
+        newWallet.value.password,
+        props.network?.blockchain,
+        props.network?.network,
+        props.tokens.idToken
+      );
+      
+      emit('close');
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.LOGIN,
+        data: { wallet },
+      }).then(() => {
+        nextTick(() => {
+          resetDialog();
+          router.push('/')
+        })
+      });
+      
+      console.log('✅ Google wallet created using fallback method');
+    } catch (fallbackError) {
+      console.error('❌ Fallback wallet creation also failed:', fallbackError);
+      throw fallbackError;
+    }
   } finally {
     creatingWalletLoader.value = false;
   }

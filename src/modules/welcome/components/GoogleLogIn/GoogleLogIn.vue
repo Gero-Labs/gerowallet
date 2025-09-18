@@ -4,7 +4,7 @@ import db from '@/db';
 import CreateGoogleWallet from '@/options/modules/welcome/dialogs/CreateGoogleWallet.vue';
 import { google } from '@/utils/assets';
 import GButton from '@/shared/components/GButton/GButton.vue';
-import ZkFold from '@/shared/utils/zkFold';
+import { ZkFold } from '@/shared/utils/zkFold';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
@@ -43,7 +43,7 @@ const googleLogin = async () => {
     if (!googleWallet) {
       newGoogleWalletDialog.value = true;
     } else {
-      await submitLogin(googleWallet.id);
+      await submitLogin(googleWallet.id, zkFold.idToken.value);
     }
   } catch (err: any) {
     console.error(err);
@@ -55,11 +55,11 @@ const googleLogin = async () => {
 
 const vmProxy = getCurrentInstance()!.proxy as any;
 
-const submitLogin = async (walletId: string): Promise<void> => {
+const submitLogin = async (walletId: string, jwt: string): Promise<void> => {
   try {
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
 
-    await zkFold.login(wallet);
+    await zkFold.login(wallet, jwt);
 
     // Wait for storage synchronization to complete before navigation
     // Poll for loggedWallet to be set (indicating login is complete)

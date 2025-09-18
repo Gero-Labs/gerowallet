@@ -11,11 +11,8 @@ const { client_id, client_secret, scopes }: { client_id: string; client_secret: 
 
 export async function signInWithGoogle(): Promise<{accessToken: string; idToken: string}> {
   const redirectUri: string = browser.identity.getRedirectURL();
-  console.log('redirectUri: ----> ', redirectUri);
   const gapi = new GoogleApi(client_id, client_secret, scopes, redirectUri);
   const authUrl: string = gapi.getAuthUrl();
-
-  console.log('authUrl: ----> ', authUrl);
 
   try {
     const resultUrl: string = await browser.identity.launchWebAuthFlow({
