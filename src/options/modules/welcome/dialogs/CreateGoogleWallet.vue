@@ -108,6 +108,9 @@ const walletCreation = async (): Promise<void> => {
       props.tokens.idToken
     );
 
+    // Update wallet address
+    
+
     emit('close');
     
     // Login with the newly created wallet

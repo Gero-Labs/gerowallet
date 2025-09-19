@@ -34,6 +34,7 @@ const newGoogleWalletDialog = ref(false);
 const zkFold = new ZkFold();
 
 const googleLogin = async () => {
+  console.log('wtDF?');
   try {
     loadingGoogleLogin.value = true;
     await zkFold.initConnection();
@@ -100,7 +101,7 @@ const profile = computed(() => zkFold.profile.value);
       outlined
       class="google-btn"
       large
-      @click:button="googleLogin"
+      @click="googleLogin"
       :loading="loadingGoogleLogin"
       :disabled="!props.selectedNetwork?.zkFoldSupport"
     >
