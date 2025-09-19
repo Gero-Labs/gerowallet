@@ -1,9 +1,8 @@
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore from '@/stores/walletStore';
-import { ZkFold } from '@/shared/utils/zkFold';
 import networks from '@/utils/networks';
-import { Blockchain, Network, WalletType, Tip } from '@/models/types';
+import { Blockchain, Network, Tip } from '@/models/types';
 import DexHunterStore from '@/stores/dexHunterStore';
 import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
@@ -122,17 +121,6 @@ export class WalletManager {
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
-
-    if (walletBg.type === WalletType.Google) {
-      promises.push(
-        zkFoldApi.walletAddress(walletBg.userId).then(res => {
-          if (res['status'] !== 200) {
-            throw new Error('Failed to get address');
-          }
-          walletBg.baseAddress = res['data']['address'];
-        })
-      );
-    }
 
     LoadingState.setText('Loading blockchain data...');
     walletBg.loadGenesis();

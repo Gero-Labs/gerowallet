@@ -1,31 +1,61 @@
 /**
  * JSON serialization utilities to handle big integers
+ * CSP-safe implementation that doesn't use eval()
  */
 
-import JSONbig from 'json-bigint'
 import { BigIntWrap, ProofBytes, BackendKey } from './Types';
 
-
-// Configure JSONbig to handle BigInt values properly
-const JSONbigConfig = JSONbig({
-    storeAsString: false,
-    useNativeBigInt: true
-})
-
+/**
+ * Custom JSON serializer that handles BigInt values
+ * Converts BigInt to string for JSON serialization
+ */
 export function serialize(data: any): string {
-    return JSONbigConfig.stringify(data)
+    return JSON.stringify(data, (key, value) => {
+        if (typeof value === 'bigint') {
+            return value.toString();
+        } else if (value instanceof BigIntWrap) {
+            return value.toBigInt().toString();
+        }
+        return value;
+    });
 }
 
+/**
+ * Custom JSON deserializer that handles BigInt values
+ * Note: This basic implementation handles simple cases
+ * For complex BigInt parsing, we rely on the specific parse functions below
+ */
 export function deserialize(jsonString: string): any {
-    return JSONbigConfig.parse(jsonString)
+    return JSON.parse(jsonString);
+}
+
+/**
+ * Parse BigInt values from JSON string without using eval()
+ * @param jsonString - JSON string that may contain BigInt values
+ * @returns Parsed object with BigInt values
+ */
+export function parseBigIntFromJSON(jsonString: string): any {
+    return JSON.parse(jsonString, (key, value) => {
+        // Try to convert string values that look like big integers back to BigInt
+        if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+            try {
+                // Only convert very large numbers to BigInt to avoid converting regular numbers
+                if (value.length > 15) {
+                    return BigInt(value);
+                }
+            } catch {
+                // If BigInt conversion fails, return the original string
+            }
+        }
+        return value;
+    });
 }
 
 export function parseProofBytes(json: string): ProofBytes | null {
     console.log(json);
     let unsafe;
     if (typeof json === 'string') {
-        const parser = JSONbig({ useNativeBigInt: true });
-        unsafe = parser.parse(json);
+        unsafe = parseBigIntFromJSON(json);
     } else if (typeof json === "object") {
         unsafe = json;
     } else {
@@ -83,8 +113,7 @@ export function parseBackendKeys(json: any[]): BackendKey[] {
 }
 
 export function parseProofStatus(json: string): ProofBytes | string {
-    const parser = JSONbig({ useNativeBigInt: true });
-    const unsafe = parser.parse(json);
+    const unsafe = parseBigIntFromJSON(json);
     if (unsafe.tag == "Completed") {
         return parseProofBytes(unsafe.contents.bytes) || "";
     }
