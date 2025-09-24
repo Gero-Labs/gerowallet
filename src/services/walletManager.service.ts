@@ -48,22 +48,22 @@ export class WalletManager {
   }
 
   /**
-   * Login with a wallet
+   * Login and Restore with a wallet
    * @param wallet - Wallet data to login with
    * @returns WalletBg instance or null if failed
    */
-  async login(wallet: any): Promise<WalletBg | null> {
-    console.debug('WalletManager: Starting login process');
-    LoadingState.setText('Creating wallet instance...');
+  async restore(wallet: any): Promise<WalletBg | null> {
+    console.debug('WalletManager: Starting restore process');
+    LoadingState.setText('Restoring wallet instance...');
     LoadingState.setLoading(true);
 
     try {
-      // Clean up existing wallet if different
+      // Clean up an existing wallet if different
       if (this.walletBg && this.currentWalletId !== wallet.id) {
         await this.logout();
       }
 
-      // Create new wallet instance if needed
+      // Create a new wallet instance if needed
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         console.debug('Creating new WalletBg instance for wallet:', wallet.id);
 
@@ -90,14 +90,79 @@ export class WalletManager {
           baseAddress: walletBg.baseAddress,
           stakeAddress: walletBg.stakeAddress,
           token: walletBg.token,
-          api: walletBg.api,
+        });
+        LoadingState.setText('Restoring wallet...');
+        await this.initializeWallet(walletBg);
+
+        this.walletBg = walletBg;
+        this.currentWalletId = wallet.id;
+
+        await walletBg.syncService.resync();
+
+        LoadingState.setText('Wallet ready');
+
+        console.debug('Wallet login successful for wallet:', wallet.id);
+        return walletBg;
+      }
+      return this.walletBg;
+    } catch (error) {
+      LoadingState.setText('Wallet initialization failed');
+      console.error('Error during wallet login:', error);
+      await this.logout();
+      throw error;
+    }
+  }
+
+  /**
+   * Login with a wallet
+   * @param wallet - Wallet data to log in with
+   * @returns WalletBg instance or null if failed
+   */
+  async login(wallet: any): Promise<WalletBg | null> {
+    console.debug('WalletManager: Starting login process');
+    LoadingState.setText('Creating wallet instance...');
+    LoadingState.setLoading(true);
+
+    try {
+      // Clean up an existing wallet if different
+      if (this.walletBg && this.currentWalletId !== wallet.id) {
+        await this.logout();
+      }
+
+      // Create a new wallet instance if needed
+      if (!this.walletBg || this.currentWalletId !== wallet.id) {
+        console.debug('Creating new WalletBg instance for wallet:', wallet.id);
+
+        // Clear wallet store data immediately to prevent cross-wallet contamination
+        WalletStore.clearForWalletSwitch();
+        TapToolsStore.clear();
+
+        const walletBg: WalletBg = new WalletBg(wallet);
+        WalletStore.setLoggedWallet({
+          id: walletBg.id,
+          name: walletBg.name,
+          icon: walletBg.icon,
+          type: walletBg.type,
+          theme: walletBg.theme,
+          order: walletBg.order,
+          chain: walletBg.chain,
+          network: walletBg.network,
+          publicKey: walletBg.publicKey,
+          provider: walletBg.provider,
+          encryptedPrivateKey: walletBg.encryptedPrivateKey,
+          passwordLastUpdate: walletBg.passwordLastUpdate,
+          userId: walletBg?.userId,
+          encryptedMnemonic: walletBg?.encryptedMnemonic,
+          baseAddress: walletBg.baseAddress,
+          stakeAddress: walletBg.stakeAddress,
+          token: walletBg.token,
         });
         LoadingState.setText('Initializing wallet...');
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
-
+        await this.walletBg.syncService.sync()
         LoadingState.setText('Wallet ready');
 
         console.debug('Wallet login successful for wallet:', wallet.id);
@@ -258,11 +323,11 @@ export class WalletManager {
         }
       }).catch(error => {
         console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
-        // Continue wallet initialization even if Ably private channel fails
+        // Continue wallet initialization even if an Ably private channel fails
       })
     );
 
-    // Subscribe to group channel
+    // Subscribe to a group channel
     promises.push(
       ablyService
         .subscribeToGroupChannel(chain, network, {
@@ -291,7 +356,7 @@ export class WalletManager {
         })
         .catch(error => {
           console.warn('⚠️ Failed to subscribe to group channel (non-critical):', error.message || error);
-          // Continue wallet initialization even if Ably group channel fails
+          // Continue wallet initialization even if an Ably group channel fails
         })
     );
 
@@ -309,7 +374,7 @@ export class WalletManager {
     console.debug('WalletManager: Starting logout process');
 
     try {
-      // Clear database cache for current wallet to prevent data leakage
+      // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
         console.debug('Clearing database cache for wallet:', this.currentWalletId);
         clearDbCache(this.currentWalletId);
@@ -346,7 +411,7 @@ export class WalletManager {
         console.warn('Failed to cleanup store messaging service during logout:', storeMessagingError);
       }
 
-      // Note: Don't send logout message to background since this method
+      // Note: Don't send a logout message to the background since this method
       // is already called FROM the background logout handler
 
       // Clear Chrome storage

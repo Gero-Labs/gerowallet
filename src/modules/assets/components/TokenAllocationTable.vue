@@ -255,20 +255,20 @@ const collectiblesLength = computed(() => {
 
 // Shared height calculation for both tabs based on their content
 const sharedContainerHeight = computed(() => {
-  // Calculate height needed for assets tab
+  // Calculate the height needed for the asset tab
   const assetsCount = tokensCount.value;
   const assetsRows = Math.min(assetsCount, 6); // Max 6 items per page
   const assetsHeight = 48 + (assetsRows * 50); // header + rows
-  
-  // Calculate height needed for collectibles tab
+
+  // Calculate height needed for collectible tab
   const filteredCollectibles = collectibles.value.filter((collection: any) => {
     if (currentTab.value === 1 && searchTerm.value?.trim()) {
       const search = searchTerm.value.toLowerCase().trim();
       const nameMatch = collection.name?.toLowerCase().includes(search);
       const descMatch = collection.description && (
-        typeof collection.description === 'string' 
+        typeof collection.description === 'string'
           ? collection.description.toLowerCase().includes(search)
-          : Array.isArray(collection.description) 
+          : Array.isArray(collection.description)
             ? collection.description.join(' ').toLowerCase().includes(search)
             : false
       );
@@ -276,30 +276,30 @@ const sharedContainerHeight = computed(() => {
     }
     return true;
   });
-  
+
   const collectiblesCount = filteredCollectibles.length;
   let collectiblesHeight = 148; // minimum
-  
-  // Match collectibles height to equivalent asset rows
+
+  // Match collectible height to equivalent asset rows
   // 1 row of collectibles (cards) should equal about 2-3 asset rows in visual height
   if (collectiblesCount === 0) {
     collectiblesHeight = 148; // Minimum (2 asset rows)
   } else if (collectiblesCount <= 7) {
-    // 1 row of collectibles = roughly same as 2-3 asset rows
-    // 2 assets = 148px, 3 assets = 198px
-    // So 1 row of collectibles should match the assets height when we have 2-3 assets
+    // 1 row of collectibles = roughly the same as 2-3 asset rows
+    // 2 assets = 148 px, 3 assets = 198 px,
+    // So 1 row of collectibles should match the asset height when we have 2-3 assets
     collectiblesHeight = 148; // Match 2 asset rows for 1 row of cards
   } else if (collectiblesCount <= 14) {
     // 2 rows of collectibles without pagination
     collectiblesHeight = 298; // Match 5 asset rows
   } else {
     // 2 rows with pagination
-    collectiblesHeight = 348; // Match 6 asset rows
+    collectiblesHeight = 322; // Match 6 asset rows
   }
-  
+
   // Use the larger height to ensure no content is cut off
   const maxContentHeight = Math.max(assetsHeight, collectiblesHeight);
-  
+
   // Ensure minimum height of 148px (2 asset rows)
   return Math.max(148, maxContentHeight);
 })

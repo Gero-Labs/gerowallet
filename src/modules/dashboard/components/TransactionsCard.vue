@@ -111,7 +111,7 @@
                   )
                 }}
               </div>
-              <div style="font-size: 12px; color: #c4c4c4">
+              <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap;">
                 {{ filters.toCurrency(item.ada * adaPrice, true, 0, '$', '', false, 6) }}
               </div>
             </div>

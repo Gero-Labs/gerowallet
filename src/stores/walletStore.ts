@@ -6,6 +6,7 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
+import { Keys } from '@/models/types';
 
 interface WhitelistedEntry {
   domain: string;
@@ -18,7 +19,7 @@ export interface WalletStore {
   transactions: any[];
   utxos: Cardano.Utxo[];
   collateral: any;
-  keys: any;
+  keys: Keys;
   tokens: {};
   collections: {};
   config: any;

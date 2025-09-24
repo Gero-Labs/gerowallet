@@ -59,13 +59,10 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
-import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
-import ledger from '@/shared/utils/ledger';
 import {
   buildAndSignData,
   convertTransactionsForStorage,
   createCoseKey,
-  createCOSEKeyHex,
   createSignDataBuilder,
   toHexArray,
 } from '@/shared/utils/converter';
@@ -955,46 +952,30 @@ export class WalletBg {
     payload: string,
     password: string,
     accountIndex: number,
-    isUsb: boolean
   ) {
     let signatureHex: string, keyHex: string;
     const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
-
-    if (this.type === WalletType.Ledger) {
-      const response: SignedMessageData = await ledger.signData(
-        addr,
-        payload,
-        networks.resolveNetwork(this.chain, this.network),
-        accountIndex,
-        isUsb
-      );
-      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
-      signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
-      keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
+    const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes());
+    const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
+    const keyHash: string = credential.hash;
+    let accountKey: Ed25519PrivateKey;
+    const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
+    if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
+      accountKey = paymentKey;
+    } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
+      accountKey = paymentKey;
+    } else if (keyHash === this.stakeKey().hash().hex()) {
+      accountKey = stakeKey;
+    } else if (keyHash === this.drepKey().hash().hex()) {
+      accountKey = drepKey;
     } else {
-      const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes());
-      const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
-      const keyHash: string = credential.hash;
-      let accountKey: Ed25519PrivateKey;
-      const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
-      if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
-        accountKey = paymentKey;
-      } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
-        accountKey = paymentKey;
-      } else if (keyHash === this.stakeKey().hash().hex()) {
-        accountKey = stakeKey;
-      } else if (keyHash === this.drepKey().hash().hex()) {
-        accountKey = drepKey;
-      } else {
-        throw DataSignError.ProofGeneration;
-      }
-      const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
-      const toSign = builder.make_data_to_sign().to_bytes();
-      signatureHex = buildAndSignData(builder, toSign, accountKey);
-      const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-      keyHex = util.bytesToHex(coseKey.to_bytes());
+      throw DataSignError.ProofGeneration;
     }
-
+    const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
+    const toSign = builder.make_data_to_sign().to_bytes();
+    signatureHex = buildAndSignData(builder, toSign, accountKey);
+    const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
+    keyHex = util.bytesToHex(coseKey.to_bytes());
     return { signature: signatureHex, key: keyHex };
   }
 

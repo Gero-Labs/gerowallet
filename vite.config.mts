@@ -219,7 +219,7 @@ export default defineConfig(({ command }) => {
               { src: 'src/assets/notifications/*', dest: 'extension/public' },
               // Skip large images for faster build
               {
-                src: 'src/assets/!(emptyState|welcome|Midnight|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
+                src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
                 dest: 'extension/assets'
               },
             ],
