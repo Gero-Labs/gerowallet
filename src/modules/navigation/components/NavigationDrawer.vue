@@ -167,6 +167,7 @@ import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import LoadingState from '@/stores/loading';
 
 interface NavigationItem {
   title?: string;
@@ -200,7 +201,6 @@ const router = vmProxy.$router
 const version = ref('')
 
 const { musicPlaylist, context } = toRefs(musicStore);
-
 const { loggedWallet, transactions } = toRefs(walletStore);
 
 const account = computed(() => {
@@ -292,28 +292,18 @@ function toggleMiniPlayer() {
 
 async function submitLogout() {
   try {
+    LoadingState.setText('Logging out ...')
+    LoadingState.setLoading(true);
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
 
-    // Wait for store synchronization to complete before navigation
-    // Poll for loggedWallet to be cleared (indicating logout is complete)
-    const maxWaitTime = 3000; // 3 seconds max wait
-    const pollInterval = 50; // 50ms intervals
-    const startTime = Date.now();
-
-    while (loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    console.debug('🚪 Store logout synchronized, navigating to welcome');
-
     // Navigate to welcome page after store is cleared
     router.push('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);
-      // Fallback: force page reload to welcome
+      // Fallback: force page reloads to welcome
       window.location.hash = '#/welcome';
     });
   } catch (error) {
@@ -323,6 +313,9 @@ async function submitLogout() {
       console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';
     });
+  } finally {
+    LoadingState.setLoading(false);
+    LoadingState.setText('');
   }
 }
 

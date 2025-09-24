@@ -169,7 +169,6 @@ const handleItemClick = (item: CarouselItem) => {
 
 const getItemClass = (item: CarouselItem) => {
   const classes: string[] = [];
-  if (item.id === 'midnight-drop') classes.push('midnight-background');
   if (item.id === 'apex-welcome') classes.push('apex-welcome-background');
   return classes;
 };
@@ -385,11 +384,6 @@ onUnmounted(() => {
 
 .carousel-progress-bar {
   border-radius: 0;
-}
-
-/* Midnight specific styles */
-.midnight-background {
-  background: linear-gradient(135deg, #1a0033 0%, #330066 50%, #4d0099 100%);
 }
 
 /* Apex specific styles */

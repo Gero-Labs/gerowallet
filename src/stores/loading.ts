@@ -12,7 +12,7 @@ export interface LoadingState {
   loadingTxs: boolean;
 }
 
-// Create observable state
+// Create an observable state
 export const loadingState = Vue.observable<LoadingState>({
   loading: false,
   text: '',
@@ -31,7 +31,7 @@ if (context === 'browser') {
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
     console.debug('📥 Received loading store update:', updates);
-    
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in loadingState) {
@@ -56,10 +56,10 @@ function broadcastFromBackground(updates: Partial<LoadingState>) {
   if (context === 'background') {
     // Apply updates locally first
     Object.assign(loadingState, updates);
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.set({ [STORE_NAME]: loadingState });
   }
@@ -84,7 +84,7 @@ function createSetter<K extends keyof LoadingState>(
 
     // Prepare updates
     let updates: Partial<LoadingState> = { [key]: value };
-    
+
     // Add any additional updates
     if (additionalUpdates) {
       updates = { ...updates, ...additionalUpdates(value) };
@@ -116,7 +116,7 @@ export default {
     }
   }),
 
-  setRestoring: createSetter('isRestoring', 
+  setRestoring: createSetter('isRestoring',
     (v) => {
       if (v) {
         console.debug(`🔄 Starting wallet restore from ${context} context`);
@@ -145,7 +145,7 @@ export default {
   // Expose the observable state
   state: loadingState,
 
-  // Utility method to get current state snapshot
+  // Utility method to get the current state snapshot
   getSnapshot(): LoadingState {
     return { ...loadingState };
   },
@@ -160,7 +160,7 @@ export default {
       connected: false,
       loadingTxs: false,
     };
-    
+
     Object.assign(loadingState, resetState);
     broadcastFromBackground(resetState);
   }
