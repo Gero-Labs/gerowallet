@@ -43,11 +43,14 @@ export const promptLogin = async (): Promise<void> => {
 };
 
 export const signData = async (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string): Promise<DataSignature> => {
-  const result = await Messaging.sendToContent({
+  const result: any = await Messaging.sendToContent({
     method: METHOD.signData,
     data: { address, payload, userGesture: navigator.userActivation?.isActive },
   });
-  return result['data'];
+  return {
+    key: result.data.key,
+    signature: result.data.signature,
+  };
 };
 
 export const signTx = async (tx: string, partialSign: boolean = false): Promise<string> => {

@@ -4,7 +4,6 @@
       <router-view></router-view>
     </component>
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
-      {{ `Loading: ${loading}, isRestoring: ${isRestoring}` }}
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>

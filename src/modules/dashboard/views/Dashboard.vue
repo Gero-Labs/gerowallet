@@ -171,9 +171,6 @@
           </v-card>
         </v-col>
       </v-row>
-
-      <!-- Claim Dialog -->
-      <ClaimDialog :show="showClaimDialog" @close="showClaimDialog = false" />
     </template>
   </v-layout>
 </template>
@@ -189,14 +186,13 @@ import StakingCard2 from '@/modules/dashboard/components/StakingCard2.vue';
 // import CashbackCard from '@/modules/dashboard/components/CashbackCard.vue';
 // import SwapCard from '@/modules/dashboard/components/SwapCard.vue';
 import TransactionsCard from '@/modules/dashboard/components/TransactionsCard.vue';
-import ClaimDialog from '@/modules/dashboard/dialogs/ClaimDialog.vue';
 import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/components/FeatureCarousel.vue';
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
-import { isWalletEmpty as checkWalletEmpty, isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
+import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 // Import carousel assets
@@ -209,10 +205,9 @@ import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 const instance = getCurrentInstance();
 
 // Store refs
-const { loggedWallet, transactions, account, tokens } = toRefs(walletStore);
+const { loggedWallet, transactions, account } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
-const showClaimDialog = ref(false);
 
 const kaiserExLoading = ref(false);
 const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
@@ -223,18 +218,8 @@ const currentApexCarouselIndex = ref(0);
 const carouselPaused = ref(false);
 const apexCarouselPaused = ref(false);
 const isLoading = ref(false);
-const loadingTxs = computed(() => portfolioLoading.value);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
-  {
-    id: 'midnight-drop',
-    title: 'Glacier Drop',
-    subtitle: 'Claim $NIGHT tokens',
-    logo: assets.logoStackedLight,
-    logoAlt: 'NIGHT Logo',
-    backgroundImage: assets.midnightImage,
-    action: 'openClaimDialog',
-  },
   {
     id: 'gero-debit-card',
     title: 'Gero Card',
@@ -300,11 +285,11 @@ const isStakingEnabled = computed(() => {
 });
 
 const isSwapEnabled = computed(() => {
-  return networks.resolveSwapSupport(loggedWallet.value.chain, loggedWallet.value.network);
+  return networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => checkWalletEmpty(account.value, tokens.value));
+const isWalletEmpty = computed(() => account.value?.controlled_amount === 0);
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   // Access config directly from reactive store for better reactivity
@@ -406,9 +391,6 @@ const resumeApexCarousel = () => {
 
 const handleCarouselClick = (item: any) => {
   switch (item.action) {
-    case 'openClaimDialog':
-      openClaimDialog();
-      break;
     case 'showUpdateInfo':
       showUpdateInfo();
       break;
@@ -428,10 +410,6 @@ const handleCarouselClick = (item: any) => {
       showApexFeatures();
       break;
   }
-};
-
-const openClaimDialog = () => {
-  showClaimDialog.value = true;
 };
 
 const showUpdateInfo = () => {

@@ -138,7 +138,7 @@ function clearProcessedDomains() {
 // const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
 // Use Chrome alarms API for reliable cleanup in service workers
-chrome.alarms.create('clearProcessedDomains', { 
+chrome.alarms.create('clearProcessedDomains', {
   delayInMinutes: 24 * 60, // 24 hours
   periodInMinutes: 24 * 60 // repeat every 24 hours
 });
@@ -1066,7 +1066,6 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
-        request.data.isUsb
       );
       sendResponse({
         id: request.id,
@@ -1201,6 +1200,37 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
+  try {
+    console.log('restore', request)
+    const currentWallet = await walletManager.restore(request.data.wallet);
+    if (currentWallet) {
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
   }
 });
 
