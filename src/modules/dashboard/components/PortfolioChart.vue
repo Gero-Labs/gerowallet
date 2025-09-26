@@ -64,7 +64,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, toRefs } from 'vue';
+import { computed, onMounted, ref, watch, toRefs } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';

@@ -39,7 +39,7 @@ import {
   getRewardAddress,
   getStakeKey,
   keyHashFromAddress,
-  toPaymentCredential,
+  toPaymentCredential, toValueCore,
 } from '@/chrome/serialization';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
@@ -70,6 +70,7 @@ import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
+import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 
 let blockchainDb: Dexie = null;
 
@@ -202,51 +203,99 @@ export class WalletBg {
 
     console.debug('🔍 Processing transactions for UTXOs...');
     for (const transaction of transactions) {
-      for (const inp of transaction.body.inputs) {
-        utxos.delete(`${inp.txId}#${inp.index}`);
-      }
-      transaction.body.outputs.forEach((out, idx) => {
-        let outAddress = out.address;
-        const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
-        try {
-          // TODO Support Byron Addresses
-          if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
-            const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
-            const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
-              this.networkId(),
-              baseAddress.getStakeCredential()
-            );
-            outAddress = rewardAddr.toAddress().toBech32();
-          }
-          if (address === outAddress || stakeAddress === outAddress) {
-            addresses.add(out.address);
-            const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
-            utxos.set(utxoId, [
-              {
-                txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
-                index: idx,
-                address: out.address,
-              },
-              {
-                address: out.address,
-                value: out.value,
-                datumHash: out.datumHash,
-                datum: out.datum,
-                scriptReference: out.scriptReference,
-              },
-            ]);
-          }
-          if (out.value.assets) {
-            out.value.assets.keys().forEach((key: string) => {
-              if (!uniqueAssets.has(key)) {
-                uniqueAssets.add(key);
-              }
-            });
-          }
-        } catch (e) {
-          console.error(e);
+      if (transaction.body) {
+        for (const inp of transaction.body.inputs) {
+          utxos.delete(`${inp.txId}#${inp.index}`);
         }
-      });
+        transaction.body.outputs.forEach((out, idx) => {
+          let outAddress = out.address;
+          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
+          try {
+            // TODO Support Byron Addresses
+            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
+              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
+              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
+                this.networkId(),
+                baseAddress.getStakeCredential()
+              );
+              outAddress = rewardAddr.toAddress().toBech32();
+            }
+            if (address === outAddress || stakeAddress === outAddress) {
+              addresses.add(out.address);
+              const utxoId = `${transaction.id || transaction.tx_hash}#${idx}`;
+              utxos.set(utxoId, [
+                {
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
+                  index: idx,
+                  address: out.address,
+                },
+                {
+                  address: out.address,
+                  value: out.value,
+                  datumHash: out.datumHash,
+                  datum: out.datum,
+                  scriptReference: out.scriptReference,
+                },
+              ]);
+            }
+            if (out.value.assets) {
+              out.value.assets.keys().forEach((key: string) => {
+                if (!uniqueAssets.has(key)) {
+                  uniqueAssets.add(key);
+                }
+              });
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        });
+      } else {
+        for (const inp of transaction.utxo.inputs) {
+          utxos.delete(`${inp.tx_hash}#${inp.output_index}`);
+        }
+        transaction.utxo.outputs.forEach((out, idx) => {
+          let outAddress = out.address;
+          const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
+          try {
+            // TODO Support Byron Addresses
+            if (!this.isEnterpriseAddress() && outAddressType === Cardano.AddressType.BasePaymentKeyStakeKey) {
+              const baseAddress: Cardano.BaseAddress = Cardano.Address.fromBech32(outAddress).asBase();
+              const rewardAddr: Cardano.RewardAddress = Cardano.RewardAddress.fromCredentials(
+                this.networkId(),
+                baseAddress.getStakeCredential()
+              );
+              outAddress = rewardAddr.toAddress().toBech32();
+            }
+            if (address === outAddress || stakeAddress === outAddress) {
+              addresses.add(out.address);
+              const utxoId: string = `${transaction.tx_hash}#${out.output_index}`;
+              utxos.set(utxoId, [
+                {
+                  txId: Cardano.TransactionId(transaction.tx_hash),
+                  index: out.output_index,
+                  address: out.address,
+                },
+                {
+                  address: out.address,
+                  value: toValueCore(out.amount),
+                  datumHash: out.datum_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(out.datum_hash)) : null,
+                  datum: out.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(out.inline_datum.bytes)).toCore() : null,
+                  scriptReference: out.reference_script ? Serialization.Script.fromCbor(HexBlob(out.reference_script.bytes)).toCore() : null
+                },
+              ]);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        });
+        Array.from(utxos.values()).forEach((utxo: Cardano.Utxo) => {
+          utxo[1].value.assets?.keys().forEach((key: string) => {
+            if (!uniqueAssets.has(key)) {
+              uniqueAssets.add(key);
+            }
+          });
+        })
+      }
     }
 
     // Set Assets Info in Network DB

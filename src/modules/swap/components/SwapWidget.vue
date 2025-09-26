@@ -181,7 +181,7 @@ import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.v
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import filters from '@/shared/utils/filters';
-import networks, { cardanoLogo } from '@/utils/networks';
+import networks from '@/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
@@ -191,6 +191,7 @@ import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardanoSvg from '@/assets/svg/cardano.svg';
 
 const emit = defineEmits(['onSwap'])
 
@@ -208,7 +209,7 @@ const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoLogo,
+  img: cardanoSvg,
   fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
   balance: 0,
   quantity: '0',
@@ -311,7 +312,7 @@ const nativeTokenComputed = computed(() => {
     return {
       name: 'Cardano',
       ticker: 'ADA',
-      img: cardanoLogo,
+      img: cardanoSvg,
       balance: 0,
       quantity: '0',
       decimals: 6,

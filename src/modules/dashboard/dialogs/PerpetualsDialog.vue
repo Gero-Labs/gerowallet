@@ -47,7 +47,7 @@
             >
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">My Positions</span>
+                  <span class="tab-text">Market Orders</span>
                   <span v-if="positions.length > 0" class="tab-count ml-1">{{ positions.length }}</span>
                 </div>
               </v-tab>
@@ -576,7 +576,7 @@
 
                   <template v-slot:[`item.status`]="{ item }">
                     <v-chip
-                      :color="getOrderStatusColor(item.status)"
+                      :color="getPositionStatusColor(item.status)"
                       x-small
                       label
                       class="status-chip"
@@ -588,10 +588,9 @@
                   <template v-slot:[`item.actions`]="{ item }">
                     <div class="d-flex justify-center">
                       <v-btn
-                        v-if="item.status === 'pending'"
-                        x-small
                         color="error"
-                        outlined
+                        text
+                        x-small
                         @click="cancelLimitOrder(item)"
                         :loading="cancellingOrders[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
                         class="close-position-btn-compact mr-1"
@@ -655,7 +654,10 @@
                   <template v-slot:[`header.asset`]="{ header }">
                     <span style="padding-left: 12px">{{ header.text }}</span>
                   </template>
-                  <template v-slot:[`header.positionType`]="{ header }">
+                  <template v-slot:[`header.orderType`]="{ header }">
+                    <span style="padding: 0 8px">{{ header.text }}</span>
+                  </template>
+                  <template v-slot:[`header.position`]="{ header }">
                     <span style="padding: 0 8px">{{ header.text }}</span>
                   </template>
                   <template v-slot:[`header.entryPrice`]="{ header }">
@@ -680,7 +682,22 @@
                     </div>
                   </template>
 
-                  <template v-slot:[`item.positionType`]="{ item }">
+                  <template v-slot:[`item.orderType`]="{ item }">
+                    <v-chip
+                      x-small
+                      label
+                      class="ultra-compact-chip"
+                      style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;"
+                    >
+                      <v-icon class="mr-1" x-small color="#10b981">{{
+                          item.orderType === "MARKET"
+                            ? "mdi-flash"
+                            : "mdi-target"
+                        }}</v-icon>
+                      {{ (item.orderType)?.toUpperCase() }}
+                    </v-chip>
+                  </template>
+                  <template v-slot:[`item.position`]="{ item }">
                     <v-chip
                       v-if="item.position || item.type"
                       :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
@@ -1354,17 +1371,16 @@ import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
-import {
+import strikeFinanceApi, {
   Asset,
-  ClosePerpetualRequest,
-  CreatePerpetualRequest,
-  PerpetualPosition,
-  LimitOrder,
   CancelLimitOrderRequest,
-  UpdatePositionRequest,
+  ClosePerpetualRequest,
   CreateLimitOrderRequest,
+  CreatePerpetualRequest,
+  LimitOrder,
+  PerpetualPosition,
+  UpdatePositionRequest,
 } from '@/api/strike-finance.api';
-import strikeFinanceApi from '@/api/strike-finance.api';
 import type { IChartApi, Time } from 'lightweight-charts';
 import { priceService, priceStore } from '@/stores/priceStore';
 import { AxiosResponse } from 'axios';
@@ -2161,28 +2177,15 @@ const positions = computed(() => {
     return [];
   }
 
-  return rawPositions.value.map((position, index) => {
+  return rawPositions.value.filter(position => position.status !== 'Completed').map((position, index) => {
     // Re-process position data with the current price
     const processedData = processPositionData(position);
 
     // Return an enhanced position with updated calculations
-    const enhanced = {
+    return {
       ...position,
       ...processedData,
     };
-
-    // Debug what the table will receive
-    console.debug('📋 Table Position Data:', {
-      index,
-      positionSize: enhanced.positionSize,
-      currentPrice: enhanced.currentPrice,
-      pnl: enhanced.pnl,
-      totalFees: enhanced.totalFees,
-      currentPositionValueUsd: enhanced.currentPositionValueUsd,
-      'Should show in table': `$${enhanced.currentPositionValueUsd?.toFixed(2) || 'N/A'}`
-    });
-
-    return enhanced;
   });
 });
 
@@ -2343,6 +2346,7 @@ const limitOrderHeaders = ref([
 
 // History Headers
 const historyHeaders = ref([
+
   {
     text: "Asset",
     align: "start",
@@ -2351,10 +2355,17 @@ const historyHeaders = ref([
     width: "20",
   },
   {
+    text: "Type",
+    align: "center",
+    sortable: true,
+    value: "orderType",
+    width: "15",
+  },
+  {
     text: "Side",
     align: "center",
     sortable: true,
-    value: "positionType",
+    value: "position",
     width: "15",
   },
   {
@@ -2866,15 +2877,14 @@ const loadHistory = async () => {
       strikeFinanceApi.getPositions(walletAddress),
       strikeFinanceApi.getLimitOrders(walletAddress)
     ]);
-
     const allPositions = positionsRes.data || [];
     const allLimitOrders = limitOrdersRes.data || [];
 
     // Combine positions and limit orders into one array
     // Add a 'type' field to distinguish between them
     const combinedOrders = [
-      ...allPositions.map(pos => ({ ...pos, orderType: 'position' })),
-      ...allLimitOrders.map(order => ({ ...order, orderType: 'limit' }))
+      ...allPositions.map(pos => ({ ...pos, orderType: 'MARKET' })),
+      ...allLimitOrders.map(order => ({ ...order, orderType: 'LIMIT' }))
     ];
 
     history.value = combinedOrders;
@@ -2903,8 +2913,6 @@ const loadHistory = async () => {
 // Tab change handler
 const onTabChange = (tabIndex: number) => {
   activeTab.value = tabIndex;
-  // Data is already loaded on mount, so just track the active tab
-  console.debug('[StrikeFinance] Switching to tab:', tabIndex);
 };
 
 // Refresh the current tab
@@ -2913,16 +2921,6 @@ const refreshCurrentTab = () => {
     case 0: loadPositions(); break;
     case 1: loadLimitOrders(); break;
     case 2: loadHistory(); break;
-  }
-};
-
-// Helper functions for status colors
-const getOrderStatusColor = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'pending': return 'warning';
-    case 'filled': return 'success';
-    case 'cancelled': return 'error';
-    default: return 'grey';
   }
 };
 
@@ -3034,8 +3032,8 @@ const cancelLimitOrder = async (order: LimitOrder) => {
   const cancelRequest: CancelLimitOrderRequest = {
     address: loggedWallet.value?.baseAddress,
     asset: {
-      policyId: order.asset.asset.policyId,
-      assetName: order.asset.asset.assetName,
+      policyId: "",
+      assetName: "",
     },
     outRef: {
       txHash: order.outRef.txHash,
@@ -3067,16 +3065,6 @@ const cancelLimitOrder = async (order: LimitOrder) => {
   } finally {
     cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = false;
   }
-};
-
-// Open the update position dialog
-const openUpdatePositionDialog = (position: PerpetualPosition) => {
-  selectedPosition.value = position;
-  updatePositionData.value = {
-    stopLossPrice: position.stopLossPrice || 0,
-    takeProfitPrice: position.takeProfitPrice || 0
-  };
-  updatePositionDialog.value = true;
 };
 
 // Update position

@@ -58,6 +58,7 @@ import multisigTotal from '@/assets/svg/multisig_stack.svg'
 import detailsSvg from '@/assets/svg/details.svg'
 import depositSvg from '@/assets/svg/deposit.svg'
 import cardanoBackground from '@/assets/cardanoBg.png'
+import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
@@ -129,6 +130,7 @@ import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
 import emptyState from '@/assets/emptyState.png'
 import card from '@/assets/svg/card.svg'
 import bringWhite from '@/assets/svg/bring-white.svg'
+import apex from '@/assets/img/apex.jpg'
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -363,7 +365,9 @@ export default {
   cashbackImage,
   debitCardImage,
   frontCardNoMcx2,
-  emptyState
+  emptyState,
+  cardanoBlueLogo,
+  apex
 }
 
 export {

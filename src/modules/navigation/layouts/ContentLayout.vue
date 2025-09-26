@@ -353,7 +353,7 @@ const updateThemeColors = () => {
   const currentFilter = isApex ? iconFilters.apex : iconFilters.cardano;
 
   // Update Vuetify theme
-  updateVuetifyTheme(isApex, true); // Always dark theme for now
+  updateVuetifyTheme(isApex, true); // Always a dark theme for now
 
   // Set CSS custom properties
   Object.entries(currentTheme).forEach(([key, value]) => {
