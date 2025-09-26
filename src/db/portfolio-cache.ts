@@ -621,7 +621,7 @@ export class PortfolioCacheService {
         console.warn('Error checking existing data for timeframe calculation in force load:', error);
       }
 
-      // Get existing data before removing cache entry
+      // Get existing data before removing the cache entry
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
@@ -664,7 +664,7 @@ export class PortfolioCacheService {
   }
 
   /**
-   * Load missing data only (doesn't touch existing cache)
+   * Load missing data only (doesn't touch the existing cache)
    */
   async loadMissingData(address: string): Promise<{
     adaData: any[];
@@ -702,8 +702,8 @@ export class PortfolioCacheService {
   }
 }
 
-// Export singleton instance with default settings (1 minute cache for testing)
-export const portfolioCacheService = new PortfolioCacheService();
+// Export a singleton instance with default settings (1-minute cache for testing)
+export const portfolioCacheService: PortfolioCacheService = new PortfolioCacheService();
 
 // Export utility functions for common use cases
 export const createPortfolioCacheService = (cacheTimeHours: number = 4, enableCache: boolean = true) => {

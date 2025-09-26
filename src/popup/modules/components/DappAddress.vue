@@ -74,6 +74,7 @@ const riskIcon = computed(() => {
   line-height: 12px;
   word-wrap: break-word;
   word-break: break-all;
+  align-items: center;
 }
 #dapp-receiver-wrap.unknown {
   background: linear-gradient(270deg, #1f1f1f -61.94%, #4b4b4b 115%);

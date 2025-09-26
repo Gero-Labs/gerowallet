@@ -226,8 +226,8 @@ export class WalletManager {
       walletBg.loadTransactions()
     );
 
-    const chain = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
-    const network = Object.keys(Network).find(key => Network[key] === walletBg.network);
+    const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
+    const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
     if (walletBg.isEnterpriseAddress()) {
       address = walletBg.baseAddress;

@@ -1,6 +1,6 @@
 import Dexie, { IndexableType, Table } from 'dexie';
 import { Api } from '@/api/api';
-import { Tip, Blockchain, Provider } from '@/models/types';
+import { Tip, Blockchain, Provider, Network } from '@/models/types';
 import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
 import ablyService from '@/services/ably.service';
@@ -61,9 +61,11 @@ export class SyncService {
         const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
 
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
-        await ablyService.publishToSyncChannel(this.walletBg.chain, this.walletBg.network, {
-          chain: this.walletBg.chain,
-          network: this.walletBg.network,
+        const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
+        const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
+        await ablyService.publishToSyncChannel(chainEnum, networkEnum, {
+          chain: chainEnum,
+          network: networkEnum,
           provider: Provider[this.walletBg.provider],
           from,
           to: tip,

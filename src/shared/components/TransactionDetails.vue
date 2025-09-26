@@ -34,8 +34,8 @@
       <div>
         Block Height: <span class="value-text">{{ transactionInfo['block_height']?.toLocaleString('en-US') }}</span>
       </div>
-      <div>
-        Network Fee: <span style="color: #ff8e8e">{{ filters.toCurrency(transactionInfo.body['fee']) }}</span>
+      <div v-if="transactionInfo.body?.fee">
+        Network Fee: <span style="color: #ff8e8e">{{ filters.toCurrency(transactionInfo.body?.fee) }}</span>
       </div>
       <div style="align-items: center">
         {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}

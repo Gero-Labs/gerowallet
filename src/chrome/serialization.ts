@@ -72,6 +72,23 @@ export function toValue(assets: any[], lovelace: string): Serialization.Value {
   return new Serialization.Value(BigInt(lovelace), tokenMap)
 }
 
+export function toValueCore(amount: { unit: string; quantity: string; }[]): Cardano.Value {
+  const value: Cardano.Value = {
+    coins: BigInt(0),
+    assets: new Map<Cardano.AssetId, bigint>()
+  };
+  amount.forEach(amt => {
+    if (amt.unit === 'lovelace') {
+      value.coins = BigInt(amt.quantity);
+    } else {
+      const assetId: Cardano.AssetId = Cardano.AssetId(amt.unit);
+      const current: bigint = value.assets?.get(assetId) ?? BigInt(0);
+      value.assets?.set(assetId, current + BigInt(amt.quantity));
+    }
+  });
+  return value;
+}
+
 export function toStakeCredential(address: Cardano.Address): Cardano.Credential {
   return Cardano.BaseAddress.fromAddress(address)?.getStakeCredential();
 }
