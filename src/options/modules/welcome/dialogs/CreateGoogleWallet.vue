@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
+import { ref, onMounted, watch, getCurrentInstance, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -81,11 +81,10 @@ const walletCreation = async (): Promise<void> => {
     // Use the improved zkFold service for wallet creation
     const zkFold = new (await import('@/shared/utils/zkFold')).ZkFold();
     
-    // Initialize connection if not already done
-    if (!zkFold.idToken.value) {
-      await zkFold.initConnection();
-      await zkFold.fetchProfile();
-    }
+    // Set tokens directly from props instead of triggering another OAuth popup
+    zkFold.accessToken.value = props.tokens.accessToken;
+    zkFold.idToken.value = props.tokens.idToken;
+    zkFold.profile.value = props.googleAccount;
 
     // Create the wallet using zkFold service
     const walletResult = await zkFold.createWallet({

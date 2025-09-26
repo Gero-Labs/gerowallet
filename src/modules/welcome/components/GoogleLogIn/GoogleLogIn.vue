@@ -34,7 +34,6 @@ const newGoogleWalletDialog = ref(false);
 const zkFold = new ZkFold();
 
 const googleLogin = async () => {
-  console.log('wtDF?');
   try {
     loadingGoogleLogin.value = true;
     await zkFold.initConnection();
