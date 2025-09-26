@@ -258,7 +258,7 @@ const sharedContainerHeight = computed(() => {
   // Calculate the height needed for the asset tab
   const assetsCount = tokensCount.value;
   const assetsRows = Math.min(assetsCount, 6); // Max 6 items per page
-  const assetsHeight = 48 + (assetsRows * 50); // header + rows
+  const assetsHeight = (assetsRows * 40); // header + rows
 
   // Calculate height needed for collectible tab
   const filteredCollectibles = collectibles.value.filter((collection: any) => {
@@ -278,12 +278,12 @@ const sharedContainerHeight = computed(() => {
   });
 
   const collectiblesCount = filteredCollectibles.length;
-  let collectiblesHeight = 148; // minimum
+  let collectiblesHeight: number; // minimum
 
   // Match collectible height to equivalent asset rows
   // 1 row of collectibles (cards) should equal about 2-3 asset rows in visual height
   if (collectiblesCount === 0) {
-    collectiblesHeight = 148; // Minimum (2 asset rows)
+    collectiblesHeight = 72; // Minimum (2 asset rows)
   } else if (collectiblesCount <= 7) {
     // 1 row of collectibles = roughly the same as 2-3 asset rows
     // 2 assets = 148 px, 3 assets = 198 px,
@@ -300,8 +300,8 @@ const sharedContainerHeight = computed(() => {
   // Use the larger height to ensure no content is cut off
   const maxContentHeight = Math.max(assetsHeight, collectiblesHeight);
 
-  // Ensure minimum height of 148px (2 asset rows)
-  return Math.max(148, maxContentHeight);
+  // Ensure a minimum height of 148px (1 asset row)
+  return Math.max(72, maxContentHeight);
 })
 
 

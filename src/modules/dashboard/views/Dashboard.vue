@@ -93,7 +93,7 @@
             </v-card-text>
           </v-card>
         </v-col>
-        <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2">
+        <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2" v-if="loggedWallet?.network === Network.PREPROD">
           <AssetsPieChart />
         </v-col>
 
@@ -105,7 +105,7 @@
           md="12"
           sm="12"
           class="pa-2"
-          v-if="loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR"
+          v-if="loggedWallet?.chain === Blockchain.APEX_PRIME && loggedWallet?.network === Network.MAINNET"
         >
           <FeatureCarousel
             :model-value="currentApexCarouselIndex"
@@ -156,21 +156,21 @@
       </v-row>
 
       <!-- KaiserEx Token Reception -->
-      <v-row no-gutters>
-        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">
-          <v-card outlined class="liquid-glass">
-            <v-card-title>KaiserEx Token Reception</v-card-title>
-            <v-card-text>
-              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">
-                Receive Token from KaiserEx
-              </v-btn>
-              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">
-                {{ kaiserExMessage.text }}
-              </v-alert>
-            </v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
+<!--      <v-row no-gutters>-->
+<!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
+<!--          <v-card outlined class="liquid-glass">-->
+<!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
+<!--            <v-card-text>-->
+<!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
+<!--                Receive Token from KaiserEx-->
+<!--              </v-btn>-->
+<!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
+<!--                {{ kaiserExMessage.text }}-->
+<!--              </v-alert>-->
+<!--            </v-card-text>-->
+<!--          </v-card>-->
+<!--        </v-col>-->
+<!--      </v-row>-->
     </template>
   </v-layout>
 </template>
@@ -199,7 +199,7 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
-import { receiveKaiserExToken } from '@/services/kaiserEx.service';
+// import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -209,8 +209,8 @@ const { loggedWallet, transactions, account } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 
-const kaiserExLoading = ref(false);
-const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
+// const kaiserExLoading = ref(false);
+// const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
 
 // Carousel state
 const currentCarouselIndex = ref(0);
@@ -248,7 +248,7 @@ const carouselItems = ref<CarouselItem[]>([
 const apexCarouselItems = ref<CarouselItem[]>([
   {
     id: 'apex-welcome',
-    title: 'Welcome to Apex Fusion',
+    title: 'Apex Fusion',
     subtitle: 'Next-generation blockchain technology',
     logo: assets.geroDashboardApex,
     logoAlt: 'Apex Fusion Logo',
@@ -330,7 +330,7 @@ const computedValues = computed(() => {
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
-// Initialize portfolio data composable with 4-hour cache
+// Initialize portfolio data composable with a 4-hour cache
 const portfolioComposable = usePortfolioData({
   cacheTimeMs: 4 * 60 * 60 * 1000, // 4 hours
   enableCache: true,
@@ -440,31 +440,31 @@ const showApexFeatures = () => {
   // Add your Apex features logic here
 };
 
-const handleReceiveKaiserExToken = async () => {
-  kaiserExLoading.value = true;
-  kaiserExMessage.value = null;
-
-  try {
-    await receiveKaiserExToken(tokenData => {
-      kaiserExMessage.value = {
-        type: 'success',
-        text: `Token received successfully! Token: ${tokenData.access_token}`,
-      };
-      kaiserExLoading.value = false;
-    });
-  } catch (error) {
-    kaiserExMessage.value = {
-      type: 'error',
-      text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
-    kaiserExLoading.value = false;
-  } finally {
-    // Always ensure loading state is cleared, even if popup was manually closed
-    setTimeout(() => {
-      kaiserExLoading.value = false;
-    }, 1000);
-  }
-};
+// const handleReceiveKaiserExToken = async () => {
+//   kaiserExLoading.value = true;
+//   kaiserExMessage.value = null;
+//
+//   try {
+//     await receiveKaiserExToken(tokenData => {
+//       kaiserExMessage.value = {
+//         type: 'success',
+//         text: `Token received successfully! Token: ${tokenData.access_token}`,
+//       };
+//       kaiserExLoading.value = false;
+//     });
+//   } catch (error) {
+//     kaiserExMessage.value = {
+//       type: 'error',
+//       text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+//     };
+//     kaiserExLoading.value = false;
+//   } finally {
+//     // Always ensure loading state is cleared, even if popup was manually closed
+//     setTimeout(() => {
+//       kaiserExLoading.value = false;
+//     }, 1000);
+//   }
+// };
 
 // Empty state handlers
 const handleBuyCrypto = () => {
@@ -561,6 +561,7 @@ watch(
 .apex-carousel-wrapper {
   background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
   height: 100% !important;
+  max-height: 246px;
 }
 
 /* Mini card wrapper styles */

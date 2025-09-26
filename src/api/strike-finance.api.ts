@@ -95,7 +95,7 @@ export interface PerpetualPosition {
   stopLossPrice?: number;
   takeProfitPrice?: number;
   outRef: OutRef;
-  status: 'open' | 'closed' | 'liquidated';
+  status: string;
   rawPositionAssetAmount: string;
   rawEnteredAtUsdPrice: string;
   rawCurrentUsdPrice: string;
