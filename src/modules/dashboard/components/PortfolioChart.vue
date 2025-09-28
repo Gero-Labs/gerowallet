@@ -53,7 +53,7 @@
         </div>
       </div>
     </div>
-    <v-progress-circular v-if="!isReadyToRender" :indeterminate="true"></v-progress-circular>
+    <v-progress-circular v-if="globalLoading" :indeterminate="true"></v-progress-circular>
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">

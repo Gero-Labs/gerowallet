@@ -328,6 +328,9 @@ export function getUtxos(
 export function getBalance(utxos: any[], collateral: any): Serialization.Value {
   const assets: any[] = []
   let lovelace = 0;
+  if (!utxos) {
+    return toValue(assets, lovelace.toString());
+  }
   if (collateral) {
     utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
   }
