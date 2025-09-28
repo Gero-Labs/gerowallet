@@ -2,7 +2,6 @@ import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
 import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob, isNotNil } from '@cardano-sdk/util';
-import { TextDecoder } from 'web-encoding';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
@@ -15,7 +14,7 @@ import { HARDENED, ChainDerivations, Keys } from '@/models/types';
 const isServiceWorker = typeof document === 'undefined';
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
-// Import assets from centralized location
+// Import assets from a centralized location
 let greenSvg = '';
 let purpleSvg = '';
 let pinkSvg = '';

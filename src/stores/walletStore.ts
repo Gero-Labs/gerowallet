@@ -281,7 +281,7 @@ export default {
 
   setBackup(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
-      walletStore.config.backup = value;
+      walletStore.config.backuzp = value;
       broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'backup', value);
     }

@@ -103,14 +103,14 @@ export default {
   setTokens(dexHunterTokens: any) {
     dexHunterStore.dexHunterTokens = dexHunterTokens;
 
-    // Broadcast from background context
+    // Broadcast from a background context
     broadcastFromBackground({ dexHunterTokens });
   },
 
   setBlacklistPolicies(blacklistPolicies: string[]) {
     dexHunterStore.blacklistPolicies = blacklistPolicies;
 
-    // Broadcast from background context
+    // Broadcast from a background context
     broadcastFromBackground({ blacklistPolicies });
   },
 

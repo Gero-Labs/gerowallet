@@ -26,7 +26,7 @@
           <div ref="qrCodeRef" style="width: 160px; height: 160px;"></div>
         </v-list-item-avatar>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="hasBackup" @click="backupWalletDialog = true">
+      <v-list-item class="px-2 py-1" v-if="canBackup" @click="backupWalletDialog = true">
         <v-list-item-avatar class="my-0">
           <v-badge
             v-if="!backup"
@@ -99,18 +99,18 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-      <v-divider />
-      <v-list-item>
-        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
-          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
-        </v-list-item-content>
-      </v-list-item>
-      <v-list-item class="px-2 py-1">
+<!--      <v-divider />-->
+<!--      <v-list-item>-->
+<!--        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>-->
+<!--          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />-->
+<!--        </v-list-item-avatar>-->
+<!--        <v-list-item-content>-->
+<!--          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>-->
+<!--        </v-list-item-content>-->
+<!--      </v-list-item>-->
+<!--      <v-list-item class="px-2 py-1">-->
 
-      </v-list-item>
+<!--      </v-list-item>-->
     </v-list>
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
@@ -126,7 +126,7 @@ import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import { walletStore } from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
@@ -134,8 +134,9 @@ const changePasswordDialog = ref<boolean>(false);
 const { loggedWallet, config } = toRefs(walletStore);
 
 const backup = computed(() => config.value?.backup || false);
-const hasBackup = computed(() => {
-  return loggedWallet.value?.type === WalletType.Normal;
+
+const canBackup = computed(() => {
+  return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
 });
 
 const qrCodeRef = ref<HTMLElement|null>(null)
