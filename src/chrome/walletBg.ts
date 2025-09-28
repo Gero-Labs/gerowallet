@@ -128,6 +128,7 @@ export class WalletBg {
       getDb: this.getDb.bind(this),
       getBlockchainDb: this.getBlockchainDb.bind(this),
       setUtxosAndAddresses: this.setUtxosAndAddresses.bind(this),
+      triggerResync: this.triggerResync.bind(this),
     });
     this.loaderFactory.createAllLoaders();
   }
@@ -474,6 +475,21 @@ export class WalletBg {
 
   public async loadTransactions() {
     return this.loaderFactory.load('transactions');
+  }
+
+  /**
+   * Trigger a resync operation to clear old data and fetch fresh data
+   * Used for migration scenarios when data format changes
+   */
+  public async triggerResync(): Promise<void> {
+    console.log('🔄 Starting migration resync...');
+    try {
+      await this.syncService.resync();
+      console.log('✅ Migration resync completed successfully');
+    } catch (error) {
+      console.error('❌ Migration resync failed:', error);
+      throw error;
+    }
   }
 
   async getLastSyncInfo() {

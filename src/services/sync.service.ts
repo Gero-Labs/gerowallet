@@ -5,11 +5,10 @@ import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
 import ablyService from '@/services/ably.service';
 import { chunkArray } from 'array-chunk-by-size';
-import { Serialization } from '@cardano-sdk/core';
+import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
-import type * as Cardano from '@cardano-sdk/core/dist/cjs/Cardano';
 
 /**
  * SyncService handles all wallet synchronization operations

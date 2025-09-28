@@ -73,7 +73,7 @@ const hasBackup = computed(() => walletStoreDefault.hasBackup())
 // Read the actual backup‐enabled flag (defaults to true)
 const getBackup = computed(() => walletStoreDefault.getBackup())
 
-// Show a badge if user *should* back up
+// Show a badge if the user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 
 // Local reactive state

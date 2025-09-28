@@ -199,13 +199,14 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 import networks from '@/utils/networks';
+import { getBalance } from '@/chrome/serialization';
 // import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 
 // Store refs
-const { loggedWallet, transactions, account } = toRefs(walletStore);
+const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
 
@@ -289,10 +290,10 @@ const isSwapEnabled = computed(() => {
 });
 
 // Empty state computed
-const isWalletEmpty = computed(() => account.value?.controlled_amount === 0);
+const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === 0);
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
-  // Access config directly from reactive store for better reactivity
+  // Access config directly from the reactive store for better reactivity
   const config = walletStore.config;
   return config && 'backup' in config && !config.backup;
 });
@@ -325,8 +326,13 @@ const computedValues = computed(() => {
     }
     // Add other asset values if they have USD/ADA pricing data
   }
-
-  const totalValue = portfolio.value.adaValue;
+  let totalValue
+  if (portfolio.value?.adaValue) {
+    totalValue = portfolio.value.adaValue;
+    console.log('portfolio.value.adaValue', portfolio.value.adaValue)
+  } else {
+    totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
+  }
   return { totalValue, assetsValue, collectibles, lpsValue };
 });
 
