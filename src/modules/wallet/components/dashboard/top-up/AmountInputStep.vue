@@ -75,8 +75,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted } from 'vue';
 import walletStore from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
 
 // Props
 interface Props {
@@ -87,7 +88,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
 // Emits
 const emit = defineEmits<{
   (e: 'update:modelValue', value: { adaAmount: string; eurAmount: string }): void;
@@ -102,7 +102,10 @@ const isUpdatingFromSecond = ref(false);
 const activeInput = ref<'first' | 'second' | null>(null);
 
 // Exchange rate
-const EXCHANGE_RATE = 0.65;
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy);
+});
+
 
 // Computed property for ADA balance
 const adaBalance = computed(() => {
@@ -154,10 +157,10 @@ const handleFirstInput = () => {
 
   if (isSwitched.value) {
     // First input is EUR, second should be ADA
-    adaAmount.value = (firstValue / EXCHANGE_RATE).toFixed(2);
+    adaAmount.value = (firstValue / EXCHANGE_RATE.value).toFixed(2);
   } else {
     // First input is ADA, second should be EUR
-    eurAmount.value = (firstValue * EXCHANGE_RATE).toFixed(2);
+    eurAmount.value = (firstValue * EXCHANGE_RATE.value).toFixed(2);
   }
 
   isUpdatingFromFirst.value = false;
@@ -178,10 +181,10 @@ const handleSecondInput = () => {
 
   if (isSwitched.value) {
     // Second input is ADA, first should be EUR
-    eurAmount.value = (secondValue * EXCHANGE_RATE).toFixed(2);
+    eurAmount.value = (secondValue * EXCHANGE_RATE.value).toFixed(2);
   } else {
     // Second input is EUR, first should be ADA
-    adaAmount.value = (secondValue / EXCHANGE_RATE).toFixed(2);
+    adaAmount.value = (secondValue / EXCHANGE_RATE.value).toFixed(2);
   }
 
   isUpdatingFromSecond.value = false;

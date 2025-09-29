@@ -167,6 +167,7 @@ import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardStore from '@/stores/modules/card';
 
 interface NavigationItem {
   title?: string;
@@ -292,6 +293,7 @@ function toggleMiniPlayer() {
 
 async function submitLogout() {
   try {
+    await cardStore.logout();
     // Send logout message to background
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
