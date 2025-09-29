@@ -12,11 +12,10 @@
           <div class="card-number-input">
             <span class="card-number-text">{{ cardData?.pan || 'Loading...' }}</span>
           </div>
-        </div> -->
-        <div class="input-full small-input">
+        </div> -->        <div class="input-full small-input">
           <label class="input-label">Expiry</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ cardDetailsFull?.expiryDate || 'Loading...' }}</span>
+            <span class="cvv-text">{{ cardDetailsFull?.details.expiryDate || 'Loading...' }}</span>
           </div>
         </div>
       </div>
@@ -25,13 +24,13 @@
           <label class="input-label">Card number</label>
           <div class="card-number-input">
             <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-            <span class="card-number-text">{{ cardDetailsFull?.pan || 'Loading...' }}</span>
+            <span class="card-number-text">{{ cardDetailsFull?.details.pan || 'Loading...' }}</span>
           </div>
         </div>
         <div class="input-full small-input">
           <label class="input-label">CVV</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ showCvv ? cardDetailsFull?.cvc2 : '•••' }}</span>
+            <span class="cvv-text">{{ showCvv ? cardDetailsFull?.details.cvc2 : '•••' }}</span>
             <v-btn icon small class="eye-btn" @click="toggleCvvVisibility">
               <v-icon small>{{ showCvv ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
             </v-btn>

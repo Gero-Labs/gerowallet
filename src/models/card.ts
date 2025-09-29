@@ -130,7 +130,10 @@ export interface CardDetails {
 export interface CardPin {
   pin: string;
 }
-
+export interface ExchangeRate {
+  buy: string;
+  sell: string;
+}
 export interface CardState {
   // Auth
   accessToken: string | null;
@@ -149,6 +152,7 @@ export interface CardState {
   cardBalance: CardBalance | null;
   cardHistory: HistoryResponse | null;
   totalDeposits: number;
+  exchangeRate: ExchangeRate | null;
   activities: Activity[];
   // Wallet status integration - ALL IN ONE!
   walletStatus: {
