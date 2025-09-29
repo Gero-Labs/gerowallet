@@ -24,7 +24,7 @@ export const cardStore = Vue.observable<CardState>({
   cardBalance: null,
   cardHistory: null,
   totalDeposits: 0,
-
+  exchangeRate: null,
   activities: [
     {
       id: 1,
@@ -48,7 +48,7 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'not_started' as 'not_started' | 'pending' | 'approved' | 'rejected',
+    kycStatus: 'not_started' as 'unverified' | 'pending' | 'approved' | 'rejected',
     kycData: null as any,
     loadingMessage: '',
     error: null as string | null,
@@ -171,6 +171,7 @@ const cardStoreInstance = {
   },
 
   async logout(): Promise<void> {
+
     cardStore.accessToken = null;
     cardStore.refreshToken = null;
     cardStore.tokenExpiry = null;
@@ -184,6 +185,7 @@ const cardStoreInstance = {
     cardStore.cardHistory = null;
     cardStore.totalDeposits = 0;
     cardStore.activities = [];
+    cardStore.exchangeRate = null;
 
     persist({
       accessToken: cardStore.accessToken,
@@ -199,6 +201,7 @@ const cardStoreInstance = {
       cardHistory: cardStore.cardHistory,
       totalDeposits: cardStore.totalDeposits,
       activities: cardStore.activities,
+      exchangeRate: cardStore.exchangeRate,
     });
 
     await clearStoredTokens();
@@ -329,14 +332,14 @@ export default {
   async setKaiserExTokens(tokens: KaiserExTokenData): Promise<void> {
     const store = cardStore;
     store.accessToken = tokens.access_token;
-    store.refreshToken = null; // KaiserEx doesn't provide refresh token
+    store.refreshToken = tokens.refresh_token;
     store.tokenExpiry = Date.now() + (tokens.expires_in || 3600) * 1000;
 
     // Also store in chrome storage for persistence
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.set({
         kaiserex_access_token: tokens.access_token,
-        kaiserex_refresh_token: null,
+        kaiserex_refresh_token: tokens.refresh_token,
         kaiserex_token_expiry: store.tokenExpiry,
       });
     }
@@ -616,6 +619,14 @@ export default {
     persist({ walletStatus: cardStore.walletStatus });
   },
 
+  async getExchangeRate(): Promise<void> {
+    const api = getCardApi(walletStore.loggedWallet);
+    const response = await api.axiosInstance.get(`/api/kaiserex/exchange-rate/ADA/EUR`);
+    cardStore.exchangeRate = response.data;
+    persist({ exchangeRate: cardStore.exchangeRate });
+    return response.data;
+  },
+
   setError(message: string): void {
     cardStore.walletStatus.error = message;
     persist({ walletStatus: cardStore.walletStatus });
@@ -656,6 +667,7 @@ export default {
             this.fetchUserKYCStatus(walletStore.loggedWallet),
             this.fetchCardanoAddress(walletStore.loggedWallet),
             this.fetchCardData(walletStore.loggedWallet),
+            this.getExchangeRate(),
           ]);
         } catch (error) {
           cardStore.errors.initialize = 'Failed to load card data';

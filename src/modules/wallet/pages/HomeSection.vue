@@ -17,7 +17,7 @@
         <RecentTransactionsSection :transactions="cardHistoryRecords" />
       </div>
       <div class="right-column">
-        <ChartSection @filter="handleFilter" />
+        <!-- <ChartSection @filter="handleFilter" /> -->
         <ExchangeRateSection />
       </div>
     </div>
@@ -46,7 +46,7 @@ const cardBalanceFormatted = computed(() => {
     const amount = cardStore.state.cardBalance.currentBalance.amount;
     return `${amount.toFixed(2)}`;
   }
-  return '€0.00';
+  return '0.00';
 });
 
 const cardBalanceAda = computed(() => {
@@ -66,14 +66,14 @@ const geroEarnedFormatted = computed(() => {
 
 const totalDepositFormatted = computed(() => {
   // Start with the original hardcoded value and add new deposits
-  const baseAmount = 1692.31;
+  const baseAmount = 0;
   const additionalDeposits = cardStore.state.totalDeposits || 0;
   return (baseAmount + additionalDeposits).toFixed(2);
 });
 
 const totalDepositAda = computed(() => {
   // Calculate ADA equivalent of total deposits
-  const baseAmount = 1692.31;
+  const baseAmount = 0;
   const additionalDeposits = cardStore.state.totalDeposits || 0;
   const totalEur = baseAmount + additionalDeposits;
   const adaAmount = totalEur / ADA_TO_EUR_RATE;
@@ -88,9 +88,9 @@ const cardHistoryRecords = computed(() => {
   return records;
 });
 
-const handleFilter = () => {
-  console.log('Filter clicked');
-};
+// const handleFilter = () => {
+//   console.log('Filter clicked');
+// };
 </script>
 
 <style lang="scss" scoped>
