@@ -107,8 +107,8 @@ function persist(patch: Partial<CardState>) {
 }
 
 // Create API instance for card operations
-function getCardApi(wallet: any): Api {
-  const api = new Api(wallet, Provider.BLOCKFROST);
+function getCardApi(): Api {
+  const api = new Api(walletStore.loggedWallet, Provider.BLOCKFROST);
 
   // Add auth interceptor for card operations
   api.axiosInstance.interceptors.request.use(config => {
@@ -124,7 +124,7 @@ function getCardApi(wallet: any): Api {
     async error => {
       if (error.response?.status === 401 && cardStore.refreshToken) {
         try {
-          await cardStoreInstance.refreshAccessToken(wallet);
+          await cardStoreInstance.refreshAccessToken();
           // Retry original request
           const originalRequest = error.config;
           originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
@@ -143,11 +143,11 @@ function getCardApi(wallet: any): Api {
 
 // Create store instance for internal use
 const cardStoreInstance = {
-  async refreshAccessToken(wallet: any): Promise<void> {
+  async refreshAccessToken(): Promise<void> {
     if (!cardStore.refreshToken) throw new Error('No refresh token available');
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.post('/api/token/refresh', {
         refresh_token: cardStore.refreshToken,
       });
@@ -171,7 +171,6 @@ const cardStoreInstance = {
   },
 
   async logout(): Promise<void> {
-
     cardStore.accessToken = null;
     cardStore.refreshToken = null;
     cardStore.tokenExpiry = null;
@@ -360,7 +359,7 @@ export default {
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.post('/api/token', {
         code,
         codeVerifier,
@@ -388,8 +387,8 @@ export default {
     }
   },
 
-  async refreshAccessToken(wallet: any): Promise<void> {
-    return cardStoreInstance.refreshAccessToken(wallet);
+  async refreshAccessToken(): Promise<void> {
+    return cardStoreInstance.refreshAccessToken();
   },
 
   async logout(): Promise<void> {
@@ -397,12 +396,12 @@ export default {
   },
 
   // User methods
-  async fetchUserInfo(wallet: any): Promise<void> {
+  async fetchUserInfo(): Promise<void> {
     cardStore.loading.userInfo = true;
     cardStore.errors.userInfo = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/user');
       cardStore.userInfo = response.data;
       persist({ userInfo: cardStore.userInfo });
@@ -417,13 +416,13 @@ export default {
     }
   },
 
-  async fetchCardanoAddress(wallet: any): Promise<void> {
+  async fetchCardanoAddress(): Promise<void> {
     cardStore.loading.cardanoAddress = true;
     cardStore.errors.cardanoAddress = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/cardano-address');
       cardStore.cardanoAddress = response.data;
       persist({ cardanoAddress: cardStore.cardanoAddress });
@@ -441,13 +440,13 @@ export default {
   },
 
   // Card methods
-  async fetchCardData(wallet: any): Promise<void> {
+  async fetchCardData(): Promise<void> {
     cardStore.loading.cardData = true;
     cardStore.errors.cardData = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/cards');
       cardStore.cardData = response.data.data?.[0] || null;
 
@@ -463,13 +462,13 @@ export default {
     }
   },
 
-  async fetchCardNumber(wallet: any): Promise<void> {
+  async fetchCardNumber(): Promise<void> {
     cardStore.loading.cardNumber = true;
     cardStore.errors.cardNumber = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/cards/number');
       cardStore.cardNumber = response.data;
       persist({ cardNumber: cardStore.cardNumber });
@@ -486,7 +485,7 @@ export default {
     }
   },
 
-  async fetchCardBalance(wallet: any): Promise<void> {
+  async fetchCardBalance(): Promise<void> {
     if (!cardStore.cardData?.card_uuid) {
       return;
     }
@@ -494,7 +493,7 @@ export default {
     cardStore.errors.cardBalance = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/cards/balance/${cardStore.cardData?.card_uuid}`);
       cardStore.cardBalance = response.data;
       persist({ cardBalance: cardStore.cardBalance });
@@ -511,10 +510,10 @@ export default {
     }
   },
 
-  async fetchUserKYCStatus(wallet: any): Promise<void> {
+  async fetchUserKYCStatus(): Promise<void> {
     persist({ loading: cardStore.loading, errors: cardStore.errors });
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
       cardStore.walletStatus.kycStatus = response.data.status.name;
       //cardStore.walletStatus.kycStatus = 'approved';
@@ -529,7 +528,7 @@ export default {
     }
   },
 
-  async fetchCardHistory(wallet: any, params: HistoryParams = {}): Promise<void> {
+  async fetchCardHistory(params: HistoryParams = {}): Promise<void> {
     if (!cardStore.cardData?.card_uuid) {
       return;
     }
@@ -538,7 +537,7 @@ export default {
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const queryParams = new URLSearchParams();
 
       // Set default period to last 60 days if not provided
@@ -580,9 +579,9 @@ export default {
     }
   },
 
-  async fetchKYCLink(wallet: any): Promise<any> {
+  async fetchKYCLink(): Promise<any> {
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/verification-link');
 
       if (response.data && response.data.url) {
@@ -596,9 +595,9 @@ export default {
     }
   },
 
-  async orderCard(wallet: any): Promise<any> {
+  async orderCard(): Promise<any> {
     try {
-      const api = getCardApi(wallet);
+      const api = getCardApi();
       const response = await api.axiosInstance.post('/api/kaiserex/cards/order');
       return response.data;
     } catch (error) {
@@ -620,7 +619,7 @@ export default {
   },
 
   async getExchangeRate(): Promise<void> {
-    const api = getCardApi(walletStore.loggedWallet);
+    const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/exchange-rate/ADA/EUR`);
     cardStore.exchangeRate = response.data;
     persist({ exchangeRate: cardStore.exchangeRate });
@@ -663,10 +662,10 @@ export default {
       if (this.isAuthenticated && walletStore.loggedWallet) {
         try {
           await Promise.all([
-            this.fetchUserInfo(walletStore.loggedWallet),
-            this.fetchUserKYCStatus(walletStore.loggedWallet),
-            this.fetchCardanoAddress(walletStore.loggedWallet),
-            this.fetchCardData(walletStore.loggedWallet),
+            this.fetchUserInfo(),
+            this.fetchUserKYCStatus(),
+            this.fetchCardanoAddress(),
+            this.fetchCardData(),
             this.getExchangeRate(),
           ]);
         } catch (error) {
@@ -698,14 +697,14 @@ export default {
     }
   },
   async fetchCardPin(cardUuid: string): Promise<void> {
-    const api = getCardApi(walletStore.loggedWallet);
+    const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/pin/${cardUuid}`);
     cardStore.cardPin = response.data;
     persist({ cardPin: cardStore.cardPin });
     return response.data;
   },
   async fetchCardDetails(cardUuid: string): Promise<void> {
-    const api = getCardApi(walletStore.loggedWallet);
+    const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
     cardStore.cardDetails = response.data;
     persist({ cardDetails: cardStore.cardDetails });
@@ -782,18 +781,18 @@ export default {
 
   async blockCard(): Promise<void> {
     try {
-      const api = getCardApi(walletStore.loggedWallet);
+      const api = getCardApi();
       await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/block`);
-      await this.fetchCardData(walletStore.loggedWallet);
+      await this.fetchCardData();
     } catch (error) {
       throw error;
     }
   },
   async unblockCard(): Promise<void> {
     try {
-      const api = getCardApi(walletStore.loggedWallet);
+      const api = getCardApi();
       await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/unblock`);
-      await this.fetchCardData(walletStore.loggedWallet);
+      await this.fetchCardData();
     } catch (error) {
       throw error;
     }
