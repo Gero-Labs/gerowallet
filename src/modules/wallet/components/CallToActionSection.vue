@@ -15,18 +15,17 @@ import GradientButton from './GradientButton.vue';
 import OrderCardModal from './OrderCardModal.vue';
 import { ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { walletStore } from '@/stores/walletStore';
 const showModal = ref(false);
 
 const kycStatus = computed(() => cardStore.state.walletStatus.kycStatus);
 
 const handleOrderCard = async () => {
-  await cardStore.orderCard(walletStore.loggedWallet);
-  await cardStore.fetchCardData(walletStore.loggedWallet);
+  await cardStore.orderCard();
+  await cardStore.fetchCardData();
 };
 
 const startKYC = () => {
-  cardStore.fetchKYCLink(walletStore.loggedWallet);
+  cardStore.fetchKYCLink();
 };
 </script>
 

@@ -29,17 +29,25 @@ import { computed, onMounted } from 'vue';
 import cardStore from '@/stores/modules/card';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
-import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
-import { walletStore } from '@/stores/walletStore';
+import { useIntervalFn } from '@vueuse/core';
 // ADA to EUR conversion rate (hardcoded)
 const ADA_TO_EUR_RATE = 0.65;
 onMounted(() => {
-  cardStore.fetchCardBalance(walletStore.loggedWallet);
-  cardStore.fetchCardHistory(walletStore.loggedWallet);
+  cardStore.fetchCardBalance();
+  cardStore.fetchCardHistory();
+  useIntervalFn(() => {
+    initData();
+  }, 60000);
 });
+
+const initData = () => {
+  cardStore.fetchCardBalance();
+  cardStore.fetchCardHistory();
+  cardStore.getExchangeRate();
+};
 
 const cardBalanceFormatted = computed(() => {
   if (cardStore.state.cardBalance?.currentBalance) {
