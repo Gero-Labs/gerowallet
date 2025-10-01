@@ -53,10 +53,14 @@
         </tbody>
       </table>
     </div>
-    <div v-if="formattedTransactions.length === 0">
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p class="loading-message">Loading transactions...</p>
+    </div>
+    <div v-if="formattedTransactions.length === 0 && !loading">
       <div class="empty-state-title">No transactions yet</div>
     </div>
-    <div v-if="formattedTransactions.length > 0" class="pagination-container">
+    <div v-if="formattedTransactions.length > 0 && !loading" class="pagination-container">
       <div class="pagination-wrapper">
         <v-btn
           variant="text"
@@ -102,6 +106,7 @@ import type { CardTransactionHistory } from '@/models/card';
 
 interface Props {
   transactions?: CardTransactionHistory[];
+  loading?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -270,6 +275,41 @@ const handleOrderCard = () => {
     line-height: 1.4;
     color: $text-primary;
     margin: 0;
+  }
+
+  .loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: $spacing-md;
+    padding: $spacing-2xl;
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid $text-primary;
+    border-top: 2px solid $primary-cyan;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-message {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-medium;
+    font-size: $font-size-sm;
+    line-height: 1.43;
+    color: $text-primary;
   }
 
   .empty-state-title {
