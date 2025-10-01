@@ -14,7 +14,7 @@
     />
     <div class="dashboard-layout">
       <div class="left-column">
-        <RecentTransactionsSection :transactions="cardHistoryRecords" />
+        <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
       </div>
       <div class="right-column">
         <!-- <ChartSection @filter="handleFilter" /> -->
@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
@@ -35,9 +35,12 @@ import HeroSection from '../components/HeroSection.vue';
 import { useIntervalFn } from '@vueuse/core';
 // ADA to EUR conversion rate (hardcoded)
 const ADA_TO_EUR_RATE = 0.65;
-onMounted(() => {
-  cardStore.fetchCardBalance();
-  cardStore.fetchCardHistory();
+const loading = ref(false);
+onMounted(async () => {
+  loading.value = true;
+  await cardStore.fetchCardBalance();
+  await cardStore.fetchCardHistory();
+  loading.value = false;
   useIntervalFn(() => {
     initData();
   }, 60000);
