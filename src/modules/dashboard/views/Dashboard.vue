@@ -113,7 +113,6 @@
             :items="apexCarouselItems"
             :paused="apexCarouselPaused"
             :is-loading="isLoading"
-            :show-progress-bar="false"
             carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
             wrapper-class="apex-carousel-wrapper"
             @item-click="handleCarouselClick"
@@ -156,21 +155,21 @@
       </v-row>
 
       <!-- KaiserEx Token Reception -->
-<!--      <v-row no-gutters>-->
-<!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
-<!--          <v-card outlined class="liquid-glass">-->
-<!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
-<!--            <v-card-text>-->
-<!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
-<!--                Receive Token from KaiserEx-->
-<!--              </v-btn>-->
-<!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
-<!--                {{ kaiserExMessage.text }}-->
-<!--              </v-alert>-->
-<!--            </v-card-text>-->
-<!--          </v-card>-->
-<!--        </v-col>-->
-<!--      </v-row>-->
+      <!--      <v-row no-gutters>-->
+      <!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
+      <!--          <v-card outlined class="liquid-glass">-->
+      <!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
+      <!--            <v-card-text>-->
+      <!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
+      <!--                Receive Token from KaiserEx-->
+      <!--              </v-btn>-->
+      <!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
+      <!--                {{ kaiserExMessage.text }}-->
+      <!--              </v-alert>-->
+      <!--            </v-card-text>-->
+      <!--          </v-card>-->
+      <!--        </v-col>-->
+      <!--      </v-row>-->
     </template>
   </v-layout>
 </template>
@@ -256,24 +255,24 @@ const apexCarouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.apexBgDashboard,
     action: 'showApexWelcome',
   },
-  {
-    id: 'apex-wallet',
-    title: 'Apex Wallet',
-    subtitle: 'Secure decentralized storage',
-    logo: assets.walletGeroApex,
-    logoAlt: 'Apex Wallet Logo',
-    backgroundImage: assets.apexImage,
-    action: 'showApexWallet',
-  },
-  {
-    id: 'apex-features',
-    title: 'Apex Features',
-    subtitle: 'Explore advanced capabilities',
-    logo: assets.apexSvg,
-    logoAlt: 'Apex Features Logo',
-    backgroundImage: assets.apexBgDashboard,
-    action: 'showApexFeatures',
-  },
+  // {
+  //   id: 'apex-wallet',
+  //   title: 'Apex Wallet',
+  //   subtitle: 'Secure decentralized storage',
+  //   logo: assets.walletGeroApex,
+  //   logoAlt: 'Apex Wallet Logo',
+  //   backgroundImage: assets.apexImage,
+  //   action: 'showApexWallet',
+  // },
+  // {
+  //   id: 'apex-features',
+  //   title: 'Apex Features',
+  //   subtitle: 'Explore advanced capabilities',
+  //   logo: assets.apexSvg,
+  //   logoAlt: 'Apex Features Logo',
+  //   backgroundImage: assets.apexBgDashboard,
+  //   action: 'showApexFeatures',
+  // },
 ]);
 
 const isStakingEnabled = computed(() => {
@@ -326,10 +325,9 @@ const computedValues = computed(() => {
     }
     // Add other asset values if they have USD/ADA pricing data
   }
-  let totalValue
+  let totalValue;
   if (portfolio.value?.adaValue) {
     totalValue = portfolio.value.adaValue;
-    console.log('portfolio.value.adaValue', portfolio.value.adaValue)
   } else {
     totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
   }
@@ -364,11 +362,13 @@ const computeChartData = computed(() => {
     };
   }
   // For other chains, calculate from transactions
+  console.log('price.value?.lastPrice', price.value);
   let graphData = undefined;
   let usdData = undefined;
   let eurData = undefined;
   let currentBalance = 0;
   if (transactions.value) {
+    console.log('transactions', transactions.value);
     graphData = [];
     usdData = [];
     eurData = [];
