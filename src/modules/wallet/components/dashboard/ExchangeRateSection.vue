@@ -34,9 +34,7 @@
 import { ref } from 'vue';
 import type { ExchangeRate } from '@/models/types';
 import trendUpSvg from '@/assets/svg/trend-up-01.svg';
-import trendDownSvg from '@/assets/svg/trend-down-01.svg';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';
-import currencyDollar from '@/modules/wallet/icons/currency-dollar.svg?url';
 
 const exchangeRates = ref<ExchangeRate[]>([
   {

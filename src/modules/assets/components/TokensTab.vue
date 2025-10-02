@@ -144,7 +144,7 @@
         class="progress-bar"
         height="14"
         :value="(item.allocation / totalAllocation) * 100"
-        color="#00dff3"
+        color="primary"
       >
         <template v-slot:default="{ value }">
           <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
