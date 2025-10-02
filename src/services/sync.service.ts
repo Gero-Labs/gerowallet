@@ -219,21 +219,30 @@ export class SyncService {
         res = await this.api.getAccountTransactions(this.walletBg.stakeAddress, height);
       }
       if (res && Array.isArray(res)) {
+        const txMap: Map<string, any> = res.reduce((map, tx: any) => {
+          map.set(tx.tx_hash, tx);
+          return map;
+        }, new Map<string, any>());
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);
         const smallerArrays: string[][] = chunkArray({ input: txHashes, bytesSize: 4000 });
         smallerArrays.forEach(smallerArray => {
           promises.push(this.api.getTransactionsCbor(smallerArray).then(txCborsResult => {
             if (txCborsResult.status == 200) {
-              return txCborsResult.data.map(txCbor => {
-                const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+              return txCborsResult.data.map((txCbor: any) => {
+                let txDeserialized: Cardano.Tx | {} = {};
+                if (txCbor.cbor) {
+                  txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+                }
+                const tx = txMap.get(txCbor.tx_hash);
                 return {
+                  tx_hash: txCbor.tx_hash,
                   utxo: txCbor.utxo,
                   block_hash: txCbor.block_hash,
-                  block_height: txCbor.block_height,
+                  block_height: txCbor.block_height || tx.block_height,
                   epoch_no: txCbor.epoch_no,
                   absolute_slot: txCbor.absolute_slot,
-                  tx_timestamp: txCbor.tx_timestamp,
+                  tx_timestamp: txCbor.tx_timestamp || tx.block_time,
                   tx_size: txCbor.tx_size,
                   cbor: txCbor.cbor,
                   ...txDeserialized,

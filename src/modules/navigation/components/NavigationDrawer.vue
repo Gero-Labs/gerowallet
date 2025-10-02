@@ -13,7 +13,7 @@
       <v-list-item class="text-center">
         <v-list-item-content class="py-2">
           <v-list-item-title>
-            <img :src="assts.geroDashboard" width="100" alt="logo" />
+            <img :src="isApex ? assets.geroDashboardApex : assets.geroDashboard" width="100" alt="logo" />
           </v-list-item-title>
           <v-list-item-subtitle>
             <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">
@@ -37,7 +37,7 @@
           :to="item.link"
           v-show="item.enabled || item.soon"
           :disabled="item.soon"
-          :active-class="themeDark ? 'activePageDark' : 'activePage'"
+          :active-class="themeDark ? (isApex ? 'activePageDark apex' : 'activePageDark') : (isApex ? 'activePage apex' : 'activePage')"
           link
           class="menuItem"
           style="height: 40px"
@@ -168,6 +168,9 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import LoadingState from '@/stores/loading';
+import { Blockchain } from '@/models/types';
+import assets from '@/utils/assets';
+import { updateVuetifyTheme } from '@/plugins/vuetify';
 
 interface NavigationItem {
   title?: string;
@@ -223,6 +226,11 @@ function openExternalLink(href?: string) {
     window.open(href, '_blank')
   }
 }
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 const items = computed((): NavigationItemUnion[] => {
   let isStakingEnabled = false;
@@ -299,7 +307,7 @@ async function submitLogout() {
       method: MessageTypes.LOGOUT,
       data: { },
     });
-
+    updateVuetifyTheme(false, true);
     // Navigate to welcome page after store is cleared
     router.push('/welcome').catch(err => {
       console.debug('Navigation after logout handled (expected during logout):', err.message || err);
@@ -334,6 +342,10 @@ onMounted(() => {
   background: linear-gradient(45deg, #00c7f3, #00ffd1);
 }
 
+.activePage.apex {
+  background: linear-gradient(45deg, #F8A282, #FECB82);
+}
+
 .activePageDark {
   color: #FFFFFF;
   background: #0C0E12;
@@ -348,6 +360,23 @@ onMounted(() => {
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
+  }
+}
+
+.activePageDark.apex {
+  color: #FFFFFF;
+  background: #0C0E12;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: {
+    image: linear-gradient(to right, #0C0E12, #0C0E12),
+    linear-gradient(to right, #0C0E12 8%, #F8A282);
+    clip: padding-box, border-box;
+    origin: padding-box, border-box;
+  }
+
+  .v-image {
+    filter: brightness(0) saturate(100%) invert(92%) sepia(45%) saturate(5319%) hue-rotate(301deg) brightness(100%) contrast(95%) !important;
   }
 }
 

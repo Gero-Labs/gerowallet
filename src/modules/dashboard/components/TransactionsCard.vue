@@ -39,15 +39,16 @@
                   <span class="activity-text">{{ getTransactionStatus(item) }}</span>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
-                  <v-tooltip top>
+                  <v-tooltip  content-class="custom-tooltip" top>
                     <template v-slot:activator="{ on, attrs }">
                       <span v-bind="attrs" v-on="on">
                         {{ time.format(new Date(item.tx_timestamp * 1000)) }}
                       </span>
                     </template>
                     <span>
-                      {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}<br />
-                      Epoch: {{ item.epoch_no }}
+                      {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}
+                      <br v-if="item.epoch_no" />
+                      {{ item.epoch_no ? `Epoch: ${item.epoch_no}` : ''}}
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>

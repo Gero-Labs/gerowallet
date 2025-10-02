@@ -269,10 +269,11 @@ export class WalletBg {
             }
             if (address === outAddress || stakeAddress === outAddress) {
               addresses.add(out.address);
-              const utxoId: string = `${transaction.tx_hash}#${out.output_index}`;
+              console.log('transaction', transaction)
+              const utxoId: string = `${transaction.id || transaction.tx_hash}#${out.output_index}`;
               utxos.set(utxoId, [
                 {
-                  txId: Cardano.TransactionId(transaction.tx_hash),
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
                   index: out.output_index,
                   address: out.address,
                 },

@@ -345,7 +345,7 @@ function handleOpenReceiveDialog() {
   receiveDialog.value = true;
 }
 
-// Theme management - update colors when chain changes
+// Theme management - update colors when a chain changes
 const updateThemeColors = () => {
   const isApex =
     loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;

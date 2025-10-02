@@ -62,6 +62,7 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
+import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
@@ -194,6 +195,7 @@ export default {
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
+  geroLogoApex,
   geroDashboardText,
   geroText,
   apexBackground,

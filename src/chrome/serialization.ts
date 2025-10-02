@@ -62,16 +62,6 @@ export function isPaymentAddress(address: string): boolean {
   return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
 }
 
-export function toValue(assets: any[], lovelace: string): Serialization.Value {
-  const tokenMap = assets.reduce((map, asset) => {
-    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
-    const current = map.get(assetId) ?? BigInt(0);
-    map.set(assetId, current + BigInt(asset.quantity));
-    return map;
-  }, new Map<Cardano.AssetId, bigint>());
-  return new Serialization.Value(BigInt(lovelace), tokenMap)
-}
-
 export function toValueCore(amount: { unit: string; quantity: string; }[]): Cardano.Value {
   const value: Cardano.Value = {
     coins: BigInt(0),
@@ -325,20 +315,39 @@ export function getUtxos(
   return selectedUtxos;
 }
 
-export function getBalance(utxos: any[], collateral: any): Serialization.Value {
-  const assets: any[] = []
-  let lovelace = 0;
-  if (!utxos) {
-    return toValue(assets, lovelace.toString());
+export function getBalance(utxos: Cardano.Utxo[], collateral: Cardano.Utxo): Serialization.Value {
+  let accumulatedValue: Serialization.Value = new Serialization.Value(BigInt(0));
+  if (utxos && collateral) {
+    utxos = utxos.filter((utxo: Cardano.Utxo) => !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index))
   }
-  if (collateral) {
-    utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
-  }
-  utxos.forEach(utxo => {
-    assets.push(...utxo.asset_list)
-    lovelace += Number(utxo.value)
+  utxos.forEach((utxo: Cardano.Utxo) => {
+    // Ensure coins is BigInt and assets is a Map (handle deserialization from storage)
+    let utxoValue = utxo[1].value;
+
+    // Convert coins to BigInt if it's a string
+    const coins = typeof utxoValue.coins === 'string' ? BigInt(utxoValue.coins) : BigInt(utxoValue.coins);
+
+    // Convert assets to Map if it's a plain object
+    let assets: Map<Cardano.AssetId, bigint> | undefined = undefined;
+    if (utxoValue.assets) {
+      if (utxoValue.assets instanceof Map) {
+        assets = utxoValue.assets;
+      } else {
+        // Convert plain object to Map
+        assets = new Map<Cardano.AssetId, bigint>();
+        Object.entries(utxoValue.assets).forEach(([assetId, quantity]) => {
+          assets!.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        });
+      }
+    }
+
+    const value: Serialization.Value = Serialization.Value.fromCore({
+      coins,
+      assets
+    });
+    accumulatedValue = coalesceValueQuantities([accumulatedValue, value]);
   })
-  return toValue(assets, lovelace.toString());
+  return accumulatedValue;
 }
 
 export function coalesceValueQuantities(quantities: Serialization.Value[]): Serialization.Value {

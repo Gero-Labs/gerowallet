@@ -73,7 +73,7 @@
 
       <!-- Separate chart row for non-Cardano wallets -->
       <v-row no-gutters v-if="loggedWallet?.network !== Network.MAINNET || loggedWallet?.chain !== Blockchain.CARDANO">
-        <v-col cols="12" xl="9" lg="9" md="9" sm="12" class="pa-2">
+        <v-col cols="12" xl="9" lg="9" md="12" sm="12" class="pa-2">
           <v-card
             outlined
             class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass"
@@ -92,9 +92,6 @@
               />
             </v-card-text>
           </v-card>
-        </v-col>
-        <v-col cols="12" xl="3" lg="3" md="3" sm="12" class="pa-2" v-if="loggedWallet?.network === Network.PREPROD">
-          <AssetsPieChart />
         </v-col>
 
         <!-- Apex Carousel Card -->
@@ -121,6 +118,9 @@
             @mouse-leave="resumeApexCarousel"
           />
         </v-col>
+        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-else-if="loggedWallet?.network === Network.PREPROD">
+          <AssetsPieChart />
+        </v-col>
       </v-row>
 
       <!-- Token Allocation Table Row -->
@@ -133,7 +133,7 @@
       <!-- Transactions and Staking Row + Swap Widget Column -->
       <v-row no-gutters>
         <v-col cols="12" :xl="isSwapEnabled ? 4 : 6" :lg="isSwapEnabled ? 4 : 6" md="6" sm="12" class="pa-2">
-          <TransactionsCard style="min-height: 396px"></TransactionsCard>
+          <TransactionsCard style="min-height: 426px"></TransactionsCard>
         </v-col>
         <v-col
           cols="12"
@@ -144,7 +144,7 @@
           class="pa-2"
           v-if="isStakingEnabled"
         >
-          <StakingCard2 v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
+          <StakingCard2 style="min-height: 426px" v-if="account?.controlled_amount && account?.pool_id"></StakingCard2>
           <NoTokensCard v-else></NoTokensCard>
         </v-col>
         <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-if="isSwapEnabled">
@@ -329,7 +329,6 @@ const computedValues = computed(() => {
   let totalValue
   if (portfolio.value?.adaValue) {
     totalValue = portfolio.value.adaValue;
-    console.log('portfolio.value.adaValue', portfolio.value.adaValue)
   } else {
     totalValue = Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
   }
