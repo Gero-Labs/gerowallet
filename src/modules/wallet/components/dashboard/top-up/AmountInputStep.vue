@@ -14,7 +14,7 @@
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
         <span class="rate-equals">=</span>
-        <span class="rate-value">€0.65 EUR</span>
+        <span class="rate-value">€{{ EXCHANGE_RATE?.toFixed(2) }} EUR</span>
       </div>
     </div>
 
@@ -105,7 +105,6 @@ const activeInput = ref<'first' | 'second' | null>(null);
 const EXCHANGE_RATE = computed(() => {
   return Number(cardStore.state.exchangeRate?.buy);
 });
-
 
 // Computed property for ADA balance
 const adaBalance = computed(() => {

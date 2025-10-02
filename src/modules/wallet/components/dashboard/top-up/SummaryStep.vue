@@ -14,7 +14,7 @@
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
         <span class="rate-equals">=</span>
-        <span class="rate-value">€0.65 EUR</span>
+        <span class="rate-value">€{{ EXCHANGE_RATE?.toFixed(2) }} EUR</span>
       </div>
     </div>
 
@@ -79,7 +79,9 @@
 
           <div class="transfer-row">
             <span class="transfer-label">Total Spend</span>
-            <span class="total-amount">₳{{ (parseFloat(adaAmount || '1000') + (selectedFeeOption === 'GERO' ? 0 : 1.23)).toFixed(2) }} ADA</span>
+            <span class="total-amount"
+              >₳{{ (parseFloat(adaAmount || '1000') + (selectedFeeOption === 'GERO' ? 0 : 1.23)).toFixed(2) }} ADA</span
+            >
           </div>
         </div>
       </div>
@@ -104,6 +106,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
 
 // Props
 interface Props {
@@ -122,6 +125,11 @@ const emit = defineEmits<{
 // Reactive data
 const password = ref('');
 const selectedFeeOption = ref('GERO');
+
+// Exchange rate
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy);
+});
 
 // Computed properties for GERO token info
 const geroBalance = computed(() => {
@@ -144,11 +152,11 @@ const geroBalance = computed(() => {
 // Determine GERO tier based on balance
 const geroTier = computed(() => {
   const balance = parseFloat(geroBalance.value);
-  
+
   // Force Gold tier for now since user has GERO tokens
   // TODO: Implement proper tier calculation based on actual requirements
   if (balance > 0) return 'Gold';
-  
+
   // Tier thresholds (example values - adjust as needed)
   // if (balance >= 10000) return 'Gold';
   // if (balance >= 5000) return 'Silver';
@@ -297,7 +305,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75E0A7;
+  color: #75e0a7;
 }
 
 .gero-tier-badge {
@@ -308,22 +316,22 @@ watch(selectedFeeOption, updateFeeOption);
   padding: 4px 12px;
   border-radius: 16px;
   text-transform: uppercase;
-  
+
   &.gold {
-    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
     color: #000;
   }
-  
+
   &.silver {
-    background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%);
+    background: linear-gradient(135deg, #c0c0c0 0%, #808080 100%);
     color: #000;
   }
-  
+
   &.bronze {
-    background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%);
-    color: #FFF;
+    background: linear-gradient(135deg, #cd7f32 0%, #8b4513 100%);
+    color: #fff;
   }
-  
+
   &.none {
     background: #333741;
     color: #cecfd2;
