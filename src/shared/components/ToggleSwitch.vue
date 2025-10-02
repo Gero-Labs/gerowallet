@@ -112,6 +112,6 @@ const model = computed<boolean>({
 }
 
 .toggleSwitch .v-input--switch__thumb {
-  color: #2f9cac!important;
+  color: var(--v-primary-base)!important;
 }
 </style>

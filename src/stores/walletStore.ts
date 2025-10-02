@@ -3,7 +3,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
-import { removeDapp, setWalletConfiguration, addConnectedDapp } from '@/db/wallet-db';
+import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
 import { Keys } from '@/models/types';
@@ -18,7 +18,7 @@ export interface WalletStore {
   account: any;
   transactions: any[];
   utxos: Cardano.Utxo[];
-  collateral: any;
+  collateral: Cardano.Utxo | null;
   keys: Keys;
   tokens: {};
   collections: {};
@@ -136,9 +136,8 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
 
     // Also persist to storage as fallback - use current local state as base instead of storage
     try {
-      // Use current local store state as the base to avoid race conditions
-      const current = walletStore;
-      const finalState = { ...current, ...serializedUpdates };
+      // Use the current local store state as the base to avoid race conditions
+      const finalState = { ...(walletStore), ...serializedUpdates };
 
       // Log if keys are being stored
       if ('keys' in serializedUpdates) {
@@ -173,7 +172,7 @@ export default {
     broadcastFromBackground({ loggedWallet });
 
     // Initialize price service when wallet is set
-    if (loggedWallet) {
+    if (loggedWallet && loggedWallet.chain === 'Cardano') {
       priceService.initialize().catch(error => {
         console.error('Failed to initialize price service:', error);
       });
@@ -193,7 +192,7 @@ export default {
   setUtxos(utxos: Cardano.Utxo[]) {
     if (utxos) {
       console.log('collateral')
-      const collateralCandidates = utxos.filter((utxo: Cardano.Utxo) => {
+      const collateralCandidates: Cardano.Utxo[] = utxos.filter((utxo: Cardano.Utxo) => {
         const assetsSize = utxo[1].value.assets?.size || 0;
         return assetsSize === 0 && Number(utxo[1].value.coins.toString()) >= 5000000 && Number(utxo[1].value.coins.toString()) <= 20000000
       }).sort((a, b) => {

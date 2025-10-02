@@ -5,33 +5,33 @@
         Transaction ID:
         <a
           class="ml-1"
-          style="color: #00dff3; align-items: center"
-          :href="`https://cexplorer.io/tx/${transactionInfo['id']}`"
+          :style="isApex ? {color: '#dc753e', alignItems: 'center' } : {color: '#00c7f3', alignItems: 'center'  }"
+          :href="transactionUrl"
           target="_blank"
         >
           {{ filters.truncate(transactionInfo['id']) }}</a
         >
-        <CopyButton x-small :value="transactionInfo['id']" class="ml-1" />
+        <CopyButton x-small :value="transactionInfo['id']" class="ml-1 mt-1" />
         <v-spacer />
         <v-btn color="error" x-small outlined @click="isReportDialogOpen = true"> Report Transaction </v-btn>
       </div>
       <div>
         Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>
       </div>
-      <div>
+      <div v-if="transactionInfo.epoch_no">
         Epoch: <span class="value-text">{{ transactionInfo.epoch_no }}</span>
       </div>
       <div>
         Tx Size: <span class="value-text">{{ filters.humanFileSize(transactionInfo['tx_size']) }}</span>
       </div>
-      <div>
+      <div v-if="transactionInfo['block_hash']">
         Block ID:
-        <a style="color: #00dff3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">
+        <a :style="isApex ? {color: '#dc753e' } : {color: '#00c7f3' }" :href="blockUrl" target="_blank">
           {{ filters.truncate(transactionInfo['block_hash']) }}</a
         >
         <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
       </div>
-      <div>
+      <div v-if="transactionInfo['block_height']">
         Block Height: <span class="value-text">{{ transactionInfo['block_height']?.toLocaleString('en-US') }}</span>
       </div>
       <div v-if="transactionInfo.body?.fee">
@@ -41,7 +41,7 @@
         {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}
         <span
           :style="{
-            color: Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E',
+            color: Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E',
           }"
         >
           <span style="margin-right: 4px">
@@ -56,9 +56,9 @@
               pill
               outlined
               style="margin-bottom: 2px"
-              class="mr-1"
+              class="mr-1 pl-0"
               :key="`asset_${index}`"
-              :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'"
+              :color="Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E'"
             >
               <v-avatar v-if="asset.img" left>
                 <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
@@ -98,7 +98,7 @@
       <v-expansion-panel style="background-color: #1e273ab3">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-bank-transfer</v-icon>
             </div>
             <h3>UTxOs</h3>
@@ -226,7 +226,7 @@
                     </td>
                     <td class="text-right">
                       <div style="color: #00dff3">
-                        <v-chip pill class="pl-0" outlined color="#00DFF3" style="margin: 2px !important">
+                        <v-chip pill class="pl-0" outlined :color="isApex ? '#dc753e' : '#00c7f3'" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
                               :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
@@ -263,7 +263,7 @@
                             pill
                             class="pl-0"
                             outlined
-                            color="#00DFF3"
+                            :color="isApex ? '#dc753e' : '#00c7f3'"
                             :key="`output${index}_asset_${assetIndex}`"
                             style="margin: 2px !important"
                           >
@@ -304,7 +304,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.certificates?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-certificate-outline</v-icon>
             </div>
             <h3>Certificates ({{ transactionInfo?.body?.certificates?.length }})</h3>
@@ -413,7 +413,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['auxiliaryData']">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
             <h3>Metadata</h3>
@@ -433,7 +433,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['assets_minted']?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
             <h3>Assets Minted ({{ transactionInfo['assets_minted']?.length }})</h3>
@@ -487,7 +487,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.withdrawals?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-bank-transfer-out</v-icon>
             </div>
             <h3>Withdrawals ({{ transactionInfo?.body?.withdrawals?.length }})</h3>
@@ -526,7 +526,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.witness?.redeemers?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-file-sign</v-icon>
             </div>
             <h3>Contracts ({{ transactionInfo.witness?.redeemers?.length }})</h3>
@@ -614,7 +614,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.collaterals">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-cash</v-icon>
             </div>
             <h3>Collateral</h3>
@@ -674,7 +674,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.referenceInputs">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-clipboard-list-outline</v-icon>
             </div>
             <h3>Reference Inputs</h3>
@@ -730,6 +730,7 @@ import governanceStoreActions from '@/stores/governanceStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
+import { Blockchain, Network } from '@/models/types';
 
 interface Props {
   transactionInfo: any;
@@ -746,6 +747,11 @@ const panels = ref<any[]>([]);
 const isExpanded = ref<boolean>(false);
 const isReportDialogOpen = ref<boolean>(false);
 const currentPoolMeta = ref<any>('');
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 function findLovelace(io: { unit: string; quantity: number }[]) {
   const tok = io.find(t => t.unit === 'lovelace');
@@ -896,6 +902,37 @@ const receivedAssets = computed(() => {
   const asstsResolved = !isExpanded.value ? assts.slice(0, 2) : assts;
   residue.value = assts.slice(2);
   return asstsResolved;
+});
+
+const transactionUrl = computed(() => {
+  const txId = props.transactionInfo['id'];
+  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
+    return `https://apexscan.org/en/transaction/${txId}/summary/`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
+    return `https://cexplorer.io/tx/${txId}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
+    return `https://preprod.cexplorer.io/tx/${txId}`;
+  }
+  return null;
+});
+
+const blockUrl = computed(() => {
+  const blockHash = props.transactionInfo['block_hash'];
+  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
+    return `https://apexscan.org/en/block/${blockHash}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
+    return `https://cexplorer.io/block/${blockHash}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
+    return `https://preprod.cexplorer.io/block/${blockHash}`;
+  }
+  return `https://cexplorer.io/block/${blockHash}`;
+});
+
+const receivedArrowStyle = computed(() => {
+  if (isApex.value) {
+    return 'background: linear-gradient(to right, #F8A282, #FECB82);';
+  }
+  return 'background: linear-gradient(to right, #00c7f3, #00fad5);';
 });
 
 const getCertificateType = (certificate: Cardano.Certificate) => {

@@ -120,13 +120,14 @@
 import { ref, computed, onMounted, nextTick, toRefs } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
-import { WalletType } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
+import geroLogoApex from '@/assets/svg/gero-logo-apex.svg';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
@@ -141,12 +142,17 @@ const canBackup = computed(() => {
 
 const qrCodeRef = ref<HTMLElement|null>(null)
 
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+})
+
 const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
   data: loggedWallet.value?.publicKey.toString(),
-  image: assets.geroLogo,
+  image: isApex ? assets.geroLogoApex : assets.geroLogo,
   margin: 2,
   qrOptions: {
     typeNumber: 0,

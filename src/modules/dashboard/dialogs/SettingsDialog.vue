@@ -80,7 +80,7 @@ const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 const tab     = ref<string | null>(null)
 const loading = ref(false)
 
-// Build your tabs array, injecting the dynamic badge
+// Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
   { label: 'Profile', value: 'profile' },
   // { label: 'Password', value: 'password' },

@@ -78,7 +78,7 @@
             </v-btn>
           </div>
           <v-card style="border-radius: 8px;" flat class="transparent no-custom-styling" v-else>
-            <v-card-text class="pa-2">
+            <v-card-text class="px-2 py-1">
               <div class="text-left" style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
                 <div>
                   <span class="pr-1" style="font-weight: 600;">Limit Price</span>
