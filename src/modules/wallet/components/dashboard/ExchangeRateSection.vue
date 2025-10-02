@@ -13,7 +13,7 @@
             </div>
             <div class="rate-details">
               <div class="currency-pair">{{ rate.pair }}</div>
-              <div class="rate-value">{{ rate.value }}</div>
+              <div class="rate-value" v-if="rate.value">{{ Number(rate.value).toFixed(2) }}</div>
             </div>
           </div>
           <!-- <div class="last-updated">Last updated: {{ lastUpdated }}</div> -->
