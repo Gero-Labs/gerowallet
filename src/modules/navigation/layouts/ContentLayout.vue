@@ -40,25 +40,13 @@
                 <v-app-bar flat color="transparent" style="max-height: 55px">
                   <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
 
-                  <!-- GERO Ticker -->
-                  <div
-                    v-if="
-                      loggedWallet?.chain !== Blockchain.APEX_PRIME && loggedWallet?.chain !== Blockchain.APEX_VECTOR
-                    "
-                    class="gero-ticker d-flex align-center"
-                    style="min-width: 120px; cursor: pointer"
+                  <!-- TOKEN TICKER -->
+                  <PriceTicker
+                    :primary-color="primaryColor"
                     @click="openSwapDialog"
-                  >
-                    <div class="d-flex flex-column">
-                      <span
-                        class="gero-label"
-                        style="font-size: 12px; font-weight: 600"
-                        :style="{ color: primaryColor }"
-                        >GERO</span
-                      >
-                      <span class="gero-price" style="font-size: 10px; color: #fff">{{ getCurrencySymbol() }}{{ geroPrice }}</span>
-                    </div>
-                  </div>
+                    :token-name="tokenName"
+                    :price="geroPrice"
+                  ></PriceTicker>
 
                   <v-spacer />
 
@@ -111,7 +99,14 @@
                   </v-tooltip>
 
                   <!-- Notifications Menu (preserved from current version) -->
-                  <v-menu offset-y :close-on-content-click="false" nudge-left="75" nudge-top="-10" eager transition="none">
+                  <v-menu
+                    offset-y
+                    :close-on-content-click="false"
+                    nudge-left="75"
+                    nudge-top="-10"
+                    eager
+                    transition="none"
+                  >
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
                         <v-icon size="20">mdi-bell-outline</v-icon>
@@ -241,7 +236,7 @@ import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-
+import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);
@@ -251,8 +246,19 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
+const { convertFiat } = useCurrencyConverter();
+const { price } = toRefs(networkStore);
 
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+const geroPrice = computed(() => {
+  const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
+  if (!isApex.value) {
+    if (geroToken?.price && geroToken.price > 0) {
+      return convertFiat(geroToken.price);
+    }
+  } else {
+    return +price.value?.lastPrice || 0;
+  }
+});
 
 const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
@@ -268,25 +274,22 @@ const backgroundImageLoaded = ref(false);
 // Computed for proper reactivity with Vue 2 components
 const isSwapDialogOpen = computed(() => swapDialog.value);
 
-const geroPrice = computed(() => {
-  const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
-  if (!geroToken) {
-    return 'GERO';
-  }
-  if (geroToken?.price && geroToken.price > 0) {
-    return convertFiat(geroToken.price).toFixed(6);
-  }
-  return 'GERO';
+const tokenName = computed(() => {
+  return isApex.value ? 'APEX' : 'GERO';
+});
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
 const primaryColor = computed(() => {
-  const isApex =
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  return isApex ? themes.apex.primary : themes.cardano.primary;
+  return isApex.value ? themes.apex.primary : themes.cardano.primary;
 });
 
 function openSwapDialog() {
-  swapDialog.value = true;
+  if (!isApex.value) {
+    swapDialog.value = true;
+  }
 }
 
 function closeSwapDialog() {
@@ -347,13 +350,11 @@ function handleOpenReceiveDialog() {
 
 // Theme management - update colors when chain changes
 const updateThemeColors = () => {
-  const isApex =
-    loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  const currentTheme = isApex ? themes.apex : themes.cardano;
-  const currentFilter = isApex ? iconFilters.apex : iconFilters.cardano;
+  const currentTheme = isApex.value ? themes.apex : themes.cardano;
+  const currentFilter = isApex.value ? iconFilters.apex : iconFilters.cardano;
 
   // Update Vuetify theme
-  updateVuetifyTheme(isApex, true); // Always a dark theme for now
+  updateVuetifyTheme(isApex.value, true); // Always a dark theme for now
 
   // Set CSS custom properties
   Object.entries(currentTheme).forEach(([key, value]) => {
@@ -571,21 +572,6 @@ div.v-toolbar__content {
 .v-dialog__content--active {
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
-}
-
-.gero-ticker {
-  transition: all 0.2s ease;
-  border-radius: 6px;
-  padding: 4px 8px;
-}
-
-.gero-ticker:hover {
-  background-color: rgba(0, 199, 243, 0.1);
-  transform: scale(1.05);
-}
-
-.gero-ticker:active {
-  transform: scale(0.98);
 }
 
 .toolbar-icon-btn {
