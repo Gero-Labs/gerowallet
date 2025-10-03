@@ -494,12 +494,15 @@ const handleBackupWallet = () => {
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
-// Portfolio data loading is now handled by usePortfolioData composable
 
+// Portfolio data loading is now handled by usePortfolioData composable
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 // Utility function to refresh portfolio data
 const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
-  if (address) {
+  if (address && !isApex.value) {
     await refreshPortfolioData(address);
   }
 };
@@ -507,7 +510,7 @@ const refreshPortfolioChart = async () => {
 // Utility function to get cache information (for debugging)
 const getPortfolioCacheInfo = async () => {
   const address = loggedWallet.value?.baseAddress;
-  if (!address) {
+  if (!address || isApex.value) {
     return null;
   }
 
@@ -526,7 +529,7 @@ defineExpose({
 watch(
   () => loggedWallet.value?.baseAddress,
   async (newAddress, oldAddress) => {
-    if (newAddress && newAddress !== oldAddress) {
+    if (newAddress && newAddress !== oldAddress && !isApex.value) {
       try {
         // Start parallel loading immediately (don't await - let it run in background)
         loadDataProgressively(newAddress).catch(error => {
