@@ -195,8 +195,6 @@ const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
-
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 

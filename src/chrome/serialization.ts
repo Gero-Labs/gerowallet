@@ -335,7 +335,7 @@ export function getBalance(utxos: any[], collateral: any): Serialization.Value {
     utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
   }
   utxos.forEach(utxo => {
-    assets.push(...utxo?.asset_list)
+    assets.push(...utxo.asset_list)
     lovelace += Number(utxo.value)
   })
   return toValue(assets, lovelace.toString());
