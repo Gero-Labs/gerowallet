@@ -14,7 +14,9 @@
       "Bash(npm run build:background:*)",
       "Bash(grep:*)",
       "Bash(sed:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "WebFetch(domain:vacuumlabs.github.io)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

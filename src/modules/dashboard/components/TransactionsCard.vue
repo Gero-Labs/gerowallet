@@ -80,6 +80,54 @@
                     v-if="item.pending"
                     >Pending</v-chip
                   >
+                  <v-chip
+                    v-if="isCashback(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#E77DFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                  >Cashback</v-chip>
+                  <v-chip
+                    v-if="isStrike(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#26FAB0"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >Strike</v-chip>
+                  <v-chip
+                    v-if="isDexHunter(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#007DFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                  >DexHunter</v-chip>
+                  <v-chip
+                    v-if="isMinswap(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#89AAFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                  >Minswap</v-chip>
+                  <v-chip
+                    v-if="isJpgStore(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#ffdb24"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                  >jpg.store</v-chip>
+                  <v-chip
+                    v-if="isWingRiders(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#e5e7eb"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                  >WingRiders</v-chip>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -113,7 +161,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap;">
-                {{ filters.toCurrency(item.ada * adaPrice, true, 0, '$', '', false, 6) }}
+                {{ filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
@@ -172,7 +220,7 @@ import networks from '@/utils/networks';
 import time from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
@@ -385,7 +433,7 @@ const loadMoreTransactions = async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
-  let newTransactions = [];
+  let newTransactions: any[];
 
   if (props.isFullList) {
     // Infinite scroll mode
@@ -441,7 +489,9 @@ const resetInfiniteScroll = async () => {
 watch(
   () => search.value,
   async () => {
-    await resetInfiniteScroll();
+    if (props.isFullList) {
+      await resetInfiniteScroll();
+    }
   }
 );
 
@@ -535,6 +585,113 @@ const isWithdrawal = item => {
     item.body.withdrawals.some(withdrawal => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
   );
 };
+
+const isStrike = (item) => {
+  return (
+    item.witness?.scripts?.some(script => Serialization.Script.fromCore(script).hash() === 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5')
+  )
+}
+
+const isDexHunter = (item) => {
+  // Check metadata for DexHunter Trade message
+  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  const hasDexHunterMetadata = msg && Array.isArray(msg)
+    ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter'))
+    : false;
+
+  // Check for DexHunter fee address in outputs
+  const DEXHUNTER_FEE_ADDRESS = 'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
+  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) =>
+    output.address === DEXHUNTER_FEE_ADDRESS
+  );
+
+  // Check for DexHunter order contract address
+  const DEXHUNTER_ORDER_ADDRESS = 'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
+  const hasDexHunterOrderAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_ORDER_ADDRESS);
+
+  return hasDexHunterMetadata || hasDexHunterFeeAddress || hasDexHunterOrderAddress;
+}
+
+const isMinswap = (item) => {
+  // Check for Minswap Pool NFT in outputs
+  const hasMinswapPoolNFT = item.body?.outputs?.some((output: any) =>
+    output.value?.assets &&
+    Object.keys(output.value.assets).some(unit =>
+      unit.startsWith('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+    )
+  );
+
+  // Check for Minswap pool NFT policy in output datum CBOR
+  const hasMinswapInOutputDatum = item.body?.outputs?.some((output: any) =>
+    output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  );
+
+  // Check for Minswap pool NFT policy in witness datums
+  const hasMinswapInWitnessDatum = item.witness?.datums?.some((datum: any) =>
+    datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  );
+
+  // Check for Minswap V2 order contract address
+  const MINSWAP_V2_ORDER_ADDRESS = 'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
+  const hasMinswapOrderAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === MINSWAP_V2_ORDER_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === MINSWAP_V2_ORDER_ADDRESS);
+
+  return hasMinswapPoolNFT || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || hasMinswapOrderAddress;
+}
+
+const isJpgStore = (item) => {
+  // Check for jpg.store marketplace script address
+  const JPGSTORE_SCRIPT_ADDRESS = 'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
+  const hasJpgStoreAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+
+  // Check for jpg.store auxiliary data structure (fields 0-10, 30)
+  const hasJpgStoreMetadata = item.auxiliaryData?.blob && (
+    item.auxiliaryData.blob[0] ||
+    item.auxiliaryData.blob[1] ||
+    item.auxiliaryData.blob[2] ||
+    item.auxiliaryData.blob[3] ||
+    item.auxiliaryData.blob[4] ||
+    item.auxiliaryData.blob[5] ||
+    item.auxiliaryData.blob[6] ||
+    item.auxiliaryData.blob[7] ||
+    item.auxiliaryData.blob[8] ||
+    item.auxiliaryData.blob[9] ||
+    item.auxiliaryData.blob[10] ||
+    item.auxiliaryData.blob[30]
+  );
+
+  // Check for datum hash (indicating a marketplace listing)
+  const hasDatumHash = item.body?.outputs?.some((output: any) => output.datumHash);
+
+  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash);
+}
+
+const isWingRiders = (item) => {
+  // Check for WingRiders order contract address (used in DexHunter orders)
+  const WINGRIDERS_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
+  const hasWingRidersOrderAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === WINGRIDERS_ORDER_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === WINGRIDERS_ORDER_ADDRESS);
+
+  // Check for WingRiders in datum CBOR (order creation/execution)
+  const hasWingRidersInDatum = item.witness?.datums?.some((datum: any) =>
+    datum.cbor?.includes('addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4')
+  );
+
+  return hasWingRidersOrderAddress || hasWingRidersInDatum;
+}
+
+const isCashback = (item) => {
+  return !!item.utxo?.inputs?.some(input => [
+    'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
+    'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd'
+  ].includes(input.address));
+}
 
 const isStakeRegistration = item => {
   return (

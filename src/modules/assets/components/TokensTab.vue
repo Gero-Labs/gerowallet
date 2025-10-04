@@ -11,6 +11,7 @@
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :custom-sort="customSort"
     :style="{ minHeight: tableHeight + 'px' }"
+    @click:row="handleTokenRowClick"
   >
     <template v-slot:body.append>
       <tr v-if="tokensList.length > 6" class="no-hover">
@@ -434,6 +435,10 @@ const totalAllocation = computed(() => {
   });
   return total;
 });
+
+const handleTokenRowClick = (row: any) => {
+  console.log(row)
+}
 
 const paginatedTokens = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;

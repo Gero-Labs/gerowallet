@@ -144,7 +144,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import TokensTab from '@/modules/assets/components/TokensTab.vue';
 import { Blockchain, Network } from '@/models/types';
