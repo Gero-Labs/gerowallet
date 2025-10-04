@@ -97,27 +97,22 @@ const submitLogin = async (walletId: string): Promise<void> => {
   try {
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
 
-    await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
 
-    // Wait for storage synchronization to complete before navigation
-    // Poll for loggedWallet to be set (indicating login is complete)
-    const maxWaitTime = 5000; // 5 seconds max wait
-    const pollInterval = 50; // 50ms intervals
-    const startTime = Date.now();
-
-    while (!loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    if (!loggedWallet.value) {
-      console.error('❌ Login failed: Wallet not found in store after timeout');
+    // OPTIMIZATION: Trust the background response instead of polling for up to 5 seconds
+    // The background script sets the store and returns success/failure
+    if (!response || response.error) {
+      console.error('❌ Login failed:', response?.error || 'Unknown error');
       return;
     }
 
-    console.debug('✅ Login synchronized, wallet logged in:', !!loggedWallet.value);
+    // Small delay to ensure store messaging has propagated (100ms vs 5000ms max before)
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    console.debug('✅ Login complete, wallet logged in:', !!loggedWallet.value);
 
     const queryParams = vmProxy.$route.query;
     console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);

@@ -1,4 +1,5 @@
 import * as Ably from 'ably';
+import { debugLog } from '@/utils/debug';
 // @ts-ignore - No types available for tiny-fifo-cache
 import FIFOCache from 'tiny-fifo-cache';
 import LoadingState from '@/stores/loading';
@@ -132,7 +133,7 @@ class AblyService {
   }
 
   public setAuthParams(chain: string, network: string, address: string): void {
-    console.debug('🔐 Setting auth params:', { chain, network, address });
+    debugLog('🔐 Setting auth params:', { chain, network, address });
     this.authParams = { chain, network, address };
     // ALWAYS recreate client when setting auth params for fresh state
     this.close();
@@ -263,7 +264,7 @@ class AblyService {
                   // Handle chunked messages
                   try {
                     const chunk = JSON.parse(msg.data);
-                    console.debug('📦 Received SYNC_CHUNK on private channel:', chunk);
+                    debugLog('📦 Received SYNC_CHUNK on private channel:', chunk);
 
                     const reconstructedMessage = messageReconstructionService.processChunk(chunk);
                     if (reconstructedMessage) {

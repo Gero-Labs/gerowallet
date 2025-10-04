@@ -3,6 +3,7 @@ import realfiApi from '@/api/realfi-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface RealFiStore {
   tokens: {};
@@ -17,11 +18,13 @@ const STORE_NAME = 'realFiStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing realFi store messaging in browser context`);
+  debugLog(`🔌 Initializing realFi store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<RealFiStore>) => {
-    console.debug('📥 Received realFi store update:', updates);
+    debugLog('📥 Received realFi store update:', updates);
     
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -35,7 +38,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(realFiStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated realFi store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated realFi store from storage:', result[STORE_NAME]);
     }
   });
 }

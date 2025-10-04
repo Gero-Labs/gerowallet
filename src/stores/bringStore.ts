@@ -3,6 +3,7 @@ import cashbackApi from '@/api/cashback-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface BringStore {
   bringCache: any;
@@ -16,12 +17,14 @@ const STORE_NAME = 'bringStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing bring store messaging in browser context`);
+  debugLog(`🔌 Initializing bring store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<BringStore>) => {
-    console.debug('📥 Received bring store update:', updates);
-    
+    debugLog('📥 Received bring store update:', updates);
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in bringStore) {
@@ -34,7 +37,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(bringStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated bring store from storage');
+      debugLog('💾 Hydrated bring store from storage');
     }
   });
 }

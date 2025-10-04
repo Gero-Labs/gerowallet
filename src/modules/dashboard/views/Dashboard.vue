@@ -539,10 +539,15 @@ watch(
   async (newAddress, oldAddress) => {
     if (newAddress && newAddress !== oldAddress) {
       try {
-        // Start parallel loading immediately (don't await - let it run in background)
-        loadDataProgressively(newAddress).catch(error => {
-          console.warn('Portfolio data loading failed:', error);
-        });
+        if (account && Number(account.value?.controlled_amount) > 0 &&
+          loggedWallet.value?.chain === Blockchain.CARDANO &&
+          loggedWallet.value?.network === Network.MAINNET
+        ) {
+          // Start parallel loading immediately (don't await - let it run in the background)
+          loadDataProgressively(newAddress).catch(error => {
+            console.warn('Portfolio data loading failed:', error);
+          });
+        }
       } catch (error) {
         console.warn('Failed to start portfolio data loading:', error);
       }

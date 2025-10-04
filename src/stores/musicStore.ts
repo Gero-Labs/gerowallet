@@ -6,6 +6,7 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 
 export interface MusicStore {
   musicPlaylist: any;
@@ -37,7 +38,7 @@ const context = getContextType();
 
 // Function to clear music store data immediately
 function clearMusicStoreImmediately() {
-  console.debug('MusicStore: Clearing immediately for wallet change');
+  debugLog('MusicStore: Clearing immediately for wallet change');
   
   // Stop any playing audio
   if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
@@ -77,7 +78,7 @@ new Vue({
     currentWalletId: {
       handler(newWalletId, oldWalletId) {
         if (oldWalletId !== null && newWalletId !== oldWalletId) {
-          console.debug('MusicStore: Wallet changed from', oldWalletId, 'to', newWalletId);
+          debugLog('MusicStore: Wallet changed from', oldWalletId, 'to', newWalletId);
           clearMusicStoreImmediately();
         }
       },
@@ -87,11 +88,13 @@ new Vue({
 });
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing music store messaging in browser context`);
+  debugLog(`🔌 Initializing music store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<MusicStore>) => {
-    console.debug('📥 Received music store update:', updates);
+    debugLog('📥 Received music store update:', updates);
     
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -118,7 +121,7 @@ if (context === 'browser') {
         storedData.context.seek = 0;
       }
       Object.assign(musicStore, storedData);
-      console.debug('💾 Hydrated music store from storage');
+      debugLog('💾 Hydrated music store from storage');
     }
   });
 }
@@ -441,7 +444,7 @@ const MusicStoreModule = {
     if (chrome?.storage?.local) {
       try {
         await chrome.storage.local.remove(STORE_NAME);
-        console.debug('MusicStore: Cleared from Chrome storage');
+        debugLog('MusicStore: Cleared from Chrome storage');
       } catch (error) {
         console.error('MusicStore: Failed to clear from Chrome storage:', error);
       }
