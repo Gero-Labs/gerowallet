@@ -9,6 +9,7 @@ import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
+import { debugLog } from '@/utils/debug';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -76,7 +77,7 @@ export class SyncService {
         });
       }
     } catch (err) {
-      console.debug(err);
+      debugLog(err);
     }
   }
 
@@ -133,7 +134,7 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
-      console.debug('setSync', syncObject);
+      debugLog('setSync', syncObject);
       NetworkStore.setTip({
         blockNo: syncObject.block.height,
         slot: syncObject.block.slot,
@@ -160,7 +161,7 @@ export class SyncService {
             await genesisTable.put({ id: 0, ...res.data });
             NetworkStore.setGenesis(res.data)
           } else {
-            console.debug(res.status)
+            debugLog(res.status)
             console.warn(parseHttpError(res))
           }
         } catch (error) {
@@ -256,7 +257,7 @@ export class SyncService {
         return txsCborResults;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
   }
 
@@ -328,11 +329,11 @@ export class SyncService {
     try {
       const res: AxiosResponse = await this.api.getAssetsInfo(units);
       if (res.status === 200 && res.data.length > 0) {
-        console.debug(res.data);
+        debugLog(res.data);
         return res.data;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
     return null;
   }
@@ -349,7 +350,7 @@ export class SyncService {
       const transactionsTable = db.table('transactions');
 
       if (!transactionsTable) {
-        console.debug('No transactions table found');
+        debugLog('No transactions table found');
         return 0;
       }
 
@@ -357,7 +358,7 @@ export class SyncService {
       const transactions = await transactionsTable.toArray();
 
       if (!transactions || transactions.length === 0) {
-        console.debug('No transactions found');
+        debugLog('No transactions found');
         return 0;
       }
 
@@ -367,11 +368,11 @@ export class SyncService {
       });
 
       const blockHeight = latestTx.block_height || 0;
-      console.debug(`Latest transaction block height: ${blockHeight}`);
+      debugLog(`Latest transaction block height: ${blockHeight}`);
       return blockHeight;
 
     } catch (e) {
-      console.debug('Error getting latest transaction block height:', e);
+      debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
   }

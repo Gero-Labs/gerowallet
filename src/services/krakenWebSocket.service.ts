@@ -173,12 +173,12 @@ class KrakenWebSocketService {
   private handleTickerData(data: any[]): void {
     if (data.length < 4) return;
 
-    const [channelID, tickerData, channelName, pair] = data;
+    const [_channelID, tickerData, channelName, pair] = data;
 
     if (channelName === 'ticker' && pair === 'ADA/USD') {
       this.lastTickerTime = Date.now();
       const ticker = this.parseTickerData(tickerData);
-      
+
       if (this.onTickerUpdate) {
         this.onTickerUpdate(ticker);
       }
@@ -239,7 +239,7 @@ class KrakenWebSocketService {
   private startTickerMonitoring(): void {
     this.tickerRequestInterval = setInterval(() => {
       const timeSinceLastUpdate = Date.now() - this.lastTickerTime;
-      
+
       if (timeSinceLastUpdate > 120000) {
         if (this.isConnected && this.subscriptions.has('ADA/USD')) {
           this.subscribeToAdaUsd();

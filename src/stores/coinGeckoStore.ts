@@ -3,6 +3,7 @@ import coinGeckoApi from '@/api/coinGecko.api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface CoinGeckoStore {
   cache: Record<string, any>;
@@ -17,11 +18,13 @@ const STORE_NAME = 'coinGeckoStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing coinGecko store messaging in browser context`);
+  debugLog(`🔌 Initializing coinGecko store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<CoinGeckoStore>) => {
-    console.debug('📥 Received coinGecko store update:', updates);
+    debugLog('📥 Received coinGecko store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -35,7 +38,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(coinGeckoStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated coinGecko store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated coinGecko store from storage:', result[STORE_NAME]);
     }
   });
 }
@@ -114,7 +117,7 @@ export default {
 
   // Utility method to check if the cache is stale (older than 5 minutes)
   isCacheStale(maxAge: number = 5 * 60 * 1000): boolean {
-    const cacheTimestamp = coinGeckoStore.cache._timestamp;
+    const cacheTimestamp = coinGeckoStore.cache['_timestamp'];
     if (!cacheTimestamp) return true;
     return Date.now() - cacheTimestamp > maxAge;
   }

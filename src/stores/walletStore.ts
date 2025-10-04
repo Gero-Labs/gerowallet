@@ -7,6 +7,7 @@ import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/walle
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
 import { Keys } from '@/models/types';
+import { debugLog } from '@/utils/debug';
 
 interface WhitelistedEntry {
   domain: string;
@@ -65,11 +66,13 @@ const STORE_NAME = 'walletStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing wallet store messaging in browser context`);
+  debugLog(`🔌 Initializing wallet store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
-    console.debug('📥 Received wallet store update:', updates);
+    debugLog('📥 Received wallet store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -83,7 +86,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(walletStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated wallet store from storage');
+      debugLog('💾 Hydrated wallet store from storage');
     }
   });
 }
@@ -100,69 +103,69 @@ export const hydrateWalletStore = (): Promise<void> => {
   });
 };
 
+// Debounced storage write to reduce I/O operations
+let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Serializer function for complex data types
+function serializeValue(key: string, value: any): any {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  } else if (value instanceof Map) {
+    return Array.from(value.entries()).reduce((obj, [key, value]) => {
+      obj[key] = value;
+      return obj;
+    }, {});
+  } else if (value instanceof Set) {
+    return Array.from(value);
+  } else {
+    return value;
+  }
+}
+
 /**
  * Broadcast updates from background context
  */
 function broadcastFromBackground(updates: Partial<WalletStore>) {
   if (context === 'background') {
-    // Log what we're trying to broadcast
+    // Log what we're trying to broadcast (only for critical updates)
     if ('keys' in updates) {
-      console.debug('📤 Broadcasting keys update:', updates.keys ? 'keys present' : 'keys null');
+      debugLog('📤 Broadcasting keys update:', updates.keys ? 'keys present' : 'keys null');
     }
 
     // Serialize data for broadcasting (handle BigInt, Maps, etc.)
-    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
-      if (typeof value === 'bigint') {
-        return value.toString();
-      } else if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
-      } else if (value instanceof Set) {
-        return Array.from(value);
-      } else {
-        return value;
-      }
-    }));
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
 
     // Check if keys survived serialization
     if ('keys' in updates && 'keys' in serializedUpdates) {
-      console.debug('📤 Keys after serialization:', serializedUpdates.keys ? 'keys present' : 'keys null');
+      debugLog('📤 Keys after serialization:', serializedUpdates.keys ? 'keys present' : 'keys null');
     }
 
-    // Broadcast to all connected browser contexts
+    // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Also persist to storage as fallback - use current local state as base instead of storage
-    try {
-      // Use the current local store state as the base to avoid race conditions
-      const finalState = { ...(walletStore), ...serializedUpdates };
-
-      // Log if keys are being stored
-      if ('keys' in serializedUpdates) {
-        console.debug('💾 Storing keys to chrome.storage:', finalState.keys ? 'keys present' : 'keys null');
-      }
-
-      chrome.storage.local.set({
-        [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
-          if (typeof value === 'bigint') {
-            return value.toString();
-          } else if (value instanceof Map) {
-            return Array.from(value.entries()).reduce((obj, [key, value]) => {
-              obj[key] = value;
-              return obj;
-            }, {});
-          } else if (value instanceof Set) {
-            return Array.from(value);
-          } else {
-            return value;
-          }
-        }))
-      });
-    } catch (error) {
-      console.error('Failed to persist wallet store to storage:', Object.keys(updates), error);
+    // Debounced storage write to reduce I/O operations during rapid updates
+    // This batches multiple updates together while maintaining data consistency
+    if (storageWriteTimeout) {
+      clearTimeout(storageWriteTimeout);
     }
+
+    storageWriteTimeout = setTimeout(() => {
+      try {
+        // Use the current local store state as the base to avoid race conditions
+        const finalState = { ...(walletStore) };
+
+        // Log if keys are being stored
+        if ('keys' in finalState) {
+          debugLog('💾 Storing keys to chrome.storage:', finalState.keys ? 'keys present' : 'keys null');
+        }
+
+        chrome.storage.local.set({
+          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
+        });
+      } catch (error) {
+        console.error('Failed to persist wallet store to storage:', Object.keys(updates), error);
+      }
+    }, 300); // 300ms debounce - balances performance with data safety
   }
 }
 
@@ -212,13 +215,13 @@ export default {
   },
 
   setKeys(keys: any) {
-    console.debug('🔑 Setting keys in walletStore:', keys);
+    debugLog('🔑 Setting keys in walletStore:', keys);
     walletStore.keys = keys;
     broadcastFromBackground({ keys });
   },
 
   setTokens(tokens: {}) {
-    console.debug('Setting tokens:', Object.keys(tokens).length, 'tokens');
+    debugLog('Setting tokens:', Object.keys(tokens).length, 'tokens');
     walletStore.tokens = tokens;
     broadcastFromBackground({ tokens });
   },
@@ -357,7 +360,7 @@ export default {
   },
 
   logout() {
-    console.debug('🚪 LOGOUT: Clearing all wallet data including tokens');
+    debugLog('🚪 LOGOUT: Clearing all wallet data including tokens');
 
     // Disconnect price service
     priceService.disconnect();
@@ -391,14 +394,14 @@ export default {
   },
 
   clearForWalletSwitch() {
-    console.debug('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
+    debugLog('🧹 clearForWalletSwitch called - clearing keys and other wallet data');
 
     // Reconnect price service for the new wallet context
     priceService.disconnect();
 
     // CRITICAL: Clear all Chrome alarms to prevent memory leaks during wallet switching
     chrome.alarms.clearAll();
-    console.debug('🧹 Cleared all Chrome alarms during wallet switch');
+    debugLog('🧹 Cleared all Chrome alarms during wallet switch');
 
     // Clear intervals to prevent memory leaks
     if (walletStore.fiatRatesIntervalId) {

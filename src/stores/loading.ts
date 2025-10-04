@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface LoadingState {
   loading: boolean;
@@ -26,11 +27,13 @@ const STORE_NAME = 'loadingState';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing loading store messaging in browser context`);
+  debugLog(`🔌 Initializing loading store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
-    console.debug('📥 Received loading store update:', updates);
+    debugLog('📥 Received loading store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -44,10 +47,13 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(loadingState, result[STORE_NAME]);
-      console.debug('💾 Hydrated loading store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated loading store from storage:', result[STORE_NAME]);
     }
   });
 }
+
+// Debounced storage write to reduce I/O operations
+let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Broadcast updates from background context
@@ -57,11 +63,17 @@ function broadcastFromBackground(updates: Partial<LoadingState>) {
     // Apply updates locally first
     Object.assign(loadingState, updates);
 
-    // Broadcast to all connected browser contexts
+    // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
 
-    // Also persist to storage as fallback
-    chrome.storage.local.set({ [STORE_NAME]: loadingState });
+    // Debounced storage write to reduce I/O operations during rapid updates
+    if (storageWriteTimeout) {
+      clearTimeout(storageWriteTimeout);
+    }
+
+    storageWriteTimeout = setTimeout(() => {
+      chrome.storage.local.set({ [STORE_NAME]: loadingState });
+    }, 300); // 300ms debounce
   }
 }
 
@@ -104,7 +116,7 @@ function createSetter<K extends keyof LoadingState>(
 export default {
   setLoading: createSetter('loading', (v) => {
     if (context === 'background' && v) {
-      console.debug('⏳ Loading state activated');
+      debugLog('⏳ Loading state activated');
     }
   }),
 
@@ -112,16 +124,16 @@ export default {
 
   setSyncing: createSetter('isSyncing', (v) => {
     if (v) {
-      console.debug(`🔄 Starting sync operation from ${context} context`);
+      debugLog(`🔄 Starting sync operation from ${context} context`);
     }
   }),
 
   setRestoring: createSetter('isRestoring',
     (v) => {
       if (v) {
-        console.debug(`🔄 Starting wallet restore from ${context} context`);
+        debugLog(`🔄 Starting wallet restore from ${context} context`);
       } else {
-        console.debug(`✅ Wallet restore completed from ${context} context`);
+        debugLog(`✅ Wallet restore completed from ${context} context`);
       }
     },
     (v) => ({
@@ -132,13 +144,13 @@ export default {
 
   setConnected: createSetter('connected', (v) => {
     if (loadingState.connected !== v) {
-      console.debug(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
+      debugLog(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
     }
   }),
 
   setLoadingTxs: createSetter('loadingTxs', (v) => {
     if (loadingState.loadingTxs !== v) {
-      console.debug(`💳 Transaction loading state: ${v ? 'loading' : 'completed'}`);
+      debugLog(`💳 Transaction loading state: ${v ? 'loading' : 'completed'}`);
     }
   }),
 
