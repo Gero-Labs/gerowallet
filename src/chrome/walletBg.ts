@@ -310,11 +310,8 @@ export class WalletBg {
     // Keys
     console.debug('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
     if (this.type !== WalletType.Google) {
-      console.debug('🔑 Syncing keys for addresses:', Array.from(addresses));
       const keys = await this.syncService.syncKeys(Array.from(addresses));
-      console.debug('🔑 Keys synced, result:', keys ? 'keys available' : 'keys null');
       WalletStore.setKeys(keys);
-      console.debug('🔑 Keys set in store');
     } else {
       console.debug('🔑 Skipping key sync for Google wallet type');
     }

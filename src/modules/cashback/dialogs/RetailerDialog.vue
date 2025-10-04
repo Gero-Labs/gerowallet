@@ -51,7 +51,7 @@ const props = defineProps({
     default: false,
   },
   retailer: {
-    type: Object
+    type: Object as () => any,
   },
   retailerTermsBasePath: {
     type: String,
@@ -102,7 +102,7 @@ const activate = async () => {
     }
     const response = await cashbackApi.activate(
       props.retailer.id,
-      baseAddress.value,
+      loggedWallet.value.baseAddress,
       networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network),
       search
     );
