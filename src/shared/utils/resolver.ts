@@ -370,7 +370,6 @@ export function resolveAsset(token: any): any {
         }
         if (label === 333 && asset.metadata && !asset.metadata.decimals) {
           const token = structuredClone(DexHunterStore.state.dexHunterTokens[asset.asset])
-          console.log(token)
           if (token?.decimals) {
             asset.metadata.decimals = token.decimals
           } else {

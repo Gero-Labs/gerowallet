@@ -17,7 +17,8 @@
       "Bash(node:*)",
       "WebFetch(domain:vacuumlabs.github.io)",
       "WebFetch(domain:github.com)",
-      "Bash(do echo \"Processing $file...\")"
+      "Bash(do echo \"Processing $file...\")",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

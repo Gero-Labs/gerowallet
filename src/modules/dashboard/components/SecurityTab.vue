@@ -127,7 +127,6 @@ import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
-import geroLogoApex from '@/assets/svg/gero-logo-apex.svg';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
@@ -152,7 +151,7 @@ const options = computed((): Partial<Options> => ({
   height: 170,
   type: 'svg',
   data: loggedWallet.value?.publicKey.toString(),
-  image: isApex ? assets.geroLogoApex : assets.geroLogo,
+  image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
   margin: 2,
   qrOptions: {
     typeNumber: 0,
