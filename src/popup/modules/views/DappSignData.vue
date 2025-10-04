@@ -88,7 +88,6 @@ import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
 import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import networks from '@/utils/networks';
-import { buildAndSignData, createCOSEKeyHex, createSignDataBuilder, toHexArray } from '@/shared/utils/converter';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
 const { loggedWallet, config, keys } = toRefs(walletStore);
@@ -153,7 +152,6 @@ const signAndReturnTx = async () => {
         isUsb: !isBT.value
       }
     }) as { data: { key: string; signature: string } };
-    console.log('signData', res)
     signature.value = res.data;
     if (txAutoSubmit.value) {
       await confirm();
@@ -190,18 +188,20 @@ const sign = async () => {
     const payload = request.value.data.payload;
     console.log('payload', payload);
     try {
+      // Create known addresses from wallet keys for Ledger signing
+      const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+      const knownAddresses = ledger.createKnownAddressesFromKeys(keys.value, network);
+
       const response: SignedMessageData = await ledger.signData(
         address,
         payload,
-        networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+        network,
         0,
         !isBT.value,
+        knownAddresses
       );
       console.log('response', response);
-      const builder = createSignDataBuilder(toHexArray(response.addressFieldHex), payload);
-      const signatureHex = buildAndSignData(builder, toHexArray(response.signatureHex), undefined);
-      const keyHex = createCOSEKeyHex(toHexArray(response.signingPublicKeyHex));
-      signature.value = { signature: signatureHex, key: keyHex, publicKey: response.signingPublicKeyHex};
+      signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex};
       if (txAutoSubmit.value) {
         await confirm();
       }
@@ -247,6 +247,7 @@ onMounted(async () => {
     const params = new URLSearchParams(window.location.href);
     tabId.value = Number(params.get("tabId"));
     controller.value = Messaging.createInternalSidePanelController(tabId.value);
+    console.log(controller.value);
   } else {
     controller.value = Messaging.createInternalController();
   }

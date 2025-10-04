@@ -222,6 +222,15 @@ const isLoading = ref(false);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
+    id: 'midnight-drop',
+    title: 'Glacier Drop',
+    subtitle: 'Claim $NIGHT tokens',
+    logo: assets.logoStackedLight,
+    logoAlt: 'NIGHT Logo',
+    backgroundImage: assets.midnightImage,
+    action: 'openMidnightClaimLink',
+  },
+  {
     id: 'gero-debit-card',
     title: 'Gero Card',
     subtitle: 'Top up ADA instantly! \n Coming soon',
@@ -396,6 +405,9 @@ const resumeApexCarousel = () => {
 
 const handleCarouselClick = (item: any) => {
   switch (item.action) {
+    case 'openMidnightClaimLink':
+      window.open('https://claim.midnight.gd/', '_blank');
+      break;
     case 'showUpdateInfo':
       showUpdateInfo();
       break;

@@ -529,7 +529,7 @@
             <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-file-sign</v-icon>
             </div>
-            <h3>Contracts ({{ transactionInfo.witness?.redeemers?.length }})</h3>
+            <h3>Witness</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -605,6 +605,46 @@
                       </v-card>
                     </td>
                   </tr>
+                </tbody>
+              </v-simple-table>
+            </v-card-text>
+          </v-card>
+          <v-card
+            flat
+            v-for="(script, index) in getScripts(transactionInfo.witness.scripts)"
+            :key="`scripts_${index}`"
+            class="mb-2 transparent"
+          >
+            <v-card-title>{{ `Script #${index + 1}` }}</v-card-title>
+            <v-card-text>
+              <v-simple-table dense style="background-color: transparent">
+                <tbody>
+                <tr>
+                  <td class="text-left grey--text">Type</td>
+                  <td class="text-left">
+                    {{ scriptType(script.language()) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">Hash</td>
+                  <td class="text-left">
+                    {{ filters.truncate(script.hash()) }}
+                    <CopyButton v-if="script.hash()" x-small class="ml-1" :value="script.hash()"></CopyButton>
+                  </td>
+                </tr>
+                <tr v-if="Cardano.isPlutusScript(script.toCore())">
+                  <td class="text-left grey--text">Bytes</td>
+                  <td class="text-left">
+                    <v-card outlined class="my-1">
+                      <v-card-title class="pa-1" style="position: absolute; right: 0">
+                        <CopyButton :value="getScriptDataBytes(script.toCore())" small></CopyButton>
+                      </v-card-title>
+                      <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+                        <pre style="white-space: pre-wrap; word-wrap: anywhere; overflow-wrap: anywhere;">{{ filters.truncate(getScriptDataBytes(script.toCore())) }}</pre>
+                      </v-card-text>
+                    </v-card>
+                  </td>
+                </tr>
                 </tbody>
               </v-simple-table>
             </v-card-text>
@@ -783,6 +823,31 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {
   );
 };
 
+const getScripts = (scripts: Cardano.Script[]) => {
+  return scripts?.map(script => {
+    return Serialization.Script.fromCore(script);
+  });
+};
+
+const getScriptDataBytes = (script: Cardano.Script) => {
+  return (script as Cardano.PlutusScript).bytes
+}
+
+const scriptType = (scriptLanguage: number) => {
+  switch (scriptLanguage) {
+    case 0:
+      return 'Native'
+    case 1:
+      return 'Plutus V1';
+    case 2:
+      return 'Plutus V2';
+    case 3:
+      return 'Plutus V3';
+    default:
+      return 'Unknown';
+  }
+};
+
 const getAssetName = (unit: string, checkAscii: boolean) => {
   const assetNameHex = Cardano.AssetId.getAssetName(Cardano.AssetId(unit));
   const policyId = Cardano.AssetId.getPolicyId(Cardano.AssetId(unit));
@@ -889,6 +954,7 @@ const txAssets = computed(() => {
 });
 
 const receivedAssets = computed(() => {
+  console.log(props.transactionInfo)
   const assts = props.transactionInfo['assets']
     .filter((asset: any) => asset.policy_id !== '')
     .map((asset: any) => {
