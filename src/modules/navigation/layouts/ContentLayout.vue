@@ -15,7 +15,7 @@
                 loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                   ? assets.apexBg
                   : assets.cardanoBg
-              })`,
+              })`
             }"
           ></div>
 

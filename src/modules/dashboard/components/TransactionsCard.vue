@@ -1,7 +1,12 @@
 <template>
-  <v-card outlined class="fill-height liquid-glass" :loading="loadingTxs">
-    <v-card-title class="pb-2">
-      Transactions
+  <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
+    <v-card-title class="pb-2 flex-grow-0">
+      <router-link
+        v-if="!isFullList"
+        to="/transactions"
+        style="text-decoration: auto; color: white;"
+      >Transactions</router-link>
+      <span v-else>Transactions</span>
       <v-spacer />
       <!-- Search box -->
       <v-text-field
@@ -17,8 +22,8 @@
         class="top-level-search"
       ></v-text-field>
     </v-card-title>
-    <v-card-text class="pa-0 text-center">
-      <div :class="{ 'table-container': props.isFullList }">
+    <v-card-text class="pa-0 text-center flex-grow-1 d-flex flex-column">
+      <div :class="{ 'table-container': props.isFullList }" class="flex-grow-1">
         <v-data-table
           :header-props="{ 'sort-icon': 'mdi-menu-up' }"
           :items="displayedTransactions"
@@ -223,23 +228,20 @@
                 <div ref="intersectionTarget" style="height: 1px"></div>
               </td>
             </tr>
-            <!-- Pagination for non-full list mode -->
-            <tr v-if="!props.isFullList && transactions.length > itemsPerPage" class="no-hover">
-              <td :colspan="activityHeaders.length" class="text-center pa-0 ma-0">
-                <v-pagination
-                  v-model="currentPage"
-                  :length="Math.ceil(transactions.length / itemsPerPage)"
-                  :total-visible="7"
-                  circle
-                  class="compact-pagination ma-0"
-                  @input="handlePageChange"
-                ></v-pagination>
-              </td>
-            </tr>
           </template>
         </v-data-table>
       </div>
     </v-card-text>
+    <v-card-actions v-if="!props.isFullList && transactions.length > itemsPerPage" class="pa-0 no-hover text-center justify-center">
+      <v-pagination
+        v-model="currentPage"
+        :length="Math.ceil(transactions.length / itemsPerPage)"
+        :total-visible="7"
+        circle
+        class="compact-pagination ma-0"
+        @input="handlePageChange"
+      ></v-pagination>
+    </v-card-actions>
     <TransactionDetailsDialog
       v-if="transactionInfo && state === '/' && !selectedTransaction"
       :transactionInfo="transactionInfo"

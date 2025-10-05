@@ -92,8 +92,8 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn color="primary" text @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">Cancel</v-btn>
-            <v-btn color="primary" @click="deleteWalletConfirm" :disabled="deleteWalletLoading" :loading="deleteWalletLoading">OK</v-btn>
+            <v-btn color="error" text @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">Cancel</v-btn>
+            <v-btn color="error" @click="deleteWalletConfirm" :disabled="deleteWalletLoading" :loading="deleteWalletLoading">YES</v-btn>
             <v-spacer></v-spacer>
           </v-card-actions>
         </v-card>
