@@ -1,6 +1,11 @@
 <template>
   <v-card flat outlined class="fill-height liquid-glass" :loading="loadingTxs || poolLoading">
-    <v-card-title>Staking</v-card-title>
+    <v-card-title>
+      <router-link
+        to="/staking"
+        style="text-decoration: auto; color: white;"
+      >Staking</router-link>
+    </v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters class="staking2-header-row py-2">

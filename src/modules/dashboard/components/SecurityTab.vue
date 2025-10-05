@@ -19,7 +19,7 @@
             Ed25519-Bip32 Extended Public Key
           </v-list-item-subtitle>
           <v-list-item-subtitle class="text-left">
-            <CopyButton :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
+            <CopyButton v-if="loggedWallet" :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-avatar size="160" rounded>
