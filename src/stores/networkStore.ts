@@ -129,6 +129,18 @@ export default {
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
     const context = getContextType();
     debugLog(`🔍 NetworkStore setTip called from ${context} context`);
+
+    // RACE CONDITION FIX: Only update tip if it's newer than the current one
+    // Prevents old Ably messages from overwriting fresh data
+    if (networkStore.tip) {
+      // Compare by block height (blockNo) - higher is newer
+      if (tip.blockNo <= networkStore.tip.blockNo) {
+        debugLog(`⚠️ Ignoring older/duplicate tip - current: ${networkStore.tip.blockNo}, new: ${tip.blockNo}`);
+        return;
+      }
+    }
+
+    debugLog(`✅ Setting new tip - blockNo: ${tip.blockNo}, epoch: ${tip.epoch}`);
     networkStore.tip = tip;
 
     // Broadcast from background context

@@ -711,7 +711,7 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
+  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`)
   emit('onSwap')
   console.log(txId)
 }

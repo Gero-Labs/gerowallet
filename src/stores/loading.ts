@@ -10,6 +10,7 @@ export interface LoadingState {
   isSyncing: boolean;
   isRestoring: boolean;
   connected: boolean;
+  connecting: boolean;
   loadingTxs: boolean;
 }
 
@@ -20,6 +21,7 @@ export const loadingState = Vue.observable<LoadingState>({
   isSyncing: false,
   isRestoring: false,
   connected: false,
+  connecting: false,
   loadingTxs: false,
 });
 
@@ -148,6 +150,12 @@ export default {
     }
   }),
 
+  setConnecting: createSetter('connecting', (v) => {
+    if (loadingState.connecting !== v) {
+      debugLog(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
+    }
+  }),
+
   setLoadingTxs: createSetter('loadingTxs', (v) => {
     if (loadingState.loadingTxs !== v) {
       debugLog(`💳 Transaction loading state: ${v ? 'loading' : 'completed'}`);
@@ -170,6 +178,7 @@ export default {
       isSyncing: false,
       isRestoring: false,
       connected: false,
+      connecting: false,
       loadingTxs: false,
     };
 
