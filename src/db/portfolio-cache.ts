@@ -332,11 +332,9 @@ export class PortfolioCacheService {
     // Check cache first
     const cachedData = await this.getCachedData(address, currency);
     if (cachedData) {
-      console.log(`Cache hit for ${currency}, returning cached data`);
       return cachedData;
     }
 
-    console.log(`Cache miss for ${currency}, need to load from API`);
 
     // Determine timeframe based on existing expired data
     let timeframe = 'all'; // default
