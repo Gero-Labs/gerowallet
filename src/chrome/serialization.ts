@@ -497,40 +497,65 @@ function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
   return array.slice(start, end);
 }
 
+// Track pending popup creations to prevent race conditions
+const pendingPopups = new Map<string, Promise<chrome.tabs.Tab>>();
+
 export async function focusOrCreatePopup(url: string, width: number, height: number): Promise<chrome.tabs.Tab> {
-  const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
-  let existingWindow = null;
-  let tabb: chrome.tabs.Tab;
-  // Iterate through each window and its tabs to find the URL
-  for (const window of windows) {
-    if (window.type === 'popup') {
-      for (const tab of window.tabs) {
-        if (tab.url === url) {
-          existingWindow = window;
-          tabb = tab;
-          break;
-        }
-      }
-      if (existingWindow) break;
-    }
+  // Check if we're already creating a popup for this URL
+  if (pendingPopups.has(url)) {
+    console.log('⏳ Popup already being created for:', url);
+    return pendingPopups.get(url);
   }
 
-  if (existingWindow) {
-    // Focus on the existing window
-    await chrome.windows.update(existingWindow.id, { focused: true });
-    return tabb;
-  } else {
-    // Create a new window with the specified URL
-    const window: chrome.windows.Window = await chrome.windows.create({
-      url: url,
-      type: 'popup',
-      focused: true,
-      ...POPUP_WINDOW,
-      width: width,
-      height: height,
-    });
-    return window.tabs[0];
-  }
+  // Create the popup promise
+  const popupPromise = (async () => {
+    try {
+      const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
+      let existingWindow = null;
+      let tabb: chrome.tabs.Tab;
+
+      // Iterate through each window and its tabs to find the URL
+      for (const window of windows) {
+        if (window.type === 'popup') {
+          for (const tab of window.tabs) {
+            if (tab.url === url) {
+              existingWindow = window;
+              tabb = tab;
+              break;
+            }
+          }
+          if (existingWindow) break;
+        }
+      }
+
+      if (existingWindow) {
+        // Focus on the existing window
+        console.log('✅ Focusing existing popup:', url);
+        await chrome.windows.update(existingWindow.id, { focused: true });
+        return tabb;
+      } else {
+        // Create a new window with the specified URL
+        console.log('🆕 Creating new popup:', url);
+        const window: chrome.windows.Window = await chrome.windows.create({
+          url: url,
+          type: 'popup',
+          focused: true,
+          ...POPUP_WINDOW,
+          width: width,
+          height: height,
+        });
+        return window.tabs[0];
+      }
+    } finally {
+      // Clean up the pending popup tracking after creation
+      pendingPopups.delete(url);
+    }
+  })();
+
+  // Store the promise to prevent concurrent creations
+  pendingPopups.set(url, popupPromise);
+
+  return popupPromise;
 }
 
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
