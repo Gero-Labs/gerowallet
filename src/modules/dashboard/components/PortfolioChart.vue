@@ -178,7 +178,7 @@ const chartKey = ref(0); // Force chart re-render when changed
 const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
 
 // VueUse-powered timeout management - automatic cleanup!
-const createTimeout = (callback: Function, delay: number) => {
+const createTimeout = (callback: () => void, delay: number) => {
   const { start } = useTimeoutFn(callback, delay, { immediate: false });
   start();
 };
@@ -461,14 +461,16 @@ const createChartSeries = (): any[] => {
       data: validData,
       showInLegend: false,
       color: seriesColor,
-      connectNulls: false,
-      gapSize: 5,
+      connectNulls: true,
+      gapSize: 0,
+      step: false,
       marker: {
         symbol: 'circle',
         enabled: false,
         radius: 3,
         lineWidth: 1,
-        lineColor: null,
+        lineColor: seriesColor,
+        fillColor: '#ffffff',
       },
       fillColor: {
         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
@@ -751,11 +753,13 @@ const loadChart = () => {
         style: {
           fontFamily: 'Inter',
           color: '#fff',
+          fontSize: '11px',
         },
         overflow: 'justify',
       },
       ordinal: false,
-      minTickInterval: 3600 * 1000, // 1 hour minimum to prevent crowding
+      minTickInterval: undefined, // Allow automatic tick interval
+      tickPixelInterval: 80, // Minimum pixels between ticks
       // COMMENTED OUT: Dual-axis Y-axis update events
       // events: {
       //   // Handle drag selection only (no wheel zoom)
@@ -876,6 +880,26 @@ const loadChart = () => {
     //     },
     //   ],
     // },
+    plotOptions: {
+      series: {
+        connectNulls: true,
+        lineWidth: 2,
+        marker: {
+          enabled: true,
+          radius: 3,
+        },
+        states: {
+          hover: {
+            enabled: true,
+            lineWidthPlus: 1,
+          },
+          inactive: {
+            opacity: 1,
+          }
+        }
+      },
+     
+    },
     colors: chartColors.value,
     legend: {
       align: 'right',
