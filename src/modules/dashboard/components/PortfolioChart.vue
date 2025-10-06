@@ -75,6 +75,8 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
 enum CurrencyType {
@@ -578,8 +580,6 @@ const loadChart = () => {
   const activeData = activeChartData.value;
   const config = currentCurrencyConfig.value;
 
-
-
   if (!activeData || !activeData.length) {
     return;
   }
@@ -895,10 +895,9 @@ const loadChart = () => {
           },
           inactive: {
             opacity: 1,
-          }
-        }
+          },
+        },
       },
-     
     },
     colors: chartColors.value,
     legend: {
@@ -1127,7 +1126,7 @@ watch(
         break;
     }
 
-        // Skip if no actual data changes for the active currency
+    // Skip if no actual data changes for the active currency
     if (!activeDataChanged && !props.progressiveLoading) {
       return;
     }
