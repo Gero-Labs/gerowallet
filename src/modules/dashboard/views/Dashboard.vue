@@ -371,13 +371,11 @@ const computeChartData = computed(() => {
     };
   }
   // For other chains, calculate from transactions
-  console.log('price.value?.lastPrice', price.value);
   let graphData = undefined;
   let usdData = undefined;
   let eurData = undefined;
   let currentBalance = 0;
   if (transactions.value) {
-    console.log('transactions', transactions.value);
     graphData = [];
     usdData = [];
     eurData = [];
