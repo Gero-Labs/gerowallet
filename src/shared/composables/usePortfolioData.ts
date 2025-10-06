@@ -43,6 +43,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
   // Load portfolio data for specific currency
   const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> => {
+    console.log('loadPortfolioData called with address:', address, 'currency:', currency);
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];

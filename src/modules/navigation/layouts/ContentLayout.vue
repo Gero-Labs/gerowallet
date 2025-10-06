@@ -15,7 +15,7 @@
                 loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                   ? assets.apexBg
                   : assets.cardanoBg
-              })`,
+              })`
             }"
           ></div>
 
@@ -54,7 +54,7 @@
 
                   <v-spacer />
 
-                  <v-tooltip bottom :content-class="connected ? 'network-tooltip' : 'network-tooltip offline'">
+                  <v-tooltip bottom :content-class="connected ? 'network-tooltip' : connecting ? 'network-tooltip connecting' : 'network-tooltip offline'">
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         style="display: flex; align-items: center; gap: 4px; min-width: 60px"
@@ -63,10 +63,10 @@
                       >
                         <v-icon
                           small
-                          :color="connected ? primaryColor : '#ff6464'"
-                          :class="{ 'sync-animation': isSyncing }"
+                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
+                          :class="{ 'sync-animation': isSyncing, 'connecting-animation': connecting }"
                         >
-                          {{ connected ? 'mdi-lan-connect' : 'mdi-lan-disconnect' }}
+                          {{ connected ? 'mdi-lan-connect' : connecting ? 'mdi-lan-pending' : 'mdi-lan-disconnect' }}
                         </v-icon>
 
                         <!-- Small epoch progress bar -->
@@ -75,11 +75,12 @@
                           height="8"
                           :buffer-value="epochSlotPercentage"
                           :value="epochSlotPercentage"
-                          :color="connected ? primaryColor : '#ff6464'"
+                          :color="connected ? primaryColor : connecting ? '#FFA500' : '#ff6464'"
                           background-color="transparent"
                           style="width: 50px"
                           striped
                           :stream="connected"
+                          :indeterminate="connecting"
                         ></v-progress-linear>
                       </div>
                     </template>
@@ -91,8 +92,8 @@
                       <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
                         <strong class="mr-1">Status:</strong>
-                        <span :style="connected ? { color: 'inherit' } : { color: '#ff6464' }">{{
-                          connected ? 'Online' : 'Offline'
+                        <span :style="connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }">{{
+                          connected ? 'Online' : connecting ? 'Connecting...' : 'Offline'
                         }}</span>
                       </div>
                     </div>
@@ -240,7 +241,7 @@ import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);
-const { isSyncing, connected } = toRefs(loadingState);
+const { isSyncing, connected, connecting } = toRefs(loadingState);
 const { loggedWallet, account, config } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
@@ -348,7 +349,7 @@ function handleOpenReceiveDialog() {
   receiveDialog.value = true;
 }
 
-// Theme management - update colors when chain changes
+// Theme management - update colors when a chain changes
 const updateThemeColors = () => {
   const currentTheme = isApex.value ? themes.apex : themes.cardano;
   const currentFilter = isApex.value ? iconFilters.apex : iconFilters.cardano;
@@ -500,6 +501,10 @@ div.v-toolbar__content {
   animation: sync-pulse 2s ease-in-out infinite;
 }
 
+.connecting-animation {
+  animation: connecting-pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes sync-pulse {
   0%,
   100% {
@@ -509,6 +514,18 @@ div.v-toolbar__content {
   50% {
     opacity: 0.6;
     transform: scale(1.1);
+  }
+}
+
+@keyframes connecting-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
   }
 }
 
@@ -545,6 +562,11 @@ div.v-toolbar__content {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
   isolation: isolate !important;
   padding: 12px 16px !important;
+
+  &.connecting {
+    border: 1px solid rgba(255, 165, 0, 0.3) !important;
+    box-shadow: 0 8px 32px rgba(255, 165, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  }
 
   &.offline {
     border: 1px solid rgba(255, 100, 100, 0.3) !important;

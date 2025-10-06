@@ -5,6 +5,7 @@ import filters from '@/shared/utils/filters';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface DexHunterStore {
   dexHunterTokens: {};
@@ -21,11 +22,13 @@ const STORE_NAME = 'dexHunterStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing dexHunter store messaging in browser context`);
+  debugLog(`🔌 Initializing dexHunter store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<DexHunterStore>) => {
-    console.debug('📥 Received dexHunter store update:', updates);
+    debugLog('📥 Received dexHunter store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -39,7 +42,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(dexHunterStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated dexHunter store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated dexHunter store from storage:', result[STORE_NAME]);
     }
   });
 }

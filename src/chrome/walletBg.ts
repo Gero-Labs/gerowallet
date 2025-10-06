@@ -27,7 +27,6 @@ import {
 } from '@/models/types';
 import {
   addrToSignWith,
-  decryptWithPassword,
   getAddress,
   getCcColdKey,
   getCcHotKey,
@@ -41,6 +40,7 @@ import {
   keyHashFromAddress,
   toPaymentCredential, toValueCore,
 } from '@/chrome/serialization';
+import { decryptWithPassword } from '@/shared/utils/crypto';
 import WalletStore from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
 import DexHunterStore from '@/stores/dexHunterStore';
@@ -269,10 +269,11 @@ export class WalletBg {
             }
             if (address === outAddress || stakeAddress === outAddress) {
               addresses.add(out.address);
-              const utxoId: string = `${transaction.tx_hash}#${out.output_index}`;
+              console.log('transaction', transaction)
+              const utxoId: string = `${transaction.id || transaction.tx_hash}#${out.output_index}`;
               utxos.set(utxoId, [
                 {
-                  txId: Cardano.TransactionId(transaction.tx_hash),
+                  txId: Cardano.TransactionId(transaction.id || transaction.tx_hash),
                   index: out.output_index,
                   address: out.address,
                 },
@@ -309,11 +310,8 @@ export class WalletBg {
     // Keys
     console.debug('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
     if (this.type !== WalletType.Google) {
-      console.debug('🔑 Syncing keys for addresses:', Array.from(addresses));
       const keys = await this.syncService.syncKeys(Array.from(addresses));
-      console.debug('🔑 Keys synced, result:', keys ? 'keys available' : 'keys null');
       WalletStore.setKeys(keys);
-      console.debug('🔑 Keys set in store');
     } else {
       console.debug('🔑 Skipping key sync for Google wallet type');
     }
@@ -396,7 +394,6 @@ export class WalletBg {
       chrome.alarms.create('refreshXerberusRisks', { delayInMinutes: 0, periodInMinutes: 720 });
       chrome.alarms.create('refreshTokenHistory', { delayInMinutes: 0, periodInMinutes: 20 });
       chrome.alarms.create(`portfolio|${this.stakeAddress}`, { delayInMinutes: 0, periodInMinutes: 60 });
-      chrome.alarms.create(`trendedPortfolio|${this.stakeAddress}`, { delayInMinutes: 0, periodInMinutes: 60 });
     }
     // Set Collections
     const collectibles = Object.fromEntries(resolvedAssets.filter(([, resolved]) => !Boolean(resolved.metadata)));
@@ -1117,13 +1114,22 @@ export class WalletBg {
 }
 
 export function alarmListener(alarm) {
+
   if (alarm.name === 'refreshDexHunterPrices') {
     DexHunterStore.updatePrices(Object.keys(WalletStore.state.tokens));
-  } else if (alarm.name === 'refreshXerberusRisks') {
+  } else if (
+    alarm.name === 'refreshXerberusRisks' &&
+    WalletStore.state.account &&
+    Number(WalletStore.state.account.controlled_amount) > 0
+  ) {
     XerberusStore.updateRisks(Object.values(WalletStore.state.tokens).map((token: any) => token.fingerprint));
   } else if (alarm.name === 'refreshTokenHistory') {
     RealFiStore.updateTokenHistory(Object.values(WalletStore.state.tokens).map((token: any) => token.unit));
-  } else if (alarm.name.includes('portfolio')) {
+  } else if (
+    alarm.name.includes('portfolio') &&
+    WalletStore.state.account &&
+    Number(WalletStore.state.account.controlled_amount) > 0
+  ) {
     const stakeAddress = alarm.name.split('|')[1];
     TapToolsStore.loadPortfolio(stakeAddress);
   } else if (alarm.name === 'coinGeckoPrices') {

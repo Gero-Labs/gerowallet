@@ -359,11 +359,21 @@ export function resolveAsset(token: any): any {
     const label: number = cip68Label(asset_name)
     if (label && asset) {
       if (asset.onchain_metadata_extra && asset.onchain_metadata_extra[label]) {
-        asset.metadata = resolveCip68(asset.onchain_metadata_extra, label, metadata);
+        const cip68Data = resolveCip68(asset.onchain_metadata_extra, label, metadata);
+        if (label === 222) {
+          onchain_metadata = cip68Data
+          asset.onchain_metadata = cip68Data
+          name = cip68Data.name
+          img = cip68Data.image
+        } else {
+          asset.metadata = cip68Data
+        }
         if (label === 333 && asset.metadata && !asset.metadata.decimals) {
           const token = structuredClone(DexHunterStore.state.dexHunterTokens[asset.asset])
           if (token?.decimals) {
             asset.metadata.decimals = token.decimals
+          } else {
+            asset.metadata.decimals = 0
           }
         }
       }
@@ -440,7 +450,7 @@ export function resolveAsset(token: any): any {
 export function findCollectionName(collectible) {
   let projectName: string = ''
   if (collectible?.onchain_metadata) {
-    const collectionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project');
+    const collectionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project' || key.toLowerCase() === 'name');
     if (collectionKey) {
       projectName = collectible.onchain_metadata[collectionKey]
     }

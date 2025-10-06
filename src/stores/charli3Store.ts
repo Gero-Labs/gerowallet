@@ -2,6 +2,7 @@ import Vue from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface MarketToken {
   symbol: string;
@@ -51,11 +52,13 @@ const STORE_NAME = 'charli3Store';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing charli3 store messaging in browser context`);
+  debugLog(`🔌 Initializing charli3 store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<Charli3Store>) => {
-    console.debug('📥 Received charli3 store update:', updates);
+    debugLog('📥 Received charli3 store update:', updates);
     
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -79,7 +82,7 @@ if (context === 'browser') {
         stored.lastRefreshTime = new Date(stored.lastRefreshTime);
       }
       Object.assign(charli3Store, stored);
-      console.debug('💾 Hydrated charli3 store from storage');
+      debugLog('💾 Hydrated charli3 store from storage');
     }
   });
 }

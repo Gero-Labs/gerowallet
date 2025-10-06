@@ -9,6 +9,7 @@ import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
+import { debugLog } from '@/utils/debug';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -76,7 +77,7 @@ export class SyncService {
         });
       }
     } catch (err) {
-      console.debug(err);
+      debugLog(err);
     }
   }
 
@@ -133,7 +134,7 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
-      console.debug('setSync', syncObject);
+      debugLog('setSync', syncObject);
       NetworkStore.setTip({
         blockNo: syncObject.block.height,
         slot: syncObject.block.slot,
@@ -160,7 +161,7 @@ export class SyncService {
             await genesisTable.put({ id: 0, ...res.data });
             NetworkStore.setGenesis(res.data)
           } else {
-            console.debug(res.status)
+            debugLog(res.status)
             console.warn(parseHttpError(res))
           }
         } catch (error) {
@@ -219,21 +220,30 @@ export class SyncService {
         res = await this.api.getAccountTransactions(this.walletBg.stakeAddress, height);
       }
       if (res && Array.isArray(res)) {
+        const txMap: Map<string, any> = res.reduce((map, tx: any) => {
+          map.set(tx.tx_hash, tx);
+          return map;
+        }, new Map<string, any>());
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);
         const smallerArrays: string[][] = chunkArray({ input: txHashes, bytesSize: 4000 });
         smallerArrays.forEach(smallerArray => {
           promises.push(this.api.getTransactionsCbor(smallerArray).then(txCborsResult => {
             if (txCborsResult.status == 200) {
-              return txCborsResult.data.map(txCbor => {
-                const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+              return txCborsResult.data.map((txCbor: any) => {
+                let txDeserialized: Cardano.Tx | {} = {};
+                if (txCbor.cbor) {
+                  txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+                }
+                const tx = txMap.get(txCbor.tx_hash);
                 return {
+                  tx_hash: txCbor.tx_hash,
                   utxo: txCbor.utxo,
                   block_hash: txCbor.block_hash,
-                  block_height: txCbor.block_height,
+                  block_height: txCbor.block_height || tx.block_height,
                   epoch_no: txCbor.epoch_no,
                   absolute_slot: txCbor.absolute_slot,
-                  tx_timestamp: txCbor.tx_timestamp,
+                  tx_timestamp: txCbor.tx_timestamp || tx.block_time,
                   tx_size: txCbor.tx_size,
                   cbor: txCbor.cbor,
                   ...txDeserialized,
@@ -247,7 +257,7 @@ export class SyncService {
         return txsCborResults;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
   }
 
@@ -319,11 +329,11 @@ export class SyncService {
     try {
       const res: AxiosResponse = await this.api.getAssetsInfo(units);
       if (res.status === 200 && res.data.length > 0) {
-        console.debug(res.data);
+        debugLog(res.data);
         return res.data;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
     return null;
   }
@@ -340,7 +350,7 @@ export class SyncService {
       const transactionsTable = db.table('transactions');
 
       if (!transactionsTable) {
-        console.debug('No transactions table found');
+        debugLog('No transactions table found');
         return 0;
       }
 
@@ -348,7 +358,7 @@ export class SyncService {
       const transactions = await transactionsTable.toArray();
 
       if (!transactions || transactions.length === 0) {
-        console.debug('No transactions found');
+        debugLog('No transactions found');
         return 0;
       }
 
@@ -358,11 +368,11 @@ export class SyncService {
       });
 
       const blockHeight = latestTx.block_height || 0;
-      console.debug(`Latest transaction block height: ${blockHeight}`);
+      debugLog(`Latest transaction block height: ${blockHeight}`);
       return blockHeight;
 
     } catch (e) {
-      console.debug('Error getting latest transaction block height:', e);
+      debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
   }

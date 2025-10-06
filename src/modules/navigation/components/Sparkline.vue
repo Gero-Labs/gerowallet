@@ -54,10 +54,14 @@ const fetch = async () => {
 }
 
 onMounted(async () => {
-  await fetch()
-  intervalId.value = setInterval(async () => {
+  // OPTIMIZATION: Defer chart data loading to improve initial page load
+  // Load after 500ms to not block wallet initialization
+  setTimeout(async () => {
     await fetch()
-  },60000);
+    intervalId.value = setInterval(async () => {
+      await fetch()
+    }, 60000);
+  }, 500);
 })
 
 onUnmounted(() => {

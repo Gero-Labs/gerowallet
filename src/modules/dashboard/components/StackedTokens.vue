@@ -14,7 +14,7 @@
         :size="props.tokenSize"
         :color="token.img ? '' : 'black'"
       >
-        <v-img v-if="token.img" :src="assts.resolveIcon(token.img)" :alt="token.asset_name"></v-img>
+        <v-img v-if="token.img" :src="token.img" :alt="token.asset_name"></v-img>
         <v-img v-else :src="assts.questionMarkDark" />
       </v-avatar>
     </v-btn>

@@ -124,9 +124,13 @@ const setCollateral = async () => {
       const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
       await submit(newTx.toCbor())
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error building collateral transaction:', error);
-    snackbar.setError('Failed to build collateral transaction');
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError('Insufficient ADA to set collateral. You need at least 5 ADA.');
+    } else {
+      snackbar.setError('Failed to build collateral transaction');
+    }
   }
 };
 

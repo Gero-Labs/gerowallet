@@ -3,6 +3,7 @@ import xerberusApi from '@/api/xerberus.api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface XerberusStore {
   risks: object;
@@ -17,11 +18,13 @@ const STORE_NAME = 'xerberusStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing xerberus store messaging in browser context`);
+  debugLog(`🔌 Initializing xerberus store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<XerberusStore>) => {
-    console.debug('📥 Received xerberus store update:', updates);
+    debugLog('📥 Received xerberus store update:', updates);
     
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -35,7 +38,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(xerberusStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated xerberus store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated xerberus store from storage:', result[STORE_NAME]);
     }
   });
 }

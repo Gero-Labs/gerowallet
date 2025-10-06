@@ -6,7 +6,7 @@ import * as Crypto from '@cardano-sdk/crypto';
 import { HARDENED, CoinTypes, Currency, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
-import { encryptPrivateKey } from '@/chrome/serialization';
+import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 
 let cachedDb: Dexie | null = null;
