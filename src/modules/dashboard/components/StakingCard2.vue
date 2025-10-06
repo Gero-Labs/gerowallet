@@ -1,16 +1,24 @@
 <template>
   <v-card flat outlined class="fill-height liquid-glass" :loading="loadingTxs || poolLoading">
-    <v-card-title>Staking</v-card-title>
+    <v-card-title>
+      <router-link
+        to="/staking"
+        style="text-decoration: auto; color: white;"
+      >Staking</router-link>
+    </v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters class="staking2-header-row py-2">
           <v-col cols="6" class="px-2 text-center">
             <span>Delegating to</span>
             <div v-if="currentPool" class="d-flex align-center justify-center">
-              <h3 class="staking2-pool-title">{{ `[${currentPool.ticker}] ${currentPool.name}` }}</h3>
+              <v-avatar size="28" class="mr-2">
+                <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
+              </v-avatar>
+              <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
               <v-menu v-model="socialMenuOpen" offset-y :close-on-content-click="false" max-width="250">
                 <template v-slot:activator="{ on, attrs }">
-                  <v-btn icon small v-bind="attrs" v-on="on" class="ml-2 staking2-social-btn">
+                  <v-btn icon small v-bind="attrs" v-on="on" class="ml-1 staking2-social-btn">
                     <v-icon small color="white">mdi-share-variant</v-icon>
                   </v-btn>
                 </template>
@@ -269,7 +277,15 @@
         <!-- Action Buttons Row -->
         <v-row no-gutters class="px-4 pb-3 pt-2 staking-action-buttons">
           <v-col cols="6">
-            <v-btn elevation="2" height="36" color="#1a1a1a" @click="unstake" block class="staking2-unstake-btn">
+            <v-btn
+              elevation="2"
+              small
+              color="error"
+              @click="unstake"
+              block
+              outlined
+              class="staking2-unstake-btn"
+            >
               <span class="staking2-unstake-text">Unstake</span>
             </v-btn>
           </v-col>
@@ -277,13 +293,13 @@
             <v-btn
               v-if="account?.withdrawable_amount > 0"
               elevation="2"
-              height="36"
+              small
               color="#1a1a1a"
               @click="withdraw"
               block
-              class="staking2-withdraw-btn"
+              :class="isApex ? 'apexButton' : 'geroButton'"
             >
-              <span class="staking2-withdraw-text">Withdraw</span>
+              Withdraw
             </v-btn>
             <v-btn v-else elevation="2" height="36" color="#1a1a1a" disabled block class="staking2-no-rewards-btn">
               <span class="staking2-no-rewards-text">No Rewards</span>
@@ -310,6 +326,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
+import { Blockchain } from '@/models/types';
 
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);
@@ -321,6 +338,11 @@ const unstakeDialog = ref<boolean>(false);
 const withdrawalDialog = ref<boolean>(false);
 const txData = ref<any>(undefined);
 const socialMenuOpen = ref<boolean>(false);
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 const poolExtendedInfo = computed(() => {
   if (currentPool.value) {
@@ -515,7 +537,7 @@ onMounted(async () => {
 
 .staking2-pool-title {
   color: white;
-  font-size: 16px;
+  font-size: 28px;
   margin: 0;
 }
 
@@ -608,7 +630,7 @@ onMounted(async () => {
 }
 
 .staking2-progress-bar {
-  width: 90%;
+  width: 100%;
 }
 
 .staking2-no-rewards {
@@ -616,7 +638,7 @@ onMounted(async () => {
 }
 
 .staking2-chart-container {
-  height: 120px;
+  height: 150px;
 }
 
 .staking2-chart {

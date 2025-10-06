@@ -3,18 +3,24 @@ export class SnackbarPlugin {
   text: string = '';
   color: string = 'primary';
   active: boolean = false;
-  timeout: number = 5000;
+  timeout: number = 700000;
 
   setError(text: string) {
-    this.text = text;
-    this.active = true;
-    this.color = '#ff6464';
+    //@ts-ignore
+    window.notify({
+      text,
+      theme: 'error',
+      hideAfter: this.timeout,
+    })
   }
 
   fireSuccess(text: string) {
-    this.text = text;
-    this.color = '#47cd89';
-    this.active = true;
+    //@ts-ignore
+    window.notify({
+      text,
+      theme: 'success',
+      hideAfter: this.timeout,
+    })
   }
 
   setTimeout(value: number) {

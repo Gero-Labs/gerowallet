@@ -1,4 +1,5 @@
 import Vue from 'vue';
+import { debugLog } from '@/utils/debug';
 import {
   deleteWallet,
   createNewWallet,
@@ -14,7 +15,7 @@ import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks from '@/utils/networks';
-import { encryptPrivateKey } from '@/chrome/serialization';
+import { encryptPrivateKey } from '@/shared/utils/crypto';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -37,12 +38,14 @@ const STORE_NAME = 'geroStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing gero store messaging in browser context`);
+  debugLog(`🔌 Initializing gero store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<GeroStore>) => {
-    console.debug('📥 Received gero store update:', updates);
-    
+    debugLog('📥 Received gero store update:', updates);
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in geroStore) {
@@ -55,7 +58,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(geroStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated gero store from storage');
+      debugLog('💾 Hydrated gero store from storage');
     }
   });
 }
@@ -78,10 +81,10 @@ function broadcastFromBackground(updates: Partial<GeroStore>) {
         return value;
       }
     }));
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
       const current = result[STORE_NAME] || {
@@ -91,8 +94,8 @@ function broadcastFromBackground(updates: Partial<GeroStore>) {
           welcomeDone: true
         }
       };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
       });
     });
   }
@@ -216,12 +219,12 @@ export default {
   },
 
   state: geroStore,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): GeroStore {
     return { ...geroStore };
   },
-  
+
   // Utility method to reset state
   reset() {
     const resetState: GeroStore = {
@@ -231,31 +234,31 @@ export default {
         welcomeDone: true
       }
     };
-    
+
     Object.assign(geroStore, resetState);
     broadcastFromBackground(resetState);
   },
-  
+
   // Utility method to check if user has completed welcome
   isWelcomeDone(): boolean {
     return geroStore.config?.welcomeDone || false;
   },
-  
+
   // Utility method to get current network
   getCurrentNetwork(): any {
     return geroStore.network;
   },
-  
+
   // Utility method to get all wallets
   getAllWallets(): any {
     return geroStore.wallets;
   },
-  
+
   // Utility method to get wallet by ID
   getWallet(walletId: number): any {
     return geroStore.wallets?.[walletId];
   },
-  
+
   // Utility method to check if wallet exists
   hasWallet(walletId: number): boolean {
     return geroStore.wallets && walletId in geroStore.wallets;

@@ -62,6 +62,7 @@ import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
+import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
@@ -117,6 +118,7 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
+import midnightImage from '@/assets/Midnight.png'
 import logoStackedLight from '@/assets/logo-stacked-light.svg'
 import apexBgDashboard from '@/assets/apexBg.png'
 import apexImage from '@/assets/apex.png'
@@ -194,6 +196,7 @@ export default {
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
+  geroLogoApex,
   geroDashboardText,
   geroText,
   apexBackground,
@@ -355,6 +358,7 @@ export default {
   clarityLogo,
   questionMark,
   questionMarkDark,
+  midnightImage,
   logoStackedLight,
   apexBgDashboard,
   apexImage,
