@@ -310,7 +310,14 @@
             >
               Withdraw
             </v-btn>
-            <v-btn v-else elevation="2" height="36" color="#1a1a1a" disabled block class="staking2-no-rewards-btn">
+            <v-btn
+              v-else
+              elevation="2"
+              small
+              color="#1a1a1a"
+              disabled
+              block
+              class="staking2-no-rewards-btn">
               <span class="staking2-no-rewards-text">No Rewards</span>
             </v-btn>
           </v-col>
