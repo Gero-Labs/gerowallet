@@ -257,7 +257,7 @@ const geroPrice = computed(() => {
       return convertFiat(geroToken.price);
     }
   } else {
-    return +price.value?.lastPrice || 0;
+    return +convertFiat(price.value?.lastPrice || 0);
   }
 });
 
