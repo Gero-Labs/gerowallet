@@ -74,6 +74,8 @@ export default {
       token_in,
       token_out,
       referrer,
+      blacklisted_dexes: [],
+      tx_optimization: true
     }
     const { data } = await axiosInstance.post(`/api/v2/swap`, requestBody);
     return data
