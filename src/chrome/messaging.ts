@@ -236,10 +236,30 @@ export const Messaging = {
             port.postMessage(request);
           }
           if (response.method === METHOD.returnData) {
+            cleanup();
             resolve(response);
           }
         }
+
+        function disconnectHandler() {
+          console.log('[Messaging] Side panel port disconnected for tab:', tabIdd);
+          cleanup();
+          // Resolve with user declined error when side panel closes without response
+          resolve({
+            target: TARGET,
+            sender: SENDER.extension,
+            error: APIError.Refused,
+            data: undefined
+          });
+        }
+
+        function cleanup() {
+          port.onMessage.removeListener(messageHandler);
+          port.onDisconnect.removeListener(disconnectHandler);
+        }
+
         port.onMessage.addListener(messageHandler);
+        port.onDisconnect.addListener(disconnectHandler);
       });
     });
   },

@@ -3,7 +3,7 @@ export class SnackbarPlugin {
   text: string = '';
   color: string = 'primary';
   active: boolean = false;
-  timeout: number = 700000;
+  timeout: number = 7000;
 
   setError(text: string) {
     //@ts-ignore
