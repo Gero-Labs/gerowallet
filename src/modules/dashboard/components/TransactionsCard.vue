@@ -263,6 +263,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const props = defineProps({
   selectedTransaction: {
