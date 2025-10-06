@@ -162,7 +162,7 @@ export class Api {
 
   async getTip() {
     const { data, status } = await this.axiosInstance.get(
-      `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=${this.provider}`
+      `/api/blocks/latest?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`
     );
     if (status === 200) return data;
     return parseHttpError(data);

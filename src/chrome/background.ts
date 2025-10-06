@@ -371,12 +371,31 @@ interface WhitelistedEntry {
   id: number;
 }
 
+// In-memory cache for bringDomains with 4-hour TTL
+let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: null, timestamp: 0 };
+const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+
 async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps
-  console.log(whitelisted)
-  const bringDomains = await getStorage('bring_relevantDomains')
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps;
   if (whitelisted.find(el => origin.includes(el.domain))) return true;
-  return !!(bringDomains && bringDomains.find(el => origin.includes(el)));
+
+  // Only check bringDomains for Cardano Mainnet
+  const loggedWallet = WalletStore.state.loggedWallet;
+  if (!networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)) {
+    return false;
+  }
+
+  // Check if cached data is still valid
+  const now = Date.now();
+  let bringDomains = bringDomainsCache.data;
+
+  if (!bringDomains || (now - bringDomainsCache.timestamp) > BRING_DOMAINS_CACHE_TTL) {
+    // Cache expired or doesn't exist, fetch new data
+    bringDomains = await (globalThis as any).bringCache?.getReadable('relevantDomains');
+    bringDomainsCache = { data: bringDomains, timestamp: now };
+  }
+
+  return !!(bringDomains && bringDomains.find((el: string) => origin.includes(el)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -930,14 +949,6 @@ app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
     });
   }
 });
-
-const getStorage = (key) =>
-  new Promise<any>((res, rej) =>
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) rej(undefined);
-      res(key ? result[key] : result);
-    }),
-  );
 
 // Check if a specific tab is open
 const checkTabOpen = (tabId) => {

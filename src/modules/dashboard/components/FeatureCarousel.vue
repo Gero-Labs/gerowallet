@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 // Define and export carousel item interface
 export interface CarouselItem {
@@ -169,6 +169,7 @@ const handleItemClick = (item: CarouselItem) => {
 
 const getItemClass = (item: CarouselItem) => {
   const classes: string[] = [];
+  if (item.id === 'midnight-drop') classes.push('midnight-background');
   if (item.id === 'apex-welcome') classes.push('apex-welcome-background');
   return classes;
 };
@@ -381,6 +382,11 @@ onUnmounted(() => {
 
 .carousel-progress-bar {
   border-radius: 0;
+}
+
+/* Midnight specific styles */
+.midnight-background {
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
 }
 
 /* Apex specific styles */

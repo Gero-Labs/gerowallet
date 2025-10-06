@@ -18,11 +18,14 @@
         <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
+    <notifications></notifications>
     <v-snackbar
+      content-class="custom-snackbar"
+      outlined
         v-model="snackbarPlugin.active"
         :timeout="snackbarPlugin.timeout"
         :color="snackbarPlugin.color"
-        top
+        bottom
         style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
         transition="scroll-y-transition"
     >
@@ -131,5 +134,35 @@ const isLoading = computed(() => {
   isolation: isolate !important;
   padding: 12px 16px !important;
   max-width: 300px !important;
+}
+.v-snack:not(.v-snack--has-background) .v-snack__wrapper {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: transparent;
+  border-radius: 12px !important;
+}
+
+.voerro-notification-theme-error {
+  border-radius: 12px !important;
+  border: 1px solid #ff6464d1!important;
+  color: #f5fff6;
+}
+
+.voerro-notification-theme-success {
+  border-radius: 12px !important;
+  border: 1px solid #47cd89d1!important;
+  color: #f5fbf8;
+}
+
+.voerro-notification {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -2,19 +2,14 @@ import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import BluetoothTransport from '@ledgerhq/hw-transport-web-ble';
 import {
   Ada,
-  AddressType as LedgerAddressType, DeviceStatusError,
+  DeviceStatusError,
   GetExtendedPublicKeysResponse,
   GetVersionResponse,
-  SignMessageResponse,
   TxOutputFormat,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano';
-import { CoinTypes, HARDENED, Key, Keys, WalletTypePurpose } from '@/models/types';
+import { Key, Keys } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import {
-  MessageAddressFieldType,
-  MessageData,
-} from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import Transport from '@ledgerhq/hw-transport';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
@@ -25,6 +20,7 @@ import { util } from '@cardano-sdk/key-management';
 import { GroupedAddress, AddressType, KeyRole, AccountKeyDerivationPath, CommunicationType } from '@cardano-sdk/key-management';
 import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
+import { HexBlob } from '@cardano-sdk/util';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -205,34 +201,59 @@ export default {
     const version: GetVersionResponse = await ledger.getVersion();
     if (!version) throw new Error('Cardano app is closed');
   },
-  async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean): Promise<SignMessageResponse> {
-    const messageData: MessageData = {
-      messageHex: payload,
-      signingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, accountIndex + HARDENED, 2, 0],
-      hashPayload: payload.length > 99,
-      preferHexDisplay: false,
-      addressFieldType: MessageAddressFieldType.ADDRESS,
-      address: {
-        type: LedgerAddressType.REWARD_KEY,
-        params: {
-          stakingPath: [WalletTypePurpose.CIP1852, CoinTypes.CARDANO, accountIndex + HARDENED, 2, 0],
-        },
-      },
-      network: { protocolMagic: network.networkParams.networkMagic, networkId: network.networkId },
-    };
-
-    let transport: Transport;
-    if (isUsb) {
-      transport = await this.connectViaUSB();
-    } else {
-      transport = await this.connectViaBT();
-    }
+  async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean, knownAddresses?: GroupedAddress[]): Promise<{signatureHex: string; signingPublicKeyHex: string; addressFieldHex: string}> {
+    const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
-    const version: GetVersionResponse = await ledger.getVersion(); // check if Ledger has Cardano app opened
-    if (!version) {
-      throw new Error('Cardano app is closed');
+    await this.ensureLedgerVersion(ledger);
+
+    // Create LedgerKeyAgent instance for proper CIP-8/CIP-30 signing
+    const chainId = network.networkId === 1 ? Cardano.ChainIds.Mainnet : Cardano.ChainIds.Preprod;
+    const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
+      chainId: chainId,
+      accountIndex: accountIndex,
+      communicationType: CommunicationType.Web
+    }, {
+      bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
+      logger: console
+    });
+
+    // Convert address from hex to bech32 if needed
+    let cardanoAddress: Cardano.Address;
+    let addressBech32: string;
+
+    if (address.startsWith('addr') || address.startsWith('stake')) {
+      // Already in bech32 format
+      cardanoAddress = Cardano.Address.fromString(address);
+      addressBech32 = address;
+    } else {
+      // Hex format - convert to Address object and then to bech32
+      const addressBytes = Buffer.from(address, 'hex');
+      cardanoAddress = Cardano.Address.fromBytes(addressBytes);
+      addressBech32 = cardanoAddress.toBech32();
     }
-    return ledger.signMessage(messageData);
+
+    // Determine if signing with a payment address or reward account
+    const isRewardAccount = cardanoAddress.getType() === Cardano.AddressType.RewardKey ||
+                            cardanoAddress.getType() === Cardano.AddressType.RewardScript;
+
+    const signWith = isRewardAccount
+      ? (addressBech32 as Cardano.RewardAccount)
+      : (addressBech32 as Cardano.PaymentAddress);
+
+    // Sign using CIP-8 data signing
+    const signature = await ledgerKeyAgent.signCip8Data({
+      knownAddresses: knownAddresses || [],
+      signWith,
+      payload: HexBlob(payload)
+    });
+
+    // Convert to the expected response format
+    // addressFieldHex must be hex bytes for COSE structure
+    return {
+      signatureHex: signature.signature,
+      signingPublicKeyHex: signature.key,
+      addressFieldHex: Cardano.Address.fromBech32(addressBech32).toBytes()
+    };
   },
 
   /**
@@ -287,6 +308,36 @@ export default {
         }
       }
     });
+
+    // Process stake/reward addresses
+    if (keys.stake && keys.stake.length > 0) {
+      keys.stake.forEach((key: Key, _arrayIndex: number) => {
+        if (key.address && key.path) {
+          try {
+            const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
+            const pathArray = hdPathToArray(key.path);
+            const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
+            console.log('[LEDGER] Processing stake address:', key.address);
+
+            // For stake addresses, we add them as reward accounts
+            knownAddresses.push({
+              type: AddressType.External, // Stake addresses use External type
+              index: derivationIndex,
+              networkId,
+              accountIndex: 0,
+              address: key.address as Cardano.PaymentAddress, // The stake address itself
+              rewardAccount: key.address as Cardano.RewardAccount, // Same as address for stake keys
+              stakeKeyDerivationPath: {
+                role: KeyRole.Stake,
+                index: derivationIndex
+              } as AccountKeyDerivationPath
+            });
+          } catch (error) {
+            console.warn(`[LEDGER] Failed to process stake address ${key.address}:`, error);
+          }
+        }
+      });
+    }
 
     console.debug('[LEDGER] Created known addresses:', knownAddresses.length);
     return knownAddresses;

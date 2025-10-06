@@ -4,6 +4,7 @@ import tapToolsApi from '@/api/tap-tools-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface TapToolsStore {
   portfolio: any;
@@ -22,11 +23,13 @@ const STORE_NAME = 'tapToolsStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing tapTools store messaging in browser context`);
+  debugLog(`🔌 Initializing tapTools store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<TapToolsStore>) => {
-    console.debug('📥 Received tapTools store update:', updates);
+    debugLog('📥 Received tapTools store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -40,7 +43,7 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(tapToolsStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated tapTools store from storage:', result[STORE_NAME]);
+      debugLog('💾 Hydrated tapTools store from storage:', result[STORE_NAME]);
     }
   });
 }
@@ -107,7 +110,7 @@ export default {
       } else {
         console.warn('Failed to load portfolio:', parseHttpError(res));
       }
-    } catch (e) {
+    } catch (e: any) {
       if (e.name === 'AxiosError') {
         if (e.status === 404) {
           console.warn('Portfolio not found for stake address:', stakeAddress);

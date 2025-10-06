@@ -9,8 +9,8 @@
     :items-per-page="-1"
     hide-default-footer
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-    :custom-sort="customSort"
     :style="{ minHeight: tableHeight + 'px' }"
+    @click:row="handleTokenRowClick"
   >
     <template v-slot:body.append>
       <tr v-if="tokensList.length > 6" class="no-hover">
@@ -144,7 +144,7 @@
         class="progress-bar"
         height="14"
         :value="(item.allocation / totalAllocation) * 100"
-        color="#00dff3"
+        color="primary"
       >
         <template v-slot:default="{ value }">
           <strong style="font-size: 8px">{{ value.toFixed(1) }}%</strong>
@@ -435,13 +435,25 @@ const totalAllocation = computed(() => {
   return total;
 });
 
+const handleTokenRowClick = (row: any) => {
+  console.log(row)
+}
+
+// Sort the full tokensList first, then paginate
+const sortedTokens = computed(() => {
+  const sortBy = [sortOptions.value.by];
+  const sortDesc = [sortOptions.value.desc];
+
+  // Apply custom sort to the entire tokensList
+  return customSort(tokensList.value, sortBy, sortDesc);
+});
+
 const paginatedTokens = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
 
-  // tokensList already includes search filtering and will be sorted by the data table's customSort
-  // So we just need to paginate the already filtered results
-  return tokensList.value.slice(start, end);
+  // Now paginate the already sorted and filtered results
+  return sortedTokens.value.slice(start, end);
 });
 
 // Use the shared container height from parent

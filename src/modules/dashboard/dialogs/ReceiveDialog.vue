@@ -126,6 +126,7 @@ import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 
 const props = defineProps<{ isOpen: boolean }>();
 const emit = defineEmits(['close']);
@@ -222,7 +223,12 @@ const usedAddresses = computed(() => {
   }
   console.log('results', results)
   return results
-})
+});
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 // whenever the dialog opens, initialize or update all QR codes
 watch(
@@ -239,7 +245,7 @@ watch(
           height: 160,
           type: 'svg',
           data: tabItem.value,
-          image: assets.geroLogo,
+          image: isApex ? assets.geroLogoApex : assets.geroLogo,
           margin: 2,
           qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
           imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },

@@ -366,7 +366,7 @@ export class PortfolioCacheService {
       console.warn('Error checking existing data for timeframe calculation:', error);
     }
 
-    // Load from API with determined timeframe
+    // Load from API with a determined timeframe
     try {
       const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, timeframe);
 
