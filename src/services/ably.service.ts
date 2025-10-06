@@ -34,7 +34,11 @@ class AblyService {
       autoConnect: false,
       closeOnUnload: false,
       queueMessages: false,
-      authCallback: this.handleAuthCallback.bind(this)
+      authCallback: this.handleAuthCallback.bind(this),
+      // Optimization: Faster connection parameters
+      realtimeRequestTimeout: 5000, // Reduce from default 10s to 5s
+      disconnectedRetryTimeout: 3000, // Faster reconnection attempts
+      suspendedRetryTimeout: 5000, // Faster recovery from suspension
     };
 
     this.client = new Ably.Realtime(clientOptions);
@@ -90,10 +94,17 @@ class AblyService {
   }
 
   private setupConnectionListeners(): void {
+    this.client.connection.on('connecting', () => {
+      LoadingState.setConnecting(true);
+      debugLog('🔌 Ably connecting...');
+    });
+
     this.client.connection.on('connected', (connectionStateChange: Ably.ConnectionStateChange) => {
       if (connectionStateChange.current === 'connected') {
         LoadingState.setText('');
         LoadingState.setConnected(true);
+        LoadingState.setConnecting(false);
+        debugLog('✅ Ably connected');
       }
     });
 
@@ -101,14 +112,18 @@ class AblyService {
       console.warn('❌ Ably disconnected:', connectionStateChange.reason);
       LoadingState.setText('Wallet is Disconnected from the Network.<br>Reconnecting ...');
       LoadingState.setConnected(false);
+      LoadingState.setConnecting(false);
     });
 
     this.client.connection.on('failed', (connectionStateChange: Ably.ConnectionStateChange) => {
       console.error('❌ Ably connection failed:', connectionStateChange.reason || connectionStateChange);
+      LoadingState.setConnected(false);
+      LoadingState.setConnecting(false);
     });
 
     this.client.connection.on('suspended', (connectionStateChange: Ably.ConnectionStateChange) => {
       console.warn('⚠️ Ably connection suspended:', connectionStateChange.reason);
+      LoadingState.setConnecting(false);
     });
   }
 
@@ -145,7 +160,7 @@ class AblyService {
     this.setupConnectionListeners();
   }
 
-  private waitForConnectionReady(timeoutMs: number = 10000): Promise<void> {
+  private waitForConnectionReady(timeoutMs: number = 5000): Promise<void> {
     return new Promise((resolve, reject) => {
       const currentState = this.client.connection.state;
 
@@ -179,7 +194,7 @@ class AblyService {
     });
   }
 
-  private waitForChannelReady(channel: Ably.RealtimeChannel, timeoutMs: number = 10000): Promise<void> {
+  private waitForChannelReady(channel: Ably.RealtimeChannel, timeoutMs: number = 5000): Promise<void> {
     return new Promise(async (resolve, reject) => {
       const currentState = channel.state;
 

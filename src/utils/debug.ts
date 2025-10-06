@@ -4,6 +4,7 @@
  */
 
 // Check if debug mode is enabled via environment variable
+// @ts-ignore
 const isDebugEnabled = import.meta.env.VITE_DEBUG_STORES === 'true';
 
 /**

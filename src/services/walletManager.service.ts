@@ -326,13 +326,22 @@ export class WalletManager {
             }
 
             try {
+              const syncObject = JSON.parse(msg.data);
+
+              // Validate SYNC message has newer tip before processing
+              if (syncObject?.block?.height) {
+                const currentTip = NetworkStore.state.tip;
+                if (currentTip && syncObject.block.height <= currentTip.blockNo) {
+                  return; // Silent skip - SYNC contains older or same tip
+                }
+              }
+
               // Only log when we're actually processing
               debugLog('SYNC::🔄 Processing SYNC message', msg.id || 'no-id');
 
               this.syncMutex.runExclusive(async () => {
                 LoadingState.setText('');
                 LoadingState.setSyncing(true);
-                const syncObject = JSON.parse(msg.data);
 
                 if (!ablyService.isTipProcessed(syncObject.block.hash)) {
                   ablyService.markTipAsProcessed(syncObject.block.hash);
@@ -358,11 +367,6 @@ export class WalletManager {
         await ablyService.subscribeToGroupChannel(chain, network, {
           onTip: async (msg: Ably.InboundMessage) => {
             try {
-              // OPTIMIZATION: Check mutex FIRST before parsing/logging
-              if (this.tipMutex.isLocked()) {
-                return; // Silent skip - mutex is locked
-              }
-
               const tip = JSON.parse(msg.data)?.data as Tip;
 
               // Quick validation checks before logging
@@ -370,15 +374,27 @@ export class WalletManager {
                 return;
               }
 
+              // Validate tip is newer than current tip before processing
+              const currentTip = NetworkStore.state.tip;
+              if (currentTip && tip.height <= currentTip.blockNo) {
+                return; // Silent skip - tip is older or same as current
+              }
+
+              // Also check if we already requested sync for this tip height
+              const lastSyncInfo = await walletBg.getLastSyncInfo();
+              if (lastSyncInfo && tip.height <= lastSyncInfo['height']) {
+                return; // Silent skip - already synced to this height or beyond
+              }
+
+              // Mark as processed BEFORE starting sync to prevent duplicates
+              ablyService.markTipAsProcessed(tip.hash);
+
               debugLog('TIP', tip);
 
-              this.tipMutex
-                .runExclusive(() => {
-                  walletBg.syncService.sync(tip);
-                })
-                .catch(err => {
-                  console.error('TIP processing failed', err);
-                });
+              // Acquire mutex and process tip
+              await this.tipMutex.runExclusive(async () => {
+                await walletBg.syncService.sync(tip);
+              });
             } catch (e) {
               console.error(e);
             }

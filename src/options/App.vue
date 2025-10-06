@@ -163,5 +163,6 @@ const isLoading = computed(() => {
   isolation: isolate !important;
   padding: 12px 16px !important;
   font-size: 14px !important;
+  overflow-wrap: anywhere;
 }
 </style>
