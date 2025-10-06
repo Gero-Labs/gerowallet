@@ -16,7 +16,16 @@
                 <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
               </v-avatar>
               <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
-              <v-menu v-model="socialMenuOpen" offset-y :close-on-content-click="false" max-width="250">
+              <v-menu 
+                v-model="socialMenuOpen" 
+                offset-y 
+                :close-on-content-click="false" 
+                max-width="250"
+                eager
+                transition="fade-transition"
+                :content-class="'social-menu-content'"
+                nudge-bottom="8"
+              >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="ml-1 staking2-social-btn">
                     <v-icon small color="white">mdi-share-variant</v-icon>
@@ -500,13 +509,16 @@ onMounted(async () => {
 
 /* Social Dropdown Liquid Glass Effect */
 .social-dropdown-card {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  background: linear-gradient(135deg, rgba(12, 14, 18, 0.98), rgba(22, 27, 38, 0.96)) !important;
+  backdrop-filter: blur(12px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.5) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+              0 2px 8px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 .social-links-list {
