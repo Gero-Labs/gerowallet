@@ -36,7 +36,7 @@
       <v-layout>
         <v-row no-gutters>
           <v-col cols="12" md="6" sm="6">
-            <v-card-title class="pt-0" style="color: white">{{ pool.block_count.toLocaleString('en-US') }}</v-card-title>
+            <v-card-title class="pt-0" style="color: white">{{ pool.block_count?.toLocaleString('en-US') }}</v-card-title>
             <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
@@ -48,7 +48,7 @@
             <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
-            <v-card-title class="pt-0" style="color: white">{{ pool.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
+            <v-card-title class="pt-0" style="color: white">{{ pool.ros?.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
             <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
           </v-col>
         </v-row>

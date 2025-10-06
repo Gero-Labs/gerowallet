@@ -427,7 +427,6 @@ const totalAllocation = computed(() => {
     }
     return res;
   }
-  console.log(tokensList.value)
   tokensList.value.forEach(token => {
     if (token.value) {
       total += token.value;
