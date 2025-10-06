@@ -117,7 +117,15 @@
             @mouse-leave="resumeApexCarousel"
           />
         </v-col>
-        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-else-if="loggedWallet?.network === Network.PREPROD">
+        <v-col
+          cols="12"
+          xl="3"
+          lg="3"
+          md="12"
+          sm="12"
+          class="pa-2"
+          v-else-if="loggedWallet?.network === Network.PREPROD"
+        >
           <AssetsPieChart />
         </v-col>
       </v-row>
@@ -374,33 +382,33 @@ const computeChartData = computed(() => {
   let graphData = undefined;
   let usdData = undefined;
   let eurData = undefined;
-  
+
   if (transactions.value && transactions.value.length > 0) {
     graphData = [];
     usdData = [];
     eurData = [];
-    
+
     // Sort transactions by timestamp in ascending order (oldest first)
     const sortedTransactions = [...transactions.value].sort((a, b) => a.tx_timestamp - b.tx_timestamp);
-    
+
     // Get current time and one year ago
     const now = Date.now();
-    const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
-    
+    const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
+
     // Get first transaction timestamp
     const firstTxTimestamp = sortedTransactions[0].tx_timestamp * 1000;
-    
+
     // Always start from one year ago with zero balance
     graphData.push([oneYearAgo, 0]);
     usdData.push([oneYearAgo, 0]);
     eurData.push([oneYearAgo, 0]);
-    
+
     // If first transaction is after one year ago, fill the gap with points every week
     // This ensures the line is visible on all time scales (12M, 3M, 30D, 7D, 1D)
     if (firstTxTimestamp > oneYearAgo) {
       const weekInMs = 7 * 24 * 60 * 60 * 1000; // 1 week
       let currentTimestamp = oneYearAgo + weekInMs;
-      
+
       // Add a point every week from year ago until first transaction
       while (currentTimestamp < firstTxTimestamp) {
         graphData.push([currentTimestamp, 0]);
@@ -408,33 +416,33 @@ const computeChartData = computed(() => {
         eurData.push([currentTimestamp, 0]);
         currentTimestamp += weekInMs;
       }
-      
+
       // Add a point just before the first transaction (1 second before) for smooth transition
       graphData.push([firstTxTimestamp - 1000, 0]);
       usdData.push([firstTxTimestamp - 1000, 0]);
       eurData.push([firstTxTimestamp - 1000, 0]);
     }
-    
+
     // Process all transactions
     let currentBalance = 0;
     sortedTransactions.forEach(tx => {
       currentBalance += tx.ada;
       const balanceInAda = currentBalance / 1000000;
       const timestamp = tx.tx_timestamp * 1000;
-      
+
       graphData.push([timestamp, balanceInAda]);
       usdData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
       eurData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
     });
-    
+
     // Fill gap from last transaction to now with weekly points
     const lastTxTimestamp = sortedTransactions[sortedTransactions.length - 1].tx_timestamp * 1000;
     const lastBalance = currentBalance / 1000000;
-    
+
     if (now - lastTxTimestamp > 7 * 24 * 60 * 60 * 1000) {
       const weekInMs = 7 * 24 * 60 * 60 * 1000;
       let currentTimestamp = lastTxTimestamp + weekInMs;
-      
+
       // Add a point every week from last transaction until now
       while (currentTimestamp < now) {
         graphData.push([currentTimestamp, lastBalance]);
@@ -443,12 +451,12 @@ const computeChartData = computed(() => {
         currentTimestamp += weekInMs;
       }
     }
-    
+
     // Add current point with last known balance
     graphData.push([now, lastBalance]);
     usdData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
     eurData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
-    }
+  }
   return {
     adaData: graphData || [],
     usdData: usdData || [],
@@ -604,7 +612,9 @@ watch(
   async (newAddress, oldAddress) => {
     if (newAddress && newAddress !== oldAddress && !isApex.value) {
       try {
-        if (account && Number(account.value?.controlled_amount) > 0 &&
+        if (
+          account &&
+          Number(account.value?.controlled_amount) > 0 &&
           loggedWallet.value?.chain === Blockchain.CARDANO &&
           loggedWallet.value?.network === Network.MAINNET
         ) {

@@ -334,9 +334,11 @@ const availableCurrencies = computed(() => {
 
 // Portfolio value formatting for any currency
 const formatPortfolioValue = (): string => {
-  const value = activePortfolioValue.value;
   const config = currentCurrencyConfig.value;
-
+  const value =
+    selectedCurrency.value === CurrencyType.USD
+      ? activePortfolioValue.value
+      : convertFiat(activePortfolioValue.value, true);
   if (value > 0) {
     return filters.toCurrency(value, false, 2, config.symbol, '', true, 0);
   }

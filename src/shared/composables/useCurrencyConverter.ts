@@ -37,12 +37,12 @@ export function useCurrencyConverter() {
   const currentCurrency = computed(() => walletStore.config?.currency || 'usd');
   const shouldConvert = computed(() => currentCurrency.value !== 'usd');
 
-  const convertFiat = (usdAmount: number): number => {
+  const convertFiat = (usdAmount: number, forceSystemCurrency: boolean = false): number => {
     if (!usdAmount || usdAmount === 0) {
       return 0;
     }
 
-    if (!shouldConvert.value) {
+    if (!shouldConvert.value && !forceSystemCurrency) {
       return usdAmount;
     }
 
