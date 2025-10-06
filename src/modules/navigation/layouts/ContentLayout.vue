@@ -247,17 +247,18 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { convertFiat } = useCurrencyConverter();
+const { convertAdaToFiat } = useCurrencyConverter();
 const { price } = toRefs(networkStore);
 
 const geroPrice = computed(() => {
   const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
+
   if (!isApex.value) {
     if (geroToken?.price && geroToken.price > 0) {
-      return convertFiat(geroToken.price);
+      return convertAdaToFiat(geroToken.price);
     }
   } else {
-    return +convertFiat(price.value?.lastPrice || 0);
+    return +convertAdaToFiat(price.value?.lastPrice || 0);
   }
 });
 
