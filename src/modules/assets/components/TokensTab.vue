@@ -198,7 +198,7 @@ const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
 
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+const { convertFiat, convertAdaToFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Headers for the data table
 const headers = ref<any[]>([
@@ -343,7 +343,7 @@ const tokensList = computed(() => {
       token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       token.risk = risks.value[token.fingerprint]?.risk;
-      token.price = dexHunterTokens.value[token.unit]?.price;
+      token.price = convertAdaToFiat(dexHunterTokens.value[token.unit]?.price);
       token.mcap = dexHunterTokens.value[token.unit]?.mcap;
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
@@ -427,6 +427,7 @@ const totalAllocation = computed(() => {
     }
     return res;
   }
+  console.log(tokensList.value)
   tokensList.value.forEach(token => {
     if (token.value) {
       total += token.value;
