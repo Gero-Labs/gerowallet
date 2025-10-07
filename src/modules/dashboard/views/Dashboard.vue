@@ -369,6 +369,9 @@ const {
   firstLoadedCurrency,
 } = portfolioComposable;
 
+// Cache current timestamp to avoid computed recalculation
+const currentTimestamp = ref(Date.now());
+
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
@@ -391,8 +394,8 @@ const computeChartData = computed(() => {
     // Sort transactions by timestamp in ascending order (oldest first)
     const sortedTransactions = [...transactions.value].sort((a, b) => a.tx_timestamp - b.tx_timestamp);
 
-    // Get current time and one year ago
-    const now = Date.now();
+    // Use cached current time instead of Date.now() to avoid constant reactivity
+    const now = currentTimestamp.value;
     const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
 
     // Get first transaction timestamp
@@ -407,14 +410,14 @@ const computeChartData = computed(() => {
     // This ensures the line is visible on all time scales (12M, 3M, 30D, 7D, 1D)
     if (firstTxTimestamp > oneYearAgo) {
       const weekInMs = 7 * 24 * 60 * 60 * 1000; // 1 week
-      let currentTimestamp = oneYearAgo + weekInMs;
+      let currentTime = oneYearAgo + weekInMs;
 
       // Add a point every week from year ago until first transaction
-      while (currentTimestamp < firstTxTimestamp) {
-        graphData.push([currentTimestamp, 0]);
-        usdData.push([currentTimestamp, 0]);
-        eurData.push([currentTimestamp, 0]);
-        currentTimestamp += weekInMs;
+      while (currentTime < firstTxTimestamp) {
+        graphData.push([currentTime, 0]);
+        usdData.push([currentTime, 0]);
+        eurData.push([currentTime, 0]);
+        currentTime += weekInMs;
       }
 
       // Add a point just before the first transaction (1 second before) for smooth transition
@@ -441,14 +444,14 @@ const computeChartData = computed(() => {
 
     if (now - lastTxTimestamp > 7 * 24 * 60 * 60 * 1000) {
       const weekInMs = 7 * 24 * 60 * 60 * 1000;
-      let currentTimestamp = lastTxTimestamp + weekInMs;
+      let currentTime = lastTxTimestamp + weekInMs;
 
       // Add a point every week from last transaction until now
-      while (currentTimestamp < now) {
-        graphData.push([currentTimestamp, lastBalance]);
-        usdData.push([currentTimestamp, lastBalance * (price.value?.lastPrice || 0)]);
-        eurData.push([currentTimestamp, lastBalance * (price.value?.lastPrice || 0)]);
-        currentTimestamp += weekInMs;
+      while (currentTime < now) {
+        graphData.push([currentTime, lastBalance]);
+        usdData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
+        eurData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
+        currentTime += weekInMs;
       }
     }
 
@@ -606,25 +609,39 @@ defineExpose({
   refreshPortfolioChart,
   getPortfolioCacheInfo,
 });
+// Update timestamp when transactions change
+watch(
+  () => transactions.value?.length,
+  () => {
+    // Update timestamp only when transactions actually change
+    currentTimestamp.value = Date.now();
+  }
+);
+
 // Watch for wallet changes to reload portfolio data with parallel loading
 watch(
   () => loggedWallet.value?.baseAddress,
   async (newAddress, oldAddress) => {
-    if (newAddress && newAddress !== oldAddress && !isApex.value) {
-      try {
-        if (
-          account &&
-          Number(account.value?.controlled_amount) > 0 &&
-          loggedWallet.value?.chain === Blockchain.CARDANO &&
-          loggedWallet.value?.network === Network.MAINNET
-        ) {
-          // Start parallel loading immediately (don't await - let it run in the background)
-          loadDataProgressively(newAddress).catch(error => {
-            console.warn('Portfolio data loading failed:', error);
-          });
+    if (newAddress && newAddress !== oldAddress) {
+      // Update timestamp on wallet change
+      currentTimestamp.value = Date.now();
+      
+      if (!isApex.value) {
+        try {
+          if (
+            account &&
+            Number(account.value?.controlled_amount) > 0 &&
+            loggedWallet.value?.chain === Blockchain.CARDANO &&
+            loggedWallet.value?.network === Network.MAINNET
+          ) {
+            // Start parallel loading immediately (don't await - let it run in the background)
+            loadDataProgressively(newAddress).catch(error => {
+              console.warn('Portfolio data loading failed:', error);
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to start portfolio data loading:', error);
         }
-      } catch (error) {
-        console.warn('Failed to start portfolio data loading:', error);
       }
     }
   },

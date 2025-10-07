@@ -72,7 +72,6 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
@@ -108,7 +107,6 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 
 const props = defineProps({
   chartData: {
@@ -171,7 +169,6 @@ const savePortfolioTabSetting = (tabValue: string): void => {
 };
 
 const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLabel: 'vs last week' });
-const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
@@ -1089,19 +1086,8 @@ const handleTabClick = tabItem => {
 //   }
 // };
 
-const generateTitleText = () => {
-  return '';
-};
-watch(
-  price,
-  newVal => {
-    lastPrice.value = newVal.lastPrice;
-    if (chartInstance.value?.title) {
-      chartInstance.value.title.update({ text: generateTitleText() });
-    }
-  },
-  { deep: true }
-);
+// Removed price watcher and generateTitleText that were causing unnecessary rerenders
+// since we're not using the title text anymore
 
 // Watch currency chart data with immediate response to any data changes
 watch(

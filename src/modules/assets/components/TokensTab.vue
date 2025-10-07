@@ -332,6 +332,7 @@ const tokensList = computed(() => {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
         coinGeckoCurrency = 'apex-2';
+        token.price = convertFiat(price.value?.lastPrice || 0);
       }
       token.mcap = cache.value[coinGeckoCurrency]?.usd_market_cap;
       const quantity = Number(
@@ -418,10 +419,12 @@ const totalAllocation = computed(() => {
   if (tokensList.value.length === 1) {
     const token = tokensList.value[0];
     let res: any;
-    if (token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)) {
+    if (
+      token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+    ) {
       // Use Kraken WebSocket price for ADA, fallback to network store price
       const adaPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
-      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice
+      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice;
     } else {
       res = token.value;
     }
@@ -436,8 +439,8 @@ const totalAllocation = computed(() => {
 });
 
 const handleTokenRowClick = (row: any) => {
-  console.log(row)
-}
+  console.log(row);
+};
 
 // Sort the full tokensList first, then paginate
 const sortedTokens = computed(() => {
@@ -460,9 +463,12 @@ const paginatedTokens = computed(() => {
 const tableHeight = computed(() => props.containerHeight);
 
 // Watch for search term changes to reset pagination
-watch(() => props.searchTerm, () => {
-  currentPage.value = 1;
-});
+watch(
+  () => props.searchTerm,
+  () => {
+    currentPage.value = 1;
+  }
+);
 </script>
 
 <style scoped>
