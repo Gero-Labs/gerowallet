@@ -1,16 +1,17 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate Your Stake"
-              :loading="loading"
-              :min-height="639"
-              :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)} to a stake pool.`">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Delegate Your Stake"
+    :loading="loading"
+    :min-height="639"
+    :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(
+      loggedWallet?.chain,
+      loggedWallet?.network
+    )} to a stake pool.`"
+  >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
-      <v-alert
-        border="left"
-        color="primary"
-        type="info"
-        prominent
-        class="text-left"
-      >
+      <v-alert border="left" color="primary" type="info" prominent class="text-left">
         <ul>
           <li>You can only delegate to one stake pool at a time</li>
           <li>You can switch to delegate to a different stake pool at any time</li>
@@ -23,20 +24,22 @@
             {{ `[${pool.ticker}] ${pool.name}` }}
           </v-list-item-title>
           <v-list-item-subtitle>{{ pool.description }}</v-list-item-subtitle>
-          <v-list-item-subtitle v-if="pool">{{ filters.truncate(pool.pool_id_bech32) }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton></v-list-item-subtitle>
+          <v-list-item-subtitle v-if="pool"
+            >{{ filters.truncate(pool.pool_id_bech32)
+            }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton
+          ></v-list-item-subtitle>
         </v-list-item-content>
 
-        <v-list-item-avatar
-          size="80"
-          v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64"
-        >
-          <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage"/>
+        <v-list-item-avatar size="80" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
+          <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage" />
         </v-list-item-avatar>
       </v-list-item>
       <v-layout>
         <v-row no-gutters>
           <v-col cols="12" md="6" sm="6">
-            <v-card-title class="pt-0" style="color: white">{{ pool.block_count?.toLocaleString('en-US') }}</v-card-title>
+            <v-card-title class="pt-0" style="color: white">{{
+              pool.block_count?.toLocaleString('en-US')
+            }}</v-card-title>
             <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
@@ -44,17 +47,32 @@
             <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
-            <v-card-title class="pt-0" style="color: white">{{ filters.toCurrency(pool.live_stake, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</v-card-title>
+            <v-card-title class="pt-0" style="color: white">{{
+              filters.toCurrency(
+                pool.live_stake,
+                false,
+                0,
+                networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+              )
+            }}</v-card-title>
             <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
-            <v-card-title class="pt-0" style="color: white">{{ pool.ros?.toLocaleString('en-US', {maximumFractionDigits: 2}) }}%</v-card-title>
+            <v-card-title class="pt-0" style="color: white"
+              >{{ pool.ros?.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}%</v-card-title
+            >
             <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
           </v-col>
         </v-row>
       </v-layout>
       <v-card-title class="pt-0" style="color: white">
-        <v-progress-linear rounded :color="filters.getColor(pool.live_saturation)" height="32" :value="pool.live_saturation" striped>
+        <v-progress-linear
+          rounded
+          :color="filters.getColor(pool.live_saturation)"
+          height="32"
+          :value="pool.live_saturation"
+          striped
+        >
           <template v-slot:default="{ value }">
             <strong>{{ Math.ceil(value) }}%</strong>
           </template>
@@ -62,7 +80,7 @@
       </v-card-title>
       <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
     </v-card-text>
-    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block;">
+    <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block">
       <v-form ref="formRef" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
@@ -78,7 +96,16 @@
                 </div>
               </v-tooltip>
             </h4>
-            <h4><strong>{{ filters.toCurrency(account.controlled_amount, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4>
+              <strong>{{
+                filters.toCurrency(
+                  account.controlled_amount,
+                  false,
+                  0,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                )
+              }}</strong>
+            </h4>
           </v-col>
           <v-col :cols="cols">
             <h4>
@@ -93,7 +120,16 @@
                 </div>
               </v-tooltip>
             </h4>
-            <h4>~<strong>{{ filters.toCurrency(account?.controlled_amount * pool.ros/100/73, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4>
+              ~<strong>{{
+                filters.toCurrency(
+                  (account?.controlled_amount * pool.ros) / 100 / 73,
+                  false,
+                  2,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                )
+              }}</strong>
+            </h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>
@@ -108,7 +144,16 @@
                 </div>
               </v-tooltip>
             </h4>
-            <h4><strong>{{ filters.toCurrency(depositFee, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4>
+              <strong>{{
+                filters.toCurrency(
+                  depositFee,
+                  false,
+                  0,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                )
+              }}</strong>
+            </h4>
           </v-col>
           <v-col :cols="cols">
             <h4>
@@ -123,19 +168,23 @@
                 </div>
               </v-tooltip>
             </h4>
-            <h4><strong>{{ filters.toCurrency(tx?.body?.fee?.toString() || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</strong></h4>
+            <h4>
+              <strong>{{
+                filters.toCurrency(
+                  tx?.body?.fee?.toString() || '0',
+                  false,
+                  0,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                )
+              }}</strong>
+            </h4>
           </v-col>
-          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
-            <v-tooltip
-              v-model="tooltip.enabled"
-              top
-              color="red"
-              v-if="loggedWallet.type === WalletType.Normal"
-            >
-              <template v-slot:activator="{ }">
+          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly">
+            <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet.type === WalletType.Normal">
+              <template v-slot:activator="{}">
                 <v-text-field
                   flat
-                  style="max-width: 295px;"
+                  style="max-width: 295px"
                   block
                   dense
                   v-model="spendingPassword"
@@ -157,12 +206,28 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <div v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0" style="align-content: center;">
+            <div v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch
+                  text-left="USB"
+                  icon-left="mdi-usb"
+                  text-right="Bluetooth"
+                  icon-right="mdi-bluetooth"
+                  v-model="isBT"
+                  :disabled="loading"
+                />
               </v-card-subtitle>
             </div>
-            <v-btn color="primary" elevation="0" @click="signDelegationTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+            <v-btn
+              color="primary"
+              elevation="0"
+              @click="signDelegationTx"
+              height="40"
+              :disabled="loading || !valid"
+              :loading="loading"
+              class="mx-2"
+              style="margin-bottom: 1px"
+            >
               {{ isSubmit ? 'Submit' : 'Delegate' }}
             </v-btn>
           </v-col>
@@ -259,7 +324,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import rules from '@/utils/rules';
-import networks from "@/utils/networks";
+import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 // TODO: Keystone hardware wallet support - currently disabled
@@ -280,13 +345,13 @@ const props = defineProps({
     default: false,
   },
   pool: {
-    type: Object as () => any
+    type: Object as () => any,
   },
   tx: {
     type: Object as () => Cardano.Tx,
     required: false,
     default: undefined,
-  }
+  },
 });
 
 const emit = defineEmits(['close']);
@@ -315,18 +380,21 @@ const isSubmit = ref(false);
 // const qrCode = ref<QRCodeStyling | null>(null);
 // const qrCodeRef = ref<HTMLElement | null>(null);
 const formRef = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
-watch(() => props.isOpen, (val) => {
-  if (val) {
-    spendingPassword.value = ''
-    showPassword.value = false
-    if (formRef.value) {
-      formRef.value.resetValidation()
+watch(
+  () => props.isOpen,
+  val => {
+    if (val) {
+      spendingPassword.value = '';
+      showPassword.value = false;
+      if (formRef.value) {
+        formRef.value.resetValidation();
+      }
     }
   }
-});
+);
 
 watch(spendingPassword, () => {
-  passwordRules.value = [rules.required()]
+  passwordRules.value = [rules.required()];
 });
 
 const depositFee = computed(() => {
@@ -337,8 +405,8 @@ const depositFee = computed(() => {
   // Calculate input amounts
   if (props.tx.body.inputs) {
     for (const input of props.tx.body.inputs) {
-      const utxo = utxos.value?.find((utxo: Cardano.Utxo) =>
-        utxo[0].txId === input.txId && utxo[0].index === input.index
+      const utxo = utxos.value?.find(
+        (utxo: Cardano.Utxo) => utxo[0].txId === input.txId && utxo[0].index === input.index
       );
       if (utxo) {
         totalAdaOutput -= Number(utxo[1].value.coins);
@@ -353,7 +421,9 @@ const depositFee = computed(() => {
     }
   }
   const registrationCert: any = props.tx.body.certificates?.find(
-    cert => cert.__typename === Cardano.CertificateType.StakeRegistration || cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+    cert =>
+      cert.__typename === Cardano.CertificateType.StakeRegistration ||
+      cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
   );
 
   return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
@@ -361,9 +431,9 @@ const depositFee = computed(() => {
 
 const cols = computed(() => {
   if (depositFee.value > 0) {
-    return 3
+    return 3;
   } else {
-    return 4
+    return 4;
   }
 });
 // TODO: Keystone QR code scanning functionality - currently disabled
@@ -424,16 +494,16 @@ const enableToolTip = () => {
 };
 
 const signTx = async (): Promise<boolean> => {
-  loading.value = true
+  loading.value = true;
   try {
     console.log('Signing Cardano JS SDK delegation transaction');
     console.log('Transaction:', props.tx);
 
     // First, verify password via a background message
-    const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+    const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-      data: { password: spendingPassword.value }
-    }) as { data: { isValid: boolean; error?: string } };
+      data: { password: spendingPassword.value },
+    })) as { data: { isValid: boolean; error?: string } };
 
     if (!passwordVerification.data.isValid) {
       enableToolTip();
@@ -446,7 +516,7 @@ const signTx = async (): Promise<boolean> => {
     console.log('Serialized transaction CBOR:', txCbor.value);
 
     // Sign the transaction via a background message
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
         txCbor: txCbor.value, // Pass serialized CBOR instead of the object
@@ -456,8 +526,8 @@ const signTx = async (): Promise<boolean> => {
         utxos: utxos.value,
         addresses: keys.value, // Address mappings
         mergeWitnesses: false,
-      }
-    }) as { data: { witnesses?: any; error?: string } };
+      },
+    })) as { data: { witnesses?: any; error?: string } };
 
     console.log('Transaction signed successfully:', witnessResult);
 
@@ -470,10 +540,10 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
     return false;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 };
 
@@ -489,11 +559,11 @@ const signLedgerTx = async () => {
       keys.value,
       utxos.value,
       !isBT.value, // isUsb flag (inverted from isBT)
-      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+      networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network)
     );
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
-    })
+    });
     console.log('[LEDGER-SIGN] Legacy signing successful:', transactionWitnessSet.toCbor());
     txWitnesses.value = transactionWitnessSet.toCbor();
     return true;
@@ -507,31 +577,31 @@ const signLedgerTx = async () => {
 
 const submitTx = async () => {
   try {
-    loading.value = true
+    loading.value = true;
     console.log('Submitting Cardano JS SDK delegation transaction');
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
+    const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
         txCbor: txCbor.value,
         witnessHex: txWitnesses.value,
-        utxos: utxos.value
-      }
-    }) as { data: { txId?: string; error?: string } };
+        utxos: utxos.value,
+      },
+    })) as { data: { txId?: string; error?: string } };
 
     if (submitResult.data.error) {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`)
-    emit('close')
+    snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    emit('close');
   } catch (e) {
     console.error('Error submitting delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
   } finally {
-    loading.value = false
-    isSubmit.value = false
+    loading.value = false;
+    isSubmit.value = false;
   }
-}
+};
 
 const signDelegationTx = async () => {
   if (isSubmit.value) {
