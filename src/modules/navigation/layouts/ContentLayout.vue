@@ -15,7 +15,7 @@
                 loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
                   ? assets.apexBg
                   : assets.cardanoBg
-              })`
+              })`,
             }"
           ></div>
 
@@ -54,7 +54,16 @@
 
                   <v-spacer />
 
-                  <v-tooltip bottom :content-class="connected ? 'network-tooltip' : connecting ? 'network-tooltip connecting' : 'network-tooltip offline'">
+                  <v-tooltip
+                    bottom
+                    :content-class="
+                      connected
+                        ? 'network-tooltip'
+                        : connecting
+                        ? 'network-tooltip connecting'
+                        : 'network-tooltip offline'
+                    "
+                  >
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         style="display: flex; align-items: center; gap: 4px; min-width: 60px"
@@ -92,9 +101,12 @@
                       <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
                         <strong class="mr-1">Status:</strong>
-                        <span :style="connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }">{{
-                          connected ? 'Online' : connecting ? 'Connecting...' : 'Offline'
-                        }}</span>
+                        <span
+                          :style="
+                            connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
+                          "
+                          >{{ connected ? 'Online' : connecting ? 'Connecting...' : 'Offline' }}</span
+                        >
                       </div>
                     </div>
                   </v-tooltip>
@@ -247,7 +259,7 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { convertAdaToFiat } = useCurrencyConverter();
+const { convertFiat } = useCurrencyConverter();
 const { price } = toRefs(networkStore);
 
 const geroPrice = computed(() => {
@@ -255,10 +267,10 @@ const geroPrice = computed(() => {
 
   if (!isApex.value) {
     if (geroToken?.price && geroToken.price > 0) {
-      return convertAdaToFiat(geroToken.price);
+      return convertFiat(geroToken.price);
     }
   } else {
-    return +convertAdaToFiat(price.value?.lastPrice || 0);
+    return convertFiat(price.value?.lastPrice || 0);
   }
 });
 
