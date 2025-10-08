@@ -6,7 +6,8 @@ const usdToEurRate = ref<number>(1);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const rateLoaded = ref(false);
-
+const usdToAdaRate = ref<number>(1);
+const adaToEurRate = ref<number>(1);
 
 export function useCurrencyConverter() {
   const api = new Api(walletStore.loggedWallet, walletStore.loggedWallet.provider);
@@ -19,12 +20,14 @@ export function useCurrencyConverter() {
 
     try {
       const fiatRates = await api.fetchFiatRates();
+      if (fiatRates?.ada) {
+        usdToAdaRate.value = 1 / fiatRates.ada;
+        rateLoaded.value = true;
+      }
 
       if (fiatRates?.eur) {
         usdToEurRate.value = fiatRates.eur;
         rateLoaded.value = true;
-      } else {
-        throw new Error('EUR rate not found in API response');
       }
     } catch (apiError) {
       error.value = 'Failed to load current exchange rate';
@@ -37,20 +40,19 @@ export function useCurrencyConverter() {
   const currentCurrency = computed(() => walletStore.config?.currency || 'usd');
   const shouldConvert = computed(() => currentCurrency.value !== 'usd');
 
-  const convertFiat = (usdAmount: number): number => {
+  const convertFiat = (usdAmount: number, forceSystemCurrency: boolean = false): number => {
     if (!usdAmount || usdAmount === 0) {
       return 0;
     }
 
-    if (!shouldConvert.value) {
+    if (!shouldConvert.value && !forceSystemCurrency) {
       return usdAmount;
     }
 
     if (!rateLoaded.value && !loading.value) {
       loadExchangeRate();
     }
-
-    return Number((usdAmount * usdToEurRate.value).toFixed(6));
+    return Number((usdAmount * usdToEurRate.value * usdToAdaRate.value).toFixed(6));
   };
 
   const getCurrencySymbol = (): string => {
@@ -71,7 +73,6 @@ export function useCurrencyConverter() {
     loading.value = false;
     await loadExchangeRate();
   };
-
 
   return {
     convertFiat,

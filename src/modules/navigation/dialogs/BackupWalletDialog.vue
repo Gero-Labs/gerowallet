@@ -115,6 +115,7 @@
                             :rules="[rules.required()]"
                             label="Password"
                             :type="showPassword ? 'text' : 'password'"
+                            @keydown.enter.stop="validUnlock && decryptMnemonic()"
                           >
                             <template v-slot:append>
                               <v-icon @click="showPassword = !showPassword" tabindex="-1">
