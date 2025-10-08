@@ -2,7 +2,10 @@
   <section class="call-to-action-section">
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
     <p class="cta-description">Your digital assets, now swipe-ready. Use your crypto like cash</p>
-    <GradientButton text="Order your card today" @click="handleOrderCard" />
+    <GradientButton v-if="kycStatus === 'approved'" text="Order your card today" @click="handleOrderCard" />
+
+    <GradientButton v-else text="Start KYC" @click="startKYC" />
+
     <OrderCardModal :open="showModal" @close="showModal = false" />
   </section>
 </template>
@@ -10,12 +13,19 @@
 <script setup lang="ts">
 import GradientButton from './GradientButton.vue';
 import OrderCardModal from './OrderCardModal.vue';
-import { ref } from 'vue';
-
+import { ref, computed } from 'vue';
+import cardStore from '@/stores/modules/card';
 const showModal = ref(false);
 
-const handleOrderCard = () => {
-  showModal.value = true;
+const kycStatus = computed(() => cardStore.state.walletStatus.kycStatus);
+
+const handleOrderCard = async () => {
+  await cardStore.orderCard();
+  await cardStore.fetchCardData();
+};
+
+const startKYC = () => {
+  cardStore.fetchKYCLink();
 };
 </script>
 

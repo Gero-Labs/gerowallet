@@ -168,7 +168,7 @@ const startCamera = async () => {
     isCameraActive.value = false;
 
     let errorMessage = 'Unable to access camera. ';
-    if (error instanceof Error) {
+    if (error && typeof error === 'object' && 'message' in error) {
       if (error.name === 'NotAllowedError') {
         errorMessage += 'Please allow camera access in your browser settings.';
       } else if (error.name === 'NotFoundError') {
@@ -244,7 +244,9 @@ const handleNext = () => {
     }
   } else if (currentStep.value === 2) {
     if (capturedPhoto.value) {
-      console.log('KYC submitted');
+      // Set KYC status to pending
+      localStorage.setItem('kycStatus', 'pending');
+      
       emit('complete', true);
       closeModal();
     } else {

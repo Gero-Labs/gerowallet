@@ -1,5 +1,6 @@
 import axios from 'axios'
 import charli3Store from '@/stores/charli3Store'
+import { getErrorMessage } from '@/shared/utils/errorHandler'
 
 //@ts-ignore
 const API_BASE_URL = process.env.VUE_APP_API_URL || 'https://dev.gerowallet.io'
@@ -73,7 +74,7 @@ class Charli3API {
       console.log('✅ Charli3 symbol_info response:', response.status, response.statusText);
       return response.data
     } catch (error: any) {
-      console.error('❌ Charli3 symbol_info error:', error instanceof Error ? error.message : 'Unknown error', error.response?.status, error.response?.statusText);
+      console.error('❌ Charli3 symbol_info error:', getErrorMessage(error), error.response?.status, error.response?.statusText);
       console.error('📡 Error details:', error.response?.data);
       throw error;
     }
@@ -94,7 +95,7 @@ class Charli3API {
       console.log('✅ Charli3 API response:', response.status, response.statusText);
       return response.data
     } catch (error: any) {
-      console.error('❌ Charli3 API error:', error instanceof Error ? error.message : 'Unknown error', error.response?.status, error.response?.statusText);
+      console.error('❌ Charli3 API error:', getErrorMessage(error), error.response?.status, error.response?.statusText);
       console.error('📡 Error details:', error.response?.data);
       throw error;
     }
@@ -165,7 +166,7 @@ class Charli3API {
         this.charli3RequestInterval = Math.min(this.charli3RequestInterval * 1.5, 10000) // Max 10 seconds
         console.warn(`Rate limited for token ${token}, increasing interval to ${this.charli3RequestInterval}ms`)
       } else {
-        console.warn(`Failed to fetch logo for ${token}:`, error instanceof Error ? error.message : 'Unknown error')
+        console.warn(`Failed to fetch logo for ${token}:`, getErrorMessage(error))
       }
       return null
     }

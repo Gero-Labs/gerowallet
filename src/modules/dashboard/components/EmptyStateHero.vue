@@ -275,18 +275,6 @@
         </v-col>
       </v-row>
 
-      <!-- Sample data option for exploration -->
-      <div class="text-center mt-6" v-if="isDevelopment">
-        <v-btn
-          text
-          small
-          @click="$emit('load-sample-data')"
-          class="sample-data-btn"
-        >
-          <v-icon small left>mdi-test-tube</v-icon>
-          Load Sample Data to Explore
-        </v-btn>
-      </div>
     </v-card-text>
 
     <!-- Animated background elements -->
@@ -308,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs, ref, getCurrentInstance } from 'vue';
+import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
@@ -320,14 +308,12 @@ const instance = getCurrentInstance();
 interface Props {
   isNewUser?: boolean;
   showTutorial?: boolean;
-  isDevelopment?: boolean;
   shouldBackup?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isNewUser: false,
-  showTutorial: true,
-  isDevelopment: false
+  showTutorial: true
 });
 
 const emit = defineEmits([
@@ -359,17 +345,9 @@ const cardBackgroundSize = computed(() => {
   return isApex.value ? '300% 100%' : '600% 100%';
 });
 
-const backgroundImage = computed(() => {
-  return isApex.value ? assets.apexBg : assets.cardanoBg;
-});
-
 // Background image for the feature cards spanning effect
 const featureBackgroundImage = computed(() => {
   return assets.emptyState;
-});
-
-const walletIcon = computed(() => {
-  return isApex.value ? assets.walletGeroApex : assets.walletSvg;
 });
 
 const subtitle = computed(() => {
@@ -428,14 +406,14 @@ const navigateToCard = () => {
 };
 
 const navigateToStaking = () => {
-  const router = instance?.proxy?.$router;
+  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/staking');
   }
 };
 
 const navigateToCashback = () => {
-  const router = instance?.proxy?.$router;
+  const router = (instance?.proxy as any)?.$router;
   if (router) {
     router.push('/cashback');
   }

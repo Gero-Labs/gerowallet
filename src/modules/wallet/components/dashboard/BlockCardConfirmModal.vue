@@ -9,15 +9,13 @@
               <v-icon class="card-icon">mdi-credit-card-off</v-icon>
             </div>
           </div>
-          
+
           <div class="text-section">
             <h3 class="modal-title">Block Your Card</h3>
-            <p class="modal-subtitle">
-              Are you sure you want to block your card? This action cannot be undone.
-            </p>
+            <p class="modal-subtitle">Are you sure you want to block your card? This action cannot be undone.</p>
           </div>
         </div>
-        
+
         <v-btn icon class="close-btn" @click="closeModal">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -38,21 +36,10 @@
               placeholder="**********"
             />
           </div>
-          
+
           <div class="buttons-section">
-            <v-btn
-              class="cancel-btn"
-              @click="closeModal"
-            >
-              Cancel
-            </v-btn>
-            <v-btn
-              color="error"
-              class="delete-btn"
-              @click="confirmBlock"
-              :loading="loading"
-              :disabled="!password"
-            >
+            <v-btn class="cancel-btn" @click="closeModal"> Cancel </v-btn>
+            <v-btn color="error" class="delete-btn" @click="confirmBlock" :loading="loading" :disabled="!password">
               Delete
             </v-btn>
           </div>
@@ -63,7 +50,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import cardStore from '@/stores/modules/card';
+import { ref, computed } from 'vue';
 
 interface Props {
   open: boolean;
@@ -84,22 +72,24 @@ const closeModal = () => {
   password.value = '';
   emit('close');
 };
+const isBlocked = computed(() => cardStore.state.cardData?.card_status === 'TEMPORARY_BLOCKED');
 
 const confirmBlock = async () => {
   if (!password.value) return;
-  
   loading.value = true;
-  
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  
-  loading.value = false;
-  
-  // Add card blocking logic here
-  console.log('Card blocked with password:', password.value);
-  
-  emit('confirm');
-  closeModal();
+  try {
+    if (isBlocked.value) {
+      await cardStore.unblockCard();
+    } else {
+      await cardStore.blockCard();
+    }
+  } catch (error) {
+    closeModal();
+  } finally {
+    loading.value = false;
+    emit('confirm');
+    closeModal();
+  }
 };
 </script>
 
@@ -253,7 +243,7 @@ const confirmBlock = async () => {
   text-transform: none;
   padding: $spacing-sm $spacing-sm !important;
   box-shadow: $shadow-button;
-  
+
   &:hover {
     background: #1a1d23 !important;
   }
@@ -273,14 +263,14 @@ const confirmBlock = async () => {
   text-transform: none;
   padding: $spacing-sm $spacing-sm !important;
   box-shadow: $shadow-button;
-  
+
   &:hover {
     background: #b42318 !important;
   }
-  
+
   &:disabled {
     background: #6b7280 !important;
     border-color: #6b7280 !important;
   }
 }
-</style> 
+</style>

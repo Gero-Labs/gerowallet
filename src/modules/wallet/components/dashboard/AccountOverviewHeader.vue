@@ -14,17 +14,6 @@
       </div>
     </div>
 
-    <!-- Password Confirm Modal - only for Manage Card -->
-    <PasswordConfirmModal
-      :open="showPasswordModal"
-      :title="passwordModalTitle"
-      :subtitle="passwordModalSubtitle"
-      :confirm-button-text="passwordModalConfirmText"
-      :action="currentAction"
-      @close="closePasswordModal"
-      @confirm="handlePasswordConfirm"
-    />
-
     <!-- Original Modals -->
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
@@ -34,36 +23,13 @@
 <script setup lang="ts">
 import TopUpModal from './TopUpModal.vue';
 import ManageCardModal from './ManageCardModal.vue';
-import PasswordConfirmModal from './PasswordConfirmModal.vue';
 import { ref } from 'vue';
 
 const showTopUpModal = ref(false);
 const showManageCardModal = ref(false);
-const showPasswordModal = ref(false);
-const currentAction = ref('');
-const passwordModalTitle = ref('');
-const passwordModalSubtitle = ref('');
-const passwordModalConfirmText = ref('');
 
 const handleManageCard = () => {
-  currentAction.value = 'manage-card';
-  passwordModalTitle.value = 'Manage Card';
-  passwordModalSubtitle.value = 'Please enter your password to manage your card settings.';
-  passwordModalConfirmText.value = 'Continue';
-  showPasswordModal.value = true;
-};
-
-const closePasswordModal = () => {
-  showPasswordModal.value = false;
-  currentAction.value = '';
-};
-
-const handlePasswordConfirm = (password: string, action: string) => {
-  console.log('Password confirmed for action:', action, 'Password:', password);
-
-  if (action === 'manage-card') {
-    showManageCardModal.value = true;
-  }
+  showManageCardModal.value = true;
 };
 </script>
 

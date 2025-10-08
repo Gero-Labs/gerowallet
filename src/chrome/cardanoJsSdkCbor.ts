@@ -1,5 +1,6 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -52,7 +53,7 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
       if (value instanceof Map) return Object.fromEntries(value);
       return value;
     }, 2));
-    throw new Error(`Failed to serialize transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to serialize transaction: ${getErrorMessage(error)}`);
   }
 }
 
@@ -70,7 +71,7 @@ export function deserializeCardanoJsSdkTx(cborHex: string): Cardano.Tx {
     return serializedTx.toCore();
   } catch (error) {
     console.error('Error deserializing CBOR to Cardano JS SDK transaction:', error);
-    throw new Error(`Failed to deserialize transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to deserialize transaction: ${getErrorMessage(error)}`);
   }
 }
 
@@ -88,7 +89,7 @@ export function serializeTxBody(txBody: Cardano.TxBody): string {
     return serializedTxBody.toCbor();
   } catch (error) {
     console.error('Error serializing transaction body to CBOR:', error);
-    throw new Error(`Failed to serialize transaction body: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to serialize transaction body: ${getErrorMessage(error)}`);
   }
 }
 
@@ -106,7 +107,7 @@ export function computeTxBodyHash(txBody: Cardano.TxBody): Cardano.TransactionId
     return serializedTxBody.hash();
   } catch (error) {
     console.error('Error computing transaction hash:', error);
-    throw new Error(`Failed to compute transaction hash: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to compute transaction hash: ${getErrorMessage(error)}`);
   }
 }
 
@@ -167,7 +168,7 @@ export function serializeWitness(witness: Cardano.Witness): string {
       }
       return value;
     }, 2));
-    throw new Error(`Failed to serialize witness: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to serialize witness: ${getErrorMessage(error)}`);
   }
 }
 
@@ -185,7 +186,7 @@ export function deserializeWitness(witnessHex: string): Cardano.Witness {
     return serializedWitness.toCore();
   } catch (error) {
     console.error('Error deserializing CBOR to witness:', error);
-    throw new Error(`Failed to deserialize witness: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to deserialize witness: ${getErrorMessage(error)}`);
   }
 }
 

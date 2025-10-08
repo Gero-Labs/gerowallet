@@ -197,6 +197,7 @@ import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/componen
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';

@@ -1,8 +1,8 @@
 import wasm from 'vite-plugin-wasm';
 import { defineConfig, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
-import { VuetifyResolver } from "unplugin-vue-components/resolvers";
-import Components from "unplugin-vue-components/vite";
+import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
+import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
@@ -17,22 +17,22 @@ export const sharedConfig: UserConfig = {
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
-      buffer: 'buffer',
+      'buffer': 'buffer',
       '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
       '@emurgo/cardano-message-signing-nodejs': '@emurgo/cardano-message-signing-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
-      stream: r('src/shims/stream.js'),
-      util: 'util',
+      'stream': r('src/shims/stream.js'),
+      'util': 'util',
       'pbkdf2': 'pbkdf2/browser',
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
   define: {
-    global: 'window',
-    __DEV__: isDev,
-    __NAME__: JSON.stringify(packageJson.name),
-    APP_VERSION: JSON.stringify(packageJson.version),
+    'global': 'window',
+    '__DEV__': isDev,
+    '__NAME__': JSON.stringify(packageJson.name),
+    'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
@@ -76,7 +76,7 @@ export const sharedConfig: UserConfig = {
           return r('src/shims/cbor.js');
         }
         return null;
-      }
+      },
     },
     {
       name: 'fix-web-encoding',
@@ -116,11 +116,7 @@ export const sharedConfig: UserConfig = {
       'blake2b',
       'crypto-ts',
     ],
-    exclude: [
-      'vue-demi',
-      '@emurgo/cardano-serialization-lib-browser',
-      'cbor'
-    ],
+    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
     esbuildOptions: {
       plugins: [],
       target: 'es2020',
@@ -142,7 +138,7 @@ export const sharedConfig: UserConfig = {
     plugins: [
       wasm(),
       // topLevelAwait() // Temporarily disabled
-    ]
+    ],
   },
   esbuild: {
     target: 'es2022',
@@ -158,8 +154,8 @@ export const sharedConfig: UserConfig = {
     rollupOptions: {
       output: {
         manualChunks: undefined, // Disable manual chunking for faster builds
-      }
-    }
+      },
+    },
   },
 };
 
