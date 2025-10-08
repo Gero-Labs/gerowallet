@@ -14,51 +14,50 @@
     />
     <div class="dashboard-layout">
       <div class="left-column">
-        <RecentTransactionsSection :transactions="cardHistoryRecords" />
+        <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
       </div>
       <div class="right-column">
-        <ChartSection @filter="handleFilter" />
+        <!-- <ChartSection @filter="handleFilter" /> -->
         <ExchangeRateSection />
-        <RecentActivitiesSection />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
-import { useMockCardData } from '@/models/card-example';
-import geroStore from '@/stores/geroStore';
-import WelcomeCard from '../components/dashboard/WelcomeCard.vue';
 import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
 import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
-import ChartSection from '../components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
-import RecentActivitiesSection from '../components/dashboard/RecentActivitiesSection.vue';
 import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
-
-const { initializeMockData } = useMockCardData();
-
+import { useIntervalFn } from '@vueuse/core';
 // ADA to EUR conversion rate (hardcoded)
 const ADA_TO_EUR_RATE = 0.65;
-
-// Computed properties for formatted data
-const userName = computed(() => {
-  if (cardStore.state.userInfo?.email) {
-    return cardStore.state.userInfo.email.split('@')[0]; // Extract name from email
-  }
-  return 'User';
+const loading = ref(false);
+onMounted(async () => {
+  loading.value = true;
+  await cardStore.fetchCardHistory();
+  await cardStore.fetchCardBalance();
+  loading.value = false;
+  useIntervalFn(() => {
+    initData();
+  }, 60000);
 });
+
+const initData = () => {
+  cardStore.fetchCardHistory();
+  cardStore.fetchCardBalance();
+  cardStore.getExchangeRate();
+};
 
 const cardBalanceFormatted = computed(() => {
   if (cardStore.state.cardBalance?.currentBalance) {
     const amount = cardStore.state.cardBalance.currentBalance.amount;
-    const currency = cardStore.state.cardBalance.currentBalance.currencyCode;
     return `${amount.toFixed(2)}`;
   }
-  return '€0.00';
+  return '0.00';
 });
 
 const cardBalanceAda = computed(() => {
@@ -78,14 +77,14 @@ const geroEarnedFormatted = computed(() => {
 
 const totalDepositFormatted = computed(() => {
   // Start with the original hardcoded value and add new deposits
-  const baseAmount = 1692.31;
+  const baseAmount = 0;
   const additionalDeposits = cardStore.state.totalDeposits || 0;
   return (baseAmount + additionalDeposits).toFixed(2);
 });
 
 const totalDepositAda = computed(() => {
   // Calculate ADA equivalent of total deposits
-  const baseAmount = 1692.31;
+  const baseAmount = 0;
   const additionalDeposits = cardStore.state.totalDeposits || 0;
   const totalEur = baseAmount + additionalDeposits;
   const adaAmount = totalEur / ADA_TO_EUR_RATE;
@@ -93,38 +92,16 @@ const totalDepositAda = computed(() => {
 });
 
 const cardHistoryRecords = computed(() => {
-  const records = cardStore.state.cardHistory?.history.records || [];
-  console.log('🏠 HomeSection cardHistoryRecords computed:', records.length, 'records');
+  const records = cardStore.state.cardHistory?.records || [];
   if (records.length > 0) {
     console.log('🏠 First record:', records[0]);
   }
   return records;
 });
 
-// Initialize data
-onMounted(async () => {
-  console.log('HomeSection mounted, DEV mode:', import.meta.env.DEV);
-  console.log('🏠 Initial cardStore.state.activities:', cardStore.state.activities);
-  
-  if (import.meta.env.DEV) {
-    // Use mock data in development
-    console.log('Initializing mock data...');
-    await initializeMockData();
-    console.log('Mock data initialized');
-  } else {
-    // Use real API in production
-    console.log('Initializing real API...');
-    await cardStore.initialize(geroStore.state.wallets);
-    console.log('Real API initialized');
-  }
-  
-  console.log('🏠 After init cardStore.state.activities:', cardStore.state.activities);
-});
-
-const handleFilter = () => {
-  console.log('Filter clicked');
-  // Handle filter action
-};
+// const handleFilter = () => {
+//   console.log('Filter clicked');
+// };
 </script>
 
 <style lang="scss" scoped>

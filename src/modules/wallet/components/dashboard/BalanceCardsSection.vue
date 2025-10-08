@@ -1,8 +1,8 @@
 <template>
   <div class="balance-cards">
     <BalanceCard title="Card Balance" :primary-value="`€${cardBalance}`" :secondary-value="cardBalanceAda" />
-    <BalanceCard title="Total Deposit" :primary-value="`€${totalDeposit}`" :secondary-value="totalDepositAda" />
-    <BalanceCard title="€GERO Tier" primary-value="GOLD" secondary-value="0% Fees on all services" :is-gero="true" />
+    <!-- <BalanceCard title="Total Deposit" :primary-value="`€${totalDeposit}`" :secondary-value="totalDepositAda" />
+    <BalanceCard title="€GERO Tier" primary-value="GOLD" secondary-value="0% Fees on all services" :is-gero="true" /> -->
   </div>
 </template>
 
