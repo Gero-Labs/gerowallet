@@ -85,8 +85,12 @@ import snackbar from '@/plugins/snackbar';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
+import ledger from '@/shared/utils/ledger';
+import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import networks from '@/utils/networks';
+import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
 const showPassword = ref(false);
@@ -130,42 +134,40 @@ const confirm = async () => {
   window.close();
 };
 
+const signAndReturnTx = async () => {
+  loading.value = true;
+  try {
+    const address = request.value.data.address;
+    console.log('address', address);
+    const payload = request.value.data.payload;
+    console.log('payload', payload);
+
+    const res = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_DATA,
+      data: {
+        address: address,
+        payload: payload,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        isUsb: !isBT.value
+      }
+    }) as { data: { key: string; signature: string } };
+    signature.value = res.data;
+    if (txAutoSubmit.value) {
+      await confirm();
+    }
+  } catch (e: any) {
+    snackbar.setError(e);
+    console.log(e);
+  }
+  loading.value = false;
+};
+
 const sign = async () => {
   if (!txAutoSubmit.value && signature.value) {
     await confirm();
     return;
   }
-
-  const signAndReturnTx = async () => {
-    loading.value = true;
-    try {
-      const address = request.value.data.address;
-      console.log('address', address);
-      const payload = request.value.data.payload;
-      console.log('payload', payload);
-
-      const res = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_DATA,
-        data: {
-          address: address,
-          payload: payload,
-          password: spendingPassword.value,
-          accountIndex: 0,
-          isUsb: !isBT.value
-        }
-      }) as { data: { key: string; signature: string } };
-      console.log('signData', res)
-      signature.value = res.data;
-      if (txAutoSubmit.value) {
-        await confirm();
-      }
-    } catch (e: any) {
-      snackbar.setError(e);
-      console.log(e);
-    }
-    loading.value = false;
-  };
-
   if (loggedWallet.value.type === WalletType.Normal) {
     if (form.value.validate()) {
       const passwordVerification = await Messaging.sendToBackgroundFromOptions({
@@ -178,6 +180,48 @@ const sign = async () => {
       } else {
         await signAndReturnTx();
       }
+    }
+  } else if (loggedWallet.value.type === WalletType.Ledger) {
+    loading.value = true;
+    const address = request.value.data.address;
+    console.log('address', address);
+    const payload = request.value.data.payload;
+    console.log('payload', payload);
+    try {
+      // Create known addresses from wallet keys for Ledger signing
+      const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+      const knownAddresses = ledger.createKnownAddressesFromKeys(keys.value, network);
+
+      const response: SignedMessageData = await ledger.signData(
+        address,
+        payload,
+        network,
+        0,
+        !isBT.value,
+        knownAddresses
+      );
+      console.log('response', response);
+      signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex};
+      if (txAutoSubmit.value) {
+        await confirm();
+      }
+    } catch (e: any) {
+      if (e instanceof DeviceStatusError) {
+        const error: DeviceStatusError = e;
+        switch (error.code) {
+          case 0x5515:
+          case 0x6E11:
+            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            break;
+          default:
+            snackbar.setError('Ledger device error: ' + error.message);
+        }
+      } else {
+        console.log(e);
+        snackbar.setError(e);
+      }
+    } finally {
+      loading.value = false;
     }
   } else {
     await signAndReturnTx();
@@ -203,6 +247,7 @@ onMounted(async () => {
     const params = new URLSearchParams(window.location.href);
     tabId.value = Number(params.get("tabId"));
     controller.value = Messaging.createInternalSidePanelController(tabId.value);
+    console.log(controller.value);
   } else {
     controller.value = Messaging.createInternalController();
   }

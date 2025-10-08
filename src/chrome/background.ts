@@ -139,7 +139,7 @@ function clearProcessedDomains() {
 // const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
 // Use Chrome alarms API for reliable cleanup in service workers
-chrome.alarms.create('clearProcessedDomains', { 
+chrome.alarms.create('clearProcessedDomains', {
   delayInMinutes: 24 * 60, // 24 hours
   periodInMinutes: 24 * 60 // repeat every 24 hours
 });
@@ -372,12 +372,31 @@ interface WhitelistedEntry {
   id: number;
 }
 
+// In-memory cache for bringDomains with 4-hour TTL
+let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: null, timestamp: 0 };
+const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+
 async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps
-  console.log(whitelisted)
-  const bringDomains = await getStorage('bring_relevantDomains')
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps;
   if (whitelisted.find(el => origin.includes(el.domain))) return true;
-  return !!(bringDomains && bringDomains.find(el => origin.includes(el)));
+
+  // Only check bringDomains for Cardano Mainnet
+  const loggedWallet = WalletStore.state.loggedWallet;
+  if (!networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)) {
+    return false;
+  }
+
+  // Check if cached data is still valid
+  const now = Date.now();
+  let bringDomains = bringDomainsCache.data;
+
+  if (!bringDomains || (now - bringDomainsCache.timestamp) > BRING_DOMAINS_CACHE_TTL) {
+    // Cache expired or doesn't exist, fetch new data
+    bringDomains = await (globalThis as any).bringCache?.getReadable('relevantDomains');
+    bringDomainsCache = { data: bringDomains, timestamp: now };
+  }
+
+  return !!(bringDomains && bringDomains.find((el: string) => origin.includes(el)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -932,14 +951,6 @@ app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
   }
 });
 
-const getStorage = (key) =>
-  new Promise<any>((res, rej) =>
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) rej(undefined);
-      res(key ? result[key] : result);
-    }),
-  );
-
 // Check if a specific tab is open
 const checkTabOpen = (tabId) => {
   return new Promise((resolve) => {
@@ -1067,7 +1078,6 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
-        request.data.isUsb
       );
       sendResponse({
         id: request.id,
@@ -1202,6 +1212,37 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
+  try {
+    console.log('restore', request)
+    const currentWallet = await walletManager.restore(request.data.wallet);
+    if (currentWallet) {
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
   }
 });
 

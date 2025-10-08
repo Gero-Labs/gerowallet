@@ -78,7 +78,7 @@
             </v-btn>
           </div>
           <v-card style="border-radius: 8px;" flat class="transparent no-custom-styling" v-else>
-            <v-card-text class="pa-2">
+            <v-card-text class="px-2 py-1">
               <div class="text-left" style="font-size: 11px; display: flex; flex-flow: row; flex-wrap: wrap; place-content: space-between;">
                 <div>
                   <span class="pr-1" style="font-weight: 600;">Limit Price</span>
@@ -181,7 +181,7 @@ import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.v
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import filters from '@/shared/utils/filters';
-import networks, { cardanoLogo } from '@/utils/networks';
+import networks from '@/utils/networks';
 import debounce from 'lodash/debounce';
 import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
@@ -191,6 +191,7 @@ import { walletStore } from '@/stores/walletStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardanoSvg from '@/assets/svg/cardano.svg';
 
 const emit = defineEmits(['onSwap'])
 
@@ -208,7 +209,7 @@ const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoLogo,
+  img: cardanoSvg,
   fallback_img: "https://storage.googleapis.com/dexhunter-images/public/unverified.svg",
   balance: 0,
   quantity: '0',
@@ -311,7 +312,7 @@ const nativeTokenComputed = computed(() => {
     return {
       name: 'Cardano',
       ticker: 'ADA',
-      img: cardanoLogo,
+      img: cardanoSvg,
       balance: 0,
       quantity: '0',
       decimals: 6,
@@ -710,7 +711,7 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully! Tx Id: ${txId}`)
+  snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`)
   emit('onSwap')
   console.log(txId)
 }

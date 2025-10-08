@@ -12,6 +12,7 @@ import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
 import walletStore from '@/stores/geroStore';
+import Notifications from '@voerro/vue-notifications'
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -36,6 +37,7 @@ loadPersistedWallet().then(() => {
 
   Vue.use(VueRouter);
   Vue.directive('click-outside', ClickOutside);
+  Vue.component('notifications', Notifications);
 
   new Vue({
     vuetify,

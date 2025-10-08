@@ -219,15 +219,18 @@ const uploadPicture = () => {
   fileInput.value?.click();
 };
 
-const onFileChange = (event: Event) => {
+const onFileChange = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     const picBase64 = e.target?.result as string;
-    geroStoreDefault.setWalletIcon(loggedWallet.value.id, picBase64);
+    await geroStoreDefault.setWalletIcon(loggedWallet.value.id, picBase64);
+
+    // Update loggedWallet icon immediately for live preview
+    loggedWallet.value.icon = picBase64;
   };
   reader.readAsDataURL(file);
 };

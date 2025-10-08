@@ -3,6 +3,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { debugLog } from '@/utils/debug';
 
 export interface NetworkStore {
   assets: any;
@@ -31,11 +32,13 @@ const STORE_NAME = 'networkStore';
 const context = getContextType();
 
 // Initialize messaging based on context
+// IMPORTANT: Only browser context subscribes to background updates
+// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
-  console.debug(`🔌 Initializing network store messaging in browser context`);
+  debugLog(`🔌 Initializing network store messaging in browser context`);
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
-    console.debug('📥 Received network store update:', updates);
+    debugLog('📥 Received network store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -49,9 +52,28 @@ if (context === 'browser') {
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
       Object.assign(networkStore, result[STORE_NAME]);
-      console.debug('💾 Hydrated network store from storage');
+      debugLog('💾 Hydrated network store from storage');
     }
   });
+}
+
+// Debounced storage write to reduce I/O operations
+let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Serializer function for complex data types
+function serializeValue(key: string, value: any): any {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  } else if (value instanceof Map) {
+    return Array.from(value.entries()).reduce((obj, [key, value]) => {
+      obj[key] = value;
+      return obj;
+    }, {});
+  } else if (value instanceof Set) {
+    return Array.from(value);
+  } else {
+    return value;
+  }
 }
 
 /**
@@ -60,56 +82,35 @@ if (context === 'browser') {
 function broadcastFromBackground(updates: Partial<NetworkStore>) {
   if (context === 'background') {
     // Serialize data for broadcasting (handle BigInt, Maps, etc.)
-    const serializedUpdates = JSON.parse(JSON.stringify(updates, (key, value) => {
-      if (typeof value === 'bigint') {
-        return value.toString();
-      } else if (value instanceof Map) {
-        return Array.from(value.entries()).reduce((obj, [key, value]) => {
-          obj[key] = value;
-          return obj;
-        }, {});
-      } else if (value instanceof Set) {
-        return Array.from(value);
-      } else {
-        return value;
-      }
-    }));
+    const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
 
-    // Broadcast to all connected browser contexts
+    // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Also persist to storage as fallback - use current local state as base instead of storage
-    try {
-      // Use current local store state as the base to avoid race conditions
-      const current = networkStore;
-      const finalState = { ...current, ...serializedUpdates };
-
-      chrome.storage.local.set({
-        [STORE_NAME]: JSON.parse(JSON.stringify(finalState, (key, value) => {
-          if (typeof value === 'bigint') {
-            return value.toString();
-          } else if (value instanceof Map) {
-            return Array.from(value.entries()).reduce((obj, [key, value]) => {
-              obj[key] = value;
-              return obj;
-            }, {});
-          } else if (value instanceof Set) {
-            return Array.from(value);
-          } else {
-            return value;
-          }
-        }))
-      });
-    } catch (error) {
-      console.error('Failed to persist network store to storage:', Object.keys(updates), error);
+    // Debounced storage write to reduce I/O operations during rapid updates
+    if (storageWriteTimeout) {
+      clearTimeout(storageWriteTimeout);
     }
+
+    storageWriteTimeout = setTimeout(() => {
+      try {
+        // Use current local store state as the base to avoid race conditions
+        const finalState = { ...networkStore };
+
+        chrome.storage.local.set({
+          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
+        });
+      } catch (error) {
+        console.error('Failed to persist network store to storage:', Object.keys(updates), error);
+      }
+    }, 300); // 300ms debounce
   }
 }
 
 export default {
   setAssets(assets: any) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setAssets called from ${context} context`);
+    debugLog(`🔍 NetworkStore setAssets called from ${context} context`);
     networkStore.assets = assets;
 
     // Broadcast from background context
@@ -118,7 +119,7 @@ export default {
 
   setEpochParams(epochParams: Cardano.ProtocolParameters) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setEpochParams called from ${context} context`);
+    debugLog(`🔍 NetworkStore setEpochParams called from ${context} context`);
     networkStore.epochParams = epochParams;
 
     // Broadcast from a background context
@@ -127,7 +128,19 @@ export default {
 
   setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setTip called from ${context} context`);
+    debugLog(`🔍 NetworkStore setTip called from ${context} context`);
+
+    // RACE CONDITION FIX: Only update tip if it's newer than the current one
+    // Prevents old Ably messages from overwriting fresh data
+    if (networkStore.tip) {
+      // Compare by block height (blockNo) - higher is newer
+      if (tip.blockNo <= networkStore.tip.blockNo) {
+        debugLog(`⚠️ Ignoring older/duplicate tip - current: ${networkStore.tip.blockNo}, new: ${tip.blockNo}`);
+        return;
+      }
+    }
+
+    debugLog(`✅ Setting new tip - blockNo: ${tip.blockNo}, epoch: ${tip.epoch}`);
     networkStore.tip = tip;
 
     // Broadcast from background context
@@ -136,7 +149,7 @@ export default {
 
   setPrice(price: {}) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setPrice called from ${context} context`);
+    debugLog(`🔍 NetworkStore setPrice called from ${context} context`);
     networkStore.price = price;
 
     // Broadcast from background context
@@ -145,7 +158,7 @@ export default {
 
   setTickerStatisticsIntervalId(tickerStatisticsIntervalId: any) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
+    debugLog(`🔍 NetworkStore setTickerStatisticsIntervalId called from ${context} context`);
     networkStore.tickerStatisticsIntervalId = tickerStatisticsIntervalId;
 
     // Broadcast from background context
@@ -154,7 +167,7 @@ export default {
 
   setGenesis(genesis: any) {
     const context = getContextType();
-    console.debug(`🔍 NetworkStore setGenesis called from ${context} context`);
+    debugLog(`🔍 NetworkStore setGenesis called from ${context} context`);
     networkStore.genesis = genesis;
 
     // Broadcast from background context

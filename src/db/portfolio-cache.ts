@@ -23,11 +23,17 @@ const DEFAULT_CACHE_TIME = 4 * 60 * 60 * 1000; // 4 hours
  * Get wallet database for current logged wallet
  */
 async function getWalletDb(): Promise<any> {
-  const walletId = walletStore.loggedWallet?.id;
-  if (!walletId) {
-    throw new Error('No wallet logged in');
+  try {
+    const walletId = walletStore.loggedWallet?.id;
+    if (!walletId) {
+      console.debug('No wallet logged in for portfolio cache');
+      return null;
+    }
+    return await getDb(walletId);
+  } catch (error) {
+    console.warn('Error getting wallet database for portfolio cache:', error);
+    return null;
   }
-  return getDb(walletId);
 }
 
 export class PortfolioCacheService {
@@ -154,6 +160,12 @@ export class PortfolioCacheService {
 
     try {
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        console.warn('Database not available for cache save');
+        return;
+      }
       const now = Date.now();
       const expiresAt = now + this.cacheTimeMs;
 
@@ -186,6 +198,12 @@ export class PortfolioCacheService {
   async removeCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<void> {
     try {
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        console.warn('Database not available for cache removal');
+        return;
+      }
 
       // Try composite index first, fallback to individual queries if schema mismatch
       try {
@@ -348,7 +366,7 @@ export class PortfolioCacheService {
       console.warn('Error checking existing data for timeframe calculation:', error);
     }
 
-    // Load from API with determined timeframe
+    // Load from API with a determined timeframe
     try {
       const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, timeframe);
 
@@ -614,14 +632,14 @@ export class PortfolioCacheService {
             timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
           }
         } else {
-          // No existing data, use full year for initial load
+          // No existing data, use full year for an initial load
           timeframe = '1y';
         }
       } catch (error) {
         console.warn('Error checking existing data for timeframe calculation in force load:', error);
       }
 
-      // Get existing data before removing cache entry
+      // Get existing data before removing the cache entry
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
@@ -664,7 +682,7 @@ export class PortfolioCacheService {
   }
 
   /**
-   * Load missing data only (doesn't touch existing cache)
+   * Load missing data only (doesn't touch the existing cache)
    */
   async loadMissingData(address: string): Promise<{
     adaData: any[];
@@ -702,8 +720,8 @@ export class PortfolioCacheService {
   }
 }
 
-// Export singleton instance with default settings (1 minute cache for testing)
-export const portfolioCacheService = new PortfolioCacheService();
+// Export a singleton instance with default settings (1-minute cache for testing)
+export const portfolioCacheService: PortfolioCacheService = new PortfolioCacheService();
 
 // Export utility functions for common use cases
 export const createPortfolioCacheService = (cacheTimeHours: number = 4, enableCache: boolean = true) => {

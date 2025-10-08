@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import { PortfolioCacheService } from '@/db/portfolio-cache';
 
 interface UsePortfolioDataOptions {
@@ -8,11 +8,11 @@ interface UsePortfolioDataOptions {
 
 export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const {
-    cacheTimeMs = 4 * 60 * 60 * 1000, // 4 hours default
+    cacheTimeMs = 4 * 60 * 60 * 1000, // 4-hour default
     enableCache = true,
   } = options;
 
-  // Create cache service instance with options
+  // Create a cache service instance with options
   const cacheService = new PortfolioCacheService({
     cacheTimeMs,
     enableCache,
@@ -43,6 +43,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
   // Load portfolio data for specific currency
   const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> => {
+    console.log('loadPortfolioData called with address:', address, 'currency:', currency);
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];
@@ -53,8 +54,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     loadingRef.value = true;
 
     try {
-      const data = await cacheService.loadPortfolioData(address, currency);
-      return data;
+      return cacheService.loadPortfolioData(address, currency);
     } catch (error) {
       console.error(`Error loading ${currency} portfolio data:`, error);
       return [];
@@ -173,8 +173,6 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
       return;
     }
 
-
-
     // Reset loading order and set all loading states to true
     loadingOrder.value = [];
     loadingAda.value = true;
@@ -189,12 +187,10 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
 
         const data = await loadPortfolioData(address, currency);
 
-        // Track loading order and update the corresponding ref immediately
+        // Track the loading order and update the corresponding ref immediately
         if (!loadingOrder.value.includes(currency)) {
           loadingOrder.value.push(currency);
         }
-
-        const isFirst = loadingOrder.value.length === 1;
 
         if (currency === 'ADA') {
           adaData.value = data;

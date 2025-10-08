@@ -113,17 +113,17 @@ const collectibles = computed(() => {
   return res;
 });
 
-const sortOptionsDropdown = computed(() => [
-  { text: 'Name (A-Z)', value: 'name' },
-  { text: 'Name (Z-A)', value: 'name_desc' },
-  { text: 'Quantity (High-Low)', value: 'quantity_desc' },
-  { text: 'Quantity (Low-High)', value: 'quantity' },
-]);
+// const sortOptionsDropdown = computed(() => [
+//   { text: 'Name (A-Z)', value: 'name' },
+//   { text: 'Name (Z-A)', value: 'name_desc' },
+//   { text: 'Quantity (High-Low)', value: 'quantity_desc' },
+//   { text: 'Quantity (Low-High)', value: 'quantity' },
+// ]);
 
 const cardSize = computed(() => {
   // Dynamically size cards based on available height
   const baseSize = props.containerHeight <= 200 ? 80 : 110;
-  
+
   if (screenWidth.value <= 480) {
     return baseSize - 10;
   } else if (screenWidth.value <= 768) {
@@ -141,7 +141,7 @@ const gridSizeClass = computed(() => {
 
 const dynamicItemsPerPage = computed(() => itemsPerPage);
 
-// Use the shared container height from parent
+// Use the shared container height from the parent
 const containerHeight = computed(() => props.containerHeight);
 
 const sortedCollectibles = computed(() => {

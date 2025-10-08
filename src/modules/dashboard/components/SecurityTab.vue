@@ -19,14 +19,14 @@
             Ed25519-Bip32 Extended Public Key
           </v-list-item-subtitle>
           <v-list-item-subtitle class="text-left">
-            <CopyButton :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
+            <CopyButton v-if="loggedWallet" :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-avatar size="160" rounded>
           <div ref="qrCodeRef" style="width: 160px; height: 160px;"></div>
         </v-list-item-avatar>
       </v-list-item>
-      <v-list-item class="px-2 py-1" v-if="hasBackup" @click="backupWalletDialog = true">
+      <v-list-item class="px-2 py-1" v-if="canBackup" @click="backupWalletDialog = true">
         <v-list-item-avatar class="my-0">
           <v-badge
             v-if="!backup"
@@ -99,18 +99,18 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-      <v-divider />
-      <v-list-item>
-        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
-          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />
-        </v-list-item-avatar>
-        <v-list-item-content>
-          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
-        </v-list-item-content>
-      </v-list-item>
-      <v-list-item class="px-2 py-1">
+<!--      <v-divider />-->
+<!--      <v-list-item>-->
+<!--        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>-->
+<!--          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />-->
+<!--        </v-list-item-avatar>-->
+<!--        <v-list-item-content>-->
+<!--          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>-->
+<!--        </v-list-item-content>-->
+<!--      </v-list-item>-->
+<!--      <v-list-item class="px-2 py-1">-->
 
-      </v-list-item>
+<!--      </v-list-item>-->
     </v-list>
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
@@ -120,13 +120,13 @@
 import { ref, computed, onMounted, nextTick, toRefs } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
-import { WalletType } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
 import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
-import { walletStore } from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
@@ -134,18 +134,24 @@ const changePasswordDialog = ref<boolean>(false);
 const { loggedWallet, config } = toRefs(walletStore);
 
 const backup = computed(() => config.value?.backup || false);
-const hasBackup = computed(() => {
-  return loggedWallet.value?.type === WalletType.Normal;
+
+const canBackup = computed(() => {
+  return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
 });
 
 const qrCodeRef = ref<HTMLElement|null>(null)
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+})
 
 const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
   data: loggedWallet.value?.publicKey.toString(),
-  image: assets.geroLogo,
+  image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
   margin: 2,
   qrOptions: {
     typeNumber: 0,

@@ -1,4 +1,5 @@
 import * as pako from 'pako';
+import { debugLog } from '@/utils/debug';
 
 interface MessageChunk {
   message_id: string;      // Unique ID for the complete message
@@ -24,15 +25,6 @@ export class MessageReconstructionService {
    * @returns The reconstructed message if all chunks received, null otherwise
    */
   processChunk(chunk: MessageChunk): any | null {
-    console.debug('📦 Processing message chunk:', {
-      messageId: chunk.message_id,
-      chunkIndex: chunk.chunk_index,
-      totalChunks: chunk.total_chunks,
-      compressed: chunk.compressed,
-      messageType: chunk.message_type,
-      dataSize: chunk.data.length
-    });
-
     // Clear existing timeout
     if (this.timeouts.has(chunk.message_id)) {
       clearTimeout(this.timeouts.get(chunk.message_id)!);
@@ -52,15 +44,8 @@ export class MessageReconstructionService {
     const chunks = this.messageChunks.get(chunk.message_id)!;
     chunks.set(chunk.chunk_index, chunk);
 
-    console.debug('📦 Chunk stored, progress:', {
-      messageId: chunk.message_id,
-      receivedChunks: chunks.size,
-      totalChunks: chunk.total_chunks
-    });
-
     // Check if all chunks received
     if (chunks.size === chunk.total_chunks) {
-      console.debug('✅ All chunks received, reconstructing message:', chunk.message_id);
       return this.reconstructMessage(chunk.message_id);
     }
 
@@ -77,23 +62,13 @@ export class MessageReconstructionService {
     const sortedChunks = Array.from(chunks.values())
       .sort((a, b) => a.chunk_index - b.chunk_index);
 
-    console.debug('🔧 Reconstructing message:', {
-      messageId,
-      totalChunks: sortedChunks.length,
-      compressed: sortedChunks[0].compressed,
-      messageType: sortedChunks[0].message_type
-    });
-
     // Combine data from all chunks
     let combinedData = sortedChunks.map(chunk => chunk.data).join('');
-
-    console.debug('🔧 Combined data size:', combinedData.length);
 
     // Decompress if needed
     if (sortedChunks[0].compressed) {
       try {
         combinedData = this.decompressData(combinedData);
-        console.debug('🗜️ Decompressed data size:', combinedData.length);
       } catch (error: any) {
         console.error('❌ Decompression failed:', error);
         this.cleanupMessage(messageId);
@@ -105,13 +80,7 @@ export class MessageReconstructionService {
     this.cleanupMessage(messageId);
 
     try {
-      const parsed = JSON.parse(combinedData);
-      console.debug('✅ Message reconstructed successfully:', {
-        messageId,
-        messageType: sortedChunks[0].message_type,
-        finalSize: combinedData.length
-      });
-      return parsed;
+      return JSON.parse(combinedData);
     } catch (error: any) {
       console.error('❌ Failed to parse reconstructed message:', error);
       throw new Error(`Failed to parse reconstructed message ${messageId}: ${error.message}`);
@@ -168,7 +137,7 @@ export class MessageReconstructionService {
    * Clear all pending messages (useful for cleanup)
    */
   clearAll(): void {
-    console.debug('🧹 Clearing all pending message chunks');
+    debugLog('🧹 Clearing all pending message chunks');
 
     // Clear all timeouts
     this.timeouts.forEach(timeout => clearTimeout(timeout));
