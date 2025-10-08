@@ -110,7 +110,6 @@
             :items="apexCarouselItems"
             :paused="apexCarouselPaused"
             :is-loading="isLoading"
-            :show-progress-bar="false"
             carousel-class="feature-carousel dashboard-card feature-card-full-height apex-carousel"
             wrapper-class="apex-carousel-wrapper"
             @item-click="handleCarouselClick"
@@ -118,7 +117,15 @@
             @mouse-leave="resumeApexCarousel"
           />
         </v-col>
-        <v-col cols="12" xl="3" lg="3" md="12" sm="12" class="pa-2" v-else-if="loggedWallet?.network === Network.PREPROD">
+        <v-col
+          cols="12"
+          xl="3"
+          lg="3"
+          md="12"
+          sm="12"
+          class="pa-2"
+          v-else-if="loggedWallet?.network === Network.PREPROD"
+        >
           <AssetsPieChart />
         </v-col>
       </v-row>
@@ -156,21 +163,21 @@
       </v-row>
 
       <!-- KaiserEx Token Reception -->
-<!--      <v-row no-gutters>-->
-<!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
-<!--          <v-card outlined class="liquid-glass">-->
-<!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
-<!--            <v-card-text>-->
-<!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
-<!--                Receive Token from KaiserEx-->
-<!--              </v-btn>-->
-<!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
-<!--                {{ kaiserExMessage.text }}-->
-<!--              </v-alert>-->
-<!--            </v-card-text>-->
-<!--          </v-card>-->
-<!--        </v-col>-->
-<!--      </v-row>-->
+      <!--      <v-row no-gutters>-->
+      <!--        <v-col cols="12" xl="12" lg="12" md="12" sm="12" class="pa-2">-->
+      <!--          <v-card outlined class="liquid-glass">-->
+      <!--            <v-card-title>KaiserEx Token Reception</v-card-title>-->
+      <!--            <v-card-text>-->
+      <!--              <v-btn color="primary" @click="handleReceiveKaiserExToken" :loading="kaiserExLoading">-->
+      <!--                Receive Token from KaiserEx-->
+      <!--              </v-btn>-->
+      <!--              <v-alert v-if="kaiserExMessage" :type="kaiserExMessage.type" class="mt-3">-->
+      <!--                {{ kaiserExMessage.text }}-->
+      <!--              </v-alert>-->
+      <!--            </v-card-text>-->
+      <!--          </v-card>-->
+      <!--        </v-col>-->
+      <!--      </v-row>-->
     </template>
   </v-layout>
 </template>
@@ -265,24 +272,24 @@ const apexCarouselItems = ref<CarouselItem[]>([
     backgroundImage: assets.apexBgDashboard,
     action: 'showApexWelcome',
   },
-  {
-    id: 'apex-wallet',
-    title: 'Apex Wallet',
-    subtitle: 'Secure decentralized storage',
-    logo: assets.walletGeroApex,
-    logoAlt: 'Apex Wallet Logo',
-    backgroundImage: assets.apexImage,
-    action: 'showApexWallet',
-  },
-  {
-    id: 'apex-features',
-    title: 'Apex Features',
-    subtitle: 'Explore advanced capabilities',
-    logo: assets.apexSvg,
-    logoAlt: 'Apex Features Logo',
-    backgroundImage: assets.apexBgDashboard,
-    action: 'showApexFeatures',
-  },
+  // {
+  //   id: 'apex-wallet',
+  //   title: 'Apex Wallet',
+  //   subtitle: 'Secure decentralized storage',
+  //   logo: assets.walletGeroApex,
+  //   logoAlt: 'Apex Wallet Logo',
+  //   backgroundImage: assets.apexImage,
+  //   action: 'showApexWallet',
+  // },
+  // {
+  //   id: 'apex-features',
+  //   title: 'Apex Features',
+  //   subtitle: 'Explore advanced capabilities',
+  //   logo: assets.apexSvg,
+  //   logoAlt: 'Apex Features Logo',
+  //   backgroundImage: assets.apexBgDashboard,
+  //   action: 'showApexFeatures',
+  // },
 ]);
 
 const isStakingEnabled = computed(() => {
@@ -335,7 +342,7 @@ const computedValues = computed(() => {
     }
     // Add other asset values if they have USD/ADA pricing data
   }
-  let totalValue
+  let totalValue;
   if (portfolio.value?.adaValue) {
     totalValue = portfolio.value.adaValue;
   } else {
@@ -362,6 +369,9 @@ const {
   firstLoadedCurrency,
 } = portfolioComposable;
 
+// Cache current timestamp to avoid computed recalculation
+const currentTimestamp = ref(Date.now());
+
 const computeChartData = computed(() => {
   // For Cardano mainnet, return ADA and USD data
   if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
@@ -375,17 +385,80 @@ const computeChartData = computed(() => {
   let graphData = undefined;
   let usdData = undefined;
   let eurData = undefined;
-  let currentBalance = 0;
-  if (transactions.value) {
+
+  if (transactions.value && transactions.value.length > 0) {
     graphData = [];
     usdData = [];
     eurData = [];
-    transactions.value.forEach(tx => {
+
+    // Sort transactions by timestamp in ascending order (oldest first)
+    const sortedTransactions = [...transactions.value].sort((a, b) => a.tx_timestamp - b.tx_timestamp);
+
+    // Use cached current time instead of Date.now() to avoid constant reactivity
+    const now = currentTimestamp.value;
+    const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
+
+    // Get first transaction timestamp
+    const firstTxTimestamp = sortedTransactions[0].tx_timestamp * 1000;
+
+    // Always start from one year ago with zero balance
+    graphData.push([oneYearAgo, 0]);
+    usdData.push([oneYearAgo, 0]);
+    eurData.push([oneYearAgo, 0]);
+
+    // If first transaction is after one year ago, fill the gap with points every week
+    // This ensures the line is visible on all time scales (12M, 3M, 30D, 7D, 1D)
+    if (firstTxTimestamp > oneYearAgo) {
+      const weekInMs = 7 * 24 * 60 * 60 * 1000; // 1 week
+      let currentTime = oneYearAgo + weekInMs;
+
+      // Add a point every week from year ago until first transaction
+      while (currentTime < firstTxTimestamp) {
+        graphData.push([currentTime, 0]);
+        usdData.push([currentTime, 0]);
+        eurData.push([currentTime, 0]);
+        currentTime += weekInMs;
+      }
+
+      // Add a point just before the first transaction (1 second before) for smooth transition
+      graphData.push([firstTxTimestamp - 1000, 0]);
+      usdData.push([firstTxTimestamp - 1000, 0]);
+      eurData.push([firstTxTimestamp - 1000, 0]);
+    }
+
+    // Process all transactions
+    let currentBalance = 0;
+    sortedTransactions.forEach(tx => {
       currentBalance += tx.ada;
-      graphData.push([tx.tx_timestamp * 1000, currentBalance / 1000000]);
-      usdData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
-      eurData.push([tx.tx_timestamp * 1000, (currentBalance / 1000000) * (price.value?.lastPrice || 0)]);
+      const balanceInAda = currentBalance / 1000000;
+      const timestamp = tx.tx_timestamp * 1000;
+
+      graphData.push([timestamp, balanceInAda]);
+      usdData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
+      eurData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
     });
+
+    // Fill gap from last transaction to now with weekly points
+    const lastTxTimestamp = sortedTransactions[sortedTransactions.length - 1].tx_timestamp * 1000;
+    const lastBalance = currentBalance / 1000000;
+
+    if (now - lastTxTimestamp > 7 * 24 * 60 * 60 * 1000) {
+      const weekInMs = 7 * 24 * 60 * 60 * 1000;
+      let currentTime = lastTxTimestamp + weekInMs;
+
+      // Add a point every week from last transaction until now
+      while (currentTime < now) {
+        graphData.push([currentTime, lastBalance]);
+        usdData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
+        eurData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
+        currentTime += weekInMs;
+      }
+    }
+
+    // Add current point with last known balance
+    graphData.push([now, lastBalance]);
+    usdData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
+    eurData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
   }
   return {
     adaData: graphData || [],
@@ -505,12 +578,15 @@ const handleBackupWallet = () => {
   // Emit event to parent component (ContentLayout) to open backup dialog
   instance?.proxy?.$emit('open-backup-dialog');
 };
-// Portfolio data loading is now handled by usePortfolioData composable
 
+// Portfolio data loading is now handled by usePortfolioData composable
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 // Utility function to refresh portfolio data
 const refreshPortfolioChart = async () => {
   const address = loggedWallet.value?.baseAddress;
-  if (address) {
+  if (address && !isApex.value) {
     await refreshPortfolioData(address);
   }
 };
@@ -518,7 +594,7 @@ const refreshPortfolioChart = async () => {
 // Utility function to get cache information (for debugging)
 const getPortfolioCacheInfo = async () => {
   const address = loggedWallet.value?.baseAddress;
-  if (!address) {
+  if (!address || isApex.value) {
     return null;
   }
 
@@ -533,23 +609,39 @@ defineExpose({
   refreshPortfolioChart,
   getPortfolioCacheInfo,
 });
+// Update timestamp when transactions change
+watch(
+  () => transactions.value?.length,
+  () => {
+    // Update timestamp only when transactions actually change
+    currentTimestamp.value = Date.now();
+  }
+);
+
 // Watch for wallet changes to reload portfolio data with parallel loading
 watch(
   () => loggedWallet.value?.baseAddress,
   async (newAddress, oldAddress) => {
     if (newAddress && newAddress !== oldAddress) {
-      try {
-        if (account && Number(account.value?.controlled_amount) > 0 &&
-          loggedWallet.value?.chain === Blockchain.CARDANO &&
-          loggedWallet.value?.network === Network.MAINNET
-        ) {
-          // Start parallel loading immediately (don't await - let it run in the background)
-          loadDataProgressively(newAddress).catch(error => {
-            console.warn('Portfolio data loading failed:', error);
-          });
+      // Update timestamp on wallet change
+      currentTimestamp.value = Date.now();
+      
+      if (!isApex.value) {
+        try {
+          if (
+            account &&
+            Number(account.value?.controlled_amount) > 0 &&
+            loggedWallet.value?.chain === Blockchain.CARDANO &&
+            loggedWallet.value?.network === Network.MAINNET
+          ) {
+            // Start parallel loading immediately (don't await - let it run in the background)
+            loadDataProgressively(newAddress).catch(error => {
+              console.warn('Portfolio data loading failed:', error);
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to start portfolio data loading:', error);
         }
-      } catch (error) {
-        console.warn('Failed to start portfolio data loading:', error);
       }
     }
   },

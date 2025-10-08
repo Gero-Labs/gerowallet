@@ -263,6 +263,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const props = defineProps({
   selectedTransaction: {
@@ -281,8 +282,6 @@ const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
-
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
