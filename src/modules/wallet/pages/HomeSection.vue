@@ -38,8 +38,8 @@ const ADA_TO_EUR_RATE = 0.65;
 const loading = ref(false);
 onMounted(async () => {
   loading.value = true;
-  await cardStore.fetchCardBalance();
   await cardStore.fetchCardHistory();
+  await cardStore.fetchCardBalance();
   loading.value = false;
   useIntervalFn(() => {
     initData();
@@ -47,8 +47,8 @@ onMounted(async () => {
 });
 
 const initData = () => {
-  cardStore.fetchCardBalance();
   cardStore.fetchCardHistory();
+  cardStore.fetchCardBalance();
   cardStore.getExchangeRate();
 };
 
