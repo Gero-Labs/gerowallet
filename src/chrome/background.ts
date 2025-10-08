@@ -1,6 +1,7 @@
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 import {
   APIError,
   METHOD,
@@ -1060,7 +1061,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     console.error('Error verifying spending password:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1096,7 +1097,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     console.error('Error signing Data:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1149,7 +1150,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
     console.error('Error signing transaction:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1207,7 +1208,7 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
     console.error('Error submitting transaction:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });

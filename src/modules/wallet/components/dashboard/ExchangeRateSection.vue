@@ -13,41 +13,43 @@
             </div>
             <div class="rate-details">
               <div class="currency-pair">{{ rate.pair }}</div>
-              <div class="rate-value">{{ rate.value }}</div>
+              <div class="rate-value" v-if="rate.value">{{ Number(rate.value).toFixed(2) }}</div>
             </div>
           </div>
-          <div class="last-updated">Last updated: {{ lastUpdated }}</div>
+          <!-- <div class="last-updated">Last updated: {{ lastUpdated }}</div> -->
         </div>
 
-        <div class="rate-change">
+        <!-- <div class="rate-change">
           <div class="change-indicator" :class="rate.trend">
             <img :src="rate.trendIcon" :alt="rate.trend" class="trend-icon" />
             <span class="change-percentage">{{ rate.change }}</span>
           </div>
-        </div>
+        </div> -->
       </div>
     </div>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import type { ExchangeRate } from '@/models/types';
+import { ref, computed } from 'vue';
 import trendUpSvg from '@/assets/svg/trend-up-01.svg';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';
+import cardStore from '@/stores/modules/card';
 
-const exchangeRates = ref<ExchangeRate[]>([
-  {
-    id: 1,
-    pair: 'ADA/EUR',
-    value: '0.65',
-    currency: 'EUR',
-    icon: currencyEuro,
-    change: '3%',
-    trend: 'positive',
-    trendIcon: trendUpSvg,
-  },
-]);
+const exchangeRates = computed(() => {
+  return [
+    {
+      id: 1,
+      pair: 'ADA/EUR',
+      value: cardStore.state.exchangeRate?.buy,
+      currency: 'EUR',
+      icon: currencyEuro,
+      change: '0%',
+      trend: 'positive',
+      trendIcon: trendUpSvg,
+    },
+  ];
+});
 
 const lastUpdated = ref('Today, 15:42');
 

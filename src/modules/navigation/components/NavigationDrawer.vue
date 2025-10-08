@@ -167,6 +167,7 @@ import { Cardano } from '@cardano-sdk/core'
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import cardStore from '@/stores/modules/card';
 import LoadingState from '@/stores/loading';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
@@ -302,6 +303,7 @@ async function submitLogout() {
   try {
     LoadingState.setText('Logging out ...')
     LoadingState.setLoading(true);
+    await cardStore.logout();
     // Send logout message to background
     router.push('/welcome')
     await Messaging.sendToBackgroundFromOptions({

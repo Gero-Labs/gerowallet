@@ -23,9 +23,16 @@ export interface CardanoAddress {
 
 // Card Types
 export interface CardData {
+  uuid: string;
+  card_uuid: string;
   pan: string;
   currentBalance: string;
   currency: string;
+  status: string;
+  type: string;
+  createdAt: string;
+  card_status: 'TEMPORARY_BLOCKED' | 'ACTIVE';
+  updatedAt: string;
 }
 
 export interface CardNumber {
@@ -74,14 +81,12 @@ export interface CardTransactionHistory {
 }
 
 export interface HistoryResponse {
-  history: {
-    meta: {
-      page: number;
-      records: number;
-      totalRecords: number;
-    };
-    records: CardTransactionHistory[];
+  meta: {
+    page: number;
+    records: number;
+    totalRecords: number;
   };
+  records: CardTransactionHistory[];
 }
 
 export interface HistoryParams {
@@ -100,18 +105,35 @@ export interface CardLoadingState {
   cardBalance: boolean;
   cardHistory: boolean;
   auth: boolean;
+  initialize: boolean;
 }
 
 export interface CardErrorState {
   userInfo: string | null;
   cardanoAddress: string | null;
   cardData: string | null;
+  cardDetails: string | null;
+  cardPin: string | null;
   cardNumber: string | null;
   cardBalance: string | null;
   cardHistory: string | null;
   auth: string | null;
+  initialize: string | null;
 }
 
+export interface CardDetails {
+  pan: string;
+  expiryDate: string;
+  cvc2: string;
+}
+
+export interface CardPin {
+  pin: string;
+}
+export interface ExchangeRate {
+  buy: string;
+  sell: string;
+}
 export interface CardState {
   // Auth
   accessToken: string | null;
@@ -124,15 +146,27 @@ export interface CardState {
 
   // Card data
   cardData: CardData | null;
+  cardDetails: CardDetails | null;
+  cardPin: CardPin | null;
   cardNumber: CardNumber | null;
   cardBalance: CardBalance | null;
   cardHistory: HistoryResponse | null;
   totalDeposits: number;
+  exchangeRate: ExchangeRate | null;
   activities: Activity[];
+  // Wallet status integration - ALL IN ONE!
+  walletStatus: {
+    currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
+    isKaiserexAuthenticated: boolean;
+    kycStatus: 'unverified' | 'pending' | 'approved' | 'rejected';
+    kycData: any;
+    loadingMessage: string;
+    error: string | null;
+  };
 
   // Loading states
   loading: CardLoadingState;
 
   // Error states
   errors: CardErrorState;
-} 
+}

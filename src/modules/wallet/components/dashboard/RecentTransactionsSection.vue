@@ -15,7 +15,7 @@
           </tr>
         </thead>
 
-        <tbody>
+        <tbody v-if="formattedTransactions.length > 0">
           <tr v-for="transaction in formattedTransactions" :key="transaction.id" class="table-row">
             <td class="table-cell date-cell">{{ transaction.date }}</td>
             <td class="table-cell transaction-cell">
@@ -53,8 +53,14 @@
         </tbody>
       </table>
     </div>
-
-    <div class="pagination-container">
+    <div v-if="loading" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p class="loading-message">Loading transactions...</p>
+    </div>
+    <div v-if="formattedTransactions.length === 0 && !loading">
+      <div class="empty-state-title">No transactions yet</div>
+    </div>
+    <div v-if="formattedTransactions.length > 0 && !loading" class="pagination-container">
       <div class="pagination-wrapper">
         <v-btn
           variant="text"
@@ -100,9 +106,12 @@ import type { CardTransactionHistory } from '@/models/card';
 
 interface Props {
   transactions?: CardTransactionHistory[];
+  loading?: boolean;
 }
 
 const props = defineProps<Props>();
+
+const emit = defineEmits(['orderCard']);
 
 // Transform API transactions to UI format
 const formattedTransactions = computed(() => {
@@ -236,6 +245,12 @@ const handlePageChange = (page: number | string) => {
   }
   // Ignore clicks on ellipsis
 };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const handleOrderCard = () => {
+  // Emit event to parent component to handle card ordering
+  emit('orderCard');
+};
 </script>
 
 <style lang="scss" scoped>
@@ -260,6 +275,52 @@ const handlePageChange = (page: number | string) => {
     line-height: 1.4;
     color: $text-primary;
     margin: 0;
+  }
+
+  .loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: $spacing-md;
+    padding: $spacing-2xl;
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid $text-primary;
+    border-top: 2px solid $primary-cyan;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-message {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-medium;
+    font-size: $font-size-sm;
+    line-height: 1.43;
+    color: $text-primary;
+  }
+
+  .empty-state-title {
+    padding: $spacing-2xl;
+    font-family: $font-family-primary;
+    font-weight: $font-weight-semibold;
+    font-size: $font-size-base;
+    line-height: 1.4;
+    color: $text-primary;
+    margin: 0;
+    text-align: center !important;
   }
 
   .table-container {
