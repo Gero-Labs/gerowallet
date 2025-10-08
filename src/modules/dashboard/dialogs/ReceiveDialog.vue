@@ -15,11 +15,11 @@
       >
         <v-tab>Payment</v-tab>
         <v-tab>Reward</v-tab>
-        <v-tab>DRep 105</v-tab>
-        <v-tab>DRep 129</v-tab>
+        <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 105</v-tab>
+        <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 129</v-tab>
       </v-tabs>
       <v-tabs-items v-model="tab" class="transparent">
-        <v-tab-item eager v-for="(item, i) in tabs" :key="i">
+        <v-tab-item eager v-for="(item, i) in tabs" :key="i" v-if="item.enabled">
           <v-list-item three-line class="px-0">
             <v-list-item-avatar size="160" rounded>
               <div
@@ -126,6 +126,7 @@ import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 
 const props = defineProps<{ isOpen: boolean }>();
 const emit = defineEmits(['close']);
@@ -177,6 +178,7 @@ const tabs = computed(() => {
       path: keys.value.payment[0].path,
       cred: keys.value.payment[0].cred,
       info: `Share your payment address or scan the QR code to receive ${networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)} safely.`,
+      enabled: true,
     },
     {
       label: 'Reward (Stake) Address',
@@ -184,6 +186,7 @@ const tabs = computed(() => {
       path: keys.value.stake[0].path,
       cred: keys.value.stake[0].cred,
       info: 'Use this to claim staking rewards.',
+      enabled: true,
     },
     {
       label: 'Delegated Representative ID (CIP-105)',
@@ -191,6 +194,7 @@ const tabs = computed(() => {
       path: keys.value.drep105[0].path,
       cred: keys.value.drep105[0].cred,
       info: 'Used to Participate in Cardano Governance Actions.',
+      enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
     {
       label: 'Delegated Representative ID (CIP-129)',
@@ -198,6 +202,7 @@ const tabs = computed(() => {
       path: keys.value.drep129[0].path,
       cred: keys.value.drep129[0].cred,
       info: 'Used to Participate in Cardano Governance Actions.',
+      enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
   ]
 });
@@ -218,7 +223,12 @@ const usedAddresses = computed(() => {
   }
   console.log('results', results)
   return results
-})
+});
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 // whenever the dialog opens, initialize or update all QR codes
 watch(
@@ -235,7 +245,7 @@ watch(
           height: 160,
           type: 'svg',
           data: tabItem.value,
-          image: assets.geroLogo,
+          image: isApex ? assets.geroLogoApex : assets.geroLogo,
           margin: 2,
           qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
           imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },

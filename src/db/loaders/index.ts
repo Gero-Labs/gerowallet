@@ -28,6 +28,7 @@ export class LoaderFactory {
       getDb: () => Promise<Dexie>;
       getBlockchainDb: () => Promise<Dexie>;
       setUtxosAndAddresses: (transactions: any[]) => Promise<void>;
+      triggerResync?: () => Promise<void>;
     }
   ) {}
 

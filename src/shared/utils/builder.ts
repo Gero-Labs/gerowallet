@@ -253,6 +253,12 @@ export async function buildCardanoTransaction({
     throw new Error('Epoch parameters not available');
   }
 
+  // Calculate total withdrawals amount
+  let totalWithdrawals = BigInt(0);
+  if (withdrawals.length > 0) {
+    totalWithdrawals = withdrawals.reduce((sum, withdrawal) => sum + withdrawal.quantity, BigInt(0));
+  }
+
   // Create a change address resolver for input selection
   const changeAddressResolver: ChangeAddressResolver = {
     resolve: async (selectionSkeleton: SelectionSkeleton) => {
@@ -260,7 +266,8 @@ export async function buildCardanoTransaction({
       const totalInput = Array.from(selectionSkeleton.inputs).reduce((sum, [, utxo]) => sum + utxo.value.coins, BigInt(0));
       const totalOutput = Array.from(selectionSkeleton.outputs).reduce((sum, output) => sum + output.value.coins, BigInt(0));
       const implicitCost = implicitCoin + selectionSkeleton.fee;
-      const changeAmount = totalInput - totalOutput - implicitCost;
+      // Add withdrawals to the available balance (withdrawals are incoming funds)
+      const changeAmount = totalInput + totalWithdrawals - totalOutput - implicitCost;
 
       // Calculate change assets by aggregating all input assets and subtracting output assets
       const changeAssets = new Map<Cardano.AssetId, bigint>();

@@ -252,15 +252,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, toRefs, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, toRefs, getCurrentInstance, onMounted } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
-import networks, { cardanoLogo } from '@/utils/networks';
 import DexHunterStore, { dexHunterStore } from '@/stores/dexHunterStore';
 import dexHunterApi from '@/api/dexhunter-api';
 import filters from '@/shared/utils/filters';
+import cardanoSvg from '@/assets/svg/cardano.svg';
 
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
@@ -269,7 +269,6 @@ const router = instance?.proxy.$router;
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
-const { assets: networkAssets } = toRefs(networkStore);
 
 // Reactive data
 const amountA = ref('');
@@ -278,17 +277,12 @@ const tokenMenuA = ref(false);
 const tokenMenuB = ref(false);
 const tokenSearchA = ref('');
 const tokenSearchB = ref('');
-
-const isUpdating = ref<boolean>(false);
-const lastNonADATokenA = ref(null);
-const lastNonADATokenB = ref(null);
 const slippageRef = ref<string>('2');
-const settingsToggle = ref<boolean>(false);
 const swapType = ref<string>('swap');
 let selectedTokenA = ref({
   name: 'Cardano',
   ticker: 'ADA',
-  img: cardanoLogo,
+  img: cardanoSvg,
   fallback_img: 'https://storage.googleapis.com/dexhunter-images/public/unverified.svg',
   balance: 0,
   quantity: '0',
@@ -326,8 +320,6 @@ const splits = ref(undefined);
 const lastFunctionCalled = ref<string>('estimate');
 const intervalId = ref<any>(0);
 const loading = ref<boolean>(false);
-const swapOverviewToggle = ref<boolean>(false);
-const pairPriceToggle = ref<boolean>(false);
 const blacklisted_dexes = ref<any[]>([]);
 const search = ref(DexHunterStore.searchTokens);
 const poolError = ref<boolean>(false);

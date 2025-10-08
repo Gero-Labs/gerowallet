@@ -183,22 +183,33 @@ async function scanTx(txData: Cardano.Tx) {
   loading.value = true;
   tx.value = txData;
 
-  try {
-    const cborHex = getCborHex();
-    risks.value = await cardanoShieldApi.scanTx({
+  const cborHex = getCborHex();
+
+  // Make Cardano Shield scan non-blocking with 5-second timeout
+  // Don't block the UI if the scan is slow or fails
+  const scanWithTimeout = Promise.race([
+    cardanoShieldApi.scanTx({
       cborHex,
       toAddress: props.sendData.recipientAddress,
       fromAddress: changeAddress.value,
       url: 'https://gerowallet.io',
-    });
+    }),
+    new Promise<any>((_, reject) =>
+      setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
+    )
+  ]);
+
+  // Allow UI to proceed immediately
+  loading.value = false;
+
+  try {
+    risks.value = await scanWithTimeout;
   } catch (e) {
-    console.error('Error scanning transaction with Cardano Shield:', e);
+    console.warn('Cardano Shield scan failed or timed out:', e);
     risks.value = {
       addressRisk: 'unknown',
     };
   }
-
-  loading.value = false;
 }
 </script>
 

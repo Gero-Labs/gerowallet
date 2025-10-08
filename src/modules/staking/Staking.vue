@@ -26,7 +26,7 @@
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-title class="staking-support-title"> Consider supporting us </v-card-title>
                 <v-card-subtitle>
-                  <v-btn small class="staking-gero-btn" @click="delegateToGero"> Stake with GERO </v-btn>
+                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">Stake with GERO</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -476,6 +476,7 @@ import stakingStore from '@/stores/stakingStore';
 import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import snackbar from '@/plugins/snackbar';
 
 const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
 const { epochParams, tip } = toRefs(networkStore);
@@ -684,9 +685,13 @@ async function delegate(row: any) {
       implicitCoin,
     });
     isDelegateDialogOpen.value = true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error building delegation transaction:', error);
-    // You might want to show an error message to the user here
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError('Insufficient ADA to complete staking transaction');
+    } else {
+      snackbar.setError('Failed to build delegation transaction');
+    }
   }
 }
 
@@ -759,12 +764,6 @@ onBeforeUnmount(() => {
 .staking-support-title {
   color: #00dff3;
   font-size: 18px;
-}
-
-.staking-gero-btn {
-  text-transform: capitalize;
-  background: linear-gradient(45deg, #00c7f3, #00ffd1);
-  color: black;
 }
 
 .staking-filters-row {

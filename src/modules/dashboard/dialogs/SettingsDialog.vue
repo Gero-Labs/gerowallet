@@ -73,14 +73,14 @@ const hasBackup = computed(() => walletStoreDefault.hasBackup())
 // Read the actual backup‐enabled flag (defaults to true)
 const getBackup = computed(() => walletStoreDefault.getBackup())
 
-// Show a badge if user *should* back up
+// Show a badge if the user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
 
-// Build your tabs array, injecting the dynamic badge
+// Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
   { label: 'Profile', value: 'profile' },
   // { label: 'Password', value: 'password' },
