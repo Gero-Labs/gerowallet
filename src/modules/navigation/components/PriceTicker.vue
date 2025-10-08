@@ -6,7 +6,7 @@
           tokenName
         }}</span>
         <span class="gero-price" style="font-size: 10px; color: #fff" v-if="price"
-          >{{ getCurrencySymbol() }}{{ price?.toFixed(6) }}</span
+          >{{ getCurrencySymbol() }}{{ price }}</span
         >
       </div>
     </div>
