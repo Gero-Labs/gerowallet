@@ -3,154 +3,155 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-    <v-card-title class="justify-center text-center" style="font-size: 32px">
-      Cashback
-    </v-card-title>
-    <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
-      Pay with any credit card online, and receive ADA Cashback!
-    </v-card-subtitle>
-    <v-card-subtitle class="justify-center text-center pt-2 pb-8">
-      <v-btn small outlined rounded color="#00DFF3" @click="isHowItWorksDialogOpen = true">
-        How it works
-      </v-btn>
-    </v-card-subtitle>
-    <v-card-text>
-      <div class="card-text">
-        <div class="main-content">
-          <div class="left-section">
-            <v-list-item two-line dense style="width: min-content; min-width: 250px">
-              <v-list-item-avatar size="40" tile>
-                <v-img :src="assets.giftSvg" contain></v-img>
-              </v-list-item-avatar>
-              <v-list-item-content>
-                <v-list-item-title style="font-size: 14px">
-                  Ready to Claim
-                </v-list-item-title>
-                <v-list-item-subtitle style="display: flex; align-items: center;">
-                  <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? convertFiat(Number(eligible.totalEstimatedUsd)) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
-                </v-list-item-subtitle>
-              </v-list-item-content>
-            </v-list-item>
-          </div>
-          <div class="right-section">
-            <v-list-item two-line dense style="width: min-content; min-width: 250px">
-              <v-list-item-avatar size="40" tile>
-                <v-img :src="assets.pendingSvg" contain></v-img>
-              </v-list-item-avatar>
-              <v-list-item-content>
-                <v-list-item-title style="font-size: 14px">
-                  Pending rewards
-                </v-list-item-title>
-                <v-list-item-subtitle style="display: flex; align-items: center;">
-                  <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
-                  <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? convertFiat(pending.totalEstimatedUsd) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
-                </v-list-item-subtitle>
-              </v-list-item-content>
-            </v-list-item>
-          </div>
-          <v-btn elevation="0" height="50" color="#0B141B" @click="isRewardsDialogOpen = true" :disabled="!supported">
-            <div class="btn-content">
-              <div :class="supported ? 'btn-text' : 'btn-text-disabled'">View Rewards</div>
-            </div>
+          <v-card-title class="justify-center text-center" style="font-size: 32px">
+            Cashback
+          </v-card-title>
+          <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
+            Powered By <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
+            <v-img max-height="36" height="36" width="40" :src="assets.bringWhite" contain alt="Bring Logo" style="margin-bottom: 2px" />
           </v-btn>
-        </div>
-      </div>
-      <v-row class="mt-4">
-        <v-col cols="12" xl="6" lg="6" md="6" style="align-content: center;">
-          <v-chip-group v-if="chipLoading" column>
-            <v-skeleton-loader
-              type="chip"
-              v-for="i in 10"
-              :key="'chip-'+i"
-              class="ma-1"
-            >
-            </v-skeleton-loader>
-          </v-chip-group>
-          <v-chip-group v-else v-model="selectedCategoryIndex" column active-class="geroButton" >
-            <v-chip class="ma-1" style="border: 1px solid rgba(51, 55, 65, 0.5); background-color: #141414!important;" v-for="item in categories?.items" :key="item.id">
-              {{ item.name }}
-            </v-chip>
-          </v-chip-group>
-        </v-col>
-        <v-col cols="12" xl="2" lg="2" md="2">
-        </v-col>
-        <v-col cols="12" xl="4" lg="4" md="4">
-          <v-autocomplete
-            v-if="supported"
-            flat
-            v-model="model"
-            :items="searchTerms"
-            :loading="isLoading2"
-            label="Brand, product, destination"
-            outlined
-            class="cashback-search"
-            solo
-            dense
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            hide-details
-            hide-no-data
-            hide-selected
-            style="border-radius: 20px"
-            :filter="customAutoCompleteFilter"
-            attach
-          >
-          </v-autocomplete>
-          <div class="pt-4" v-if="totalItems > 0">
-            {{ totalItems }} Deals Found
-          </div>
-        </v-col>
-      </v-row>
-      <v-row class="mt-4" v-show="!isLoading">
-        <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
-          <v-card class="pa-4 fill-height" flat style="background-color: #161B26!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
-            <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
-              <v-img :src="retailer.img" contain style="margin: auto;" eager>
-                <template v-slot:placeholder>
-                  <v-row
-                      class="fill-height ma-0"
-                      align="center"
-                      justify="center"
+          </v-card-subtitle>
+          <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
+            Pay with any credit card online, and receive ADA Cashback!
+          </v-card-subtitle>
+          <v-card-subtitle class="justify-center text-center pt-2 pb-8">
+            <v-btn small outlined rounded color="#00DFF3" @click="isHowItWorksDialogOpen = true">
+              How it works
+            </v-btn>
+          </v-card-subtitle>
+          <v-card-text>
+            <div class="card-text">
+              <div class="main-content">
+                <div class="left-section">
+                  <v-list-item two-line dense style="width: min-content; min-width: 250px">
+                    <v-list-item-avatar size="40" tile>
+                      <v-img :src="assets.giftSvg" contain></v-img>
+                    </v-list-item-avatar>
+                    <v-list-item-content>
+                      <v-list-item-title style="font-size: 14px">
+                        Ready to Claim
+                      </v-list-item-title>
+                      <v-list-item-subtitle style="display: flex; align-items: center;">
+                        <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
+                        <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? convertFiat(Number(eligible.totalEstimatedUsd)) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
+                      </v-list-item-subtitle>
+                    </v-list-item-content>
+                  </v-list-item>
+                </div>
+                <div class="right-section">
+                  <v-list-item two-line dense style="width: min-content; min-width: 250px">
+                    <v-list-item-avatar size="40" tile>
+                      <v-img :src="assets.pendingSvg" contain></v-img>
+                    </v-list-item-avatar>
+                    <v-list-item-content>
+                      <v-list-item-title style="font-size: 14px">
+                        Pending rewards
+                      </v-list-item-title>
+                      <v-list-item-subtitle style="display: flex; align-items: center;">
+                        <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
+                        <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? convertFiat(pending.totalEstimatedUsd) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
+                      </v-list-item-subtitle>
+                    </v-list-item-content>
+                  </v-list-item>
+                </div>
+                <v-btn elevation="0" height="50" color="#0B141B" @click="isRewardsDialogOpen = true" :disabled="!supported">
+                  <div class="btn-content">
+                    <div :class="supported ? 'btn-text' : 'btn-text-disabled'">View Rewards</div>
+                  </div>
+                </v-btn>
+              </div>
+            </div>
+            <v-row class="mt-4">
+              <v-col cols="12" xl="6" lg="6" md="6" style="align-content: center;">
+                <v-chip-group v-if="chipLoading" column>
+                  <v-skeleton-loader
+                    type="chip"
+                    v-for="i in 10"
+                    :key="'chip-'+i"
+                    class="ma-1"
                   >
-                    <v-progress-circular
-                        indeterminate
-                        color="primary"
-                    ></v-progress-circular>
-                  </v-row>
-                </template>
-              </v-img>
-            </v-avatar>
-            <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
-            <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
-              <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(2) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
-            </v-card-subtitle>
-          </v-card>
-        </v-col>
-      </v-row>
-      <v-row class="mt-4" v-show="isLoading && supported">
-        <v-col cols="12" md="3" style="border-radius: 16px" v-for="i in 12" :key="i">
-          <v-skeleton-loader
-            height="183"
-            type="image"
-          ></v-skeleton-loader>
-        </v-col>
-      </v-row>
-    </v-card-text>
+                  </v-skeleton-loader>
+                </v-chip-group>
+                <v-chip-group v-else v-model="selectedCategoryIndex" column active-class="geroButton" >
+                  <v-chip class="ma-1" style="border: 1px solid rgba(51, 55, 65, 0.5); background-color: #141414!important;" v-for="item in categories?.items" :key="item.id">
+                    {{ item.name }}
+                  </v-chip>
+                </v-chip-group>
+              </v-col>
+              <v-col cols="12" xl="2" lg="2" md="2">
+              </v-col>
+              <v-col cols="12" xl="4" lg="4" md="4">
+                <v-autocomplete
+                  v-if="supported"
+                  flat
+                  v-model="model"
+                  :items="searchTerms"
+                  :loading="isLoading2"
+                  label="Brand, product, destination"
+                  outlined
+                  class="cashback-search"
+                  solo
+                  dense
+                  prepend-inner-icon="mdi-magnify"
+                  clearable
+                  hide-details
+                  hide-no-data
+                  hide-selected
+                  style="border-radius: 20px"
+                  :filter="customAutoCompleteFilter"
+                  attach
+                >
+                </v-autocomplete>
+                <div class="pt-4" v-if="totalItems > 0">
+                  {{ totalItems }} Deals Found
+                </div>
+              </v-col>
+            </v-row>
+            <v-row class="mt-4" v-show="!isLoading">
+              <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
+                <v-card class="pa-4 fill-height" flat style="background-color: #161B26!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
+                  <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.img">
+                    <v-img :src="retailer.img" contain style="margin: auto;" eager>
+                      <template v-slot:placeholder>
+                        <v-row
+                            class="fill-height ma-0"
+                            align="center"
+                            justify="center"
+                        >
+                          <v-progress-circular
+                              indeterminate
+                              color="primary"
+                          ></v-progress-circular>
+                        </v-row>
+                      </template>
+                    </v-img>
+                  </v-avatar>
+                  <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
+                  <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
+                    <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(2) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
+                  </v-card-subtitle>
+                </v-card>
+              </v-col>
+            </v-row>
+            <v-row class="mt-4" v-show="isLoading && supported">
+              <v-col cols="12" md="3" style="border-radius: 16px" v-for="i in 12" :key="i">
+                <v-skeleton-loader
+                  height="183"
+                  type="image"
+                ></v-skeleton-loader>
+              </v-col>
+            </v-row>
+          </v-card-text>
 
-    <v-card-actions class="justify-center text-center" style="flex-direction: column;">
-      <v-card-title>
-        {{ supported ? '' : 'Unfortunately, Cashback isn\'t supported in your Country yet.'}}
-        {{ loadingMore ? "Loading ..." : "" }}
-      </v-card-title>
-      <v-card-title ref="intersectionTarget" style="font-size: 14px" v-if="supported">
-        Powered By
-        <v-btn color="primary" class="px-0 mx-0 ml-1" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">Bring</v-btn>
-      </v-card-title>
-    </v-card-actions>
-    <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
-    <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath" :search-term="searchTerm"></RetailerDialog>
-    <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
+          <v-card-actions ref="intersectionTarget" class="justify-center text-center" style="flex-direction: column;">
+            <v-card-title>
+              {{ supported ? '' : 'Unfortunately, Cashback isn\'t supported in your Country yet.'}}
+              {{ loadingMore ? "Loading ..." : "" }}
+            </v-card-title>
+          </v-card-actions>
+          <ViewRewardsDialog :isOpen="isRewardsDialogOpen" @close="isRewardsDialogOpen = false"></ViewRewardsDialog>
+          <RetailerDialog :isOpen="isRetailerDialogOpen" @close="closeRetailerDialog" :retailer="retailer" :retailer-terms-base-path="retailerTermsBasePath" :search-term="searchTerm"></RetailerDialog>
+          <HowItWorksDialog :isOpen="isHowItWorksDialogOpen" @close="isHowItWorksDialogOpen = false"></HowItWorksDialog>
         </v-card>
       </v-col>
     </v-row>

@@ -72,9 +72,10 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
 enum CurrencyType {
@@ -106,7 +107,6 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
 };
 
 const { loggedWallet } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 
 const props = defineProps({
   chartData: {
@@ -169,7 +169,6 @@ const savePortfolioTabSetting = (tabValue: string): void => {
 };
 
 const tab = ref({ value: loadPortfolioTabSetting() || 'WEEK', label: '7D', vsLabel: 'vs last week' });
-const lastPrice = ref(1);
 const chartInstance = ref(null);
 const selectedTabIndex = ref(4); // Default to WEEK tab (index 4 = 7D)
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA); // Current selected currency
@@ -178,7 +177,7 @@ const chartKey = ref(0); // Force chart re-render when changed
 const lastLoadTime = ref(0); // Prevent too frequent loadChart calls
 
 // VueUse-powered timeout management - automatic cleanup!
-const createTimeout = (callback: Function, delay: number) => {
+const createTimeout = (callback: () => void, delay: number) => {
   const { start } = useTimeoutFn(callback, delay, { immediate: false });
   start();
 };
@@ -332,9 +331,11 @@ const availableCurrencies = computed(() => {
 
 // Portfolio value formatting for any currency
 const formatPortfolioValue = (): string => {
-  const value = activePortfolioValue.value;
   const config = currentCurrencyConfig.value;
-
+  const value =
+    selectedCurrency.value === CurrencyType.USD
+      ? activePortfolioValue.value
+      : convertFiat(activePortfolioValue.value, true);
   if (value > 0) {
     return filters.toCurrency(value, false, 2, config.symbol, '', true, 0);
   }
@@ -461,14 +462,16 @@ const createChartSeries = (): any[] => {
       data: validData,
       showInLegend: false,
       color: seriesColor,
-      connectNulls: false,
-      gapSize: 5,
+      connectNulls: true,
+      gapSize: 0,
+      step: false,
       marker: {
         symbol: 'circle',
         enabled: false,
         radius: 3,
         lineWidth: 1,
-        lineColor: null,
+        lineColor: seriesColor,
+        fillColor: '#ffffff',
       },
       fillColor: {
         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
@@ -575,8 +578,6 @@ const loadChart = () => {
 
   const activeData = activeChartData.value;
   const config = currentCurrencyConfig.value;
-
-
 
   if (!activeData || !activeData.length) {
     return;
@@ -751,11 +752,13 @@ const loadChart = () => {
         style: {
           fontFamily: 'Inter',
           color: '#fff',
+          fontSize: '11px',
         },
         overflow: 'justify',
       },
       ordinal: false,
-      minTickInterval: 3600 * 1000, // 1 hour minimum to prevent crowding
+      minTickInterval: undefined, // Allow automatic tick interval
+      tickPixelInterval: 80, // Minimum pixels between ticks
       // COMMENTED OUT: Dual-axis Y-axis update events
       // events: {
       //   // Handle drag selection only (no wheel zoom)
@@ -876,6 +879,25 @@ const loadChart = () => {
     //     },
     //   ],
     // },
+    plotOptions: {
+      series: {
+        connectNulls: true,
+        lineWidth: 2,
+        marker: {
+          enabled: true,
+          radius: 3,
+        },
+        states: {
+          hover: {
+            enabled: true,
+            lineWidthPlus: 1,
+          },
+          inactive: {
+            opacity: 1,
+          },
+        },
+      },
+    },
     colors: chartColors.value,
     legend: {
       align: 'right',
@@ -1064,19 +1086,8 @@ const handleTabClick = tabItem => {
 //   }
 // };
 
-const generateTitleText = () => {
-  return '';
-};
-watch(
-  price,
-  newVal => {
-    lastPrice.value = newVal.lastPrice;
-    if (chartInstance.value?.title) {
-      chartInstance.value.title.update({ text: generateTitleText() });
-    }
-  },
-  { deep: true }
-);
+// Removed price watcher and generateTitleText that were causing unnecessary rerenders
+// since we're not using the title text anymore
 
 // Watch currency chart data with immediate response to any data changes
 watch(
@@ -1103,7 +1114,7 @@ watch(
         break;
     }
 
-        // Skip if no actual data changes for the active currency
+    // Skip if no actual data changes for the active currency
     if (!activeDataChanged && !props.progressiveLoading) {
       return;
     }

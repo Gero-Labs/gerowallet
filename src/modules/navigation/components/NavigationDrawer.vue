@@ -303,17 +303,18 @@ async function submitLogout() {
     LoadingState.setText('Logging out ...')
     LoadingState.setLoading(true);
     // Send logout message to background
+    router.push('/welcome')
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
     updateVuetifyTheme(false, true);
-    // Navigate to welcome page after store is cleared
-    router.push('/welcome').catch(err => {
-      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
-      // Fallback: force page reloads to welcome
-      window.location.hash = '#/welcome';
-    });
+    // // Navigate to welcome page after store is cleared
+    // router.push('/welcome').catch(err => {
+    //   console.debug('Navigation after logout handled (expected during logout):', err.message || err);
+    //   // Fallback: force page reloads to welcome
+    //   window.location.hash = '#/welcome';
+    // });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error
