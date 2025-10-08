@@ -138,6 +138,7 @@ export class TransactionsLoader extends BaseLoader {
       isEnterpriseAddress: () => boolean;
       networkId: () => number;
       setUtxosAndAddresses: (transactions: any[]) => Promise<void>;
+      triggerResync?: () => Promise<void>;
     }
   ) {
     super('transactions');
@@ -151,6 +152,11 @@ export class TransactionsLoader extends BaseLoader {
       async (newTransactions: any[]) => {
         Loading.setLoadingTxs(true);
         try {
+          // Check for the old transaction format and trigger migration if needed
+          if (await this.detectAndHandleOldTransactionFormat(newTransactions)) {
+            return; // Exit early as a resync is in progress
+          }
+
           let transactions: any = [];
           if (newTransactions?.length) {
             const isEnterpriseAddress = this.walletContext.isEnterpriseAddress();
@@ -158,7 +164,7 @@ export class TransactionsLoader extends BaseLoader {
             const currentStake = !isEnterpriseAddress ? this.walletContext.stakeAddress : '';
             const networkId = this.walletContext.networkId();
             const network = networks.resolveNetwork(this.walletContext.chain, this.walletContext.network);
-            
+
             const nativeAssetMetadata = {
               decimals: 6,
               description: network?.currencyDescription,
@@ -168,7 +174,7 @@ export class TransactionsLoader extends BaseLoader {
             };
 
             newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp);
-
+            console.log('newTransactions', newTransactions)
             transactions = newTransactions.map((tx) => {
               let sentAmount = 0;
               let receivedAmount = 0;
@@ -184,9 +190,9 @@ export class TransactionsLoader extends BaseLoader {
               });
 
               const totalAmount = receivedAmount - sentAmount;
-              
+
               const finalAssets = this.calculateFinalAssets(sentAssets, receivedAssets);
-              
+
               const nativeAsset = {
                 unit: "lovelace",
                 policy_id: "",
@@ -207,7 +213,7 @@ export class TransactionsLoader extends BaseLoader {
             });
           }
           WalletStore.setTransactions(transactions);
-          
+
           try {
             await this.walletContext.setUtxosAndAddresses(transactions);
           } catch (error) {
@@ -240,9 +246,9 @@ export class TransactionsLoader extends BaseLoader {
 
     for (let i = 0; i < utxos.length; i++) {
       const utxo = utxos[i];
-      const isOwnAddress = utxo.address === currentAddress || 
+      const isOwnAddress = utxo.address === currentAddress ||
         toStakeAddress(utxo.address, networkId) === currentStake;
-      
+
       if (!isOwnAddress || (isSent && utxo.data_hash) || (!isSent && utxo.datum_hash)) {
         continue;
       }
@@ -279,10 +285,10 @@ export class TransactionsLoader extends BaseLoader {
 
     sentAssets.forEach((sentAsset, unit) => {
       const receivedAsset = receivedAssets.get(unit);
-      const quantity = receivedAsset 
-        ? sentAsset.quantity - receivedAsset.quantity 
+      const quantity = receivedAsset
+        ? sentAsset.quantity - receivedAsset.quantity
         : sentAsset.quantity;
-      
+
       if (quantity !== 0) {
         finalAssets.push({
           ...sentAsset,
@@ -299,5 +305,48 @@ export class TransactionsLoader extends BaseLoader {
     });
 
     return finalAssets;
+  }
+
+  /**
+   * Detects old transaction format and triggers migration if needed
+   * @param transactions - Array of transaction objects to check
+   * @returns Promise<boolean> - true if migration was triggered, false otherwise
+   */
+  private async detectAndHandleOldTransactionFormat(transactions: any[]): Promise<boolean> {
+    if (!transactions?.length) {
+      return false;
+    }
+
+    // Check if any transaction has the old 'transaction' field
+    const hasOldFormat = transactions.some(tx =>
+      tx.hasOwnProperty('transaction') ||
+      // Check for missing new fields that should exist in the new format
+      !tx.hasOwnProperty('utxo')
+    );
+
+    if (hasOldFormat) {
+      console.log('🔄 Detected old transaction format, triggering resync...');
+
+      try {
+        // Clear old transaction data to prepare for fresh sync
+        const walletDB = await this.getDb();
+        await walletDB.table('transactions').clear();
+        console.log('✅ Cleared old transaction data');
+
+        // Trigger resync if the method is available
+        if (this.walletContext.triggerResync) {
+          await this.walletContext.triggerResync();
+          console.log('✅ Resync triggered successfully');
+          return true;
+        } else {
+          console.warn('⚠️ triggerResync method not available in wallet context');
+        }
+      } catch (error) {
+        console.error('❌ Failed to trigger migration resync:', error);
+        // Don't block the wallet loading process even if migration fails
+      }
+    }
+
+    return false;
   }
 }

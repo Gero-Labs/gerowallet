@@ -13,10 +13,6 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import * as CryptoTS from 'crypto-ts';
-import cryptoRandomString from 'crypto-random-string';
-import { decrypt_with_password, encrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -62,14 +58,21 @@ export function isPaymentAddress(address: string): boolean {
   return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
 }
 
-export function toValue(assets: any[], lovelace: string): Serialization.Value {
-  const tokenMap = assets.reduce((map, asset) => {
-    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
-    const current = map.get(assetId) ?? BigInt(0);
-    map.set(assetId, current + BigInt(asset.quantity));
-    return map;
-  }, new Map<Cardano.AssetId, bigint>());
-  return new Serialization.Value(BigInt(lovelace), tokenMap)
+export function toValueCore(amount: { unit: string; quantity: string; }[]): Cardano.Value {
+  const value: Cardano.Value = {
+    coins: BigInt(0),
+    assets: new Map<Cardano.AssetId, bigint>()
+  };
+  amount.forEach(amt => {
+    if (amt.unit === 'lovelace') {
+      value.coins = BigInt(amt.quantity);
+    } else {
+      const assetId: Cardano.AssetId = Cardano.AssetId(amt.unit);
+      const current: bigint = value.assets?.get(assetId) ?? BigInt(0);
+      value.assets?.set(assetId, current + BigInt(amt.quantity));
+    }
+  });
+  return value;
 }
 
 export function toStakeCredential(address: Cardano.Address): Cardano.Credential {
@@ -308,17 +311,39 @@ export function getUtxos(
   return selectedUtxos;
 }
 
-export function getBalance(utxos: any[], collateral: any): Serialization.Value {
-  const assets: any[] = []
-  let lovelace = 0;
-  if (collateral) {
-    utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
+export function getBalance(utxos: Cardano.Utxo[], collateral: Cardano.Utxo): Serialization.Value {
+  let accumulatedValue: Serialization.Value = new Serialization.Value(BigInt(0));
+  if (utxos && collateral) {
+    utxos = utxos.filter((utxo: Cardano.Utxo) => !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index))
   }
-  utxos.forEach(utxo => {
-    assets.push(...utxo.asset_list)
-    lovelace += Number(utxo.value)
+  utxos.forEach((utxo: Cardano.Utxo) => {
+    // Ensure coins is BigInt and assets is a Map (handle deserialization from storage)
+    let utxoValue = utxo[1].value;
+
+    // Convert coins to BigInt if it's a string
+    const coins = typeof utxoValue.coins === 'string' ? BigInt(utxoValue.coins) : BigInt(utxoValue.coins);
+
+    // Convert assets to Map if it's a plain object
+    let assets: Map<Cardano.AssetId, bigint> | undefined = undefined;
+    if (utxoValue.assets) {
+      if (utxoValue.assets instanceof Map) {
+        assets = utxoValue.assets;
+      } else {
+        // Convert plain object to Map
+        assets = new Map<Cardano.AssetId, bigint>();
+        Object.entries(utxoValue.assets).forEach(([assetId, quantity]) => {
+          assets!.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        });
+      }
+    }
+
+    const value: Serialization.Value = Serialization.Value.fromCore({
+      coins,
+      assets
+    });
+    accumulatedValue = coalesceValueQuantities([accumulatedValue, value]);
   })
-  return toValue(assets, lovelace.toString());
+  return accumulatedValue;
 }
 
 export function coalesceValueQuantities(quantities: Serialization.Value[]): Serialization.Value {
@@ -472,40 +497,65 @@ function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
   return array.slice(start, end);
 }
 
+// Track pending popup creations to prevent race conditions
+const pendingPopups = new Map<string, Promise<chrome.tabs.Tab>>();
+
 export async function focusOrCreatePopup(url: string, width: number, height: number): Promise<chrome.tabs.Tab> {
-  const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
-  let existingWindow = null;
-  let tabb: chrome.tabs.Tab;
-  // Iterate through each window and its tabs to find the URL
-  for (const window of windows) {
-    if (window.type === 'popup') {
-      for (const tab of window.tabs) {
-        if (tab.url === url) {
-          existingWindow = window;
-          tabb = tab;
-          break;
-        }
-      }
-      if (existingWindow) break;
-    }
+  // Check if we're already creating a popup for this URL
+  if (pendingPopups.has(url)) {
+    console.log('⏳ Popup already being created for:', url);
+    return pendingPopups.get(url);
   }
 
-  if (existingWindow) {
-    // Focus on the existing window
-    await chrome.windows.update(existingWindow.id, { focused: true });
-    return tabb;
-  } else {
-    // Create a new window with the specified URL
-    const window: chrome.windows.Window = await chrome.windows.create({
-      url: url,
-      type: 'popup',
-      focused: true,
-      ...POPUP_WINDOW,
-      width: width,
-      height: height,
-    });
-    return window.tabs[0];
-  }
+  // Create the popup promise
+  const popupPromise = (async () => {
+    try {
+      const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
+      let existingWindow = null;
+      let tabb: chrome.tabs.Tab;
+
+      // Iterate through each window and its tabs to find the URL
+      for (const window of windows) {
+        if (window.type === 'popup') {
+          for (const tab of window.tabs) {
+            if (tab.url === url) {
+              existingWindow = window;
+              tabb = tab;
+              break;
+            }
+          }
+          if (existingWindow) break;
+        }
+      }
+
+      if (existingWindow) {
+        // Focus on the existing window
+        console.log('✅ Focusing existing popup:', url);
+        await chrome.windows.update(existingWindow.id, { focused: true });
+        return tabb;
+      } else {
+        // Create a new window with the specified URL
+        console.log('🆕 Creating new popup:', url);
+        const window: chrome.windows.Window = await chrome.windows.create({
+          url: url,
+          type: 'popup',
+          focused: true,
+          ...POPUP_WINDOW,
+          width: width,
+          height: height,
+        });
+        return window.tabs[0];
+      }
+    } finally {
+      // Clean up the pending popup tracking after creation
+      pendingPopups.delete(url);
+    }
+  })();
+
+  // Store the promise to prevent concurrent creations
+  pendingPopups.set(url, popupPromise);
+
+  return popupPromise;
 }
 
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
@@ -661,28 +711,4 @@ export function keyHashFromAddress(address: string): Hash28ByteBase16 {
     // I want the application to not crush but don't care about the message
   }
   return undefined;
-}
-
-export function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): string {
-  const privateKey = encryptWithPassword(password, rootKey.bytes());
-  return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
-}
-
-export function encryptWithPassword(password, rootKeyBytes): string {
-  const passwordHex = Buffer.from(password).toString('hex');
-  const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
-  const salt = cryptoRandomString({ length: 2 * 32 });
-  const nonce = cryptoRandomString({ length: 2 * 12 });
-  return encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
-}
-
-export function decryptWithPassword(password: string, privateKey): Buffer {
-  const passwordHex = Buffer.from(password).toString('hex');
-  let decryptedHex;
-  try {
-    decryptedHex = decrypt_with_password(passwordHex, privateKey);
-  } catch (err) {
-    throw new Error('Wrong Passphrase');
-  }
-  return Buffer.from(decryptedHex, 'hex');
 }

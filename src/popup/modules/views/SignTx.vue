@@ -421,19 +421,32 @@ const init = async () => {
     console.log(txCbor);
     tx.value = deserializeCardanoJsSdkTx(txCbor);
     const queryParams = route.query;
-    try {
-      risks.value = await cardanoShieldApi.scanTx({
+
+    // Make Cardano Shield scan non-blocking with 5-second timeout
+    // Don't block the UI if the scan is slow or fails
+    const scanWithTimeout = Promise.race([
+      cardanoShieldApi.scanTx({
         cborHex: txCbor,
         toAddress: recipient.value,
         fromAddress: changeAddress.value,
         url: queryParams['website'] as string,
-      });
+      }),
+      new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
+      )
+    ]);
+
+    // Allow UI to proceed immediately, update risks when scan completes
+    loading.value = false;
+
+    try {
+      risks.value = await scanWithTimeout;
     } catch (e) {
+      console.warn('Cardano Shield scan failed or timed out:', e);
       risks.value = {
         addressRisk: 'unknown',
       };
     }
-    loading.value = false;
   }
 };
 

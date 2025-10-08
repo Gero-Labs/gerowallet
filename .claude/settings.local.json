@@ -1,23 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)",
-      "Bash(dir D:GeroReposgitReposgeroFrontgerowalletvite.config*.mts)",
-      "Bash(rm:*)",
-      "WebFetch(domain:app.strikefinance.org)",
-      "Bash(git add:*)",
-      "Bash(sed:*)",
-      "Bash(npm run dev:*)",
-      "WebSearch",
-      "Bash(npx tsc:*)",
-      "Bash(node:*)",
+      "Bash(npm run build:beta:*)",
+      "Bash(cd:*)",
+      "Read(//Users/dudiedri/IdeaProjects/**)",
+      "Bash(find:*)",
+      "Bash(for:*)",
+      "Bash(do sed -i '' \"s/import\\.meta\\.env\\[''/import.meta.env./g; s/''\\]//g\" \"$file\")",
+      "Bash(done)",
+      "Bash(awk:*)",
+      "Bash(cat:*)",
+      "Bash(npm run clear:*)",
+      "Bash(npm run build:background:*)",
       "Bash(grep:*)",
-      "Bash(curl:*)",
-      "WebFetch(domain:api.kraken.com)",
-      "WebFetch(domain:docs.kraken.com)",
-      "Bash(tasklist:*)",
-      "mcp__ide__getDiagnostics"
+      "Bash(sed:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:vacuumlabs.github.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(do echo \"Processing $file...\")",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
-    "deny": []
+    "deny": [],
+    "ask": []
   }
 }

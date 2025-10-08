@@ -6,6 +6,7 @@
  */
 
 import { getContextType } from '@/utils/storageSync';
+import { debugLog } from '@/utils/debug';
 
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
@@ -47,7 +48,7 @@ class StoreMessagingService {
     
     // Only browser contexts need to connect to background
     if (context === 'browser') {
-      console.debug(`🔌 StoreMessaging service initializing in browser context`);
+      debugLog(`🔌 StoreMessaging service initializing in browser context`);
       // Don't block on connection - let it happen in background
       this.connect().catch(error => {
         console.error('Failed to connect store messaging:', error);
@@ -61,17 +62,17 @@ class StoreMessagingService {
   private async connect(): Promise<void> {
     // If already connected, return immediately
     if (this.port?.name) {
-      console.debug('📡 Already connected, skipping connection');
+      debugLog('📡 Already connected, skipping connection');
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
       try {
-        console.debug('📡 Establishing store messaging connection from', getContextType(), 'context...');
+        debugLog('📡 Establishing store messaging connection from', getContextType(), 'context...');
         
         // Create port with a specific name for store updates
         this.port = chrome.runtime.connect({ name: 'store-sync' });
-        console.debug('📡 Port created:', this.port);
+        debugLog('📡 Port created:', this.port);
         
         // Handle incoming messages
         this.port.onMessage.addListener((message: Message) => {
@@ -80,7 +81,7 @@ class StoreMessagingService {
         
         // Handle disconnection
         this.port.onDisconnect.addListener(() => {
-          console.debug('📡 Store messaging disconnected');
+          debugLog('📡 Store messaging disconnected');
           this.port = null;
           
           // Attempt to reconnect with exponential backoff
@@ -91,7 +92,7 @@ class StoreMessagingService {
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         
-        console.debug('✅ Store messaging connected');
+        debugLog('✅ Store messaging connected');
         
         // Re-subscribe to stores after successful connection
         if (this.subscribedStores.size > 0) {
@@ -104,7 +105,7 @@ class StoreMessagingService {
                 storeName
               });
             });
-            console.debug(`📡 Re-subscribed to ${this.subscribedStores.size} stores`);
+            debugLog(`📡 Re-subscribed to ${this.subscribedStores.size} stores`);
           }, 100);
           this.reconnectTimeouts.add(resubscribeTimeoutId);
         }
@@ -130,7 +131,7 @@ class StoreMessagingService {
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000); // Max 30 seconds
     
-    console.debug(`📡 Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
+    debugLog(`📡 Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
     
     const timeoutId = setTimeout(() => {
       this.reconnectTimeouts.delete(timeoutId);
@@ -244,7 +245,7 @@ class StoreMessagingService {
    * Clean up all connections and timeouts to prevent memory leaks
    */
   public destroy(): void {
-    console.debug('🧹 Destroying store messaging service');
+    debugLog('🧹 Destroying store messaging service');
     
     // Clear all reconnect timeouts
     this.reconnectTimeouts.forEach(timeoutId => clearTimeout(timeoutId));

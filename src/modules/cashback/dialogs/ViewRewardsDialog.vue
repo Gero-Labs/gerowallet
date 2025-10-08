@@ -156,10 +156,10 @@ import networks from '@/utils/networks';
 import { stringToHex } from '@/shared/utils/converter';
 import snackbar from '@/plugins/snackbar';
 import { METHOD } from '@/chrome/config';
-import { Address } from '@emurgo/cardano-serialization-lib-browser';
 import cashbackApi from '@/api/cashback-api';
 import { Messaging } from '@/chrome/messaging';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import { Cardano } from '@cardano-sdk/core';
 
 interface Props {
   isOpen: boolean;
@@ -175,8 +175,6 @@ const { loggedWallet } = toRefs(walletStore);
 
 const currentTab = ref(0);
 const expanded = ref([]);
-const messageToSign = ref<string>("");
-const signature = ref<string>("");
 const loading = ref(false);
 
 const dealsHeaders = ref([
@@ -261,7 +259,7 @@ const claim = async () => {
     const messageToSignValue = res.messageToSign;
     const request = {
       method: METHOD.signData,
-      data: { address: Address.from_bech32(baseAddress.value).to_hex(), payload: stringToHex(messageToSignValue) },
+      data: { address: Cardano.Address.fromBech32(baseAddress.value).toBytes(), payload: stringToHex(messageToSignValue) },
     };
     const signatureResult: any = await Messaging.sendToBackground(request);
     if (signatureResult.error) {

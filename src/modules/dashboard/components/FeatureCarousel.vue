@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 // Define and export carousel item interface
 export interface CarouselItem {
@@ -268,7 +268,6 @@ onUnmounted(() => {
 .carousel-wrapper {
   position: relative;
   height: 100%;
-  min-height: 422px;
   border-radius: 12px;
   overflow: hidden;
   background-color: rgba(255, 255, 255, 0.05);
@@ -300,7 +299,6 @@ onUnmounted(() => {
 .carousel-wrapper .v-carousel .v-window__container,
 .carousel-wrapper .v-carousel-item {
   height: 100% !important;
-  min-height: 422px !important;
 }
 
 /* Prevent height flickering during transitions */
@@ -311,7 +309,6 @@ onUnmounted(() => {
 .carousel-wrapper .v-window-item {
   flex: 0 0 100% !important;
   height: 100% !important;
-  min-height: 422px !important;
 }
 
 .carousel-behind-overlay {
@@ -389,7 +386,7 @@ onUnmounted(() => {
 
 /* Midnight specific styles */
 .midnight-background {
-  background: linear-gradient(135deg, #1a0033 0%, #330066 50%, #4d0099 100%);
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
 }
 
 /* Apex specific styles */

@@ -92,7 +92,7 @@
       <!-- Feature cards with spanning background -->
       <v-row class="mt-8 feature-cards-grid" justify="center">
         <!-- Card 1: Buy Crypto (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex && !isTestnet">
+        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveBuySupported(loggedWallet?.chain, loggedWallet?.network)">
           <div class="feature-card-container buy-card-emphasized">
             <div
               class="feature-card-background card-1"
@@ -159,36 +159,36 @@
         </v-col>
 
         <!-- Card 3: Learn -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-3"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '33% center' : '40% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('open-learn')">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-school
-                  </v-icon>
-                  <h3 class="feature-title">Learn</h3>
-                  <p class="feature-description">Discover {{ blockchain }} ecosystem</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  Learn
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
+<!--        <v-col cols="12" sm="6" md="4" lg="2">-->
+<!--          <div class="feature-card-container">-->
+<!--            <div-->
+<!--              class="feature-card-background card-3"-->
+<!--              :style="{-->
+<!--                backgroundImage: `url(${featureBackgroundImage})`,-->
+<!--                backgroundSize: cardBackgroundSize,-->
+<!--                backgroundPosition: isApex ? '33% center' : '40% center',-->
+<!--                backgroundRepeat: 'no-repeat'-->
+<!--              }"-->
+<!--            ></div>-->
+<!--            <div class="feature-card-glass" @click="$emit('open-learn')">-->
+<!--              <div class="feature-card-content">-->
+<!--                <div class="feature-card-main">-->
+<!--                  <v-icon size="48" :color="primaryColor" class="mb-3">-->
+<!--                    mdi-school-->
+<!--                  </v-icon>-->
+<!--                  <h3 class="feature-title">Learn</h3>-->
+<!--                  <p class="feature-description">Discover {{ blockchain }} ecosystem</p>-->
+<!--                </div>-->
+<!--                <v-chip small :color="primaryColor" text-color="white">-->
+<!--                  Learn-->
+<!--                </v-chip>-->
+<!--              </div>-->
+<!--            </div>-->
+<!--          </div>-->
+<!--        </v-col>-->
 
         <!-- Card 4: Gero Card (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
+        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveGeroCardSupport(loggedWallet?.chain, loggedWallet?.network)">
           <div class="feature-card-container">
             <div
               class="feature-card-background card-4"
@@ -198,8 +198,8 @@
                 backgroundPosition: '60% center',
                 backgroundRepeat: 'no-repeat'
               }"
-            ></div>
-            <div class="feature-card-glass">
+            />
+            <div class="feature-card-glass" @click="navigateToCard">
               <div class="feature-card-content">
                 <div class="feature-card-main">
                   <v-icon size="48" :color="primaryColor" class="mb-3">
@@ -227,7 +227,7 @@
                 backgroundPosition: isApex ? '66% center' : '80% center',
                 backgroundRepeat: 'no-repeat'
               }"
-            ></div>
+            />
             <div class="feature-card-glass" @click="navigateToStaking">
               <div class="feature-card-content">
                 <div class="feature-card-main">
@@ -336,10 +336,6 @@ const isApex = computed(() => {
          loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
 
-const isTestnet = computed(() => {
-  return loggedWallet.value?.network !== Network.MAINNET;
-})
-
 const primaryColor = computed(() => {
   return isApex.value ? '#dc753e' : '#00c7f3';
 });
@@ -402,6 +398,13 @@ const copyToClipboard = async () => {
 };
 
 // Navigation functions
+const navigateToCard = () => {
+  const router = instance?.proxy?.$router;
+  if (router) {
+    router.push('/card');
+  }
+};
+
 const navigateToStaking = () => {
   const router = (instance?.proxy as any)?.$router;
   if (router) {

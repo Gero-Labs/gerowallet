@@ -23,7 +23,7 @@
       </div>
     </v-card-title>
     <Select
-      v-if="showWallet"
+      v-if="showWallet && loggedWallet"
       :value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
