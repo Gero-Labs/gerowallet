@@ -18,7 +18,11 @@
       "WebFetch(domain:vacuumlabs.github.io)",
       "WebFetch(domain:github.com)",
       "Bash(do echo \"Processing $file...\")",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "Bash(gh project list:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh issue create:*)"
     ],
     "deny": [],
     "ask": []
