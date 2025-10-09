@@ -5,9 +5,11 @@
     @close="$emit('close')"
     title="Strike Perpetuals"
     subtitle="Trade perpetual futures with leverage on Cardano"
-    :min-height="0"
+    :min-height="746"
+    :height="746"
     :width="1100"
     :scrollable="true"
+    :persistent="false"
   >
     <v-card-text class="pt-1 dialog-content-container" style="z-index: 4">
       <v-row>
@@ -47,7 +49,7 @@
             >
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">Market Orders</span>
+                  <span class="tab-text">Positions</span>
                   <span v-if="positions.length > 0" class="tab-count ml-1">{{ positions.length }}</span>
                 </div>
               </v-tab>
@@ -59,7 +61,7 @@
               </v-tab>
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">All Orders</span>
+                  <span class="tab-text">History</span>
                   <span v-if="history.length > 0" class="tab-count ml-1">{{ history.length }}</span>
                 </div>
               </v-tab>
@@ -94,7 +96,7 @@
               <!-- Empty state -->
               <div v-else-if="positions.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-                <p class="mt-2">No open positions</p>
+                <p class="mt-2">No Open Positions</p>
                 <p class="mt-1 text-caption">
                   Your perpetual positions will appear here
                 </p>
@@ -144,6 +146,7 @@
                     class="text-center pa-0 ma-0"
                   >
                     <v-pagination
+                      color="#26FAB0"
                       v-model="currentPositionsPage"
                       :length="
                           Math.ceil(positions.length / positionsPerPage)
@@ -151,7 +154,7 @@
                       :total-visible="5"
                       circle
                       class="compact-pagination ma-0"
-                    ></v-pagination>
+                    />
                   </td>
                 </tr>
               </template>
@@ -498,7 +501,7 @@
               <!-- Empty state -->
               <div v-else-if="limitOrders.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-target</v-icon>
-                <p class="mt-2">No limit orders</p>
+                <p class="mt-2">No Limit Orders</p>
                 <p class="mt-1 text-caption">
                   Your pending limit orders will appear here
                 </p>
@@ -600,175 +603,118 @@
                       </v-btn>
                     </div>
                   </template>
-
-                  <template v-slot:body.append>
-                    <tr v-if="limitOrders.length > positionsPerPage" class="no-hover">
-                      <td :colspan="limitOrderHeaders.length" class="text-center pa-0 ma-0">
-                        <v-pagination
-                          v-model="currentLimitOrdersPage"
-                          :length="Math.ceil(limitOrders.length / positionsPerPage)"
-                          :total-visible="5"
-                          circle
-                          class="compact-pagination ma-0"
-                        ></v-pagination>
-                      </td>
-                    </tr>
-                  </template>
                 </v-data-table>
               </div>
             </v-tab-item>
 
             <!-- History Tab -->
             <v-tab-item>
-              <!-- Loading state -->
-              <div v-if="loadingHistory" class="loading-state">
-                <v-progress-circular
-                  indeterminate
-                  color="#26FAB0"
-                  size="40"
-                />
-                <p class="mt-3">Loading history...</p>
-              </div>
+              <v-card class="transparent history-card-container">
+                <v-card-text class="pa-0 history-card-content">
+                  <!-- Loading state -->
+                  <div v-if="loadingHistory" class="loading-state">
+                    <v-progress-circular
+                      indeterminate
+                      color="#26FAB0"
+                      size="40"
+                    />
+                    <p class="mt-3">Loading history...</p>
+                  </div>
 
-              <!-- Empty state -->
-              <div v-else-if="history.length === 0" class="empty-state">
-                <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
-                <p class="mt-2">No orders found</p>
-                <p class="mt-1 text-caption">
-                  All your positions and orders will appear here
-                </p>
-              </div>
+                  <!-- Empty state -->
+                  <div v-else-if="history.length === 0" class="empty-state">
+                    <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
+                    <p class="mt-2">No History</p>
+                    <p class="mt-1 text-caption">
+                      All your positions and orders will appear here
+                    </p>
+                  </div>
 
-              <!-- History table -->
-              <div v-else class="positions-table">
-                <v-data-table
-                  dense
-                  class="transparent positions-data-table"
-                  :headers="historyHeaders"
-                  :items="paginatedHistory"
-                  :items-per-page="-1"
-                  hide-default-footer
-                  :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-                >
-                  <!-- Custom headers with padding -->
-                  <template v-slot:[`header.asset`]="{ header }">
-                    <span style="padding-left: 12px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.orderType`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.position`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.entryPrice`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.finalPnl`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.status`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.closedTime`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-
-                  <template v-slot:[`item.asset`]="{ item }">
-                    <div class="d-flex align-items-center pl-2">
-                      <div class="asset-info d-flex flex-column justify-center">
-                        <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
-                        <div class="asset-leverage text-caption text--secondary text-center">{{ item.leverage }}x</div>
-                      </div>
-                    </div>
-                  </template>
-
-                  <template v-slot:[`item.orderType`]="{ item }">
-                    <v-chip
-                      x-small
-                      label
-                      class="ultra-compact-chip"
-                      style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;"
+                  <!-- History table -->
+                  <div v-else class="positions-table">
+                    <v-data-table
+                      dense
+                      class="transparent positions-data-table"
+                      :headers="historyHeaders"
+                      :items="paginatedHistory"
+                      :items-per-page="positionsPerPage"
+                      hide-default-footer
+                      :header-props="{ 'sort-icon': 'mdi-menu-up' }"
                     >
-                      <v-icon class="mr-1" x-small color="#10b981">{{
-                          item.orderType === "MARKET"
-                            ? "mdi-flash"
-                            : "mdi-target"
-                        }}</v-icon>
-                      {{ (item.orderType)?.toUpperCase() }}
-                    </v-chip>
-                  </template>
-                  <template v-slot:[`item.position`]="{ item }">
-                    <v-chip
-                      v-if="item.position || item.type"
-                      :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
-                      x-small
-                      label
-                      class="ultra-compact-chip"
-                      :style="(item.position || item.type)?.toUpperCase() === 'LONG'
+                      <!-- Custom headers with padding -->
+                      <template v-slot:[`header.action`]="{ header }">
+                        <span style="padding-left: 12px">{{ header.text }}</span>
+                      </template>
+
+
+                      <template v-slot:[`item.asset`]="{ item }">
+                        <div class="d-flex align-items-center pl-2">
+                          <div class="asset-info d-flex flex-column justify-center">
+                            <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
+                          </div>
+                        </div>
+                      </template>
+
+                      <template v-slot:[`item.action`]="{ item }">
+                        <v-chip
+                          x-small
+                          label
+                          class="ultra-compact-chip"
+                          :style="(item.position || item.type)?.toUpperCase() === 'LONG'
                         ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
                         : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'"
-                    >
-                      {{ (item.position || item.type)?.toUpperCase() }}
-                    </v-chip>
-                  </template>
+                          :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
+                        >
+                          <v-icon class="mr-1" x-small :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'">{{
+                              item.action?.includes('Limit') ? "mdi-target"
+                                : "mdi-flash"
+                            }}</v-icon>
+                          {{ (item.action)?.toUpperCase() }}
+                        </v-chip>
+                      </template>
 
-                  <template v-slot:[`item.entryPrice`]="{ item }">
-                    <div class="price-values-compact">
-                      <div class="entry-price">${{ (item.entryPrice || item.price)?.toFixed(2) || '0.00' }}</div>
-                    </div>
-                  </template>
-
-                  <template v-slot:[`item.finalPnl`]="{ item }">
-                    <div class="d-flex align-items-center justify-center">
-                      <v-avatar tile size="10" class="mr-1 trend-icon-centered">
-                        <v-img
-                          :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
-                          alt="trend"
-                        />
-                      </v-avatar>
-                      <div class="pnl-values-compact">
-                        <div :class="(item.pnl || 0) >= 0 ? 'profit' : 'loss'">
-                          {{ formatCurrency(item.pnl || 0) }}
+                      <template v-slot:[`item.entryPrice`]="{ item }">
+                        <div class="price-values-compact">
+                          <div class="entry-price">${{ (item.entryPrice || item.price)?.toFixed(2) || '0.00' }}</div>
                         </div>
-                      </div>
-                    </div>
-                  </template>
+                      </template>
 
-                  <template v-slot:[`item.status`]="{ item }">
-                    <v-chip
-                      :color="getPositionStatusColor(item.status)"
-                      x-small
-                      label
-                      class="status-chip"
-                    >
-                      {{ (item.status || 'unknown').toUpperCase() }}
-                    </v-chip>
-                  </template>
-
-                  <template v-slot:[`item.closedTime`]="{ item }">
-                    <div class="text-caption">
-                      {{ item.enteredPositionTime ? formatDate(item.enteredPositionTime) : '-' }}
-                    </div>
-                  </template>
-
-                  <template v-slot:body.append>
-                    <tr v-if="history.length > positionsPerPage" class="no-hover">
-                      <td :colspan="historyHeaders.length" class="text-center pa-0 ma-0">
-                        <v-pagination
-                          v-model="currentHistoryPage"
-                          :length="Math.ceil(history.length / positionsPerPage)"
-                          :total-visible="5"
-                          circle
-                          class="compact-pagination ma-0"
-                        ></v-pagination>
-                      </td>
-                    </tr>
-                  </template>
-                </v-data-table>
-              </div>
+                      <template v-slot:[`item.finalPnl`]="{ item }">
+                        <div class="d-flex align-items-center justify-center">
+                          <v-avatar tile size="10" class="mr-1 trend-icon-centered">
+                            <v-img
+                              :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
+                              alt="trend"
+                            />
+                          </v-avatar>
+                          <div class="pnl-values-compact">
+                            <div :class="(item.pnl || 0) > 0 ? 'profit' : (item.pnl) == 0 ? 'even' : 'loss'">
+                              {{ formatCurrency(item.pnl || 0) }}
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                      <template v-slot:[`item.closedTime`]="{ item }">
+                        <div class="text-caption">
+                          {{ item.enteredPositionTime ? formatDate(item.enteredPositionTime) : '-' }}
+                        </div>
+                      </template>
+                    </v-data-table>
+                  </div>
+                </v-card-text>
+                <v-card-actions v-if="history.length > positionsPerPage" class="text-center justify-center">
+                  <v-pagination
+                    color="#26FAB0"
+                    v-model="currentHistoryPage"
+                    :length="Math.ceil(history.length / positionsPerPage)"
+                    :total-visible="7"
+                    circle
+                    class="compact-pagination ma-0"
+                  />
+                </v-card-actions>
+              </v-card>
             </v-tab-item>
           </v-tabs-items>
-
         </v-col>
         <v-col cols="4">
           <div
@@ -1262,7 +1208,7 @@
               color="primary"
               block
               @click="openPosition"
-              :loading="loading"
+              :loading="loading || openingPosition"
               :disabled="!canOpenPosition"
               class="open-position-btn enhanced compact"
               :class="{
@@ -1419,7 +1365,7 @@ const calculateAccumulatedBorrowFee = (
   hourlyBorrowFee: number,
   enteredPositionTime: number
 ) => {
-  const currentTime = Date.now() + 300000; // Add 5 minutes (300000ms) for a validity interval
+  const currentTime = Date.now() + 300000; // Add 5 minutes (300,000 ms) for a validity interval
   const hoursElapsed = (currentTime - enteredPositionTime) / (1000 * 60 * 60);
   return hourlyBorrowFee * hoursElapsed;
 };
@@ -1563,7 +1509,7 @@ const formatPercentage = (value: number, totalPositionValue: number) => {
 // Format currency - exactly matching React component
 const formatCurrency = (value: number) => {
   const formattedValue = Math.abs(value).toFixed(
-    Math.max(2, Math.abs(value) < 0.01 ? 4 : 2)
+    Math.max(2, Math.abs(value) < 0.01 ? 2 : 2)
   );
   return value < 0 ? `-$${formattedValue}` : `$${formattedValue}`;
 };
@@ -2164,22 +2110,43 @@ const stopChartUpdates = () => {
   }
 };
 
+// Alias for positions - used for checking if position still exists during polling
+const perpetualPositions = computed(() => positions.value);
+
 // Reactive positions that update when ADA price changes
 const positions = computed(() => {
-  console.debug('🔍 Positions computed - rawPositions.value:', {
+  console.log('🔍 [PerpetualsDialog] Positions computed - rawPositions.value:', {
     length: rawPositions.value.length,
     hasData: rawPositions.value.length > 0,
-    firstPosition: rawPositions.value[0] || 'none'
+    allPositions: rawPositions.value,
+    allStatuses: rawPositions.value.map(p => ({ id: p.id, status: p.status }))
   });
 
   if (!rawPositions.value.length) {
-    console.debug('🔍 No rawPositions available, returning empty array');
+    console.log('🔍 [PerpetualsDialog] No rawPositions available, returning empty array');
     return [];
   }
 
-  return rawPositions.value.filter(position => position.status !== 'Completed').map((position, index) => {
+  // For Positions tab: show all positions regardless of status
+  // The API should only return active positions, not completed/closed ones
+  // If we need to filter, we should use an inclusive filter (e.g., status === 'ACTIVE')
+  // rather than an exclusive filter
+  const filteredPositions = rawPositions.value;
+
+  console.log('🔍 [PerpetualsDialog] Processing positions:', {
+    count: filteredPositions.length,
+    positions: filteredPositions
+  });
+
+  return filteredPositions.map((position, index) => {
     // Re-process position data with the current price
     const processedData = processPositionData(position);
+
+    console.log(`🔍 [PerpetualsDialog] Processed position ${index}:`, {
+      id: position.id,
+      status: position.status,
+      processedData
+    });
 
     // Return an enhanced position with updated calculations
     return {
@@ -2195,10 +2162,14 @@ const tickerSymbol = computed(() => {
 });
 
 const closingPositions = ref<Record<string, boolean>>({});
+const closingPositionIntervals = ref<Record<string, number>>({});
 const loadingPositions = ref(false);
 const limitOrders = ref<LimitOrder[]>([]);
 const loadingLimitOrders = ref(false);
 const cancellingOrders = ref<Record<string, boolean>>({});
+const cancellingOrderIntervals = ref<Record<string, number>>({});
+const openingPosition = ref(false);
+const openingPositionInterval = ref<number | null>(null);
 const activeTab = ref(0);
 const history = ref<any[]>([]);
 const loadingHistory = ref(false);
@@ -2219,7 +2190,7 @@ onBeforeUnmount(() => {
 
 // Pagination for positions table (consistent with TokensTab.vue)
 const currentPositionsPage = ref(1);
-const positionsPerPage = ref(5); // Match tokens table default
+const positionsPerPage = ref(7); // Match tokens table default
 
 // Computed for paginated positions
 const paginatedPositions = computed(() => {
@@ -2346,31 +2317,23 @@ const limitOrderHeaders = ref([
 
 // History Headers
 const historyHeaders = ref([
-
-  {
-    text: "Asset",
-    align: "start",
-    sortable: true,
-    value: "asset",
-    width: "20",
-  },
   {
     text: "Type",
-    align: "center",
+    align: "start",
     sortable: true,
-    value: "orderType",
-    width: "15",
+    value: "action",
+    width: "164",
   },
   {
-    text: "Side",
+    text: "Asset",
     align: "center",
     sortable: true,
-    value: "position",
-    width: "15",
+    value: "asset",
+    width: "10",
   },
   {
     text: "Entry Price",
-    align: "center",
+    align: "start",
     sortable: true,
     value: "entryPrice",
     width: "20",
@@ -2383,18 +2346,11 @@ const historyHeaders = ref([
     width: "20",
   },
   {
-    text: "Status",
-    align: "center",
-    sortable: true,
-    value: "status",
-    width: "15",
-  },
-  {
     text: "Date",
     align: "center",
     sortable: true,
     value: "closedTime",
-    width: "20",
+    width: "126",
   },
 ]);
 
@@ -2421,7 +2377,7 @@ watch(
       console.debug("PerpetualsDialog: Dialog opened, optimizing load sequence");
 
       // Start positions loading immediately for the main tab
-      const positionsPromise = loadPositions();
+      const positionsPromise = loadPositions(false);
 
       // Start background tasks in parallel
       const backgroundTasks = Promise.allSettled([
@@ -2447,7 +2403,7 @@ watch(
           }
         })(),
         // Load secondary tab data
-        loadLimitOrders(),
+        loadLimitOrders(false),
         loadHistory()
       ]);
 
@@ -2495,6 +2451,36 @@ watch(
       console.debug("PerpetualsDialog: Dialog closed, stopping updates");
       shouldFetchChartData.value = false;
       stopChartUpdates();
+
+      // Clean up all position closing polling intervals
+      Object.entries(closingPositionIntervals.value).forEach(([positionKey, intervalId]) => {
+        console.debug(`[StrikeFinance] Clearing polling interval for position ${positionKey}`);
+        clearInterval(intervalId);
+      });
+      closingPositionIntervals.value = {};
+
+      // Reset all closing position states
+      closingPositions.value = {};
+
+      // Clean up all order cancelling polling intervals
+      Object.entries(cancellingOrderIntervals.value).forEach(([orderKey, intervalId]) => {
+        console.debug(`[StrikeFinance] Clearing polling interval for order ${orderKey}`);
+        clearInterval(intervalId);
+      });
+      cancellingOrderIntervals.value = {};
+
+      // Reset all cancelling order states
+      cancellingOrders.value = {};
+
+      // Clean up opening position polling interval
+      if (openingPositionInterval.value !== null) {
+        console.debug(`[StrikeFinance] Clearing polling interval for opening position`);
+        clearInterval(openingPositionInterval.value);
+        openingPositionInterval.value = null;
+      }
+
+      // Reset opening position state
+      openingPosition.value = false;
     }
   }
 );
@@ -2542,7 +2528,7 @@ const updateDebouncedCalculations = () => {
       const liqPrice = currentAdaPrice * (1 + adjustedLiquidationMargin);
       debouncedLiquidationPrice.value = `$${liqPrice.toFixed(4)}`;
     }
-  }, 50); // 50ms debounce for smooth UI updates
+  }, 50); // 50 ms debounce for smooth UI updates
 };
 
 // Fast computed for immediate slider response
@@ -2656,6 +2642,10 @@ const openMarketPosition = async (walletAddress: string) => {
   };
 
   console.debug('[StrikeFinance] Opening position with request:', openPositionRequest);
+
+  // Get initial position count to detect new position
+  const initialPositionCount = positions.value.length;
+
   const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
   const txCbor: string = cborResponse.data['cbor'];
 
@@ -2667,10 +2657,7 @@ const openMarketPosition = async (walletAddress: string) => {
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
   } else {
-    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-    const txId = txResponse.data['txHash'];
-    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-    console.log(txId)
+    await submit(txCbor, signaturesRes.data);
     positionData.value = {
       asset: "ADA/USD",
       collateralAmount: 0,
@@ -2681,7 +2668,37 @@ const openMarketPosition = async (walletAddress: string) => {
       stopLossPrice: 0,
       takeProfitPrice: 0,
     };
-    await loadPositions();
+
+    // Set loading state and start polling for the new position
+    openingPosition.value = true;
+    console.debug(`[StrikeFinance] Starting polling for new market position`);
+
+    let pollAttempts = 0;
+    const maxPollAttempts = 24; // 2-minute max (24 * 5 seconds)
+
+    openingPositionInterval.value = window.setInterval(async () => {
+      pollAttempts++;
+      console.debug(`[StrikeFinance] Polling for new position (attempt ${pollAttempts}/${maxPollAttempts})`);
+
+      await loadPositions(false); // Don't show loading spinner
+
+      // Check if a new position appeared
+      const hasNewPosition = positions.value.length > initialPositionCount;
+
+      if (hasNewPosition || pollAttempts >= maxPollAttempts) {
+        if (hasNewPosition) {
+          console.debug(`[StrikeFinance] New position detected, stopping poll`);
+        } else {
+          console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
+        }
+
+        if (openingPositionInterval.value !== null) {
+          clearInterval(openingPositionInterval.value);
+          openingPositionInterval.value = null;
+        }
+        openingPosition.value = false;
+      }
+    }, 5000);
   }
 }
 
@@ -2703,6 +2720,10 @@ const openLimitPosition = async (walletAddress: string) => {
   };
 
   console.debug('[StrikeFinance] Opening limit position with request:', openPositionRequest);
+
+  // Get initial limit order count to detect new order
+  const initialOrderCount = limitOrders.value.length;
+
   const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openLimitOrder(openPositionRequest);
   const txCbor: string = cborResponse.data['cbor'];
 
@@ -2714,11 +2735,7 @@ const openLimitPosition = async (walletAddress: string) => {
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
   } else {
-    // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
-    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-    const txId = txResponse.data['txHash'];
-    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-    console.log(txId)
+    await submit(txCbor, signaturesRes.data);
     positionData.value = {
       asset: "ADA/USD",
       collateralAmount: 0,
@@ -2729,7 +2746,37 @@ const openLimitPosition = async (walletAddress: string) => {
       stopLossPrice: 0,
       takeProfitPrice: 0,
     };
-    await loadLimitOrders();
+
+    // Set loading state and start polling for the new limit order
+    openingPosition.value = true;
+    console.debug(`[StrikeFinance] Starting polling for new limit order`);
+
+    let pollAttempts = 0;
+    const maxPollAttempts = 24; // 2 minutes max (24 * 5 seconds)
+
+    openingPositionInterval.value = window.setInterval(async () => {
+      pollAttempts++;
+      console.debug(`[StrikeFinance] Polling for new limit order (attempt ${pollAttempts}/${maxPollAttempts})`);
+
+      await loadLimitOrders(false); // Don't show loading spinner
+
+      // Check if a new limit order appeared
+      const hasNewOrder = limitOrders.value.length > initialOrderCount;
+
+      if (hasNewOrder || pollAttempts >= maxPollAttempts) {
+        if (hasNewOrder) {
+          console.debug(`[StrikeFinance] New limit order detected, stopping poll`);
+        } else {
+          console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
+        }
+
+        if (openingPositionInterval.value !== null) {
+          clearInterval(openingPositionInterval.value);
+          openingPositionInterval.value = null;
+        }
+        openingPosition.value = false;
+      }
+    }, 5000);
   }
 }
 
@@ -2747,7 +2794,12 @@ const closePosition = async (position: PerpetualPosition) => {
     return;
   }
 
-  closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = true;
+  const positionKey = `${position.outRef.txHash}#${position.outRef.outputIndex}`;
+  closingPositions.value[positionKey] = true;
+
+  // Store polling interval ID for cleanup
+  let pollingIntervalId: number | null = null;
+
   try {
     const closeRequest: ClosePerpetualRequest = {
       address: loggedWallet.value?.baseAddress,
@@ -2770,16 +2822,56 @@ const closePosition = async (position: PerpetualPosition) => {
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
-    } else {
-      // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
-      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-      const txId = txResponse.data['txHash'];
-      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-      console.log(txId)
-      //TODO remove position
+      return;
     }
-    // Reload positions after a successful close
-    await loadPositions();
+    await submit(txCbor, signaturesRes.data);
+
+    // Start polling for position closure
+    const maxPollingAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    let pollingAttempts = 0;
+
+    pollingIntervalId = window.setInterval(async () => {
+      pollingAttempts++;
+      console.log(`[StrikeFinance] Polling for position closure (attempt ${pollingAttempts}/${maxPollingAttempts})`);
+
+      try {
+        await loadPositions(false);
+
+        // Check if position is still in the list
+        const stillExists = perpetualPositions.value.some(
+          p => p.outRef.txHash === position.outRef.txHash &&
+               p.outRef.outputIndex === position.outRef.outputIndex
+        );
+
+        if (!stillExists) {
+          // Position successfully closed
+          console.log('[StrikeFinance] Position successfully closed');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          closingPositions.value[positionKey] = false;
+          snackbar.fireSuccess('Position closed successfully');
+        } else if (pollingAttempts >= maxPollingAttempts) {
+          // Max attempts reached
+          console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          closingPositions.value[positionKey] = false;
+        }
+      } catch (error) {
+        console.error('[StrikeFinance] Error during position polling:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Store interval ID for cleanup on dialog close
+    if (!closingPositionIntervals.value) {
+      closingPositionIntervals.value = {};
+    }
+    closingPositionIntervals.value[positionKey] = pollingIntervalId;
+
   } catch (error) {
     console.error("[StrikeFinance]  Failed to close position - detailed error:", {
       error,
@@ -2795,17 +2887,22 @@ const closePosition = async (position: PerpetualPosition) => {
       }
     });
     snackbar.setError('Failed to Close Position');
-  } finally {
-    closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = false;
+    closingPositions.value[positionKey] = false;
+
+    // Clean up polling interval on error
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = null;
+    }
   }
 };
 
-const submit = async (cborHex: string) => {
+const submit = async (cborHex: string, witnessSetHex?: string) => {
   const submitResult = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SUBMIT_TX,
     data: {
       txCbor: cborHex,
-      witnessHex: null,
+      witnessHex: witnessSetHex || null,
       utxos: utxos.value
     }
   }) as { data: { txId?: string; error?: string } };
@@ -2835,14 +2932,14 @@ const getPositionTrendIcon = (position: any) => {
   }
 };
 
-const loadPositions = async () => {
+const loadPositions = async (withLoading: boolean = true) => {
   const walletAddress = loggedWallet.value?.baseAddress;
 
   if (!walletAddress) {
     console.warn("No wallet address available");
     return;
   }
-  loadingPositions.value = true;
+  if (withLoading) loadingPositions.value = true;
   try {
     console.debug('[StrikeFinance]  Loading positions for wallet:', walletAddress);
     const res: AxiosResponse<PerpetualPosition[]> = await strikeFinanceApi.getPositions(walletAddress);
@@ -2855,7 +2952,7 @@ const loadPositions = async () => {
     console.error("Failed to load positions:", (error as any)?.message || error);
     rawPositions.value = [];
   } finally {
-    loadingPositions.value = false;
+    if (withLoading) loadingPositions.value = false;
   }
 };
 
@@ -2870,34 +2967,46 @@ const loadHistory = async () => {
   }
   loadingHistory.value = true;
   try {
-    console.debug('[StrikeFinance] Loading all orders for wallet:', walletAddress);
+    console.debug('[StrikeFinance] Loading perpetual history for wallet:', walletAddress);
 
-    // Load both positions and limit orders concurrently
-    const [positionsRes, limitOrdersRes] = await Promise.all([
-      strikeFinanceApi.getPositions(walletAddress),
-      strikeFinanceApi.getLimitOrders(walletAddress)
-    ]);
-    const allPositions = positionsRes.data || [];
-    const allLimitOrders = limitOrdersRes.data || [];
+    const historyRes = await strikeFinanceApi.getPerpetualHistory(walletAddress);
+    const transactions = historyRes.data?.transactions || [];
 
-    // Combine positions and limit orders into one array
-    // Add a 'type' field to distinguish between them
-    const combinedOrders = [
-      ...allPositions.map(pos => ({ ...pos, orderType: 'MARKET' })),
-      ...allLimitOrders.map(order => ({ ...order, orderType: 'LIMIT' }))
-    ];
+    // Map API response to match table structure
+    const mappedHistory = transactions.map(tx => ({
+      asset: {
+        ticker: tx.assetTicker,
+      },
+      leverage: Math.round(tx.positionSize / tx.collateralAmount) || 1, // Calculate leverage from position size
+      orderType: tx.type?.toUpperCase() || 'MARKET',
+      position: tx.positionType?.toUpperCase() || 'LONG',
+      type: tx.positionType?.toUpperCase() || 'LONG',
+      entryPrice: tx.enteredPrice,
+      price: tx.enteredPrice,
+      pnl: tx.pnl,
+      status: tx.status?.toLowerCase() || 'unknown',
+      enteredPositionTime: tx.time,
+      txHash: tx.txHash,
+      description: tx.description,
+      action: tx.action,
+      collateralAmount: tx.collateralAmount,
+      positionSize: tx.positionSize,
+      currentPrice: tx.currentPrice,
+      contract: tx.contract,
+      pair: tx.pair,
+      originalTxHash: tx.originalTxHash,
+    }));
 
-    history.value = combinedOrders;
+    history.value = mappedHistory;
 
-    console.debug('[StrikeFinance] All orders loaded:', {
-      positions: allPositions.length,
-      limitOrders: allLimitOrders.length,
-      total: combinedOrders.length
+    console.debug('[StrikeFinance] Perpetual history loaded:', {
+      transactions: transactions.length,
+      mapped: mappedHistory.length
     });
 
-    console.debug('[StrikeFinance] Status breakdown:',
-      combinedOrders.reduce((acc, item) => {
-        acc[item.status] = (acc[item.status] || 0) + 1;
+    console.debug('[StrikeFinance] Action breakdown:',
+      mappedHistory.reduce((acc, item) => {
+        acc[item.action] = (acc[item.action] || 0) + 1;
         return acc;
       }, {})
     );
@@ -2933,7 +3042,7 @@ const getPositionStatusColor = (status: string) => {
     case 'liquidated': return 'error';    // Red for liquidated positions
     case 'pending': return 'warning';     // Orange for pending positions
     case 'cancelled':
-    case 'canceled': return 'grey';       // Grey for cancelled orders
+    case 'canceled': return 'grey';       // Grey for canceled orders
     default: return 'grey';               // Grey for unknown statuses
   }
 };
@@ -2991,11 +3100,10 @@ onBeforeUnmount(() => {
 });
 
 // Load limit orders
-const loadLimitOrders = async () => {
+const loadLimitOrders = async (withLoading: boolean = true) => {
   const walletAddress = loggedWallet.value?.baseAddress;
   if (!walletAddress) return;
-
-  loadingLimitOrders.value = true;
+  if (withLoading) loadingLimitOrders.value = true;
   try {
     const response = await strikeFinanceApi.getLimitOrders(walletAddress);
     limitOrders.value = response.data;
@@ -3019,7 +3127,7 @@ const loadLimitOrders = async () => {
     console.error('Failed to load limit orders:', error);
     limitOrders.value = [];
   } finally {
-    loadingLimitOrders.value = false;
+    if (withLoading) loadingLimitOrders.value = false;
   }
 };
 
@@ -3028,7 +3136,13 @@ const cancelLimitOrder = async (order: LimitOrder) => {
     console.error('Invalid order data for cancelling');
     return;
   }
-  cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = true;
+
+  const orderKey = `${order.outRef.txHash}#${order.outRef.outputIndex}`;
+  cancellingOrders.value[orderKey] = true;
+
+  // Store polling interval ID for cleanup
+  let pollingIntervalId: number | null = null;
+
   const cancelRequest: CancelLimitOrderRequest = {
     address: loggedWallet.value?.baseAddress,
     asset: {
@@ -3040,9 +3154,11 @@ const cancelLimitOrder = async (order: LimitOrder) => {
       outputIndex: order.outRef.outputIndex,
     }
   };
+
   try {
     const cborResponse: AxiosResponse<string> = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
     const txCbor: string = cborResponse.data['cbor'];
+
     // Sign the transaction with partial signing to add user's witness
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
@@ -3050,20 +3166,66 @@ const cancelLimitOrder = async (order: LimitOrder) => {
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
-    } else {
-      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-      const txId = txResponse.data['txHash'];
-      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-      console.log(txId)
-      //TODO remove order
+      return;
     }
-    // Reload limit orders
-    await loadLimitOrders();
+    await submit(txCbor, signaturesRes.data);
+
+    // Start polling for order cancellation
+    const maxPollingAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    let pollingAttempts = 0;
+
+    pollingIntervalId = window.setInterval(async () => {
+      pollingAttempts++;
+      console.log(`[StrikeFinance] Polling for order cancellation (attempt ${pollingAttempts}/${maxPollingAttempts})`);
+
+      try {
+        await loadLimitOrders(false);
+
+        // Check if order is still in the list
+        const stillExists = limitOrders.value.some(
+          o => o.outRef.txHash === order.outRef.txHash &&
+               o.outRef.outputIndex === order.outRef.outputIndex
+        );
+
+        if (!stillExists) {
+          // Order successfully cancelled
+          console.log('[StrikeFinance] Order successfully cancelled');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          cancellingOrders.value[orderKey] = false;
+          snackbar.fireSuccess('Order cancelled successfully');
+        } else if (pollingAttempts >= maxPollingAttempts) {
+          // Max attempts reached
+          console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          cancellingOrders.value[orderKey] = false;
+        }
+      } catch (error) {
+        console.error('[StrikeFinance] Error during order polling:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Store interval ID for cleanup on dialog close
+    if (!cancellingOrderIntervals.value) {
+      cancellingOrderIntervals.value = {};
+    }
+    cancellingOrderIntervals.value[orderKey] = pollingIntervalId;
+
   } catch (error: any) {
     console.error("[StrikeFinance] Failed to cancel limit order", error);
     snackbar.setError(`Failed to Cancel Limit Order ${error.message}`);
-  } finally {
-    cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = false;
+    cancellingOrders.value[orderKey] = false;
+
+    // Clean up polling interval on error
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = null;
+    }
   }
 };
 
@@ -3430,6 +3592,11 @@ const getCollateralAmount = (item: any) => {
   font-weight: 600 !important;
 }
 
+.even {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
 /* Reload button matching SwapWidget */
 ::v-deep .v-btn--icon {
   background: rgba(255, 255, 255, 0.05) !important;
@@ -3438,6 +3605,27 @@ const getCollateralAmount = (item: any) => {
 
 ::v-deep .v-btn--icon:hover {
   background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Fix refresh button loading spinner size */
+::v-deep .refresh-btn-external .v-btn__loader {
+  width: 12px !important;
+  height: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  justify-self: anchor-center;
+  align-self: anchor-center;
+}
+
+::v-deep .refresh-btn-external .v-btn__loader .v-progress-circular {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+::v-deep .refresh-btn-external .v-btn__loader .v-progress-circular svg {
+  width: 12px !important;
+  height: 12px !important;
 }
 
 /* Status colors */
@@ -3538,6 +3726,8 @@ const getCollateralAmount = (item: any) => {
   border: 1px solid rgba(38, 250, 176, 0.1);
   border-radius: 4px;
   padding: 2px;
+  margin: 2px 0px;
+  height: 274px;
 }
 
 .positions-data-table {

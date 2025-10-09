@@ -1,5 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Deal Details" subtitle="" :min-height="600" :height="620" :width="500">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Deal Details"
+    subtitle=""
+    :min-height="600"
+    :height="620"
+    :width="500"
+    :persistent="false"
+  >
     <v-card-title class="pa-0">
       <v-list-item v-if="retailer" class="px-0">
         <v-list-item-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="60" v-if="retailer.img">

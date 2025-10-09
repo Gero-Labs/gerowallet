@@ -34,7 +34,8 @@ import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { HexBlob } from '@cardano-sdk/util';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -646,19 +647,39 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
+  // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
+  const requestCopy = JSON.parse(JSON.stringify(request));
+
   let responsePromise: Promise<any>;
   if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.signTx}` +
-      `?website=${encodeURIComponent(request.origin)}` +
-      `&tabId=${request.send.tab.id}`;
-    responsePromise = openSidebar(request.send.tab.id, url).then((tabId) =>
-      Messaging.sendToSidePanelInternal(tabId, request)
+      `?website=${encodeURIComponent(requestCopy.origin)}` +
+      `&tabId=${requestCopy.send.tab.id}`;
+
+    responsePromise = openSidebar(requestCopy.send.tab.id, url).then((tabId) =>
+      Messaging.sendToSidePanelInternal(tabId, requestCopy)
     );
   } else {
-    const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
+    // Force close any existing SignTx popups before opening a new one
+    // This prevents browser reuse of popup windows
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const window of windows) {
+      if (window.type === 'popup') {
+        for (const tab of window.tabs) {
+          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
+            await chrome.windows.remove(window.id);
+            break;
+          }
+        }
+      }
+    }
+
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.origin)}`
+    );
     responsePromise = focusOrCreatePopup(popupURL, 470, 852).then((tab) =>
-      Messaging.sendToPopupInternal(tab.id, request)
+      Messaging.sendToPopupInternal(tab.id, requestCopy)
     );
   }
   responsePromise
@@ -1165,16 +1186,28 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       // Handle different transaction input formats
       let txCbor: string;
       if (request.data.txCbor && request.data.witnessHex) {
-        // Combine transaction CBOR with witness
-        const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
-        const witness = deserializeWitness(request.data.witnessHex);
+        console.log('original Cbor', request.data.txCbor)
+        console.log('witnessHex', request.data.witnessHex)
+        const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
+        const existingWitness = serializableTx.witnessSet();
+        const existingWitnessCore = existingWitness.toCore();
+        const newWitnesses: Cardano.Witness = Serialization.TransactionWitnessSet.fromCbor(request.data.witnessHex).toCore();
 
-        const signedTx = {
-          ...tx,
-          witness: witness
-        };
+        // Merge existing signatures with new signatures
+        const mergedSignatures = new Map([
+          ...(existingWitnessCore.signatures?.entries() || []),
+          ...newWitnesses.signatures.entries()
+        ]);
 
-        txCbor = serializeCardanoJsSdkTx(signedTx);
+        existingWitness.setVkeys(
+          Serialization.CborSet.fromCore(
+            [...mergedSignatures.entries()],
+            Serialization.VkeyWitness.fromCore,
+          ),
+        );
+        serializableTx.setWitnessSet(existingWitness);
+        txCbor = serializableTx.toCbor();
+        console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
         txCbor = request.data.txCbor;

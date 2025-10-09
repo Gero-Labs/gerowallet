@@ -1,5 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :height="600" :width="480" title="Select a Token" subtitle="">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    :min-height="300"
+    :height="600"
+    :width="480"
+    title="Select a Token"
+    subtitle=""
+    :persistent="false"
+  >
     <v-card-title class="pa-0 px-2">
       <v-text-field
         v-model="search"
@@ -91,7 +100,6 @@ import { ref, computed, onUnmounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
-import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 
 interface Props {

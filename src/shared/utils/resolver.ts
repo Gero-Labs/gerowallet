@@ -673,6 +673,7 @@ export function analyzeTransactionForSignatures(
   }
 
   // Check for required signers field
+  // Only check for signatures that belong to this wallet (for multisig support)
   if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
     console.debug('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
     for (const keyHash of transaction.body.requiredExtraSignatures) {
@@ -707,15 +708,6 @@ export function analyzeTransactionForSignatures(
             }
           }
         }
-      }
-
-      // Log if we couldn't find a matching key
-      if (!foundMatch) {
-        console.warn(`Could not find wallet key for required signature: ${keyHash}`);
-        console.debug('Available address types:', Object.keys(addresses));
-        console.debug('Payment addresses:', addresses.payment?.map(a => ({ keyHash: a.cred, path: a.path })));
-        console.debug('Change addresses:', addresses.change?.map(a => ({ keyHash: a.cred, path: a.path })));
-        console.debug('Stake addresses:', addresses.stake?.map(a => ({ keyHash: a.cred, path: a.path })));
       }
     }
   }

@@ -1,5 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="How it Works?" subtitle="" :min-height="560" :height="560" :width="604">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="How it Works?"
+    subtitle=""
+    :min-height="560"
+    :height="560"
+    :width="604"
+    :persistent="false"
+  >
     <v-card-text class="px-0 pt-2 pb-0" style="z-index: 3; color: white">
       Search for your favorite items and brands, browse through various categories, or explore our top brands to find exactly what you need.<br>
       <br>

@@ -1,5 +1,10 @@
 <template>
-  <v-dialog content-class="rounded-xxl dialogStyle darken" v-model="dialogLocal" :persistent="persistent" scrollable max-width="850">
+  <v-dialog
+    content-class="rounded-xxl dialogStyle darken"
+    v-model="dialogLocal"
+    :persistent="persistent"
+    scrollable max-width="850"
+  >
     <v-card
       class="py-0 rounded-xxl transparent fill-height"
     >

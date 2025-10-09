@@ -20,7 +20,7 @@
         :key="index"
         :src="item.backgroundImage"
         :class="getItemClass(item)"
-        @click="!isLoading && handleItemClick(item)"
+        @click.stop="!isLoading && handleItemClick(item)"
       >
         <div class="carousel-overlay" :class="getOverlayClass(item)">
           <div class="carousel-content" :class="getContentClass(item)">
