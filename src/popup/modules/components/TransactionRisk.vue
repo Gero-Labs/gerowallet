@@ -21,6 +21,7 @@
 
     <div id="risk-indicator">
       <img id="risk-level" alt="Risk Level" :src="icon" />
+
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
           <v-icon x-large>mdi-cog</v-icon>
@@ -47,8 +48,12 @@ const props = defineProps({
   },
   loading: {
     type: Boolean,
+    default: false
   }
 });
+
+// Debug logging
+console.log('TransactionRisk loading prop:', props.loading);
 
 const getLabel = (risk: string | undefined) => {
   if (!risk) return 'N/A';
