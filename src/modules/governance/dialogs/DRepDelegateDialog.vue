@@ -1,6 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Delegate to a DRep" :loading="loading" :min-height="660" :width="700"
-              :subtitle="`Delegating your ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} to a Delegated Representative.`">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Delegate to a DRep"
+    :loading="loading"
+    :min-height="660"
+    :width="700"
+    :subtitle="`Delegating your ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} to a Delegated Representative.`"
+    :persistent="false"
+  >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="drep">
       <v-alert
         border="left"

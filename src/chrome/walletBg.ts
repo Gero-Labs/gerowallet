@@ -68,7 +68,7 @@ import {
 } from '@/shared/utils/converter';
 import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
-import { deserializeCardanoJsSdkTx, serializeWitness } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
 import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 
@@ -869,15 +869,15 @@ export class WalletBg {
 
     const rootPrivateKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
 
-      // Derive an account private key
-      const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
-        WalletTypePurpose.CIP1852,
-        CoinTypes.CARDANO,
-        HARDENED + accountIndex,
-      ]);
+    // Derive an account private key
+    const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex,
+    ]);
 
-      // Create a signature map for the witness
-      const signatures = new Map<string, string>();
+    // Create a signature map for the witness
+    const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
     const requiredSigners = analyzeTransactionForSignatures(
@@ -899,53 +899,19 @@ export class WalletBg {
     // Sign with each required key
     for (const signer of requiredSigners) {
       console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+      const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
+      const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
+      // Sign the transaction hash as a HexBlob type
+      const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
+      signatures.set(rawPublicKey.hex(), signature.hex());
+    }
 
-        const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
-        const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
-
-        // Sign the transaction hash as a HexBlob type
-        const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
-
-      // Use the raw public key bytes (32 bytes) for the witness map, not the extended key
-      const rawPublicKeyBytes = rawPublicKey.bytes();
-      const rawPublicKeyHex = Buffer.from(rawPublicKeyBytes).toString('hex');
-
-      console.debug(`  Public key: ${rawPublicKeyHex}`);
-      console.debug(`  Signature: ${signature.hex().substring(0, 20)}...`);
-
-        signatures.set(rawPublicKey.hex(), signature.hex());
-      }
-
-    console.debug(`🔏 Total signatures created: ${signatures.size}`);
-    console.debug('🔏 Signature map entries:');
-    signatures.forEach((sig, pubKey) => {
-      console.debug(`  ${pubKey}: ${sig.substring(0, 20)}...`);
-    });
-
-      // Create a witness set - ensure a signature map is properly set
-      const witness: Cardano.Witness = {
-        signatures: new Map(signatures), // Create a new Map to ensure it's properly set
-      };
-      if (mergeWitnesses) {
-        // Merge existing signatures with new ones
-        if (transaction.witness?.signatures) {
-          transaction.witness.signatures.forEach((sig, pubKey) => {
-            witness.signatures.set(pubKey, sig);
-          });
-        }
-        witness.scripts = transaction.witness?.scripts
-        witness.datums = transaction.witness?.datums
-        witness.redeemers = transaction.witness?.redeemers
-        witness.bootstrap = transaction.witness?.bootstrap
-      }
-
-    // Serialize witness to CBOR hex
-    const witnessHex = serializeWitness(witness);
-
-    return {
-      witnesses: witnessHex,
+    // Create a witness set - ensure a signature map is properly set
+    const witness: Cardano.Witness = {
+      signatures: new Map(signatures), // Create a new Map to ensure it's properly set
     };
-
+    // Serialize witness to CBOR hex
+    return { witnesses: Serialization.TransactionWitnessSet.fromCore(witness).toCbor() };
   }
 
   /**

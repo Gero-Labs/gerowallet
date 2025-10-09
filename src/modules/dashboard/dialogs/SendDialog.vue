@@ -1,6 +1,13 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
-              :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="emit('close')"
+    title="Quick Send"
+    :loading="txSubmitLoading"
+    :min-height="0"
+    :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`"
+    :persistent="false"
+  >
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
         <v-stepper-header>

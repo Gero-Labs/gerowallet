@@ -1,5 +1,12 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Buy / Sell" subtitle="Choose your favorite Provider for On-ramp / Off-ramp" :min-height="300">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="Buy / Sell"
+    subtitle="Choose your favorite Provider for On-ramp / Off-ramp"
+    :min-height="300"
+    :persistent="false"
+  >
     <v-card class="transparent" flat>
       <v-card-text>
         <v-stepper v-model="step" outlined style="background-color: transparent" >
@@ -30,14 +37,14 @@
                 <v-row>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseBuy">
-                      <div 
-                        class="card-3d-wrapper" 
+                      <div
+                        class="card-3d-wrapper"
                         :style="buyCardStyle"
-                        @mousemove="handleBuyCardMouseMove" 
+                        @mousemove="handleBuyCardMouseMove"
                         @mouseleave="handleBuyCardMouseLeave"
                       >
-                        <parallax-card 
-                          style="margin-left: auto; margin-right: auto;" 
+                        <parallax-card
+                          style="margin-left: auto; margin-right: auto;"
                           :data-image="assets.buyAda"
                         >
                           <h1 slot="header" style="line-height: 1;">Buy ADA</h1>
@@ -48,14 +55,14 @@
                   </v-col>
                   <v-col cols="6">
                     <v-card class="pa-4 transparent" flat @click="chooseSell">
-                      <div 
-                        class="card-3d-wrapper" 
+                      <div
+                        class="card-3d-wrapper"
                         :style="sellCardStyle"
-                        @mousemove="handleSellCardMouseMove" 
+                        @mousemove="handleSellCardMouseMove"
                         @mouseleave="handleSellCardMouseLeave"
                       >
-                        <parallax-card 
-                          style="margin-left: auto; margin-right: auto;" 
+                        <parallax-card
+                          style="margin-left: auto; margin-right: auto;"
                           :data-image="assets.sellAda"
                         >
                           <h1 slot="header" style="line-height: 1;">Sell ADA</h1>

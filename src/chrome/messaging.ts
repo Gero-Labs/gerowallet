@@ -204,7 +204,10 @@ export const Messaging = {
         function messageHandler(response: any) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
-            port.postMessage(request);
+            // Create a deep copy of the request to prevent mutations from affecting the original
+            // This is critical for transaction signing to ensure each signing attempt gets fresh data
+            const requestCopy = JSON.parse(JSON.stringify(request));
+            port.postMessage(requestCopy);
           }
           if (response.method === METHOD.returnData) {
             resolve(response);
@@ -229,11 +232,20 @@ export const Messaging = {
   },
   sendToSidePanelInternal: function (tabIdd: number, request: Message) {
     return new Promise((resolve, _reject) => {
-      chrome.runtime.onConnect.addListener(port => {
+      // Remove any existing listeners for this tab before adding new one
+      // This prevents old listeners from responding with stale request data
+      if ((this as any)._sidePanelListeners?.[tabIdd]) {
+        const oldListener = (this as any)._sidePanelListeners[tabIdd];
+        chrome.runtime.onConnect.removeListener(oldListener);
+      }
+
+      function connectionHandler(port: chrome.runtime.Port) {
         function messageHandler(response: any) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
-            port.postMessage(request);
+            // Create a deep copy of the request to prevent mutations
+            const requestCopy = JSON.parse(JSON.stringify(request));
+            port.postMessage(requestCopy);
           }
           if (response.method === METHOD.returnData) {
             cleanup();
@@ -242,7 +254,6 @@ export const Messaging = {
         }
 
         function disconnectHandler() {
-          console.log('[Messaging] Side panel port disconnected for tab:', tabIdd);
           cleanup();
           // Resolve with user declined error when side panel closes without response
           resolve({
@@ -256,11 +267,24 @@ export const Messaging = {
         function cleanup() {
           port.onMessage.removeListener(messageHandler);
           port.onDisconnect.removeListener(disconnectHandler);
+          chrome.runtime.onConnect.removeListener(connectionHandler);
+          // Clean up listener tracking
+          if ((Messaging as any)._sidePanelListeners?.[tabIdd] === connectionHandler) {
+            delete (Messaging as any)._sidePanelListeners[tabIdd];
+          }
         }
 
         port.onMessage.addListener(messageHandler);
         port.onDisconnect.addListener(disconnectHandler);
-      });
+      }
+
+      // Track the listener so we can remove it later
+      if (!(this as any)._sidePanelListeners) {
+        (this as any)._sidePanelListeners = {};
+      }
+      (this as any)._sidePanelListeners[tabIdd] = connectionHandler;
+
+      chrome.runtime.onConnect.addListener(connectionHandler);
     });
   },
   createInternalController: () => new InternalController(),

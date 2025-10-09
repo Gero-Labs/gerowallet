@@ -6,6 +6,7 @@
     subtitle=""
     :min-height="300"
     :height="600"
+    :persistent="false"
   >
     <v-card-title class="py-0 transparent">
       <v-tabs

@@ -5,6 +5,7 @@
     title="Your Rewards"
     subtitle="View your pending and historical rewards"
     :min-height="0"
+    :persistent="false"
   >
     <div style="z-index: 3" class="px-4">
       <v-row>

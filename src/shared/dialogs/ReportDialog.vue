@@ -6,6 +6,7 @@
     :title="'Report '+ (reportSite ? 'Website' : 'Transaction')"
     :subtitle="'Improve Cardano Shield by letting us know if a '+ (reportSite ? 'website' : 'transaction') + ' is fraudulent or trustworthy.'"
     :min-height="0"
+    :persistent="false"
   >
     <v-card-title style="display: block" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
