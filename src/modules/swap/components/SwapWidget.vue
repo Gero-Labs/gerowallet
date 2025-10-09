@@ -23,16 +23,12 @@
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0 px-0 pt-2">
-          <div class="d-flex align-center justify-space-between mb-1 mt-1">
-            <span style="color: #FDA29B; font-size: 12px; font-weight: 200;">Selling</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
-          </div>
+        <v-card-text class="pb-0 px-0 pt-4">
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            title=""
+            title="Selling"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
@@ -43,15 +39,11 @@
           <v-btn icon class="my-1 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
             <v-icon color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
-          <div class="d-flex align-center justify-space-between mb-1 mt-n2">
-            <span style="color: #75E0A7; font-size: 12px; font-weight: 200;">Buying</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
-          </div>
           <TokenSelector
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            title=""
+            title="Buying"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"

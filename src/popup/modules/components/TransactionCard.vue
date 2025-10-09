@@ -30,7 +30,7 @@
                   </template>
                 </v-img>
               </v-avatar>
-              {{ toCurrency(asset.amount, false, 0, '', ` ${asset.currency}`, false, decimals(asset?.id)) }}
+              {{ toCurrency(asset.amount, false, 0, '', ` ${getAssetName(asset.currency)}`, false, decimals(asset?.id)) }}
             </v-chip>
           </div>
         </div>
@@ -51,6 +51,7 @@ import { ref, watch, onMounted, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
+import { Cardano } from '@cardano-sdk/core';
 
 const props = defineProps({
   risk: {
@@ -81,6 +82,11 @@ const decimals = (unit: string) => {
   }
   return decimals;
 };
+
+const getAssetName = (assetId: any) => {
+  const assetName = Cardano.AssetId.getAssetName(assetId);
+  return Cardano.AssetName.toUTF8(assetName, true);
+}
 
 const toggleAllAssets = () => {
   showAllAssets.value = !showAllAssets.value;

@@ -369,7 +369,7 @@ export async function buildCardanoTransaction({
     },
     tokenBundleSizeExceedsLimit: () => false,
     computeMinimumCoinQuantity: (output) => BrowserTxConstruction.minAdaRequired(output, BigInt(protocolParams.coinsPerUtxoByte)),
-    computeSelectionLimit: async () => 20
+    computeSelectionLimit: async () => 100 // Increased from 20 to 100 to support wallets with many small UTXOs
   };
 
   // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
