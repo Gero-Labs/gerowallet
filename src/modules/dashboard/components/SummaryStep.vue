@@ -181,6 +181,7 @@ const getCborHex = (): string => {
 async function scanTx(txData: Cardano.Tx) {
   risks.value.score = undefined;
   loading.value = true;
+  console.log('SummaryStep: Set loading to TRUE');
   tx.value = txData;
 
   const cborHex = getCborHex();
@@ -199,9 +200,6 @@ async function scanTx(txData: Cardano.Tx) {
     )
   ]);
 
-  // Allow UI to proceed immediately
-  loading.value = false;
-
   try {
     risks.value = await scanWithTimeout;
   } catch (e) {
@@ -209,6 +207,10 @@ async function scanTx(txData: Cardano.Tx) {
     risks.value = {
       addressRisk: 'unknown',
     };
+  } finally {
+    // Set loading to false after scan completes (success or failure)
+    loading.value = false;
+    console.log('SummaryStep: Set loading to FALSE');
   }
 }
 </script>

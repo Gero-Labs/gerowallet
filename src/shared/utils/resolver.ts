@@ -199,6 +199,10 @@ const tryConvertPlutusMapToUtf8Record = (map: Cardano.PlutusMap): Partial<Record
       record[keyAsStr] = tryConvertPlutusDataToUtf8List(value)
     } else if (Cardano.util.isPlutusBoundedBytes(value)) {
       record[keyAsStr] = tryConvertPlutusDataToUtf8String(value);
+    } else {
+      // Include all other PlutusData types (PlutusMap, PlutusBigInt, etc.)
+      // This is important for CIP68 metadata fields like decimals: { "int": 6 }
+      record[keyAsStr] = value;
     }
   }
   return record;
@@ -287,7 +291,7 @@ export const fromPlutusData = (
   }
 
   const nftMetadataRecord = tryConvertPlutusMapToUtf8Record(nftMetadata);
-  const { name, image, mediaType, description, files, ...additionalProperties } = nftMetadataRecord;
+  const { name, image, mediaType, description, files, decimals, ticker, url, logo, legal, ...additionalProperties } = nftMetadataRecord;
 
   if (!conditionalValidators.isNameValid(name)) {
     return null;
@@ -300,12 +304,36 @@ export const fromPlutusData = (
     imageAsUri = tryCoerce(image, Asset.Uri);
   }
 
+  // Extract decimals from PlutusData - it's stored as a map with "int" key
+  let decimalsValue: number | undefined = undefined;
+  if (decimals) {
+    if (Cardano.util.isPlutusMap(decimals)) {
+      // CIP68 stores decimals as a map: { "int": 6 }
+      const decimalsRecord = tryConvertPlutusMapToUtf8Record(decimals);
+      const intValue = decimalsRecord['int'];
+      if (Cardano.util.isPlutusBigInt(intValue)) {
+        decimalsValue = Number(intValue);
+      } else if (typeof intValue === 'string') {
+        decimalsValue = parseInt(intValue, 10);
+      }
+    } else if (Cardano.util.isPlutusBigInt(decimals)) {
+      decimalsValue = Number(decimals);
+    } else if (typeof decimals === 'string') {
+      decimalsValue = parseInt(decimals, 10);
+    }
+  }
+
   return {
     description: asString(description),
     files: mapFiles(files),
     image: imageAsUri,
     mediaType: tryCoerce(mediaType, Asset.ImageMediaType),
     name: name || '',
+    decimals: decimalsValue,
+    ticker: asString(ticker),
+    url: asString(url),
+    logo: asString(logo),
+    legal: asString(legal),
     otherProperties: undefinedIfEmpty(mapOtherProperties(additionalProperties)),
     version: version.toString()
   };
