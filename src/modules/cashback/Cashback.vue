@@ -8,7 +8,7 @@
           </v-card-title>
           <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
             Powered By <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
-            <v-img max-height="36" height="36" width="40" :src="assets.bringWhite" contain alt="Bring Logo" style="margin-bottom: 2px" />
+            <v-img class="bring-web3-logo" max-height="36" height="36" width="40" :src="assets.bringWhite" contain alt="Bring Logo" />
           </v-btn>
           </v-card-subtitle>
           <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
@@ -473,5 +473,15 @@ onMounted(async () => {
 
 .theme--dark.v-chip--active:hover::before, .theme--dark.v-chip--active::before {
    opacity: 0;
+}
+
+.bring-web3-logo {
+  margin-bottom: 2px;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.bring-web3-logo:hover {
+  opacity: 1;
 }
 </style>

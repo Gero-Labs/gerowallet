@@ -130,6 +130,30 @@ export interface PoolInfo {
   fundingRate: number;
 }
 
+export interface PerpetualTransaction {
+  action: string;
+  address: string;
+  assetTicker: string;
+  collateralAmount: number;
+  contract: string;
+  currentPrice: number;
+  description: string;
+  enteredPrice: number;
+  pair: string;
+  pnl: number;
+  positionSize: number;
+  positionType: string;
+  status: string;
+  time: number;
+  txHash: string;
+  type: string;
+  originalTxHash?: string;
+}
+
+export interface PerpetualHistoryResponse {
+  transactions: PerpetualTransaction[];
+}
+
 /**
  * Strike Finance API service
  */
@@ -225,6 +249,17 @@ export default {
    */
   async getPoolInfoV2(): Promise<AxiosResponse<PoolInfo>> {
     return axiosInstance.get('/api/strike/perpetuals/getPoolInfoV2');
+  },
+
+  /**
+   * Get perpetual transaction history for an address
+   * @param address - User's wallet address
+   * @returns Perpetual transaction history
+   */
+  async getPerpetualHistory(address: string): Promise<AxiosResponse<PerpetualHistoryResponse>> {
+    return axiosInstance.get('/api/strike/perpetuals/getPerpetualHistory', {
+      params: { address }
+    });
   },
 
   /**

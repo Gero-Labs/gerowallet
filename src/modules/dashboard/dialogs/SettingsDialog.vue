@@ -7,6 +7,7 @@
     :loading="loading"
     :min-height="0"
     scrollable
+    :persistent="false"
   >
     <v-card-title class="px-2 py-0">
       <v-tabs

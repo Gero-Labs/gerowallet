@@ -1,6 +1,13 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" title="Unstake from Pool"
-              subtitle="Deregister from your current staking pool delegation and withdraw your stake." :loading="loading">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    :min-height="300"
+    title="Unstake from Pool"
+    subtitle="Deregister from your current staking pool delegation and withdraw your stake."
+    :loading="loading"
+    :persistent="false"
+  >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         border="left"

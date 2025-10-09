@@ -1,6 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="closeDialog" :loading="loading" :min-height="0" title="New Multisig Wallet"
-    scrollable subtitle="A multisig wallet requires multiple parties signatures to authorize any transaction.">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="closeDialog"
+    :loading="loading"
+    :min-height="0"
+    title="New Multisig Wallet"
+    scrollable
+    subtitle="A multisig wallet requires multiple parties signatures to authorize any transaction."
+    :persistent="false"
+  >
     <v-fade-transition>
       <v-alert v-show="contactStatus.message" :type="contactStatus.type" class="text-left" dense prominient>
         {{ contactStatus.message }}
@@ -37,19 +45,19 @@
                 }}</div>
             </v-col>
             <v-col cols="12" class="text-left pa-0 mb-2 d-flex align-center">
-              <v-text-field class="no-margin-append-outer" 
+              <v-text-field class="no-margin-append-outer"
                 label="Singer wallet address"
-                v-model="signer.address" 
+                v-model="signer.address"
                 outlined dense
                 :rules="[rules.required(), rules.paymentAddress(loggedWallet.value.network !== 'mainnet')]"
                 :readonly="index === 0 && signer.address === baseAddress"
                 :error="!!duplicateSignerError.message && duplicateSignerError.duplicateAddresses.includes(signer.address)"
                 :error-messages="duplicateSignerError.message" @keyup="checkDuplicateSigner()">
               </v-text-field>
-              <v-text-field v-if="index" 
+              <v-text-field v-if="index"
                 label="Singer name"
-                v-model="signer.name" 
-                outlined 
+                v-model="signer.name"
+                outlined
                 dense
                 :rules="[rules.required()]"
                 class="ml-4 no-margin-append-outer">
