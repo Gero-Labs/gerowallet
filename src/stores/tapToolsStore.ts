@@ -121,9 +121,9 @@ export default {
     }
   },
 
-  async loadPortfolioTrendedValue(stakeAddress: string) {
+  async loadPortfolioTrendedValue(stakeAddress: string, currency: string = 'USD', timeframe: string = 'all') {
     try {
-      const res = await tapToolsApi.getPortfolioTrendedValue(stakeAddress);
+      const res = await tapToolsApi.getPortfolioTrendedValue(stakeAddress, currency, timeframe);
       if (res?.status === 200) {
         this.setPortfolioTrendedValue(res.data.map((element: any) => [element.time * 1000, element.value]));
       } else {
