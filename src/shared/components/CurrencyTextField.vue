@@ -188,4 +188,8 @@ let formattedValue = computed({
   min-height: 30px!important;
   height: 30px!important;
 }
+.v-text-field.v-text-field--solo .v-input__control {
+  min-height: 30px;
+  padding: 0;
+}
 </style>

@@ -7,21 +7,28 @@
     <v-card-text style="display: flex; flex-direction: column" class="pa-0">
       <v-row no-gutters class="pb-1" v-if="!bottomTitle">
         <v-col cols="12" style="display: flex; align-items: center">
-          <span v-if="title" :style="{ color: titleColor }">{{ title }}</span>
-          <v-spacer></v-spacer>
-          <v-btn
-            text
-            plain
-            small
-            @click="setMax"
-            :ripple="false"
-            color="#00DFF3"
-            class="px-0"
-            v-if="maxButtonEnabled"
-            :style="index !== 0 ? { marginRight: '30px' } : {}"
-            >MAX</v-btn
-          >
-          <span v-else style="height: 10px"></span>
+          <v-list-item class="px-0" style="padding-bottom: 0!important; min-height: 0">
+            <v-list-item-content class="pa-0" style="padding-bottom: 0!important;">
+              <v-list-item-title class="ma-0" :style="{ marginRight: index !=0 ? '30px!important' : '0' , flexFlow: 'row', display: 'flex', paddingBottom: '2px!important' }">
+                <span v-if="title" :style="{ color: titleColor, alignSelf: 'end', fontSize: '12px' }">{{ title }}</span>
+                <v-spacer></v-spacer>
+                <div style="flex-flow: column; display: flex; justify-self: right; align-self: end;">
+                  <v-btn
+                    text
+                    plain
+                    small
+                    @click="setMax"
+                    :ripple="false"
+                    color="#00DFF3"
+                    class="px-0 mx-0"
+                    v-if="maxButtonEnabled"
+                    style="justify-content: right; height: 14px;"
+                  >MAX</v-btn>
+                  <span v-if="externalBalance" class="caption grey--text" style="text-box-trim: trim-end;">Balance: {{filters.toCurrency(selectedToken.balance, false, 2, '', '', true, selectedToken.decimals) }}</span>
+                </div>
+              </v-list-item-title>
+            </v-list-item-content>
+          </v-list-item>
         </v-col>
       </v-row>
       <div style="display: flex; align-items: center">
@@ -34,20 +41,19 @@
             paddingBottom: '0!important',
           }"
         >
-          <!--        <v-card-subtitle class="text-right pb-0 pt-2">Balance: {{ selectedToken.balance | toCurrency(false,2,'', true, selectedToken.decimals) }}</v-card-subtitle>-->
-          <v-card-subtitle class="pa-0 text-right" style="margin-bottom: -10px">
+          <v-card-subtitle class="pa-0 text-right caption grey--text" style="margin-bottom: -10px">
             Balance: {{ balance }}
           </v-card-subtitle>
           <v-card-text style="display: flex" class="pa-0">
             <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left">
               <v-list-item-content class="py-0">
-                <v-list-item-title class="ma-0">
+                <v-list-item-title class="ma-0" style="height: 32px">
                   <span v-if="tokenLock" style="font-size: 18px">
                     <v-badge
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="44"
+                      :offset-y="34"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -71,7 +77,7 @@
                     text
                     plain
                     :ripple="false"
-                    style="font-size: 18px; letter-spacing: normal"
+                    style="font-size: 18px; letter-spacing: normal; height: 32px"
                     class="pa-0"
                     @click="selectTokenDialog = true"
                   >
@@ -79,7 +85,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="44"
+                      :offset-y="34"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -101,14 +107,14 @@
                     >
                   </v-btn>
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text">
+                <v-list-item-subtitle class="light-text" style="align-content: end;">
                   {{ selectedToken.name }}
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
             <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right">
               <v-list-item-content class="py-0">
-                <v-list-item-title>
+                <v-list-item-title class="ma-0">
                   <CurrencyTextField
                     v-model="selectedToken.quantity"
                     :decimals="selectedToken.decimals"
@@ -132,7 +138,8 @@
                   v-else-if="
                     selectedToken.ticker ===
                       networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) &&
-                    minimum > selectedToken.quantity
+                    minimum > 0 &&
+                    minimum > Number(selectedToken.quantity)
                   "
                   style="color: #f97066 !important"
                 >
@@ -151,7 +158,10 @@
                 </v-list-item-subtitle>
                 <v-list-item-subtitle
                   class="light-text"
-                  :style="priceImpact > 3 ? { color: '#FEC84B!important' } : {}"
+                  :style="{
+                    alignContent: 'end',
+                    color: priceImpact > 3 ? '#FEC84B!important' : ''
+                  }"
                   v-else-if="!isNaN(Number(price.replaceAll(',', '')))"
                 >
                   {{ '~' + getCurrencySymbol() + convertFiat(Number(price.replaceAll(',', ''))).toFixed(2)
@@ -248,6 +258,10 @@ const props = defineProps({
   search: {
     type: Function,
   },
+  externalBalance: {
+    type: Boolean,
+    default: false,
+  }
 });
 const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 
@@ -310,8 +324,9 @@ function quantityChange(val) {
 }
 
 function setMax() {
-  // emit('setMax', props.index)
-  selectedToken.value.quantity = balance.value.replaceAll(',', '');
+  emit('setMax', props.index)
+  // Don't set quantity here - let the parent handle it
+  // selectedToken.value.quantity = balance.value.replaceAll(',', '');
 }
 
 function removeTokenSelector() {
