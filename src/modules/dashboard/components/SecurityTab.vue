@@ -99,18 +99,33 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
-<!--      <v-divider />-->
-<!--      <v-list-item>-->
-<!--        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>-->
-<!--          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />-->
-<!--        </v-list-item-avatar>-->
-<!--        <v-list-item-content>-->
-<!--          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>-->
-<!--        </v-list-item-content>-->
-<!--      </v-list-item>-->
-<!--      <v-list-item class="px-2 py-1">-->
-
-<!--      </v-list-item>-->
+      <v-divider />
+      <v-list-item>
+        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
+          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />
+        </v-list-item-avatar>
+        <v-list-item-content>
+          <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
+        </v-list-item-content>
+      </v-list-item>
+      <v-list-item class="px-2 py-1">
+        <v-list-item-avatar class="my-0">
+          <v-icon>
+            mdi-security
+          </v-icon>
+        </v-list-item-avatar>
+        <v-list-item-content class="py-0">
+          <v-list-item-title class="text-left">
+            <h3 style="color: white; font-size: 16px;">Website Protection</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            Protect against malicious websites and scams
+          </v-list-item-subtitle>
+        </v-list-item-content>
+        <v-list-item-action class="my-0">
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="websiteProtection" />
+        </v-list-item-action>
+      </v-list-item>
     </v-list>
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
@@ -125,6 +140,7 @@ import QRCodeStyling from 'qr-code-styling';
 import assets from '@/utils/assets';
 import { Options } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import filters from '@/shared/utils/filters';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 
@@ -134,6 +150,14 @@ const changePasswordDialog = ref<boolean>(false);
 const { loggedWallet, config } = toRefs(walletStore);
 
 const backup = computed(() => config.value?.backup || false);
+const websiteProtection = computed({
+  get() {
+    return config.value?.websiteProtection !== undefined ? config.value.websiteProtection : true;
+  },
+  set(value) {
+    WalletStore.setWebsiteProtection(value);
+  }
+});
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
