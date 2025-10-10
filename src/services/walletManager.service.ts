@@ -1,6 +1,6 @@
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import zkFoldApi from '@/api/zk-fold.api';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Tip } from '@/models/types';
@@ -418,9 +418,17 @@ export class WalletManager {
     // OPTIMIZATION: Load non-critical data in background after wallet is ready
     // This improves perceived performance by not blocking the login flow
     // DexHunter swap tokens (~17ms), blacklist policies (~9ms), BringCache (~349ms)
-    setTimeout(() => {
+    setTimeout(async () => {
       if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-        DexHunterStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
+        // Load DexHunter tokens first - this provides verification status
+        await DexHunterStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
+
+        // Re-resolve assets after DexHunter tokens are loaded to update verified status
+        const utxos = walletStore.utxos;
+        if (utxos && utxos.length > 0) {
+          walletBg.setAssets(utxos);
+        }
+
         DexHunterStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
       }
       if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {

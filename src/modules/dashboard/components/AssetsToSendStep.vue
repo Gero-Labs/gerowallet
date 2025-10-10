@@ -8,6 +8,7 @@
               v-for="(token, index) in tokenModel"
               :key="index"
               class="pb-1"
+              background-color="#161B26"
               v-model="tokenModel[index]"
               :available="getAvailableTokens(index)"
               :index="index"
@@ -188,13 +189,8 @@ const collections = computed(() => {
   return collections
 })
 
-watch(props.value, (newVal, oldVal) => {
-  if (newVal !== oldVal) {
-    selectedTokens.value = newVal['selectedTokens']
-  }
-}, {
-  deep: true
-})
+// Remove this watch - it's causing unnecessary updates and conflicts with the tokenModel computed property
+// The tokenModel computed property already handles the binding to props.value.selectedTokens
 
 function getAvailableTokens(currentIndex) {
   const currentSelected = tokenModel.value[currentIndex];
@@ -254,15 +250,8 @@ function setMax(index) {
   emit('setMax', index)
 }
 
-watch(selectedTokens, (newVal, _oldVal) => {
-  emit('input', {
-    ...props.value,
-    selectedTokens: newVal,
-    selectedCollectibles: selectedCollectibles.value,
-  })
-}, {
-  deep: true
-})
+// Removed watch on selectedTokens - tokenModel computed setter handles this
+// Removed redundant watch - using direct v-item-group binding instead
 
 watch(selectedCollectibles, (newVal, _oldVal) => {
   newVal.forEach(collectible => {

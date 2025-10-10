@@ -1,6 +1,7 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { minAdaRequired as minAdaRequiredSDK } from '@cardano-sdk/tx-construction';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -16,13 +17,6 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
  */
 export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
   try {
-    console.log('Serializing Cardano JS SDK transaction:', tx);
-    console.log('Transaction body:', JSON.stringify(tx.body, (key, value) => {
-      if (typeof value === 'bigint') return value.toString();
-      if (value instanceof Map) return Object.fromEntries(value);
-      return value;
-    }, 2));
-
     // Validate transaction structure before serialization
     if (!tx.body) {
       throw new Error('Transaction body is missing');
@@ -36,16 +30,9 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
       throw new Error('Transaction outputs are missing or empty');
     }
 
-    // Log certificates if they exist
-    if (tx.body.certificates && tx.body.certificates.length > 0) {
-      console.log('Transaction certificates:', tx.body.certificates);
-    }
-
     // Use Cardano JS SDK's built-in serialization
     const serializedTx = Serialization.Transaction.fromCore(tx);
-    const cborHex = serializedTx.toCbor();
-    console.log('Successfully serialized transaction to CBOR:', cborHex);
-    return cborHex;
+    return serializedTx.toCbor();
   } catch (error) {
     console.error('Error serializing Cardano JS SDK transaction to CBOR:', error);
     console.error('Transaction structure that failed:', JSON.stringify(tx, (key, value) => {
@@ -64,8 +51,6 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
  */
 export function deserializeCardanoJsSdkTx(cborHex: string): Cardano.Tx {
   try {
-    console.log('Deserializing CBOR hex string:', cborHex);
-
     // Use Cardano JS SDK's built-in deserialization
     const serializedTx = Serialization.Transaction.fromCbor(HexBlob(cborHex));
     return serializedTx.toCore();
@@ -121,39 +106,28 @@ export class BrowserTxConstruction {
 
   /**
    * Calculate minimum ADA required for a UTXO based on protocol parameters
+   * Uses the official Cardano SDK implementation from @cardano-sdk/tx-construction
    * @param output - The transaction output
    * @param coinsPerUtxoByte - Cost per UTXO byte from protocol parameters
    * @returns Minimum ADA required as BigInt
    */
   static minAdaRequired(output: Cardano.TxOut, coinsPerUtxoByte: bigint): bigint {
     try {
-      // Calculate minimum ADA required for a UTXO based on its size
-      // This is a simplified version based on typical UTXO sizes
-      const baseUtxoSize = 160; // Base UTXO size in bytes (address + value)
-      const addressSize = output.address.length / 2; // Address is hex, so divide by 2 for bytes
-      const assetSize = output.value.assets?.size ? (output.value.assets.size * 50) : 0; // ~50 bytes per asset
+      // Use the official Cardano SDK function which correctly implements
+      // the protocol's minUTxOValue calculation (same as Lace wallet uses)
+      const minAda = minAdaRequiredSDK(output, coinsPerUtxoByte);
 
-      // Additional overhead for CBOR encoding
-      const encodingOverhead = 20;
-
-      const totalSize = BigInt(baseUtxoSize + addressSize + assetSize + encodingOverhead);
-      const minAda = totalSize * coinsPerUtxoByte;
-
-      console.debug('MinAda calculation:', {
-        address: output.address,
-        addressSize,
-        assetSize,
-        totalSize: totalSize.toString(),
+      console.debug('MinAda calculation (SDK):', {
         coinsPerUtxoByte: coinsPerUtxoByte.toString(),
-        minAda: minAda.toString()
+        minAda: minAda.toString(),
+        minAdaInAda: (Number(minAda) / 1000000).toFixed(6)
       });
 
-      // Ensure minimum is at least 1 ADA
-      const minimumAda = BigInt(1000000); // 1 ADA in lovelace
-      return minAda > minimumAda ? minAda : minimumAda;
+      return minAda;
     } catch (error) {
-      console.error('Error calculating minimum ADA required:', error);
-      // Fallback to 1 ADA minimum
+      console.error('Error calculating minAda:', error);
+      // Fallback to a reasonable minimum based on typical UTXOs
+      // Typical min is around 1 ADA for outputs with assets
       return BigInt(1000000);
     }
   }
