@@ -254,7 +254,7 @@ const items = computed((): NavigationItemUnion[] => {
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: networks.resolveMultiSigSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Gero Card', icon: assts.card, link: '/card',  enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
+    { title: 'Gero Card', icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
     { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
     { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
@@ -305,18 +305,16 @@ async function submitLogout() {
     LoadingState.setLoading(true);
     await cardStore.logout();
     // Send logout message to background
-    router.push('/welcome')
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGOUT,
       data: { },
     });
     updateVuetifyTheme(false, true);
-    // // Navigate to welcome page after store is cleared
-    // router.push('/welcome').catch(err => {
-    //   console.debug('Navigation after logout handled (expected during logout):', err.message || err);
-    //   // Fallback: force page reloads to welcome
-    //   window.location.hash = '#/welcome';
-    // });
+    // Navigate to welcome page after store is cleared
+    // Use replace to avoid adding to history, and catch navigation guard redirects
+    router.replace('/welcome').catch(err => {
+      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
+    });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error

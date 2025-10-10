@@ -267,10 +267,10 @@ const geroPrice = computed(() => {
 
   if (!isApex.value) {
     if (geroToken?.price && geroToken.price > 0) {
-      return convertFiat(geroToken.price);
+      return Number(convertFiat(geroToken.price));
     }
   } else {
-    return convertFiat(price.value?.lastPrice || 0);
+    return Number(convertFiat(price.value?.lastPrice || 0));
   }
 });
 

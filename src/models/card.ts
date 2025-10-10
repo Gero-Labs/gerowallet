@@ -18,7 +18,7 @@ export interface UserInfo {
 }
 
 export interface CardanoAddress {
-  address: string;
+  wallet_address: string;
 }
 
 // Card Types
