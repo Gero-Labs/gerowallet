@@ -9,7 +9,7 @@
           </v-btn>
 
           <!-- Registration iframe -->
-          <div class="iframe-container" :style="{ height: iframeContainerHeight + 'px' }">
+          <div class="iframe-container">
             <iframe
               ref="registrationIframe"
               :src="iframeUrl"
@@ -25,14 +25,14 @@
             </div>
           </div>
         </div>
-        
+
         <div v-else class="completion-message">
           <div class="success-icon">
             <img src="@/modules/wallet/icons/check-blue.svg" alt="Success" />
           </div>
           <h3 class="success-title">Registration Complete!</h3>
           <p class="success-text">
-            Your Kaiserex account has been created. You can now proceed with the KYC verification 
+            Your Kaiserex account has been created. You can now proceed with the KYC verification
             to order your Gero Crypto Card.
           </p>
           <GradientButton text="Continue to KYC" @click="proceedToKYC" />
@@ -65,9 +65,6 @@ const registrationComplete = ref(false);
 // Registration URL
 const iframeUrl = 'https://www.kaiserex.com/gerocard';
 
-// Iframe container height control
-const iframeContainerHeight = ref(630); // Adjust this value to control height
-
 // Reset state when modal opens
 watch(() => props.open, (newVal) => {
   if (newVal) {
@@ -75,7 +72,7 @@ watch(() => props.open, (newVal) => {
     iframeLoaded.value = false;
     registrationComplete.value = false;
     console.debug('Kaiserex registration modal opened');
-    
+
     // Force iframe reload by changing the src slightly to prevent caching issues
     nextTick(() => {
       if (registrationIframe.value) {
@@ -83,7 +80,7 @@ watch(() => props.open, (newVal) => {
         registrationIframe.value.src = `${iframeUrl}?_t=${timestamp}`;
       }
     });
-    
+
     // Fallback timeout in case iframe load event doesn't fire
     setTimeout(() => {
       if (isLoading.value && newVal) { // Only if still loading and modal is still open
@@ -99,12 +96,12 @@ const onIframeLoad = () => {
   isLoading.value = false;
   iframeLoaded.value = true;
   console.debug('Kaiserex registration iframe loaded');
-  
+
   // Don't inject any CSS - let the iframe scroll naturally on smaller screens
 };
 
 const closeModal = () => {
-  if (registrationComplete.value || 
+  if (registrationComplete.value ||
       confirm('Are you sure you want to cancel? You need to complete registration to order your Gero Card.')) {
     emit('close');
   }
@@ -168,8 +165,6 @@ const proceedToKYC = () => {
 .content-wrapper {
   display: flex;
   flex-direction: column;
-  gap: $spacing-xl;
-  padding: $spacing-3xl;
   position: relative; // For close button positioning
 }
 
@@ -194,7 +189,7 @@ const proceedToKYC = () => {
   border: none;
   background: white;
   display: block;
-  transform: scale(0.75) translateY(0px);
+  transform: scale(0.73) translateY(0px);
   transform-origin: center top;
   flex-shrink: 0;
 }
@@ -236,7 +231,7 @@ const proceedToKYC = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   img {
     width: 32px;
     height: 32px;
@@ -266,29 +261,9 @@ const proceedToKYC = () => {
 
 // Removed old tooltip CSS since we're using v-tooltip now
 
-@media (max-width: $breakpoint-lg) {
-  .content-wrapper {
-    padding: $spacing-lg;
-    gap: $spacing-lg;
-  }
-
-  .iframe-container {
-    height: 700px;
-  }
-}
-
 @media (max-width: $breakpoint-md) {
   .kaiserex-registration-modal {
-    max-height: 95vh;
-  }
-
-  .content-wrapper {
-    padding: $spacing-md;
-    gap: $spacing-md;
-  }
-
-  .iframe-container {
-    height: 600px;
+    max-height: 100vh;
   }
 }
 </style>
