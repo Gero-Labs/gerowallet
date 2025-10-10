@@ -1,12 +1,12 @@
 <template>
-  <div class="gero-ticker d-flex align-center">
+  <div class="gero-ticker d-flex align-center" v-if="price">
     <div class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer" @click="$emit('click')">
       <div class="d-flex flex-column">
         <span class="gero-label" style="font-size: 12px; font-weight: 600" :style="{ color: primaryColor }">{{
           tokenName
         }}</span>
-        <span class="gero-price" style="font-size: 10px; color: #fff" v-if="price"
-          >{{ getCurrencySymbol() }}{{ price }}</span
+        <span class="gero-price" style="font-size: 10px; color: #fff"
+          >{{ getCurrencySymbol() }}{{ price.toFixed(6) }}</span
         >
       </div>
     </div>
