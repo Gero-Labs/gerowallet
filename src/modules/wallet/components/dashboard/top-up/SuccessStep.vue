@@ -9,7 +9,7 @@
     <div class="header-text">
       <h2 class="modal-title">Top-up Success</h2>
       <p class="modal-subtitle">Your balance has been updated and is ready to use</p>
-      <p class="transaction-id">Transaction ID: #{{ transactionId }}</p>
+      <p class="transaction-id">Transaction ID: #{{ transactionId.slice(0, 8) }}...{{ transactionId.slice(-8) }}</p>
     </div>
   </div>
 </template>
