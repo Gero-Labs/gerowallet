@@ -54,6 +54,7 @@ export const walletStore = Vue.observable<WalletStore>({
     locale: 'us',
     txAutoSubmit: true,
     useSidePanel: true,
+    websiteProtection: true,
   },
   fiatRates: null,
   fiatRatesIntervalId: null,
@@ -66,8 +67,6 @@ const STORE_NAME = 'walletStore';
 const context = getContextType();
 
 // Initialize messaging based on context
-// IMPORTANT: Only browser context subscribes to background updates
-// Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
   debugLog(`🔌 Initializing wallet store messaging in browser context`);
   // Browser context: Subscribe to updates from background
@@ -318,6 +317,14 @@ export default {
       walletStore.config.locale = value;
       broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'locale', value);
+    }
+  },
+
+  setWebsiteProtection(value: boolean) {
+    if (walletStore.config && walletStore.loggedWallet) {
+      walletStore.config.websiteProtection = value;
+      broadcastFromBackground({ config: walletStore.config });
+      setWalletConfiguration(walletStore.loggedWallet.id, 'websiteProtection', value);
     }
   },
 

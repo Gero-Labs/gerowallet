@@ -8,7 +8,7 @@
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                mdi-information-outline
+                mdi-information-outlƒine
               </v-icon>
             </template>
             <div>
@@ -418,7 +418,7 @@ const init = async () => {
     txCbor = request.value?.data?.tx;
   }
   if (txCbor) {
-    console.log(txCbor);
+    loading.value = true;
     tx.value = deserializeCardanoJsSdkTx(txCbor);
     const queryParams = route.query;
 
@@ -436,9 +436,6 @@ const init = async () => {
       )
     ]);
 
-    // Allow UI to proceed immediately, update risks when scan completes
-    loading.value = false;
-
     try {
       risks.value = await scanWithTimeout;
     } catch (e) {
@@ -446,6 +443,8 @@ const init = async () => {
       risks.value = {
         addressRisk: 'unknown',
       };
+    } finally {
+      loading.value = false;
     }
   }
 };
