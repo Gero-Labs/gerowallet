@@ -254,9 +254,7 @@ const items = computed((): NavigationItemUnion[] => {
     { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: networks.resolveMultiSigSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    //{ title: 'Gero Card', icon: assts.card, link: '/card',  enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
-
-    { title: 'Gero Card', icon: assts.card, link: '/card',  enabled: true, new: true },
+    { title: 'Gero Card', icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
     { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
     { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
