@@ -1,190 +1,20 @@
-import { Asset as AssetType, Blockchain, ChainDerivations, Network, Paginate, UTxO } from '@/models/types';
-import { APIError, DataSignError, POPUP_WINDOW, STORAGE } from './config';
+import { Blockchain, ChainDerivations, Network, Paginate, UTxO } from '@/models/types';
+import { APIError, DataSignError, POPUP_WINDOW } from './config';
 import networks from '@/utils/networks';
 import {
-  Bip32PrivateKey,
   Bip32PublicKey,
   Ed25519KeyHash,
   Ed25519KeyHashHex,
-  Ed25519PrivateKey,
   Ed25519PublicKey,
   Hash28ByteBase16,
   Hash32ByteBase16,
 } from '@cardano-sdk/crypto';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { bech32, bech32m } from 'bech32';
+import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
-
-export function convertToTxSchema(txId: string, txCbor: string, utxos: any[], networkId: number): any {
-  const tx: Cardano.Tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor)).toCore();
-  const inputs: any[] = [];
-  tx.body.inputs.forEach((input: Cardano.TxIn) => {
-    const utxo = utxos.find(utxo => utxo.tx_hash === input.txId && utxo.tx_index === input.index)
-    if (utxo) {
-      inputs.push(utxo)
-    }
-  })
-  const outputs: any[] = [];
-  let index: number = 0;
-  let totalOutput: bigint = BigInt(0);
-  tx.body.outputs.forEach((output: Cardano.TxOut) => {
-    let stakeAddress = null
-    try {
-      const stakeCred: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(output.address));
-      stakeAddress = Cardano.RewardAddress.fromCredentials(networkId, stakeCred).toAddress().toBech32();
-    } catch (e) {
-      console.log(e)
-    }
-    totalOutput = totalOutput + output.value.coins
-    const asset_list = []
-    const multiAsset: Cardano.TokenMap = output.value.assets;
-    if (multiAsset) {
-      multiAsset.forEach((quantity, assetId) => {
-        asset_list.push({
-          policy_id: Cardano.AssetId.getPolicyId(assetId),
-          asset_name: Cardano.AssetId.getAssetName(assetId),
-          quantity: quantity,
-        });
-      })
-    }
-    const outputRes: any = {
-      asset_list,
-      payment_addr: {
-        bech32: output.address,
-        cred: toPaymentCredential(Cardano.Address.fromBech32(output.address)).hash
-      },
-      reference_script: output.scriptReference,
-      stake_addr: stakeAddress,
-      tx_hash: txId,
-      tx_index: index++,
-      value: output.value.coins.toString()
-    }
-    if (output.datumHash) {
-      outputRes.datum_hash = output.datumHash;
-    }
-    if (output.datum) {
-      outputRes.inline_datum = output.datum;
-    }
-    if (output.scriptReference) {
-      outputRes.reference_script = output.scriptReference;
-    }
-    outputs.push(outputRes);
-  })
-  const assets_minted: any[] = []
-  if (tx.body.mint) {
-    tx.body.mint.entries().forEach(([assetId, quantity]) => {
-      const policyId: Cardano.PolicyId = Cardano.AssetId.getPolicyId(assetId);
-      const assetName: Cardano.AssetName = Cardano.AssetId.getAssetName(assetId);
-      assets_minted.push({
-        decimals: 0,
-        policy_id: policyId,
-        asset_name: assetName,
-        quantity: quantity.toString(),
-        fingerprint: Cardano.AssetFingerprint.fromParts(policyId, Cardano.AssetName(assetName))
-      })
-    })
-  }
-  const certificates: any[] = []
-  if (tx.body.certificates?.length > 0) {
-    let index: number = 0;
-    tx.body.certificates.forEach((cert: Cardano.Certificate) => {
-      if (cert.__typename === Cardano.CertificateType.StakeDeregistration) {
-        certificates.push({
-          index: index++,
-          info: {
-            stake_address: Cardano.RewardAddress.fromCredentials(networkId, {
-              type: cert.stakeCredential.type,
-              hash: cert.stakeCredential.hash
-            }).toAddress().toBech32()
-          },
-          type: 'stake_deregistration'
-        })
-      } else if (cert.__typename === Cardano.CertificateType.StakeRegistration) {
-        certificates.push({
-          index: index++,
-          info: {
-            deposit: "2000000", // TODO value should be taken from epoch parameters
-            stake_address: Cardano.RewardAddress.fromCredentials(networkId, {
-              type: cert.stakeCredential.type,
-              hash: cert.stakeCredential.hash
-            }).toAddress().toBech32()
-          },
-          type: 'stake_registration'
-        })
-      } else if (cert.__typename === Cardano.CertificateType.StakeDelegation) {
-        certificates.push({
-          index: index++,
-          info: {
-            pool_id_bech32: cert.poolId,
-            pool_id_hex: Cardano.PoolId.toKeyHash(cert.poolId),
-            stake_address: Cardano.RewardAddress.fromCredentials(networkId, {
-              type: Cardano.CredentialType.KeyHash,
-              hash: cert.stakeCredential.hash
-            }).toAddress().toBech32()
-          },
-          type: 'pool_delegation'
-        })
-      } else if (cert.__typename === Cardano.CertificateType.VoteDelegation && Cardano.isDRepCredential(cert.dRep)) {
-        const credential: Cardano.Credential = cert.dRep
-        certificates.push({
-          index: index++,
-          info: {
-            drep_hex: Ed25519KeyHashHex(cert.dRep.hash),
-            drep_id: Cardano.DRepID.cip129FromCredential(credential),
-            stake_address: Cardano.RewardAddress.fromCredentials(
-              networkId,
-              {
-                type: Cardano.CredentialType.KeyHash,
-                hash: cert.stakeCredential.hash
-              }
-            ).toAddress().toBech32()
-          },
-          type: 'vote_delegation'
-        })
-      } else {
-        console.log(cert)
-      }
-    })
-  }
-  const native_scripts: Cardano.Script[] = []
-  const plutus_scripts: Cardano.Script[] = []
-
-  tx.auxiliaryData?.scripts.forEach((script: Cardano.Script) => {
-    if (script.__type === Cardano.ScriptType.Native) {
-      native_scripts.push(script);
-    } else if (script.__type == Cardano.ScriptType.Plutus) {
-      plutus_scripts.push(script)
-    }
-  })
-  const reference_inputs: Cardano.TxIn[] = tx.body.referenceInputs ? tx.body.referenceInputs : []
-  const withdrawals: Cardano.Withdrawal[] = tx.body.withdrawals ? tx.body.withdrawals : []
-  return {
-    absolute_slot: 0,
-    assets_minted,
-    block_hash: '',
-    block_height: 0,
-    certificates,
-    deposit: "0",
-    fee: tx.body.fee.toString(),
-    inputs,
-    invalid_after: "",
-    invalid_before: '',
-    metadata: tx.auxiliaryData?.blob,
-    native_scripts,
-    outputs,
-    plutus_scripts,
-    reference_inputs,
-    total_output: totalOutput.toString(),
-    tx_hash: txId,
-    tx_size: 0,
-    tx_timestamp: (new Date()).getTime() / 1000,
-    withdrawals,
-    pending: true
-  }
-}
 
 export function jsonToPlutusData(jsonObj): Serialization.PlutusData {
   function parsePlutusData(data): Serialization.PlutusData {
@@ -228,27 +58,40 @@ export function isPaymentAddress(address: string): boolean {
   return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
 }
 
-export function isPaymentAddressOrHandle(address: string): boolean {
-  return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address) || (address.startsWith('$') && address.length > 1);
-}
-
-export function resolvePrivatePaymentKey(decodedHash: Buffer, keyIndex: number): Ed25519PrivateKey {
-  const prvRootKeyBech32: Bip32PrivateKey = Bip32PrivateKey.fromBytes(decodedHash);
-  return prvRootKeyBech32.derive([ChainDerivations.EXTERNAL, keyIndex]).toRawKey();
-}
-
-export function toValue(assets: any[], lovelace: string): Serialization.Value {
-  const tokenMap = assets.reduce((map, asset) => {
-    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
-    const current = map.get(assetId) ?? BigInt(0);
-    map.set(assetId, current + BigInt(asset.quantity));
-    return map;
-  }, new Map<Cardano.AssetId, bigint>());
-  return new Serialization.Value(BigInt(lovelace), tokenMap)
+export function toValueCore(amount: { unit: string; quantity: string; }[]): Cardano.Value {
+  const value: Cardano.Value = {
+    coins: BigInt(0),
+    assets: new Map<Cardano.AssetId, bigint>()
+  };
+  amount.forEach(amt => {
+    if (amt.unit === 'lovelace') {
+      value.coins = BigInt(amt.quantity);
+    } else {
+      const assetId: Cardano.AssetId = Cardano.AssetId(amt.unit);
+      const current: bigint = value.assets?.get(assetId) ?? BigInt(0);
+      value.assets?.set(assetId, current + BigInt(amt.quantity));
+    }
+  });
+  return value;
 }
 
 export function toStakeCredential(address: Cardano.Address): Cardano.Credential {
   return Cardano.BaseAddress.fromAddress(address)?.getStakeCredential();
+}
+
+export function toStakeAddress(addressBech32: string, networkId: Cardano.NetworkId): string {
+  if (Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentKeyStakeKey &&
+      Cardano.Address.fromString(addressBech32).getType() !== Cardano.AddressType.BasePaymentScriptStakeKey) {
+    return undefined;
+  }
+  const stakeCredential: Cardano.Credential = toStakeCredential(Cardano.Address.fromBech32(addressBech32));
+  if (!stakeCredential) {
+    return undefined;
+  }
+  return Cardano.RewardAddress
+    .fromCredentials(networkId, stakeCredential)
+    .toAddress()
+    .toBech32();
 }
 
 export function toPaymentCredential(address: Cardano.Address): Cardano.Credential {
@@ -301,8 +144,8 @@ export function getAddress(xpub: string, chain: string, network: string, index: 
   const networkId = networks.resolveNetworkId(chain, network);
   const pubKey = getPublicKey(xpub);
   return buildBaseAddress(networkId,
-    Hash28ByteBase16.fromEd25519KeyHashHex(paymentKeyHash(pubKey, index).hex()),
-    Hash28ByteBase16.fromEd25519KeyHashHex(stakeKeyHash(pubKey, 0).hex())).toAddress();
+    Hash28ByteBase16(paymentKeyHash(pubKey, index).hex()),
+    Hash28ByteBase16(stakeKeyHash(pubKey, 0).hex())).toAddress();
 }
 
 export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: Hash28ByteBase16, stakeKeyHash: Hash28ByteBase16) {
@@ -319,37 +162,53 @@ export function buildBaseAddress(networkId: Cardano.NetworkId, paymentKeyHash: H
   );
 }
 
-export function buildEnterpriseAddress(networkId: Cardano.NetworkId, paymentKeyHash: Hash28ByteBase16) {
-  return Cardano.EnterpriseAddress.fromCredentials(networkId, {
-    hash: paymentKeyHash,
-    type: Cardano.CredentialType.KeyHash
-  });
-}
-
-export function buildRewardAddress(networkId: Cardano.NetworkId, stakeKeyHash: Hash28ByteBase16) {
-  return Cardano.RewardAddress.fromCredentials(networkId, {
-    type: Cardano.CredentialType.KeyHash,
-    hash: stakeKeyHash
-  });
-}
-
 export function getUtxos(
   amount: string = undefined,
   paginate: Paginate = undefined,
-  utxos: any[],
-  collateral: any
+  utxos: Cardano.Utxo[],
+  collateral: Cardano.Utxo
 ): Serialization.TransactionUnspentOutput[] {
-
   // Exclude collateral input from the overall UTXO set
   if (collateral) {
     utxos = utxos.filter(
       (utxo) =>
-        !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index)
+        !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index)
     );
   }
 
   // Convert raw UTXOs to the appropriate format
-  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo) => toUTxO(utxo));
+  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {
+    // Reconstruct the value with proper Map for assets (needed after JSON deserialization)
+    let value = utxo[1].value;
+    if (value?.assets && !(value.assets instanceof Map)) {
+      const assetsMap = new Map<Cardano.AssetId, bigint>();
+      // Convert plain object back to Map
+      Object.entries(value.assets).forEach(([assetId, quantity]) => {
+        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+      });
+      value = {
+        coins: BigInt(value.coins),
+        assets: assetsMap
+      };
+    } else if (value) {
+      // Ensure coins is BigInt even if no assets
+      value = {
+        coins: BigInt(value.coins),
+        assets: value.assets || undefined
+      };
+    }
+
+    return Serialization.TransactionUnspentOutput.fromCore([{
+      txId: utxo[0].txId,
+      index: utxo[0].index
+    }, {
+      address: utxo[1].address,
+      value: value,
+      datumHash: utxo[1].datumHash,
+      datum: utxo[1].datum,
+      scriptReference: utxo[1].scriptReference
+    }]);
+  });
 
   // If no amount is specified, return all UTXOs (with optional pagination)
   if (!amount) {
@@ -452,17 +311,39 @@ export function getUtxos(
   return selectedUtxos;
 }
 
-export function getBalance(utxos: any[], collateral: any): Serialization.Value {
-  const assets: any[] = []
-  let lovelace = 0;
-  if (collateral) {
-    utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
+export function getBalance(utxos: Cardano.Utxo[], collateral: Cardano.Utxo): Serialization.Value {
+  let accumulatedValue: Serialization.Value = new Serialization.Value(BigInt(0));
+  if (utxos && collateral) {
+    utxos = utxos.filter((utxo: Cardano.Utxo) => !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index))
   }
-  utxos.forEach(utxo => {
-    assets.push(...utxo.asset_list)
-    lovelace += Number(utxo.value)
+  utxos.forEach((utxo: Cardano.Utxo) => {
+    // Ensure coins is BigInt and assets is a Map (handle deserialization from storage)
+    let utxoValue = utxo[1].value;
+
+    // Convert coins to BigInt if it's a string
+    const coins = typeof utxoValue.coins === 'string' ? BigInt(utxoValue.coins) : BigInt(utxoValue.coins);
+
+    // Convert assets to Map if it's a plain object
+    let assets: Map<Cardano.AssetId, bigint> | undefined = undefined;
+    if (utxoValue.assets) {
+      if (utxoValue.assets instanceof Map) {
+        assets = utxoValue.assets;
+      } else {
+        // Convert plain object to Map
+        assets = new Map<Cardano.AssetId, bigint>();
+        Object.entries(utxoValue.assets).forEach(([assetId, quantity]) => {
+          assets!.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        });
+      }
+    }
+
+    const value: Serialization.Value = Serialization.Value.fromCore({
+      coins,
+      assets
+    });
+    accumulatedValue = coalesceValueQuantities([accumulatedValue, value]);
   })
-  return toValue(assets, lovelace.toString());
+  return accumulatedValue;
 }
 
 export function coalesceValueQuantities(quantities: Serialization.Value[]): Serialization.Value {
@@ -486,7 +367,7 @@ export function getRewardAddress(xpub: string, chain: string, network: string): 
     networkId,
     {
       type: Cardano.CredentialType.KeyHash,
-      hash: Hash28ByteBase16.fromEd25519KeyHashHex(stakeKey.hash().hex())
+      hash: Hash28ByteBase16(stakeKey.hash().hex())
     }).toAddress()
 }
 
@@ -495,7 +376,16 @@ export function getCip129DrepId(xpub: string): Cardano.DRepID {
   return Cardano.DRepID.cip129FromCredential(
     {
       type: Cardano.CredentialType.KeyHash,
-      hash: Hash28ByteBase16.fromEd25519KeyHashHex(drepKey.hash().hex())
+      hash: Hash28ByteBase16(drepKey.hash().hex())
+    })
+}
+
+export function getCip105DrepId(xpub: string): Cardano.DRepID {
+  const drepKey = getDrepKey(xpub, 0);
+  return Cardano.DRepID.cip105FromCredential(
+    {
+      type: Cardano.CredentialType.KeyHash,
+      hash: Hash28ByteBase16(drepKey.hash().hex())
     })
 }
 
@@ -565,32 +455,34 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
   return filteredUtxos.map((utxo) => toUTxO(utxo).toCbor());
 }
 
-export function getUsedAddresses(addresses: {}, paginate?: Paginate): HexBlob[] {
+export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
   let res: HexBlob[] = []
-  const addressesArray: any[] = Object.values(addresses)
-  if (addressesArray && Array.isArray(addressesArray)) {
-    addressesArray.sort((a,b) => (a['path'] > b['path']) ? 1 : ((b['path'] > a['path']) ? -1 : 0))
-    const addressesArrayHex: HexBlob[] = addressesArray.map(el => Cardano.Address.fromBech32(el['address']).toBytes())
+  const addresses: string[] = keys.payment.filter(a => a.used);
+  if (addresses && Array.isArray(addresses)) {
+    const addressesArrayHex: HexBlob[] = addresses.map(el => Cardano.Address.fromBech32(el['address']).toBytes());
     res = paginateArray(addressesArrayHex, paginate);
   }
   return res
 }
 
-export function getUnusedAddresses(xpub: string, chain: string, network: string, addresses: {}): HexBlob[] {
-  console.debug('getting unused addresses');
-  let addressesArray: any[] = Object.values(addresses)
-  let highestIndex: number = 0;
-  if (addressesArray && Array.isArray(addressesArray)) {
-    addressesArray.forEach(el => {
-      const hdPath: number[] = hdPathToArray(el['path'])
-      if (hdPath[3] === 0) {
-        if (hdPath[4] > highestIndex) {
+export function getUnusedAddresses(xpub: string, chain: string, network: string, keys: any): HexBlob[] {
+  let res: HexBlob[] = []
+  const addresses: string[] = keys.payment.filter(a => !a.used);
+  if (addresses && Array.isArray(addresses)) {
+    res = addresses.map(el => Cardano.Address.fromBech32(el['address']).toBytes());
+    if (res.length == 0) {
+      let highestIndex: number = 0
+      const usedAddresses = keys.payment.filter(a => a.used)
+      usedAddresses.forEach((usedAddress: any) => {
+        const hdPath: number[] = hdPathToArray(usedAddress.path)
+        if (hdPath[3] === 0 && hdPath[4] > highestIndex) {
           highestIndex = hdPath[4]
         }
-      }
-    })
+      });
+      res = [getAddress(xpub, chain, network, highestIndex + 1).toBytes()]
+    }
   }
-  return [getAddress(xpub, chain, network, highestIndex + 1).toBytes()]
+  return res;
 }
 
 function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
@@ -605,67 +497,105 @@ function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
   return array.slice(start, end);
 }
 
+// Track pending popup creations to prevent race conditions
+const pendingPopups = new Map<string, Promise<chrome.tabs.Tab>>();
+
 export async function focusOrCreatePopup(url: string, width: number, height: number): Promise<chrome.tabs.Tab> {
-  const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
-  let existingWindow = null;
-  let tabb: chrome.tabs.Tab;
-  // Iterate through each window and its tabs to find the URL
-  for (const window of windows) {
-    if (window.type === 'popup') {
-      for (const tab of window.tabs) {
-        if (tab.url === url) {
-          existingWindow = window;
-          tabb = tab;
-          break;
-        }
-      }
-      if (existingWindow) break;
-    }
+  // Check if we're already creating a popup for this URL
+  if (pendingPopups.has(url)) {
+    console.log('⏳ Popup already being created for:', url);
+    return pendingPopups.get(url);
   }
 
-  if (existingWindow) {
-    // Focus on the existing window
-    await chrome.windows.update(existingWindow.id, { focused: true });
-    return tabb;
-  } else {
-    // Create a new window with the specified URL
-    const window: chrome.windows.Window = await chrome.windows.create({
-      url: url,
-      type: 'popup',
-      focused: true,
-      ...POPUP_WINDOW,
-      width: width,
-      height: height,
-    });
-    return window.tabs[0];
-  }
+  // Create the popup promise
+  const popupPromise = (async () => {
+    try {
+      const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
+      let existingWindow = null;
+      let tabb: chrome.tabs.Tab;
+
+      // Iterate through each window and its tabs to find the URL
+      for (const window of windows) {
+        if (window.type === 'popup') {
+          for (const tab of window.tabs) {
+            if (tab.url === url) {
+              existingWindow = window;
+              tabb = tab;
+              break;
+            }
+          }
+          if (existingWindow) break;
+        }
+      }
+
+      if (existingWindow) {
+        // Focus on the existing window
+        console.log('✅ Focusing existing popup:', url);
+        await chrome.windows.update(existingWindow.id, { focused: true });
+        return tabb;
+      } else {
+        // Create a new window with the specified URL
+        console.log('🆕 Creating new popup:', url);
+        const window: chrome.windows.Window = await chrome.windows.create({
+          url: url,
+          type: 'popup',
+          focused: true,
+          ...POPUP_WINDOW,
+          width: width,
+          height: height,
+        });
+        return window.tabs[0];
+      }
+    } finally {
+      // Clean up the pending popup tracking after creation
+      pendingPopups.delete(url);
+    }
+  })();
+
+  // Store the promise to prevent concurrent creations
+  pendingPopups.set(url, popupPromise);
+
+  return popupPromise;
 }
 
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
   const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === chain);
   const networkEnum: string = Object.keys(Network).find(key => Network[key] === network);
-  return await fetch(`${baseUrl}/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
+  return fetch(`${baseUrl}/api/transactions/submit-tx?chain=${chainEnum}&network=${networkEnum}&provider=KOIOS`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: tx
   })
 }
 
-export const urlScan = async url => {
-  const result = await fetch(`${baseUrl}/api/url/scan?url=${url}`, {
+export const urlScan = async (url: string) => {
+  return fetch(`${baseUrl}/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (result) {
-    console.log('result', result);
-  }
-  return result;
 };
 
 export function getPublicKey(xpub: string): Bip32PublicKey {
-  const { words } = bech32.decode(xpub, 120) ?? bech32m.decode(xpub, 120);
-  const byteArray = Uint8Array.from(bech32.fromWords(words));
+  let words: Decoded;
+  try {
+    words = bech32.decode(xpub, 120);
+  } catch (e) {
+    words = bech32m.decode(xpub, 120);
+  }
+  const byteArray = Uint8Array.from(bech32.fromWords(words.words));
   return Bip32PublicKey.fromBytes(byteArray);
+}
+
+export function getPaymentKeyExternal(xpub: string, index: number): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.EXTERNAL, index])
+    .toRawKey()
+}
+
+export function getPaymentKeyInternal(xpub: string, index: number): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.INTERNAL, index])
+    .toRawKey()
 }
 
 export function getStakeKey(xpub: string, index: number): Ed25519PublicKey {
@@ -677,6 +607,18 @@ export function getStakeKey(xpub: string, index: number): Ed25519PublicKey {
 export function getDrepKey(xpub: string, index): Ed25519PublicKey {
   return getPublicKey(xpub)
     .derive([ChainDerivations.DREP, index])
+    .toRawKey()
+}
+
+export function getCcColdKey(xpub: string, index): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.CONSTITUTIONAL_COMMITTEE_COLD, index])
+    .toRawKey()
+}
+
+export function getCcHotKey(xpub: string, index): Ed25519PublicKey {
+  return getPublicKey(xpub)
+    .derive([ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, index])
     .toRawKey()
 }
 
@@ -694,24 +636,6 @@ export function hdPathToArray(path: string): number[] {
       return parseInt(part, 10);
     }
   });
-}
-
-export function assetsToValue(assets: AssetType[]): Serialization.Value {
-  const coin: Cardano.Lovelace = BigInt(assets.find((asset) => asset.unit === 'lovelace').quantity)
-  const multiasset: Cardano.TokenMap = new Map<Cardano.AssetId, bigint>()
-  assets // TODO use MAP
-    .filter(asset => asset.unit !== 'lovelace')
-    .forEach(asset => {
-      const assetId: Cardano.AssetId = Cardano.AssetId(asset.unit)
-      let quantity: bigint = multiasset.get(assetId)
-      if (!quantity) {
-        quantity = BigInt(asset.quantity)
-      } else {
-        quantity += BigInt(asset.quantity)
-      }
-      multiasset.set(assetId, quantity);
-    })
-  return new Serialization.Value(coin, multiasset)
 }
 
 export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
@@ -734,8 +658,8 @@ export function toUTxO(utxo: UTxO): Serialization.TransactionUnspentOutput {
         assets: tokenMap,
       },
       datumHash: utxo.datum_hash ? Hash32ByteBase16.fromHexBlob(HexBlob(utxo.datum_hash)) : null,
-      datum: utxo.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(utxo.inline_datum)).toCore() : null,
-      scriptReference: utxo.reference_script ? Serialization.Script.fromCbor(HexBlob(utxo.reference_script)).toCore() : null
+      datum: utxo.inline_datum ? Serialization.PlutusData.fromCbor(HexBlob(utxo.inline_datum.bytes)).toCore() : null,
+      scriptReference: utxo.reference_script ? Serialization.Script.fromCbor(HexBlob(utxo.reference_script.bytes)).toCore() : null
     }
   ]);
 }
@@ -753,7 +677,7 @@ export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAcco
     // Try to parse as drep key hash
     const drepKeyHash = Ed25519KeyHashHex(addr);
     const drepId = Cardano.DRepID.cip129FromCredential({
-      hash: Hash28ByteBase16.fromEd25519KeyHashHex(drepKeyHash),
+      hash: Hash28ByteBase16(drepKeyHash),
       type: Cardano.CredentialType.KeyHash
     });
     const drepAddr: Cardano.Address = Cardano.DRepID.toAddress(drepId)?.toAddress();
@@ -764,16 +688,27 @@ export function addrToSignWith(addr: Cardano.PaymentAddress | Cardano.RewardAcco
   }
 }
 
-export const getStorage = (key) =>
-  new Promise<any>((res, rej) =>
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) rej(undefined);
-      res(key ? result[key] : result);
-    }),
-  );
-
-export const getNetwork = async (): Promise<any> => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet)
-  return loggedWallet['network'].toLowerCase();
-};
-
+export function keyHashFromAddress(address: string): Hash28ByteBase16 {
+  const keyAddress: Cardano.Address = Cardano.Address.fromBech32(address);
+  try {
+    return Cardano.BaseAddress.fromAddress(keyAddress).getPaymentCredential().hash;
+  } catch (e) {
+    // I want the application to not crush but don't care about the message
+  }
+  try {
+    return Cardano.EnterpriseAddress.fromAddress(keyAddress).getPaymentCredential().hash
+  } catch (e) {
+    // I want the application to not crush but don't care about the message
+  }
+  try {
+    return Cardano.PointerAddress.fromAddress(keyAddress).getPaymentCredential().hash
+  } catch (e) {
+    // I want the application to not crush but don't care about the message
+  }
+  try {
+    return Cardano.RewardAddress.fromAddress(keyAddress).getPaymentCredential().hash
+  } catch (e) {
+    // I want the application to not crush but don't care about the message
+  }
+  return undefined;
+}

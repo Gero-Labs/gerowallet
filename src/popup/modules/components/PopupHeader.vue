@@ -14,8 +14,8 @@
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
                              width="3"></v-progress-circular>
-        <v-avatar v-else tile size="16" class="ml-1">
-          <img :src="websiteRiskIcon" alt="Website Risk Icon" />
+        <v-avatar v-else tile size="16" class="ml-1 text-center">
+          <v-img contain :src="websiteRiskIcon" alt="Website Risk Icon" />
         </v-avatar>
       </div>
       <div v-else>
@@ -23,7 +23,7 @@
       </div>
     </v-card-title>
     <Select
-      v-if="showWallet"
+      v-if="showWallet && loggedWallet"
       :value="loggedWallet"
       :items="[loggedWallet]"
       :readonly="true"
@@ -32,98 +32,103 @@
     <slot />
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
+import { getCurrentInstance, ref, toRefs, computed, onMounted } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';
-import { useStore } from '@/stores';
-import { mapState } from 'pinia';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
 
-export default{
-  name: 'PopupHeader',
-  components: { Select },
-  props: {
-    title: {
-      type: String,
-      default: '',
-    },
-    showWebsite: {
-      type: Boolean,
-      default: true
-    },
-    showWallet: {
-      type: Boolean,
-      default: true
-    },
-    disabled: {
-      type: Boolean,
-      default: false
-    }
+defineProps({
+  title: {
+    type: String,
+    default: '',
   },
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    favicon() {
-      if (this.queryParams?.website) {
-        return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${this.queryParams.website}&size=16`;
-      }
-      return '';
-    },
-    domain() {
-      if (this.queryParams?.website) {
-        return this.extractHostname(this.queryParams.website);
-      }
-      return '';
-    },
-    websiteRiskIcon() {
-      return assets.resolveDappRisk(this.dappRisk)
-    },
+  showWebsite: {
+    type: Boolean,
+    default: true
   },
-  methods: {
-    extractHostname(url) {
-      let hostname;
-      //find & remove protocol (http, ftp, etc.) and get hostname
-
-      if (url.indexOf('//') > -1) {
-        hostname = url.split('/')[2];
-      } else {
-        hostname = url.split('/')[0];
-      }
-
-      //find & remove port number
-      hostname = hostname.split(':')[0];
-      //find & remove "?"
-      hostname = hostname.split('?')[0];
-
-      this.validateDomain(hostname);
-      return hostname;
-    },
-    validateDomain(s) {
-      try {
-        new URL('https://' + s);
-        return true;
-      } catch (e) {
-        console.error(e);
-        return false;
-      }
-    },
+  showWallet: {
+    type: Boolean,
+    default: true
   },
-  data: () => ({
-    loading: true,
-    dappRisk: DappRisk.unknown,
-    assets,
-  }),
-  async created() {
-    this.queryParams = this.$route.query;
-    const api = cardanoShieldApi
-    try {
-      this.dappRisk = DappRisk[await api.scanUrl(this.queryParams['website'])];
-    } catch (e) {
-      console.log(e);
-    }
-    this.loading = false;
+  disabled: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const { loggedWallet } = toRefs(walletStore);
+const loading = ref<boolean>(true);
+const dappRisk = ref<DappRisk>(DappRisk.unknown);
+const queryParams = ref(null);
+
+const vmProxy = getCurrentInstance()!.proxy as any
+
+const favicon = computed(() => {
+  if (queryParams.value?.website) {
+    return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${queryParams.value.website}&size=16`;
+  }
+  return '';
+});
+
+const domain = computed(() => {
+  if (queryParams.value?.website) {
+    return extractHostname(queryParams.value?.website);
+  }
+  return '';
+});
+
+const websiteRiskIcon = computed(() => {
+  return assets.resolveDappRisk(dappRisk.value)
+});
+
+function extractHostname(url) {
+  let hostname;
+  //find & remove protocol (http, ftp, etc.) and get hostname
+
+  if (url.indexOf('//') > -1) {
+    hostname = url.split('/')[2];
+  } else {
+    hostname = url.split('/')[0];
+  }
+
+  //find & remove port number
+  hostname = hostname.split(':')[0];
+  //find & remove "?"
+  hostname = hostname.split('?')[0];
+
+  validateDomain(hostname);
+  return hostname;
+}
+
+function validateDomain(s) {
+  try {
+    new URL('https://' + s);
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
   }
 }
+
+onMounted(async () => {
+  const route = vmProxy.$route;
+  queryParams.value = route.query;
+  try {
+    const riskString = await cardanoShieldApi.scanUrl(queryParams.value['website']);
+    dappRisk.value = DappRisk[riskString as keyof typeof DappRisk] ?? DappRisk.unknown;
+  } catch (e) {
+    console.log(e);
+  }
+  loading.value = false;
+})
+
+// Expose domain property for parent components to access via refs
+defineExpose({
+  domain
+})
 </script>
 <style scoped>
 

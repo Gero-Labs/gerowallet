@@ -5,46 +5,34 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined>
+        <v-card flat outlined class="liquid-glass">
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>
-                <v-list-item-title style="display: flex">
+                <v-list-item-title class="staking-header">
                   Available Stake Pools
                   <v-spacer></v-spacer>
-                  <div style="display: flex;">
+                  <div class="staking-pro-toggle">
                     <p class="mr-5 my-auto">PRO</p>
-                    <v-switch
-                      inset
-                      dense
-                      v-model="isPro"
-                      hide-details
-                      style="margin-top: 0; align-items: center;"
-                    >
-                    </v-switch>
+                    <v-switch inset dense v-model="isPro" hide-details class="staking-switch"> </v-switch>
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  Earn rewards by staking your {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with {{ loggedWallet?.chain }}'s extensive network of stake pools.
+                  Earn rewards by staking your
+                  {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with
+                  {{ loggedWallet?.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
-              <v-list-item-action style="align-items: center;" class="ma-0" v-if="geroPoolExists && !delegatingToGero">
-                <v-card-title style="color: #00DFF3; font-size: 18px">
-                  Consider supporting us
-                </v-card-title>
+              <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
+                <v-card-title class="staking-support-title"> Consider supporting us </v-card-title>
                 <v-card-subtitle>
-                  <v-btn small
-                         style="text-transform: capitalize; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
-                         @click="delegateToGero"
-                  >
-                    Stake with GERO
-                  </v-btn>
+                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">Stake with GERO</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
           </v-card-title>
           <v-card-subtitle class="pt-5">
-            <v-row no-gutters style="align-items: center;">
+            <v-row no-gutters class="staking-filters-row">
               <v-col class="px-1" cols="12" lg="6" md="4" sm="6" xs="12">
                 <v-text-field
                   v-model="search"
@@ -58,193 +46,390 @@
                 </v-text-field>
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
-                <v-switch dense v-model="hideSaturated" label="Hide Saturated" hide-details style="margin: auto"></v-switch>
+                <v-switch
+                  dense
+                  v-model="hideSaturated"
+                  label="Hide Saturated"
+                  hide-details
+                  class="staking-filter-switch"
+                ></v-switch>
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
-                <v-switch dense v-model="pledgeMet" label="Pledge Met" hide-details style="margin: auto"></v-switch>
+                <v-switch
+                  dense
+                  v-model="pledgeMet"
+                  label="Pledge Met"
+                  hide-details
+                  class="staking-filter-switch"
+                ></v-switch>
               </v-col>
             </v-row>
           </v-card-subtitle>
           <v-card-text class="py-0">
-            <v-data-table v-if="isPro" dense :headers="headers" :items="stakePools" :items-per-page="8" :page.sync="page"
-                          @page-count="pageCount = $event" :header-props="{ 'sort-icon': 'mdi-menu-up' }" multi-sort
-                          hide-default-footer class="poolsTable transparent" @click:row="delegate">
+            <!-- Error message -->
+            <div v-if="poolsError" class="text-center py-4">
+              <v-icon color="error" large>mdi-alert</v-icon>
+              <p class="mt-2 error--text">{{ poolsError }}</p>
+              <v-btn @click="reloadWithFilters" color="primary">Retry</v-btn>
+            </div>
+            <v-data-table
+              v-if="isPro"
+              dense
+              :headers="headers"
+              :items="paginatedPools"
+              :items-per-page="15"
+              :page.sync="page"
+              @page-count="pageCount = $event"
+              :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+              :must-sort="true"
+              hide-default-footer
+              class="poolsTable transparent"
+              :sort-by.sync="sortBy"
+              :sort-desc.sync="sortDesc"
+              :loading="poolsLoading"
+              @click:row="delegate"
+            >
               <template v-slot:[`item.name`]="{ item }">
                 <v-list-item three-line style="min-height: 68px" class="px-0">
-                  <v-list-item-avatar size="24" style="place-self: center;">
-                    <v-img :src="poolExtendedInfo(item).info.url_png_icon_64x64" v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64" alt="" @error="fallbackImage" eager></v-img>
+                  <v-list-item-avatar size="24" style="place-self: center; margin-right: 8px !important">
+                    <v-img
+                      :src="poolExtendedInfo(item).info.url_png_icon_64x64"
+                      v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64"
+                      alt=""
+                      @error="assets.fallbackImage"
+                      eager
+                    ></v-img>
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
-                    <v-list-item-title style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: horizontal; overflow: hidden; text-overflow: ellipsis; white-space: normal;">{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
+                    <v-list-item-title class="pool-name-title"
+                      >{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
                       <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
-                          <v-icon small>
-                            mdi-web
-                          </v-icon>
+                          <v-icon small> mdi-web </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.facebook_handle" @click.stop="" :href="'https://www.facebook.com/'+poolExtendedInfo(item)?.info?.social?.facebook_handle" target="_blank">
-                          <v-icon small>
-                            mdi-facebook
-                          </v-icon>
+                        <v-btn
+                          icon
+                          x-small
+                          v-if="poolExtendedInfo(item)?.info?.social?.facebook_handle"
+                          @click.stop=""
+                          :href="'https://www.facebook.com/' + poolExtendedInfo(item)?.info?.social?.facebook_handle"
+                          target="_blank"
+                        >
+                          <v-icon small> mdi-facebook </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(item)?.info?.social?.twitter_handle" target="_blank">
+                        <v-btn
+                          icon
+                          x-small
+                          v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle"
+                          @click.stop=""
+                          :href="'https://x.com/' + poolExtendedInfo(item)?.info?.social?.twitter_handle"
+                          target="_blank"
+                        >
                           <v-avatar tile size="14">
-                            <v-img :src="xLogo" alt="x"></v-img>
+                            <v-img :src="assets.xSvg" alt="x"></v-img>
                           </v-avatar>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(item)?.info?.social?.youtube_handle" target="_blank">
-                          <v-icon small>
-                            mdi-youtube
-                          </v-icon>
+                        <v-btn
+                          icon
+                          x-small
+                          v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle"
+                          @click.stop=""
+                          :href="'https://youtube.com/' + poolExtendedInfo(item)?.info?.social?.youtube_handle"
+                          target="_blank"
+                        >
+                          <v-icon small> mdi-youtube </v-icon>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(item)?.info?.social?.discord_handle" target="_blank">
+                        <v-btn
+                          icon
+                          x-small
+                          v-if="poolExtendedInfo(item)?.info?.social?.discord_handle"
+                          @click.stop=""
+                          :href="'https://discord.gg/' + poolExtendedInfo(item)?.info?.social?.discord_handle"
+                          target="_blank"
+                        >
                           <v-avatar tile size="14">
-                            <v-img :src="discordLogo" width="14" height="14" alt="discord" contain></v-img>
+                            <v-img :src="assets.discordSvg" width="14" height="14" alt="discord" contain></v-img>
                           </v-avatar>
                         </v-btn>
-                        <v-btn icon x-small v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(item)?.info?.social?.telegram_handle" target="_blank">
+                        <v-btn
+                          icon
+                          x-small
+                          v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle"
+                          @click.stop=""
+                          :href="'https://t.me/' + poolExtendedInfo(item)?.info?.social?.telegram_handle"
+                          target="_blank"
+                        >
                           <v-avatar tile size="14">
-                            <v-img :src="telegramLogo" alt="x"></v-img>
+                            <v-img :src="assets.telegramSvg" alt="x"></v-img>
                           </v-avatar>
                         </v-btn>
                       </div>
                     </v-list-item-title>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" v-if="item.description">{{item.description}}</v-list-item-subtitle>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: normal;" class="mr-1">
-                      {{ item.pool_id_bech32 | truncate }}
+                    <v-list-item-subtitle class="pool-description" v-if="item.description">{{
+                      item.description
+                    }}</v-list-item-subtitle>
+                    <v-list-item-subtitle class="pool-id-subtitle mr-1">
+                      {{ filters.truncate(item.pool_id_bech32) }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
               </template>
               <template v-slot:[`item.live_delegators`]="{ item }">
-                {{ (item.live_delegators).toLocaleString('en-US') }}
+                {{ item.live_delegators.toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.ros`]="{ item }">
-                {{ item.ros.toLocaleString('en-US', {maximumFractionDigits: 2}) }}
+                {{ item.ros.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}
               </template>
               <template v-slot:[`item.block_count`]="{ item }">
                 {{ item.block_count.toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.live_saturation`]="{ item }">
-                <v-progress-linear rounded :color="getColor(item.live_saturation)" height="16" :value="item.live_saturation" striped>
+                <v-progress-linear
+                  rounded
+                  :color="filters.getColor(item.live_saturation)"
+                  height="16"
+                  :value="item.live_saturation"
+                  striped
+                >
                   <template v-slot:default="{ value }">
                     <strong>{{ Math.ceil(value) }}%</strong>
                   </template>
                 </v-progress-linear>
-                <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify;">
-                  <strong>{{ item.active_stake | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</strong>
-                  <strong v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000" style="display: inline-flex; font-size: 10px">
-                    <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(item.active_stake) - Number(item.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                <div class="pool-saturation-details">
+                  <strong>{{
+                    filters.toCurrency(
+                      item.active_stake,
+                      false,
+                      1,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                      '',
+                      true
+                    )
+                  }}</strong>
+                  <strong
+                    v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000"
+                    class="stake-change-up"
+                  >
+                    <v-icon x-small color="#47cd89" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
+                    {{
+                      filters.toCurrency(
+                        Number(item.active_stake) - Number(item.live_stake),
+                        false,
+                        1,
+                        networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                        '',
+                        true
+                      )
+                    }}
                   </strong>
-                  <strong v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000" style="display: inline-flex; font-size: 10px">
-                    <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(item.live_stake) - Number(item.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
+                  <strong
+                    v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000"
+                    class="stake-change-down"
+                  >
+                    <v-icon x-small color="#F97066" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                    {{
+                      filters.toCurrency(
+                        Number(item.live_stake) - Number(item.active_stake),
+                        false,
+                        1,
+                        networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                        '',
+                        true
+                      )
+                    }}
                   </strong>
                 </div>
               </template>
               <template v-slot:[`item.fixed_cost`]="{ item }">
-                <span style="font-size: 14px; color: white" v-if="loggedWallet">{{ item.margin + '%' }} / {{ item.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
-                  }}</span>
+                <span class="pool-fees-text" v-if="loggedWallet"
+                  >{{ item.margin + '%' }} /
+                  {{
+                    filters.toCurrency(
+                      item.fixed_cost,
+                      false,
+                      0,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                    )
+                  }}</span
+                >
               </template>
               <template v-slot:[`item.pledge`]="{ item }">
-                {{ item.pledge | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
-                <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)">mdi-check</v-icon>
+                {{
+                  filters.toCurrency(
+                    item.pledge,
+                    false,
+                    2,
+                    networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                    '',
+                    true
+                  )
+                }}
+                <v-icon x-small color="#47cd89" v-if="Number(item.pledge) <= Number(item.live_pledge)"
+                  >mdi-check</v-icon
+                >
                 <v-icon x-small color="#F97066" v-else>mdi-close</v-icon>
               </template>
             </v-data-table>
             <v-row no-gutters v-else>
-              <v-col cols="12" xl="3" lg="4" md="6" sm="12" v-for="(pool, index) in pagedPools" :key="index"
-                     class="px-2 py-2">
-                <v-hover
-                  v-slot="{ hover }"
-                >
+              <v-col
+                cols="12"
+                xl="3"
+                lg="4"
+                md="6"
+                sm="12"
+                v-for="(pool, index) in paginatedPools"
+                :key="index"
+                class="px-2 py-2"
+              >
+                <v-hover v-slot="{ hover }">
                   <v-card
                     flat
                     outlined
                     :color="hover ? '#FFFFFF' : '#84CAFF'"
-                    style="border-radius: 12px"
+                    class="pool-card fill-height"
                     @click="delegate(pool)"
-                    class="fill-height"
                   >
                     <v-list-item v-if="pool">
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
-                          {{`[${pool.ticker}] ${pool.name ? pool.name : ''}` }}
+                          {{ `[${pool.ticker}] ${pool.name ? pool.name : ''}` }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
-                          <v-btn icon x-small v-if="pool?.homepage" @click.stop="" :href="pool?.homepage" target="_blank">
-                            <v-icon small>
-                              mdi-web
-                            </v-icon>
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="pool?.homepage"
+                            @click.stop=""
+                            :href="pool?.homepage"
+                            target="_blank"
+                          >
+                            <v-icon small> mdi-web </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.facebook_handle" @click.stop="" :href="'https://www.facebook.com/'+poolExtendedInfo(pool)?.info?.social?.facebook_handle" target="_blank">
-                            <v-icon small>
-                              mdi-facebook
-                            </v-icon>
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="poolExtendedInfo(pool)?.info?.social?.facebook_handle"
+                            @click.stop=""
+                            :href="'https://www.facebook.com/' + poolExtendedInfo(pool)?.info?.social?.facebook_handle"
+                            target="_blank"
+                          >
+                            <v-icon small> mdi-facebook </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle" @click.stop="" :href="'https://x.com/'+poolExtendedInfo(pool)?.info?.social?.twitter_handle" target="_blank">
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle"
+                            @click.stop=""
+                            :href="'https://x.com/' + poolExtendedInfo(pool)?.info?.social?.twitter_handle"
+                            target="_blank"
+                          >
                             <v-avatar tile size="14">
-                              <v-img :src="xLogo" alt="x"></v-img>
+                              <v-img :src="assets.xSvg" alt="x"></v-img>
                             </v-avatar>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle" @click.stop="" :href="'https://youtube.com/'+poolExtendedInfo(pool)?.info?.social?.youtube_handle" target="_blank">
-                            <v-icon small>
-                              mdi-youtube
-                            </v-icon>
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle"
+                            @click.stop=""
+                            :href="'https://youtube.com/' + poolExtendedInfo(pool)?.info?.social?.youtube_handle"
+                            target="_blank"
+                          >
+                            <v-icon small> mdi-youtube </v-icon>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle" @click.stop="" :href="'https://discord.gg/'+poolExtendedInfo(pool)?.info?.social?.discord_handle" target="_blank">
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle"
+                            @click.stop=""
+                            :href="'https://discord.gg/' + poolExtendedInfo(pool)?.info?.social?.discord_handle"
+                            target="_blank"
+                          >
                             <v-avatar tile size="14">
-                              <v-img :src="discordLogo" alt="discord" width="14" height="14" contain></v-img>
+                              <v-img :src="assets.discordSvg" alt="discord" width="14" height="14" contain></v-img>
                             </v-avatar>
                           </v-btn>
-                          <v-btn icon x-small v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle" @click.stop="" :href="'https://t.me/'+poolExtendedInfo(pool)?.info?.social?.telegram_handle" target="_blank">
+                          <v-btn
+                            icon
+                            x-small
+                            v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle"
+                            @click.stop=""
+                            :href="'https://t.me/' + poolExtendedInfo(pool)?.info?.social?.telegram_handle"
+                            target="_blank"
+                          >
                             <v-avatar tile size="14">
-                              <v-img :src="telegramLogo" alt="telegram"></v-img>
+                              <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
                             </v-avatar>
                           </v-btn>
                         </v-list-item-subtitle>
                       </v-list-item-content>
-                      <v-list-item-avatar class="ma-0" size="32" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
+                      <v-list-item-avatar
+                        class="ma-0"
+                        size="32"
+                        v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64"
+                      >
                         <v-img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" eager></v-img>
                       </v-list-item-avatar>
                     </v-list-item>
                     <v-card-text class="pt-0">
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Saturation</span>
+                          <span class="pool-card-label">Saturation</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-progress-linear height="20" rounded :value="pool.live_saturation" color="#333741">
+                          <v-progress-linear
+                            height="20"
+                            rounded
+                            striped
+                            :value="pool.live_saturation"
+                            :color="filters.getColor(pool.live_saturation)"
+                          >
                             <span>{{ pool.live_saturation + '%' }}</span>
                           </v-progress-linear>
                         </v-col>
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Pledge</span>
+                          <span class="pool-card-label">Pledge</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip x-small color="#085D3A" style="border: 1px solid #75E0A7; color: #75E0A7; " v-if="loggedWallet">
-                            {{ pool.pledge | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
+                          <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
+                            {{
+                              filters.toCurrency(
+                                pool.pledge,
+                                false,
+                                0,
+                                networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                              )
+                            }}
                           </v-chip>
                         </v-col>
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">ROS</span>
+                          <span class="pool-card-label">ROS</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white">{{ (pool.ros).toFixed(2) + '%' }}</span>
+                          <span class="pool-card-value">{{ pool.ros.toFixed(2) + '%' }}</span>
                         </v-col>
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span style="font-size: 14px; color: white">Fees</span>
+                          <span class="pool-card-label">Fees</span>
                         </v-col>
                         <v-col cols="7">
-                          <span style="font-size: 14px; color: white" v-if="pool && loggedWallet">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+                          <span class="pool-card-value" v-if="pool && loggedWallet"
+                            >{{ pool.margin + '%' }} /
+                            {{
+                              filters.toCurrency(
+                                pool.fixed_cost,
+                                false,
+                                0,
+                                networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                              )
+                            }}</span
+                          >
                         </v-col>
                       </v-row>
                     </v-card-text>
@@ -253,199 +438,286 @@
               </v-col>
             </v-row>
           </v-card-text>
-          <v-card-actions style="justify-content: center;">
-            <v-pagination style="max-width: 400px" :total-visible="6" circle class="pagination mb-2" v-model="page" :length="numPages"></v-pagination>
+          <v-card-actions class="staking-pagination-wrapper">
+            <v-pagination
+              class="staking-pagination mb-2"
+              :total-visible="6"
+              circle
+              v-model="page"
+              :length="numPages"
+              @input="loadPaginatedPools"
+              :disabled="poolsLoading"
+            ></v-pagination>
           </v-card-actions>
         </v-card>
       </v-col>
     </v-row>
-    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
+    <DelegateDialog
+      v-if="txData"
+      :isOpen="isDelegateDialogOpen"
+      @close="closeDelegateDialog"
+      :pool="selectedPool"
+      :tx="txData"
+    ></DelegateDialog>
   </v-layout>
 </template>
-<script>
-import filters from "@/shared/utils/filters";
-import { appWallet, useStore } from '@/stores';
-import {mapActions, mapState} from "pinia";
-import CopyButton from "@/shared/components/CopyButton.vue";
+<script setup lang="ts">
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
+import debounce from 'lodash/debounce';
+import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import {
-  Certificate, Ed25519KeyHash,
-  Credential,
-  StakeDelegation,
-  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { buildTx } from '@/shared/utils/builder';
-import { toUTxO } from '@/shared/utils/converter';
+import { Cardano } from '@cardano-sdk/core';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
-import networks from "@/utils/networks";
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import networks from '@/utils/networks';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import stakingStore from '@/stores/stakingStore';
+import filters from '@/shared/utils/filters';
+import { setWalletConfiguration } from '@/db/wallet-db';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import snackbar from '@/plugins/snackbar';
 
-export default {
-  name: 'Staking',
-  components: { StakingCard, DelegateDialog, CopyButton},
-  computed: {
-    ...mapState(useStore, ['stakingProView']),
-    isPro: {
-      get() {
-        return this.stakingProView
+const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
+const { epochParams, tip } = toRefs(networkStore);
+
+const {
+  pools: paginatedPools,
+  paginationMeta,
+  loading: poolsLoading,
+  error: poolsError,
+  filters: poolsFilters,
+} = toRefs(stakingStore.state);
+
+const page = ref<number>(1);
+const pageSize = ref<number>(15);
+const pageCount = ref<number>(0);
+
+// Use reactive filters from store
+const hideSaturated = computed({
+  get: () => poolsFilters.value.hideSaturated,
+  set: value => {
+    stakingStore.updateFilters({ hideSaturated: value });
+    reloadWithFilters(); // Reload with new filters
+  },
+});
+
+const pledgeMet = computed({
+  get: () => poolsFilters.value.pledgeMet,
+  set: value => {
+    stakingStore.updateFilters({ pledgeMet: value });
+    reloadWithFilters(); // Reload with new filters
+  },
+});
+
+// Create a debounced search value that will trigger the actual search
+const searchInput = ref(poolsFilters.value.search);
+
+// Create a debounced function to update search
+const debouncedUpdateSearch = debounce((value: string) => {
+  stakingStore.updateFilters({ search: value });
+  reloadWithFilters(); // Reload with new filters
+}, 500); // 500ms debounce
+
+// Watch searchInput and trigger the debounced update
+watch(searchInput, newValue => {
+  debouncedUpdateSearch(newValue);
+});
+
+const search = computed({
+  get: () => searchInput.value,
+  set: value => {
+    searchInput.value = value; // This will trigger the debounced search
+  },
+});
+
+// Helper function to reload data with current filters
+const reloadWithFilters = () => {
+  page.value = 1; // Reset to first page
+  loadPaginatedPools(1);
+};
+const selectedPool = ref<any>(null);
+const txData = ref<any>(null);
+const isDelegateDialogOpen = ref<boolean>(false);
+const sortBy = ref<string>('ros');
+const sortDesc = ref<boolean>(true);
+
+const headers = computed(() => {
+  return [
+    { text: 'Name', sortable: true, align: 'left', value: 'name' },
+    {
+      text: 'Delegators',
+      sortable: true,
+      align: 'center d-none d-lg-table-cell',
+      value: 'live_delegators',
+      width: 122,
+    },
+    { text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
+    { text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
+    {
+      text: 'Saturation',
+      sortable: true,
+      align: 'center',
+      value: 'live_saturation',
+      width: 128,
+      filter: value => {
+        if (!hideSaturated.value) return true;
+        return value < 99;
       },
-      set(val) {
-        this.setStakingProView(val)
-      }
     },
-    headers() {
-      return [
-        {text: 'Name', sortable: true, align: 'left', value: 'name'},
-        {text: 'Delegators', sortable: true, align: 'center d-none d-lg-table-cell', value: 'live_delegators', width: 122 },
-        {text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
-        {text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
-        {
-          text: 'Saturation', sortable: true, align: 'center', value: 'live_saturation', width: 128, filter: value => {
-            if (!this.hideSaturated) return true
-            return value < 99
-          }
-        },
-        {text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-        {text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 84 }
-      ]
-    },
-    geroPoolExists() {
-      return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    geroPoolId() {
-      return networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    delegatingToGero() {
-      if (this.account) {
-        return this.geroPoolId === this.account.pool_id
-      }
-      return false
-    },
-    ...mapState(useStore, ['pools', 'loggedWallet', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-    numPages() {
-      // calculate the number of pages we have
-      return Math.ceil(this.stakePools.length / this.pageSize);
-    },
-    stakePools() {
-      if (this.pools) {
-        let filteredPools = this.pools.filter(pool => pool.pool_status === 'registered')
-        if (this.search) {
-          filteredPools = filteredPools.filter(pool => (pool.ticker && pool.ticker.toLowerCase().includes(this.search.toLowerCase())) || (pool.name && pool.name.toLowerCase().includes(this.search.toLowerCase())))
-        }
-        if (this.pledgeMet) {
-          filteredPools = filteredPools.filter(pool => {
-            return Number(pool.pledge) <= Number(pool.live_pledge)
-          })
-        }
-        filteredPools.sort((a, b) => {
-          if (a.pool_id_bech32 === this.geroPoolId) return -1;
-          if (b.pool_id_bech32 === this.geroPoolId) return 1;
-          return 0;
-        });
-        return filteredPools
-      }
-      return []
-    },
-    pagedPools() {
-      // get the start index for your paged result set.
-      // The page number starts at 1 so the active item in the pagination is displayed properly.
-      // However for our calculation the page number must start at (n-1)
-      const startIndex = (this.page - 1) * this.pageSize;
+    { text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
+    { text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
+  ];
+});
 
-      // create a copy of your assets list so we don't modify the original data set
-      const data = [...this.stakePools];
+let isPro = computed({
+  get: () => {
+    return config.value.stakingProView;
+  },
+  set: val => {
+    config.value.stakingProView = val;
+    setWalletConfiguration(loggedWallet.value.id, 'stakingProView', val);
+  },
+});
 
-      // only return the data for the current page using splice
-      return data.splice(startIndex, this.pageSize);
-    },
-  },
-  watch: {
-    search(val) {
-      if (val) {
-        this.page = 1
-      }
-    },
-  },
-  methods: {
-    ...mapActions(useStore, ['setStakingProView']),
-    getColor(value) {
-      if (value > 100) {
-        value = 100
-      }
-      value = value / 100
-      //value from 0 to 1
-      const hue = ((1 - value) * 120).toString(10);
-      return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-    },
-    delegateToGero() {
-      if (this.loggedWallet) {
-        const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-        const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-        if (!pool) {
-          console.log('Pool Not Found')
-          return;
-        }
-        this.delegate(pool)
-      }
-    },
-    delegate(row) {
-      console.log('delegate', row)
-      this.selectedPool = row
-      const wallet = appWallet;
-      // Registration Certificate
-      const certificates = [];
-      if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-        certificates.push(registrationCertificate);
-      }
-      // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(this.selectedPool.pool_id_bech32)));
-      certificates.push(delegationCertificate);
-      // UTxOs
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.isDelegateDialogOpen = true
-    },
-    poolExtendedInfo(pool) {
-      if (pool && pool.pool_extended_info) {
-        return JSON.parse(pool.pool_extended_info);
-      }
-      return undefined
-    },
-    fallbackImage(e) {
-      if (e && e.target) {
-        e.target.src = this.errorImage
-      }
+const geroPoolExists = computed(() => {
+  return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+});
+
+const geroPoolId = computed(() => {
+  return networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+});
+
+const delegatingToGero = computed(() => {
+  if (account.value) {
+    return geroPoolId.value === account.value.pool_id;
+  }
+  return false;
+});
+
+// Function to load paginated pools
+const loadPaginatedPools = async (pageNum: number = 1) => {
+  if (!loggedWallet.value) return;
+
+  await stakingStore.loadPoolsPaginated(loggedWallet.value, {
+    page: pageNum,
+    per_page: pageSize.value,
+    sort_by: sortBy.value,
+    sort_direction: sortDesc.value ? 'desc' : 'asc',
+  });
+};
+
+const numPages = computed(() => {
+  if (paginationMeta.value) {
+    return paginationMeta.value.total_pages;
+  }
+  return 1;
+});
+
+watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
+  if (newSortBy !== undefined && newSortDesc !== undefined) {
+    loadPaginatedPools(1);
+  }
+});
+
+const delegateToGero = async () => {
+  if (loggedWallet.value) {
+    const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+    await stakingStore.loadPoolById(loggedWallet.value, poolId);
+
+    if (stakingStore.state.currentPool) {
+      delegate(stakingStore.state.currentPool);
     }
-  },
-  filters,
-  data: () => ({
-    filters,
-    blockchainDB: undefined,
-    page: 1,
-    pageSize: 12,
-    search: '',
-    hideSaturated: true,
-    pledgeMet: true,
-    pageCount: 0,
-    xLogo: assets.xSvg,
-    discordLogo: assets.discordSvg,
-    telegramLogo: assets.telegramSvg,
-    errorImage: assets.errorImage,
-    isDelegateDialogOpen: false,
-    selectedPool: undefined,
-    txData: undefined,
-    networks,
-    assets,
-  })
+  }
+};
+
+async function delegate(row: any) {
+  selectedPool.value = row;
+
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+    let certificate;
+    let implicitCoin = BigInt(0);
+
+    if (!account.value?.active) {
+      // Need to register a stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.StakeRegistrationDelegation,
+        stakeCredential,
+        poolId,
+        deposit: stakeKeyDepositLovelace,
+      };
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.StakeDelegation,
+        stakeCredential,
+        poolId,
+      };
+    }
+    certificates.push(certificate);
+
+    // Use the generic transaction builder
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin,
+    });
+    isDelegateDialogOpen.value = true;
+  } catch (error: any) {
+    console.error('Error building delegation transaction:', error);
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError('Insufficient ADA to complete staking transaction');
+    } else {
+      snackbar.setError('Failed to build delegation transaction');
+    }
+  }
 }
+
+const closeDelegateDialog = () => {
+  isDelegateDialogOpen.value = false;
+  txData.value = null;
+  selectedPool.value = null;
+};
+
+const poolExtendedInfo = (pool: any) => {
+  if (pool && pool.pool_extended_info) {
+    return JSON.parse(pool.pool_extended_info);
+  }
+  return undefined;
+};
+
+onMounted(() => {
+  // Load initial paginated pools data
+  reloadWithFilters();
+});
+
+onBeforeUnmount(() => {
+  stakingStore.clearCurrentPool();
+});
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }
@@ -454,14 +726,137 @@ export default {
   background-color: rgb(22, 27, 38);
 }
 
-.v-data-table>.v-data-table__wrapper>table>tbody>tr>td, .v-data-table>.v-data-table__wrapper>table>tbody>tr>th, .v-data-table>.v-data-table__wrapper>table>tfoot>tr>td, .v-data-table>.v-data-table__wrapper>table>tfoot>tr>th, .v-data-table>.v-data-table__wrapper>table>thead>tr>td, .v-data-table>.v-data-table__wrapper>table>thead>tr>th {
+.v-data-table > .v-data-table__wrapper > table > tbody > tr > td,
+.v-data-table > .v-data-table__wrapper > table > tbody > tr > th,
+.v-data-table > .v-data-table__wrapper > table > tfoot > tr > td,
+.v-data-table > .v-data-table__wrapper > table > tfoot > tr > th,
+.v-data-table > .v-data-table__wrapper > table > thead > tr > td,
+.v-data-table > .v-data-table__wrapper > table > thead > tr > th {
   padding: 0 10px;
-  transition: height .2s cubic-bezier(.4,0,.6,1);
+  transition: height 0.2s cubic-bezier(0.4, 0, 0.6, 1);
 }
 
 .poolsTable {
   :is(tbody) {
     cursor: pointer;
   }
+}
+
+/* Staking page styles */
+.staking-header {
+  display: flex;
+  overflow: visible;
+}
+
+.staking-pro-toggle {
+  display: flex;
+}
+
+.staking-switch {
+  margin-top: 0;
+  align-items: center;
+}
+
+.staking-gero-support {
+  align-items: center;
+}
+
+.staking-support-title {
+  color: #00dff3;
+  font-size: 18px;
+}
+
+.staking-filters-row {
+  align-items: center;
+}
+
+.staking-filter-switch {
+  margin: auto;
+}
+
+/* Pool table styles */
+.pool-name-title {
+  display: -webkit-box;
+  -webkit-box-orient: horizontal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.pool-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.pool-id-subtitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.pool-saturation-details {
+  font-size: 10px;
+  text-align-last: justify;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stake-change-up {
+  display: inline-flex;
+  font-size: 10px;
+}
+
+.stake-change-down {
+  display: inline-flex;
+  font-size: 10px;
+}
+
+.stake-arrow-icon {
+  font-size: 10px;
+}
+
+.stake-arrow-icon-down {
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.pool-fees-text {
+  font-size: 14px;
+  color: white;
+}
+
+/* Pool cards styles */
+.pool-card {
+  border-radius: 12px;
+}
+
+.pool-card-label {
+  font-size: 14px;
+  color: white;
+}
+
+.pool-card-value {
+  font-size: 14px;
+  color: white;
+}
+
+.pool-pledge-chip {
+  border: 1px solid #75e0a7;
+  color: #75e0a7;
+}
+
+/* Pagination styles */
+.staking-pagination-wrapper {
+  justify-content: center;
+}
+
+.staking-pagination {
+  max-width: 400px;
 }
 </style>

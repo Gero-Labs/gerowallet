@@ -3,11 +3,10 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
-    <v-overlay v-show="loading || isRestoring || loadingTxs" opacity="0.9" style="text-align: center;">
+    <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
-        <v-card-text style="color: white" v-if="text">{{ text }}</v-card-text>
         <v-progress-linear
             buffer-value="0"
             color="primary"
@@ -16,13 +15,17 @@
             value="0"
             style="color: cyan; width: 100px; text-align: center"
         ></v-progress-linear>
+        <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
+    <notifications></notifications>
     <v-snackbar
+      content-class="custom-snackbar"
+      outlined
         v-model="snackbarPlugin.active"
         :timeout="snackbarPlugin.timeout"
         :color="snackbarPlugin.color"
-        top
+        bottom
         style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
         transition="scroll-y-transition"
     >
@@ -31,29 +34,45 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref, computed, toRefs } from 'vue'
-import { useStore } from "@/stores";
+import { ref, computed, toRefs } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
-import networks from '@/utils/networks';
-import { loadingState } from '@/plugins/loading';
+import Loading, { loadingState } from '@/stores/loading';
+import DexHunterStore from '@/stores/dexHunterStore';
+import CoinGeckoStore from '@/stores/coinGeckoStore';
+import WalletStore from '@/stores/walletStore';
+import XerberusStore from '@/stores/xerberusStore';
+import TapToolsStore from '@/stores/tapToolsStore';
+import RealFiStore from '@/stores/realFiStore';
+import NetworkStore from '@/stores/networkStore';
+import MusicStore from '@/stores/musicStore';
+import GeroStore from '@/stores/geroStore';
+import BringStore from '@/stores/bringStore';
+import Charli3Store from '@/stores/charli3Store';
+
+// Ensure the store modules are initialized (which sets up messaging)
+console.log('📱 Options page initializing loading store:', Loading);
+console.log('📱 Options page initializing wallet store:', WalletStore);
+console.log('📱 Options page initializing dexHunter store:', DexHunterStore);
+console.log('📱 Options page initializing coinGecko store:', CoinGeckoStore);
+console.log('📱 Options page initializing xerberus store:', XerberusStore);
+console.log('📱 Options page initializing tapTools store:', TapToolsStore);
+console.log('📱 Options page initializing realFi store:', RealFiStore);
+console.log('📱 Options page initializing network store:', NetworkStore);
+console.log('📱 Options page initializing music store:', MusicStore);
+console.log('📱 Options page initializing gero store:', GeroStore);
+console.log('📱 Options page initializing bring store:', BringStore);
+console.log('📱 Options page initializing charli3 store:', Charli3Store);
+
 
 const { loading, isRestoring, text } = toRefs(loadingState);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
 
-const store = useStore();
-
-const loadingTxs = computed(() => store.loadingTxs);
-const network = computed(() => store.network);
-const setNetwork = store.setNetwork;
-
-onMounted(() => {
-  if (!network) {
-    setNetwork(networks.networks[0])
-  }
-})
+const isLoading = computed(() => {
+  return loading.value || isRestoring.value;
+});
 </script>
 <style lang="scss">
 .v-application {
@@ -96,5 +115,54 @@ onMounted(() => {
   border: 1px solid #404040;
   font-size: 10px !important;
   opacity: 0.9 !important;
+}
+.v-text-field--outlined.no-margin-append-outer .v-input__append-outer {
+  margin: 0 0 0 4px !important;
+}
+
+.v-text-field--outlined.no-margin-append-outer .v-input__append-inner {
+  margin: 0 !important;
+}
+
+.custom-tooltip {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  max-width: 300px !important;
+}
+.v-snack:not(.v-snack--has-background) .v-snack__wrapper {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: transparent;
+  border-radius: 12px !important;
+}
+
+.voerro-notification-theme-error {
+  border-radius: 12px !important;
+  border: 1px solid #ff6464d1!important;
+  color: #f5fff6;
+}
+
+.voerro-notification-theme-success {
+  border-radius: 12px !important;
+  border: 1px solid #47cd89d1!important;
+  color: #f5fbf8;
+}
+
+.voerro-notification {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  isolation: isolate !important;
+  padding: 12px 16px !important;
+  font-size: 14px !important;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -7,6 +7,7 @@
     :loading="loading"
     :min-height="0"
     scrollable
+    :persistent="false"
   >
     <v-card-title class="px-2 py-0">
       <v-tabs
@@ -60,32 +61,27 @@ import CollateralTab          from '@/modules/dashboard/components/CollateralTab
 import ProfileTab             from '@/modules/dashboard/components/ProfileTab.vue'
 import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDappsTab.vue'
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
-import { walletConfigStore }  from '@/stores/modules/walletConfig'
+import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
 
 // Props & Emitting
 const props = defineProps<{ isOpen: boolean }>()
 const emit  = defineEmits<{ (e: 'close'): void }>()
 
-// Pinia store
-const walletConfig = walletConfigStore()
-
 // Derive whether we've ever loaded a backup setting
-const hasBackup = computed(() =>
-  !!(walletConfig.config && 'backup' in walletConfig.config)
-)
+const hasBackup = computed(() => walletStoreDefault.hasBackup())
 
 // Read the actual backup‐enabled flag (defaults to true)
-const getBackup = computed(() => walletConfig.getBackup)
+const getBackup = computed(() => walletStoreDefault.getBackup())
 
-// Show a badge if user *should* back up
+// Show a badge if the user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
 
-// Build your tabs array, injecting the dynamic badge
+// Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
   { label: 'Profile', value: 'profile' },
   // { label: 'Password', value: 'password' },

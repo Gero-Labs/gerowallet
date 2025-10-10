@@ -1,3 +1,4 @@
+import { CID } from 'multiformats/cid'
 import apexBg from '@/assets/apex.png'
 import walletCreateBg from '@/modules/welcome/assets/wallet_new.png'
 import walletRestoreBg from '@/modules/welcome/assets/wallet_restore.png'
@@ -48,21 +49,31 @@ import dollarShieldSvg from '@/assets/svg/dollar-shield.svg'
 import swapSvg from '@/assets/svg/swap.svg'
 import qrCodeSvg from '@/assets/svg/qr-code.svg'
 import sendSvg from '@/assets/svg/send.svg'
+import multisigTree from '@/assets/svg/multisig-tree.svg'
+import multisigPaid from '@/assets/svg/multisig_paid.svg'
+import multisigPending from '@/assets/svg/multisig_pending.svg'
+import multisigDollar from '@/assets/svg/multisig_dollar.svg'
+import multisigExpired from '@/assets/svg/multisig_expired.svg'
+import multisigTotal from '@/assets/svg/multisig_stack.svg'
+import detailsSvg from '@/assets/svg/details.svg'
+import depositSvg from '@/assets/svg/deposit.svg'
 import cardanoBackground from '@/assets/cardanoBg.png'
+import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
+import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
 import guardarian from '@/modules/dashboard/assets/guardarian.svg'
 import moonpay from '@/modules/dashboard/assets/moonpay.svg'
-import welcomeVideo from '@/assets/video/welcome.mp4'
-import blogSS from '@/shared/assets/welcome/blog.png'
-import newDesignSS from '@/shared/assets/welcome/new_design.png'
-import cashbackSS from '@/shared/assets/welcome/cashback.png'
-import governanceSS from '@/shared/assets/welcome/governance.png'
-import cardanoShieldSS from '@/shared/assets/welcome/cardano_shield.png'
+import welcomeImage from '@/shared/assets/welcome/welcome.png'
+import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
+import geroCardSS from '@/shared/assets/welcome/gero_card.png'
+import perpetualsSS from '@/shared/assets/welcome/perpetuals.png'
+import multisigSS from '@/shared/assets/welcome/multisig.png'
+import cashbackNewSS from '@/shared/assets/welcome/cashback_new.png'
 import riskLow from '@/assets/img/cardano-shield/risk-low.svg'
 import riskMedium from '@/assets/img/cardano-shield/risk-medium.svg'
 import riskHigh from '@/assets/img/cardano-shield/risk-high.svg'
@@ -105,6 +116,25 @@ import pairSvg from '@/assets/svg/pair.svg';
 import pairApexSvg from '@/assets/svg/pairApex.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
+import questionMark from '@/assets/svg/question-mark.svg'
+import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
+import midnightImage from '@/assets/Midnight.png'
+import logoStackedLight from '@/assets/logo-stacked-light.svg'
+import apexBgDashboard from '@/assets/apexBg.png'
+import apexImage from '@/assets/apex.png'
+import apexSvg from '@/assets/svg/ap3x.svg'
+import walletGeroApex from '@/assets/svg/walletGeroApex.svg'
+import debitCardBgImage from '@/assets/debitcardbg.png'
+import cashbackCarouselImage from '@/assets/cashbackcarousel.png'
+import cashbackImage from '@/assets/cashback.png'
+import debitCardImage from '@/assets/geroCard.png'
+import frontCardNoMcx2 from '@/assets/front_card_no_mcx2.png'
+import emptyState from '@/assets/emptyState.png'
+import card from '@/assets/svg/card.svg'
+import bringWhite from '@/assets/svg/bring-white.svg'
+import apex from '@/assets/img/apex.jpg'
+
+const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 export default {
   apexBg,
@@ -155,10 +185,18 @@ export default {
   swapSvg,
   qrCodeSvg,
   sendSvg,
-
+  multisigTree,
+  multisigPaid,
+  multisigPending,
+  multisigDollar,
+  multisigExpired,
+  multisigTotal,
+  detailsSvg,
+  depositSvg,
   cardanoShieldLogo,
   cardanoShieldBigLogo,
   geroLogo,
+  geroLogoApex,
   geroDashboardText,
   geroText,
   apexBackground,
@@ -166,19 +204,29 @@ export default {
   geroDashboardApex,
   guardarian,
   moonpay,
-  welcomeVideo,
-  blogSS,
-  newDesignSS,
-  cashbackSS,
-  governanceSS,
+  welcomeImage,
   dao,
-  cardanoShieldSS,
+  improvedUxSS,
+  geroCardSS,
+  perpetualsSS,
+  multisigSS,
+  cashbackNewSS,
   giftSvg,
   pendingSvg,
   piggyBankSvg,
   withdrawalSvg,
   buyAda,
   sellAda,
+  card,
+  bringWhite,
+  detectCIDVersion(cidStr: string) {
+    try {
+      const cid = CID.parse(cidStr);
+      return cid.version; // 0, 1, or 2
+    } catch (e) {
+      return null; // Not a valid CID
+    }
+  },
   resolveIcon(icon: string): string {
     if (!icon) {
       return errorImage;
@@ -186,6 +234,12 @@ export default {
 
     if (icon.startsWith('http') || icon.startsWith('data:')) {
       return icon;
+    } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
+      return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
+    } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
+      return `${baseUrl}/api/ipfs?path=${icon.replace('ipfs://', '').replace('ipfs/', '')}`
+    } else if (this.detectCIDVersion(icon) != null) {
+      return `${baseUrl}/api/ipfs?path=${icon}`
     }
 
     switch (icon) {
@@ -205,8 +259,34 @@ export default {
         return blueSvg;
       case 'grey':
         return greySvg;
+    }
+
+    const firstChar = icon.charAt(0);
+
+    let mimeType: string | null = null;
+
+    switch (firstChar) {
+      case '/':
+        mimeType = 'image/jpeg';
+        break;
+      case 'i':
+        mimeType = 'image/png';
+        break;
+      case 'R':
+        mimeType = 'image/gif';
+        break;
+      case 'U':
+        mimeType = 'image/webp';
+        break;
       default:
         return errorImage;
+    }
+
+    return `data:${mimeType};base64,${icon}`;
+  },
+  fallbackImage(e) {
+    if (e && e.target) {
+      e.target.src = this.errorImage
     }
   },
   resolveRisk(risk: string): string {
@@ -275,5 +355,28 @@ export default {
   pairSvg,
   pairApexSvg,
   cardanoSvg,
-  clarityLogo
+  clarityLogo,
+  questionMark,
+  questionMarkDark,
+  midnightImage,
+  logoStackedLight,
+  apexBgDashboard,
+  apexImage,
+  apexSvg,
+  walletGeroApex,
+  debitCardBgImage,
+  cashbackCarouselImage,
+  cashbackImage,
+  debitCardImage,
+  frontCardNoMcx2,
+  emptyState,
+  cardanoBlueLogo,
+  apex
+}
+
+export {
+  geroDashboardApex,
+  geroDashboard,
+  google,
+  zkFold
 }

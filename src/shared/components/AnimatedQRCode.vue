@@ -1,6 +1,5 @@
 <template>
   <div class="text-center">
-    <!-- Single Canvas QR Code Display -->
     <div
       :style="{
         width: `${qrCodeSize}px`,
@@ -17,98 +16,91 @@
   </div>
 </template>
 
-<script>
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { UR, UREncoder } from '@keystonehq/keystone-sdk';
 import QRCode from 'qrcode';
 
-export default {
-  name: 'AnimatedQRCode',
-  props: {
-    cbor: {
-      type: String,
-      required: true
-    },
-    type: {
-      type: String,
-      required: true
-    },
-    interval: {
-      type: Number,
-      default: 250
-    },
-    capacity: {
-      type: Number,
-      default: 200
-    },
-    size: {
-      type: Number,
-      default: 350
-    },
+const props = defineProps({
+  cbor: {
+    type: String,
+    required: true
   },
-  data() {
-    return {
-      currentQRCode: '', // Holds the current QR code fragment
-      urEncoder: null, // Instance of UREncoder
-      intervalId: null, // Interval ID for managing timing
-    };
+  type: {
+    type: String,
+    required: true
   },
-  computed: {
-    qrCodeSize() {
-      return this.size;
-    }
+  interval: {
+    type: Number,
+    default: 250
   },
-  methods: {
-    generateAnimatedQRCode() {
-      console.log(this.type);
-      // Initialize UREncoder with the given CBOR data
-      this.urEncoder = new UREncoder(new UR(Buffer.from(this.cbor, 'hex'), this.type), this.capacity);
+  capacity: {
+    type: Number,
+    default: 200
+  },
+  size: {
+    type: Number,
+    default: 350
+  },
+});
 
-      // Draw the first QR code fragment
-      this.currentQRCode = this.urEncoder.nextPart().toUpperCase();
-      this.drawQRCode();
-      console.log(this.capacity)
-      // Update QR code based on the interval
-      if (!this.intervalId) {
-        this.intervalId = setInterval(() => {
-          const newQRCode = this.urEncoder.nextPart().toUpperCase();
-          if (newQRCode !== this.currentQRCode) { // Only update if the QR code part changes
-            this.currentQRCode = newQRCode;
-            this.drawQRCode(); // Redraw the QR code
-          }
-        }, this.interval);
+const currentQRCode = ref('');
+const urEncoder = ref<UREncoder | null>(null);
+const intervalId = ref<NodeJS.Timeout | null>(null);
+const qrCodeCanvas = ref<HTMLCanvasElement | null>(null);
+
+const qrCodeSize = computed(() => {
+  return props.size;
+});
+
+const generateAnimatedQRCode = () => {
+  console.log(props.type);
+  urEncoder.value = new UREncoder(new UR(Buffer.from(props.cbor, 'hex'), props.type), props.capacity);
+
+  currentQRCode.value = urEncoder.value.nextPart().toUpperCase();
+  drawQRCode();
+  console.log(props.capacity)
+
+  if (!intervalId.value) {
+    intervalId.value = setInterval(() => {
+      const newQRCode = urEncoder.value!.nextPart().toUpperCase();
+      if (newQRCode !== currentQRCode.value) {
+        currentQRCode.value = newQRCode;
+        drawQRCode();
+      }
+    }, props.interval);
+  }
+};
+
+const drawQRCode = () => {
+  const canvas = qrCodeCanvas.value;
+  if (!canvas) return;
+
+  QRCode.toCanvas(
+    canvas,
+    currentQRCode.value,
+    {
+      width: qrCodeSize.value,
+      margin: 5,
+      errorCorrectionLevel: 'L',
+      color: {
+        dark: '#000000',
+        light: '#ffffff00'
       }
     },
-
-    drawQRCode() {
-      const canvas = this.$refs.qrCodeCanvas;
-      if (!canvas) return;
-
-      // Use the `qrcode` library to draw the QR code on the canvas
-      QRCode.toCanvas(
-        canvas,
-        this.currentQRCode,
-        {
-          width: this.qrCodeSize,
-          margin: 5,
-          errorCorrectionLevel: 'L', // Low error correction level
-          color: {
-            dark: '#000000', // Black QR code
-            light: '#ffffff00' // Transparent background
-          }
-        },
-        (error) => {
-          if (error) console.error('Error drawing QR code on canvas:', error);
-        }
-      );
-    },
-  },
-  mounted() {
-    this.generateAnimatedQRCode(); // Start QR code animation on mount
-  },
-  beforeDestroy() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId); // Clear the interval when component is destroyed
+    (error) => {
+      if (error) console.error('Error drawing QR code on canvas:', error);
     }
+  );
+};
+
+onMounted(() => {
+  generateAnimatedQRCode();
+});
+
+onUnmounted(() => {
+  if (intervalId.value) {
+    clearInterval(intervalId.value);
   }
-}
+});
 </script>

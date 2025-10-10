@@ -13,6 +13,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Windows temporary files
+DumpStack.log
+DumpStack.log.tmp
+*.tmp
+*.log
+
 # Editor directories and files
 .idea
 .vscode

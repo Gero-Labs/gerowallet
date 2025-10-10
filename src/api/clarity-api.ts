@@ -11,6 +11,18 @@ const axiosInstance = axios.create({
 
 export default {
   async getDaoDetails(address: string) {
-    return await axiosInstance.get(`/api/clarity/account-info?address=${address}`);
-  }
-}
+    return axiosInstance.get(`/api/clarity/account-info?address=${address}`);
+  },
+  async getDaoMembers() {
+    return axiosInstance.get(`/api/clarity/dao/members`);
+  },
+  async getGeroDetails() {
+    return axiosInstance.get(`/api/clarity/dao/details`);
+  },
+  // async getGeroGovernance() {
+  //   return axiosInstance.get(`/api/clarity/dao/governance`);
+  // },
+  // async getGeroTreasury() {
+  //   return axiosInstance.get(`/api/clarity/dao/treasury`);
+  // },
+};

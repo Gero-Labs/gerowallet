@@ -1,4 +1,15 @@
-export const walletDBVersion: number = 3;
+export const geroWalletDbName: string = 'GeroWalletDatabase';
+
+export const geroDBVersion: number = 13;
+
+export const geroDBSchema = {
+  wallets:
+    '++id, name, icon, type, theme, order, encryptedPrivateKey, publicKey, passwordLastUpdate, chain, network, userId',
+  config: '++id, key, value',
+  provider: '++id, [name+chain+network], baseUrl, apiKey',
+};
+
+export const walletDBVersion: number = 8;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -9,14 +20,23 @@ export const walletDBSchema = {
   rewards: 'epoch, amount, pool_id, type',
   transactions: 'id',
   connected_dapps: '++id, domain, time',
-}
+  multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
+  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // Portfolio charts data moved from separate DB
+};
 
-export const blockChainDBVersion: number = 2;
+export const blockChainDBVersion: number = 5;
 
 export const blockChainDBSchema = {
   pools: 'pool_id_bech32',
   dreps: 'drep_id',
   sync: '++id, time',
   assets: 'asset, fingerprint, asset_name, policy_id',
-  // protocol_params: 'epoch'
-}
+  epoch_params: 'epoch',
+  genesis_info: 'id',
+};
+
+export const portfolioDBVersion: number = 1;
+
+export const portfolioDBSchema = {
+  portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt', // data is JSON string
+};

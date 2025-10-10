@@ -1,26 +1,32 @@
-import VueRouter, {NavigationGuardNext, Route} from 'vue-router';
+import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
 
-import { useStore } from '@/stores';
-import Welcome from '@/modules/welcome/views/Welcome.vue';
+// Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
-import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
-import Staking from "@/modules/staking/Staking.vue";
-import DappConnect from "@/popup/modules/views/DappConnect.vue";
 import PopupLayout from "@/modules/navigation/layouts/PopupLayout.vue";
-import DappSignData from '@/popup/modules/views/DappSignData.vue';
-import SignTx from '@/popup/modules/views/SignTx.vue';
-import zkFiat from "@/modules/zkFiat/zkFiat.vue";
-import Cashback from "@/modules/cashback/Cashback.vue";
-import MediaPlayer from "@/modules/media-player/MediaPlayer.vue";
-import loading from '@/plugins/loading';
-import Swap from '@/modules/swap/Swap.vue';
+
+// Critical parts loaded immediately
+import Welcome from '@/modules/welcome/views/Welcome.vue';
+import Dashboard from '@/modules/dashboard/views/Dashboard.vue';
 import Login from '@/popup/modules/views/Login.vue';
-import DevTools from '@/modules/devTools/DevTools.vue';
-import Governance from '@/modules/governance/Governance.vue';
-import WarningPopUp from '@/popup/modules/views/WarningPopUp.vue';
-import Transactions from '@/modules/transactions/Transactions.vue';
-import Blog from '@/modules/blog/Blog.vue';
+
+// Lazy loading for other components (saves ~5MB initial load)
+const Staking = () => import("@/modules/staking/Staking.vue");
+const DappConnect = () => import("@/popup/modules/views/DappConnect.vue");
+const DappSignData = () => import('@/popup/modules/views/DappSignData.vue');
+const SignTx = () => import('@/popup/modules/views/SignTx.vue');
+const Cashback = () => import("@/modules/cashback/Cashback.vue");
+const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
+const Swap = () => import('@/modules/swap/Swap.vue');
+const DevTools = () => import('@/modules/devTools/DevTools.vue');
+const Governance = () => import('@/modules/governance/Governance.vue');
+const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
+const Transactions = () => import('@/modules/transactions/Transactions.vue');
+const Blog = () => import('@/modules/blog/Blog.vue');
+const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue');
+const Card = () => import('@/modules/wallet/GeroCard.vue');
+
+import WalletStore from '@/stores/walletStore';
 
 const routes = [
   {
@@ -71,15 +77,6 @@ const routes = [
     path: '/governance',
     name: 'governance',
     component: Governance,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/zkFiat',
-    name: 'zkFiat',
-    component: zkFiat,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -168,6 +165,24 @@ const routes = [
     },
   },
   {
+    path: '/multisig',
+    name: 'multisig',
+    component: MultiSig,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: false,
+    },
+  },
+  {
+    path: '/card',
+    name: 'card',
+    component: Card,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '*',
     name: 'other',
     redirect: '/',
@@ -181,36 +196,28 @@ const router = new VueRouter({
 });
 
 router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
-  loading.setLoading(true);
-  const store = useStore();
-  const wallets: any[] = store.wallets;
-  if (Array.isArray(wallets) && !wallets.length) {
-    await store.loadWallets();
+  const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
+  const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
+  const isWelcome: boolean = to.name === 'welcome';
+
+  // Prevent redirect loops: if we're already being redirected to welcome, just allow it
+  if (isWelcome && from.path === '/') {
+    return next();
   }
-  const isLoggedIn = store.isLoggedIn;
-  if (to.matched.some(record => record.meta['requiresAuth'])) {
-    // this route requires auth, check if logged in
-    // if not, redirect to login page.
-    if (!isLoggedIn) {
-      const redirect = to.path != '/' ? to.path : null;
-      let path = '/welcome'
-      if (redirect) {
-        path += `?redirect=${to.fullPath}`
-      }
-      if (to.query && Object.keys(to?.query).length !== 0) {
-        path += `?${(new URLSearchParams(to.query.toString())).toString()}`;
-      }
-      next({
-        path: path,
-      });
+
+  if (needsAuth && !isLoggedIn) {
+    // not logged in → send to /welcome (with optional redirect)
+    let redirectTo = '/welcome';
+    if (to.path !== '/') {
+      redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
-  } else if (to.name === 'welcome' && isLoggedIn) {
-    next({
-      path: '/',
-    });
+    return next({ path: redirectTo });
+  }
+  if (isWelcome && isLoggedIn) {
+    // already logged in → don't show welcome again
+    return next({ path: '/' });
   }
   next();
-  loading.setLoading(false);
 });
 
 export default router;

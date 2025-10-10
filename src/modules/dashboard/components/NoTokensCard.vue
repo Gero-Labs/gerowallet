@@ -1,10 +1,12 @@
 <template>
-  <v-card outlined class="card-container justify-center">
+  <v-card outlined class="card-container justify-center liquid-glass">
     <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
       <p class="display-1">Let's start by getting some {{ assetType }} into your wallet!</p>
-      <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">Claim your {{ assetType }} tokens with your Wallet by using the DApp below</p>
+      <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">
+        Claim your {{ assetType }} tokens with your Wallet by using the DApp below
+      </p>
       <v-btn class="claim-apex-button" v-if="assetType === Blockchain.APEX_PRIME"></v-btn>
     </section>
 
@@ -13,9 +15,10 @@
       :class="{ 'no-apex': !hasAssets }"
     >
       <div class="stake-apex-info">
-        <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
+        <h1 class="display-1">Stake Your {{ assetType }} and Earn Rewards</h1>
         <v-card-text class="subtitle-1" v-if="loggedWallet"
-          >Earn rewards by staking your {{assetType}} tokens with {{loggedWallet?.chain}}'s extensive network of stake pools.</v-card-text
+          >Earn rewards by staking your {{ assetType }} tokens with {{ loggedWallet?.chain }}'s extensive network of
+          stake pools.</v-card-text
         >
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
           Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
@@ -27,84 +30,58 @@
         </div>
       </div>
 
-      <h2 class="error-message">You need to have {{assetType}} in your wallet before staking!</h2>
+      <h2 class="error-message">You need to have {{ assetType }} in your wallet before staking!</h2>
     </section>
-    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
+    <DelegateDialog
+      :isOpen="isDelegateDialogOpen"
+      @close="isDelegateDialogOpen = false"
+      :pool="selectedPool"
+      :tx="txData"
+    ></DelegateDialog>
   </v-card>
 </template>
-<script>
-import {mapState} from "pinia";
-import { appWallet, useStore } from '@/stores';
-import {Blockchain} from "@/models/types";
-import networks from "@/utils/networks";
-import {
-  Certificate, Ed25519KeyHash,
-  Credential,
-  StakeDelegation,
-  StakeRegistration, Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { toUTxO } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
+<script setup lang="ts">
+import { computed, ref, toRefs } from 'vue';
+import { Blockchain } from '@/models/types';
+import networks from '@/utils/networks';
+import { Cardano } from '@cardano-sdk/core';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
+import { walletStore } from '@/stores/walletStore';
+import stakingStore from '@/stores/stakingStore';
 
-export default {
-  name: "NoTokensCard",
-  components: { DelegateDialog },
-  computed: {
-    geroPoolExists() {
-      if (this.loggedWallet) {
-        return !!networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-      }
-      return false
-    },
-    assetType() {
-      if (!this.loggedWallet) {
-        return ''
-      }
-      return networks.resolveCurrencyTicker(this.loggedWallet?.chain, this.loggedWallet?.network)
-    },
-    hasAssets() {
-      return !!this.account
-    },
-    Blockchain() {
-      return Blockchain
-    },
-    ...mapState(useStore, ['loggedWallet', 'pools', 'latestTip', 'baseAddress']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-  },
-  methods: {
-    delegateToGero() {
-      const poolId = networks.resolvePool(this.loggedWallet?.chain, this.loggedWallet?.network)
-      this.selectedPool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (!this.selectedPool) {
-        console.log('Pool Not Found')
-        return;
-      }
-      const wallet = appWallet;
-      // Registration Certificate
-      const certificates = [];
-      if (!this.account?.active) {
-        const registrationCertificate = Certificate.new_stake_registration(StakeRegistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-        certificates.push(registrationCertificate);
-      }
-      // Delegation Certificate
-      const delegationCertificate = Certificate.new_stake_delegation(StakeDelegation.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex())), Ed25519KeyHash.from_bech32(poolId)));
-      certificates.push(delegationCertificate);
-      // UTxOs
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, [])
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.isDelegateDialogOpen = true
+const { loggedWallet, account } = toRefs(walletStore);
+
+const isDelegateDialogOpen = ref(false);
+const selectedPool = ref<any>(null);
+const txData = ref<Cardano.Tx | null>(null);
+const geroPoolExists = computed(() => {
+  if (loggedWallet.value) {
+    return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+  }
+  return false;
+});
+
+const assetType = computed(() => {
+  if (!loggedWallet.value) {
+    return '';
+  }
+  return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+});
+
+const hasAssets = computed(() => {
+  return !!account.value;
+});
+
+const delegateToGero = async () => {
+  if (loggedWallet.value) {
+    const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+    await stakingStore.loadPoolById(loggedWallet.value, poolId);
+
+    if (stakingStore.state.currentPool) {
+      selectedPool.value = stakingStore.state.currentPool;
+      isDelegateDialogOpen.value = true;
     }
-  },
-  data: () => ({
-    isDelegateDialogOpen: false,
-    selectedPool: undefined,
-    txData: undefined,
-  })
+  }
 };
 </script>
 <style scoped>

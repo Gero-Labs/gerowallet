@@ -11,15 +11,15 @@
       <v-card-text class="text-left px-0">
         <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
           <template v-slot:[`item.utxo`]="{ item }">
-            <span class="mr-1">{{ `${item.tx_hash}#${item.tx_index}` | truncate }}</span>
-            <CopyButton x-small :value="`${item.tx_hash}#${item.tx_index}`"></CopyButton>
+            <span class="mr-1">{{ filters.truncate(`${item.utxo}`) }}</span>
+            <CopyButton x-small :value="`${item.utxo}`"></CopyButton>
           </template>
           <template v-slot:[`item.address`]="{ item }">
-            <span class="mr-1">{{ `${item.payment_addr.bech32}` | truncate }}</span>
-            <CopyButton x-small :value="`${item.payment_addr.bech32}`"></CopyButton>
+            <span class="mr-1">{{ filters.truncate(`${item.address}`) }}</span>
+            <CopyButton x-small :value="`${item.address}`"></CopyButton>
           </template>
           <template v-slot:[`item.balance`]="{ item }">
-            <span>{{ `${item.value}` | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
+            <span>{{ filters.toCurrency(`${item.balance}`, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}</span>
           </template>
         </v-data-table>
         <v-row no-gutters class="mt-4">
@@ -41,95 +41,115 @@
     </v-card>
   </v-tab-item>
 </template>
-<script>
-import { mapState } from 'pinia';
-import { appWallet, useStore } from '@/stores';
-import { buildTx } from '@/shared/utils/builder';
-import {
-  Address, Transaction,
-  TransactionOutput,
-  TransactionOutputs,
-  TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { assetsToValue, toUTxO } from '@/shared/utils/converter';
+<script setup lang="ts">
+import { ref, computed, toRefs } from 'vue';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import snackbar from '@/plugins/snackbar';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import { Messaging } from '@/chrome/messaging';
-// import { Cardano, Serialization } from '@cardano-sdk/core';
-// import { assetsToValue, toUTxO } from '@/chrome/serialization';
-// import { GenericTxBuilder } from '@cardano-sdk/tx-construction';
-// import { TxBuilderDependencies } from '@cardano-sdk/tx-construction/dist/esm/tx-builder/types';
-// import { TxBuilderProviders } from '@cardano-sdk/tx-construction/dist/esm/types';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { MessageTypes } from '@/models/MessageTypes';
+import { HexBlob } from '@cardano-sdk/util';
 
-export default {
-  name: 'CollateralTab',
-  components: { CopyButton },
-  computed: {
-    networks() {
-      return networks
-    },
-    ...mapState(useStore, ['loggedWallet', 'baseAddress', 'latestTip']),
-    ...mapState(walletConfigStore, ['utxos', 'collateral']),
-    collateralCandidate() {
-      if (this.collateral) {
-        return [this.collateral]
-      }
-      return []
+// Define emits
+const emit = defineEmits(['close']);
+
+// Get reactive store properties
+const { loggedWallet, utxos, collateral, keys } = toRefs(walletStore);
+const { tip, epochParams } = toRefs(networkStore);
+
+
+// Reactive data
+const headers = ref([
+  {text: 'UTxO', sortable: false, value: 'utxo'},
+  {text: 'Address', sortable: false, value: 'address'},
+  {text: 'Balance', sortable: false, value: 'balance'},
+]);
+
+const collateralCandidate = computed<any>(() => {
+  if (collateral.value) {
+    return [collateral.value].map((utxo: Cardano.Utxo) => ({
+      utxo: `${utxo[0].txId}#${utxo[0].index}`,
+      address: utxo[1].address,
+      balance: utxo[1].value.coins.toString()
+    }));
+  }
+  return [];
+});
+
+// Methods
+const setCollateral = async () => {
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
     }
-  },
-  filters,
-  methods: {
-    async setCollateral() {
-      // const outputs: Serialization.TransactionOutput[] = []
-      // outputs.push(new Serialization.TransactionOutput(Cardano.Address.fromBech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])))
-      // const transactionUnspentOutputs: Serialization.TransactionUnspentOutput[] = []
-      // this.utxos.forEach((utxo) => transactionUnspentOutputs.push(toUTxO(utxo)));
-      // const txBuilderProviders: TxBuilderProviders
-      // const txBuilderDependencies: TxBuilderDependencies = {
-      //
-      // }
-      // const txBuilder: GenericTxBuilder = new GenericTxBuilder()
 
-      // const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
-
-
-      const outputs = TransactionOutputs.new();
-      outputs.add(TransactionOutput.new(Address.from_bech32(this.baseAddress), assetsToValue([{ unit: 'lovelace', quantity: "5000000" }])));
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, outputs, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress);
-      const tx = Transaction.new(txBody, TransactionWitnessSet.new())
-      const res = await Messaging.sendToBackground({
-        method: METHOD.signTx,
-        data: { tx: tx.to_hex(), partialSign: true },
-      });
-      if (res.data) {
-        const signedTx = Transaction.new(
-          tx.body(),
-          TransactionWitnessSet.from_bytes(Buffer.from(res.data, "hex")),
-          undefined // TODO Transaction metadata
-        );
-        const txId = await appWallet.submitTx(signedTx, this.utxos);
-        console.log(txId)
-        snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`)
-        this.$emit('close')
-        //TODO Wait for Collateral to load up in UI
-      } else if (res.error) {
-        snackbar.setError(res.error.info)
+    // Create a collateral output of 5 ADA
+    const collateralOutput: Cardano.TxOut = {
+      address: loggedWallet.value.baseAddress as Cardano.PaymentAddress,
+      value: {
+        coins: BigInt(5000000) // 5 ADA
       }
+    };
+
+    // Build the transaction using the modern SDK
+    const txData = await buildCardanoTransaction({
+      outputs: [collateralOutput],
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value
+    });
+
+    // Convert to CBOR for signing
+    const transaction: Serialization.Transaction = Serialization.Transaction.fromCore(txData)
+    const txCbor = transaction.toCbor();
+
+    const signaturesRes: any = await Messaging.sendToBackground({
+      method: METHOD.signTx,
+      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    });
+    console.log('signaturesRes', signaturesRes)
+    if (signaturesRes.error) {
+      snackbar.setError(signaturesRes.error.info)
+    } else {
+      console.log(signaturesRes)
+      const witnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
+      const newTx: Serialization.Transaction = new Serialization.Transaction(transaction.body(), witnessSet)
+      await submit(newTx.toCbor())
     }
-  },
-  data: () => ({
-    headers: [
-      {text: 'UTxO', sortable: false, value: 'utxo'},
-      {text: 'Address', sortable: false, value: 'address'},
-      {text: 'Balance', sortable: false, value: 'balance'},
-    ]
-  }),
+  } catch (error: any) {
+    console.error('Error building collateral transaction:', error);
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError('Insufficient ADA to set collateral. You need at least 5 ADA.');
+    } else {
+      snackbar.setError('Failed to build collateral transaction');
+    }
+  }
+};
+
+const submit = async (cborHex: string) => {
+  const submitResult = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.SUBMIT_TX,
+    data: {
+      txCbor: cborHex,
+      witnessHex: null,
+      utxos: utxos.value
+    }
+  }) as { data: { txId?: string; error?: string } };
+  if (submitResult.data.error) {
+    throw new Error(submitResult.data.error);
+  }
+  const txId = submitResult.data.txId;
+  snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
+  console.log(txId)
+  emit('close')
 }
 </script>
 

@@ -21,40 +21,40 @@
     </v-list>
   </v-menu>
 </template>
-<script>
-import { mapState } from "pinia";
-import { useStore } from "@/stores";
+<script setup lang="ts">
+import { ref, watch, onMounted } from 'vue';
 import networks from "@/utils/networks";
 
-export default {
-  name: "NetworkSelector",
-  computed: {
-    ...mapState(useStore, ['network']),
-  },
-  watch: {
-    selectedNetwork(val) {
-      this.store.setNetwork(val)
-      // if (val.blockchain.includes("Apex")) {
-      //   this.$vuetify.theme.themes.dark.primary ='#dc753e'
-      // } else {
-      //   this.$vuetify.theme.themes.dark.primary ='#2f9cac'
-      // }
-    }
-  },
-  data: () => ({
-    networks,
-    selectedNetwork: undefined,
-    store: useStore()
-  }),
-  mounted() {
-    if (this.network) {
-      this.selectedNetwork = this.network
-    } else {
-      this.selectedNetwork = this.networks.networks[0]
-      useStore().setNetwork(this.selectedNetwork)
-    }
-  }
+interface Props {
+  modelValue?: any;
 }
+
+const props = defineProps<Props>();
+
+const emit = defineEmits(['update:modelValue', 'network-changed']);
+
+const selectedNetwork = ref<any>(undefined);
+
+watch(selectedNetwork, (val) => {
+  if (val) {
+    emit('update:modelValue', val);
+    emit('network-changed', val);
+    // if (val.blockchain.includes("Apex")) {
+    //   this.$vuetify.theme.themes.dark.primary ='#dc753e'
+    // } else {
+    //   this.$vuetify.theme.themes.dark.primary ='#2f9cac'
+    // }
+  }
+});
+
+onMounted(() => {
+  if (props.modelValue) {
+    selectedNetwork.value = props.modelValue;
+  } else {
+    selectedNetwork.value = networks.networks[0];
+    emit('network-changed', selectedNetwork.value);
+  }
+});
 </script>
 <style>
 .toggleUpDown {

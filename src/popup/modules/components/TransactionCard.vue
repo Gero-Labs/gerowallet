@@ -5,98 +5,112 @@
     </div>
     <v-card flat :class="withBg ? 'tx-details bg' : 'tx-details'">
       <div class="provider">{{ amount?.provider }}</div>
-      <div class="total">{{ amount?.total | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</div>
+      <div class="total">{{ toCurrency(amount?.total, true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</div>
       <div class="assets mr-1" v-if="amount?.assets?.length">Assets:</div>
       <div v-if="amount?.assets?.length">
-        <div v-for="asset in shownAssets" :key="asset.currency" class="asset-entry">
-          <div class="pr-1">{{ asset.currency }}</div>
-          <div>{{ asset.amount | toCurrency(false, 0, '', '', false, decimals(asset?.id)) }}</div>
+        <div v-for="(asset, index) in shownAssets" :key="asset.currency" class="asset-entry">
+          <div class="pr-1"></div>
+          <div>
+            <v-chip pill small class="px-1" outlined :key="`asset_${index}`" :color="risk ? 'error' : 'primary'" style="margin: 2px!important;">
+              <v-avatar v-if="asset.img" left>
+                <v-img :src="asset.img" :alt="`${asset.currency} Logo`" contain>
+                  <template v-slot:placeholder>
+                    <v-row
+                      class="fill-height ma-0"
+                      align="center"
+                      justify="center"
+                    >
+                      <v-progress-circular
+                        size="14"
+                        width="2"
+                        indeterminate
+                        color="grey lighten-5"
+                      ></v-progress-circular>
+                    </v-row>
+                  </template>
+                </v-img>
+              </v-avatar>
+              {{ toCurrency(asset.amount, false, 0, '', ` ${getAssetName(asset.currency)}`, false, decimals(asset?.id)) }}
+            </v-chip>
+          </div>
         </div>
         <a v-if="hiddenAssets" class="asset-entry" @click="toggleAllAssets()">
           {{ hiddenAssets }} more types of collectibles
         </a>
       </div>
     </v-card>
-
     <div class="tx-footer" v-if="amount.txFee">
       <template>
-        Tx Fee<span class="ml-1"> {{ 0 - amount?.txFee | toCurrency(true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
+        Tx Fee<span class="ml-1"> {{ toCurrency(0 - amount?.txFee, true, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
       </template>
     </div>
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch, onMounted, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
-import { mapState } from 'pinia';
-import { useStore } from '@/stores';
 import networks from '@/utils/networks';
+import { walletStore } from '@/stores/walletStore';
+import { Cardano } from '@cardano-sdk/core';
 
-export default {
-  name: 'TransactionCard',
-  props: {
-    risk: {
-      type: Boolean,
-    },
-    transaction: {
-      type: Object,
-    },
-    withBg: {
-      type: Boolean,
-      default: () => true
-    }
+const props = defineProps({
+  risk: {
+    type: Boolean,
   },
-  computed: {
-    ...mapState(useStore, ['loggedWallet', 'assets']),
+  transaction: {
+    type: Object,
   },
-  watch: {
-    transaction: {
-      handler(newVal) {
-        this.amount = newVal
-        if (this.amount?.assets?.length < 5) {
-          this.shownAssets = this.amount?.assets;
-          this.hiddenAssets = 0;
-        } else {
-          this.shownAssets = this.amount?.assets.slice(0, 5);
-          this.hiddenAssets = this.amount?.assets.length - 5;
-        }
-      },
-      deep: true,
-    },
-  },
-  data() {
-    return {
-      networks,
-      amount: undefined,
-      showAllAssets: true,
-      hiddenAssets: 0,
-      shownAssets: [],
-    };
-  },
-  filters,
-  methods: {
-    decimals(unit) {
-      let decimals = 0
-      if (unit && this.assets && this.assets[unit] && this.assets[unit].metadata) {
-        decimals = this.assets[unit].metadata.decimals
-      }
-      return decimals
-    },
-    toggleAllAssets() {
-      this.showAllAssets = !this.showAllAssets;
-    },
-  },
-  mounted() {
-    this.showAllAssets = false;
-    this.amount = this.transaction
-    if (this.amount?.assets?.length < 5) {
-      this.shownAssets = this.amount?.assets;
-      this.hiddenAssets = 0;
-    } else {
-      this.shownAssets = this.amount?.assets.slice(0, 5);
-      this.hiddenAssets = this.amount?.assets.length - 5;
-    }
-  },
+  withBg: {
+    type: Boolean,
+    default: true
+  }
+});
+
+const { loggedWallet, tokens } = toRefs(walletStore);
+
+const amount = ref<any>(undefined);
+const showAllAssets = ref(true);
+const hiddenAssets = ref(0);
+const shownAssets = ref<any[]>([]);
+
+const { toCurrency } = filters;
+
+const decimals = (unit: string) => {
+  let decimals = 0;
+  if (unit && tokens.value && tokens.value[unit] && tokens.value[unit].metadata) {
+    decimals = tokens.value[unit].metadata.decimals;
+  }
+  return decimals;
 };
+
+const getAssetName = (assetId: any) => {
+  const assetName = Cardano.AssetId.getAssetName(assetId);
+  return Cardano.AssetName.toUTF8(assetName, true);
+}
+
+const toggleAllAssets = () => {
+  showAllAssets.value = !showAllAssets.value;
+};
+
+const updateAssets = (newVal: any) => {
+  amount.value = newVal;
+  if (amount.value?.assets?.length < 5) {
+    shownAssets.value = amount.value?.assets;
+    hiddenAssets.value = 0;
+  } else {
+    shownAssets.value = amount.value?.assets.slice(0, 5);
+    hiddenAssets.value = amount.value?.assets.length - 5;
+  }
+};
+
+watch(() => props.transaction, (newVal) => {
+  updateAssets(newVal);
+}, { deep: true });
+
+onMounted(() => {
+  showAllAssets.value = false;
+  updateAssets(props.transaction);
+});
 </script>
 <style scoped lang="scss">
 
@@ -116,6 +130,9 @@ export default {
 }
 
 .tx-details {
+  background-color: #0F0F0F !important;
+  border: 1px solid #272930 !important;
+  border-radius: 10px;
   padding: 8px;
   display: grid;
   grid-template-columns: 1fr 6fr;

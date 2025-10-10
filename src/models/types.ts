@@ -1,4 +1,4 @@
-import { HARDENED } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+const HARDENED = 2147483648;
 
 const WalletType = {
   Trezor: 'Trezor',
@@ -6,6 +6,11 @@ const WalletType = {
   Keystone: 'Keystone',
   Normal: 'Normal',
   Google: 'Google',
+};
+
+export type NetworkScheme = {
+  blockchain: string;
+  network: string;
 };
 
 const Theme = {
@@ -17,6 +22,10 @@ const purpose = {
   minting: 1855,
   multisig: 1854,
   voting: 1694,
+};
+
+const coin_type = {
+  cardano: 1815,
 };
 
 const CoreAddressTypes = {
@@ -47,14 +56,10 @@ const WalletTypePurpose = {
 };
 
 const CoinTypes = {
-  CARDANO: HARDENED + 1815, // HARD_DERIVATION_START + 1815;
+  CARDANO: HARDENED + coin_type.cardano, // HARD_DERIVATION_START + 1815;
   ERGO: HARDENED + 429, // HARD_DERIVATION_START + 429;
 };
 
-/**
- * Defined by bip44
- * https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#address-gap-limit
- */
 const BIP44_SCAN_SIZE = 20;
 
 const ChainDerivations = {
@@ -62,13 +67,15 @@ const ChainDerivations = {
   INTERNAL: 1,
   CHIMERIC_ACCOUNT: 2,
   DREP: 3,
+  CONSTITUTIONAL_COMMITTEE_COLD: 4,
+  CONSTITUTIONAL_COMMITTEE_HOT: 5,
 };
 
 enum Provider {
   UNDEFINED,
   KOIOS,
   BLOCKFROST,
-  YACI
+  YACI,
 }
 
 const Blockchain = {
@@ -116,17 +123,17 @@ export type DataSignature = {
 };
 
 export type Paginate = {
-  page: number,
-  limit: number,
+  page: number;
+  limit: number;
 };
 
 export type PaginateError = {
-  maxSize: number,
+  maxSize: number;
 };
 
 export type CollateralParams = {
   amount: string | number;
-}
+};
 
 export type WalletInstance = {
   experimental: ExperimentalFeatures;
@@ -149,11 +156,11 @@ export type ExperimentalFeatures = {
   signTxs?(txs: string[], partialSign: boolean): Promise<string[]>;
 };
 export type Extension = {
-  cip: number
-}
+  cip: number;
+};
 export type Extensions = {
-  extensions: Extension[]
-}
+  extensions: Extension[];
+};
 
 const Currency = {
   AUD: { short: 'aud', description: 'Australian Dollar', symbol: 'A$' },
@@ -182,7 +189,7 @@ export type TxOutput = {
 export type Withdrawal = {
   address: string;
   amount: string;
-}
+};
 
 export const DEFAULT_TTL: number = 14400;
 
@@ -190,44 +197,54 @@ export type Proof = {
   pi_a: string[];
   pi_b: string[][];
   pi_c: string[];
-  protocol: string,
-  curve: string,
-}
+  protocol: string;
+  curve: string;
+};
 
 export type UTxO = {
   tx_hash: string;
   tx_index: number;
   payment_addr: {
     bech32: string;
-  }
-  asset_list: [
-    policy_id: string,
-    asset_name: string,
-    quantity: string
-  ],
-  datum_hash: string,
-  inline_datum: string,
-  reference_script: string,
-  value: string
-}
+  };
+  asset_list: {
+    policy_id: string;
+    asset_name: string;
+    quantity: string;
+  }[];
+  reference_script: {
+    hash: string;
+    size: number;
+    type: string;
+    bytes: string;
+    value: any;
+  };
+  stake_addr: string;
+  datum_hash: string;
+  inline_datum: {
+    bytes: string;
+    value: any;
+  };
+  value: string;
+};
 
 export type Tip = {
-  time: number,
-  height: number,
-  hash: string,
-  slot: number,
-  epoch: number,
-  epoch_slot: number,
-  slot_leader: string,
-  size: number,
-  tx_count: number,
-  output: string,
-  fees: string,
-  block_vrf: string,
-  previous_block: string,
-  next_block: string,
-  confirmations: number
-}
+  time: number;
+  height: number;
+  hash: string;
+  slot: number;
+  epoch: number;
+  epoch_slot: number;
+  slot_leader: string;
+  size: number;
+  tx_count: number;
+  output: string;
+  fees: string;
+  block_vrf: string;
+  previous_block: string;
+  next_block: string;
+  confirmations: number;
+};
 
 export {
   purpose,
@@ -243,5 +260,114 @@ export {
   Blockchain,
   Network,
   ERROR,
-  Currency
+  Currency,
+  coin_type,
 };
+
+// ============================================================================
+// WALLET UI TYPES - Component Props and Interfaces
+// ============================================================================
+
+// Component Props Types
+export interface ButtonProps {
+  text: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+}
+
+export interface FeatureCardProps {
+  icon: 'conversion' | 'global' | 'track';
+  title: string;
+  description: string;
+}
+
+export interface FeatureListItemProps {
+  text: string;
+  icon?: string;
+}
+
+export interface ModalProps {
+  open: boolean;
+  onClose?: () => void;
+}
+
+// Section Types
+export interface SectionProps {
+  className?: string;
+  children?: any;
+}
+
+// Legacy Transaction Type (for backward compatibility)
+export interface Transaction {
+  id: number;
+  date: string;
+  name: string;
+  avatarText?: string;
+  icon?: string;
+  amount: string;
+  category: string;
+  categoryClass: string;
+  categoryDotClass: string;
+}
+
+export interface ExchangeRate {
+  id: number;
+  pair: string;
+  value: string;
+  currency: string;
+  icon: string;
+  change: string;
+  trend: 'positive' | 'negative';
+  trendIcon: string;
+}
+
+export interface Activity {
+  id: number;
+  type: string;
+  cryptoAmount: string;
+  fiatAmount: string;
+  date: string;
+  status: string;
+}
+
+export interface Key {
+  address?: string;
+  cred: string;
+  path: string;
+  used?: boolean;
+}
+
+export interface Keys {
+  ccCold: Key[];
+  ccHot: Key[];
+  change: Key[];
+  drep105: Key[];
+  drep129: Key[];
+  payment: Key[];
+  script: Key[];
+  stake: Key[];
+}
+
+// Pagination interfaces
+export interface PaginationMeta {
+  page: number;
+  total_items: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  hide_saturated?: boolean;
+  pledge_met?: boolean;
+  sort_by?: string;
+  sort_direction?: string;
+}

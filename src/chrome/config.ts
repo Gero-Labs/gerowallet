@@ -1,4 +1,4 @@
-export const TARGET = 'gero-wallet';
+export const TARGET = 'gerowallet';
 export const SENDER = {
   extension: 'extension',
   webpage: 'webpage',
@@ -80,21 +80,6 @@ export const POPUP = {
 export const POPUP_WINDOW = {
   top: 50,
   left: 100,
-};
-
-export const STORAGE = {
-  loggedWallet: 'loggedWallet',
-  whitelisted: 'whitelisted',
-  encryptedKey: 'encryptedKey',
-  account: 'account',
-  currentAccount: 'currentAccount',
-  network: 'network',
-  currency: 'currency',
-  migration: 'migration',
-  addresses: 'addresses',
-  utxos: 'utxos',
-  collateral: 'collateral',
-  assets: 'assets'
 };
 
 export const EVENT = {

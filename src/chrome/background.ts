@@ -1,10 +1,12 @@
+import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
+import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 import {
   APIError,
   METHOD,
   POPUP,
   SENDER,
-  STORAGE,
   TARGET,
   TxSendError,
 } from '@/chrome/config';
@@ -15,7 +17,6 @@ import {
   focusOrCreatePopup,
   getUsedAddresses,
   getCollateral,
-  getAddress,
   getUtxos,
   getBalance,
   getRewardAddress,
@@ -25,34 +26,58 @@ import {
   getUnusedAddresses,
 } from '@/chrome/serialization';
 import { ERROR } from '@/models/types';
-import Tab = chrome.tabs.Tab;
 import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
-import { login, WalletBg } from '@/chrome/walletBg';
-import { convertToTxSchema } from '@/chrome/helper';
+import { loadConfig, loadWallets } from '@/plugins/geroLoader';
+import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
+import { walletManager } from '@/services/walletManager.service';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { HexBlob } from '@cardano-sdk/util';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
-  import('/@vite/client')
+  import('/@vite/client').catch(console.error)
   // load latest content script
-  import('./contentScriptHMR')
+  import('./contentScriptHMR').catch(console.error)
 }
 
-let wallet: WalletBg | null = null;
+loadConfig().then(() => {
+  console.log('Gero Config loaded')
+})
+loadWallets().then(async () => {
+  console.log('Wallets loaded')
+
+  // Wait for the wallet store to be hydrated from Chrome storage
+  await hydrateWalletStore();
+  console.log('Wallet store hydrated, checking for logged wallet...');
+
+  if (walletStore.loggedWallet) {
+    console.log('Login in wallet: ', walletStore.loggedWallet.name);
+    await walletManager.login(walletStore.loggedWallet);
+  } else {
+    console.log('No logged wallet found after hydration');
+    Loading.setLoading(false)
+  }
+});
 
 //@ts-ignore
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 (async () => {
   await bringInitBackground({
+    isEnabledByDefault: true,
     identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
     apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
     cashbackPagePath: '/index.html#/cashback'
   })
 })();
-const currentVersion = chrome.runtime.getManifest().version;
+
+// Initialize background store messaging (the import alone initializes it)
+console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
+const currentVersion: string = chrome.runtime.getManifest().version;
 
 if (!isBeta) {
   chrome.runtime.onInstalled.addListener((details) => {
@@ -62,7 +87,7 @@ if (!isBeta) {
         title: 'Extension Updated',
         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
         iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/2.5.4.png'),
+        imageUrl: chrome.runtime.getURL('public/2.6.0.png'),
       });
     }
   });
@@ -77,7 +102,23 @@ if (!isBeta) {
   });
 }
 
-const processedDomains = new Set<string>();
+export async function openSidebar(tabId: number, path: string) {
+  if (typeof tabId !== 'number') {
+    return null;
+  }
+  chrome.sidePanel.setOptions({
+      tabId,
+      path,
+      enabled: true
+  })
+  chrome.sidePanel.setPanelBehavior({
+    openPanelOnActionClick: false
+  })
+  chrome.sidePanel.open({ tabId });
+  return tabId;
+}
+
+const processedDomains: Set<string> = new Set<string>();
 
 chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
   const domains = result['processedDomains'] || [];
@@ -96,8 +137,19 @@ function clearProcessedDomains() {
 }
 
 // Set an interval to clear the processed domains every 24 hours (86,400,000 milliseconds)
-const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
-setInterval(clearProcessedDomains, oneDayInMilliseconds);
+// const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
+
+// Use Chrome alarms API for reliable cleanup in service workers
+chrome.alarms.create('clearProcessedDomains', {
+  delayInMinutes: 24 * 60, // 24 hours
+  periodInMinutes: 24 * 60 // repeat every 24 hours
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'clearProcessedDomains') {
+    clearProcessedDomains();
+  }
+});
 
 console.log('Background Loaded');
 
@@ -105,24 +157,29 @@ let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
 
-interface Response {
-  data?: any;
-  error?: any;
-}
-
 async function handleBlacklisted(request: any, tabId: number) {
+  // Check if website protection is enabled
+  const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
+    ? walletStore.config.websiteProtection
+    : true; // Default to enabled
+  if (!websiteProtectionEnabled) {
+    return 'skip';
+  }
+
   let urlStatus;
   try {
     const response = await urlScan(request.origin);
     urlStatus = await response.json();
-
-    if (urlStatus === 'blacklist' || urlStatus === 'suspicious') {
+    console.log('urlScan', urlStatus);
+    if (urlStatus === 'blacklist'
+      // || urlStatus === 'suspicious'
+    ) {
       // Send the overlay message immediately
       await chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
 
       const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.warning}?website=${encodeURIComponent(request.origin)}`);
       const popupResponse: any = await focusOrCreatePopup(popupURL, 470, 600)
-        .then(tab => Messaging.sendToPopupInternal(tab, request))
+        .then(tab => Messaging.sendToPopupInternal(tab.id, request))
         .then(response => response);
       return popupResponse;
     }
@@ -137,12 +194,14 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
     const url = new URL(details.url);
     const origin = url.origin;
     const domain = getDomain(url.hostname);
+    if (!domain) {
+      return;
+    }
 
     const request = {
       id: 'unique_id_' + Date.now(), // Generate a unique id
       origin: origin
     };
-
     if (domain && !processedDomains.has(domain)) {
       const res = await handleBlacklisted(request, details.tabId);
       if (res['data'] === 'proceed') {
@@ -156,6 +215,8 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'approved') {
         processedDomains.add(domain);
         await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+      } else if (res === 'skip') {
+        // nothing
       } else {
         console.log(res['error'])
       }
@@ -166,8 +227,8 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
 app.add(METHOD.getBalance, async (request, sendResponse) => {
   console.log('getBalance', request)
   try {
-    const collateral = await getStorage(STORAGE.collateral);
-    const utxosFromStorage = await getStorage(STORAGE.utxos);
+    const collateral = WalletStore.state.collateral;
+    const utxosFromStorage = WalletStore.state.utxos;
     const balance = getBalance(utxosFromStorage, collateral)
     sendResponse({
       id: request.id,
@@ -185,62 +246,66 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   }
 });
 
-app.add(METHOD.enable, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet) {
+app.add(METHOD.enable, (request, sendResponse) => {
+  console.log('enable', request)
+  const { id, origin, send } = request;
+  const tabId = send.tab?.id;
+  const reply = (opts: { data?: any; error?: any }) => {
     sendResponse({
-      id: request.id,
-      error: APIError.AccountNotSet,
+      id,
+      ...opts,
       target: TARGET,
       sender: SENDER.extension,
     });
-  } else {
-    try {
-      const whitelisted = await isWhitelisted(request.origin);
-      if (whitelisted) {
-        sendResponse({
-          id: request.id,
-          data: true,
-          target: TARGET,
-          sender: SENDER.extension,
-        });
-      } else {
-        const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(request.origin)}`);
-        const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
-          .then(tab => Messaging.sendToPopupInternal(tab, request))
-          .then(response => response);
-        if (response.data === true) {
-          sendResponse({
-            id: request.id,
-            data: true,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        } else if (response.error) {
-          sendResponse({
-            id: request.id,
-            error: response.error,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        } else {
-          sendResponse({
-            id: request.id,
-            error: APIError.InternalError,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        }
-      }
-    } catch (error) {
-      sendResponse({
-        id: request.id,
-        error: APIError.InternalError,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    }
+  };
+
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet) {
+    return reply({ error: APIError.AccountNotSet });
   }
+  if (WalletStore.isWhitelisted(origin)) {
+    return reply({ data: true });
+  }
+
+  if (typeof tabId !== 'number') {
+    return reply({ error: APIError.InternalError });
+  }
+
+  const normalizeAndSend = (response: any) => {
+    if (response.data) {
+      reply({ data: response.data });
+    } else if (response.error) {
+      reply({ error: response.error });
+    } else {
+      reply({ error: APIError.InternalError });
+    }
+  };
+
+  if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
+    const sidePanelUrl =
+      `index.html#/${POPUP.dappConnect}` +
+      `?website=${encodeURIComponent(origin)}` +
+      `&tabId=${request.send.tab.id}`;
+
+    openSidebar(tabId, sidePanelUrl)
+      .then(openedTabId => Messaging.sendToSidePanelInternal(openedTabId, request))
+      .then(normalizeAndSend)
+      .catch(err => reply({ error: err }));
+  } else {
+    const popupURL =
+      chrome.runtime.getURL(
+        `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
+      );
+
+    focusOrCreatePopup(popupURL, 470, 600)
+      .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+      .then(normalizeAndSend)
+      .catch(err => reply({ error: err }));
+  }
+
+  // IMPORTANT: Return true so that Chrome knows we'll call sendResponse asynchronously
+  return true;
 });
 
 app.add(METHOD.isEnabled, (request, sendResponse) => {
@@ -264,8 +329,8 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
+  const loggedWallet = WalletStore.state.loggedWallet
+  if (!loggedWallet) {
     sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
@@ -273,27 +338,17 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
-  const address = await getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    sendResponse({
-      id: request.id,
-      data: address.toBytes(),
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } else {
-    sendResponse({
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
+  sendResponse({
+    id: request.id,
+    data: Cardano.Address.fromBech32(loggedWallet.baseAddress).toBytes(),
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
+  const loggedWallet = WalletStore.state.loggedWallet
+  if (!loggedWallet || !loggedWallet.baseAddress) {
     sendResponse({
       id: request.id,
       error: APIError.AccountNotSet,
@@ -301,22 +356,12 @@ app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
-  const address = getAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
-  if (address) {
-    sendResponse({
-      id: request.id,
-      data: address.toBech32(),
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } else {
-    sendResponse({
-      id: request.id,
-      error: APIError.InternalError,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
+  sendResponse({
+    id: request.id,
+    data: loggedWallet.baseAddress,
+    target: TARGET,
+    sender: SENDER.extension,
+  });
 });
 
 app.add(METHOD.isWhitelisted, async (request, sendResponse) => {
@@ -343,21 +388,36 @@ interface WhitelistedEntry {
   id: number;
 }
 
-async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = await getWhitelisted();
-  const bringDomains = await getStorage('bring_relevantDomains')
-  if (whitelisted.find(el => origin.includes(el.domain))) return true;
-  return !!(bringDomains && bringDomains.find(el => origin.includes(el)));
-}
+// In-memory cache for bringDomains with 4-hour TTL
+let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: null, timestamp: 0 };
+const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
-async function getWhitelisted(): Promise<WhitelistedEntry[]> {
-  const result = await getStorage(STORAGE.whitelisted);
-  return Array.isArray(result) ? result : [];
+async function isWhitelisted(origin: string): Promise<boolean> {
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps;
+  if (whitelisted.find(el => origin.includes(el.domain))) return true;
+
+  // Only check bringDomains for Cardano Mainnet
+  const loggedWallet = WalletStore.state.loggedWallet;
+  if (!networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)) {
+    return false;
+  }
+
+  // Check if cached data is still valid
+  const now = Date.now();
+  let bringDomains = bringDomainsCache.data;
+
+  if (!bringDomains || (now - bringDomainsCache.timestamp) > BRING_DOMAINS_CACHE_TTL) {
+    // Cache expired or doesn't exist, fetch new data
+    bringDomains = await (globalThis as any).bringCache?.getReadable('relevantDomains');
+    bringDomainsCache = { data: bringDomains, timestamp: now };
+  }
+
+  return !!(bringDomains && bringDomains.find((el: string) => origin.includes(el)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
   console.log('getNetworkId', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
       id: request.id,
@@ -377,7 +437,7 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
   console.log('getRewardAddresses', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
       id: request.id,
@@ -399,8 +459,8 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
   console.log('getUtxos', request)
   try {
-    const utxosFromStorage = await getStorage(STORAGE.utxos);
-    const collateral = await getStorage(STORAGE.collateral);
+    const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
+    const collateral = WalletStore.state.collateral;
     const utxos = getUtxos(request.data.amount, request.data.paginate, utxosFromStorage, collateral)
     let res: string[] | null;
     if (utxos) {
@@ -426,7 +486,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
-  const storedUtxos = await getStorage(STORAGE.utxos);
+  const storedUtxos = WalletStore.state.utxos;
   try {
     const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
     sendResponse({
@@ -448,7 +508,16 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
   console.log('getUsedAddresses', request)
   try {
-    const addresses = getUsedAddresses(await getStorage(STORAGE.addresses), request?.data?.paginate);
+    const loggedWallet = WalletStore.state.loggedWallet
+    if (!loggedWallet) {
+      sendResponse({
+        id: request.id,
+        error: APIError.AccountNotSet,
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+    const addresses = getUsedAddresses(WalletStore.state.keys, request?.data?.paginate);
     sendResponse({
       id: request.id,
       data: addresses,
@@ -467,10 +536,18 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
   console.log('getUnusedAddresses', request)
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  const addresses = await getStorage(STORAGE.addresses)
   try {
-    const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, addresses);
+    const loggedWallet = WalletStore.state.loggedWallet
+    if (!loggedWallet) {
+      sendResponse({
+        id: request.id,
+        error: APIError.AccountNotSet,
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+    const addressesRes = getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, WalletStore.state.keys);
+    console.log(addressesRes)
     sendResponse({
       id: request.id,
       data: addressesRes,
@@ -478,6 +555,7 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
+    console.error(e)
     sendResponse({
       id: request.id,
       error: e,
@@ -488,159 +566,253 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.popupLogin, async (request, sendResponse) => {
-  try {
-    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.login}`);
-    const response: Response = await focusOrCreatePopup(popupURL, 470, 600)
-      .then((tab) => Messaging.sendToPopupInternal(tab, request))
-      .then((response) => response);
-    sendResponse({
-      id: request.id,
-      data: response.data,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } catch (e) {
-    sendResponse({
-      id: request.id,
-      error: e,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
+  let responsePromise: Promise<any>;
+  if (WalletStore.state.config.useSidePanel && request.data.userGesture) {
+    const url =
+      `index.html#/${POPUP.login}` +
+      `&tabId=${request.send.tab.id}`;
+    responsePromise = openSidebar(request.send.tab.id, url).then((tabId) =>
+      Messaging.sendToSidePanelInternal(tabId, request)
+    );
+  } else {
+    const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.login}}`);
+    responsePromise = focusOrCreatePopup(popupURL, 470, 600).then((tab) =>
+      Messaging.sendToPopupInternal(tab.id, request)
+    );
   }
-});
-
-app.add(METHOD.signData, async (request, sendResponse) => {
-  try {
-    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
-    await focusOrCreatePopup(popupURL, 470, 600)
-      .then((tab: Tab) => Messaging.sendToPopupInternal(tab, request))
-      .then((response: any) => {
-        if (response.data) {
-          sendResponse({
-            id: request.id,
-            data: response.data,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        } else if (response.error) {
-          sendResponse({
-            id: request.id,
-            error: response.error,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        } else {
-          sendResponse({
-            id: request.id,
-            error: APIError.InternalError,
-            target: TARGET,
-            sender: SENDER.extension,
-          });
-        }
-      });
-  } catch (e) {
-    sendResponse({
-      id: request.id,
-      error: e,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
-});
-
-app.add(METHOD.signTx, async (request, sendResponse) => {
-  try {
-    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
-    const tab: Tab = await focusOrCreatePopup(popupURL, 470, 852);
-    const response: any = await Messaging.sendToPopupInternal(tab, request);
-    console.log(response)
-    if (response.data) {
-      sendResponse({
-        id: request.id,
-        data: response.data,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    } else if (response.error) {
-      sendResponse({
-        id: request.id,
-        error: response.error,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    } else {
-      sendResponse({
-        id: request.id,
-        error: APIError.InternalError,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
-    }
-  } catch (e) {
-    sendResponse({
-      id: request.id,
-      error: e,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
-});
-
-app.add(METHOD.submitTx, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
-  if (!loggedWallet || !loggedWallet.publicKey) {
-    sendResponse({
-      id: request.id,
-      error: APIError.AccountNotSet,
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
-
-  submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
-    .then(async (response: any) => {
-      if (!response.ok) {
-        switch (response.status) {
-          case 400:
-            throw { ...TxSendError.Failure, message: response.statusText };
-          case 500:
-            throw APIError.InternalError;
-          case 429:
-            throw TxSendError.Refused;
-          case 425:
-            throw ERROR.fullMempool;
-          default:
-            throw APIError.InvalidRequest;
-        }
+  responsePromise
+    .then((response: any) => {
+      if (response.data) {
+        sendResponse({
+          id: request.id,
+          data: response.data,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      } else {
+        sendResponse({
+          id: request.id,
+          error: APIError.InternalError,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
       }
-      const utxos = await getStorage(STORAGE.utxos);
-      const txCbor = request.data.tx
-      const txId = await response.text();
-      if (txId) {
-        const tx = convertToTxSchema(txId, txCbor, utxos, networks.resolveNetworkId(loggedWallet['chain'], loggedWallet['network']))
-        if (wallet) {
-          await wallet.setAccountTransactions([tx])
-        }
-      }
-      sendResponse({
-        id: request.id,
-        data: txId,
-        target: TARGET,
-        sender: SENDER.extension,
-      });
     })
-    .catch(e => {
-      return {
+    .catch((e) => {
+      sendResponse({
         id: request.id,
         error: e,
         target: TARGET,
         sender: SENDER.extension,
-      };
+      });
     });
 });
 
+app.add(METHOD.signData, (request, sendResponse) => {
+  console.log('signData', request)
+  let responsePromise: Promise<any>;
+  if (WalletStore.state.config.useSidePanel) {
+    const url =
+      `index.html#/${POPUP.dappSignData}` +
+      `?website=${encodeURIComponent(request.origin)}` +
+      `&tabId=${request.send.tab.id}`;
+    responsePromise = openSidebar(request.send.tab.id, url).then((tabId) =>
+      Messaging.sendToSidePanelInternal(tabId, request)
+    );
+  } else {
+    const popupURL: string = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
+    responsePromise = focusOrCreatePopup(popupURL, 470, 600).then((tab) =>
+      Messaging.sendToPopupInternal(tab.id, request)
+    );
+  }
+  responsePromise
+    .then((response: any) => {
+      console.log('sidePanel signData', response)
+      if (response.data) {
+        sendResponse({
+          id: request.id,
+          data: response.data,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      } else if (response.error) {
+        sendResponse({
+          id: request.id,
+          error: response.error,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      } else {
+        sendResponse({
+          id: request.id,
+          error: APIError.InternalError,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      }
+    })
+    .catch((e) => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
+
+app.add(METHOD.signTx, async (request, sendResponse) => {
+  // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
+  const requestCopy = JSON.parse(JSON.stringify(request));
+
+  let responsePromise: Promise<any>;
+  if (WalletStore.state.config.useSidePanel) {
+    const url =
+      `index.html#/${POPUP.signTx}` +
+      `?website=${encodeURIComponent(requestCopy.origin)}` +
+      `&tabId=${requestCopy.send.tab.id}`;
+
+    responsePromise = openSidebar(requestCopy.send.tab.id, url).then((tabId) =>
+      Messaging.sendToSidePanelInternal(tabId, requestCopy)
+    );
+  } else {
+    // Force close any existing SignTx popups before opening a new one
+    // This prevents browser reuse of popup windows
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const window of windows) {
+      if (window.type === 'popup') {
+        for (const tab of window.tabs) {
+          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
+            await chrome.windows.remove(window.id);
+            break;
+          }
+        }
+      }
+    }
+
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.origin)}`
+    );
+    responsePromise = focusOrCreatePopup(popupURL, 470, 852).then((tab) =>
+      Messaging.sendToPopupInternal(tab.id, requestCopy)
+    );
+  }
+  responsePromise
+    .then((response: any) => {
+      if (response.data) {
+        sendResponse({
+          id: request.id,
+          data: response.data,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      } else if (response.error) {
+        sendResponse({
+          id: request.id,
+          error: response.error,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      } else {
+        sendResponse({
+          id: request.id,
+          error: APIError.InternalError,
+          target: TARGET,
+          sender: SENDER.extension,
+        });
+      }
+    })
+    .catch((e) => {
+      sendResponse({
+        id: request.id,
+        error: e,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    });
+});
+
+app.add(METHOD.submitTx, async (request, sendResponse) => {
+  try {
+    const loggedWallet = WalletStore.state.loggedWallet;
+    if (!loggedWallet || !loggedWallet.publicKey) {
+      sendResponse({
+        id: request.id,
+        error: APIError.AccountNotSet,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+    const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
+    if (!response.ok) {
+      let error: any;
+      switch (response.status) {
+        case 400:
+          error = { ...TxSendError.Failure, message: response.statusText };
+          break;
+        case 500:
+          error = APIError.InternalError;
+          break;
+        case 429:
+          error = TxSendError.Refused;
+          break;
+        case 425:
+          error = ERROR.fullMempool;
+          break;
+        default:
+          error = APIError.InvalidRequest;
+      }
+      console.error("Error in submitTx:", error);
+      sendResponse({
+        id: request.id,
+        error,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+    const txCbor = request.data.tx
+    const txId = await response.text();
+    console.log('txId', txId)
+    if (txId) {
+      const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
+      const pendingTx = {
+        id: txId, // Required for a database key path
+        tx_hash: txId,
+        block_hash: '',
+        block_height: 0,
+        epoch_no: 0,
+        absolute_slot: 0,
+        tx_timestamp: Math.floor(Date.now() / 1000),
+        tx_size: 0,
+        cbor: txCbor,
+        pending: true,
+        utxo: null, // No UTXO data for submitted transactions
+        ...txDeserialized, // Spreads body, witness, auxiliaryData, isValid, etc.
+      };
+      const currentWallet = walletManager.getWallet();
+      if (currentWallet) {
+        await currentWallet.setAccountTransactions([pendingTx])
+      }
+    }
+    sendResponse({
+      id: request.id,
+      data: txId,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (e) {
+    console.error("Error in submitTx:", e);
+    sendResponse({
+      id: request.id,
+      error: e,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
 app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
       id: request.id,
@@ -670,7 +842,7 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
 
 app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
   try {
-    const account = await getStorage(STORAGE.account);
+    const account = WalletStore.state.account;
     if (!account) {
       sendResponse({
         id: request.id,
@@ -680,7 +852,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
       });
     }
     if (account.active) {
-      const loggedWallet = await getStorage(STORAGE.loggedWallet);
+      const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
           id: request.id,
@@ -719,7 +891,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
 
 app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
   try {
-    const account = await getStorage(STORAGE.account);
+    const account = WalletStore.state.account;
     if (!account) {
       sendResponse({
         id: request.id,
@@ -729,7 +901,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
       });
     }
     if (account.active) {
-      const loggedWallet = await getStorage(STORAGE.loggedWallet);
+      const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
           id: request.id,
@@ -767,7 +939,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAccountPub, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
       id: request.id,
@@ -796,7 +968,7 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
-  const loggedWallet = await getStorage(STORAGE.loggedWallet);
+  const loggedWallet = WalletStore.state.loggedWallet;
   try {
     sendResponse({
       id: request.id,
@@ -814,14 +986,6 @@ app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
     });
   }
 });
-
-const getStorage = (key) =>
-  new Promise<any>((res, rej) =>
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) rej(undefined);
-      res(key ? result[key] : result);
-    }),
-  );
 
 // Check if a specific tab is open
 const checkTabOpen = (tabId) => {
@@ -909,11 +1073,232 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
   }
 });
 
+app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
+  try {
+    console.log('verify spending password', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      const isValid = walletBg.verifySpendingPassword(request.data.password);
+      sendResponse({
+        id: request.id,
+        data: { isValid },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error verifying spending password:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
+  try {
+    console.log('sign data', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      const res = await walletBg.signData(
+        request.data.address,
+        request.data.payload,
+        request.data.password,
+        request.data.accountIndex || 0,
+      );
+      sendResponse({
+        id: request.id,
+        data: res,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing Data:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
+  try {
+    console.log('sign tx', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      // Handle both legacy (tx object) and new (txCbor string) formats
+      let transaction;
+      if (request.data.txCbor) {
+        // New format: deserialize CBOR to Cardano.Tx object
+        console.log('Deserializing CBOR transaction:', request.data.txCbor);
+        transaction = deserializeCardanoJsSdkTx(request.data.txCbor);
+      } else if (request.data.tx) {
+        // Legacy format: use transaction object directly
+        console.log('Using legacy transaction object');
+        transaction = request.data.tx;
+      } else {
+        throw new Error('No transaction data provided (neither tx nor txCbor)');
+      }
+
+      const witnessResult = await walletBg.signTx(
+        transaction,
+        request.data.partialSign || false,
+        request.data.password,
+        request.data.accountIndex || 0,
+        request.data.utxos,
+        request.data.addresses,
+        request.data.mergeWitnesses || false
+      );
+      sendResponse({
+        id: request.id,
+        data: witnessResult,
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error signing transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
+  try {
+    console.log('submit tx', request);
+    const walletBg = walletManager.getWallet();
+    if (walletBg) {
+      // Handle different transaction input formats
+      let txCbor: string;
+      if (request.data.txCbor && request.data.witnessHex) {
+        console.log('original Cbor', request.data.txCbor)
+        console.log('witnessHex', request.data.witnessHex)
+        const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
+        const existingWitness = serializableTx.witnessSet();
+        const existingWitnessCore = existingWitness.toCore();
+        const newWitnesses: Cardano.Witness = Serialization.TransactionWitnessSet.fromCbor(request.data.witnessHex).toCore();
+
+        // Merge existing signatures with new signatures
+        const mergedSignatures = new Map([
+          ...(existingWitnessCore.signatures?.entries() || []),
+          ...newWitnesses.signatures.entries()
+        ]);
+
+        existingWitness.setVkeys(
+          Serialization.CborSet.fromCore(
+            [...mergedSignatures.entries()],
+            Serialization.VkeyWitness.fromCore,
+          ),
+        );
+        serializableTx.setWitnessSet(existingWitness);
+        txCbor = serializableTx.toCbor();
+        console.log('Submitting transaction with witnesses:', txCbor);
+      } else if (request.data.txCbor) {
+        // CBOR hex string format (already signed)
+        txCbor = request.data.txCbor;
+      } else if (request.data.tx) {
+        // Legacy Transaction object or Cardano.Tx object
+        txCbor = request.data.tx;
+      } else {
+        throw new Error('No transaction data provided (neither tx nor txCbor)');
+      }
+
+      const txId = await walletBg.submitTx(
+        txCbor,
+        request.data.utxos || []
+      );
+
+      sendResponse({
+        id: request.id,
+        data: { txId: txId },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { error: 'Wallet instance not available' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  } catch (error) {
+    console.error('Error submitting transaction:', error);
+    sendResponse({
+      id: request.id,
+      data: { error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
+  try {
+    console.log('restore', request)
+    const currentWallet = await walletManager.restore(request.data.wallet);
+    if (currentWallet) {
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
+});
+
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    const walletBg = await login(request.data.wallet);
+    console.log('login', request)
+    const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
-      wallet = walletBg;
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -942,8 +1327,7 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
   try {
-    wallet.logout();
-    wallet = null;
+    await walletManager.logout();
     sendResponse({
       id: request.id,
       data: { success: true },
@@ -964,8 +1348,9 @@ app.addToOptions(MessageTypes.LOGOUT, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   try {
-    if (wallet) {
-      await wallet.resync();
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      await currentWallet.syncService.resync();
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -981,7 +1366,7 @@ app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
       })
     }
   } catch (err) {
-    console.log('login error', err)
+    console.log('resync error', err)
     sendResponse({
       id: request.id,
       data: { success: false },

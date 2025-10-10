@@ -21,6 +21,7 @@
 
     <div id="risk-indicator">
       <img id="risk-level" alt="Risk Level" :src="icon" />
+
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
           <v-icon x-large>mdi-cog</v-icon>
@@ -36,46 +37,45 @@
     </div>
   </div>
 </template>
-<script>
+<script setup lang="ts">
+import { computed } from 'vue';
 import { DappScore } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
 
-export default {
-  name: 'TransactionRisk',
-  props: {
-    risk: {
-      type: String
-    },
-    loading: {
-      type: Boolean,
-    }
+const props = defineProps({
+  risk: {
+    type: String
   },
-  methods: {
-    getLabel(risk) {
-      switch (DappScore[risk]) {
-        case DappScore.low:
-          return 'LOW';
-        case DappScore.medium:
-          return 'MED';
-        case DappScore.high:
-          return 'HIGH';
-        default:
-          return 'N/A';
-      }
-    },
-  },
-  computed: {
-    icon() {
-      return assets.resolveCardanoShieldRisk(this.risk)
-    },
-    label() {
-      return this.getLabel(this.risk);
-    },
-  },
-  data: () => ({
-    assets,
-  })
+  loading: {
+    type: Boolean,
+    default: false
+  }
+});
+
+// Debug logging
+console.log('TransactionRisk loading prop:', props.loading);
+
+const getLabel = (risk: string | undefined) => {
+  if (!risk) return 'N/A';
+  switch (DappScore[risk as keyof typeof DappScore]) {
+    case DappScore.low:
+      return 'LOW';
+    case DappScore.medium:
+      return 'MED';
+    case DappScore.high:
+      return 'HIGH';
+    default:
+      return 'N/A';
+  }
 };
+
+const icon = computed(() => {
+  return assets.resolveCardanoShieldRisk(props.risk);
+});
+
+const label = computed(() => {
+  return getLabel(props.risk);
+});
 </script>
 <style scoped>
 #risk-wrap {

@@ -6,91 +6,116 @@
   </div>
 </template>
 
-<script>
-import Highcharts from 'highcharts'
+<script setup lang="ts">
+import { ref, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
+import Highcharts from 'highcharts';
+// Using any for Highcharts types to avoid complex type issues
 
-export default {
-  props: {
-    classname: {
-      type: String,
-      default: 'vue-highcharts',
-    },
-    styles: {
-      type: Object,
-      default: function() {
-        return {}
-      },
-    },
-    options: Object,
-    highcharts: Object,
-  },
-  name: 'VueHighcharts',
-  data() {
-    return {
-      chart: null,
-      loading: true,
-    }
-  },
-  mounted() {
-    if (!this.getChart() && this.options) {
-      this.init()
-    }
-  },
-  methods: {
-    getChart() {
-      return this.chart
-    },
-    addSeries(options) {
-      this.delegateMethod('addSeries', options)
-    },
-    removeSeries() {
-      while (this.getChart().series.length !== 0) {
-        this.getChart().series[0].remove()
-      }
-    },
-    mergeOption(options) {
-      this.delegateMethod('update', options)
-    },
-    showLoading(txt) {
-      this.getChart().showLoading(txt)
-    },
-    hideLoading() {
-      this.getChart().hideLoading()
-    },
-    delegateMethod(name, ...args) {
-      if (!this.getChart()) {
-        console.log(`Cannot call [$name] before the chart is initialized. Set prop [options] first.`, this,)
-        return
-      }
-      return this.getChart()[name](...args)
-    },
-    init() {
-      if (!this.getChart() && this.options) {
-        let highchartInstance = this.highcharts || Highcharts
-        if (highchartInstance.product === 'Highstock') {
-          this.chart = new highchartInstance.stockChart(this.$el, this.options)
-          return
-        } else if (highchartInstance.product === 'Highmaps') {
-          this.chart = new highchartInstance.mapChart(this.$el, this.options)
-          return
-        }
-        this.chart = new highchartInstance.Chart(this.$el, this.options)
-      }
-    },
-  },
-  watch: {
-    options: function(options) {
-      if (!this.getChart() && options) {
-        this.init()
-      } else {
-        this.getChart().update(this.options)
-      }
-    },
-  },
-  beforeDestroy() {
-    if (this.getChart()) {
-      this.getChart().destroy()
-    }
-  },
+interface Props {
+  classname?: string;
+  styles?: Record<string, string | number>;
+  options?: any;
+  highcharts?: typeof Highcharts;
 }
+
+const props = withDefaults(defineProps<Props>(), {
+  classname: 'vue-highcharts',
+  styles: () => ({}),
+});
+
+const chart = ref<any>(null);
+const instance = getCurrentInstance();
+
+const getChart = (): any => {
+  return chart.value;
+};
+
+const addSeries = (options: any): void => {
+  delegateMethod('addSeries', options);
+};
+
+const removeSeries = (): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    while (chartInstance.series.length !== 0) {
+      chartInstance.series[0].remove();
+    }
+  }
+};
+
+const mergeOption = (options: any): void => {
+  delegateMethod('update', options);
+};
+
+const showLoading = (txt: string): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.showLoading(txt);
+  }
+};
+
+const hideLoading = (): void => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.hideLoading();
+  }
+};
+
+const delegateMethod = (name: string, ...args: unknown[]): unknown => {
+  const chartInstance = getChart();
+  if (!chartInstance) {
+    console.log(`Cannot call [${name}] before the chart is initialized. Set prop [options] first.`, instance);
+    return undefined;
+  }
+  return (chartInstance as any)[name](...args);
+};
+
+const init = (): void => {
+  const chartInstance = getChart();
+  if (!chartInstance && props.options && instance?.proxy?.$el) {
+    const highchartInstance = props.highcharts || Highcharts;
+    const element = instance.proxy.$el as HTMLElement;
+    
+    // Create standard Highcharts chart
+    chart.value = new highchartInstance.Chart(element, props.options);
+  }
+};
+
+watch(
+  () => props.options,
+  (options: any) => {
+    const chartInstance = getChart();
+    if (!chartInstance && options) {
+      init();
+    } else if (chartInstance && options) {
+      chartInstance.update(options);
+    }
+  }
+);
+
+onMounted(() => {
+  const chartInstance = getChart();
+  if (!chartInstance && props.options) {
+    init();
+  }
+});
+
+onBeforeUnmount(() => {
+  const chartInstance = getChart();
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+});
+
+// Expose methods to parent component
+defineExpose({
+  getChart,
+  addSeries,
+  removeSeries,
+  mergeOption,
+  showLoading,
+  hideLoading,
+  delegateMethod,
+  init
+});
 </script>

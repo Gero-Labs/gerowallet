@@ -3,27 +3,24 @@ import {
   AssetName,
   Assets,
   AuxiliaryData,
-  AuxiliaryDataHash,
   BaseAddress,
   BigNum,
   Bip32PublicKey,
   ByronAddress,
-  Credential,
-  decode_metadatum_to_json_str,
   Ed25519KeyHash,
   Ed25519Signature,
-  EnterpriseAddress, FixedTransaction,
-  GeneralTransactionMetadata,
-  hash_plutus_data, make_vkey_witness,
-  MetadataJsonSchema,
-  MetadataList,
+  EnterpriseAddress, hash_plutus_data, make_vkey_witness,
   MultiAsset,
+  NativeScript,
+  NativeScripts,
   PlutusData,
   PlutusDatumSchema,
   PointerAddress, PrivateKey,
   PublicKey,
   RewardAddress,
-  ScriptHash, TransactionHash,
+  ScriptAll,
+  ScriptAny,
+  ScriptHash, ScriptNOfK, ScriptPubkey, TransactionHash,
   TransactionInput,
   TransactionOutput,
   TransactionUnspentOutput,
@@ -33,8 +30,6 @@ import {
   Vkeywitness,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
-import { blake2b, blake2bHex } from 'blakejs';
-import { bech32 } from 'bech32';
 import {
   AlgorithmId,
   BigNum as BigNum2,
@@ -44,18 +39,12 @@ import {
   Headers,
   HeaderMap,
   Label,
-  ProtectedHeaderMap, KeyType, COSEKey, COSESign1,
+  ProtectedHeaderMap, KeyType, COSEKey, Int, CurveType,
 } from '@emurgo/cardano-message-signing-browser';
-
-import {
-  AddressType,
-  CIP36VoteRegistrationFormat,
-  TxAuxiliaryDataType,
-  TxOutputDestinationType,
-} from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import { Buffer } from 'buffer';
-import cbor from 'cbor';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
+import { HexBlob } from '@cardano-sdk/util';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 
 const _inMemoryCacheAddressCredentials = new Map();
 const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
@@ -66,8 +55,7 @@ const cacheAddressCredentials = (addrHexOrBech32, addressCredentials) => {
 export function toUTxO(utxo): TransactionUnspentOutput {
   return TransactionUnspentOutput.new(
     TransactionInput.new(TransactionHash.from_hex(utxo.tx_hash), utxo.tx_index),
-    TransactionOutput.new(Address.from_bech32(utxo.payment_addr.bech32), toValue(utxo.asset_list, utxo.value)
-    )
+    TransactionOutput.new(Address.from_bech32(utxo.payment_addr.bech32), toValue(utxo.asset_list, utxo.value))
   );
 }
 
@@ -118,16 +106,6 @@ export const assetsToValue = (assets) => {
   return value;
 };
 
-export function getColor(value) {
-  if (value > 100) {
-    value = 100
-  }
-  value = value / 100
-  //value from 0 to 1
-  const hue = ((1 - value) * 120).toString(10);
-  return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-}
-
 export function getArtists(artists) {
   if (artists !== undefined && Array.isArray(artists)) {
     return artists.join(', ');
@@ -139,17 +117,6 @@ export function formatTime(secs: number): string {
   const minutes = Math.floor(secs / 60) || 0;
   const seconds = (secs - minutes * 60) || 0;
   return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-}
-
-export function unitToFingerprint(unit) {
-  const policyIdBytes = Buffer.from(unit.slice(0,56), 'hex');
-  const assetNameBytes = Buffer.from(unit.slice(56), 'hex');
-  const combined = Buffer.concat([policyIdBytes, assetNameBytes]);
-  // Perform Blake2b-160 hash on the combined bytes
-  const hash = blake2b(combined, null, 20);
-  // Encode the result as Bech32
-  const words = bech32.toWords(hash);
-  return bech32.encode('asset', words)
 }
 
 export function stringToHex(input: string) {
@@ -179,31 +146,44 @@ export function hdPathToArray(path: string): number[] {
     }
   });
 }
+export const CoseLabel = {
+  address: Label.new_text('address'),
+  crv: Label.new_int(Int.new_i32(-1)),
+  x: Label.new_int(Int.new_i32(-2))
+};
 
-export const createSignDataBuilder = (addressBytes: Uint8Array, payload2: string, hashed: boolean) => {
-  const free: any[] = [];
+const createSigStructureHeaders = (addressBytes: Uint8Array) => {
   const protectedHeaders = HeaderMap.new();
-  free.push(protectedHeaders);
-  const labelAlgoid = Label.from_algorithm_id(AlgorithmId.EdDSA);
-  free.push(labelAlgoid);
-  const labelAddress = Label.new_text("address");
-  free.push(labelAddress);
-  const valueAddress = CBORValue.new_bytes(addressBytes);
-  free.push(valueAddress);
-  protectedHeaders.set_algorithm_id(labelAlgoid);
-  protectedHeaders.set_header(labelAddress, valueAddress);
-  const protectedSerialized = ProtectedHeaderMap.new(protectedHeaders);
-  free.push(protectedSerialized);
-  const unprotectedHeaders = HeaderMap.new();
-  free.push(unprotectedHeaders);
-  const headers = Headers.new(protectedSerialized, unprotectedHeaders);
-  free.push(headers);
-  const builder2 = COSESign1Builder.new(headers, toHexBuffer(payload2), false);
-  if (hashed) {
-    builder2.hash_payload();
-  }
-  freeCSLObjects(free);
-  return builder2;
+  protectedHeaders.set_key_id(addressBytes);
+  protectedHeaders.set_header(CoseLabel.address, CBORValue.new_bytes(addressBytes));
+  protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+  return protectedHeaders;
+};
+
+export const createSignDataBuilder = (addressBytes: Uint8Array, payload: string) => {
+  return COSESign1Builder.new(
+    Headers.new(ProtectedHeaderMap.new(createSigStructureHeaders(addressBytes)), HeaderMap.new()),
+    Buffer.from(payload, 'hex'),
+    false
+  );
+};
+
+export const createCoseKey = (addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex) => {
+  const coseKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
+  coseKey.set_key_id(addressBytes);
+  coseKey.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
+  coseKey.set_header(CoseLabel.crv, CBORValue.from_label(Label.from_curve_type(CurveType.Ed25519)));
+  coseKey.set_header(CoseLabel.x, CBORValue.new_bytes(Buffer.from(publicKey, 'hex')));
+  return coseKey;
+};
+
+export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
+  const signedData = accountKey ? accountKey.sign(HexBlob.fromBytes(signingData)).bytes() : signingData;
+  const coseSign1 = builder.build(signedData);
+  const signatureHex = toHexString(coseSign1.to_bytes());
+  safeFreeCSLObject(builder);
+  safeFreeCSLObject(coseSign1);
+  return signatureHex;
 };
 
 export const createCOSEKeyHex = (pubKeyBytes) => {
@@ -239,15 +219,6 @@ export const createCOSEKeyHex = (pubKeyBytes) => {
   freeCSLObjects(free);
   return keyHex;
 };
-
-export function verifyData(data: { key: string; signature: string }, address2: string, payload2: string) {
-  const coseSign1_verify = COSESign1.from_bytes(toHexBuffer(data.signature));
-  const signedSigStruc_verify = coseSign1_verify.signed_data();
-  const isSame = toHexString(signedSigStruc_verify.payload()) === payload2;
-  console.log(payload2)
-  console.warn("verifyData: isSame:", isSame);
-  return isSame;
-}
 
 export const safeFreeCSLObject = (obj2) => {
   if (obj2 && obj2.free) {
@@ -351,29 +322,10 @@ export const isSameArray = (a1, a2) => {
   return a1.length === a2.length && a1.every((v2, i2) => v2 === a2[i2]);
 };
 
-export const hasConwaySetTag = (tx2: FixedTransaction) => {
-  const decodedTx = getDecodedCbor(tx2.to_hex());
-  const decodedTxBody = getDecodedTxBody(decodedTx);
-  for (const item of decodedTxBody) {
-    const key3 = item[0];
-    const value2 = item[1];
-    if (key3 === 0) {
-      return !Array.isArray(value2);
-    }
-  }
-  return false;
+export const hasConwaySetTag = (tx2: Cardano.Tx) => {
+  const tx: Serialization.Transaction = Serialization.Transaction.fromCore(tx2);
+  return tx.body().hasTaggedSets()
 };
-
-export const getDecodedCbor = (cborHex): Array<any> | null  => {
-  try {
-    return !cborHex ? null : cbor.decodeAllSync(Buffer.from(cborHex, 'hex'));
-  } catch (e) {
-    console.error("getDecodedCbor", e);
-  }
-  return null;
-};
-
-const getDecodedTxBody = (tx2) => tx2[0][0];
 
 export const isCatalystVotingRegistrationMetadata = (metadata: AuxiliaryData) => {
   const _metadata = metadata == null ? void 0 : metadata.metadata();
@@ -393,168 +345,6 @@ export const isCatalystVotingRegistrationMetadata = (metadata: AuxiliaryData) =>
     _metadata.free();
   }
   return false;
-};
-
-export function generateLedgerMetadataFromHash(metadataHash: AuxiliaryDataHash) {
-  return {
-    type: TxAuxiliaryDataType.ARBITRARY_HASH,
-    params: {
-      hashHex: metadataHash.to_hex()
-    }
-  };
-}
-
-const getCatalystRegistrationMetadata = (metadata) => {
-  const metaList = MetadataList.from_bytes(metadata.to_bytes());
-  const generalTxMeta = GeneralTransactionMetadata.from_bytes(metaList.get(0).to_bytes());
-  safeFreeCSLObject(metaList);
-  return generalTxMeta;
-};
-
-export function generateLedgerMetadata(accountData, metadata: AuxiliaryData) {
-  if (isCatalystVotingRegistrationMetadata(metadata)) {
-    const metadatum = getCatalystRegistrationMetadata(metadata).get(BigNum.from_str("61284"));
-    const catalyst_meta = JSON.parse(decode_metadatum_to_json_str(metadatum, MetadataJsonSchema.BasicConversions));
-    const votingPublicKey = catalyst_meta["1"];
-    const nonce2 = catalyst_meta["4"];
-    const rewardAddr = Address.from_hex(catalyst_meta["3"].replace(/^0x/, ""));
-    const rewardAddrBech32 = rewardAddr.to_bech32();
-    safeFreeCSLObject(rewardAddr);
-    const cred = getAddressCredentials(rewardAddrBech32);
-    const paymentCred = getOwnedCred([accountData.keys], cred.paymentCred);
-    const stakeCred = getOwnedCred([accountData.keys], cred.stakeCred, "stake");
-    if (!paymentCred || !stakeCred) {
-      throw new Error("Error: generateLedgerMetadata: reward address credentials not found");
-    }
-    const stakingKeyPath = hdPathToArray(stakeCred.path);
-    return {
-      type: TxAuxiliaryDataType.CIP36_REGISTRATION,
-      params: {
-        format: CIP36VoteRegistrationFormat.CIP_15,
-        voteKeyHex: votingPublicKey.replace(/^0x/, ""),
-        // voteKeyPath: BIP32Path;
-        // delegations: Array<CIP36VoteDelegation>;
-        stakingPath: stakingKeyPath,
-        paymentDestination: {
-          type: TxOutputDestinationType.DEVICE_OWNED,
-          params: generateLedgerOwnedAddress(accountData, paymentCred, stakeCred)
-        },
-        nonce: nonce2
-        // votingPurpose: bigint_like;
-      }
-    };
-  } else {
-    return {
-      type: TxAuxiliaryDataType.ARBITRARY_HASH,
-      params: {
-        hashHex: blake2bHex(Buffer.from(metadata.to_bytes()), void 0, 32)
-      }
-    };
-  }
-}
-
-export function generateLedgerMintBundle(mintList2) {
-  const assetGroup = [];
-  const sortedMintList = [...mintList2].sort((a2, b2) => a2[0].localeCompare(b2[0], "en-US"));
-  for (const mint of sortedMintList) {
-    const assetList = [];
-    const sortedAssetList = Object.entries(mint[1]).sort((a2, b2) => {
-      return a2[0].length === b2[0].length ? a2[0].localeCompare(b2[0], "en-US") : a2[0].length - b2[0].length;
-    });
-    for (const asset of sortedAssetList) {
-      assetList.push({
-        assetNameHex: asset[0],
-        amount: asset[1]
-      });
-    }
-    assetGroup.push({
-      policyIdHex: mint[0],
-      tokens: assetList
-    });
-  }
-  return assetGroup;
-}
-
-export const generateLedgerOwnedAddress = (accountData, paymentCred, stakeCred) => {
-  const _paymentCred = typeof paymentCred === "string" ? getOwnedCred([accountData.keys], paymentCred) : paymentCred;
-  const _stakeCred = typeof stakeCred === "string" ? getOwnedCred([accountData.keys], stakeCred, "stake") : stakeCred;
-  if (_paymentCred && _stakeCred) {
-    return {
-      type: AddressType.BASE_PAYMENT_KEY_STAKE_KEY,
-      params: {
-        spendingPath: hdPathToArray(_paymentCred.path),
-        stakingPath: hdPathToArray(_stakeCred.path)
-      }
-    };
-  } else if (_paymentCred && !stakeCred) {
-    return {
-      type: AddressType.ENTERPRISE_KEY,
-      params: {
-        spendingPath: hdPathToArray(_paymentCred.path)
-      }
-    };
-  } else if (_stakeCred && !paymentCred) {
-    return {
-      type: AddressType.REWARD_KEY,
-      params: {
-        stakingPath: hdPathToArray(_stakeCred.path)
-      }
-    };
-  }
-  throw new Error(`generateLedgerOwnedAddress: couldn't find cred for: paymentCred=${paymentCred}, stakeCred=${stakeCred}`);
-}
-
-export const getOwnedCred = (credList, cred, type2?) => {
-  if (!cred || !credList) return null;
-  let key3;
-  for (const creds of credList) {
-    switch (type2) {
-      case "payment":
-        key3 = creds.payment.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "change":
-        key3 = creds.change.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "stake":
-        key3 = creds.stake.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "script":
-        key3 = creds.script.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "drep":
-        key3 = creds.drep.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "cc_cold":
-        key3 = creds.cc_cold.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      case "cc_hot":
-        key3 = creds.cc_hot.find((item) => item.cred === cred);
-        if (key3) return key3;
-        break;
-      default:
-        key3 = creds.payment.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.change.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.stake.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.script.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.drep.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.cc_cold.find((item) => item.cred === cred);
-        if (key3) return key3;
-        key3 = creds.cc_hot.find((item) => item.cred === cred);
-        if (key3) return key3;
-    }
-  }
-  return null;
 };
 
 const getAddressBytes = (addrHexOrBech32) => {
@@ -727,47 +517,16 @@ const getPlutusDataJSONFromCSL = (cslPlutusData) => {
   return _json ?? null;
 };
 
-export const isScriptStakeAddress = (addrBech32) => {
-  let type2 = null;
-  try {
-    type2 = getAddressType(addrBech32);
-  } catch (error3) {
-    console.warn("Could not determine address type.", error3);
-    return false;
-  }
-  switch (type2) {
-    case 2:
-    case 3:
-    case 15:
+export const isScriptStakeAddress = (addrBech32: string): boolean => {
+  const address: Cardano.Address = Cardano.Address.fromString(addrBech32);
+  switch(address.getType()) {
+    case Cardano.AddressType.BasePaymentKeyStakeScript:
+    case Cardano.AddressType.BasePaymentScriptStakeScript:
+    case Cardano.AddressType.RewardScript:
       return true;
+    default:
+      return false;
   }
-  return false;
-};
-
-function getAddressType(addrBech32) {
-  const addrBytes = getAddressBytes(addrBech32);
-  if (!addrBytes) {
-    throw new Error('Could not parse address "' + addrBech32 + '".');
-  }
-  return (addrBytes[0] & 240) >> 4;
-}
-
-export const getRewardAddressFromCred = (stakeCred, network2: number) => {
-  const cslStakeCred = getCSLCredential(stakeCred);
-  const cslRewardAddr = RewardAddress.new(network2, cslStakeCred);
-  const cslAddr = cslRewardAddr.to_address();
-  const addr = cslAddr.to_bech32(void 0);
-  safeFreeCSLObject(cslAddr);
-  safeFreeCSLObject(cslRewardAddr);
-  safeFreeCSLObject(cslStakeCred);
-  return addr;
-};
-
-const getCSLCredential = (cred, _free?) => {
-  const cslKeyHash = Ed25519KeyHash.from_bytes(toHexBuffer(cred));
-  const cslCred = Credential.from_keyhash(cslKeyHash);
-  safeFreeCSLObject(cslKeyHash);
-  return cslCred;
 };
 
 export const assembleWitnesses = (accountData2, signedTxData) => {
@@ -778,7 +537,6 @@ export const assembleWitnesses = (accountData2, signedTxData) => {
     vkeyWitnesses.add(getVkeyWitness(pubKey, witness.witnessSignatureHex));
   }
   witnesses.set_vkeys(vkeyWitnesses);
-  console.log(witnesses.to_json())
   const witnessSetHex = witnesses.to_hex();
   safeFreeCSLObject(vkeyWitnesses);
   safeFreeCSLObject(witnesses);
@@ -869,3 +627,192 @@ export const addVkeys = (cslTxHash, cslWitnessSet, credList, prvRootKeyBech32: B
   safeFreeCSLObject(cslVkeys);
   return cslWitnessSetOwned;
 };
+
+export const jsonToNativeScript = (json) => {
+  if (json.type === "sig") {
+    // Single signature case
+    const keyHashHex = json.keyHash;
+    const keyHashBytes = toHexArray(keyHashHex);// Buffer.from(keyHashHex, 'hex');
+    const ed25519KeyHash = Ed25519KeyHash.from_bytes(keyHashBytes);
+    return NativeScript.new_script_pubkey(ScriptPubkey.new(ed25519KeyHash));
+  } else if (json.type === "all") {
+    // ALL case - all scripts must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_all(ScriptAll.new(scripts));
+  } else if (json.type === "any") {
+    // ANY case - any one script must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_any(ScriptAny.new(scripts));
+  } else if (json.type === "atLeast") {
+    // N-of-K case - at least N scripts must be satisfied
+    const scripts = NativeScripts.new();
+    for (const scriptJson of json.scripts) {
+      scripts.add(jsonToNativeScript(scriptJson));
+    }
+    return NativeScript.new_script_n_of_k(ScriptNOfK.new(json.required, scripts));
+  } else {
+    throw new Error("Unknown script type: " + json.type);
+  }
+};
+
+/**
+ * Creates legacy UTXO structure from Cardano JS SDK transaction format
+ * This is needed for TransactionDetails component compatibility and transaction calculations
+ * @param tx - Transaction with Cardano JS SDK body structure
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Legacy UTXO structure with inputs and outputs
+ */
+export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
+  const inputs: any[] = [];
+  const outputs: any[] = [];
+
+  // Convert inputs from Cardano JS SDK format to legacy format
+  // For inputs, we need to find the actual UTXO values from our UTXO set
+  if (tx.body?.inputs) {
+    tx.body.inputs.forEach((input: any) => {
+      // Try to find the corresponding UTXO from provided UTXOs
+      const utxo = utxos.find((utxo: any) =>
+        utxo[0].txId === input.txId && utxo[0].index === input.index
+      );
+
+      let address = '';
+      let amount: any[] = [];
+
+      if (utxo) {
+        // Use the actual UTXO data
+        address = utxo[1].address;
+        amount = [{
+          unit: 'lovelace',
+          quantity: Number(utxo[1].value.coins)
+        }];
+
+        if (utxo[1].value.assets && utxo[1].value.assets.size > 0) {
+          utxo[1].value.assets.forEach((quantity: bigint, assetId: string) => {
+            amount.push({
+              unit: assetId,
+              quantity: Number(quantity)
+            });
+          });
+        }
+      }
+
+      inputs.push({
+        tx_hash: input.txId,
+        output_index: input.index,
+        address: address,
+        amount: amount
+      });
+    });
+  }
+
+  // Convert outputs from Cardano JS SDK format to legacy format
+  if (tx.body?.outputs) {
+    tx.body.outputs.forEach((output: any, index: number) => {
+      const amount: any[] = [{
+        unit: 'lovelace',
+        quantity: Number(output.value.coins)
+      }];
+
+      // Convert assets map to array format
+      if (output.value.assets && output.value.assets.size > 0) {
+        output.value.assets.forEach((quantity: bigint, assetId: string) => {
+          amount.push({
+            unit: assetId,
+            quantity: Number(quantity)
+          });
+        });
+      }
+
+      outputs.push({
+        output_index: index,
+        address: output.address,
+        amount: amount
+      });
+    });
+  }
+
+  return {
+    inputs,
+    outputs
+  };
+}
+
+/**
+ * Converts transactions to database schema format
+ * Handles various transaction formats including Cardano JS SDK and legacy formats
+ * @param txs - Array of transactions to convert
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Array of converted transactions ready for database storage
+ */
+export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[]): any[] {
+  return txs.map(tx => {
+    // Check if this is already a properly formatted transaction with utxo data
+    if (tx.id && tx.utxo) {
+      return tx;
+    }
+
+    // If transaction has id and Cardano JS SDK structure but no utxo, create utxo structure
+    if (tx.id && tx.body && !tx.utxo) {
+      return {
+        ...tx,
+        utxo: createUtxoStructure(tx, utxos)
+      };
+    }
+
+    // Check if this is a transaction from sync with deserialized body
+    if (tx.body && tx.cbor) {
+      // Transaction is already deserialized from sync process
+      // Just need to ensure it has the id field
+      const txId = tx.tx_hash || tx.id;
+      return {
+        ...tx,
+        id: txId
+      };
+    }
+
+    // Check if this is a raw transaction with CBOR that needs full conversion
+    if (tx.cbor && !tx.body) {
+      try {
+        // Use the already imported Serialization from the top of the file
+        // Deserialize the transaction
+        const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
+        const txId = tx.tx_hash || Serialization.Transaction.fromCore(txDeserialized).getId();
+
+        // Return the transaction in the expected database format
+        return {
+          id: txId,
+          tx_hash: txId,
+          block_hash: tx.block_hash || '',
+          block_height: tx.block_height || 0,
+          absolute_slot: tx.absolute_slot || 0,
+          tx_timestamp: tx.tx_timestamp || Math.floor(Date.now() / 1000),
+          tx_size: tx.tx_size || 0,
+          epoch_no: tx.epoch_no || 0,
+          cbor: tx.cbor,
+          body: txDeserialized.body,
+          witness: txDeserialized.witness,
+          auxiliaryData: txDeserialized.auxiliaryData,
+          isValid: txDeserialized.isValid !== false,
+          pending: false,
+          // Include UTXO data if available from sync
+          utxo: tx.utxo
+        };
+      } catch (e) {
+        console.error('Error deserializing transaction CBOR:', e);
+        // Fallback: ensure it at least has an id
+        const fallbackId = tx.tx_hash || tx.hash || 'fallback_' + Date.now();
+        return { ...tx, id: fallbackId };
+      }
+    }
+
+    // Legacy format - just ensure it has an id
+    const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
+    return { ...tx, id: txId };
+  });
+}

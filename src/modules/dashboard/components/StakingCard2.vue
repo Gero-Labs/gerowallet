@@ -1,155 +1,325 @@
 <template>
-  <v-card flat outlined :loading="loadingTxs">
-    <v-card-title>Staking</v-card-title>
+  <v-card flat outlined class="fill-height liquid-glass" :loading="loadingTxs || poolLoading">
+    <v-card-title>
+      <router-link
+        to="/staking"
+        style="text-decoration: auto; color: white;"
+      >Staking</router-link>
+    </v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
-        <v-row no-gutters style="background-color: #161B26" class="py-4">
+        <v-row no-gutters class="staking2-header-row py-2">
           <v-col cols="6" class="px-2 text-center">
             <span>Delegating to</span>
-            <h2 style="color: white" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h2>
-            <v-btn x-small text color="#F97066" @click="unstake">Unstake</v-btn>
+            <div v-if="currentPool" class="d-flex align-center justify-center">
+              <v-avatar size="28" class="mr-2">
+                <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
+              </v-avatar>
+              <h3 class="staking2-pool-title">{{ `${currentPool.ticker}` }}</h3>
+              <v-menu 
+                v-model="socialMenuOpen" 
+                offset-y 
+                :close-on-content-click="false" 
+                max-width="250"
+                eager
+                transition="fade-transition"
+                :content-class="'social-menu-content'"
+                nudge-bottom="8"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn icon small v-bind="attrs" v-on="on" class="ml-1 staking2-social-btn">
+                    <v-icon small color="white">mdi-share-variant</v-icon>
+                  </v-btn>
+                </template>
+
+                <v-card class="social-dropdown-card">
+                  <v-card-title class="py-2 px-3">
+                    <span class="subtitle-2">Pool Links</span>
+                  </v-card-title>
+                  <v-divider></v-divider>
+                  <v-list dense class="social-links-list">
+                    <v-list-item
+                      v-if="currentPool?.homepage"
+                      :href="currentPool.homepage"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-icon small>mdi-web</v-icon>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">Website</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+
+                    <v-list-item
+                      v-if="poolExtendedInfo?.info?.social?.facebook_handle"
+                      :href="'https://www.facebook.com/' + poolExtendedInfo.info.social.facebook_handle"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-icon small>mdi-facebook</v-icon>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">Facebook</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+
+                    <v-list-item
+                      v-if="poolExtendedInfo?.info?.social?.twitter_handle"
+                      :href="'https://x.com/' + poolExtendedInfo.info.social.twitter_handle"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-avatar tile size="16">
+                          <v-img :src="assets.xSvg" alt="x"></v-img>
+                        </v-avatar>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">X (Twitter)</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+
+                    <v-list-item
+                      v-if="poolExtendedInfo?.info?.social?.youtube_handle"
+                      :href="'https://youtube.com/' + poolExtendedInfo.info.social.youtube_handle"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-icon small>mdi-youtube</v-icon>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">YouTube</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+
+                    <v-list-item
+                      v-if="poolExtendedInfo?.info?.social?.discord_handle"
+                      :href="'https://discord.gg/' + poolExtendedInfo.info.social.discord_handle"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-avatar tile size="16">
+                          <v-img :src="assets.discordSvg" alt="discord" contain></v-img>
+                        </v-avatar>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">Discord</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+
+                    <v-list-item
+                      v-if="poolExtendedInfo?.info?.social?.telegram_handle"
+                      :href="'https://t.me/' + poolExtendedInfo.info.social.telegram_handle"
+                      target="_blank"
+                      class="social-link-item"
+                    >
+                      <v-list-item-icon class="mr-3">
+                        <v-avatar tile size="16">
+                          <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
+                        </v-avatar>
+                      </v-list-item-icon>
+                      <v-list-item-content>
+                        <v-list-item-title class="social-link-text">Telegram</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+                  </v-list>
+                </v-card>
+              </v-menu>
+            </div>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Total</span>
-            <h2 style="color: white" v-if="loggedWallet && account">{{ account.controlled_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</h2>
+            <h4 class="staking2-amount-value" v-if="loggedWallet && account">
+              {{
+                filters.toCurrency(
+                  account.controlled_amount,
+                  false,
+                  2,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                  '',
+                  true
+                )
+              }}
+            </h4>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
             <span>Rewards</span>
-            <h2 style="color: white">{{ account?.withdrawable_amount | toCurrency(false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</h2>
-            <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
-              Withdraw
-            </v-btn>
+            <h4 class="staking2-amount-value">
+              {{
+                filters.toCurrency(
+                  account?.withdrawable_amount,
+                  false,
+                  2,
+                  networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                )
+              }}
+            </h4>
           </v-col>
         </v-row>
         <v-row no-gutters class="pt-2">
           <v-col cols="6" class="px-4">
-            <div>
-              <v-btn icon small v-if="pool?.homepage" :href="pool?.homepage" target="_blank">
-                <v-icon small>
-                  mdi-web
-                </v-icon>
-              </v-btn>
-              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.facebook_handle" :href="'https://www.facebook.com/'+poolExtendedInfo?.info?.social?.facebook_handle" target="_blank">
-                <v-icon small>
-                  mdi-facebook
-                </v-icon>
-              </v-btn>
-              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.twitter_handle" :href="'https://x.com/'+poolExtendedInfo?.info?.social?.twitter_handle" target="_blank">
-                <v-avatar tile size="14">
-                  <v-img :src="assets.xSvg" alt="x"></v-img>
-                </v-avatar>
-              </v-btn>
-              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.youtube_handle" :href="'https://youtube.com/'+poolExtendedInfo?.info?.social?.youtube_handle" target="_blank">
-                <v-icon small>
-                  mdi-youtube
-                </v-icon>
-              </v-btn>
-              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.discord_handle" :href="'https://discord.gg/'+poolExtendedInfo?.info?.social?.discord_handle" target="_blank">
-                <v-avatar tile size="14">
-                  <v-img :src="assets.discordSvg" alt="discord" contain></v-img>
-                </v-avatar>
-              </v-btn>
-              <v-btn icon small v-if="poolExtendedInfo?.info?.social?.telegram_handle" :href="'https://t.me/'+poolExtendedInfo?.info?.social?.telegram_handle" target="_blank">
-                <v-avatar tile size="14">
-                  <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
-                </v-avatar>
-              </v-btn>
-            </div>
-            <v-row no-gutters class="pt-2 pb-1">
-              <v-col cols="6" style="display: block;text-align: center;" v-if="account">
-                <h4>Pool Id</h4>
-                <span style="color: white;">{{ account.pool_id | truncate }}</span>
-                <CopyButton :value="account.pool_id" x-small></CopyButton>
-              </v-col>
-              <v-col cols="6" style="display: block;text-align: center;">
+            <v-row no-gutters class="pt-2 pb-2">
+              <v-col cols="4" class="staking2-stat-col">
                 <h4>ROS</h4>
-                <span style="color: white;">{{ pool?.ros ? pool.ros.toFixed(2)+'%' : '0%' }}</span>
+                <span class="staking2-stat-value">{{
+                  currentPool?.ros ? currentPool.ros.toFixed(2) + '%' : '0%'
+                }}</span>
+              </v-col>
+              <v-col cols="4" class="staking2-stat-col" v-if="currentPool">
+                <h4>Pledge</h4>
+                <div class="staking2-pledge-container">
+                  <span class="staking2-pledge-text">{{
+                    filters.toCurrency(
+                      currentPool.pledge,
+                      false,
+                      1,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                      '',
+                      true
+                    )
+                  }}</span>
+                  <v-icon
+                    x-small
+                    :color="Number(currentPool.pledge) <= Number(currentPool.live_pledge) ? '#47cd89' : '#F97066'"
+                    class="ml-1"
+                  >
+                    {{ Number(currentPool.pledge) <= Number(currentPool.live_pledge) ? 'mdi-check' : 'mdi-close' }}
+                  </v-icon>
+                </div>
+              </v-col>
+              <v-col cols="4" class="staking2-stat-col" v-if="loggedWallet && currentPool">
+                <h4>Fees</h4>
+                <span class="staking2-fees-text"
+                  >{{ currentPool.margin + '%' }} /
+                  {{
+                    filters.toCurrency(
+                      currentPool.fixed_cost,
+                      false,
+                      0,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
+                    )
+                  }}</span
+                >
               </v-col>
             </v-row>
-            <v-row no-gutters>
-              <v-col cols="6" style="display: block;text-align: center;" v-if="loggedWallet && pool">
-                <h4>Fees</h4>
-                <span style="font-size: 14px; color: white">{{ pool.margin + '%' }} / {{ pool.fixed_cost | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}</span>
-              </v-col>
-              <v-col cols="6" style="display: block;text-align: center;" v-if="pool">
-                <h4>Saturation</h4>
-                <v-progress-linear rounded :color="getColor(pool.live_saturation)" height="16" :value="pool.live_saturation" striped>
+          </v-col>
+          <v-col cols="6" class="px-4">
+            <div v-if="currentPool" class="staking2-saturation-container">
+              <div class="staking2-saturation-header">
+                <strong class="staking2-stake-amount">{{
+                  filters.toCurrency(currentPool.active_stake, false, 1, '₳', '', true)
+                }}</strong>
+                <h4 class="staking2-saturation-title">Saturation</h4>
+                <strong
+                  v-if="Number(currentPool.active_stake) - Number(currentPool.live_stake) > 100000000"
+                  class="staking2-stake-change-up"
+                >
+                  <v-icon x-small color="#47cd89" class="staking2-arrow-icon">mdi-arrow-up-bold</v-icon>
+                  {{
+                    filters.toCurrency(
+                      Number(currentPool.active_stake) - Number(currentPool.live_stake),
+                      false,
+                      1,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                      '',
+                      true
+                    )
+                  }}
+                </strong>
+                <strong
+                  v-else-if="Number(currentPool.live_stake) - Number(currentPool.active_stake) > 100000000"
+                  class="staking2-stake-change-down"
+                >
+                  <v-icon x-small color="#F97066" class="staking2-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                  {{
+                    filters.toCurrency(
+                      Number(currentPool.live_stake) - Number(currentPool.active_stake),
+                      false,
+                      1,
+                      networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network),
+                      '',
+                      true
+                    )
+                  }}
+                </strong>
+                <span v-else class="staking2-placeholder">&nbsp;</span>
+              </div>
+              <div class="staking2-progress-container">
+                <v-progress-linear
+                  rounded
+                  :color="filters.getColor(currentPool.live_saturation)"
+                  height="16"
+                  :value="currentPool.live_saturation"
+                  striped
+                  class="staking2-progress-bar"
+                >
                   <template v-slot:default="{ value }">
                     <strong>{{ Math.ceil(value) }}%</strong>
                   </template>
                 </v-progress-linear>
-                <div class="justify-space-between d-flex align-items-center" style="font-size: 10px; text-align-last: justify; color: white">
-                  <strong>{{ pool.active_stake | toCurrency(false, 1, '₳', '', true) }}</strong>
-                  <strong v-if="Number(pool.active_stake) - Number(pool.live_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
-                    <v-icon x-small color="#47cd89" style="font-size: 10px">mdi-arrow-up-bold</v-icon>
-                    {{ Number(pool.active_stake) - Number(pool.live_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
-                  </strong>
-                  <strong v-else-if="Number(pool.live_stake) - Number(pool.active_stake) > 100000000" style="display: inline-flex; font-size: 10px; color: white">
-                    <v-icon x-small color="#F97066" style="font-size: 10px; line-height: 1.7;">mdi-arrow-down-bold</v-icon>
-                    {{ Number(pool.live_stake) - Number(pool.active_stake) | toCurrency(false, 1, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}
-                  </strong>
-                </div>
-              </v-col>
-            </v-row>
-          </v-col>
-          <v-col cols="6" class="px-4" style="align-content: center">
-            <v-card-text v-if="!rewardsChartData || Object.values(rewardsChartData).length === 0" style="font-size: 20px;align-content: center;" class="text-center">
-              <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
-              <span v-else>No Rewards Yet</span>
-            </v-card-text>
-            <div style="min-height: 155px" v-else>
-              <RewardsChart :chart-data="rewardsChartData"></RewardsChart>
+              </div>
             </div>
           </v-col>
         </v-row>
-        <v-row no-gutters class="pt-4">
+
+        <!-- Reward History Chart Row - Full Width -->
+        <v-row no-gutters class="px-4 pb-2">
           <v-col cols="12">
-            <v-data-table :items="rewardsData" :headers="stakingHeaders" class="transparent"
-                          :hide-default-footer="!(rewardsData?.length > 0)"
-                          :sort-by.sync="sortBy"
-                          :sort-desc.sync="sortDesc" dense
-                          :items-per-page="5"
-                          :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+            <v-card-text
+              v-if="!rewardsChartData || Object.values(rewardsChartData).length === 0"
+              class="staking2-no-rewards text-center pa-4"
             >
-              <template v-slot:[`item.pool_id`]="{ item }">
-                <v-list-item two-line>
-                  <v-list-item-avatar size="40" v-if="resolvePoolIcon(item.pool_id)">
-                    <v-img :src="resolvePoolIcon(item.pool_id)" :alt="item.pool_id+ ' Icon'"></v-img>
-                  </v-list-item-avatar>
-                  <v-list-item-content>
-                    <v-list-item-title>{{ resolvePoolName(item.pool_id) }}</v-list-item-title>
-                    <v-list-item-subtitle style="display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
-                      {{ resolvePoolDescription(item.pool_id) }}
-                    </v-list-item-subtitle>
-                  </v-list-item-content>
-                </v-list-item>
-              </template>
-              <template v-slot:[`item.amount`]="{ item }">
-                <span v-if="isNumeric(item.amount)"
-                      :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">{{
-                    item.amount | toCurrency(false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
-                  }}</span>
-                <span v-else>{{ item.amount }}</span>
-              </template>
-              <template v-slot:[`item.change`]="{ item }">
-                <v-avatar tile size="20">
-                  <v-img
-                    :src="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? assets.arrowRightSvg : change(item) >= 0 ? assets.trendUpSvg : assets.trendDownSvg"
-                    alt="trend"></v-img>
-                </v-avatar>&nbsp;
-                <span :style="isNaN(change(item)) || change(item) === Infinity || change(item) === 0 ? {color: '#A3A3A3' } : change(item) >= 0 ? { color: '#47CD89'} : { color: '#F97066'}">
-                  {{ isNaN(change(item)) || change(item) === Infinity ? '0%' : filters.toCurrency(change(item), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
-                  }}</span>
-              </template>
-              <template v-slot:[`item.date`]="{ item }">
-                <v-list-item two-line class="px-0">
-                  <v-list-item-content>
-                    <v-list-item-title>{{ item.date }}</v-list-item-title>
-                    <v-list-item-subtitle>{{ item.time }}</v-list-item-subtitle>
-                  </v-list-item-content>
-                </v-list-item>
-              </template>
-            </v-data-table>
+              <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
+              <span v-else>No Rewards Yet</span>
+            </v-card-text>
+            <div class="staking2-chart-container" v-else>
+              <RewardsChart :chart-data="rewardsChartData" class="staking2-chart"></RewardsChart>
+            </div>
+          </v-col>
+        </v-row>
+
+        <!-- Action Buttons Row -->
+        <v-row no-gutters class="px-4 pb-3 pt-2 staking-action-buttons">
+          <v-col cols="6">
+            <v-btn
+              elevation="2"
+              small
+              color="error"
+              @click="unstake"
+              block
+              outlined
+              class="staking2-unstake-btn"
+            >
+              <span class="staking2-unstake-text">Unstake</span>
+            </v-btn>
+          </v-col>
+          <v-col cols="6" class="pl-3">
+            <v-btn
+              v-if="account?.withdrawable_amount > 0"
+              elevation="2"
+              small
+              color="#1a1a1a"
+              @click="withdraw"
+              block
+              :class="isApex ? 'apexButton' : 'geroButton'"
+            >
+              Withdraw
+            </v-btn>
+            <v-btn
+              v-else
+              elevation="2"
+              small
+              color="#1a1a1a"
+              disabled
+              block
+              class="staking2-no-rewards-btn">
+              <span class="staking2-no-rewards-text">No Rewards</span>
+            </v-btn>
           </v-col>
         </v-row>
       </v-layout>
@@ -158,206 +328,368 @@
     <WithdrawalDialog :is-open="withdrawalDialog" @close="withdrawalDialog = false" :tx="txData"></WithdrawalDialog>
   </v-card>
 </template>
-<script>
+<script setup lang="ts">
+import { computed, ref, toRefs, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
-import filters from "@/shared/utils/filters";
-import {useStore} from "@/stores";
-import CopyButton from "@/shared/components/CopyButton.vue";
-import {Network} from "@/models/types";
-import {mapState} from "pinia";
+import filters from '@/shared/utils/filters';
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
-import {
-  Certificate, Credential, Ed25519KeyHash,
-  StakeDeregistration,
-  Transaction, TransactionUnspentOutputs, TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
-import { toUTxO } from '@/shared/utils/converter';
-import { buildTx } from '@/shared/utils/builder';
-import WithdrawalDialog from "@/modules/staking/dialogs/WithdrawalDialog.vue";
+import { Cardano } from '@cardano-sdk/core';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import networks from '@/utils/networks';
-import { walletConfigStore } from '@/stores/modules/walletConfig';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
+import { loadingState } from '@/stores/loading';
+import stakingStoreActions from '@/stores/stakingStore';
+import { Blockchain } from '@/models/types';
 
-export default {
-  name: 'StakingCard2',
-  components: {WithdrawalDialog, UnstakeDialog, CopyButton, RewardsChart},
-  props: {
-    chartData: {
-      type: Object,
-      default: () => {
-      },
-    },
-    project: {
-      type: Object,
-      default: () => {
-      },
-    },
-  },
-  computed: {
-    networks() {
-      return networks
-    },
-    filters() {
-      return filters
-    },
-    ...mapState(useStore, ['rewards','loggedWallet','pools', 'loadingTxs', 'latestTip', 'baseAddress', 'stakeAddress', 'loadingTxs']),
-    ...mapState(walletConfigStore, ['utxos', 'account']),
-    Network() {
-      return Network
-    },
-    pool() {
-      if (this.pools) {
-        return this.pools.find(pool => pool.pool_id_bech32 === this.account.pool_id)
+const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
+const { tip, epochParams } = toRefs(networkStore);
+const { loadingTxs } = toRefs(loadingState);
+const { currentPool, poolLoading } = toRefs(stakingStoreActions.state);
+
+const hideZero = ref<boolean>(false);
+const unstakeDialog = ref<boolean>(false);
+const withdrawalDialog = ref<boolean>(false);
+const txData = ref<any>(undefined);
+const socialMenuOpen = ref<boolean>(false);
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
+const poolExtendedInfo = computed(() => {
+  if (currentPool.value) {
+    return JSON.parse(currentPool.value.pool_extended_info);
+  }
+  return null;
+});
+
+const rewardsData = computed(() => {
+  if (rewards.value && !hideZero.value) {
+    let rewardsCopy = JSON.parse(JSON.stringify(rewards.value));
+    if (rewardsCopy.length > 0) {
+      const min = rewardsCopy[0].epoch;
+      for (let i = 0; i < rewardsCopy.length; i++) {
+        if (rewardsCopy[i] && rewardsCopy[i].epoch === i) continue;
+        rewardsCopy.splice(i, 0, Object.assign({}, rewardsCopy[i - 1], { epoch: i, amount: '0' }));
       }
-      return null
-    },
-    poolExtendedInfo() {
-      if (this.pool) {
-        return JSON.parse(this.pool.pool_extended_info)
-      }
-      return null
-    },
-    rewardsData() {
-      if (this.rewards && !this.hideZero) {
-        let rewardsCopy = JSON.parse(JSON.stringify(this.rewards)).sort((a,b) => a.epoch - b.epoch)
-        if (rewardsCopy.length > 0) {
-          const min = rewardsCopy[0].epoch
-          for (let i = 0 ; i < rewardsCopy.length ; i ++) {
-            if (rewardsCopy[i] && rewardsCopy[i].epoch === i) continue;
-            rewardsCopy.splice(i, 0, Object.assign({}, rewardsCopy[i - 1], { epoch: i, amount: '0'}))
-          }
-          return rewardsCopy.slice(min)
-        }
-      }
-      return this.rewards
-    },
-    rewardsChartData() {
-      const obj = {}
-      if (this.rewardsData) {
-        this.rewardsData.slice(-10).forEach(value => {
-          obj[value.epoch] = Number(value.amount) / 1000000
-        })
-      }
-      return obj
-    },
-  },
-  data() {
-    return {
-      hideZero: false,
-      sortBy: 'epoch',
-      sortDesc: true,
-      stakingHeaders: [
-        {text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id'},
-        {text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88},
-        {text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100},
-        {text: 'Change', align: 'start', sortable: true, value: 'change', width: 120},
-      ],
-      blockchainDB: undefined,
-      unstakeDialog: false,
-      withdrawalDialog: false,
-      txData: undefined,
-      assets,
-    }
-  },
-  filters,
-  methods: {
-    withdraw() {
-      console.log('test')
-      const wallet = useStore().getWallet;
-      // Withdrawals
-      const withdrawals = []
-      if (this.account?.withdrawable_amount && Number(this.account?.withdrawable_amount) > 0) {
-        withdrawals.push({
-          address: this.stakeAddress,
-          amount: this.account.withdrawable_amount
-        })
-      }
-      const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-      this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-      const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, [], withdrawals)
-      this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-      console.log(txBody.to_json())
-      this.withdrawalDialog = true
-    },
-    unstake() {
-      console.log('test')
-      const wallet = useStore().getWallet;
-      const certificates = [];
-      if (this.account?.active) {
-        // DeRegistration Certificate
-        const deRegistrationCertificate = Certificate.new_stake_deregistration(StakeDeregistration.new(Credential.from_keyhash(Ed25519KeyHash.from_hex(wallet.stakeKey().hash().hex()))))
-        certificates.push(deRegistrationCertificate);
-        // Withdrawals
-        const withdrawals = []
-        if (this.account?.withdrawable_amount && Number(this.account.withdrawable_amount) > 0) {
-          withdrawals.push({
-            address: this.stakeAddress,
-            amount: this.account.withdrawable_amount
-          })
-        }
-        const transactionUnspentOutputs = TransactionUnspentOutputs.new();
-        this.utxos.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
-        const txBody = buildTx(this.loggedWallet, undefined, transactionUnspentOutputs, this.latestTip.slot, this.baseAddress, certificates, withdrawals)
-        this.txData = Transaction.new(txBody, TransactionWitnessSet.new())
-        console.log(txBody.to_json())
-        this.unstakeDialog = true
-      }
-    },
-    getColor(value) {
-      if (value > 100) {
-        value = 100
-      }
-      value = value / 100
-      //value from 0 to 1
-      const hue = ((1 - value) * 120).toString(10);
-      return ["hsl(", hue, ",57.26%,54.12%)"].join("");
-    },
-    change(item) {
-      const index = this.rewardsData.indexOf(item)
-      if (this.rewardsData[index-1]) {
-        let previous = this.rewardsData[index-1]
-        if (previous) {
-          if (previous.amount === 0) {
-            return 0
-          }
-          return Number(item.amount) - Number(previous.amount)
-        }
-      }
-      return 0
-    },
-    resolvePoolIcon(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return JSON.parse(pool.pool_extended_info)?.info?.url_png_icon_64x64
-      }
-      return ''
-    },
-    resolvePoolName(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return `[${pool.ticker}] ${pool.name}`
-      }
-      return 'N/A'
-    },
-    resolvePoolDescription(poolId) {
-      const pool = this.pools.find(pool => pool.pool_id_bech32 === poolId)
-      if (pool) {
-        return pool.description
-      }
-      return ''
-    },
-    isNumeric(n) {
-      return !isNaN(parseFloat(n)) && isFinite(n);
+      return rewardsCopy.slice(min);
     }
   }
-}
+  return rewards.value;
+});
+
+const rewardsChartData = computed(() => {
+  const obj = {};
+  if (rewardsData.value) {
+    rewardsData.value.slice(-10).forEach(value => {
+      obj[value.epoch] = Number(value.amount) / 1000000;
+    });
+  }
+  return obj;
+});
+
+const withdraw = async () => {
+  try {
+    // Prepare withdrawals if there are any rewards
+    const withdrawals: Cardano.Withdrawal[] = [];
+    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+      withdrawals.push({
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount),
+      });
+    }
+
+    // Use the generic transaction builder for withdrawal-only transaction
+    txData.value = await buildCardanoTransaction({
+      withdrawals,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+    });
+
+    withdrawalDialog.value = true;
+  } catch (error) {
+    console.error('Error building withdrawal transaction:', error);
+  }
+};
+
+const unstake = async () => {
+  try {
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
+
+    // Check if stake key is registered
+    if (!account.value?.active) {
+      throw new Error('Cannot unstake: stake key is not registered');
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+    // Create deregistration certificate
+    const certificate: Cardano.Certificate = {
+      __typename: Cardano.CertificateType.StakeDeregistration,
+      stakeCredential,
+    };
+    certificates.push(certificate);
+
+    // Prepare withdrawals if there are any rewards
+    const withdrawals: Cardano.Withdrawal[] = [];
+    if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+      withdrawals.push({
+        stakeAddress: loggedWallet.value.stakeAddress,
+        quantity: BigInt(account.value.withdrawable_amount),
+      });
+    }
+
+    // Use the generic transaction builder
+    // For unstaking, deposit is returned (negative implicit coin)
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      withdrawals,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin: -stakeKeyDepositLovelace, // Deposit is returned
+    });
+    unstakeDialog.value = true;
+  } catch (error) {
+    console.error('Error building unstake transaction:', error);
+    // You might want to show an error message to the user here
+  }
+};
+
+const loadPoolData = async (poolId: string) => {
+  if (poolId && loggedWallet.value) {
+    try {
+      stakingStoreActions.clearCurrentPool();
+      await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
+    } catch (error) {
+      console.error('Error loading pool data:', error);
+    }
+  }
+};
+
+watch(
+  () => account.value?.pool_id,
+  async (newPoolId, oldPoolId) => {
+    if (newPoolId && newPoolId !== oldPoolId) {
+      await loadPoolData(newPoolId);
+    }
+  },
+  { immediate: true }
+);
+
+onMounted(async () => {
+  if (account.value?.pool_id) {
+    await loadPoolData(account.value.pool_id);
+  }
+});
 </script>
-<style>
+<style scoped>
 .v-progress-linear__determinate {
   background: linear-gradient(90deg, #00c7f3, #00ffd1);
 }
 
-.v-data-table-header {
-  background-color: rgb(22, 27, 38);
+.staking-action-buttons {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  left: 0;
+}
+
+/* Social Dropdown Liquid Glass Effect */
+.social-dropdown-card {
+  background: linear-gradient(135deg, rgba(12, 14, 18, 0.98), rgba(22, 27, 38, 0.96)) !important;
+  backdrop-filter: blur(12px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+              0 2px 8px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.social-links-list {
+  background: transparent !important;
+}
+
+.social-link-item {
+  border-radius: 8px !important;
+  margin: 2px 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.social-link-item:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-1px);
+}
+
+.social-link-text {
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* StakingCard2 specific styles */
+.staking2-header-row {
+  background-color: #161b26;
+}
+
+.staking2-pool-title {
+  color: white;
+  font-size: 28px;
+  margin: 0;
+}
+
+.staking2-social-btn {
+  margin-top: -2px;
+}
+
+.staking2-amount-value {
+  color: white;
+  font-size: 16px;
+  margin: 4px 0;
+}
+
+.staking2-stat-col {
+  display: block;
+  text-align: center;
+}
+
+.staking2-stat-value {
+  color: white;
+  font-size: 13px;
+}
+
+.staking2-pledge-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.staking2-pledge-text {
+  color: white;
+  font-size: 12px;
+}
+
+.staking2-fees-text {
+  font-size: 12px;
+  color: white;
+}
+
+.staking2-saturation-container {
+  padding-top: 8px;
+}
+
+.staking2-saturation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.staking2-stake-amount {
+  font-size: 10px;
+  color: white;
+}
+
+.staking2-saturation-title {
+  margin: 0;
+}
+
+.staking2-stake-change-up {
+  display: inline-flex;
+  font-size: 10px;
+  color: white;
+  align-items: center;
+}
+
+.staking2-stake-change-down {
+  display: inline-flex;
+  font-size: 10px;
+  color: white;
+  align-items: center;
+}
+
+.staking2-arrow-icon {
+  font-size: 10px;
+}
+
+.staking2-arrow-icon-down {
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.staking2-placeholder {
+  font-size: 10px;
+}
+
+.staking2-progress-container {
+  display: flex;
+  justify-content: center;
+}
+
+.staking2-progress-bar {
+  width: 100%;
+}
+
+.staking2-no-rewards {
+  font-size: 20px;
+}
+
+.staking2-chart-container {
+  height: 150px;
+}
+
+.staking2-chart {
+  height: 100%;
+  width: 100%;
+}
+
+/* Action buttons styles */
+.staking2-unstake-btn {
+  text-transform: capitalize;
+}
+
+.staking2-unstake-text {
+  color: #f97066;
+  font-weight: 600;
+}
+
+.staking2-withdraw-btn {
+  text-transform: capitalize;
+}
+
+.staking2-withdraw-text {
+  color: #47cd89;
+  font-weight: 600;
+}
+
+.staking2-no-rewards-btn {
+  text-transform: capitalize;
+}
+
+.staking2-no-rewards-text {
+  color: #666;
+  font-weight: 600;
 }
 </style>

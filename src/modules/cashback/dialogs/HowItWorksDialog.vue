@@ -1,5 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="How it Works?" subtitle="" :min-height="560" :height="560" :width="604">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    title="How it Works?"
+    subtitle=""
+    :min-height="560"
+    :height="560"
+    :width="604"
+    :persistent="false"
+  >
     <v-card-text class="px-0 pt-2 pb-0" style="z-index: 3; color: white">
       Search for your favorite items and brands, browse through various categories, or explore our top brands to find exactly what you need.<br>
       <br>
@@ -15,37 +24,27 @@
     </v-card-text>
   </BaseDialog>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import filters from '@/shared/utils/filters';
-import axios from 'axios';
 
-export default {
-  name: 'HowItWorksDialog',
-  components: {BaseDialog },
-  props: {
-    isOpen: {
-      type: Boolean,
-      default: false,
-    }
-  },
-  filters,
-  data: () => ({
-    loading: true,
-    disabled: true,
-  }),
-  mounted() {
+const props = defineProps({
+  isOpen: {
+    type: Boolean,
+    default: false,
+  }
+});
 
-  },
-  watch: {
-    isOpen(val) {
-      if (val) {
-        this.loading = true
-        this.default = true
-      }
-    }
-  },
-};
+const emit = defineEmits(['close']);
+
+const loading = ref(true);
+const disabled = ref(true);
+
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    loading.value = true;
+  }
+});
 </script>
 <style scoped>
 

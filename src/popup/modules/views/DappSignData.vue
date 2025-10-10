@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Sign Data" :show-website="!(this.$route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)" :disabled="loading">
+    <PopupHeader title="Sign Data" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
@@ -16,7 +16,7 @@
       <v-card-actions class="justify-center pb-0 pt-3 px-0">
         <v-layout>
           <v-row>
-            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal" class="pb-0">
+            <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !signature" class="pb-0">
               <v-tooltip
                 v-model="tooltip.enabled"
                 top
@@ -49,7 +49,7 @@
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <USBBluetoothSwitch v-model="isBT" :disabled="loading" />
+                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
@@ -62,10 +62,10 @@
                 block
                 class="geroButton"
                 style="color: black!important;"
-                @click="confirm"
+                @click="sign"
                 :loading="loading"
                 :disabled="!valid || loading">
-                Sign & Confirm
+                {{txAutoSubmit ? 'Sign & Confirm' : !signature ? 'SIGN' : 'CONFIRM'}}
               </v-btn>
             </v-col>
           </v-row>
@@ -74,101 +74,185 @@
     </PopupHeader>
   </v-form>
 </template>
-<script>
+<script setup lang="ts">
+import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
-import { appWallet, useStore } from '@/stores';
 import { Messaging } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
-import USBBluetoothSwitch from '@/shared/components/USBBluetoothSwitch.vue';
-import { mapState } from 'pinia';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
-import { verifyData } from '@/shared/utils/converter';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { walletStore } from '@/stores/walletStore';
+import { MessageTypes } from '@/models/MessageTypes';
+import ledger from '@/shared/utils/ledger';
+import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
+import networks from '@/utils/networks';
+import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
-export default {
-  name: 'DappSignData',
-  components: { USBBluetoothSwitch, PopupHeader },
-  computed: {
-    ...mapState(useStore, ['loggedWallet']),
-    WalletType() {
-      return WalletType
+const { loggedWallet, config, keys } = toRefs(walletStore);
+const vmProxy = getCurrentInstance()!.proxy as any;
+const spendingPassword = ref('');
+const showPassword = ref(false);
+const request = ref<any>(null);
+const message = ref('');
+const valid = ref(false);
+const tooltip = ref({
+  enabled: false,
+  text: 'Wrong Spending Password!'
+});
+const isBT = ref(false);
+const loading = ref(false);
+const controller = ref<any>(null);
+const tabId = ref<number | null>(null);
+const signature = ref<any>(undefined);
+const form = ref<any>(null);
+
+const txAutoSubmit = computed(() => {
+  return config.value?.txAutoSubmit;
+});
+
+const useSidePanel = computed(() => {
+  return config.value?.useSidePanel;
+});
+
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+};
+
+const decline = async () => {
+  await controller.value.returnData({ data: undefined, error: DataSignError.UserDeclined });
+  window.close();
+};
+
+const confirm = async () => {
+  console.log(signature.value);
+  await controller.value.returnData({ data: signature.value, error: undefined });
+  window.close();
+};
+
+const signAndReturnTx = async () => {
+  loading.value = true;
+  try {
+    const address = request.value.data.address;
+    console.log('address', address);
+    const payload = request.value.data.payload;
+    console.log('payload', payload);
+
+    const res = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_DATA,
+      data: {
+        address: address,
+        payload: payload,
+        password: spendingPassword.value,
+        accountIndex: 0,
+        isUsb: !isBT.value
+      }
+    }) as { data: { key: string; signature: string } };
+    signature.value = res.data;
+    if (txAutoSubmit.value) {
+      await confirm();
     }
-  },
-  methods: {
-    enableToolTip() {
-      this.tooltip.enabled = true;
-      setTimeout(() => {
-        this.tooltip.enabled = false;
-      }, 3000);
-    },
-    async decline() {
-      await this.controller.returnData({ data: undefined, error: DataSignError.UserDeclined })
-      window.close();
-    },
-    async confirm() {
-      const signAndReturnTx = async () => {
-        this.loading = true
-        try {
-          const address = this.request.data.address
-          console.log('address', address)
-          const payload = this.request.data.payload
-          console.log('payload', payload)
-          const res = await appWallet.signData(address, payload, this.spendingPassword, 0, !this.isBT)
-          console.log(res)
-          verifyData(res, address, payload)
-          await this.controller.returnData({ data: res, error: undefined })
-          window.close();
-        } catch (e) {
-          snackbar.setError(e)
-          console.log(e);
-          await this.controller.returnData({ data: undefined, error: e });
-        }
-        this.loading = false
-      };
-      if (appWallet.type === WalletType.Normal) {
-        if (this.$refs.form.validate()) {
-          if (appWallet.verifySpendingPassword(this.spendingPassword)) {
-            await signAndReturnTx();
-          } else {
-            this.enableToolTip();
-          }
-        }
+  } catch (e: any) {
+    snackbar.setError(e);
+    console.log(e);
+  }
+  loading.value = false;
+};
+
+const sign = async () => {
+  if (!txAutoSubmit.value && signature.value) {
+    await confirm();
+    return;
+  }
+  if (loggedWallet.value.type === WalletType.Normal) {
+    if (form.value.validate()) {
+      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+        data: { password: spendingPassword.value }
+      }) as { data: { isValid: boolean; error?: string } };
+
+      if (!passwordVerification.data.isValid) {
+        enableToolTip();
       } else {
         await signAndReturnTx();
       }
-    },
-    async init() {
-      console.log('init')
-      const request = await this.controller.requestData();
-      if (request?.data?.payload) {
-        this.message = Buffer.from(request.data.payload, 'hex').toString('utf-8')
-      }
-      this.request = request;
     }
-  },
-  data() {
-    return {
-      rules,
-      spendingPassword: '',
-      showPassword: false,
-      request: null,
-      message: ``,
-      password: '',
-      valid: false,
-      tooltip: {
-        enabled: false,
-        text: 'Wrong Spending Password!'
-      },
-      isBT: false,
-      loading: false,
-      controller: Messaging.createInternalController()
-    };
-  },
-  async created() {
-    await this.init();
-  },
+  } else if (loggedWallet.value.type === WalletType.Ledger) {
+    loading.value = true;
+    const address = request.value.data.address;
+    console.log('address', address);
+    const payload = request.value.data.payload;
+    console.log('payload', payload);
+    try {
+      // Create known addresses from wallet keys for Ledger signing
+      const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
+      const knownAddresses = ledger.createKnownAddressesFromKeys(keys.value, network);
+
+      const response: SignedMessageData = await ledger.signData(
+        address,
+        payload,
+        network,
+        0,
+        !isBT.value,
+        knownAddresses
+      );
+      console.log('response', response);
+      signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex};
+      if (txAutoSubmit.value) {
+        await confirm();
+      }
+    } catch (e: any) {
+      if (e instanceof DeviceStatusError) {
+        const error: DeviceStatusError = e;
+        switch (error.code) {
+          case 0x5515:
+          case 0x6E11:
+            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            break;
+          default:
+            snackbar.setError('Ledger device error: ' + error.message);
+        }
+      } else {
+        console.log(e);
+        snackbar.setError(e);
+      }
+    } finally {
+      loading.value = false;
+    }
+  } else {
+    await signAndReturnTx();
+  }
 };
+
+const init = async () => {
+  console.log('init');
+  try {
+    const requestData = await controller.value.requestData();
+    if (requestData?.data?.payload) {
+      message.value = Buffer.from(requestData.data.payload, 'hex').toString('utf-8');
+    }
+    request.value = requestData;
+  } catch (e) {
+    console.log(e);
+  }
+};
+
+onMounted(async () => {
+  if (useSidePanel.value) {
+    console.log('sidePanel')
+    const params = new URLSearchParams(window.location.href);
+    tabId.value = Number(params.get("tabId"));
+    controller.value = Messaging.createInternalSidePanelController(tabId.value);
+    console.log(controller.value);
+  } else {
+    controller.value = Messaging.createInternalController();
+  }
+  await init();
+});
 </script>
 <style scoped>
 .dapp-sign-details {
