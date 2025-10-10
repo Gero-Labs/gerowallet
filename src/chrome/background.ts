@@ -158,12 +158,22 @@ let lastFullscreenTabId = -1;
 const app = Messaging.createBackgroundController();
 
 async function handleBlacklisted(request: any, tabId: number) {
+  // Check if website protection is enabled
+  const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
+    ? walletStore.config.websiteProtection
+    : true; // Default to enabled
+  if (!websiteProtectionEnabled) {
+    return 'skip';
+  }
+
   let urlStatus;
   try {
     const response = await urlScan(request.origin);
     urlStatus = await response.json();
     console.log('urlScan', urlStatus);
-    if (urlStatus === 'blacklist' || urlStatus === 'suspicious') {
+    if (urlStatus === 'blacklist'
+      // || urlStatus === 'suspicious'
+    ) {
       // Send the overlay message immediately
       await chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
 
@@ -184,6 +194,9 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
     const url = new URL(details.url);
     const origin = url.origin;
     const domain = getDomain(url.hostname);
+    if (!domain) {
+      return;
+    }
 
     const request = {
       id: 'unique_id_' + Date.now(), // Generate a unique id
@@ -202,6 +215,8 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'approved') {
         processedDomains.add(domain);
         await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+      } else if (res === 'skip') {
+        // nothing
       } else {
         console.log(res['error'])
       }

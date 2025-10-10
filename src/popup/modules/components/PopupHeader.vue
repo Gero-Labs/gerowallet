@@ -14,8 +14,8 @@
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
                              width="3"></v-progress-circular>
-        <v-avatar v-else tile size="16" class="ml-1">
-          <img :src="websiteRiskIcon" alt="Website Risk Icon" />
+        <v-avatar v-else tile size="16" class="ml-1 text-center">
+          <v-img contain :src="websiteRiskIcon" alt="Website Risk Icon" />
         </v-avatar>
       </div>
       <div v-else>
