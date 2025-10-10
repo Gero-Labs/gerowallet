@@ -36,12 +36,13 @@
                     :chart-data="computeChartData.adaData"
                     :chart-data-usd="computeChartData.usdData"
                     :chart-data-eur="computeChartData.eurData"
-                    :portfolio-value-ada="computedValues.totalValue"
-                    :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                    :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                    :portfolio-value-ada="currentPortfolioValues.ada"
+                    :portfolio-value-usd="currentPortfolioValues.usd"
+                    :portfolio-value-eur="currentPortfolioValues.eur"
                     :loading="portfolioLoading"
                     :progressive-loading="true"
                     :first-loaded-currency="firstLoadedCurrency"
+                    @refresh="refreshPortfolioChart"
                   />
                 </v-card-text>
               </v-card>
@@ -83,12 +84,13 @@
                 :chart-data="computeChartData.adaData"
                 :chart-data-usd="computeChartData.usdData"
                 :chart-data-eur="computeChartData.eurData"
-                :portfolio-value-ada="computedValues.totalValue"
-                :portfolio-value-usd="computedValues.totalValue * (price?.lastPrice || 0)"
-                :portfolio-value-eur="computedValues.totalValue * (price?.lastPrice || 0)"
+                :portfolio-value-ada="currentPortfolioValues.ada"
+                :portfolio-value-usd="currentPortfolioValues.usd"
+                :portfolio-value-eur="currentPortfolioValues.eur"
                 :loading="portfolioLoading"
                 :progressive-loading="true"
                 :first-loaded-currency="firstLoadedCurrency"
+                @refresh="refreshPortfolioChart"
               />
             </v-card-text>
           </v-card>
@@ -368,6 +370,7 @@ const {
   getCacheStats,
   getCacheStatus,
   firstLoadedCurrency,
+  latestPortfolioValues,
 } = portfolioComposable;
 
 // Cache current timestamp to avoid computed recalculation
@@ -465,6 +468,26 @@ const computeChartData = computed(() => {
     adaData: graphData || [],
     usdData: usdData || [],
     eurData: eurData || [],
+  };
+});
+
+// Extract current portfolio values from API (latest epoch time from TapTools)
+const currentPortfolioValues = computed(() => {
+  // For Cardano mainnet, prioritize API values from TapTools
+  if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
+    // Use API values if available (from chart data), otherwise fallback
+    return {
+      ada: latestPortfolioValues.value.ada !== null ? latestPortfolioValues.value.ada : computedValues.value.totalValue,
+      usd: latestPortfolioValues.value.usd !== null ? latestPortfolioValues.value.usd : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
+      eur: latestPortfolioValues.value.eur !== null ? latestPortfolioValues.value.eur : (computedValues.value.totalValue * (price.value?.lastPrice || 0)),
+    };
+  }
+
+  // For other chains/networks, use calculated values from transactions
+  return {
+    ada: computedValues.value.totalValue,
+    usd: computedValues.value.totalValue * (price.value?.lastPrice || 0),
+    eur: computedValues.value.totalValue * (price.value?.lastPrice || 0),
   };
 });
 
