@@ -72,7 +72,7 @@
 
           <div class="transfer-row">
             <span class="transfer-label">Transfer Fee</span>
-            <span class="fee-amount">{{ selectedFeeOption === 'GERO' ? '₳0.00 ADA' : '₳1.23 ADA' }}</span>
+            <span class="fee-amount">{{ selectedFeeOption === 'GERO' ? '₳0.00 ADA' : '₳1.00 ADA' }}</span>
           </div>
 
           <div class="divider"></div>
@@ -80,7 +80,7 @@
           <div class="transfer-row">
             <span class="transfer-label">Total Spend</span>
             <span class="total-amount"
-              >₳{{ (parseFloat(adaAmount || '1000') + (selectedFeeOption === 'GERO' ? 0 : 1.23)).toFixed(2) }} ADA</span
+              >₳{{ (parseFloat(adaAmount || '1') + (selectedFeeOption === 'GERO' ? 0 : 1)).toFixed(2) }} ADA</span
             >
           </div>
         </div>
@@ -90,16 +90,11 @@
       <div class="summary-container">
         <div class="transfer-row">
           <span class="transfer-label">Card will receive exactly</span>
-          <span class="receive-amount">€{{ eurAmount || '654.03' }} EUR</span>
+          <span class="receive-amount">€{{ eurAmount || '1' }} EUR</span>
         </div>
       </div>
     </div>
 
-    <!-- Password Input -->
-    <div class="password-section">
-      <label class="password-label">Enter Password to confirm transaction*</label>
-      <input v-model="password" type="password" placeholder="**********" class="password-input" />
-    </div>
   </div>
 </template>
 
