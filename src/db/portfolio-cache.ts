@@ -464,7 +464,7 @@ export class PortfolioCacheService {
         try {
           const loadPromises = currenciesToLoad.map(async currency => {
             try {
-              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency);
+              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, '1y');
 
               // Simple conversion to array format
               const processedData = data.map((item: any) => [item.time * 1000, item.value]);

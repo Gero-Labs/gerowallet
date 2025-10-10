@@ -10,7 +10,8 @@
               @click="toggleCurrency"
               :class="{ clickable: availableCurrencies.length > 1 }"
             >
-              {{ formatPortfolioValue() }}
+              <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
+              <OdometerCounter :value="Math.round(activePortfolioValue)" format="int" :duration="1000" :key="selectedCurrency" />
             </div>
             <div class="address-section" v-if="shortenAddress">
               <CopyButton
@@ -50,10 +51,25 @@
               </v-tab>
             </v-tabs>
           </div>
+
+          <!-- Refresh Button -->
+          <v-btn
+            icon
+            x-small
+            class="refresh-btn ml-2"
+            @click="handleRefresh"
+            :loading="isRefreshing"
+            :disabled="isRefreshing"
+          >
+            <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
+          </v-btn>
         </div>
       </div>
     </div>
-    <v-progress-circular v-if="globalLoading" :indeterminate="true"></v-progress-circular>
+    <div v-if="globalLoading" class="loading-container">
+      <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
+      <div class="loading-text">Loading Chart</div>
+    </div>
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
@@ -74,6 +90,7 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 const { convertFiat } = useCurrencyConverter();
 
@@ -146,6 +163,25 @@ const props = defineProps({
     default: null,
   },
 });
+
+// Define emits
+const emit = defineEmits<{
+  (e: 'refresh'): void;
+}>();
+
+// Refresh state
+const isRefreshing = ref(false);
+
+// Handle refresh button click
+const handleRefresh = async () => {
+  isRefreshing.value = true;
+  emit('refresh');
+
+  // Keep spinner for minimum 500ms for visual feedback
+  setTimeout(() => {
+    isRefreshing.value = false;
+  }, 500);
+};
 
 // Load tab preference from localStorage or default to WEEK (7D)
 const loadPortfolioTabSetting = (): string => {
@@ -257,9 +293,9 @@ const firstAvailableCurrency = computed(() => {
 });
 
 const globalLoading = computed(() => {
-  // If progressive loading is enabled, only show loading when no data is available yet
+  // If progressive loading is enabled, show loading until first data arrives
   if (props.progressiveLoading) {
-    return props.loading && !hasAnyChartData.value;
+    return props.loading || !hasAnyChartData.value;
   }
   // Original behavior: show loading state
   return props.loading;
@@ -332,10 +368,9 @@ const availableCurrencies = computed(() => {
 // Portfolio value formatting for any currency
 const formatPortfolioValue = (): string => {
   const config = currentCurrencyConfig.value;
-  const value =
-    selectedCurrency.value === CurrencyType.USD
-      ? activePortfolioValue.value
-      : convertFiat(activePortfolioValue.value, true);
+  // Don't convert - the API already provides values in the correct currency
+  const value = activePortfolioValue.value;
+
   if (value > 0) {
     return filters.toCurrency(value, false, 2, config.symbol, '', true, 0);
   }
@@ -371,39 +406,6 @@ const convertStringToCurrencyType = (currencyString: string): CurrencyType | nul
       return null;
   }
 };
-
-// COMMENTED OUT: Dual-axis toggle functions
-// // Series toggle functions
-// const toggleAdaSeries = (): void => {
-//   showAda.value = !showAda.value;
-//   updateActiveToggle();
-//   if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//     loadChart(props.chartData);
-//   }
-// };
-
-// const toggleUsdSeries = (): void => {
-//   showUsd.value = !showUsd.value;
-//   updateActiveToggle();
-//   if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//     loadChart(props.chartData);
-//   }
-// };
-
-// const toggleDualAxis = (): void => {
-//   if (showAda.value && showUsd.value) {
-//     showDualAxis.value = !showDualAxis.value;
-//     if (props.chartData.length > 0 || props.chartDataUsd.length > 0) {
-//       loadChart(props.chartData);
-//     }
-//   }
-// };
-
-// const updateActiveToggle = (): void => {
-//   activeSeriesToggle.value = [];
-//   if (showAda.value) activeSeriesToggle.value.push('ada');
-//   if (showUsd.value) activeSeriesToggle.value.push('usd');
-// };
 
 // Format numbers with K, M, B abbreviations for Y-axis
 const formatAxisNumber = (value: number, currency: string = ''): string => {
@@ -486,88 +488,6 @@ const createChartSeries = (): any[] => {
   return series;
 };
 
-// COMMENTED OUT: Original dual-axis version
-// const createChartSeries = (chartData: any[]): any[] => {
-//   console.log('Creating chart series:');
-//   console.log('ADA chartData:', chartData.length, 'points');
-//   console.log('USD chartDataUsd:', props.chartDataUsd.length, 'points');
-//   console.log('Sample ADA data point:', chartData[0]);
-//   console.log('Sample USD data point:', props.chartDataUsd[0]);
-//
-//   const series = [];
-//
-//   if (showAda.value && chartData.length > 0) {
-//     console.log('Adding ADA series with', chartData.length, 'points');
-//     series.push({
-//       type: "areaspline",
-//       name: "ADA Balance",
-//       data: chartData,
-//       showInLegend: true,
-//       yAxis: showDualAxis.value ? 0 : undefined,
-//       color: primaryColor.value,
-//       marker: {
-//         symbol: "circle",
-//         enabled: false,
-//         radius: 3,
-//         lineWidth: 1,
-//         lineColor: null,
-//       },
-//       fillColor: {
-//         linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
-//         stops: [
-//           [0.1, primaryColor.value + '33'],
-//           [1, primaryColor.value + '00'],
-//         ],
-//       },
-//     });
-//   }
-//
-//   if (showUsd.value) {
-//     // Use dedicated USD data if available, otherwise calculate from ADA data
-//     const usdData = props.chartDataUsd.length > 0
-//       ? props.chartDataUsd
-//       : price.value?.lastPrice && chartData.length > 0
-//         ? chartData.map(point => [
-//             point[0], // timestamp
-//             point[1] * price.value.lastPrice // ADA value * current price (not historical)
-//           ])
-//         : [];
-//
-//     console.log('USD data source:', props.chartDataUsd.length > 0 ? 'props.chartDataUsd' : 'calculated from ADA');
-//     console.log('USD data length:', usdData.length);
-//     console.log('Sample USD data:', usdData[0]);
-//
-//     if (usdData.length > 0) {
-//       console.log('Adding USD series with', usdData.length, 'points');
-//       series.push({
-//         type: "areaspline",
-//         name: "USD Balance",
-//         data: usdData,
-//         showInLegend: true,
-//         yAxis: showDualAxis.value ? 1 : undefined,
-//         color: "#4CAF50",
-//         marker: {
-//           symbol: "circle",
-//           enabled: false,
-//           radius: 3,
-//           lineWidth: 1,
-//           lineColor: null,
-//         },
-//         fillColor: {
-//           linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
-//           stops: [
-//             [0.1, '#4CAF5033'],
-//             [1, '#4CAF5000'],
-//           ],
-//         },
-//       });
-//     }
-//   }
-//
-//
-//   console.log('Total series created:', series.length);
-//   return series;
-// };
 const loadChart = () => {
   // Prevent multiple simultaneous renders and too frequent calls
   const now = Date.now();
@@ -997,97 +917,11 @@ const handleTabClick = tabItem => {
     // Set time range first
     chartInstance.value.xAxis[0].setExtremes(startUTC, endUTC);
 
-    // COMMENTED OUT: Dual-axis Y-axis range update
-    // setTimeout(() => {
-    //   console.log('Executing scheduled Y-axis update...');
-    //   updateYAxisRange(startUTC, endUTC);
-    // }, 50);
-
     if (chartInstance.value?.title) {
       chartInstance.value.title.update({ text: '' });
     }
   }
 };
-
-// COMMENTED OUT: Dual-axis Y-axis range update
-// Optimized Y-axis range update
-// const updateYAxisRange = (startTime: number, endTime: number) => {
-//   if (!chartInstance.value || !chartInstance.value.yAxis) return;
-//
-//   // Early exit if no data
-//   if (!props.chartData.length && !props.chartDataUsd.length) return;
-//
-//   // Efficient binary search for time range filtering (assuming sorted data)
-//   const findDataInRange = (data: [number, number][]) => {
-//     if (!data.length) return [];
-//
-//     let start = 0;
-//     let end = data.length - 1;
-//
-//     // Find start index
-//     while (start < data.length && data[start][0] < startTime) start++;
-//
-//     // Find end index
-//     while (end >= 0 && data[end][0] > endTime) end--;
-//
-//     return data.slice(start, end + 1);
-//   };
-//
-//   const visibleAdaData = showAda.value ? findDataInRange(props.chartData) : [];
-//   const visibleUsdData = showUsd.value ? findDataInRange(props.chartDataUsd) : [];
-//
-//   // Calculate ranges efficiently
-//   if (showDualAxis.value && chartInstance.value.yAxis.length > 1) {
-//     // ADA axis (left)
-//     if (visibleAdaData.length > 0) {
-//       let adaMin = Infinity, adaMax = -Infinity;
-//       for (const point of visibleAdaData) {
-//         if (point[1] < adaMin) adaMin = point[1];
-//         if (point[1] > adaMax) adaMax = point[1];
-//       }
-//       const adaPadding = (adaMax - adaMin) * 0.05;
-//       chartInstance.value.yAxis[0].setExtremes(
-//         Math.max(0, adaMin - adaPadding),
-//         adaMax + adaPadding,
-//         false // Don't redraw yet
-//       );
-//     }
-//
-//     // USD axis (right)
-//     if (visibleUsdData.length > 0) {
-//       let usdMin = Infinity, usdMax = -Infinity;
-//       for (const point of visibleUsdData) {
-//         if (point[1] < usdMin) usdMin = point[1];
-//         if (point[1] > usdMax) usdMax = point[1];
-//       }
-//       const usdPadding = (usdMax - usdMin) * 0.05;
-//       chartInstance.value.yAxis[1].setExtremes(
-//         Math.max(0, usdMin - usdPadding),
-//         usdMax + usdPadding,
-//         true // Redraw after both axes are set
-//       );
-//     }
-//   } else {
-//     // Single axis mode
-//     const allVisibleData = [...visibleAdaData, ...visibleUsdData];
-//     if (allVisibleData.length === 0) return;
-//
-//     let dataMin = Infinity, dataMax = -Infinity;
-//     for (const point of allVisibleData) {
-//       if (point[1] < dataMin) dataMin = point[1];
-//       if (point[1] > dataMax) dataMax = point[1];
-//     }
-//
-//     const padding = (dataMax - dataMin) * 0.05;
-//     chartInstance.value.yAxis[0].setExtremes(
-//       Math.max(0, dataMin - padding),
-//       dataMax + padding
-//     );
-//   }
-// };
-
-// Removed price watcher and generateTitleText that were causing unnecessary rerenders
-// since we're not using the title text anymore
 
 // Watch currency chart data with immediate response to any data changes
 watch(
@@ -1358,8 +1192,9 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 600;
   color: #ffffff;
-  display: flex;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1em;
   transition: opacity 0.2s ease;
 }
 
@@ -1369,6 +1204,13 @@ onMounted(() => {
 
 .portfolio-amount.clickable:hover {
   opacity: 0.8;
+}
+
+.currency-symbol {
+  font-weight: 600;
+  margin-right: 0.1em;
+  line-height: 1;
+  display: inline-block;
 }
 
 .currency-switch-icon {
@@ -1509,6 +1351,56 @@ onMounted(() => {
 
   .portfolio-amount {
     font-size: 1.125rem;
+  }
+}
+
+/* Refresh Button */
+.refresh-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.refresh-btn:hover {
+  opacity: 1;
+}
+
+.refresh-btn .v-icon.rotating {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  min-height: 200px;
+}
+
+.loading-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
   }
 }
 </style>

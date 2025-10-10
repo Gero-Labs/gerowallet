@@ -41,9 +41,23 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     return loadingOrder.value.length > 0 ? loadingOrder.value[0] : null;
   });
 
+  // Get latest portfolio values (most recent data point from each currency)
+  const latestPortfolioValues = computed(() => {
+    return {
+      ada: adaData.value && adaData.value.length > 0
+        ? adaData.value[adaData.value.length - 1][1]
+        : null,
+      usd: usdData.value && usdData.value.length > 0
+        ? usdData.value[usdData.value.length - 1][1]
+        : null,
+      eur: eurData.value && eurData.value.length > 0
+        ? eurData.value[eurData.value.length - 1][1]
+        : null,
+    };
+  });
+
   // Load portfolio data for specific currency
   const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> => {
-    console.log('loadPortfolioData called with address:', address, 'currency:', currency);
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];
@@ -262,6 +276,9 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
     // Loading order tracking
     loadingOrder,
     firstLoadedCurrency,
+
+    // Latest values
+    latestPortfolioValues,
 
     // Methods
     loadPortfolioData,
