@@ -7,7 +7,7 @@
       unknown: DappRisk[risk] === DappRisk.unknown,
       suspicious: DappRisk[risk] === DappRisk.suspicious,
       blacklist: DappRisk[risk] === DappRisk.blacklist,
-      whitelist: DappRisk[risk] === DappRisk.whitelist
+      whitelist: DappRisk[risk] === DappRisk.whitelist || address === loggedWallet?.baseAddress
     } : {}">
       <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row; text-align: left;">
         <div style="width: 18px; height: 18px" id="dapp-receiver-check">
@@ -20,9 +20,12 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, toRefs } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+
+const { loggedWallet } = toRefs(walletStore);
 
 const props = defineProps({
   address: {
@@ -38,6 +41,9 @@ const props = defineProps({
 });
 
 const riskIcon = computed(() => {
+  if (props.address === loggedWallet.value?.baseAddress) {
+    return assets.resolveDappRisk(DappRisk.whitelist);
+  }
   return assets.resolveDappRisk(DappRisk[props.risk as keyof typeof DappRisk]);
 });
 </script>
