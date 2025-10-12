@@ -302,7 +302,17 @@ export class WalletBg {
 
     // Set Assets Info in Network DB
     await this.syncService.syncAssets(Array.from(uniqueAssets));
-    //TODO wait for network Store to Load Assets
+
+    // Wait for assets to be loaded into NetworkStore before resolving them
+    // Only needed on first-time wallet import/restore (when lastSyncInfo doesn't exist)
+    // For regular logins, assets are already cached in NetworkStore
+    const lastSyncInfo = await this.getLastSyncInfo();
+    if (!lastSyncInfo) {
+      console.debug('🔄 First-time import detected - waiting for assets to load...');
+      await this.waitForAssetsToLoad(Array.from(uniqueAssets));
+    } else {
+      console.debug('✅ Regular login - assets already cached in NetworkStore');
+    }
 
     // Resolve Assets from UTxOs
     this.setAssets(Array.from(utxos.values()));
@@ -320,6 +330,39 @@ export class WalletBg {
     console.debug('💰 Setting', utxos.size, 'UTXOs to store');
     WalletStore.setUtxos(Array.from(utxos.values()));
     console.debug('✅ setUtxosAndAddresses completed successfully');
+  }
+
+  /**
+   * Wait for assets to be loaded into NetworkStore from the blockchain database
+   * This prevents race conditions where assets are resolved before metadata is available
+   * @param assetUnits - Array of asset units to wait for
+   * @param timeoutMs - Maximum time to wait in milliseconds (default: 5000ms)
+   */
+  private async waitForAssetsToLoad(assetUnits: string[], timeoutMs: number = 5000): Promise<void> {
+    if (!assetUnits || assetUnits.length === 0) {
+      return;
+    }
+
+    console.debug(`⏳ Waiting for ${assetUnits.length} assets to load into NetworkStore...`);
+    const startTime = Date.now();
+    const checkInterval = 50; // Check every 50ms
+
+    while (Date.now() - startTime < timeoutMs) {
+      // Check if all assets are loaded in NetworkStore
+      const allAssetsLoaded = assetUnits.every(unit => NetworkStore.state.assets[unit]);
+
+      if (allAssetsLoaded) {
+        console.debug(`✅ All assets loaded into NetworkStore in ${Date.now() - startTime}ms`);
+        return;
+      }
+
+      // Wait before checking again
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    // Timeout reached - log warning but continue (don't block wallet initialization)
+    const loadedCount = assetUnits.filter(unit => NetworkStore.state.assets[unit]).length;
+    console.warn(`⚠️ Timeout waiting for assets: ${loadedCount}/${assetUnits.length} loaded after ${timeoutMs}ms`);
   }
 
   setAssets(utxos?: Cardano.Utxo[]) {
