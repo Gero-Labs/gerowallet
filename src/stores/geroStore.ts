@@ -195,7 +195,7 @@ export default {
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password
-        const encryptedPrivateKey = await encryptPrivateKey(rootKey, newPassword);
+        const encryptedPrivateKey = encryptPrivateKey(rootKey, newPassword);
 
         // Handle mnemonic if it exists
         let encryptedMnemonic = null;
