@@ -66,6 +66,7 @@ import {
   createSignDataBuilder,
   toHexArray,
 } from '@/shared/utils/converter';
+import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
@@ -757,19 +758,19 @@ export class WalletBg {
     return getDrepKey(this.publicKey, 0);
   }
 
-  async requestAccountKey(
+  requestAccountKey(
     password: string,
     accountIndex: number
-  ): Promise<{
+  ): {
     accountKey: Bip32PrivateKey;
     paymentKey: Ed25519PrivateKey;
     stakeKey: Ed25519PrivateKey;
     drepKey: Ed25519PrivateKey;
-  }> {
+  } {
     let accountKey: Bip32PrivateKey;
     try {
       const decrypted = decrypt(this.encryptedPrivateKey, password);
-      const buffer: Buffer = await decryptWithPassword(password, JSON.parse(decrypted));
+      const buffer: Buffer = decryptWithPassword(password, JSON.parse(decrypted));
       accountKey = Bip32PrivateKey.fromBytes(buffer).derive([
         WalletTypePurpose.CIP1852,
         CoinTypes.CARDANO,
@@ -817,10 +818,10 @@ export class WalletBg {
     await this.setLastSyncInfo(tip);
   }
 
-  async verifySpendingPassword(password: string) {
+  verifySpendingPassword(password: string) {
     try {
       const decrypted = decrypt(this.encryptedPrivateKey, password);
-      await decryptWithPassword(password, JSON.parse(decrypted));
+      decryptWithPassword(password, JSON.parse(decrypted));
       return true;
     } catch (e) {
       return false;
@@ -859,7 +860,7 @@ export class WalletBg {
     }
     // Decrypt private key
     const decrypted = decrypt(this.encryptedPrivateKey, password);
-    const decodedHash = await decryptWithPassword(password, JSON.parse(decrypted));
+    const decodedHash = decryptWithPassword(password, JSON.parse(decrypted));
     password = null;
 
     if (!decodedHash && partialSign === false) {
@@ -986,7 +987,7 @@ export class WalletBg {
     const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
     const keyHash: string = credential.hash;
     let accountKey: Ed25519PrivateKey;
-    const { paymentKey, stakeKey, drepKey } = await this.requestAccountKey(password, accountIndex);
+    const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
     if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
       accountKey = paymentKey;
     } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
@@ -998,11 +999,10 @@ export class WalletBg {
     } else {
       throw DataSignError.ProofGeneration;
     }
-    // Await async CSL message signing functions
-    const builder = await createSignDataBuilder(addressBytes, payload);
+    const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
     const toSign = builder.make_data_to_sign().to_bytes();
     signatureHex = buildAndSignData(builder, toSign, accountKey);
-    const coseKey = await createCoseKey(addressBytes, accountKey.toPublic().hex());
+    const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
     keyHex = util.bytesToHex(coseKey.to_bytes());
     return { signature: signatureHex, key: keyHex };
   }
