@@ -43,9 +43,10 @@
                   <!-- TOKEN TICKER -->
                   <PriceTicker
                     :primary-color="primaryColor"
-                    @click="openSwapDialog"
                     :token-name="tokenName"
-                    :price="geroPrice"
+                    :price-in-ada="geroPriceInAda"
+                    :price-in-usd="geroPriceInUsd"
+                    :price-in-eur="geroPriceInEur"
                   ></PriceTicker>
 
                   <v-spacer />
@@ -248,6 +249,7 @@ import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
+import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -259,19 +261,35 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { convertFiat } = useCurrencyConverter();
+const { usdToEurRate } = useCurrencyConverter();
 const { price } = toRefs(networkStore);
 
-const geroPrice = computed(() => {
-  const geroToken = dexHunterTokens.value['10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f'];
+// GERO token unit
+const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
 
-  if (!isApex.value) {
-    if (geroToken?.price && geroToken.price > 0) {
-      return Number(convertFiat(geroToken.price));
-    }
-  } else {
-    return Number(convertFiat(price.value?.lastPrice || 0));
+const geroPriceInAda = computed(() => {
+  const geroToken = dexHunterTokens.value[GERO_UNIT];
+  if (!isApex.value && geroToken?.price && geroToken.price > 0) {
+    return Number(geroToken.price);
   }
+  return 0;
+});
+
+const geroPriceInUsd = computed(() => {
+  const priceInAda = geroPriceInAda.value;
+  if (priceInAda === 0) return 0;
+
+  // Get ADA/USD price
+  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  return Number((priceInAda * adaPriceUsd).toFixed(6));
+});
+
+const geroPriceInEur = computed(() => {
+  const priceInUsd = geroPriceInUsd.value;
+  if (priceInUsd === 0) return 0;
+
+  // Convert USD to EUR
+  return Number((priceInUsd * usdToEurRate.value).toFixed(6));
 });
 
 const drawer = ref<boolean>(false);
