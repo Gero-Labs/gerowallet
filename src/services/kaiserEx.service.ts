@@ -75,6 +75,9 @@ class KaiserExServiceImpl implements KaiserExService {
 
   async auth(completeCallback?: (tokenData: KaiserExTokenData) => void): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Clean up any previous auth attempt before starting a new one
+      this.cleanup();
+
       if (completeCallback) this.completeCallback = completeCallback;
 
       this.generatePKCE().then(({ codeVerifier, codeChallenge }) => {
