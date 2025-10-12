@@ -119,10 +119,10 @@
         <v-tooltip top :open-delay="500" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <span v-bind="attrs" v-on="on">
-              {{ filters.toCurrency(convertFiat(item.value), false, 3, getCurrencySymbol(), '', true, 0) }}
+              {{ filters.toCurrency(item.value, false, 3, getCurrencySymbol(), '', true, 0) }}
             </span>
           </template>
-          {{ filters.toCurrency(convertFiat(item.value), false, 6, getCurrencySymbol(), '', false, 0) }}
+          {{ filters.toCurrency(item.value, false, 6, getCurrencySymbol(), '', false, 0) }}
         </v-tooltip>
       </span>
     </template>
@@ -130,10 +130,10 @@
       <v-tooltip v-if="item.mcap" top :open-delay="500" content-class="custom-tooltip">
         <template v-slot:activator="{ on, attrs }">
           <span v-bind="attrs" v-on="on">
-            {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 2, getCurrencySymbol(), '', true, 0) }}
+            {{ filters.toCurrency(Number(item.mcap), false, 2, getCurrencySymbol(), '', true, 0) }}
           </span>
         </template>
-        {{ filters.toCurrency(convertFiat(Number(item.mcap)), false, 4, getCurrencySymbol(), '', false, 0) }}
+        {{ filters.toCurrency(Number(item.mcap), false, 4, getCurrencySymbol(), '', false, 0) }}
       </v-tooltip>
       <span v-else>N/A</span>
     </template>
@@ -325,8 +325,10 @@ const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: any) => {
     if (token.policy_id === '') {
       token.risk = 'AAA';
-      // Use Kraken WebSocket price for ADA, fallback to network store price
-      token.price = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      // Use Kraken WebSocket price for ADA, fallback to network store price (in USD)
+      // Convert to user's selected currency (USD or EUR)
+      const usdPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      token.price = convertFiat(usdPrice);
       let coinGeckoCurrency = 'cardano';
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
@@ -334,7 +336,7 @@ const tokensList = computed(() => {
         coinGeckoCurrency = 'apex-2';
         token.price = convertFiat(price.value?.lastPrice || 0);
       }
-      token.mcap = cache.value[coinGeckoCurrency]?.usd_market_cap;
+      token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -344,8 +346,12 @@ const tokensList = computed(() => {
       token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
     } else {
       token.risk = risks.value[token.fingerprint]?.risk;
-      token.price = convertFiat(dexHunterTokens.value[token.unit]?.price);
-      token.mcap = dexHunterTokens.value[token.unit]?.mcap;
+      // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
+      const priceInAda = dexHunterTokens.value[token.unit]?.price || 0;
+      const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      const priceInUsd = priceInAda * adaPriceUsd;
+      token.price = convertFiat(priceInUsd);
+      token.mcap = convertFiat(dexHunterTokens.value[token.unit]?.mcap);
       const quantity = Number(
         filters.toCurrency(token.quantity, false, 6, '', '', false, token.metadata?.decimals).replaceAll(',', '')
       );
@@ -418,17 +424,8 @@ const totalAllocation = computed(() => {
   let total = 0;
   if (tokensList.value.length === 1) {
     const token = tokensList.value[0];
-    let res: any;
-    if (
-      token.metadata.ticker === networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
-    ) {
-      // Use Kraken WebSocket price for ADA, fallback to network store price
-      const adaPrice = priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0;
-      res = Number(filters.toCurrency(token.quantity, false, token.decimals, '', '', false, 6)) * adaPrice;
-    } else {
-      res = token.value;
-    }
-    return res;
+    // Use the already calculated value (already in correct currency)
+    return token.value || 0;
   }
   tokensList.value.forEach(token => {
     if (token.value) {
