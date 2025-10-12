@@ -30,12 +30,21 @@ import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
-import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
-import { walletManager } from '@/services/walletManager.service';
+import {
+  loadConfig,
+  loadWallets
+} from '@/plugins/geroLoader';
+import WalletStore, {
+  walletStore,
+  hydrateWalletStore
+} from '@/stores/walletStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
+
+// Lazy load wallet manager to prevent blocking extension initialization
+// Load it during wallet initialization, then access synchronously
+let walletManager: any = null;
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -47,8 +56,13 @@ if (import.meta.hot) {
 loadConfig().then(() => {
   console.log('Gero Config loaded')
 })
+
 loadWallets().then(async () => {
   console.log('Wallets loaded')
+
+  // Lazy load walletManager module now that initial loading is complete
+  const module = await import('@/services/walletManager.service');
+  walletManager = module.walletManager;
 
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
@@ -93,10 +107,7 @@ if (!isBeta) {
   });
   chrome.notifications.onClicked.addListener(function(notificationId) {
     if (notificationId === 'updateNotification') {
-      // Perform your action here, for example, open a URL in a new tab
       chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
-
-      // Optionally, clear the notification if needed
       chrome.notifications.clear(notificationId);
     }
   });

@@ -67,6 +67,8 @@ export default {
     await axiosInstance.post(`/api/v2/swap/reverseEstimate`, requestBody);
   },
   async swap(amount_in: number, buyer_address: string, token_in: string, token_out: string, slippage: number, referrer: string = 'DEXHUNTER'): Promise<any> {
+    token_in = token_in === "lovelace" ? '' : token_in;
+    token_out = token_out === "lovelace" ? '' : token_out;
     const requestBody = {
       amount_in,
       buyer_address,

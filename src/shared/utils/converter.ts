@@ -30,17 +30,41 @@ import {
   Vkeywitness,
   Vkeywitnesses,
 } from '@emurgo/cardano-serialization-lib-browser';
-import {
-  AlgorithmId,
-  BigNum as BigNum2,
-  Int as Int2,
-  CBORValue,
-  COSESign1Builder,
-  Headers,
-  HeaderMap,
-  Label,
-  ProtectedHeaderMap, KeyType, COSEKey, Int, CurveType,
-} from '@emurgo/cardano-message-signing-browser';
+// Lazy-loaded CSL message signing imports (WASM blocks extension initialization)
+let COSESign1Builder: any = null;
+let AlgorithmId: any = null;
+let BigNum2: any = null;
+let Int2: any = null;
+let CBORValue: any = null;
+let Headers: any = null;
+let HeaderMap: any = null;
+let Label: any = null;
+let ProtectedHeaderMap: any = null;
+let KeyType: any = null;
+let COSEKey: any = null;
+let Int: any = null;
+let CurveType: any = null;
+
+// Lazy load CSL message signing library to prevent WASM blocking
+async function loadCSLMessageSigning() {
+  if (!COSESign1Builder) {
+    const cslMsg = await import('@emurgo/cardano-message-signing-browser');
+    COSESign1Builder = cslMsg.COSESign1Builder;
+    AlgorithmId = cslMsg.AlgorithmId;
+    BigNum2 = cslMsg.BigNum;
+    Int2 = cslMsg.Int;
+    CBORValue = cslMsg.CBORValue;
+    Headers = cslMsg.Headers;
+    HeaderMap = cslMsg.HeaderMap;
+    Label = cslMsg.Label;
+    ProtectedHeaderMap = cslMsg.ProtectedHeaderMap;
+    KeyType = cslMsg.KeyType;
+    COSEKey = cslMsg.COSEKey;
+    Int = cslMsg.Int;
+    CurveType = cslMsg.CurveType;
+  }
+}
+
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey, Ed25519PublicKeyHex, Ed25519PrivateKey } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
@@ -146,38 +170,47 @@ export function hdPathToArray(path: string): number[] {
     }
   });
 }
-export const CoseLabel = {
-  address: Label.new_text('address'),
-  crv: Label.new_int(Int.new_i32(-1)),
-  x: Label.new_int(Int.new_i32(-2))
-};
+// Helper to get CoseLabel (lazy-loaded)
+function getCoseLabel() {
+  return {
+    address: Label.new_text('address'),
+    crv: Label.new_int(Int.new_i32(-1)),
+    x: Label.new_int(Int.new_i32(-2))
+  };
+}
 
-const createSigStructureHeaders = (addressBytes: Uint8Array) => {
+async function createSigStructureHeaders(addressBytes: Uint8Array) {
+  await loadCSLMessageSigning();
+  const CoseLabel = getCoseLabel();
   const protectedHeaders = HeaderMap.new();
   protectedHeaders.set_key_id(addressBytes);
   protectedHeaders.set_header(CoseLabel.address, CBORValue.new_bytes(addressBytes));
   protectedHeaders.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
   return protectedHeaders;
-};
+}
 
-export const createSignDataBuilder = (addressBytes: Uint8Array, payload: string) => {
+export async function createSignDataBuilder(addressBytes: Uint8Array, payload: string) {
+  await loadCSLMessageSigning();
+  const headers = await createSigStructureHeaders(addressBytes);
   return COSESign1Builder.new(
-    Headers.new(ProtectedHeaderMap.new(createSigStructureHeaders(addressBytes)), HeaderMap.new()),
+    Headers.new(ProtectedHeaderMap.new(headers), HeaderMap.new()),
     Buffer.from(payload, 'hex'),
     false
   );
-};
+}
 
-export const createCoseKey = (addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex) => {
+export async function createCoseKey(addressBytes: Uint8Array, publicKey: Ed25519PublicKeyHex) {
+  await loadCSLMessageSigning();
+  const CoseLabel = getCoseLabel();
   const coseKey = COSEKey.new(Label.from_key_type(KeyType.OKP));
   coseKey.set_key_id(addressBytes);
   coseKey.set_algorithm_id(Label.from_algorithm_id(AlgorithmId.EdDSA));
   coseKey.set_header(CoseLabel.crv, CBORValue.from_label(Label.from_curve_type(CurveType.Ed25519)));
   coseKey.set_header(CoseLabel.x, CBORValue.new_bytes(Buffer.from(publicKey, 'hex')));
   return coseKey;
-};
+}
 
-export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
+export const buildAndSignData = (builder: any, signingData: Uint8Array, accountKey: Ed25519PrivateKey | undefined) => {
   const signedData = accountKey ? accountKey.sign(HexBlob.fromBytes(signingData)).bytes() : signingData;
   const coseSign1 = builder.build(signedData);
   const signatureHex = toHexString(coseSign1.to_bytes());
@@ -186,7 +219,8 @@ export const buildAndSignData = (builder: COSESign1Builder, signingData: Uint8Ar
   return signatureHex;
 };
 
-export const createCOSEKeyHex = (pubKeyBytes) => {
+export async function createCOSEKeyHex(pubKeyBytes) {
+  await loadCSLMessageSigning();
   const free = [];
   const okpKey = Label.from_key_type(KeyType.OKP);
   free.push(okpKey);
@@ -218,7 +252,7 @@ export const createCOSEKeyHex = (pubKeyBytes) => {
   const keyHex = toHexString(key3.to_bytes());
   freeCSLObjects(free);
   return keyHex;
-};
+}
 
 export const safeFreeCSLObject = (obj2) => {
   if (obj2 && obj2.free) {

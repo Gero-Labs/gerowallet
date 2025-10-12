@@ -1,6 +1,6 @@
 <template>
-  <div class="gero-ticker d-flex align-center" v-if="price">
-    <div class="gero-ticker d-flex align-center" style="min-width: 120px; cursor: pointer" @click="$emit('click')">
+  <div :class="isApex ? 'apex-ticker' : 'gero-ticker'" class="d-flex align-center" v-if="price">
+    <div :class="isApex ? 'apex-ticker' : 'gero-ticker'" class="d-flex align-center" style="min-width: 120px; cursor: pointer" @click="$emit('click')">
       <div class="d-flex flex-column">
         <span class="gero-label" style="font-size: 12px; font-weight: 600" :style="{ color: primaryColor }">{{
           tokenName
@@ -14,9 +14,18 @@
 </template>
 <script setup lang="ts">
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { computed, toRefs } from 'vue';
+import { Blockchain } from '@/models/types';
+import { walletStore } from '@/stores/walletStore';
 const { getCurrencySymbol } = useCurrencyConverter();
 
-const props = defineProps({
+const { loggedWallet } = toRefs(walletStore);
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
+defineProps({
   primaryColor: {
     type: String,
     default: '#00c7f3',
@@ -28,6 +37,10 @@ const props = defineProps({
   price: {
     type: Number,
     default: 0,
+  },
+  isApex: {
+    type: Boolean,
+    default: false,
   },
 });
 </script>
@@ -44,6 +57,21 @@ const props = defineProps({
 }
 
 .gero-ticker:active {
+  transform: scale(0.98);
+}
+
+.apex-ticker {
+  transition: all 0.2s ease;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.apex-ticker:hover {
+  background-color: rgba(255, 165, 0, 0.1);
+  transform: scale(1.05);
+}
+
+.apex-ticker:active {
   transform: scale(0.98);
 }
 </style>
