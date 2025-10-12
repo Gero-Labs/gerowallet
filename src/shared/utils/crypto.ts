@@ -1,8 +1,20 @@
 import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import cryptoRandomString from 'crypto-random-string';
-import { decrypt_with_password, encrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+
+// Lazy-loaded CSL crypto imports (WASM blocks extension initialization)
+let encrypt_with_password: any = null;
+let decrypt_with_password: any = null;
+
+// Lazy load CSL crypto library to prevent WASM blocking
+async function loadCSLCrypto() {
+  if (!encrypt_with_password) {
+    const csl = await import('@emurgo/cardano-serialization-lib-browser');
+    encrypt_with_password = csl.encrypt_with_password;
+    decrypt_with_password = csl.decrypt_with_password;
+  }
+}
 
 export function encrypt(text: string, password: string): string {
   return CryptoTS.AES.encrypt(text, password).toString();
@@ -13,7 +25,8 @@ export function decrypt(ciphertext: string, password: string): string {
   return bytes.toString(CryptoTS.enc.Utf8);
 }
 
-export function encryptWithPassword(password, rootKeyBytes): string {
+export async function encryptWithPassword(password, rootKeyBytes): Promise<string> {
+  await loadCSLCrypto();
   const passwordHex = Buffer.from(password).toString('hex');
   const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
   const salt = cryptoRandomString({ length: 2 * 32 });
@@ -21,7 +34,8 @@ export function encryptWithPassword(password, rootKeyBytes): string {
   return encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
 }
 
-export function decryptWithPassword(password: string, privateKey): Buffer {
+export async function decryptWithPassword(password: string, privateKey): Promise<Buffer> {
+  await loadCSLCrypto();
   const passwordHex = Buffer.from(password).toString('hex');
   let decryptedHex;
   try {
@@ -32,7 +46,7 @@ export function decryptWithPassword(password: string, privateKey): Buffer {
   return Buffer.from(decryptedHex, 'hex');
 }
 
-export function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): string {
-  const privateKey = encryptWithPassword(password, rootKey.bytes());
+export async function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): Promise<string> {
+  const privateKey = await encryptWithPassword(password, rootKey.bytes());
   return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
 }
