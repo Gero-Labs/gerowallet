@@ -25,7 +25,14 @@
       "Bash(gh issue create:*)",
       "Bash(npm install:*)",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(kubectl get deployment:*)",
+      "Bash(kubectl patch:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(kubectl delete:*)",
+      "Bash(kubectl apply:*)",
+      "Bash(kubectl rollout status:*)",
+      "Bash(kubectl get:*)"
     ],
     "deny": [],
     "ask": []
