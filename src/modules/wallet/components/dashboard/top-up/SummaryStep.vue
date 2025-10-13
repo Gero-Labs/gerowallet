@@ -19,7 +19,7 @@
     </div>
 
     <!-- GERO Info -->
-    <div class="gero-info-container">
+    <!-- <div class="gero-info-container">
       <div class="gero-info-row">
         <span class="gero-info-label">Your $GERO Balance:</span>
         <span class="gero-info-value">{{ geroBalance }} GERO</span>
@@ -28,7 +28,7 @@
         <span class="gero-info-label">Your Tier:</span>
         <span class="gero-tier-badge" :class="geroTier.toLowerCase()">{{ geroTier }}</span>
       </div>
-    </div>
+    </div> -->
 
     <!-- Summary Section -->
     <div class="summary-section">
@@ -47,7 +47,7 @@
               </div>
               <span class="fee-option-text">ADA</span>
             </div>
-            <div
+            <!-- <div
               class="fee-option"
               :class="{ selected: selectedFeeOption === 'GERO' }"
               @click="selectedFeeOption = 'GERO'"
@@ -56,7 +56,7 @@
                 <div class="radio-dot"></div>
               </div>
               <span class="fee-option-text">$GERO</span>
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -119,7 +119,7 @@ const emit = defineEmits<{
 
 // Reactive data
 const password = ref('');
-const selectedFeeOption = ref('GERO');
+const selectedFeeOption = ref('ADA');
 
 // Exchange rate
 const EXCHANGE_RATE = computed(() => {
