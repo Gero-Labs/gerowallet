@@ -3,7 +3,7 @@
  * Handles PKCE authentication flow for KaiserEx token reception
  */
 const viteBackendUrl = import.meta.env['VITE_BACKEND_URL'];
-const backendUrl = 'https://api.dev.kaiserex.cybro.cz';
+const backendUrl = 'https://oauth.kaiserex.com';
 
 export interface KaiserExTokenData {
   access_token: string;

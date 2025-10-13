@@ -56,7 +56,7 @@ const emit = defineEmits<Emits>();
 const tabs = [
   { id: 'view', label: 'View Card Details' },
   { id: 'block', label: 'Block Card' },
-  { id: 'order', label: 'Order Physical Card' },
+  // { id: 'order', label: 'Order Physical Card' },
 ];
 
 const activeTab = ref('view');
