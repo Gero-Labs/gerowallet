@@ -171,8 +171,8 @@ const proceedToKYC = () => {
 .iframe-container {
   position: relative;
   width: 100%;
-  max-width: 1150px; // 1800 * 0.75
-  // height is controlled by :style binding in template (default: 750px)
+  max-width: 1150px; // 1800 * 0.73
+  height: 876px; // 1200 * 0.73 (scaled height of iframe)
   margin: 0 auto;
   background: transparent;
   border-radius: 0;

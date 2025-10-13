@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined class="mx-auto liquid-glass compact-swap-widget d-flex flex-column px-2" style="height: 100%;">
+  <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%;">
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden;">
       <div class="swap-content-wrapper">
         <v-card-title class="pb-0 pt-3 px-0">
@@ -23,7 +23,7 @@
             </v-btn>
           </v-btn-toggle>
         </v-card-title>
-        <v-card-text class="pb-0 px-0 pt-4">
+        <v-card-text class="pb-0 px-0 pt-4" style="text-align: -webkit-center;">
           <TokenSelector
             v-model="selectedTokenA"
             :available="availableTokens"
@@ -32,11 +32,12 @@
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
+            @setMax="setMaxTokenA"
             :search="search"
             class="mt-n3"
             background-color="#101828"
           />
-          <v-btn icon class="my-1 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
+          <v-btn icon class="mt-1 mb-0 z-index-5 geroButton" @click="switchPair" style="height: 32px; width: 32px; margin: 8px auto;">
             <v-icon color="#1a1a1a">mdi-swap-vertical</v-icon>
           </v-btn>
           <TokenSelector
@@ -47,11 +48,12 @@
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
-            class="mt-n3"
+            style="margin-top: -13px"
             :price="getPrice(selectedTokenB)"
             :price-impact="calculateWeightedPriceImpact"
             @change="tokenBQuantityChange"
             :search="search"
+            :show-balance="false"
           />
           <div class="text-left mt-2" v-if="swapType === 'swap'" style="display: flex;">
             <v-btn text plain x-small class="px-0 no-opacity" :ripple="false" @click="pairPriceToggle = !pairPriceToggle" style="letter-spacing: normal">
@@ -147,7 +149,7 @@
             <v-progress-circular indeterminate size="20" class="ma-2"></v-progress-circular>
           </div>
         </v-card-text>
-        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-3 mt-1 mb-0" />
+        <SwapOverviewOverlay ref="swap" @excludedChange="excludedChange" v-model="swapOverviewToggle" :token-a="selectedTokenA" :token-b="selectedTokenB" :slippage="slippageRef" :estimation="estimation" style="border-radius: 8px" class="mx-0 mt-1 mb-0" />
       </div>
     </v-card-text>
     <v-card-actions class="px-3 pt-2 pb-3" style="justify-content: center;">
@@ -355,8 +357,7 @@ const availableTokens = computed(() => {
     //   // If none are pinned, sort by balance in descending order
       return b.balance - a.balance;
     });
-  const gr = [nativeToken, ...availableTokens];
-  return gr;
+  return [nativeToken, ...availableTokens];
 });
 
 const calculateWeightedPriceImpact = computed(() => {
@@ -711,6 +712,28 @@ const submit = async (cborHex: string) => {
 const excludedChange = async (val) => {
   blacklisted_dexes.value = val
   await performPeriodicEstimate()
+}
+
+const setMaxTokenA = () => {
+  if (!selectedTokenA.value) return;
+
+  const balance = selectedTokenA.value.balance || 0;
+  const decimals = selectedTokenA.value.decimals || 0;
+  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+
+  // For ADA (native currency), reserve 3 ADA for tx fees, deposits, and DEX fees
+  if (selectedTokenA.value.ticker === nativeTicker) {
+    const reservedAmount = 3_000_000; // 3 ADA in lovelace
+    const maxBalanceLovelace = Math.max(0, Number(balance) - reservedAmount);
+    const maxBalance = filters.toCurrency(maxBalanceLovelace, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    selectedTokenA.value.quantity = maxBalance;
+    tokenAQuantityChange(maxBalance);
+  } else {
+    // For non-ADA tokens, use full balance (fees are paid in ADA)
+    const maxBalance = filters.toCurrency(balance, false, decimals, '', '', false, decimals).replaceAll(',', '');
+    selectedTokenA.value.quantity = maxBalance;
+    tokenAQuantityChange(maxBalance);
+  }
 }
 
 onMounted(async () => {
