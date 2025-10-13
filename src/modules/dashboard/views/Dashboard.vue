@@ -205,6 +205,7 @@ import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
 
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
+import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 // Import carousel assets
 import assets from '@/utils/assets';
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
@@ -219,6 +220,10 @@ const instance = getCurrentInstance();
 const { loggedWallet, transactions, account, utxos, collateral } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { portfolio } = toRefs(tapToolsStore);
+const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
+
+// Load exchange rate immediately on component mount
+loadExchangeRate();
 
 // const kaiserExLoading = ref(false);
 // const kaiserExMessage = ref<{ type: string; text: string } | null>(null);
@@ -420,14 +425,14 @@ const computeChartData = computed(() => {
       while (currentTime < firstTxTimestamp) {
         graphData.push([currentTime, 0]);
         usdData.push([currentTime, 0]);
-        eurData.push([currentTime, 0]);
+        eurData.push([currentTime, 0]); // EUR is also 0 when balance is 0
         currentTime += weekInMs;
       }
 
       // Add a point just before the first transaction (1 second before) for smooth transition
       graphData.push([firstTxTimestamp - 1000, 0]);
       usdData.push([firstTxTimestamp - 1000, 0]);
-      eurData.push([firstTxTimestamp - 1000, 0]);
+      eurData.push([firstTxTimestamp - 1000, 0]); // EUR is also 0 when balance is 0
     }
 
     // Process all transactions
@@ -438,8 +443,9 @@ const computeChartData = computed(() => {
       const timestamp = tx.tx_timestamp * 1000;
 
       graphData.push([timestamp, balanceInAda]);
-      usdData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
-      eurData.push([timestamp, balanceInAda * (price.value?.lastPrice || 0)]);
+      const balanceInUsd = balanceInAda * (price.value?.lastPrice || 0);
+      usdData.push([timestamp, balanceInUsd]);
+      eurData.push([timestamp, balanceInUsd * usdToEurRate.value]);
     });
 
     // Fill gap from last transaction to now with weekly points
@@ -453,16 +459,18 @@ const computeChartData = computed(() => {
       // Add a point every week from last transaction until now
       while (currentTime < now) {
         graphData.push([currentTime, lastBalance]);
-        usdData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
-        eurData.push([currentTime, lastBalance * (price.value?.lastPrice || 0)]);
+        const balanceUsd = lastBalance * (price.value?.lastPrice || 0);
+        usdData.push([currentTime, balanceUsd]);
+        eurData.push([currentTime, balanceUsd * usdToEurRate.value]);
         currentTime += weekInMs;
       }
     }
 
     // Add current point with last known balance
     graphData.push([now, lastBalance]);
-    usdData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
-    eurData.push([now, lastBalance * (price.value?.lastPrice || 0)]);
+    const currentBalanceUsd = lastBalance * (price.value?.lastPrice || 0);
+    usdData.push([now, currentBalanceUsd]);
+    eurData.push([now, currentBalanceUsd * usdToEurRate.value]);
   }
   return {
     adaData: graphData || [],
@@ -483,11 +491,12 @@ const currentPortfolioValues = computed(() => {
     };
   }
 
-  // For other chains/networks, use calculated values from transactions
+  // For other chains/networks (including Apex), use calculated values from transactions
+  const totalValueUsd = computedValues.value.totalValue * (price.value?.lastPrice || 0);
   return {
     ada: computedValues.value.totalValue,
-    usd: computedValues.value.totalValue * (price.value?.lastPrice || 0),
-    eur: computedValues.value.totalValue * (price.value?.lastPrice || 0),
+    usd: totalValueUsd,
+    eur: totalValueUsd * usdToEurRate.value,
   };
 });
 

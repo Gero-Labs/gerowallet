@@ -252,6 +252,7 @@ import { dexHunterStore } from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
+import networks from '@/utils/networks';
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);
@@ -261,21 +262,37 @@ const { config: geroConfig } = toRefs(geroStore);
 const { dexHunterTokens } = toRefs(dexHunterStore);
 const { tip } = toRefs(networkStore);
 const { musicPlaylist, context } = toRefs(musicStore);
-const { usdToEurRate } = useCurrencyConverter();
+const { usdToEurRate, loadExchangeRate } = useCurrencyConverter();
 const { price } = toRefs(networkStore);
+
+// Load exchange rate immediately
+loadExchangeRate();
 
 // GERO token unit
 const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
 
 const geroPriceInAda = computed(() => {
+  // For Apex, we show the native token price (AP3X = 1, like ADA = 1 for Cardano)
+  if (isApex.value) {
+    return 1;
+  }
+
+  // For Cardano, show GERO token price in ADA
   const geroToken = dexHunterTokens.value[GERO_UNIT];
-  if (!isApex.value && geroToken?.price && geroToken.price > 0) {
+  if (geroToken?.price && geroToken.price > 0) {
     return Number(geroToken.price);
   }
   return 0;
 });
 
 const geroPriceInUsd = computed(() => {
+  // For Apex, AP3X price in USD is same as ADA price (1:1 peg assumption or oracle price)
+  if (isApex.value) {
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return Number(adaPriceUsd.toFixed(6));
+  }
+
+  // For Cardano, calculate GERO token price in USD
   const priceInAda = geroPriceInAda.value;
   if (priceInAda === 0) return 0;
 
@@ -307,7 +324,11 @@ const backgroundImageLoaded = ref(false);
 const isSwapDialogOpen = computed(() => swapDialog.value);
 
 const tokenName = computed(() => {
-  return isApex.value ? 'APEX' : 'GERO';
+  if (isApex.value) {
+    // Use the currency ticker from network configuration
+    return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) || 'AP3X';
+  }
+  return 'GERO';
 });
 
 const isApex = computed(() => {
