@@ -250,7 +250,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, getCurrentInstance, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
@@ -263,6 +263,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 const props = defineProps({
@@ -352,7 +353,14 @@ const transactions = computed(() => {
         ('strike'.includes(searchLower) && isStrike(tx)) ||
         ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
-        ('internal'.includes(searchLower) && isInternalTransfer(tx));
+        ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
+        ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
+        ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
+        ('pending'.includes(searchLower) && tx.pending) ||
+        (tx.body?.certificates?.some((cert: any) => {
+          const certType = cert.__typename;
+          return (certType.toLowerCase().includes(searchLower))
+        }));
 
       // Check contact name
       const contactName = getContactName(tx);
@@ -392,8 +400,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 
     addFundTransferStatus(item, statuses);
 
-    const finalStatus = statuses.join(', ');
-    transactionStatuses.value[txId] = finalStatus;
+    transactionStatuses.value[txId] = statuses.join(', ');
   });
 
   await Promise.all(promises);
@@ -878,9 +885,7 @@ const isWingRiders = (item) => {
 const isVyFi = (item) => {
   // Check for VyFi metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
-  const hasVyFiMetadata = typeof msg === 'string' && msg.includes('VyFi');
-
-  return hasVyFiMetadata;
+  return typeof msg === 'string' && msg.includes('VyFi');
 }
 
 const isSundaeSwap = (item) => {
@@ -892,8 +897,7 @@ const isSundaeSwap = (item) => {
   const SUNDAESWAP_V3_POOL_ADDRESS = 'addr1x8srqftqemf0mjlukfszd97ljuxdp44r372txfcr75wrz26rnxqnmtv3hdu2t6chcfhl2zzjh36a87nmd6dwsu3jenqsslnz7e';
 
   // Check for SundaeSwap contract addresses (indicates DEX interaction)
-  const hasSundaeSwapAddress =
-    item.utxo?.inputs?.some((input: any) =>
+  return item.utxo?.inputs?.some((input: any) =>
       input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
       input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
       input.address === SUNDAESWAP_V3_POOL_ADDRESS
@@ -903,8 +907,6 @@ const isSundaeSwap = (item) => {
       output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
       output.address === SUNDAESWAP_V3_POOL_ADDRESS
     );
-
-  return hasSundaeSwapAddress;
 }
 
 const isSplash = (item) => {
@@ -1054,8 +1056,8 @@ onUnmounted(() => {
 
 .transactions-table tbody tr td {
   height: 50px !important;
-  padding-top: 0px !important;
-  padding-bottom: 0px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   vertical-align: middle !important;
   text-align: center !important;
 }
@@ -1320,9 +1322,11 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1px;
   background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
   -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }
 
@@ -1377,10 +1381,12 @@ onUnmounted(() => {
   bottom: 0;
   border-radius: 12px;
   padding: 1px;
-  background: linear-gradient(90deg, #c024c3, #3a85d0);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
   -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }
 
@@ -1390,7 +1396,7 @@ onUnmounted(() => {
   z-index: 1;
   padding: 0 4px;
   display: inline-block;
-  background: linear-gradient(90deg, #c024c3, #3a85d0);
+  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -1436,9 +1442,11 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1px;
   background: linear-gradient(90deg, #0059FF, #00FFF6);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
   -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
   mask-composite: exclude;
 }
 
