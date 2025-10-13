@@ -25,6 +25,7 @@ defineEmits<{
   position: relative;
   overflow: hidden;
   border-radius: 8px;
+  color: #0c0e12 !important; // Dark text color (override white from mixin)
 }
 
 .gradient-button::before {

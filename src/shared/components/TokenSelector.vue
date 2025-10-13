@@ -41,7 +41,7 @@
             paddingBottom: '0!important',
           }"
         >
-          <v-card-subtitle class="pa-0 text-right caption grey--text" style="margin-bottom: -10px">
+          <v-card-subtitle v-if="showBalance" class="pa-0 text-right caption grey--text" style="margin-bottom: -10px">
             Balance: {{ balance }}
           </v-card-subtitle>
           <v-card-text style="display: flex" class="pa-0">
@@ -53,7 +53,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34"
+                      :offset-y="34+props.badgeOffsetY"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -85,7 +85,7 @@
                       overlap
                       avatar
                       color="transparent"
-                      :offset-y="34"
+                      :offset-y="34+props.badgeOffsetY"
                       v-if="selectedToken.verified"
                       class="mr-1"
                     >
@@ -258,9 +258,17 @@ const props = defineProps({
   search: {
     type: Function,
   },
+  showBalance: {
+    type: Boolean,
+    default: true,
+  },
   externalBalance: {
     type: Boolean,
     default: false,
+  },
+  badgeOffsetY: {
+    type: Number,
+    default: 0,
   }
 });
 const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
