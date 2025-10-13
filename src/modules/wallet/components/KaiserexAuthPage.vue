@@ -21,22 +21,11 @@
           </div>
           
           <div class="option-content">
-            <h3 class="option-title">
-              New to 
-              <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="kaiserex-hover">Kaiserex</span>
-                </template>
-                <div class="tooltip-content">
-                  <strong>Kaiserex</strong> is Gero's trusted financial partner that handles card issuance, 
-                  KYC verification, and payment processing for the Gero Crypto Card.
-                </div>
-              </v-tooltip>?
-            </h3>
+            <h3 class="option-title">Register to order your card</h3>
             <p class="option-description">
               Create your Kaiserex account and complete the verification process to order your card.
             </p>
-            
+
             <div class="option-steps">
               <div class="step-item">
                 <span class="step-number">1</span>
@@ -52,10 +41,22 @@
               </div>
             </div>
           </div>
-          
+
           <div class="option-action">
-            <GradientButton 
-              text="Create Account" 
+            <p class="new-to-kaiserex">
+              New to
+              <v-tooltip top :open-delay="300" content-class="custom-tooltip">
+                <template v-slot:activator="{ on, attrs }">
+                  <span v-bind="attrs" v-on="on" class="kaiserex-hover">Kaiserex</span>
+                </template>
+                <div class="tooltip-content">
+                  <strong>Kaiserex</strong> is Gero's trusted financial partner that handles card issuance,
+                  KYC verification, and payment processing for the Gero Crypto Card.
+                </div>
+              </v-tooltip>?
+            </p>
+            <GradientButton
+              text="Order Your Gero Card"
               @click="handleRegister"
               class="full-width"
             />
@@ -96,11 +97,11 @@
             </div>
             
             <div class="option-action">
-              <SecondaryButton 
-                :text="kaiserExLoading ? 'Signing In...' : 'Sign In'" 
+              <SecondaryButton
+                :text="kaiserExLoading ? 'Signing In...' : 'Sign In'"
                 :disabled="kaiserExLoading"
                 @click="handleLogin"
-                class="full-width"
+                class="full-width gradient-text-button"
               />
             </div>
           </div>
@@ -216,7 +217,7 @@
           <div class="management-column-content">
             <h3 class="management-heading">Manage Your Card in Seconds</h3>
             <p class="management-description">
-              An all-in-one platform that helps you manage everything about your Gero Card account
+              An all-in-one platform that helps you manage everything about your Gero Card
             </p>
             <div class="feature-list">
               <div class="feature-item">
@@ -278,30 +279,30 @@ const handleRegister = () => {
 const handleLogin = async () => {
   try {
     kaiserExLoading.value = true;
-    
-    // Wrap receiveKaiserExToken in a Promise to ensure proper async handling
-    await new Promise((resolve, reject) => {
-      receiveKaiserExToken( async tokenData => {
-        console.log('handleLogin', tokenData);
 
-        try {
-          console.log('handleLogin', tokenData);
-          console.log('Token received:', tokenData);
-          // Use the proper method to set tokens
-          await cardStore.setKaiserExTokens(tokenData);
-          // Set authentication status in localStorage
-          localStorage.setItem('kaiserexRegistered', 'true');
-          kaiserExLoading.value = false;
-          // Emit auth completion
-          emit('auth-complete');
-          resolve(tokenData);
-        } catch (error) {
-          reject(error);
-        }
-      });
+    // Call receiveKaiserExToken with callback
+    await receiveKaiserExToken(async tokenData => {
+      try {
+        console.log('Token received:', tokenData);
+        // Use the proper method to set tokens
+        await cardStore.setKaiserExTokens(tokenData);
+        // Set authentication status in localStorage
+        localStorage.setItem('kaiserexRegistered', 'true');
+        kaiserExLoading.value = false;
+        // Emit auth completion
+        emit('auth-complete');
+      } catch (error) {
+        console.error('❌ Failed to process KaiserEx token:', error);
+        kaiserExLoading.value = false;
+      }
     });
-  } catch (error) {
-    console.error('❌ Failed to receive KaiserEx token:', error);
+  } catch (error: any) {
+    // Handle window closed gracefully (don't log as error)
+    if (error?.message === 'Authentication window was closed by user') {
+      console.log('ℹ️ Authentication cancelled by user');
+    } else {
+      console.error('❌ Failed to receive KaiserEx token:', error);
+    }
     kaiserExLoading.value = false;
   }
 };
@@ -593,9 +594,16 @@ const handleRegistrationComplete = () => {
 
 .option-description {
   @include body-text($font-size-base);
-  color: $text-secondary;
+  color: $text-secondary; // Slightly off-white color (same as management description)
   margin: 0 0 $spacing-md 0; // Reduced from $spacing-lg
   line-height: 1.6;
+}
+
+.new-to-kaiserex {
+  @include body-text($font-size-sm);
+  color: $text-secondary;
+  margin: 0 0 $spacing-sm 0;
+  text-align: center;
 }
 
 .option-steps {
@@ -671,12 +679,22 @@ const handleRegistrationComplete = () => {
 
 .full-width {
   width: 100%;
-  
+
   :deep(.gradient-button),
   :deep(.secondary-button) {
     width: 100% !important;
     height: 48px;
     font-size: $font-size-base;
+    font-weight: $font-weight-semibold;
+  }
+}
+
+.gradient-text-button {
+  :deep(.button-text) {
+    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     font-weight: $font-weight-semibold;
   }
 }
