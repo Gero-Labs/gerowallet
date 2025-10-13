@@ -80,13 +80,24 @@ const currentCurrencySymbol = computed(() => {
 });
 
 function cycleDisplayMode() {
-  // Cycle through: USD → EUR → ADA → USD
-  if (displayMode.value === 'USD') {
-    displayMode.value = 'EUR';
-  } else if (displayMode.value === 'EUR') {
-    displayMode.value = 'ADA';
+  // For Apex: Cycle through USD → EUR → USD (no ADA)
+  // For Cardano: Cycle through USD → EUR → ADA → USD
+  if (isApex.value) {
+    // Apex: only USD and EUR
+    if (displayMode.value === 'USD') {
+      displayMode.value = 'EUR';
+    } else {
+      displayMode.value = 'USD';
+    }
   } else {
-    displayMode.value = 'USD';
+    // Cardano: USD, EUR, and ADA
+    if (displayMode.value === 'USD') {
+      displayMode.value = 'EUR';
+    } else if (displayMode.value === 'EUR') {
+      displayMode.value = 'ADA';
+    } else {
+      displayMode.value = 'USD';
+    }
   }
 }
 </script>
