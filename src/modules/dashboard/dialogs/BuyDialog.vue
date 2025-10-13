@@ -135,7 +135,6 @@
         <div v-else style="height: 36px" />
       </v-card-actions>
     </v-card>
-
   </BaseDialog>
 </template>
 <script setup lang="ts">
