@@ -4,9 +4,7 @@
       <!-- Header -->
       <div class="auth-header">
         <h1 class="page-title">Get Your Gero Crypto Card</h1>
-        <p class="page-description">
-          Choose an option below to get started with your crypto card order
-        </p>
+        <p class="page-description">Choose an option below to get started with your crypto card order</p>
       </div>
 
       <!-- Auth Options -->
@@ -19,7 +17,7 @@
               <v-icon>mdi-account-plus</v-icon>
             </div>
           </div>
-          
+
           <div class="option-content">
             <h3 class="option-title">Register to order your card</h3>
             <p class="option-description">
@@ -73,13 +71,13 @@
                 <v-icon>mdi-account-check</v-icon>
               </div>
             </div>
-            
+
             <div class="option-content">
               <h3 class="option-title">Already have a Kaiserex account?</h3>
               <p class="option-description">
                 Sign in to your existing account to continue with your card order or check your status.
               </p>
-              
+
               <div class="option-features">
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
@@ -95,7 +93,7 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="option-action">
               <SecondaryButton
                 :text="kaiserExLoading ? 'Signing In...' : 'Sign In'"
@@ -114,44 +112,26 @@
                 Back
               </button>
               <h3 class="form-title">Sign in to Kaiserex</h3>
-              <p class="form-description">
-                Enter your credentials to continue with your card order.
-              </p>
+              <p class="form-description">Enter your credentials to continue with your card order.</p>
             </div>
-            
+
             <div class="form-content">
               <div class="form-group">
                 <label class="form-label">Username or Email</label>
-                <input 
-                  v-model="username" 
-                  type="text" 
-                  class="form-input"
-                  placeholder="Enter your username or email"
-                />
+                <input v-model="username" type="text" class="form-input" placeholder="Enter your username or email" />
               </div>
-              
+
               <div class="form-group">
                 <label class="form-label">Password</label>
-                <input 
-                  v-model="password" 
-                  type="password" 
-                  class="form-input"
-                  placeholder="Enter your password"
-                />
+                <input v-model="password" type="password" class="form-input" placeholder="Enter your password" />
               </div>
-              
+
               <div class="form-actions">
-                <GradientButton 
-                  text="Sign In" 
-                  @click="handleLoginSubmit"
-                  class="full-width"
-                />
+                <GradientButton text="Sign In" @click="handleLoginSubmit" class="full-width" />
               </div>
-              
+
               <div class="forgot-password">
-                <button class="forgot-link">
-                  Forgot your password?
-                </button>
+                <button class="forgot-link">Forgot your password?</button>
               </div>
             </div>
           </div>
@@ -159,28 +139,32 @@
           <!-- 2FA Verification View -->
           <div v-if="show2FAForm" class="twofa-form-container">
             <div class="form-header">
-              <button @click="show2FAForm = false; showLoginForm = true" class="back-button">
+              <button
+                @click="
+                  show2FAForm = false;
+                  showLoginForm = true;
+                "
+                class="back-button"
+              >
                 <v-icon small>mdi-arrow-left</v-icon>
                 Back
               </button>
               <h3 class="form-title">Two-Factor Authentication</h3>
-              <p class="form-description">
-                Enter the 6-digit code from your authenticator app to continue.
-              </p>
+              <p class="form-description">Enter the 6-digit code from your authenticator app to continue.</p>
             </div>
-            
+
             <div class="form-content">
               <div class="form-group">
                 <label class="form-label">Verification Code</label>
                 <div class="code-input-container">
-                  <input 
+                  <input
                     v-for="(_, index) in twoFACode"
                     :key="index"
                     :ref="`codeInput${index}`"
                     v-model="twoFACode[index]"
                     @input="handleCodeInput(index)"
                     @keydown="handleCodeKeydown($event, index)"
-                    type="text" 
+                    type="text"
                     maxlength="1"
                     class="code-input"
                     :placeholder="'•'"
@@ -191,20 +175,18 @@
                   {{ twoFAError }}
                 </div>
               </div>
-              
+
               <div class="form-actions">
-                <GradientButton 
-                  :text="kaiserExLoading ? 'Verifying...' : 'Verify'" 
+                <GradientButton
+                  :text="kaiserExLoading ? 'Verifying...' : 'Verify'"
                   @click="handleTwoFASubmit"
                   :disabled="!isCodeComplete || kaiserExLoading"
                   class="full-width"
                 />
               </div>
-              
+
               <div class="resend-code">
-                <button class="resend-link" @click="handleResendCode">
-                  Didn't receive a code? Resend
-                </button>
+                <button class="resend-link" @click="handleResendCode">Didn't receive a code? Resend</button>
               </div>
             </div>
           </div>
@@ -239,12 +221,11 @@
     </div>
 
     <!-- Modals -->
-    <KaiserexRegistrationModal 
-      :open="showRegistrationModal" 
+    <KaiserexRegistrationModal
+      :open="showRegistrationModal"
       @close="showRegistrationModal = false"
-      @complete="handleRegistrationComplete" 
+      @complete="handleRegistrationComplete"
     />
-    
   </div>
 </template>
 
@@ -312,7 +293,7 @@ const handleLoginSubmit = () => {
   showLoginForm.value = false;
   show2FAForm.value = true;
   twoFAError.value = '';
-  
+
   // Focus on first input when 2FA form shows
   setTimeout(() => {
     const firstInput = document.querySelector('.code-input') as HTMLInputElement;
@@ -322,13 +303,13 @@ const handleLoginSubmit = () => {
 
 const handleCodeInput = (index: number) => {
   const value = twoFACode.value[index];
-  
+
   // Only allow digits
   if (value && !/^\d$/.test(value)) {
     twoFACode.value[index] = '';
     return;
   }
-  
+
   // Move to next input if value entered
   if (value && index < 5) {
     const nextInput = document.querySelectorAll('.code-input')[index + 1] as HTMLInputElement;
@@ -345,7 +326,7 @@ const handleCodeKeydown = (event: KeyboardEvent, index: number) => {
       twoFACode.value[index - 1] = '';
     }
   }
-  
+
   // Handle paste
   if (event.key === 'v' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
@@ -365,10 +346,10 @@ const handleTwoFASubmit = async () => {
     twoFAError.value = 'Please enter all 6 digits';
     return;
   }
-  
+
   // Verify the code (in production, this would call an API)
   const enteredCode = twoFACode.value.join('');
-  
+
   // For demo purposes, accept any 6-digit code or specific test code
   if (enteredCode.length === 6) {
     try {
@@ -381,13 +362,13 @@ const handleTwoFASubmit = async () => {
             cardStore.setKaiserExTokens(tokenData);
             // Set authentication status
             localStorage.setItem('kaiserexRegistered', 'true');
-            
+
             // Reset forms
             show2FAForm.value = false;
             showLoginForm.value = false;
             twoFACode.value = ['', '', '', '', '', ''];
             twoFAError.value = '';
-            
+
             // Emit auth completion
             emit('auth-complete');
             resolve(tokenData);
@@ -403,7 +384,7 @@ const handleTwoFASubmit = async () => {
   } else {
     twoFAError.value = 'Invalid verification code. Please try again.';
     twoFACode.value = ['', '', '', '', '', ''];
-    
+
     // Focus back on first input
     setTimeout(() => {
       const firstInput = document.querySelector('.code-input') as HTMLInputElement;
@@ -416,7 +397,7 @@ const handleResendCode = () => {
   // In production, this would trigger a new code to be sent
   twoFAError.value = '';
   console.log('Resending 2FA code...');
-  
+
   // Show success message temporarily
   twoFAError.value = 'New code sent to your authenticator app';
   setTimeout(() => {
@@ -427,7 +408,7 @@ const handleResendCode = () => {
 const handleRegistrationComplete = () => {
   // Set authentication status
   localStorage.setItem('kaiserexRegistered', 'true');
-  
+
   showRegistrationModal.value = false;
   emit('auth-complete');
 };
@@ -447,7 +428,7 @@ const handleRegistrationComplete = () => {
   padding-right: $spacing-xl;
   padding-bottom: $spacing-xl;
   position: relative;
-  
+
   // Background image with blend mode
   &::before {
     content: '';
@@ -511,11 +492,11 @@ const handleRegistrationComplete = () => {
   position: relative;
   overflow: hidden;
   height: 480px; // Fixed height for consistency
-  
+
   &:hover {
     border-color: rgba(0, 199, 243, 0.3);
   }
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -527,7 +508,7 @@ const handleRegistrationComplete = () => {
     opacity: 0;
     transition: opacity 0.3s ease;
   }
-  
+
   &:hover::before {
     opacity: 1;
   }
@@ -539,7 +520,7 @@ const handleRegistrationComplete = () => {
   backdrop-filter: blur(12px) !important;
   background: #000000ab !important;
   border: solid 2px #ffffff44 !important;
-  
+
   &:hover {
     background: #000000bb !important;
     border-color: rgba(0, 199, 243, 0.4) !important;
@@ -562,16 +543,16 @@ const handleRegistrationComplete = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   .v-icon {
     font-size: 32px; // Reduced from 36px
   }
-  
+
   &.new-user {
     background: rgba(0, 199, 243, 0.1);
     color: $primary-cyan;
   }
-  
+
   &.existing-user {
     background: rgba(255, 255, 255, 0.1);
     color: $text-secondary;
@@ -665,7 +646,7 @@ const handleRegistrationComplete = () => {
   margin-top: auto;
   flex-shrink: 0;
   width: 100%;
-  
+
   .gradient-button,
   .secondary-button,
   :deep(.gradient-button),
@@ -758,11 +739,11 @@ const handleRegistrationComplete = () => {
     grid-template-columns: 1fr;
     gap: $spacing-2xl;
   }
-  
+
   .auth-option {
     padding: $spacing-2xl;
   }
-  
+
   .management-content {
     flex-direction: column;
     gap: $spacing-2xl;
@@ -774,21 +755,20 @@ const handleRegistrationComplete = () => {
   .kaiserex-auth-page {
     padding: $spacing-lg;
   }
-  
+
   .page-title {
     font-size: $font-size-2xl;
   }
-  
+
   .auth-option {
     padding: $spacing-xl;
   }
-  
+
   .option-steps {
     flex-direction: column;
     gap: $spacing-md;
   }
 }
-
 
 // Kaiserex hover tooltip styling
 .kaiserex-hover {
@@ -796,7 +776,7 @@ const handleRegistrationComplete = () => {
   cursor: help;
   border-bottom: 1px dotted $primary-cyan;
   transition: all 0.2s ease;
-  
+
   &:hover {
     color: lighten($primary-cyan, 10%);
     border-bottom-color: lighten($primary-cyan, 10%);
@@ -807,7 +787,7 @@ const handleRegistrationComplete = () => {
 .tooltip-content {
   font-size: $font-size-sm;
   line-height: 1.5;
-  
+
   strong {
     color: $primary-cyan;
     font-weight: $font-weight-semibold;
@@ -832,7 +812,7 @@ const handleRegistrationComplete = () => {
 
 .form-header {
   margin-bottom: $spacing-xl;
-  
+
   .back-button {
     display: flex;
     align-items: center;
@@ -846,20 +826,20 @@ const handleRegistrationComplete = () => {
     padding: $spacing-xs;
     border-radius: $border-radius-sm;
     transition: all 0.2s ease;
-    
+
     &:hover {
       color: $primary-cyan;
       background: rgba(0, 199, 243, 0.1);
     }
   }
-  
+
   .form-title {
     @include heading-style($font-size-xl);
     color: $text-primary;
     margin: 0 0 $spacing-sm 0;
     text-align: center;
   }
-  
+
   .form-description {
     @include body-text($font-size-sm);
     color: $text-secondary;
@@ -894,13 +874,13 @@ const handleRegistrationComplete = () => {
   color: $text-primary;
   font-size: $font-size-base;
   transition: border-color 0.2s ease;
-  
+
   &:focus {
     outline: none;
     border-color: $primary-cyan;
     box-shadow: 0 0 0 2px rgba(0, 199, 243, 0.1);
   }
-  
+
   &::placeholder {
     color: $text-muted;
   }
@@ -914,7 +894,7 @@ const handleRegistrationComplete = () => {
 .forgot-password {
   text-align: center;
   margin-top: $spacing-md;
-  
+
   .forgot-link {
     background: none;
     border: none;
@@ -922,7 +902,7 @@ const handleRegistrationComplete = () => {
     font-size: $font-size-sm;
     cursor: pointer;
     text-decoration: underline;
-    
+
     &:hover {
       opacity: 0.8;
     }
@@ -955,14 +935,14 @@ const handleRegistrationComplete = () => {
   background: $background-secondary;
   color: $text-primary;
   transition: all 0.2s ease;
-  
+
   &:focus {
     outline: none;
     border-color: $primary-cyan;
     box-shadow: 0 0 0 3px rgba(0, 199, 243, 0.2);
     background: rgba(0, 199, 243, 0.05);
   }
-  
+
   &::placeholder {
     color: $text-muted;
     font-size: $font-size-2xl;
@@ -979,7 +959,7 @@ const handleRegistrationComplete = () => {
   font-size: $font-size-sm;
   margin-top: $spacing-sm;
   text-align: center;
-  
+
   .error-icon {
     color: #ff4444;
   }
@@ -988,7 +968,7 @@ const handleRegistrationComplete = () => {
 .resend-code {
   text-align: center;
   margin-top: $spacing-md;
-  
+
   .resend-link {
     background: none;
     border: none;
@@ -997,16 +977,15 @@ const handleRegistrationComplete = () => {
     cursor: pointer;
     text-decoration: underline;
     transition: opacity 0.2s ease;
-    
+
     &:hover {
       opacity: 0.8;
     }
-    
+
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   }
 }
-
 </style>
