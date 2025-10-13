@@ -52,7 +52,8 @@ export function useCurrencyConverter() {
     if (!rateLoaded.value && !loading.value) {
       loadExchangeRate();
     }
-    return Number((usdAmount * usdToEurRate.value * usdToAdaRate.value).toFixed(6));
+    // Convert USD to EUR (not ADA!)
+    return Number((usdAmount * usdToEurRate.value).toFixed(6));
   };
 
   const getCurrencySymbol = (): string => {
