@@ -879,6 +879,7 @@
                 outlined
                 :class="{
                     'short-position': positionData.position === 'SHORT',
+                    'invalid-input': limitPriceValidation.isInvalid
                   }"
               >
                 <v-card-text class="pa-1">
@@ -905,6 +906,15 @@
                   </div>
                 </v-card-text>
               </v-card>
+              
+              <!-- Limit Price Validation Warning -->
+              <div
+                v-if="limitPriceValidation.isInvalid && positionData.limitPrice > 0"
+                class="limit-price-warning mt-2"
+              >
+                <v-icon small color="#f59e0b" class="mr-1">mdi-alert</v-icon>
+                <span class="warning-text">{{ limitPriceValidation.message }}</span>
+              </div>
             </div>
 
             <!-- Step 3: Collateral Amount -->
@@ -2565,6 +2575,35 @@ watch(
   }
 );
 
+// Limit price validation
+const limitPriceValidation = computed(() => {
+  const currentPrice = Number(perpetualsPrice.value?.lastPrice || 0);
+  const limitPrice = positionData.value.limitPrice;
+  const position = positionData.value.position;
+  
+  if (!limitPrice || limitPrice <= 0 || !currentPrice) {
+    return { isInvalid: false, message: '' };
+  }
+  
+  // For LONG positions: limit price should be BELOW current price
+  if (position === 'LONG' && limitPrice >= currentPrice) {
+    return {
+      isInvalid: true,
+      message: `Long limit price must be below current price ($${currentPrice.toFixed(4)})`
+    };
+  }
+  
+  // For SHORT positions: limit price should be ABOVE current price
+  if (position === 'SHORT' && limitPrice <= currentPrice) {
+    return {
+      isInvalid: true,
+      message: `Short limit price must be above current price ($${currentPrice.toFixed(4)})`
+    };
+  }
+  
+  return { isInvalid: false, message: '' };
+});
+
 const canOpenPosition = computed(() => {
   const hasRequiredFields =
     positionData.value.asset &&
@@ -2574,7 +2613,9 @@ const canOpenPosition = computed(() => {
 
   // Additional validation for LIMIT orders
   if (positionData.value.orderType === "LIMIT") {
-    return hasRequiredFields && positionData.value.limitPrice > 0;
+    return hasRequiredFields && 
+           positionData.value.limitPrice > 0 && 
+           !limitPriceValidation.value.isInvalid;
   }
 
   return hasRequiredFields;
@@ -4112,6 +4153,15 @@ const getCollateralAmount = (item: any) => {
   border-color: rgba(255, 82, 82, 0.4) !important;
 }
 
+.input-card.invalid-input {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  background-color: rgba(245, 158, 11, 0.05) !important;
+}
+
+.input-card.invalid-input:hover {
+  border-color: rgba(245, 158, 11, 0.7) !important;
+}
+
 .input-card.small {
   background-color: #101828 !important;
 }
@@ -4629,5 +4679,38 @@ const getCollateralAmount = (item: any) => {
   height: 20px !important;
   padding: 0 8px !important;
   min-width: auto !important;
+}
+
+/* Limit Price Validation Warning */
+.limit-price-warning {
+  display: flex;
+  align-items: center;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  animation: fadeIn 0.3s ease;
+}
+
+.limit-price-warning .warning-text {
+  color: #f59e0b;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.limit-price-warning .v-icon {
+  flex-shrink: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
