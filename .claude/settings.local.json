@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git commit:*)",
       "Bash(gh pr create:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(npm run manifest:*)",
+      "Bash(npx tsx:*)"
     ],
     "deny": [],
     "ask": []
