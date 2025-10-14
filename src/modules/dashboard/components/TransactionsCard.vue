@@ -68,6 +68,15 @@
                     >Stake Registration</v-chip
                   >
                   <v-chip
+                    v-if="isStakeDeRegistration(item)"
+                    x-small
+                    outlined
+                    class="px-1"
+                    color="red"
+                    style="margin-right: 4px !important"
+                  >Stake Deregistration</v-chip
+                  >
+                  <v-chip
                     v-if="isWithdrawal(item)"
                     x-small
                     outlined
@@ -420,6 +429,7 @@ const getCertificateBaseStatus = (certificateType: string): string => {
     case Cardano.CertificateType.StakeRegistrationDelegation:
     case Cardano.CertificateType.StakeDelegation:
       return 'Delegating to Pool';
+    case Cardano.CertificateType.Unregistration:
     case Cardano.CertificateType.StakeDeregistration:
       return 'Stake Deregistration';
     case Cardano.CertificateType.RegisterDelegateRepresentative:
@@ -982,6 +992,17 @@ const isStakeRegistration = item => {
       certificate =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
         certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+    )
+  );
+};
+
+const isStakeDeRegistration = item => {
+  return (
+    item.body?.certificates?.length > 0 &&
+    item.body.certificates.some(
+      certificate =>
+        certificate.__typename === Cardano.CertificateType.Unregistration ||
+        certificate.__typename === Cardano.CertificateType.StakeDeregistration
     )
   );
 };
