@@ -523,15 +523,27 @@ const walletCreationStep3 = async () => {
         network: props.network.network
       })
       dialogLocal.value = false
-      await Messaging.sendToBackgroundFromOptions({
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
         data: { wallet },
-      }).then(() => {
-        nextTick(() => {
-          resetDialog()
-          router.push('/')
-        })
       });
+      
+      if (response && !response.error) {
+        nextTick(() => {
+          resetDialog();
+          router.push('/').catch(err => {
+            if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+              console.error('Navigation error:', err);
+            }
+          });
+        });
+      } else if (response?.error) {
+        console.warn('Login response error:', response.error);
+        nextTick(() => {
+          resetDialog();
+          router.push('/').catch(() => {});
+        });
+      }
     }
   } catch (e: any) {
     console.error('Error creating wallet:', e);
