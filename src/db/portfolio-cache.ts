@@ -42,8 +42,8 @@ async function getWalletDb(): Promise<any> {
  */
 async function hasPortfolioChartsTable(db: any): Promise<boolean> {
   try {
-    if (!db) return false;
-    
+    if (!db || !db.tables) return false;
+
     // Check if the table exists in the database schema
     const tableNames = db.tables.map((table: any) => table.name);
     return tableNames.includes('portfolio_charts');
@@ -60,13 +60,13 @@ async function hasPortfolioChartsTable(db: any): Promise<boolean> {
 async function safeGetPortfolioTable(db: any): Promise<any> {
   try {
     if (!db) return null;
-    
+
     const hasTable = await hasPortfolioChartsTable(db);
     if (!hasTable) {
       console.debug('portfolio_charts table does not exist yet (old wallet database)');
       return null;
     }
-    
+
     return db.table('portfolio_charts');
   } catch (error) {
     console.warn('Error accessing portfolio_charts table:', error);
@@ -133,13 +133,13 @@ export class PortfolioCacheService {
 
     try {
       const db = await getWalletDb();
-      
+
       // Guard against undefined db
       if (!db) {
         console.debug('Database not available for cache retrieval');
         return null;
       }
-      
+
       const now = Date.now();
 
       // Safely get the portfolio table
@@ -270,21 +270,23 @@ export class PortfolioCacheService {
         return; // Table doesn't exist for old users
       }
 
-      // Try composite index first, fallback to individual queries if schema mismatch
+      // Use simple approach: query by address and filter by currency
+      // Avoid composite index as it causes issues in browser context
       try {
-        await portfolioTable.where(['address', 'currency']).equals([address, currency]).delete();
-      } catch (schemaError: any) {
-        if (schemaError.name === 'SchemaError') {
-          console.warn('Composite index not available, using fallback method for cache removal');
-          // Fallback: query by address and filter by currency
-          const entries = await portfolioTable.where('address').equals(address).toArray();
-          const entriesToDelete = entries.filter(entry => entry.currency === currency);
-          for (const entry of entriesToDelete) {
+        const entries = await portfolioTable.where('address').equals(address).toArray();
+        const entriesToDelete = entries.filter(entry => entry.currency === currency);
+        for (const entry of entriesToDelete) {
+          // Guard against entries without id (should not happen but be defensive)
+          if (entry.id !== undefined && entry.id !== null) {
             await portfolioTable.delete(entry.id);
+          } else {
+            console.warn('Found portfolio cache entry without id, cannot delete:', entry);
           }
-        } else {
-          throw schemaError;
         }
+        console.debug(`🗑️ Delete successful`);
+      } catch (error: any) {
+        console.error(`🗑️ Error during delete:`, error);
+        throw error;
       }
     } catch (error) {
       console.error('Error removing cached portfolio data:', error);
@@ -297,20 +299,20 @@ export class PortfolioCacheService {
   async clearAddressCache(address: string): Promise<void> {
     try {
       const db = await getWalletDb();
-      
+
       // Guard against undefined db
       if (!db) {
         console.debug('Database not available for cache clearing');
         return;
       }
-      
+
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
         console.debug('portfolio_charts table not available, skipping cache clearing');
         return; // Table doesn't exist for old users
       }
-      
+
       await portfolioTable.where('address').equals(address).delete();
     } catch (error) {
       console.error('Error clearing address cache:', error);
@@ -335,20 +337,20 @@ export class PortfolioCacheService {
   async cleanupExpiredCache(address: string): Promise<number> {
     try {
       const db = await getWalletDb();
-      
+
       // Guard against undefined db
       if (!db) {
         console.debug('Database not available for cache cleanup');
         return 0;
       }
-      
+
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
         console.debug('portfolio_charts table not available, skipping cache cleanup');
         return 0; // Table doesn't exist for old users
       }
-      
+
       const now = Date.now();
       const expiredEntries = await portfolioTable.where('expiresAt').belowOrEqual(now).toArray();
 
@@ -434,7 +436,7 @@ export class PortfolioCacheService {
 
     try {
       const db = await getWalletDb();
-      
+
       if (db) {
         const portfolioTable = await safeGetPortfolioTable(db);
         if (portfolioTable) {
@@ -482,7 +484,7 @@ export class PortfolioCacheService {
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
-        
+
         if (db) {
           const portfolioTable = await safeGetPortfolioTable(db);
           if (portfolioTable) {
@@ -534,7 +536,7 @@ export class PortfolioCacheService {
 
     try {
       const db = await getWalletDb();
-      
+
       // Guard against undefined db
       if (!db) {
         console.debug('Database not available for loading all portfolio data');
@@ -556,7 +558,7 @@ export class PortfolioCacheService {
             return [];
           }
         });
-        
+
         const [adaData, usdData, eurData] = await Promise.all(loadPromises);
         return { adaData, usdData, eurData };
       }
@@ -674,7 +676,7 @@ export class PortfolioCacheService {
         };
       }
       const db = await getWalletDb();
-      
+
       // Guard against undefined db
       if (!db) {
         console.debug('Database not available for cache status check');
@@ -684,7 +686,7 @@ export class PortfolioCacheService {
           eur: { hasData: false, dataPoints: 0, expiresAt: null },
         };
       }
-      
+
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
@@ -695,7 +697,7 @@ export class PortfolioCacheService {
           eur: { hasData: false, dataPoints: 0, expiresAt: null },
         };
       }
-      
+
       const now = Date.now();
 
       // Load data for all currencies
@@ -769,7 +771,7 @@ export class PortfolioCacheService {
 
       try {
         const db = await getWalletDb();
-        
+
         if (db) {
           const portfolioTable = await safeGetPortfolioTable(db);
           if (portfolioTable) {
@@ -806,7 +808,7 @@ export class PortfolioCacheService {
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
-        
+
         if (db) {
           const portfolioTable = await safeGetPortfolioTable(db);
           if (portfolioTable) {

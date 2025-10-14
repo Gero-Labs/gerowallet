@@ -345,6 +345,7 @@ const resetData = () => {
   txCbor.value = ''
   txWitnesses.value = ''
   isSubmit.value = false
+  txValid.value = false  // Reset tx validation state
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
   if (foundAsset) {
@@ -355,6 +356,8 @@ const resetData = () => {
     selectedCollectibles: {},
     recipientAddress: '',
     selectedWallet: loggedWallet.value,
+    minAda: 0,
+    adaShortage: 0
   };
   console.log(sendData.value)
 }

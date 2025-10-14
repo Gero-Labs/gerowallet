@@ -10,7 +10,9 @@
       "Bash(find:*)",
       "Bash(cat:*)",
       "Bash(npx tsc:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Read(//Users/dudiedri/IdeaProjects/A.D. Labs/lace/apps/browser-extension-wallet/src/lib/scripts/background/services/**)",
+      "Read(//Users/dudiedri/IdeaProjects/A.D. Labs/lace/**)"
     ],
     "deny": [],
     "ask": []
