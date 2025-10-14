@@ -36,42 +36,75 @@ src/
       walletBg.ts           # Wallet operations in background context
       messaging.ts          # Chrome messaging system
       storeMessagingBg.ts   # Background store messaging broadcaster
-      serialization.ts      # Cardano serialization utilities
-      cardanoJsSdkCbor.ts   # SDK ↔ CSL CBOR conversion utilities
+      serialization.ts      # Cardano serialization utilities (legacy CSL)
+      cardanoJsSdkCbor.ts   # SDK ↔ CSL CBOR conversion + fee calculation utilities
       auth.ts               # Google authentication
    modules/                  # Feature modules (Vue components)
-      dashboard/            # Portfolio, assets, quick actions
-      multisig/            # Multi-signature wallet functionality
-      staking/             # Cardano staking and delegation
-      governance/          # Cardano governance and DRep
-      swap/                # DeFi and token swapping
+      assets/              # Asset management and token details
+      blog/                # In-app blog and news
       cashback/            # Bring cashback integration
-      wallet/              # Gero Card (debit card) integration
+      dashboard/           # Portfolio, assets, quick actions
+      devTools/            # Developer tools and debugging
+      governance/          # Cardano governance (CIP-1694) and DRep
+      media-player/        # Audio/music player integration
+      multisig/            # Multi-signature wallet functionality
       navigation/          # App navigation, layout, router
+      staking/             # Cardano staking and delegation
+      swap/                # DeFi and token swapping
+      transactions/        # Transaction history and details
+      wallet/              # Gero Card (debit card) integration
       welcome/             # Onboarding and wallet creation
    stores/                  # Vue Observable state management
-      walletStore.ts       # Active wallet state
+      bringStore.ts        # Bring cashback state
+      charli3Store.ts      # Charli3 oracle data
+      coinGeckoStore.ts    # CoinGecko price data
+      dexHunterStore.ts    # DEX Hunter swap aggregation
       geroStore.ts         # Global app state (wallets list, config)
-      networkStore.ts      # Network/provider management
-      priceStore.ts        # Price data (Kraken WebSocket)
-      [feature]Store.ts    # Feature-specific stores
+      governanceStore.ts   # Governance and DRep state
+      loading.ts           # Loading state management
+      musicStore.ts        # Music player state
+      networkStore.ts      # Network/provider management (tip, epoch params)
+      priceStore.ts        # Real-time price data (Kraken WebSocket)
+      realFiStore.ts       # RealFi integration state
+      stakingStore.ts      # Staking pools and delegation state
+      tapToolsStore.ts     # TapTools analytics
+      walletStore.ts       # Active wallet state (UTXOs, keys, addresses)
+      xerberusStore.ts     # Xerberus risk ratings
    services/                # Business logic services
-      walletManager.service.ts    # Wallet lifecycle management
-      ably.service.ts             # Real-time blockchain updates
-      storeMessaging.service.ts   # Browser-side store sync
-      krakenWebSocket.service.ts  # Real-time price data
-   db/                      # Database layer
+      ably.service.ts                  # Real-time blockchain updates (WebSocket)
+      kaiserEx.service.ts              # KaiserEx integration
+      krakenWebSocket.service.ts       # Real-time price data
+      messageReconstruction.service.ts # Reassemble large Ably messages
+      storageObserver.service.ts       # Chrome storage change observer
+      storeMessaging.service.ts        # Browser-side store sync
+      sync.service.ts                  # Wallet sync orchestration
+      walletManager.service.ts         # Wallet lifecycle management
+   db/                      # Database layer (Dexie/IndexedDB)
       gero-db.ts           # Application-level database (wallets list)
       wallet-db.ts         # Wallet-specific databases
       schema.ts            # Database schema versions
       portfolio-cache.ts   # Portfolio data caching
    api/                     # External API integrations
       api.ts               # Base API class
-      blockchain-api.ts    # Cardano blockchain data
-      [service]-api.ts     # Feature-specific APIs
+      blockchain-api.ts    # Cardano blockchain data (Blockfrost, Koios)
+      cardano-shield-api.ts # Transaction risk assessment
+      cashback-api.ts      # Cashback integration
+      charli3-api.ts       # Oracle price feeds
+      clarity-api.ts       # Clarity Protocol integration
+      crypto-api.ts        # Cryptocurrency market data
+      dexhunter-api.ts     # DEX aggregation and swaps
+      kraken-api.ts        # Kraken exchange API
+      moonpay-api.ts       # Fiat on-ramp
+      realfi-api.ts        # RealFi protocol
+      tap-tools-api.ts     # Token analytics and portfolio tracking
    shared/                  # Reusable components and utilities
       utils/               # Utility functions
+         builder.ts        # Transaction builder (Cardano JS SDK)
+         resolver.ts       # Address/key resolvers and signature analysis
+         crypto.ts         # Encryption/decryption utilities
+         errorHandler.ts   # Error handling utilities
       composables/         # Vue composables
+      components/          # Shared Vue components
    options/                 # Extension options page entry point
    popup/                   # Extension popup entry point
    sidepanel/              # Extension side panel entry point
@@ -487,6 +520,45 @@ const decryptedMnemonic = decrypt(encryptedMnemonic, password);
 - Test both legacy and modern code paths during migration
 - Gradual migration approach (don't break existing functionality)
 
+### 8. **Transaction Fee Calculation (Conway Era)**
+**Critical Fix** (2025-01-14): Proper fee calculation for Conway-era certificate transactions
+
+**Problem**: Delegation and unstaking transactions were failing with `FeeTooSmallUTxO` errors because:
+1. Fee calculation didn't account for witness overhead during CBOR serialization
+2. Change outputs weren't resolved before fee calculation (missing ~1-2KB in transaction size)
+3. Conway-era certificates (`Unregistration`, `Registration`, `StakeRegistrationDelegation`) weren't recognized for signature detection
+
+**Solution implemented in**:
+- `src/chrome/cardanoJsSdkCbor.ts` - `BrowserTxConstruction.minFee()` now adds witness overhead
+- `src/shared/utils/builder.ts` - `changeAddressResolver` always creates change output for certificate/withdrawal-only transactions
+- `src/shared/utils/resolver.ts` - `analyzeTransactionForSignatures()` recognizes Conway-era certificate types
+
+**Key Pattern for Certificate Transactions**:
+```typescript
+// ALWAYS create change output for transactions with certificates but no explicit outputs
+const isCertificateOrWithdrawalOnly = (certificates.length > 0 || withdrawals.length > 0)
+                                       && selectionSkeleton.outputs.size === 0;
+
+if (isCertificateOrWithdrawalOnly) {
+  // Always create change output with minimum 1 ADA
+  // This ensures CBOR size calculation includes the change output
+  return [changeOutput];
+}
+```
+
+**Fee Calculation Flow**:
+1. SDK's `minFee()` calculates base fee from CBOR size
+2. Estimate required signatures (payment key + stake key for staking ops)
+3. Add witness overhead: `witnessCount × 110 bytes × minFeeCoefficient`
+4. Total fee = base fee + witness overhead
+
+**Conway-Era Certificate Types**:
+- `CertificateType.Unregistration` - Unstake (replaces legacy `StakeDeregistration`)
+- `CertificateType.Registration` - Register stake key (replaces legacy `StakeRegistration`)
+- `CertificateType.StakeRegistrationDelegation` - Register + delegate in one certificate
+- `CertificateType.StakeDelegation` - Delegate to pool (no registration)
+- All certificates must include `deposit` field for registration operations
+
 ### 5. **Database Issues**
 - **"No Addresses Table" Error**: Forgot to apply schema when opening database
   - Solution: Always call `db.version(walletDBVersion).stores(walletDBSchema)` before `db.open()`
@@ -692,4 +764,4 @@ const decryptedMnemonic = decrypt(encryptedMnemonic, password);
 
 ---
 
-**Last Updated**: 2025-01-04 (after wallet login performance optimizations)
+**Last Updated**: 2025-01-14 (after Conway-era transaction fee calculation fixes)

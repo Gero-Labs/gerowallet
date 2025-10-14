@@ -224,7 +224,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
-import { ref, toRefs, watch } from 'vue';
+import { ref, toRefs, watch, nextTick } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";
 import { Blockchain, Network } from '@/models/types';
@@ -245,6 +245,7 @@ const emit = defineEmits(['updateRecipientAddress'])
 
 const { loggedWallet, contacts } = toRefs(walletStore)
 
+const form = ref<any>(null);
 const valid = ref<boolean>(false);
 const paymentAddress = ref<string>('');
 const recipientAddress = ref<string>('');
@@ -356,11 +357,27 @@ watch(contact, (val) => {
   }
 }, { deep: true })
 
-watch(props.sendData, (val) => {
-  if (val && !val.recipientAddress) {
+// Watch for parent resetting recipientAddress and sync local state
+watch(() => props.sendData.recipientAddress, async (newAddress) => {
+  // When parent clears the address (dialog reset), clear local state
+  if (!newAddress) {
     recipientAddress.value = ''
+    paymentAddress.value = ''
+    resolved.value = undefined
+    asset.value = undefined
+
+    // Reset form validation to clear any error states
+    await nextTick()
+    if (form.value) {
+      form.value.resetValidation()
+    }
   }
-}, { deep: true })
+  // When parent sets an address (e.g., from contact selection), sync it
+  else if (newAddress !== recipientAddress.value) {
+    recipientAddress.value = newAddress
+    paymentAddress.value = newAddress
+  }
+}, { immediate: true })
 </script>
 <style>
 .send-recipient-details-container {

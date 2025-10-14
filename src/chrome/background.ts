@@ -457,7 +457,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
-  console.log('getUtxos', request)
+  console.log('getUtxos::Request', request)
   try {
     const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
     const collateral = WalletStore.state.collateral;
@@ -469,6 +469,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
     } else {
       res = null
     }
+    console.log('getUtxos::Response', res)
     sendResponse({
       id: request.id,
       data: res,
@@ -486,9 +487,15 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  console.log('🔍 getCollateral::Request', request);
   const storedUtxos = WalletStore.state.utxos;
+  console.log('📦 Stored UTXOs for collateral:', {
+    count: storedUtxos?.length || 0,
+    hasUtxos: !!storedUtxos && storedUtxos.length > 0
+  });
   try {
     const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
+    console.log('✅ getCollateral::Response', { count: utxos?.length || 0 });
     sendResponse({
       id: request.id,
       data: utxos,
@@ -496,6 +503,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
+    console.error('❌ getCollateral::Error', e);
     sendResponse({
       id: request.id,
       error: e,
@@ -503,10 +511,11 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
+  return true; // IMPORTANT: return true for async handlers
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  console.log('getUsedAddresses', request)
+  console.log('getUsedAddresses::Request', request)
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
@@ -518,6 +527,7 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
       })
     }
     const addresses = getUsedAddresses(WalletStore.state.keys, request?.data?.paginate);
+    console.log('getUsedAddresses::Response', addresses)
     sendResponse({
       id: request.id,
       data: addresses,
