@@ -1,7 +1,7 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { minAdaRequired as minAdaRequiredSDK } from '@cardano-sdk/tx-construction';
+import { minAdaRequired as minAdaRequiredSDK, minFee as minFeeSDK } from '@cardano-sdk/tx-construction';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -73,34 +73,71 @@ export class BrowserTxConstruction {
    * @returns Minimum fee in lovelace as BigInt
    */
   static minFee(tx: Cardano.Tx, resolvedInputs: Cardano.Utxo[], protocolParams: any): bigint {
+    console.log('🔧 BrowserTxConstruction.minFee called!', {
+      hasWitness: !!tx.witness,
+      signaturesSize: tx.witness?.signatures?.size
+    });
     try {
-      // Linear fee calculation: fee = a * size + b
-      const minFeeA = BigInt(protocolParams.minFeeCoefficient);
-      const minFeeB = BigInt(protocolParams.minFeeConstant);
+      // Use the official Cardano SDK minFee function (same as Lace wallet)
+      // This properly serializes the transaction and calculates the actual fee
+      let calculatedFee = minFeeSDK(tx, resolvedInputs, protocolParams);
+      console.log('🔧 SDK minFee returned:', calculatedFee.toString());
 
-      // Estimate transaction size based on inputs, outputs, and certificates
-      // These are conservative estimates based on CBOR encoding sizes
-      const inputsSize = tx.body.inputs.length * 180; // ~180 bytes per input
-      const outputsSize = tx.body.outputs.length * 50;  // ~50 bytes per output
-      const certificatesSize = (tx.body.certificates?.length || 0) * 50; // ~50 bytes per certificate
-      const baseSize = 300; // Base transaction overhead (includes headers, etc.)
+      // IMPORTANT: The SDK's minFee serializes the transaction with actual witnesses
+      // If the transaction has empty witnesses, we need to add the estimated witness size
+      // Each VKeyWitness is approximately 100-110 bytes (32 byte vkey + 64 byte signature + CBOR overhead)
+      const hasEmptyWitnesses = !tx.witness.signatures || tx.witness.signatures.size === 0;
 
-      const estimatedSize = BigInt(baseSize + inputsSize + outputsSize + certificatesSize);
+      if (hasEmptyWitnesses) {
+        console.log('🔧 Transaction structure:', {
+          hasCertificates: tx.body.certificates !== undefined,
+          certificatesLength: tx.body.certificates?.length,
+          hasWithdrawals: tx.body.withdrawals !== undefined,
+          withdrawalsLength: tx.body.withdrawals?.length
+        });
 
-      const calculatedFee = minFeeB + (minFeeA * estimatedSize);
+        // Estimate number of required signatures
+        // For staking operations: payment key + stake key = 2 signatures
+        // For regular sends: payment key = 1 signature
+        const hasCertificates = tx.body.certificates && tx.body.certificates.length > 0;
+        const hasWithdrawals = tx.body.withdrawals && tx.body.withdrawals.length > 0;
+        const requiresStakeKey = hasCertificates || hasWithdrawals;
 
-      console.debug('Fee calculation:', {
-        minFeeA: minFeeA.toString(),
-        minFeeB: minFeeB.toString(),
-        estimatedSize: estimatedSize.toString(),
-        calculatedFee: calculatedFee.toString()
-      });
+        console.log('🔧 Signature estimation:', {
+          hasCertificates,
+          hasWithdrawals,
+          requiresStakeKey,
+          estimatedSignatures: requiresStakeKey ? 2 : 1
+        });
+
+        const estimatedSignatures = requiresStakeKey ? 2 : 1;
+        const witnessSize = estimatedSignatures * 110; // 110 bytes per witness
+
+        // Add witness overhead to fee: witnessSize * minFeeCoefficient
+        const witnessFeeOverhead = BigInt(witnessSize) * BigInt(protocolParams.minFeeCoefficient);
+        calculatedFee += witnessFeeOverhead;
+
+        console.log('🔧 Fee calculation (SDK + witness overhead):', {
+          baseFee: (calculatedFee - witnessFeeOverhead).toString(),
+          witnessSize,
+          witnessOverhead: witnessFeeOverhead.toString(),
+          totalFee: calculatedFee.toString(),
+          totalFeeAda: (Number(calculatedFee) / 1000000).toFixed(6),
+          minFeeCoefficient: protocolParams.minFeeCoefficient
+        });
+      } else {
+        console.log('🔧 Fee calculation (SDK with actual witnesses):', {
+          fee: calculatedFee.toString(),
+          feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
+          witnessCount: tx.witness.signatures.size
+        });
+      }
 
       return calculatedFee;
     } catch (error) {
-      console.error('Error calculating minimum fee:', error);
-      // Fallback to a reasonable default fee for delegation transactions
-      return BigInt(200000); // 0.2 ADA
+      console.error('Error calculating minimum fee with SDK:', error);
+      // Fallback to a reasonable default fee for complex transactions
+      return BigInt(300000); // 0.3 ADA
     }
   }
 

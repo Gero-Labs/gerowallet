@@ -282,7 +282,6 @@ const qrCode = ref<QRCodeStyling | null>(null);
 const tokens = computed(() => {
   if (resolvedAssets.value) {
     const tokens = Object.values(resolvedAssets.value).map((token: any) => {
-      console.log('Token mapping:', token.metadata.ticker, 'verified:', token.verified);
       return {
         ...token,
         name: token.metadata.name,

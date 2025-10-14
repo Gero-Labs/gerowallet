@@ -163,7 +163,16 @@ export class WalletManager {
 
         this.walletBg = walletBg;
         this.currentWalletId = wallet.id;
-        await this.walletBg.syncService.sync()
+
+        // OPTIMIZATION: Use REST sync on login to get tip immediately
+        // This prevents "Cannot read properties of null (reading 'slot')" errors
+        // when trying to send transactions before Ably sync completes
+        LoadingState.setText('Syncing wallet data...');
+        await this.walletBg.syncService.syncViaRest().catch(err => {
+          console.warn('REST sync failed during login (non-critical):', err);
+          // Fall back to regular Ably sync if REST fails
+        });
+
         LoadingState.setText('Wallet ready');
 
         debugLog('Wallet login successful for wallet:', wallet.id);

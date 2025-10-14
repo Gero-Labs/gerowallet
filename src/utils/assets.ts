@@ -118,8 +118,6 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 import clarityLogo from '@/assets/img/clarityLogo.png';
 import questionMark from '@/assets/svg/question-mark.svg'
 import questionMarkDark from '@/assets/svg/question-mark-dark.svg'
-import midnightImage from '@/assets/Midnight.png'
-import logoStackedLight from '@/assets/logo-stacked-light.svg'
 import apexBgDashboard from '@/assets/apexBg.png'
 import apexImage from '@/assets/apex.png'
 import apexSvg from '@/assets/svg/ap3x.svg'
@@ -358,8 +356,6 @@ export default {
   clarityLogo,
   questionMark,
   questionMarkDark,
-  midnightImage,
-  logoStackedLight,
   apexBgDashboard,
   apexImage,
   apexSvg,
