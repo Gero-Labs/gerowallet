@@ -97,7 +97,8 @@
 
                     <div class="network-tooltip-content">
                       <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
-                      <div><strong>Last Sync:</strong> {{ tip?.time ? time.format(new Date(tip.time)) : 'N/A' }}</div>
+                      <div><strong>Last Sync:</strong> {{ lastSyncTimestamp }}</div>
+                      <div><strong>Next Sync:</strong> {{ nextSyncDisplay }}</div>
                       <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
                       <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
@@ -225,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, toRefs, watch, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, toRefs, watch, getCurrentInstance } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -363,6 +364,58 @@ const epochSlotPercentage = computed(() => {
   return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
 });
 
+// Reactive counter for updating the next sync countdown
+const currentTime = ref(Date.now());
+
+// Format last sync as timestamp (e.g., "2:45:32 PM")
+const lastSyncTimestamp = computed(() => {
+  if (!tip.value?.time) {
+    return 'N/A';
+  }
+
+  const date = new Date(tip.value.time);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+});
+
+// Calculate next sync display
+// Since Ably provides real-time sync based on blockchain events,
+// we show "Real-time" when connected, or estimate based on average block time (20 seconds for Cardano)
+const nextSyncDisplay = computed(() => {
+  if (!connected.value) {
+    return 'Waiting for connection...';
+  }
+
+  if (connecting.value) {
+    return 'Connecting...';
+  }
+
+  // For connected state, show real-time sync
+  // Optionally, we could calculate the next expected block time based on tip.time + ~20 seconds
+  if (connected.value && tip.value?.time) {
+    const CARDANO_BLOCK_TIME = 20000; // 20 seconds in milliseconds
+    const lastSyncTime = new Date(tip.value.time).getTime();
+    const now = currentTime.value; // Use reactive time for countdown
+    const timeSinceLastSync = now - lastSyncTime;
+    const nextSyncEstimate = lastSyncTime + CARDANO_BLOCK_TIME;
+
+    // If we're past the expected next block time, sync is due now
+    if (now >= nextSyncEstimate) {
+      return 'Real-time (any moment)';
+    }
+
+    // Otherwise calculate seconds until next expected sync
+    const secondsUntilNextSync = Math.ceil((nextSyncEstimate - now) / 1000);
+    return `~${secondsUntilNextSync}s`;
+  }
+
+  return 'Real-time';
+});
+
 const isWelcomeDone = computed({
   get() {
     return !!geroConfig.value?.welcomeDone;
@@ -448,6 +501,9 @@ const preloadBackgroundImage = () => {
   img.src = imageUrl;
 };
 
+// Update current time every second for next sync countdown
+let timeInterval: ReturnType<typeof setInterval> | null = null;
+
 // Lifecycle
 onMounted(async () => {
   // Ensure colors are set on mount
@@ -460,6 +516,18 @@ onMounted(async () => {
     },
     { timeout: 2000 }
   );
+
+  // Start interval for next sync countdown
+  timeInterval = setInterval(() => {
+    currentTime.value = Date.now();
+  }, 1000);
+});
+
+// Clean up interval on unmount
+onBeforeUnmount(() => {
+  if (timeInterval) {
+    clearInterval(timeInterval);
+  }
 });
 </script>
 
