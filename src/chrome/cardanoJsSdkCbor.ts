@@ -78,14 +78,7 @@ export class BrowserTxConstruction {
       signaturesSize: tx.witness?.signatures?.size
     });
     try {
-      // Use the official Cardano SDK minFee function (same as Lace wallet)
-      // This properly serializes the transaction and calculates the actual fee
-      let calculatedFee = minFeeSDK(tx, resolvedInputs, protocolParams);
-      console.log('🔧 SDK minFee returned:', calculatedFee.toString());
-
-      // IMPORTANT: The SDK's minFee serializes the transaction with actual witnesses
-      // If the transaction has empty witnesses, we need to add the estimated witness size
-      // Each VKeyWitness is approximately 100-110 bytes (32 byte vkey + 64 byte signature + CBOR overhead)
+      // Check if we need to add dummy witnesses for accurate fee calculation
       const hasEmptyWitnesses = !tx.witness.signatures || tx.witness.signatures.size === 0;
 
       if (hasEmptyWitnesses) {
@@ -111,29 +104,52 @@ export class BrowserTxConstruction {
         });
 
         const estimatedSignatures = requiresStakeKey ? 2 : 1;
-        const witnessSize = estimatedSignatures * 110; // 110 bytes per witness
 
-        // Add witness overhead to fee: witnessSize * minFeeCoefficient
-        const witnessFeeOverhead = BigInt(witnessSize) * BigInt(protocolParams.minFeeCoefficient);
-        calculatedFee += witnessFeeOverhead;
+        // CRITICAL FIX: Create dummy witnesses with realistic structure
+        // This ensures the CBOR serialization includes the actual witness Map structure
+        // which has different encoding overhead than an empty Map
+        const dummySignatures = new Map<Cardano.Ed25519PublicKeyHex, Cardano.Ed25519SignatureHex>();
 
-        console.log('🔧 Fee calculation (SDK + witness overhead):', {
-          baseFee: (calculatedFee - witnessFeeOverhead).toString(),
-          witnessSize,
-          witnessOverhead: witnessFeeOverhead.toString(),
-          totalFee: calculatedFee.toString(),
-          totalFeeAda: (Number(calculatedFee) / 1000000).toFixed(6),
+        // Add dummy signatures (32 byte vkey + 64 byte signature in hex)
+        // These are just placeholders - the actual values don't matter for fee calculation
+        for (let i = 0; i < estimatedSignatures; i++) {
+          const dummyVKey = '0'.repeat(64) as Cardano.Ed25519PublicKeyHex; // 32 bytes = 64 hex chars
+          const dummySignature = '0'.repeat(128) as Cardano.Ed25519SignatureHex; // 64 bytes = 128 hex chars
+          dummySignatures.set(dummyVKey, dummySignature);
+        }
+
+        // Create a transaction copy with dummy witnesses for accurate CBOR serialization
+        const txWithDummyWitnesses: Cardano.Tx = {
+          ...tx,
+          witness: {
+            ...tx.witness,
+            signatures: dummySignatures
+          }
+        };
+
+        // Now call SDK's minFee with the transaction that has proper witness structure
+        const calculatedFee = minFeeSDK(txWithDummyWitnesses, resolvedInputs, protocolParams);
+
+        console.log('🔧 Fee calculation (SDK with dummy witnesses):', {
+          fee: calculatedFee.toString(),
+          feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
+          witnessCount: estimatedSignatures,
           minFeeCoefficient: protocolParams.minFeeCoefficient
         });
+
+        return calculatedFee;
       } else {
+        // Transaction already has witnesses, use it directly
+        const calculatedFee = minFeeSDK(tx, resolvedInputs, protocolParams);
+
         console.log('🔧 Fee calculation (SDK with actual witnesses):', {
           fee: calculatedFee.toString(),
           feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
           witnessCount: tx.witness.signatures.size
         });
-      }
 
-      return calculatedFee;
+        return calculatedFee;
+      }
     } catch (error) {
       console.error('Error calculating minimum fee with SDK:', error);
       // Fallback to a reasonable default fee for complex transactions

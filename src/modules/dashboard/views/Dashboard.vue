@@ -525,7 +525,10 @@ const showUpdateInfo = () => {
 };
 
 const showDebitCardInfo = () => {
-  // Add your debit card info logic here
+  const proxy = instance?.proxy as any;
+  if (proxy && proxy.$router && proxy.$route.path !== '/card') {
+    proxy.$router.push('/card');
+  }
 };
 
 const navigateToCashback = () => {
