@@ -10,6 +10,7 @@ import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
+import blockchainApi from '@/api/blockchain-api';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -150,7 +151,6 @@ export class SyncService {
       const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
 
       // Call REST sync API directly
-      const blockchainApi = (await import('@/api/blockchain-api')).default;
       const restStart = performance.now();
       const syncResponse = await blockchainApi.syncRest({
         chain: chainEnum,
