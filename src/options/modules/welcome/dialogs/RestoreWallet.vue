@@ -385,14 +385,27 @@ const walletCreationStep2 = async () => {
         props.network.network
       );
       dialogLocal.value = false;
-      await Messaging.sendToBackgroundFromOptions({
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
         data: { wallet },
-      }).then(() => {
-        vmProxy.$nextTick(() => {
-          router.push('/');
-        });
       });
+      
+      if (response && !response.error) {
+        vmProxy.$nextTick(() => {
+          router.push('/').catch(err => {
+            // Suppress redirect errors (expected when already on target route)
+            if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+              console.error('Navigation error:', err);
+            }
+          });
+        });
+      } else if (response?.error) {
+        console.warn('Login response error:', response.error);
+        // Still navigate even if there's a connection error, as the wallet might have been created
+        vmProxy.$nextTick(() => {
+          router.push('/').catch(() => {});
+        });
+      }
     } catch (error) {
       console.error('Error creating wallet:', error);
     } finally {

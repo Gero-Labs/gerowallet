@@ -16,10 +16,20 @@ import Notifications from '@voerro/vue-notifications'
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
-    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
-      if (saved) Object.assign(walletStore, saved);
+    try {
+      chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Chrome storage error:', chrome.runtime.lastError.message);
+          resolve();
+          return;
+        }
+        if (saved) Object.assign(walletStore, saved);
+        resolve();
+      });
+    } catch (error) {
+      console.warn('Error loading persisted wallet:', error);
       resolve();
-    });
+    }
   });
 }
 
