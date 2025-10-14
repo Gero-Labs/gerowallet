@@ -220,4 +220,12 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   next();
 });
 
+// Handle navigation errors globally (suppresses redirect errors in console)
+router.onError((error) => {
+  const isNavigationFailure = error.message.includes('Redirected') || error.message.includes('navigation guard');
+  if (!isNavigationFailure) {
+    console.error('Router error:', error);
+  }
+});
+
 export default router;

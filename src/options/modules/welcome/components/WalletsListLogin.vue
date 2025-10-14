@@ -104,8 +104,8 @@ const submitLogin = async (walletId: string): Promise<void> => {
 
     // OPTIMIZATION: Trust the background response instead of polling for up to 5 seconds
     // The background script sets the store and returns success/failure
-    if (!response || response.error) {
-      console.error('❌ Login failed:', response?.error || 'Unknown error');
+    if (!response || (response as any).error) {
+      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
       return;
     }
 
@@ -121,10 +121,18 @@ const submitLogin = async (walletId: string): Promise<void> => {
     if (queryParams['redirect']) {
       const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
       console.debug('🧭 Navigating to redirect path:', redirectPath);
-      await vmProxy.$router.push(redirectPath);
+      await vmProxy.$router.push(redirectPath).catch(err => {
+        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+          console.error('Navigation error:', err);
+        }
+      });
     } else {
       console.debug('🧭 Navigating to home page: /');
-      await vmProxy.$router.push("/");
+      await vmProxy.$router.push("/").catch(err => {
+        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+          console.error('Navigation error:', err);
+        }
+      });
     }
 
     console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
