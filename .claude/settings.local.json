@@ -5,7 +5,8 @@
       "Bash(gh pr create:*)",
       "Bash(git add:*)",
       "Bash(npm run manifest:*)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Read(//Users/dudiedri/IdeaProjects/A.D. Labs/gero-backend/src/**)"
     ],
     "deny": [],
     "ask": []

@@ -73,12 +73,6 @@
             <!-- Default content for standard items -->
             <div v-else class="carousel-content-center">
               <slot name="default" :item="item">
-                <img
-                  :src="item.logo"
-                  :alt="item.logoAlt"
-                  class="carousel-logo mb-3"
-                  :class="{ 'apex-logo': isApexItem(item) }"
-                />
                 <div class="carousel-text" :class="{ 'apex-text': isApexItem(item) }">
                   <v-card-title class="pt-0 white--text text-center carousel-title-large">{{ item.title }}</v-card-title>
                   <v-card-subtitle class="pb-0 white--text text-center">{{ item.subtitle }}</v-card-subtitle>
@@ -113,7 +107,6 @@ export interface CarouselItem {
   id: string;
   title: string;
   subtitle: string;
-  logo: string;
   logoAlt: string;
   backgroundImage: string;
   cardImage?: string;
