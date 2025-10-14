@@ -923,6 +923,7 @@ export class WalletBg {
     const signatures = new Map<string, string>();
 
     // Analyze transaction to determine required signatures
+    console.log('🔧 About to analyze transaction for signatures');
     const requiredSigners = analyzeTransactionForSignatures(
       transaction,
       utxos,
@@ -933,21 +934,25 @@ export class WalletBg {
       this.stakeKey.bind(this)
     );
 
-    console.debug('🔍 Required signers analysis:');
-    console.debug(`  Found ${requiredSigners.length} required signers`);
+    console.log('🔧 Required signers analysis:');
+    console.log(`🔧 Found ${requiredSigners.length} required signers`);
     requiredSigners.forEach((signer, index) => {
-      console.debug(`  Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
+      console.log(`🔧 Signer ${index}: type=${signer.type}, path=[${signer.derivationPath.join(',')}]`);
     });
 
     // Sign with each required key
     for (const signer of requiredSigners) {
-      console.debug(`🔏 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
+      console.log(`🔧 Signing with ${signer.type} key, derivation path: [${signer.derivationPath.join(',')}]`);
       const privateKey: Bip32PrivateKey = accountPrivateKey.derive(signer.derivationPath);
       const rawPublicKey: Ed25519PublicKey = privateKey.toRawKey().toPublic();
+      console.log(`🔧 Public key hash: ${rawPublicKey.hash().hex()}`);
       // Sign the transaction hash as a HexBlob type
       const signature = privateKey.toRawKey().sign(HexBlob(transaction.id));
       signatures.set(rawPublicKey.hex(), signature.hex());
+      console.log(`🔧 Added signature for public key: ${rawPublicKey.hex().substring(0, 16)}...`);
     }
+
+    console.log(`🔧 Total signatures collected: ${signatures.size}`);
 
     // Create a witness set - ensure a signature map is properly set
     const witness: Cardano.Witness = {

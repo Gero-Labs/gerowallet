@@ -68,6 +68,15 @@
                     >Stake Registration</v-chip
                   >
                   <v-chip
+                    v-if="isStakeDeRegistration(item)"
+                    x-small
+                    outlined
+                    class="px-1"
+                    color="red"
+                    style="margin-right: 4px !important"
+                  >Stake Deregistration</v-chip
+                  >
+                  <v-chip
                     v-if="isWithdrawal(item)"
                     x-small
                     outlined
@@ -420,6 +429,7 @@ const getCertificateBaseStatus = (certificateType: string): string => {
     case Cardano.CertificateType.StakeRegistrationDelegation:
     case Cardano.CertificateType.StakeDelegation:
       return 'Delegating to Pool';
+    case Cardano.CertificateType.Unregistration:
     case Cardano.CertificateType.StakeDeregistration:
       return 'Stake Deregistration';
     case Cardano.CertificateType.RegisterDelegateRepresentative:
@@ -444,6 +454,9 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
     if (pool && pool.ticker) {
       return 'Delegating to ' + pool.ticker;
     }
+  } else if ((certificate.__typename === Cardano.CertificateType.Unregistration ||
+              certificate.__typename === Cardano.CertificateType.StakeDeregistration)) {
+    return 'Stake Deregistration';
   }
 
   return baseStatus;
@@ -563,22 +576,27 @@ watch(
 );
 
 // Watch for transactions changes to reset infinite scroll
+// Only reset if the transaction count changes (not for status updates)
+const transactionCount = ref(0);
 watch(
-  () => transactions.value,
-  async () => {
-    await resetInfiniteScroll();
+  () => transactions.value.length,
+  async (newCount, oldCount) => {
+    // Only reset if transaction count actually changed
+    if (newCount !== oldCount || newCount !== transactionCount.value) {
+      transactionCount.value = newCount;
+      await resetInfiniteScroll();
 
-    // Recreate intersection observer after reset
-    if (props.isFullList) {
-      if (intersectionObserver.value) {
-        intersectionObserver.value.disconnect();
+      // Recreate intersection observer after reset
+      if (props.isFullList) {
+        if (intersectionObserver.value) {
+          intersectionObserver.value.disconnect();
+        }
+        await nextTick();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setupIntersectionObserver();
       }
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
-      setupIntersectionObserver();
     }
-  },
-  { deep: true }
+  }
 );
 
 // Setup intersection observer for infinite scroll
@@ -974,6 +992,17 @@ const isStakeRegistration = item => {
       certificate =>
         certificate.__typename === Cardano.CertificateType.StakeRegistration ||
         certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+    )
+  );
+};
+
+const isStakeDeRegistration = item => {
+  return (
+    item.body?.certificates?.length > 0 &&
+    item.body.certificates.some(
+      certificate =>
+        certificate.__typename === Cardano.CertificateType.Unregistration ||
+        certificate.__typename === Cardano.CertificateType.StakeDeregistration
     )
   );
 };

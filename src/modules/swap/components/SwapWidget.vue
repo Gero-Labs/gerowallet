@@ -506,13 +506,6 @@ const getPrice = (token) => {
   return (Number(quantity) * multiplier * lastPrice).toLocaleString('en-US');
 }
 
-const getTokenBalance = (token) => {
-  if (!token) return '0';
-  const balance = token.balance || 0;
-  const decimals = token.decimals || 0;
-  return filters.toCurrency(balance, false, 2, '', '', true, decimals);
-}
-
 const setSlippage = (val) => {
   slippageRef.value = val;
 }
@@ -705,8 +698,23 @@ const submit = async (cborHex: string) => {
   }
   const txId = submitResult.data.txId;
   snackbar.fireSuccess(`Swap Order Transaction Submitted Successfully!<br>Tx Id: ${txId}`)
+
+  // Clear the input fields after successful submission
+  clearInputs();
+
   emit('onSwap')
   console.log(txId)
+}
+
+const clearInputs = () => {
+  // Reset quantities to '0'
+  selectedTokenA.value.quantity = '0';
+  selectedTokenB.value.quantity = '0';
+
+  // Reset limit value for limit orders
+  if (swapType.value === 'limit') {
+    limit.value = price_ba2.value.toString();
+  }
 }
 
 const excludedChange = async (val) => {

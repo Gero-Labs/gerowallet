@@ -206,4 +206,31 @@ export default {
       throw parseHttpError(error);
     }
   },
+
+  /**
+   * Perform a REST sync for a wallet to get latest blockchain data
+   * @param syncRequest - Sync request parameters
+   * @returns Sync response with account info, transactions, assets, tip
+   */
+  async syncRest(syncRequest: {
+    chain: string;
+    network: string;
+    provider: string;
+    from: number;
+    to: any; // Block object
+    address: string;
+    rewards_sum: string;
+    controlled_amount: string;
+    withdrawable_amount: string;
+    epoch?: number;
+  }) {
+    try {
+      const { data, status } = await axiosInstance.post('/api/sync', syncRequest);
+      if (status === 200) return data;
+      throw parseHttpError(data);
+    } catch (error: any | AxiosError) {
+      console.error('REST sync failed:', error);
+      throw parseHttpError(error);
+    }
+  },
 };

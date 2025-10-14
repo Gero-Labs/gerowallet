@@ -10,6 +10,7 @@ import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
+import blockchainApi from '@/api/blockchain-api';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -77,6 +78,103 @@ export class SyncService {
         });
       }
     } catch (err) {
+      debugLog(err);
+    }
+  }
+
+  /**
+   * Perform a fast REST sync to get latest blockchain data immediately
+   * This is useful during wallet login to prevent tip-related errors
+   * @param tip - Optional blockchain tip to sync to
+   */
+  async syncViaRest(tip?: Tip) {
+    try {
+      const syncStart = performance.now();
+      console.log('⏱️ PERF: syncViaRest START');
+
+      if (!tip) {
+        tip = await this.api.getTip();
+      }
+
+      const lastSyncInfo = await this.walletBg.getLastSyncInfo();
+      if (!lastSyncInfo) {
+        LoadingState.setRestoring(true);
+        try {
+          await this.walletBg.restore(tip);
+        } finally {
+          LoadingState.setRestoring(false);
+        }
+        console.log(`⏱️ PERF: syncViaRest (restore) took ${performance.now() - syncStart}ms`);
+        return;
+      }
+
+      // Only sync if tip is newer
+      if (tip.height <= lastSyncInfo['height']) {
+        debugLog('syncViaRest: Tip is not newer, skipping sync');
+
+        // IMPORTANT: Even if we skip sync, we MUST set the tip in NetworkStore
+        // to prevent "Cannot read properties of null (reading 'slot')" errors
+        NetworkStore.setTip({
+          blockNo: tip.height,
+          slot: tip.slot,
+          hash: tip.hash,
+          time: tip.time,
+          epoch: tip.epoch,
+          epoch_slot: tip.epoch_slot || 0,
+        });
+
+        console.log(`⏱️ PERF: syncViaRest (skipped, tip set) took ${performance.now() - syncStart}ms`);
+        return;
+      }
+
+      const promises = [];
+      promises.push(this.syncGenesis());
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
+
+      const prevAccountInfo = await this.walletBg.getAccountInfo();
+      const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
+      const from = latestTxBlockHeight + 1 || 0;
+      let address: string;
+      if (this.walletBg.isEnterpriseAddress()) {
+        address = this.walletBg.baseAddress;
+      } else {
+        address = this.walletBg.stakeAddress;
+      }
+      const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
+      const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
+      const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
+
+      const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch);
+      const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
+      const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
+
+      // Call REST sync API directly
+      const restStart = performance.now();
+      const syncResponse = await blockchainApi.syncRest({
+        chain: chainEnum,
+        network: networkEnum,
+        provider: Provider[this.walletBg.provider],
+        from,
+        to: tip,
+        address,
+        rewards_sum,
+        controlled_amount,
+        withdrawable_amount,
+        epoch,
+      });
+      console.log(`⏱️ PERF: REST sync API call took ${performance.now() - restStart}ms`);
+
+      // Process the sync response
+      if (syncResponse && syncResponse.success) {
+        await this.setSync(syncResponse);
+        console.log(`⏱️ PERF: syncViaRest TOTAL took ${performance.now() - syncStart}ms`);
+      } else {
+        console.warn('REST sync returned unsuccessful response:', syncResponse);
+      }
+    } catch (err) {
+      console.error('syncViaRest error:', err);
       debugLog(err);
     }
   }
