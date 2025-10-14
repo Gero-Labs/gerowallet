@@ -444,6 +444,9 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
     if (pool && pool.ticker) {
       return 'Delegating to ' + pool.ticker;
     }
+  } else if ((certificate.__typename === Cardano.CertificateType.Unregistration ||
+              certificate.__typename === Cardano.CertificateType.StakeDeregistration)) {
+    return 'Stake Deregistration';
   }
 
   return baseStatus;
@@ -563,22 +566,27 @@ watch(
 );
 
 // Watch for transactions changes to reset infinite scroll
+// Only reset if the transaction count changes (not for status updates)
+const transactionCount = ref(0);
 watch(
-  () => transactions.value,
-  async () => {
-    await resetInfiniteScroll();
+  () => transactions.value.length,
+  async (newCount, oldCount) => {
+    // Only reset if transaction count actually changed
+    if (newCount !== oldCount || newCount !== transactionCount.value) {
+      transactionCount.value = newCount;
+      await resetInfiniteScroll();
 
-    // Recreate intersection observer after reset
-    if (props.isFullList) {
-      if (intersectionObserver.value) {
-        intersectionObserver.value.disconnect();
+      // Recreate intersection observer after reset
+      if (props.isFullList) {
+        if (intersectionObserver.value) {
+          intersectionObserver.value.disconnect();
+        }
+        await nextTick();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setupIntersectionObserver();
       }
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
-      setupIntersectionObserver();
     }
-  },
-  { deep: true }
+  }
 );
 
 // Setup intersection observer for infinite scroll

@@ -47,9 +47,13 @@ import networks from '@/utils/networks';
 import { Cardano } from '@cardano-sdk/core';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import stakingStore from '@/stores/stakingStore';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import snackbar from '@/plugins/snackbar';
 
-const { loggedWallet, account } = toRefs(walletStore);
+const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
+const { epochParams, tip } = toRefs(networkStore);
 
 const isDelegateDialogOpen = ref(false);
 const selectedPool = ref<any>(null);
@@ -73,13 +77,76 @@ const hasAssets = computed(() => {
 });
 
 const delegateToGero = async () => {
-  if (loggedWallet.value) {
+  if (!loggedWallet.value) return;
+
+  try {
     const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
     await stakingStore.loadPoolById(loggedWallet.value, poolId);
 
-    if (stakingStore.state.currentPool) {
-      selectedPool.value = stakingStore.state.currentPool;
-      isDelegateDialogOpen.value = true;
+    if (!stakingStore.state.currentPool) {
+      snackbar.setError('Failed to load GERO pool information');
+      return;
+    }
+
+    selectedPool.value = stakingStore.state.currentPool;
+
+    // Check if we have epoch parameters
+    if (!epochParams.value) {
+      throw new Error('Epoch parameters not available');
+    }
+
+    const certificates: Cardano.Certificate[] = [];
+
+    // Create stake credential from the key hash
+    const stakeCredential: Cardano.Credential = {
+      type: Cardano.CredentialType.KeyHash,
+      hash: keys.value.stake[0].cred,
+    };
+
+    const poolIdBech32 = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+
+    // Use proper deposit from epoch parameters - ensure BigInt conversion
+    const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
+    let certificate;
+    let implicitCoin = BigInt(0);
+
+    if (!account.value?.active) {
+      // Need to register a stake key first, then delegate
+      certificate = {
+        __typename: Cardano.CertificateType.StakeRegistrationDelegation,
+        stakeCredential,
+        poolId: poolIdBech32,
+        deposit: stakeKeyDepositLovelace,
+      };
+      implicitCoin = stakeKeyDepositLovelace; // Deposit required
+    } else {
+      // Just delegate, no registration needed
+      certificate = {
+        __typename: Cardano.CertificateType.StakeDelegation,
+        stakeCredential,
+        poolId: poolIdBech32,
+      };
+    }
+    certificates.push(certificate);
+
+    // Build the delegation transaction
+    txData.value = await buildCardanoTransaction({
+      certificates,
+      utxos: utxos.value,
+      epochParams: epochParams.value,
+      changeAddress: keys.value.payment[0].address,
+      tip: tip.value,
+      implicitCoin,
+    });
+
+    isDelegateDialogOpen.value = true;
+  } catch (error: any) {
+    console.error('Error building delegation transaction:', error);
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError('Insufficient ADA to complete staking transaction');
+    } else {
+      snackbar.setError('Failed to build delegation transaction: ' + (error.message || 'Unknown error'));
     }
   }
 };

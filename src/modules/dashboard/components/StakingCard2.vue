@@ -430,6 +430,11 @@ const unstake = async () => {
       throw new Error('Cannot unstake: stake key is not registered');
     }
 
+    // Check if keys are loaded
+    if (!keys.value || !keys.value.stake || keys.value.stake.length === 0) {
+      throw new Error('Wallet keys not available. Please reload the extension.');
+    }
+
     const certificates: Cardano.Certificate[] = [];
 
     // Create stake credential from the key hash
@@ -441,10 +446,11 @@ const unstake = async () => {
     // Use proper deposit from epoch parameters - ensure BigInt conversion
     const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
 
-    // Create deregistration certificate
+    // Conway-era unregistration certificate (returns deposit to user)
     const certificate: Cardano.Certificate = {
-      __typename: Cardano.CertificateType.StakeDeregistration,
+      __typename: Cardano.CertificateType.Unregistration,
       stakeCredential,
+      deposit: stakeKeyDepositLovelace,
     };
     certificates.push(certificate);
 

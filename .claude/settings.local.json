@@ -6,7 +6,11 @@
       "Bash(git add:*)",
       "Bash(npm run manifest:*)",
       "Bash(npx tsx:*)",
-      "Read(//Users/dudiedri/IdeaProjects/A.D. Labs/gero-backend/src/**)"
+      "Read(//Users/dudiedri/IdeaProjects/A.D. Labs/gero-backend/src/**)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []
