@@ -427,8 +427,7 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
   // Cardano.Utxo is [TxIn, TxOut] where TxOut has value: { coins: bigint, assets?: Map }
   let filteredUtxos = storedUtxos.filter(utxo => {
     const txOut = utxo[1];
-    const hasNoAssets = !txOut.value.assets || txOut.value.assets.size === 0;
-    return hasNoAssets;
+    return !txOut.value.assets || txOut.value.assets.size === 0;
   });
 
   if (filteredUtxos.length === 0) {
