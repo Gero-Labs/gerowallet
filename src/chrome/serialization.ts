@@ -416,18 +416,27 @@ const getFilterAmount = (amount: string): bigint => {
     return filterAmount;
 };
 
-export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: any[]): string[] {
+export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: Cardano.Utxo[]): string[] {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
     error.info = 'No UTXOs available in wallet.';
     throw error;
   }
-  let filteredUtxos = storedUtxos.filter(utxo => Array.isArray(utxo.asset_list) && utxo.asset_list.length === 0)
+
+  // Filter for pure ADA UTXOs (no assets) suitable for collateral
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut has value: { coins: bigint, assets?: Map }
+  let filteredUtxos = storedUtxos.filter(utxo => {
+    const txOut = utxo[1];
+    const hasNoAssets = !txOut.value.assets || txOut.value.assets.size === 0;
+    return hasNoAssets;
+  });
+
   if (filteredUtxos.length === 0) {
     const error = APIError.InvalidRequest;
-    error.info = 'No UTXOs available in wallet.';
+    error.info = 'No pure ADA UTXOs available for collateral.';
     throw error;
   }
+
   if (amount) {
     let filterAmount = MAX_COLLATERAL_AMOUNT;
     try {
@@ -437,14 +446,16 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
       error.info = (e as Error)?.message || 'Unknown error';
       throw error;
     }
-    const utxos = [];
+
+    const utxos: Cardano.Utxo[] = [];
     let totalCoins = 0n;
     for (const utxo of filteredUtxos) {
-      const coin = utxo.value;
-      totalCoins += BigInt(coin);
+      const coins = utxo[1].value.coins;
+      totalCoins += BigInt(coins);
       utxos.push(utxo);
       if (totalCoins >= filterAmount) break;
     }
+
     if (totalCoins < filterAmount) {
       const error = APIError.Refused;
       error.info = 'not enough coins in configured collateral UTxOs';
@@ -452,7 +463,11 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
     }
     filteredUtxos = utxos;
   }
-  return filteredUtxos.map((utxo) => toUTxO(utxo).toCbor());
+
+  // Convert Cardano.Utxo to CBOR strings
+  return filteredUtxos.map((utxo) => {
+    return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
+  });
 }
 
 export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
