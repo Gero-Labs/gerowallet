@@ -74,6 +74,7 @@
             <div v-else class="carousel-content-center">
               <slot name="default" :item="item">
                 <img
+                  v-if="item.logo"
                   :src="item.logo"
                   :alt="item.logoAlt"
                   class="carousel-logo mb-3"
@@ -113,7 +114,7 @@ export interface CarouselItem {
   id: string;
   title: string;
   subtitle: string;
-  logo: string;
+  logo?: string;
   logoAlt: string;
   backgroundImage: string;
   cardImage?: string;

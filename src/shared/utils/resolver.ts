@@ -664,25 +664,27 @@ export function analyzeTransactionForSignatures(
 
   // Check for certificates (staking operations and governance)
   if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-    console.debug('🔍 Analyzing certificates for required signatures:');
+    console.log('🔧 Analyzing certificates for required signatures:');
     for (const certificate of transaction.body.certificates) {
-      console.debug(`  Certificate type: ${certificate.__typename}`);
+      console.log(`🔧   Certificate type: ${certificate.__typename}`);
 
       if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
           certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
+          certificate.__typename === Cardano.CertificateType.Registration ||
+          certificate.__typename === Cardano.CertificateType.Unregistration ||
           certificate.__typename === Cardano.CertificateType.StakeDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
-        // Need stake key signature for both staking and governance operations
-        console.debug(`  Adding stake key signer for certificate: ${certificate.__typename}`);
+        // Need stake key signature for both staking and governance operations (including Conway-era certificates)
+        console.log(`🔧   Adding stake key signer for certificate: ${certificate.__typename}`);
         requiredSigners.push({
           derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
           type: 'stake'
         });
       } else {
-        console.debug(`  Unknown certificate type, no signer added: ${certificate.__typename}`);
+        console.log(`🔧   Unknown certificate type, no signer added: ${certificate.__typename}`);
       }
     }
   }

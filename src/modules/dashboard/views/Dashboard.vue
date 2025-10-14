@@ -199,7 +199,6 @@ import FeatureCarousel, { type CarouselItem } from '@/modules/dashboard/componen
 import TokensMarketCards from '@/modules/dashboard/components/TokensMarketCards.vue';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
-import cardStore from '@/stores/modules/card';
 import { networkStore } from '@/stores/networkStore';
 import { tapToolsStore } from '@/stores/tapToolsStore';
 import { isNewUser as checkNewUser } from '../utils/emptyStateConfigs';
@@ -237,19 +236,9 @@ const isLoading = ref(false);
 // Carousel items for Cardano
 const carouselItems = ref<CarouselItem[]>([
   {
-    id: 'midnight-drop',
-    title: 'Glacier Drop',
-    subtitle: 'Claim $NIGHT tokens',
-    logo: assets.logoStackedLight,
-    logoAlt: 'NIGHT Logo',
-    backgroundImage: assets.midnightImage,
-    action: 'openMidnightClaimLink',
-  },
-  {
     id: 'gero-debit-card',
     title: 'Gero Card',
     subtitle: 'Top up ADA instantly! \n Coming soon',
-    logo: assets.logoStackedLight,
     logoAlt: 'Gero Logo',
     backgroundImage: assets.debitCardBgImage,
     cardImage: assets.debitCardImage,
@@ -260,7 +249,6 @@ const carouselItems = ref<CarouselItem[]>([
     id: 'ada-cashback',
     title: 'ADA Cashback',
     subtitle: 'Pay online, and receive ADA Cashback! \n Click to see deals!',
-    logo: assets.logoStackedLight,
     logoAlt: 'Gero Logo',
     backgroundImage: assets.cashbackCarouselImage,
     cardImage: assets.cashbackImage,
@@ -511,9 +499,6 @@ const resumeApexCarousel = () => {
 
 const handleCarouselClick = (item: any) => {
   switch (item.action) {
-    case 'openMidnightClaimLink':
-      window.open('https://claim.midnight.gd/', '_blank');
-      break;
     case 'showUpdateInfo':
       showUpdateInfo();
       break;
@@ -658,7 +643,7 @@ watch(
     if (newAddress && newAddress !== oldAddress) {
       // Update timestamp on wallet change
       currentTimestamp.value = Date.now();
-      
+
       if (!isApex.value) {
         try {
           if (
