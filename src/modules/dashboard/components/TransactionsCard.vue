@@ -464,14 +464,33 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 
 // Add fund transfer status if applicable
 const addFundTransferStatus = (item: any, statuses: string[]): void => {
-  if (item.receivedAmount - item.sentAmount > 0) {
-    if (!item.body?.certificates) {
-      statuses.push('Received Funds');
-    }
-  } else {
-    if (!item.body?.certificates) {
-      statuses.push('Sent Funds');
-    }
+  // Skip if transaction has certificates (delegation, registration, etc.)
+  if (item.body?.certificates) {
+    return;
+  }
+
+  const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
+  const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
+  const hasReceivedTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity > 0);
+  const hasSentTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity < 0);
+
+  // Build smart status message
+  if (hasReceivedFunds && hasReceivedTokens) {
+    statuses.push('Received Funds & Tokens');
+  } else if (hasSentFunds && hasSentTokens) {
+    statuses.push('Sent Funds & Tokens');
+  } else if (hasReceivedFunds && hasSentTokens) {
+    statuses.push('Received Funds & Sent Tokens');
+  } else if (hasSentFunds && hasReceivedTokens) {
+    statuses.push('Sent Funds & Received Tokens');
+  } else if (hasReceivedFunds) {
+    statuses.push('Received Funds');
+  } else if (hasSentFunds) {
+    statuses.push('Sent Funds');
+  } else if (hasReceivedTokens) {
+    statuses.push('Received Tokens');
+  } else if (hasSentTokens) {
+    statuses.push('Sent Tokens');
   }
 };
 
@@ -839,8 +858,15 @@ const isMinswap = (item) => {
 const isJpgStore = (item) => {
   // Check for jpg.store marketplace script address
   const JPGSTORE_SCRIPT_ADDRESS = 'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
+
+  // Check for jpg.store Ask V1 Contract address (inputs only)
+  const JPGSTORE_ASK_V1_ADDRESS = 'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
+
   const hasJpgStoreAddress =
-    item.utxo?.inputs?.some((input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS) ||
+    item.utxo?.inputs?.some((input: any) =>
+      input.address === JPGSTORE_SCRIPT_ADDRESS ||
+      input.address === JPGSTORE_ASK_V1_ADDRESS
+    ) ||
     item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
@@ -1010,9 +1036,9 @@ const isStakeDeRegistration = item => {
 const getColor = item => {
   if (item.status === 'Pending') {
     return '#FEC84B';
-  } else if (getTransactionStatus(item).includes('Received') || item.ada > 0) {
+  } else if (item.ada > 0) {
     return '#47cd89';
-  } else if (getTransactionStatus(item).includes('Sent') || item.ada < 0) {
+  } else if (item.ada < 0) {
     return '#F97066';
   }
   return '';
