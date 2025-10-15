@@ -1036,9 +1036,9 @@ const isStakeDeRegistration = item => {
 const getColor = item => {
   if (item.status === 'Pending') {
     return '#FEC84B';
-  } else if (getTransactionStatus(item).includes('Received') || item.ada > 0) {
+  } else if (item.ada > 0) {
     return '#47cd89';
-  } else if (getTransactionStatus(item).includes('Sent') || item.ada < 0) {
+  } else if (item.ada < 0) {
     return '#F97066';
   }
   return '';
