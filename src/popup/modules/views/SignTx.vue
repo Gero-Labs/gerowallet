@@ -432,16 +432,19 @@ const init = async () => {
         url: queryParams['website'] as string,
       }),
       new Promise<any>((_, reject) =>
-        setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 5000)
+        setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 10000)
       )
     ]);
 
     try {
       risks.value = await scanWithTimeout;
+      console.log('SignTx received Cardano Shield response:', risks.value);
+      console.log('SignTx passing risks.score to TransactionRisk:', risks.value?.score);
     } catch (e) {
       console.warn('Cardano Shield scan failed or timed out:', e);
       risks.value = {
         addressRisk: 'unknown',
+        score: 'unknown',  // Default score when scan fails
       };
     } finally {
       loading.value = false;

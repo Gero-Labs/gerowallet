@@ -339,6 +339,12 @@
                       {{ getCredentialType(certificate.stakeCredential.type) }}
                     </td>
                   </tr>
+                  <tr v-if="certificate?.deposit">
+                    <td class="text-left grey--text">Deposit</td>
+                    <td class="text-left">
+                      {{ filters.toCurrency(certificate.deposit, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
+                    </td>
+                  </tr>
                   <tr v-if="certificate.poolId">
                     <td class="text-left grey--text">Pool</td>
                     <td class="text-left">
