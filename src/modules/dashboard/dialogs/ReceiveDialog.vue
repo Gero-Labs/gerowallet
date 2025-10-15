@@ -246,7 +246,7 @@ watch(
           height: 160,
           type: 'svg',
           data: tabItem.value,
-          image: isApex ? assets.geroLogoApex : assets.geroLogo,
+          image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
           margin: 2,
           qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
           imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
