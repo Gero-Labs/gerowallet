@@ -195,7 +195,7 @@ export function diffAssetsFromIncomingToOutgoing(inputAssets: Cardano.Value, out
       const outValue: bigint = outputAssets.assets ? outputAssets.assets.get(assetId) : 0n;
       const difference: bigint = inValue - outValue;
       return {
-        assetName: Cardano.AssetName.toUTF8(Cardano.AssetId.getAssetName(assetId), true),
+        assetName: Cardano.AssetId(assetId),
         policy: Cardano.AssetId.getPolicyId(assetId),
         quantity: difference,
         id: assetId,
