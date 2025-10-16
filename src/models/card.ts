@@ -23,6 +23,7 @@ export interface CardanoAddress {
 
 // Card Types
 export interface CardData {
+  id: number;
   uuid: string;
   card_uuid: string;
   pan: string;
