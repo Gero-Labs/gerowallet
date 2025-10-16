@@ -50,9 +50,9 @@
             <!-- Action Buttons -->
             <div class="modal-actions">
               <SecondaryButton text="Cancel" @click="closeModal()" :disabled="txSubmitLoading" />
-              <GradientButton 
-                :text="currentStep === 1 ? 'Continue' : 'Top Up'" 
-                @click="handleTopUp" 
+              <GradientButton
+                :text="currentStep === 1 ? 'Continue' : 'Top Up'"
+                @click="handleTopUp"
                 :disabled="!canTopUp || txSubmitLoading"
                 :loading="txSubmitLoading"
               />
@@ -170,7 +170,7 @@ const buildTx = async () => {
   try {
     const cardanoAddress = cardStore.state.cardanoAddress?.wallet_address;
     console.log('💰 Cardano address:', cardanoAddress);
-    
+
     if (!cardanoAddress) {
       throw new Error('Cardano address not found. Please ensure you are authenticated.');
     }
@@ -216,7 +216,7 @@ const signTx = async (): Promise<boolean> => {
   txSubmitLoading.value = true;
   try {
     console.log('🔏 Signing transaction...');
-    
+
     // Serialize transaction
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     console.log('📦 Serialized transaction CBOR');
@@ -256,7 +256,7 @@ const submitTx = async () => {
   try {
     txSubmitLoading.value = true;
     console.log('📤 Submitting transaction...');
-    
+
     const submitResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -273,7 +273,7 @@ const submitTx = async () => {
     console.log('✅ Transaction submitted successfully');
     transactionId.value = submitResult.data.txId || Math.floor(Math.random() * 100000000).toString();
     console.log('📝 Transaction ID:', transactionId.value);
-    
+
     snackbar.fireSuccess(`Top-up transaction sent successfully!`);
     return true;
   } catch (e) {
@@ -354,7 +354,7 @@ const handleTopUp = async () => {
 
 const handleLoadingComplete = () => {
   console.log('🎉 Top up completed successfully!');
-  
+
   // Update card balance and add transaction using stored amounts
   const adaAmt = parseFloat(transactionAmounts.value.adaAmount) || 0;
   const eurAmt = parseFloat(transactionAmounts.value.eurAmount) || 0;
@@ -366,11 +366,11 @@ const handleLoadingComplete = () => {
     // Update card balance
     cardStore.updateCardBalance(eurAmt);
 
-    // Add transaction to history
-    cardStore.addTopUpTransaction(adaAmt, eurAmt, transactionId.value);
-
-    // Add activity to recent activities
-    cardStore.addTopUpActivity(adaAmt, eurAmt);
+    // // Add transaction to history
+    // cardStore.addTopUpTransaction(adaAmt, eurAmt, transactionId.value);
+    //
+    // // Add activity to recent activities
+    // cardStore.addTopUpActivity(adaAmt, eurAmt);
 
     console.log(`✅ Balance updated: +€${eurAmt}, Transaction added: ${transactionId.value}, Activity added`);
   } else {
@@ -418,7 +418,7 @@ const handleBackToAccount = () => {
 
 .password-field {
   width: 100%;
-  
+
   :deep(.v-input__control) {
     background: #0c0e12;
   }
