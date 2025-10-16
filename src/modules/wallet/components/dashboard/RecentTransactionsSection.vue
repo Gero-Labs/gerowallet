@@ -103,6 +103,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { CardTransactionHistory } from '@/models/card';
+import cardStore from '@/stores/modules/card';
 
 interface Props {
   transactions?: CardTransactionHistory[];
@@ -200,8 +201,10 @@ const getCategoryDotClass = (category: string): string => {
   return dotClasses[category] || 'dot-gray';
 };
 
-const currentPage = ref(1);
-const totalPages = ref(10);
+const currentPage = ref(cardStore.cardHistoryMeta?.page || 1);
+const totalPages = computed(() => {
+  return Math.ceil(cardStore.cardHistoryMeta?.totalRecords / 10);
+});
 
 const visiblePages = computed(() => {
   const pages: (number | string)[] = [];
@@ -246,11 +249,6 @@ const handlePageChange = (page: number | string) => {
   // Ignore clicks on ellipsis
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const handleOrderCard = () => {
-  // Emit event to parent component to handle card ordering
-  emit('orderCard');
-};
 </script>
 
 <style lang="scss" scoped>

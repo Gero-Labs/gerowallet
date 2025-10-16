@@ -567,6 +567,9 @@ export default {
       }`;
       const response = await api.axiosInstance.get(url);
       cardStore.cardHistory = response.data;
+      cardStore.cardHistory.meta.totalRecords = response.data.meta.totalRecords;
+      cardStore.cardHistory.meta.page = response.data.meta.page;
+      cardStore.cardHistory.meta.records = response.data.meta.records;
       persist({ cardHistory: cardStore.cardHistory });
     } catch (error) {
       cardStore.errors.cardHistory =
