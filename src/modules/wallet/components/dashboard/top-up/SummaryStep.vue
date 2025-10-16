@@ -72,7 +72,7 @@
 
           <div class="transfer-row">
             <span class="transfer-label">Transfer Fee</span>
-            <span class="fee-amount">{{ selectedFeeOption === 'GERO' ? '₳0.00 ADA' : '₳1.00 ADA' }}</span>
+            <span class="fee-amount">₳0.00 ADA</span>
           </div>
 
           <div class="divider"></div>
@@ -80,7 +80,7 @@
           <div class="transfer-row">
             <span class="transfer-label">Total Spend</span>
             <span class="total-amount"
-              >₳{{ (parseFloat(adaAmount || '1') + (selectedFeeOption === 'GERO' ? 0 : 1)).toFixed(2) }} ADA</span
+              >₳{{ Number(adaAmount).toFixed(2) }} ADA</span
             >
           </div>
         </div>
