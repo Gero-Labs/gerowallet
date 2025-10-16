@@ -18,7 +18,7 @@
             </p>
           </div>
         </div>
-        <SecondaryButton text="Contact Support" @click="handleContactSupport" />
+        <!-- <SecondaryButton text="Contact Support" @click="handleContactSupport" /> -->
       </div>
     </div>
   </section>

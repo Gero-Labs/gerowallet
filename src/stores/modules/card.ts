@@ -288,6 +288,8 @@ export default {
         return 'new';
       case 'pending':
         return 'pending';
+      case 'registered':
+        return 'pending';
       case 'approved':
         if (cardStore.cardData?.card_uuid) {
           return 'approved';
