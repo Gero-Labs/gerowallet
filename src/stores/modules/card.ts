@@ -293,7 +293,7 @@ export default {
       case 'approved':
         if (cardStore.cardData?.card_uuid) {
           return 'approved';
-        } else if (!cardStore.cardData?.card_uuid) {
+        } else if (cardStore.cardData?.id && !cardStore.cardData?.card_uuid) {
           return 'pending';
         } else {
           return 'new';
