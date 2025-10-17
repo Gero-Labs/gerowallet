@@ -238,7 +238,7 @@ const carouselItems = ref<CarouselItem[]>([
   {
     id: 'gero-debit-card',
     title: 'Gero Card',
-    subtitle: 'Top up ADA instantly! \n Coming soon',
+    subtitle: 'Top up ADA instantly!',
     logoAlt: 'Gero Logo',
     backgroundImage: assets.debitCardBgImage,
     cardImage: assets.debitCardImage,
