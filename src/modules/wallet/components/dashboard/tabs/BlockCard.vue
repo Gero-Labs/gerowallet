@@ -1,74 +1,100 @@
 <template>
   <div class="block-card">
-    <div class="block-content">
-      <div class="warning-section">
-        <h3 class="warning-title">Temporarily block your card</h3>
-        <p class="warning-text">
-          Blocking your card will immediately stop all transactions. This action can't be reversed instantly — you'll
-          need to contact our support team to unblock it.
-        </p>
+      <h3 class="warning-title">PIN</h3>
+      <div class="form-row">
+        <div class="pin-section">
+          <div class="pin-container">
+            <v-otp-input
+              length="4"
+              :readonly="true"
+              :type="showPin ? 'text' : 'password'"
+              :value="cardDetailsFull?.pin"
+              class="pin-input"
+            ></v-otp-input>
+            <v-btn icon small class="eye-btn" @click="togglePinVisibility">
+              <v-icon small>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
+            </v-btn>
+          </div>
+        </div>
       </div>
+      <div class="block-content">
+        <div class="warning-section">
+          <h3 class="warning-title">Temporarily block your card</h3>
+          <p class="warning-text">
+            Blocking your card will immediately stop all transactions. This action can't be reversed instantly — you'll
+            need to contact our support team to unblock it.
+          </p>
+        </div>
 
-      <div class="action-section">
-        <v-btn 
-          color="error" 
-          class="block-btn" 
-          :disabled="isCardBlocked"
-          :loading="loading"
-          @click="showConfirmModal = true"
-        >
-          {{ isCardBlocked ? 'Card Already Blocked' : 'Block Card' }}
-        </v-btn>
+        <div class="action-section">
+          <v-btn
+            color="error"
+            class="block-btn"
+            :disabled="isCardBlocked"
+            :loading="loading"
+            @click="handleConfirmBlock"
+          >
+            {{ isCardBlocked ? 'Card Already Blocked' : 'Block Card' }}
+          </v-btn>
+        </div>
       </div>
-    </div>
 
     <div class="help-section">
       <p class="help-text">Need help? Contact our support team to unblock or replace your card.</p>
     </div>
-
-    <!-- Confirmation Modal -->
-    <BlockCardConfirmModal
-      :open="showConfirmModal"
-      @close="showConfirmModal = false"
-      @confirm="handleConfirmBlock"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import cardStore from '@/stores/modules/card';
-import BlockCardConfirmModal from '../BlockCardConfirmModal.vue';
+import { ref, computed, onMounted } from 'vue';
+import cardStoreModule from '@/stores/modules/card';
 
-const showConfirmModal = ref(false);
 const loading = ref(false);
+const showPin = ref(false);
+// Get selected card data from store
+const selectedCard = computed(() => {
+  return cardStoreModule.getSelectedCard();
+});
+
+const cardData = computed(() => {
+  return selectedCard.value?.cardData;
+});
+
+const togglePinVisibility = () => {
+  showPin.value = !showPin.value;
+};
+
+const cardDetailsFull = computed(() => {
+  const card = selectedCard.value;
+  if (!card) return null;
+  return {
+    pin: card.cardPin?.pin,
+  } as any;
+});
+
+onMounted(async () => {
+  if (cardData.value?.card_uuid) {
+    await cardStoreModule.fetchCardPin(cardData.value.card_uuid);
+  }
+});
 
 // Check if card is blocked based on state
 const isCardBlocked = computed(() => {
-  return cardStore.state.cardBalance?.state === 'BLOCKED';
+  return selectedCard.value?.cardBalance?.state === 'BLOCKED';
 });
 
 const handleConfirmBlock = async () => {
   loading.value = true;
   try {
-    // Here you would call the API to block the card
-    console.log('Blocking card:', cardStore.state.cardNumber?.number);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Update the card state (in real app this would come from API response)
-    if (cardStore.state.cardBalance) {
-      cardStore.state.cardBalance.state = 'BLOCKED';
+    if (isCardBlocked.value) {
+      await cardStoreModule.unblockCard(cardData.value?.card_uuid);
+    } else {
+      await cardStoreModule.blockCard(cardData.value?.card_uuid);
     }
-    
-    console.log('Card blocked successfully');
   } catch (error) {
     console.error('Failed to block card:', error);
-  } finally {
-    loading.value = false;
-    showConfirmModal.value = false;
   }
+  loading.value = false;
 };
 </script>
 
@@ -139,5 +165,43 @@ const handleConfirmBlock = async () => {
 .help-text {
   @include body-text($font-size-sm);
   color: $text-muted;
+}
+
+.small-input {
+  width: 112px !important;
+  flex: none;
+}
+
+.input-label {
+  @include body-text($font-size-sm);
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  margin: 0 0 6px 0;
+}
+.pin-input {
+  :deep(.v-otp-input) {
+    gap: 8px !important;
+  }
+
+  :deep(input) {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 20px !important;
+  }
+}
+
+.form-row {
+  display: flex;
+  justify-content: center;
+  gap: $spacing-md;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.pin-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-sm;
 }
 </style>

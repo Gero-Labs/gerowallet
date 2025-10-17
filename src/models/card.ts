@@ -45,7 +45,7 @@ export interface CardBalance {
     amount: number;
     currencyCode: string;
   };
-  state: string;
+  state: 'ACTIVE' | 'BLOCKED';
 }
 
 // Card Transaction Types

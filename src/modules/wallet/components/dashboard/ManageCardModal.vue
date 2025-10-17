@@ -13,19 +13,19 @@
       </div>
 
       <!-- Tabs -->
-      <div class="tabs-container">
-        <div class="tabs-wrapper">
-          <v-btn
-            v-for="tab in tabs"
-            :key="tab.id"
-            :class="['tab-btn', { active: activeTab === tab.id }]"
-            text
-            @click="activeTab = tab.id"
-          >
-            {{ tab.label }}
-          </v-btn>
-        </div>
-      </div>
+<!--      <div class="tabs-container">-->
+<!--        <div class="tabs-wrapper">-->
+<!--          <v-btn-->
+<!--            v-for="tab in tabs"-->
+<!--            :key="tab.id"-->
+<!--            :class="['tab-btn', { active: activeTab === tab.id }]"-->
+<!--            text-->
+<!--            @click="activeTab = tab.id"-->
+<!--          >-->
+<!--            {{ tab.label }}-->
+<!--          </v-btn>-->
+<!--        </div>-->
+<!--      </div>-->
 
       <!-- Tab Content -->
       <div class="tab-content">
@@ -54,12 +54,12 @@ interface Emits {
 const emit = defineEmits<Emits>();
 
 const tabs = [
-  { id: 'view', label: 'View Card Details' },
+  // { id: 'view', label: 'View Card Details' },
   { id: 'block', label: 'Block Card' },
   // { id: 'order', label: 'Order Physical Card' },
 ];
 
-const activeTab = ref('view');
+const activeTab = ref('block');
 
 const closeDialog = () => {
   emit('close');
