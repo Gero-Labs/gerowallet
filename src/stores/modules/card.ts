@@ -60,16 +60,16 @@ export const cardStore = Vue.observable<CardState>({
 
 /**
  * Initialize card store with split storage model:
- * 
+ *
  * COOKIES (chrome.cookies API):
  * - accessToken: Sensitive auth token
  * - refreshToken: Token refresh credential
  * - tokenExpiry: Token expiration timestamp
- * 
+ *
  * CHROME STORAGE (chrome.storage.local):
  * - All other card state (user info, cards, balances, etc.)
  * - Tokens are explicitly excluded from chrome.storage for better security
- * 
+ *
  * Why split storage?
  * - Cookies provide better security boundaries (domain isolation, auto-expiry)
  * - Chrome storage provides larger storage capacity for card data
@@ -119,30 +119,16 @@ initCardStore();
 
 /**
  * Persist card store data to chrome.storage.local
- * 
+ *
  * IMPORTANT: Tokens are NOT persisted here!
  * - accessToken, refreshToken, tokenExpiry are stored in cookies
  * - They are explicitly deleted before saving to chrome.storage
  * - This ensures tokens have proper security boundaries and auto-expiry
  */
-function persist(patch: Partial<CardState>) {
-  try {
-    const next = { ...cardStore, ...patch };
-
-    // Remove sensitive tokens from chrome.storage (stored in cookies instead)
-    delete next.accessToken;
-    delete next.refreshToken;
-    delete next.tokenExpiry;
-
-    chrome.storage.local.set({ cardStore: next });
-  } catch (error) {
-    console.error('Failed to persist card store to chrome.storage:', error);
-  }
-}
 
 /**
  * Helper to retrieve authentication tokens from cookies
- * 
+ *
  * Returns null on failure to allow graceful fallback.
  * Used for lazy-loading tokens when not available in memory.
  */
@@ -233,12 +219,6 @@ const cardStoreInstance = {
       cardStore.refreshToken = tokens.refresh_token;
       cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
 
-      persist({
-        accessToken: cardStore.accessToken,
-        refreshToken: cardStore.refreshToken,
-        tokenExpiry: cardStore.tokenExpiry,
-      });
-
       await storeTokens(tokens);
     } catch (error) {
       await cardStoreInstance.logout();
@@ -256,30 +236,19 @@ const cardStoreInstance = {
     cardStore.selectedCardId = null; // NEW
     cardStore.exchangeRate = null;
 
-    persist({
-      accessToken: cardStore.accessToken,
-      refreshToken: cardStore.refreshToken,
-      tokenExpiry: cardStore.tokenExpiry,
-      userInfo: cardStore.userInfo,
-      cardanoAddress: cardStore.cardanoAddress,
-      cards: cardStore.cards,
-      selectedCardId: cardStore.selectedCardId,
-      exchangeRate: cardStore.exchangeRate,
-    });
-
     await clearStoredTokens();
   },
 };
 
 /**
  * Store authentication tokens in secure cookies
- * 
+ *
  * Uses chrome.cookies API instead of chrome.storage.local for enhanced security:
  * - Domain isolation: Cookies are bound to backend domain
  * - Auto-expiry: Cookies automatically expire based on token lifetime
  * - Secure flag: HTTPS-only transmission
  * - SameSite protection: CSRF protection
- * 
+ *
  * NOTE: While we can't set httpOnly from client-side, this is still more secure
  * than chrome.storage.local. For full httpOnly protection, backend should set
  * cookies via Set-Cookie headers.
@@ -334,7 +303,7 @@ async function storeTokens(tokens: AuthTokens): Promise<void> {
 
 /**
  * Clear all authentication tokens from cookies
- * 
+ *
  * Called during logout to ensure tokens are properly removed.
  * Does not throw on failure to ensure logout succeeds even if cookie removal fails.
  */
@@ -390,7 +359,6 @@ export default {
     const card = cardStore.cards.find(c => c.cardData.card_uuid === cardId);
     if (card) {
       cardStore.selectedCardId = cardId;
-      persist({ selectedCardId: cardId });
     } else {
       throw new Error(`Card with ID ${cardId} not found`);
     }
@@ -415,8 +383,6 @@ export default {
         cardStore.selectedCardId = cardInfo.cardData.card_uuid;
       }
     }
-
-    persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
   },
 
   /**
@@ -432,8 +398,6 @@ export default {
       if (cardStore.selectedCardId === cardId) {
         cardStore.selectedCardId = cardStore.cards.length > 0 ? cardStore.cards[0].cardData.card_uuid : null;
       }
-
-      persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
     }
   },
 
@@ -568,18 +532,11 @@ export default {
 
     // Set authentication status
     await this.setKaiserexAuthentication(true);
-
-    persist({
-      accessToken: store.accessToken,
-      refreshToken: store.refreshToken,
-      tokenExpiry: store.tokenExpiry,
-    });
   },
 
   async authenticate(wallet: any, code: string, codeVerifier: string): Promise<void> {
     cardStore.loading.auth = true;
     cardStore.errors.auth = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
@@ -592,21 +549,13 @@ export default {
       cardStore.refreshToken = tokens.refresh_token;
       cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
 
-      persist({
-        accessToken: cardStore.accessToken,
-        refreshToken: cardStore.refreshToken,
-        tokenExpiry: cardStore.tokenExpiry,
-      });
-
       await storeTokens(tokens);
     } catch (error) {
       cardStore.errors.auth =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Authentication failed';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.auth = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -622,43 +571,35 @@ export default {
   async fetchUserInfo(): Promise<void> {
     cardStore.loading.userInfo = true;
     cardStore.errors.userInfo = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/user');
       cardStore.userInfo = response.data;
-      persist({ userInfo: cardStore.userInfo });
     } catch (error) {
       cardStore.errors.userInfo =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch user info';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.userInfo = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
   async fetchCardanoAddress(): Promise<void> {
     cardStore.loading.cardanoAddress = true;
     cardStore.errors.cardanoAddress = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/cardano-address');
       cardStore.cardanoAddress = response.data;
-      persist({ cardanoAddress: cardStore.cardanoAddress });
     } catch (error) {
       cardStore.errors.cardanoAddress =
         error && typeof error === 'object' && 'message' in error
           ? String(error.message)
           : 'Failed to fetch Cardano address';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.cardanoAddress = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -666,7 +607,6 @@ export default {
   async fetchCardData(): Promise<void> {
     cardStore.loading.cardData = true;
     cardStore.errors.cardData = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
@@ -695,16 +635,12 @@ export default {
           this.upsertCard(newCard);
         }
       }
-
-      persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
     } catch (error) {
       cardStore.errors.cardData =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.cardData = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -722,7 +658,6 @@ export default {
 
     cardStore.loading.cardNumber = true;
     cardStore.errors.cardNumber = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
@@ -730,17 +665,14 @@ export default {
 
       // Update the specific card's number
       card.cardNumber = response.data;
-      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardNumber =
         error && typeof error === 'object' && 'message' in error
           ? String(error.message)
           : 'Failed to fetch card number';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.cardNumber = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -758,7 +690,6 @@ export default {
 
     cardStore.loading.cardBalance = true;
     cardStore.errors.cardBalance = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
@@ -766,35 +697,27 @@ export default {
 
       // Update the specific card's balance
       card.cardBalance = response.data;
-      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardBalance =
         error && typeof error === 'object' && 'message' in error
           ? String(error.message)
           : 'Failed to fetch card balance';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.cardBalance = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
   async fetchUserKYCStatus(): Promise<void> {
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
       cardStore.walletStatus.kycStatus = response.data.status.name;
       //cardStore.walletStatus.kycStatus = 'approved';
-      persist({ walletStatus: cardStore.walletStatus });
     } catch (error) {
       cardStore.walletStatus.kycStatus = 'unverified';
-      persist({ walletStatus: cardStore.walletStatus });
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -812,7 +735,6 @@ export default {
 
     cardStore.loading.cardHistory = true;
     cardStore.errors.cardHistory = null;
-    persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
@@ -845,17 +767,14 @@ export default {
 
       // Update the specific card's history
       card.cardHistory = response.data;
-      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardHistory =
         error && typeof error === 'object' && 'message' in error
           ? String(error.message)
           : 'Failed to fetch card history';
-      persist({ errors: cardStore.errors });
       throw error;
     } finally {
       cardStore.loading.cardHistory = false;
-      persist({ loading: cardStore.loading });
     }
   },
 
@@ -892,25 +811,21 @@ export default {
     if (isAuthenticated) {
       await this.initialize();
     }
-    persist({ walletStatus: cardStore.walletStatus });
   },
 
   async getExchangeRate(): Promise<void> {
     const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/exchange-rate/ADA/EUR`);
     cardStore.exchangeRate = response.data;
-    persist({ exchangeRate: cardStore.exchangeRate });
     return response.data;
   },
 
   setError(message: string): void {
     cardStore.walletStatus.error = message;
-    persist({ walletStatus: cardStore.walletStatus });
   },
 
   clearError(): void {
     cardStore.walletStatus.error = null;
-    persist({ walletStatus: cardStore.walletStatus });
   },
 
   // Initialize store
@@ -960,11 +875,6 @@ export default {
     } finally {
       try {
         cardStore.loading.initialize = false;
-        persist({
-          loading: cardStore.loading,
-          errors: cardStore.errors,
-          walletStatus: cardStore.walletStatus,
-        });
       } catch (persistError) {
         cardStore.loading.initialize = false;
       }
@@ -980,7 +890,6 @@ export default {
     if (card && card.cardBalance) {
       card.cardBalance.currentBalance.amount += additionalAmount;
       card.totalDeposits += additionalAmount;
-      persist({ cards: cardStore.cards });
     }
   },
 
@@ -993,7 +902,6 @@ export default {
     const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/pin/${cardUuid}`);
     card.cardPin = response.data;
-    persist({ cards: cardStore.cards });
     return response.data;
   },
 
@@ -1006,7 +914,6 @@ export default {
     const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
     card.cardDetails = response.data;
-    persist({ cards: cardStore.cards });
     return response.data;
   },
 
@@ -1057,8 +964,6 @@ export default {
     card.cardHistory.records.unshift(newTransaction);
     card.cardHistory.meta.records += 1;
     card.cardHistory.meta.totalRecords += 1;
-
-    persist({ cards: cardStore.cards });
   },
 
   addTopUpActivity(adaAmount: number, eurAmount: number, cardId?: string): void {
@@ -1083,7 +988,6 @@ export default {
 
     // Add to beginning of activities array
     card.activities.unshift(newActivity);
-    persist({ cards: cardStore.cards });
   },
 
   async blockCard(cardId?: string): Promise<void> {
@@ -1092,7 +996,7 @@ export default {
 
     try {
       const api = getCardApi();
-      await api.axiosInstance.post(`/api/kaiserex/cards/${targetCardId}/block`);
+      await api.axiosInstance.patch(`/api/kaiserex/cards/${targetCardId}/block`);
       await this.fetchCardData();
     } catch (error) {
       throw error;
@@ -1105,7 +1009,7 @@ export default {
 
     try {
       const api = getCardApi();
-      await api.axiosInstance.post(`/api/kaiserex/cards/${targetCardId}/unblock`);
+      await api.axiosInstance.patch(`/api/kaiserex/cards/${targetCardId}/unblock`);
       await this.fetchCardData();
     } catch (error) {
       throw error;
