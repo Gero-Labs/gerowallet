@@ -112,7 +112,6 @@ const confirmRegistration = () => {
   if (confirm('Have you successfully completed your Kaiserex registration?')) {
     registrationComplete.value = true;
     // Store registration status
-    localStorage.setItem('kaiserexRegistered', 'true');
   }
 };
 

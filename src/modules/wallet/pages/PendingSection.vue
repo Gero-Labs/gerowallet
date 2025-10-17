@@ -63,6 +63,8 @@ import RecentActivitiesSection from '@/modules/wallet/components/dashboard/Recen
   flex-direction: column;
   gap: 32px;
   width: 100%;
+
+  position: relative;
   .soon-content {
     opacity: 0.4;
     cursor: not-allowed;
