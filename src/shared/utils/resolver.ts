@@ -9,6 +9,7 @@ import { CID } from 'multiformats/cid';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
+import { debugLog } from '@/utils/debug';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
@@ -125,7 +126,7 @@ function cip68Label(asset_name: any): number | null {
 
 function resolveCip68(onchain_metadata_extra: any, label: number, metadata) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(JSON.parse(onchain_metadata_extra)[label]);
-  const metadataJson: Asset.NftMetadata = fromPlutusData(plutusData.toCore());
+  const metadataJson: Asset.NftMetadata | any = fromPlutusData(plutusData.toCore());
   metadata = metadataJson;
   if (metadataJson.otherProperties) {
     metadata = {
@@ -141,12 +142,12 @@ const getConditionalValidators = (strict: boolean) => ({
     if (typeof name === 'string') return true;
     if (typeof name === 'undefined') {
       if (strict) {
-        console.debug('Invalid PlutusData: "name" is required');
+        debugLog('Invalid PlutusData: "name" is required');
         return false;
       }
       return true;
     }
-    console.debug('Invalid PlutusData: "name" must be utf8 bounded bytes');
+    debugLog('Invalid PlutusData: "name" must be utf8 bounded bytes');
     return false;
   },
   isValidDatumShape: (plutusData: Cardano.PlutusData | undefined): plutusData is Cardano.ConstrPlutusData => {
@@ -156,7 +157,7 @@ const getConditionalValidators = (strict: boolean) => ({
       plutusData.constructor === 0n &&
       plutusData.fields.items.length >= minNumberOfFields;
     if (!isValid)
-      console.debug(
+      debugLog(
         `Invalid PlutusData: expecting ConstrPlutusData with 0th constructor and ${minNumberOfFields} items`
       );
     return isValid;
@@ -278,7 +279,7 @@ const mapFile = (file: Cardano.PlutusData): Asset.NftMetadataFile | undefined =>
 export const fromPlutusData = (
   plutusData: Cardano.PlutusData | undefined,
   strict = false
-): Asset.NftMetadata | null => {
+): Asset.NftMetadata | any => {
   const conditionalValidators = getConditionalValidators(strict);
   if (!conditionalValidators.isValidDatumShape(plutusData)) {
     return null;
@@ -286,7 +287,7 @@ export const fromPlutusData = (
 
   const [nftMetadata, version] = plutusData.fields.items;
   if (!Cardano.util.isPlutusMap(nftMetadata) || !Cardano.util.isPlutusBigInt(version)) {
-    console.debug('Invalid PlutusData: expecting a map at [0] and integer at [1]');
+    debugLog('Invalid PlutusData: expecting a map at [0] and integer at [1]');
     return null;
   }
 
@@ -299,7 +300,7 @@ export const fromPlutusData = (
 
   let imageAsUri: Asset.Uri = undefined
   if (typeof image !== 'string') {
-    console.debug('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
+    debugLog('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
   } else {
     imageAsUri = tryCoerce(image, Asset.Uri);
   }
@@ -705,9 +706,9 @@ export function analyzeTransactionForSignatures(
   // Check for required signers field
   // Only check for signatures that belong to this wallet (for multisig support)
   if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
-    console.debug('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
+    debugLog('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
     for (const keyHash of transaction.body.requiredExtraSignatures) {
-      console.debug(`🔍 Looking for required key hash: ${keyHash}`);
+      debugLog(`🔍 Looking for required key hash: ${keyHash}`);
       let foundMatch = false;
 
       // Search through all known addresses in the wallet store keys
@@ -720,19 +721,19 @@ export function analyzeTransactionForSignatures(
         if (addressArray && Array.isArray(addressArray)) {
           for (const addressInfo of addressArray) {
             if (addressInfo && (addressInfo.cred)) {
-              console.debug(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
+              debugLog(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
               // Compare key hash directly from wallet store
               // Use cred field if keyHash is not available (this is the actual field name in WalletStore)
               if (keyHash === addressInfo.cred) {
                 const pathArray = parseDerivationPath(addressInfo.path);
-                console.debug(`🔍 Full parsed path: [${pathArray.join(',')}]`);
-                console.debug(`🔍 Should be: [0, 0] for external address index 0`);
+                debugLog(`🔍 Full parsed path: [${pathArray.join(',')}]`);
+                debugLog(`🔍 Should be: [0, 0] for external address index 0`);
                 requiredSigners.push({
                   derivationPath: pathArray,
                   type: addressType === 'stake' ? 'stake' : 'payment'
                 });
                 foundMatch = true;
-                console.debug(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
+                debugLog(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
                 break;
               }
             }

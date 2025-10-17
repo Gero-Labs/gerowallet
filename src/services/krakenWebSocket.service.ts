@@ -2,6 +2,7 @@
  * Kraken WebSocket Service for real-time ADA/USD market data
  * Replaces the Binance API for Strike Finance integration
  */
+import { debugLog } from '@/utils/debug';
 
 interface KrakenTickerData {
   a: [string, string, string]; // ask [price, whole_lot_volume, lot_volume]
@@ -41,7 +42,7 @@ class KrakenWebSocketService {
   private tickerRequestInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    console.debug('🦑 Kraken WebSocket Service initialized');
+    debugLog('🦑 Kraken WebSocket Service initialized');
   }
 
   /**
@@ -71,7 +72,7 @@ class KrakenWebSocketService {
         };
 
         this.ws.onclose = (event) => {
-          console.debug('🦑 ❌ Disconnected from Kraken WebSocket:', event.code, event.reason);
+          debugLog('🦑 ❌ Disconnected from Kraken WebSocket:', event.code, event.reason);
           this.isConnected = false;
           this.stopPing();
           this.stopTickerMonitoring();
@@ -118,7 +119,7 @@ class KrakenWebSocketService {
       }
     };
 
-    console.debug('🦑 📡 Subscribing to ADA/USD ticker:', subscription);
+    debugLog('🦑 📡 Subscribing to ADA/USD ticker:', subscription);
     this.ws.send(JSON.stringify(subscription));
     this.subscriptions.add('ADA/USD');
   }

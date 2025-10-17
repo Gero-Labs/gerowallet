@@ -172,6 +172,7 @@ import LoadingState from '@/stores/loading';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { debugLog } from '@/utils/debug';
 
 interface NavigationItem {
   title?: string;
@@ -313,13 +314,13 @@ async function submitLogout() {
     // Navigate to welcome page after store is cleared
     // Use replace to avoid adding to history, and catch navigation guard redirects
     router.replace('/welcome').catch(err => {
-      console.debug('Navigation after logout handled (expected during logout):', err.message || err);
+      debugLog('Navigation after logout handled (expected during logout):', err.message || err);
     });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error
     router.replace('/welcome').catch(err => {
-      console.debug('Navigation after logout error handled (expected during logout):', err.message || err);
+      debugLog('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';
     });
   } finally {

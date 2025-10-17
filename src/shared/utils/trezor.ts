@@ -19,6 +19,7 @@ import type { Manifest } from '@trezor/connect/lib/types/settings';
 import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 // Trezor Connect manifest configuration
 const TREZOR_MANIFEST = {
@@ -188,7 +189,7 @@ export default {
       }
     });
 
-    console.debug('[TREZOR] Created known addresses:', knownAddresses.length);
+    debugLog('[TREZOR] Created known addresses:', knownAddresses.length);
     return knownAddresses;
   },
 
