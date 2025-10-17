@@ -58,39 +58,73 @@ export const cardStore = Vue.observable<CardState>({
   },
 });
 
-// Load stored data from chrome storage
-chrome.storage.local.get('cardStore', res => {
-  if (res['cardStore']) {
-    // Ensure walletStatus exists before assignment
-    const storedData = res['cardStore'];
-    if (!storedData.walletStatus) {
-      storedData.walletStatus = {
-        currentState: 'loading',
-        isKaiserexAuthenticated: false,
-        kycStatus: 'not_started',
-        kycData: null,
-        loadingMessage: '',
-        error: null,
-      };
+async function initCardStore() {
+  cardStore.accessToken = await getTokenFromCookie('kaiserex_access_token');
+  cardStore.refreshToken = await getTokenFromCookie('kaiserex_refresh_token');
+  cardStore.tokenExpiry = parseInt((await getTokenFromCookie('kaiserex_token_expiry')) || '0', 10);
+
+  // Load stored data from chrome storage
+  chrome.storage.local.get('cardStore', res => {
+    if (res['cardStore']) {
+      // Ensure walletStatus exists before assignment
+      const storedData = res['cardStore'];
+      if (!storedData.walletStatus) {
+        storedData.walletStatus = {
+          currentState: 'loading',
+          isKaiserexAuthenticated: false,
+          kycStatus: 'not_started',
+          kycData: null,
+          loadingMessage: '',
+          error: null,
+        };
+      }
+
+      Object.assign(cardStore, storedData);
     }
-    Object.assign(cardStore, storedData);
-  }
-});
+  });
+}
+initCardStore();
 
 // Persist data to chrome storage
 function persist(patch: Partial<CardState>) {
   const next = { ...cardStore, ...patch };
+
+  delete next.accessToken;
+  delete next.refreshToken;
+  delete next.tokenExpiry;
+
   chrome.storage.local.set({ cardStore: next });
+}
+
+// Helper to get token from cookie
+async function getTokenFromCookie(name: string): Promise<string | null> {
+  if (typeof chrome !== 'undefined' && chrome.cookies) {
+    const cookie = await chrome.cookies.get({
+      url: import.meta.env['VITE_BACKEND_URL'],
+      name,
+    });
+    return cookie?.value || null;
+  }
+  return null;
 }
 
 // Create API instance for card operations
 function getCardApi(): Api {
   const api = new Api(walletStore.loggedWallet, Provider.BLOCKFROST);
 
+  // Enable sending cookies with requests
+  api.axiosInstance.defaults.withCredentials = true;
+
   // Add auth interceptor for card operations
-  api.axiosInstance.interceptors.request.use(config => {
-    if (cardStore.accessToken) {
-      config.headers.Authorization = `Bearer ${cardStore.accessToken}`;
+  api.axiosInstance.interceptors.request.use(async config => {
+    // Try to get token from memory first, then from cookie
+    let token = cardStore.accessToken;
+    if (!token) {
+      token = await getTokenFromCookie('kaiserex_access_token');
+    }
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   });
@@ -153,8 +187,8 @@ const cardStoreInstance = {
     cardStore.tokenExpiry = null;
     cardStore.userInfo = null;
     cardStore.cardanoAddress = null;
-    cardStore.cards = [];  // NEW: Clear all cards
-    cardStore.selectedCardId = null;  // NEW
+    cardStore.cards = []; // NEW: Clear all cards
+    cardStore.selectedCardId = null; // NEW
     cardStore.exchangeRate = null;
 
     persist({
@@ -173,21 +207,62 @@ const cardStoreInstance = {
 };
 
 async function storeTokens(tokens: AuthTokens): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    await chrome.storage.local.set({
-      kaiserex_access_token: tokens.access_token,
-      kaiserex_refresh_token: tokens.refresh_token,
-      kaiserex_token_expiry: Date.now() + tokens.expires_in * 1000,
+  if (typeof chrome !== 'undefined' && chrome.cookies) {
+    const domain = new URL(import.meta.env['VITE_BACKEND_URL']).hostname;
+    const expirationDate = Math.floor(Date.now() / 1000) + tokens.expires_in;
+
+    // Store access token in cookie
+    await chrome.cookies.set({
+      url: import.meta.env['VITE_BACKEND_URL'],
+      name: 'kaiserex_access_token',
+      value: tokens.access_token,
+      domain: domain,
+      path: '/',
+      secure: true,
+      sameSite: 'no_restriction',
+      expirationDate: expirationDate,
+    });
+
+    // Store refresh token in cookie (longer expiration, e.g., 30 days)
+    await chrome.cookies.set({
+      url: import.meta.env['VITE_BACKEND_URL'],
+      name: 'kaiserex_refresh_token',
+      value: tokens.refresh_token,
+      domain: domain,
+      path: '/',
+      secure: true,
+      sameSite: 'no_restriction',
+      expirationDate: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days
+    });
+
+    // Store token expiry
+    await chrome.cookies.set({
+      url: import.meta.env['VITE_BACKEND_URL'],
+      name: 'kaiserex_token_expiry',
+      value: (Date.now() + tokens.expires_in * 1000).toString(),
+      domain: domain,
+      path: '/',
+      secure: true,
+      sameSite: 'no_restriction',
+      expirationDate: expirationDate,
     });
   }
 }
 
 async function clearStoredTokens(): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    await chrome.storage.local.remove(['kaiserex_access_token', 'kaiserex_refresh_token', 'kaiserex_token_expiry']);
-  }
+  await chrome.cookies.remove({
+    url: import.meta.env['VITE_BACKEND_URL'],
+    name: 'kaiserex_access_token',
+  });
+  await chrome.cookies.remove({
+    url: import.meta.env['VITE_BACKEND_URL'],
+    name: 'kaiserex_refresh_token',
+  });
+  await chrome.cookies.remove({
+    url: import.meta.env['VITE_BACKEND_URL'],
+    name: 'kaiserex_token_expiry',
+  });
 }
-
 export default {
   // ============================================================================
   // Multi-Card Helper Methods
@@ -230,9 +305,7 @@ export default {
    * @param cardInfo - The card info to add/update
    */
   upsertCard(cardInfo: CardInfo): void {
-    const index = cardStore.cards.findIndex(
-      c => c.cardData.card_uuid === cardInfo.cardData.card_uuid
-    );
+    const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardInfo.cardData.card_uuid);
 
     if (index >= 0) {
       // Update existing card
@@ -261,9 +334,7 @@ export default {
 
       // If removed card was selected, select first available card
       if (cardStore.selectedCardId === cardId) {
-        cardStore.selectedCardId = cardStore.cards.length > 0
-          ? cardStore.cards[0].cardData.card_uuid
-          : null;
+        cardStore.selectedCardId = cardStore.cards.length > 0 ? cardStore.cards[0].cardData.card_uuid : null;
       }
 
       persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
@@ -391,14 +462,14 @@ export default {
     store.refreshToken = tokens.refresh_token;
     store.tokenExpiry = Date.now() + (tokens.expires_in || 3600) * 1000;
 
-    // Also store in chrome storage for persistence
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.set({
-        kaiserex_access_token: tokens.access_token,
-        kaiserex_refresh_token: tokens.refresh_token,
-        kaiserex_token_expiry: store.tokenExpiry,
-      });
-    }
+    // Store tokens in cookies
+    await storeTokens({
+      token_type: 'Bearer',
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_in: tokens.expires_in || 3600,
+    });
+
     console.log('setKaiserExTokens', tokens);
     // Set authentication status
     await this.setKaiserexAuthentication(true);
@@ -724,10 +795,7 @@ export default {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
     console.log('setKaiserexAuthentication', isAuthenticated);
     if (isAuthenticated) {
-      localStorage.setItem('kaiserexRegistered', 'true');
       await this.initialize();
-    } else {
-      localStorage.removeItem('kaiserexRegistered');
     }
     persist({ walletStatus: cardStore.walletStatus });
   },
@@ -756,20 +824,21 @@ export default {
     cardStore.errors.initialize = null;
 
     try {
-      const kaiserexAuth = localStorage.getItem('kaiserexRegistered') === 'true';
-      cardStore.walletStatus.isKaiserexAuthenticated = kaiserexAuth;
+      // Read tokens from cookies
+      if (typeof chrome !== 'undefined' && chrome.cookies) {
+        const url = import.meta.env['VITE_BACKEND_URL'];
 
-      if (typeof chrome !== 'undefined' && chrome.storage) {
-        const result = await chrome.storage.local.get([
-          'kaiserex_access_token',
-          'kaiserex_refresh_token',
-          'kaiserex_token_expiry',
+        const [accessTokenCookie, refreshTokenCookie, tokenExpiryCookie] = await Promise.all([
+          chrome.cookies.get({ url, name: 'kaiserex_access_token' }),
+          chrome.cookies.get({ url, name: 'kaiserex_refresh_token' }),
+          chrome.cookies.get({ url, name: 'kaiserex_token_expiry' }),
         ]);
 
-        if (result['kaiserex_access_token'] && result['kaiserex_token_expiry']) {
-          cardStore.accessToken = result['kaiserex_access_token'];
-          cardStore.refreshToken = result['kaiserex_refresh_token'];
-          cardStore.tokenExpiry = result['kaiserex_token_expiry'];
+        if (accessTokenCookie?.value && tokenExpiryCookie?.value) {
+          cardStore.accessToken = accessTokenCookie.value;
+          cardStore.refreshToken = refreshTokenCookie?.value || null;
+          cardStore.tokenExpiry = parseInt(tokenExpiryCookie.value, 10);
+          cardStore.walletStatus.isKaiserexAuthenticated = true;
         }
       }
 

@@ -13,7 +13,8 @@
             <div class="header-content">
               <h2 class="modal-title">Get Started with Gero Crypto Card</h2>
               <p class="modal-subtitle">
-                First, you'll create an account with Kaiserex, our trusted banking partner. Then complete verification to order your card.
+                First, you'll create an account with Kaiserex, our trusted banking partner. Then complete verification
+                to order your card.
               </p>
             </div>
 
@@ -48,10 +49,10 @@
     </v-dialog>
 
     <!-- Kaiserex Registration Modal -->
-    <KaiserexRegistrationModal 
-      :open="showKaiserexModal" 
+    <KaiserexRegistrationModal
+      :open="showKaiserexModal"
       @close="handleKaiserexClose"
-      @complete="handleKaiserexComplete" 
+      @complete="handleKaiserexComplete"
     />
 
     <!-- KYC Modal -->
@@ -65,6 +66,7 @@ import GradientButton from './GradientButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
 import KYCModal from './KYCModal.vue';
 import { ref } from 'vue';
+import cardStore from '@/stores/modules/card';
 
 defineProps<{
   open: boolean;
@@ -83,8 +85,8 @@ const closeModal = () => {
 
 const handleGetStarted = () => {
   // Check if user has already registered with Kaiserex
-  const isRegistered = localStorage.getItem('kaiserexRegistered') === 'true';
-  
+  const isRegistered = cardStore.state.walletStatus.isKaiserexAuthenticated;
+
   if (isRegistered) {
     // If already registered, go directly to KYC
     showKYCModal.value = true;
@@ -105,8 +107,7 @@ const handleKaiserexComplete = () => {
 };
 
 const setKYCStatus = () => {
-  localStorage.setItem('kycStatus', 'pending');
-  
+  cardStore.state.walletStatus.kycStatus = 'pending';
   showKYCModal.value = false;
   closeModal();
 };
