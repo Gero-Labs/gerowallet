@@ -3,18 +3,15 @@
     <!-- Card Carousel and Balance Section -->
     <v-card v-if="cards.length > 0" flat class="transparent">
       <v-row>
-        <v-col cols="12" md="7" class="py-0" style="align-content: center; justify-items: center;">
+        <v-col cols="12" md="7" class="py-0" style="align-content: center; justify-items: center">
           <div class="card-carousel">
             <v-window v-model="currentCardIndex" :show-arrows="cards.length > 1" continuous>
-              <v-window-item
-                v-for="card in cards"
-                :key="card.cardData.card_uuid"
-              >
+              <v-window-item v-for="card in cards" :key="card.cardData.card_uuid">
                 <div
                   class="credit-card"
                   @mousemove="handleCardMouseMove"
                   @mouseleave="handleCardMouseLeave"
-                  @click="handleManageCard"
+                  @click="showManageCardConfirmationModal = true"
                   :style="cardTiltStyle"
                 >
                   <!-- Shine effect -->
@@ -26,14 +23,16 @@
                   </p>
 
                   <!-- Card Bottom Info -->
-                  <div class="card-bottom" style="max-width: 310px;">
+                  <div class="card-bottom" style="max-width: 310px">
                     <div class="card-holder">
                       <p class="label">CARDHOLDER NAME</p>
                       <p class="value">GERO WALLET</p>
                     </div>
                     <div class="card-cvv">
                       <p class="label">CVV</p>
-                      <p class="value">{{ showCardDetails && card.cardDetails?.details?.cvc2 ? card.cardDetails.details.cvc2 : '***' }}</p>
+                      <p class="value">
+                        {{ showCardDetails && card.cardDetails?.details?.cvc2 ? card.cardDetails.details.cvc2 : '***' }}
+                      </p>
                     </div>
                     <div class="card-expiry">
                       <p class="label">EXP.</p>
@@ -45,12 +44,16 @@
             </v-window>
           </div>
         </v-col>
-        <v-col cols="12" md="5" class="py-0" style="align-content: center; justify-items: center;">
+        <v-col cols="12" md="5" class="py-0" style="align-content: center; justify-items: center">
           <div class="balance-section">
             <div class="balance-container">
               <p class="balance-label">Total Balance</p>
               <p class="balance-amount">
-                {{ cards[currentCardIndex]?.cardBalance?.currentBalance?.amount ? formatCurrency(cards[currentCardIndex].cardBalance.currentBalance.amount) : '€0.00' }}
+                {{
+                  cards[currentCardIndex]?.cardBalance?.currentBalance?.amount
+                    ? formatCurrency(cards[currentCardIndex].cardBalance.currentBalance.amount)
+                    : '€0.00'
+                }}
               </p>
               <p class="balance-conversion">
                 ≈ {{ formatADA(cards[currentCardIndex]?.cardBalance?.currentBalance?.amount || 0) }} ADA
@@ -62,7 +65,11 @@
                   <img src="@/modules/wallet/icons/currency-euro.svg" alt="Top up" class="btn-icon" />
                   Top up
                 </v-btn>
-                <v-btn class="action-btn eye-btn" variant="outlined" @click="toggleCardVisibility">
+                <v-btn
+                  class="action-btn eye-btn"
+                  variant="outlined"
+                  @click="showCardDetails ? (showCardDetails = false) : (showConfirmationModal = true)"
+                >
                   <v-icon>{{ showCardDetails ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                 </v-btn>
               </div>
@@ -73,9 +80,7 @@
       <div class="card-layout">
         <!-- Card Carousel -->
 
-
         <!-- Balance Section -->
-
       </div>
     </v-card>
 
@@ -88,6 +93,23 @@
     <!-- Modals -->
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
+
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :open="showConfirmationModal"
+      @close="showConfirmationModal = false"
+      @confirm="toggleCardVisibility"
+      :title="'View Card Details'"
+      :subtitle="'View the details of your card. This action cannot be undone.'"
+    />
+    <!-- Confirmation Modal Manage Card-->
+    <ConfirmationModal
+      :open="showManageCardConfirmationModal"
+      @close="showManageCardConfirmationModal = false"
+      @confirm="showManageCardModal = true"
+      :title="'Manage Card'"
+      :subtitle="'Manage the details of your card. This action cannot be undone.'"
+    />
   </div>
 </template>
 
@@ -96,6 +118,7 @@ import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import cardStoreModule from '@/stores/modules/card';
+import ConfirmationModal from './dashboard/ConfirmationModal.vue';
 
 const currentCardIndex = ref(0);
 const cardTiltStyle = ref<any>({});
@@ -103,6 +126,8 @@ const cardShineStyle = ref<any>({});
 const showCardDetails = ref(false);
 const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
+const showConfirmationModal = ref(false);
+const showManageCardConfirmationModal = ref(false);
 
 // Get cards from the real card store
 const cards = computed(() => {
@@ -115,37 +140,40 @@ const exchangeRate = computed(() => {
 });
 
 // Watch for selected card changes and update current index
-watch(() => cardStoreModule.state.selectedCardId, (newCardId) => {
-  if (newCardId && cards.value.length > 0) {
-    const index = cards.value.findIndex(c => c.cardData.card_uuid === newCardId);
-    if (index >= 0) {
-      currentCardIndex.value = index;
+watch(
+  () => cardStoreModule.state.selectedCardId,
+  newCardId => {
+    if (newCardId && cards.value.length > 0) {
+      const index = cards.value.findIndex(c => c.cardData.card_uuid === newCardId);
+      if (index >= 0) {
+        currentCardIndex.value = index;
+      }
     }
-  }
-}, { immediate: true });
+  },
+  { immediate: true }
+);
 
 // Update selected card when carousel index changes
-watch(currentCardIndex, (newIndex) => {
+watch(currentCardIndex, newIndex => {
   if (cards.value[newIndex]) {
     cardStoreModule.selectCard(cards.value[newIndex].cardData.card_uuid);
   }
 });
 
 // Card visibility toggle
-const toggleCardVisibility = () => {
-  showCardDetails.value = !showCardDetails.value;
+const toggleCardVisibility = async () => {
+  try {
+    await cardStoreModule.fetchCardDetails(cardStoreModule.state.selectedCardId);
+    showCardDetails.value = !showCardDetails.value;
+  } catch (error) {
+    console.error('Failed to fetch card details:', error);
+  }
 };
 
 // Top up handler
 const handleTopUp = () => {
   console.log('Top up clicked');
   showTopUpModal.value = true;
-};
-
-// Manage card handler
-const handleManageCard = () => {
-  console.log('Manage card clicked');
-  showManageCardModal.value = true;
 };
 
 // 3D Card tilt effect with shine and dynamic glow
@@ -176,7 +204,7 @@ const handleCardMouseMove = (event: MouseEvent) => {
       0 10px 30px rgba(0, 0, 0, 0.3),
       ${glowOffsetX}px ${glowOffsetY}px 120px rgba(0, 200, 200, 0.12),
       ${glowOffsetX * 0.5}px ${glowOffsetY * 0.5}px 60px rgba(0, 200, 200, 0.08)
-    `
+    `,
   };
 
   cardShineStyle.value = {
@@ -184,7 +212,7 @@ const handleCardMouseMove = (event: MouseEvent) => {
       radial-gradient(circle at ${percentX}% ${percentY}%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(255, 255, 255, 0.02) 100%)
     `,
-    opacity: 1
+    opacity: 1,
   };
 };
 
@@ -196,12 +224,12 @@ const handleCardMouseLeave = () => {
       0 10px 30px rgba(0, 0, 0, 0.3),
       0 0 120px rgba(0, 200, 200, 0.12),
       0 0 60px rgba(0, 200, 200, 0.08)
-    `
+    `,
   };
 
   cardShineStyle.value = {
     opacity: 0,
-    transition: 'opacity 0.3s ease-out'
+    transition: 'opacity 0.3s ease-out',
   };
 };
 
@@ -296,10 +324,7 @@ const formatADA = (eurAmount: number) => {
   border-radius: 1rem;
   padding: 2rem;
   color: white;
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.3),
-    0 0 120px rgba(0, 200, 200, 0.12),
-    0 0 60px rgba(0, 200, 200, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 120px rgba(0, 200, 200, 0.12), 0 0 60px rgba(0, 200, 200, 0.08);
   position: relative;
   display: flex;
   flex-direction: column;
