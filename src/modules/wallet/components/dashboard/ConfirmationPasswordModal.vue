@@ -11,8 +11,8 @@
           </div>
 
           <div class="text-section">
-            <h3 class="modal-title">Block Your Card</h3>
-            <p class="modal-subtitle">Are you sure you want to block your card? This action cannot be undone.</p>
+            <h3 class="modal-title">{{ title }}</h3>
+            <p class="modal-subtitle">{{ subtitle }}</p>
           </div>
         </div>
 
@@ -25,23 +25,28 @@
       <div class="modal-actions">
         <div class="actions-content">
           <div class="password-section">
-            <label class="input-label">Enter Password to confirm transaction*</label>
-            <v-text-field
-              v-model="password"
-              type="password"
-              dense
-              outlined
-              class="password-input"
-              hide-details
-              placeholder="**********"
-            />
+            <v-tooltip v-model="tooltip.enabled" top color="red">
+              <template v-slot:activator="{}">
+                <v-text-field
+                  v-model="password"
+                  type="password"
+                  dense
+                  outlined
+                  class="password-input"
+                  label="Spending Password"
+                  hide-details
+                  placeholder="**********"
+                  @keyup.enter="verifyPassword"
+                />
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
           </div>
+          <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
           <div class="buttons-section">
             <v-btn class="cancel-btn" @click="closeModal"> Cancel </v-btn>
-            <v-btn color="error" class="delete-btn" @click="confirmBlock" :loading="loading" :disabled="!password">
-              Delete
-            </v-btn>
+            <v-btn color="error" class="delete-btn" @click="verifyPassword" :disabled="!password"> Confirm </v-btn>
           </div>
         </div>
       </div>
@@ -50,11 +55,14 @@
 </template>
 
 <script setup lang="ts">
-import cardStore from '@/stores/modules/card';
-import { ref, computed } from 'vue';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import { ref, watch } from 'vue';
 
 interface Props {
   open: boolean;
+  title: string;
+  subtitle: string;
 }
 
 interface Emits {
@@ -62,35 +70,53 @@ interface Emits {
   (e: 'confirm'): void;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const password = ref('');
-const loading = ref(false);
-
+const errorMessage = ref('');
 const closeModal = () => {
   password.value = '';
   emit('close');
 };
-const isBlocked = computed(() => cardStore.state.cardData?.card_status === 'TEMPORARY_BLOCKED');
-
-const confirmBlock = async () => {
-  if (!password.value) return;
-  loading.value = true;
+const enableToolTip = () => {
+  tooltip.value.enabled = true;
+  setTimeout(() => {
+    tooltip.value.enabled = false;
+  }, 3000);
+};
+const tooltip = ref({
+  enabled: false,
+  text: 'Wrong Spending Password!',
+});
+// Password verification
+const verifyPassword = async () => {
   try {
-    if (isBlocked.value) {
-      await cardStore.unblockCard();
-    } else {
-      await cardStore.blockCard();
+    const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.VERIFY_SPENDING_PASSWORD,
+      data: { password: password.value },
+    })) as { data: { isValid: boolean; error?: string } };
+    if (!passwordVerification.data.isValid) {
+      enableToolTip();
+      return;
     }
-  } catch (error) {
-    closeModal();
-  } finally {
-    loading.value = false;
     emit('confirm');
     closeModal();
+  } catch (error) {
+    enableToolTip();
   }
 };
+
+watch(
+  () => props.open,
+  newVal => {
+    if (newVal) {
+      password.value = '';
+      errorMessage.value = '';
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <style lang="scss" scoped>
@@ -184,6 +210,8 @@ const confirmBlock = async () => {
 }
 
 .password-section {
+  margin-top: 36px;
+  position: relative;
   @include flex-column;
   gap: $spacing-xs;
 }
@@ -272,5 +300,11 @@ const confirmBlock = async () => {
     background: #6b7280 !important;
     border-color: #6b7280 !important;
   }
+}
+
+.error-message {
+  color: #d92d20;
+  font-size: $font-size-sm;
+  margin: 0;
 }
 </style>

@@ -268,7 +268,6 @@ const handleLogin = async () => {
         // Use the proper method to set tokens
         await cardStore.setKaiserExTokens(tokenData);
         // Set authentication status in localStorage
-        localStorage.setItem('kaiserexRegistered', 'true');
         kaiserExLoading.value = false;
         // Emit auth completion
         emit('auth-complete');
@@ -361,7 +360,6 @@ const handleTwoFASubmit = async () => {
             // Use the proper method to set tokens
             cardStore.setKaiserExTokens(tokenData);
             // Set authentication status
-            localStorage.setItem('kaiserexRegistered', 'true');
 
             // Reset forms
             show2FAForm.value = false;
@@ -407,7 +405,6 @@ const handleResendCode = () => {
 
 const handleRegistrationComplete = () => {
   // Set authentication status
-  localStorage.setItem('kaiserexRegistered', 'true');
 
   showRegistrationModal.value = false;
   emit('auth-complete');
