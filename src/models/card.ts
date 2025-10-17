@@ -74,9 +74,7 @@ export interface CardTransactionHistory {
     amount: number;
     currencyCode: string;
   };
-  narrative: {
-    description: string;
-  };
+  narrative: string;
   debit: boolean;
   state: string;
 }
@@ -123,9 +121,11 @@ export interface CardErrorState {
 }
 
 export interface CardDetails {
-  pan: string;
-  expiryDate: string;
-  cvc2: string;
+  details: {
+    pan: string;
+    expiryDate: string;
+    cvc2: string;
+  }
 }
 
 export interface CardPin {
@@ -135,6 +135,18 @@ export interface ExchangeRate {
   buy: string;
   sell: string;
 }
+// Individual card data with all related information
+export interface CardInfo {
+  cardData: CardData;
+  cardDetails: CardDetails | null;
+  cardPin: CardPin | null;
+  cardNumber: CardNumber | null;
+  cardBalance: CardBalance | null;
+  cardHistory: HistoryResponse | null;
+  totalDeposits: number;
+  activities: Activity[];
+}
+
 export interface CardState {
   // Auth
   accessToken: string | null;
@@ -145,16 +157,11 @@ export interface CardState {
   userInfo: UserInfo | null;
   cardanoAddress: CardanoAddress | null;
 
-  // Card data
-  cardData: CardData | null;
-  cardDetails: CardDetails | null;
-  cardPin: CardPin | null;
-  cardNumber: CardNumber | null;
-  cardBalance: CardBalance | null;
-  cardHistory: HistoryResponse | null;
-  totalDeposits: number;
+  // Multiple cards support
+  cards: CardInfo[]; // Array of all user's cards
+  selectedCardId: string | null; // Currently selected card UUID
   exchangeRate: ExchangeRate | null;
-  activities: Activity[];
+
   // Wallet status integration - ALL IN ONE!
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';

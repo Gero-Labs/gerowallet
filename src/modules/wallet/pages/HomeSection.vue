@@ -1,43 +1,39 @@
 <template>
   <div class="home-section">
-    <!-- Account Overview Section -->
-    <!-- <WelcomeCard :user-name="userName" /> -->
     <HeroSection />
-    <AccountOverviewHeader />
 
-    <BalanceCardsSection
-      :card-balance="cardBalanceFormatted"
-      :card-balance-ada="cardBalanceAda"
-      :gero-earned="geroEarnedFormatted"
-      :total-deposit="totalDepositFormatted"
-      :total-deposit-ada="totalDepositAda"
-    />
     <div class="dashboard-layout">
       <div class="left-column">
         <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
       </div>
       <div class="right-column">
         <!-- <ChartSection @filter="handleFilter" /> -->
-        <ExchangeRateSection />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import cardStore from '@/stores/modules/card';
-import AccountOverviewHeader from '../components/dashboard/AccountOverviewHeader.vue';
-import BalanceCardsSection from '../components/dashboard/BalanceCardsSection.vue';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
-import ExchangeRateSection from '../components/dashboard/ExchangeRateSection.vue';
 import HeroSection from '../components/HeroSection.vue';
 import { useIntervalFn } from '@vueuse/core';
-// ADA to EUR conversion rate (hardcoded)
-const ADA_TO_EUR_RATE = 0.65;
 const loading = ref(false);
+
 onMounted(async () => {
   loading.value = true;
+
+  // Fetch card details for the selected card (only once on mount)
+  const selectedCardId = cardStore.state.selectedCardId;
+  if (selectedCardId) {
+    try {
+      await cardStore.fetchCardDetails(selectedCardId);
+    } catch (error) {
+      console.error('Failed to fetch card details:', error);
+    }
+  }
+
   await cardStore.fetchCardHistory();
   await cardStore.fetchCardBalance();
   loading.value = false;
@@ -46,62 +42,39 @@ onMounted(async () => {
   }, 60000);
 });
 
+// Watch for card selection changes and fetch transaction details
+watch(() => cardStore.state.selectedCardId, async (newCardId, oldCardId) => {
+  if (newCardId && newCardId !== oldCardId) {
+    loading.value = true;
+    try {
+      // Fetch card details (PAN, CVV, expiry) for the newly selected card
+      await cardStore.fetchCardDetails(newCardId);
+      // Fetch transaction history for the newly selected card
+      await cardStore.fetchCardHistory({}, newCardId);
+      // Fetch balance for the newly selected card
+      await cardStore.fetchCardBalance(newCardId);
+    } catch (error) {
+      console.error('Failed to fetch card data:', error);
+    } finally {
+      loading.value = false;
+    }
+  }
+});
+
 const initData = () => {
   cardStore.fetchCardHistory();
   cardStore.fetchCardBalance();
   cardStore.getExchangeRate();
 };
 
-const cardBalanceFormatted = computed(() => {
-  if (cardStore.state.cardBalance?.currentBalance) {
-    const amount = cardStore.state.cardBalance.currentBalance.amount;
-    return `${amount.toFixed(2)}`;
-  }
-  return '0.00';
-});
-
-const cardBalanceAda = computed(() => {
-  // Calculate ADA equivalent of card balance
-  if (cardStore.state.cardBalance?.currentBalance) {
-    const eurAmount = cardStore.state.cardBalance.currentBalance.amount;
-    const adaAmount = eurAmount / ADA_TO_EUR_RATE;
-    return `₳${adaAmount.toFixed(2)}`;
-  }
-  return '₳0.00';
-});
-
-const geroEarnedFormatted = computed(() => {
-  // This would come from GERO rewards
-  return '0.00K';
-});
-
-const totalDepositFormatted = computed(() => {
-  // Start with the original hardcoded value and add new deposits
-  const baseAmount = 0;
-  const additionalDeposits = cardStore.state.totalDeposits || 0;
-  return (baseAmount + additionalDeposits).toFixed(2);
-});
-
-const totalDepositAda = computed(() => {
-  // Calculate ADA equivalent of total deposits
-  const baseAmount = 0;
-  const additionalDeposits = cardStore.state.totalDeposits || 0;
-  const totalEur = baseAmount + additionalDeposits;
-  const adaAmount = totalEur / ADA_TO_EUR_RATE;
-  return `₳${adaAmount.toFixed(2)}`;
-});
-
 const cardHistoryRecords = computed(() => {
-  const records = cardStore.state.cardHistory?.records || [];
+  const selectedCard = cardStore.getSelectedCard();
+  const records = selectedCard?.cardHistory?.records || [];
   if (records.length > 0) {
     console.log('🏠 First record:', records[0]);
   }
   return records;
 });
-
-// const handleFilter = () => {
-//   console.log('Filter clicked');
-// };
 </script>
 
 <style lang="scss" scoped>

@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory } from '@/models/card';
+import type { AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo } from '@/models/card';
 import type { KaiserExTokenData } from '@/services/kaiserEx.service';
 import type { Activity } from '@/models/types';
 import { Api } from '@/api/api';
@@ -16,33 +16,10 @@ export const cardStore = Vue.observable<CardState>({
   userInfo: null,
   cardanoAddress: null,
 
-  // Card data
-  cardData: null,
-  cardDetails: null,
-  cardPin: null,
-  cardNumber: null,
-  cardBalance: null,
-  cardHistory: null,
-  totalDeposits: 0,
+  // Multiple cards support
+  cards: [],
+  selectedCardId: null,
   exchangeRate: null,
-  activities: [
-    {
-      id: 1,
-      type: 'Top-up',
-      cryptoAmount: '₳200',
-      fiatAmount: '+€130.00',
-      date: '03/05/2025',
-      status: 'Completed',
-    },
-    {
-      id: 2,
-      type: 'Top-up',
-      cryptoAmount: '₳200',
-      fiatAmount: '+€130.00',
-      date: '03/05/2025',
-      status: 'Completed',
-    },
-  ],
 
   // Wallet status integration - EVERYTHING IN ONE STORE!
   walletStatus: {
@@ -176,14 +153,8 @@ const cardStoreInstance = {
     cardStore.tokenExpiry = null;
     cardStore.userInfo = null;
     cardStore.cardanoAddress = null;
-    cardStore.cardData = null;
-    cardStore.cardDetails = null;
-    cardStore.cardPin = null;
-    cardStore.cardNumber = null;
-    cardStore.cardBalance = null;
-    cardStore.cardHistory = null;
-    cardStore.totalDeposits = 0;
-    cardStore.activities = [];
+    cardStore.cards = [];  // NEW: Clear all cards
+    cardStore.selectedCardId = null;  // NEW
     cardStore.exchangeRate = null;
 
     persist({
@@ -192,14 +163,8 @@ const cardStoreInstance = {
       tokenExpiry: cardStore.tokenExpiry,
       userInfo: cardStore.userInfo,
       cardanoAddress: cardStore.cardanoAddress,
-      cardData: cardStore.cardData,
-      cardDetails: cardStore.cardDetails,
-      cardPin: cardStore.cardPin,
-      cardNumber: cardStore.cardNumber,
-      cardBalance: cardStore.cardBalance,
-      cardHistory: cardStore.cardHistory,
-      totalDeposits: cardStore.totalDeposits,
-      activities: cardStore.activities,
+      cards: cardStore.cards,
+      selectedCardId: cardStore.selectedCardId,
       exchangeRate: cardStore.exchangeRate,
     });
 
@@ -224,7 +189,91 @@ async function clearStoredTokens(): Promise<void> {
 }
 
 export default {
+  // ============================================================================
+  // Multi-Card Helper Methods
+  // ============================================================================
+
+  /**
+   * Get the currently selected card
+   * @returns The selected card or null if none selected
+   */
+  getSelectedCard(): CardInfo | null {
+    if (!cardStore.selectedCardId) return null;
+    return cardStore.cards.find(c => c.cardData.card_uuid === cardStore.selectedCardId) || null;
+  },
+
+  /**
+   * Get a specific card by UUID
+   * @param cardId - The card UUID
+   * @returns The card or null if not found
+   */
+  getCard(cardId: string): CardInfo | null {
+    return cardStore.cards.find(c => c.cardData.card_uuid === cardId) || null;
+  },
+
+  /**
+   * Select a card by UUID
+   * @param cardId - The card UUID to select
+   */
+  selectCard(cardId: string): void {
+    const card = cardStore.cards.find(c => c.cardData.card_uuid === cardId);
+    if (card) {
+      cardStore.selectedCardId = cardId;
+      persist({ selectedCardId: cardId });
+    } else {
+      throw new Error(`Card with ID ${cardId} not found`);
+    }
+  },
+
+  /**
+   * Add or update a card in the cards array
+   * @param cardInfo - The card info to add/update
+   */
+  upsertCard(cardInfo: CardInfo): void {
+    const index = cardStore.cards.findIndex(
+      c => c.cardData.card_uuid === cardInfo.cardData.card_uuid
+    );
+
+    if (index >= 0) {
+      // Update existing card
+      Vue.set(cardStore.cards, index, cardInfo);
+    } else {
+      // Add new card
+      cardStore.cards.push(cardInfo);
+
+      // Auto-select if it's the first card
+      if (cardStore.cards.length === 1) {
+        cardStore.selectedCardId = cardInfo.cardData.card_uuid;
+      }
+    }
+
+    persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
+  },
+
+  /**
+   * Remove a card by UUID
+   * @param cardId - The card UUID to remove
+   */
+  removeCard(cardId: string): void {
+    const index = cardStore.cards.findIndex(c => c.cardData.card_uuid === cardId);
+    if (index >= 0) {
+      cardStore.cards.splice(index, 1);
+
+      // If removed card was selected, select first available card
+      if (cardStore.selectedCardId === cardId) {
+        cardStore.selectedCardId = cardStore.cards.length > 0
+          ? cardStore.cards[0].cardData.card_uuid
+          : null;
+      }
+
+      persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
+    }
+  },
+
+  // ============================================================================
   // Auth Getters
+  // ============================================================================
+
   get isAuthenticated() {
     if (!cardStore.accessToken || !cardStore.tokenExpiry) return false;
     const isValid = Date.now() < cardStore.tokenExpiry;
@@ -239,7 +288,8 @@ export default {
 
   // Card Getters
   get hasCard() {
-    return cardStore.cardData !== null;
+    const selectedCard = this.getSelectedCard();
+    return selectedCard !== null && selectedCard.cardData !== null;
   },
 
   get hasCardanoAddress() {
@@ -247,20 +297,23 @@ export default {
   },
 
   get formattedBalance() {
-    if (!cardStore.cardBalance) return null;
+    const selectedCard = this.getSelectedCard();
+    if (!selectedCard || !selectedCard.cardBalance) return null;
     return {
-      amount: cardStore.cardBalance.currentBalance.amount,
-      currency: cardStore.cardBalance.currentBalance.currencyCode,
-      state: cardStore.cardBalance.state,
+      amount: selectedCard.cardBalance.currentBalance.amount,
+      currency: selectedCard.cardBalance.currentBalance.currencyCode,
+      state: selectedCard.cardBalance.state,
     };
   },
 
   get cardHistoryRecords() {
-    return cardStore.cardHistory?.records || [];
+    const selectedCard = this.getSelectedCard();
+    return selectedCard?.cardHistory?.records || [];
   },
 
   get cardHistoryMeta() {
-    return cardStore.cardHistory?.meta || null;
+    const selectedCard = this.getSelectedCard();
+    return selectedCard?.cardHistory?.meta || null;
   },
 
   // Wallet Status Getters - ALL IN ONE STORE!
@@ -283,6 +336,8 @@ export default {
       return 'auth';
     }
 
+    const selectedCard = this.getSelectedCard();
+
     switch (walletStatus.kycStatus) {
       case 'unverified':
         return 'new';
@@ -291,9 +346,9 @@ export default {
       case 'registered':
         return 'pending';
       case 'approved':
-        if (cardStore.cardData?.card_uuid) {
+        if (selectedCard?.cardData?.card_uuid) {
           return 'approved';
-        } else if (cardStore.cardData?.id && !cardStore.cardData?.card_uuid) {
+        } else if (selectedCard?.cardData?.id && !selectedCard?.cardData?.card_uuid) {
           return 'pending';
         } else {
           return 'new';
@@ -450,9 +505,32 @@ export default {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/cards');
-      cardStore.cardData = response.data.data?.[0] || null;
+      const cardsData = response.data.data || [];
 
-      persist({ cardData: cardStore.cardData });
+      // Populate cards array with all user's cards
+      for (const cardData of cardsData) {
+        const existingCard = cardStore.cards.find(c => c.cardData.card_uuid === cardData.card_uuid);
+
+        if (existingCard) {
+          // Update existing card's cardData
+          existingCard.cardData = cardData;
+        } else {
+          // Add new card with minimal info (other fields will be populated by other fetch methods)
+          const newCard: CardInfo = {
+            cardData,
+            cardDetails: null,
+            cardPin: null,
+            cardNumber: null,
+            cardBalance: null,
+            cardHistory: null,
+            totalDeposits: 0,
+            activities: [],
+          };
+          this.upsertCard(newCard);
+        }
+      }
+
+      persist({ cards: cardStore.cards, selectedCardId: cardStore.selectedCardId });
     } catch (error) {
       cardStore.errors.cardData =
         error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Failed to fetch card data';
@@ -464,16 +542,29 @@ export default {
     }
   },
 
-  async fetchCardNumber(): Promise<void> {
+  async fetchCardNumber(cardId?: string): Promise<void> {
+    // Use provided cardId or selected card
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) {
+      return;
+    }
+
+    const card = this.getCard(targetCardId);
+    if (!card) {
+      throw new Error(`Card with ID ${targetCardId} not found`);
+    }
+
     cardStore.loading.cardNumber = true;
     cardStore.errors.cardNumber = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
 
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.get('/api/kaiserex/cards/number');
-      cardStore.cardNumber = response.data;
-      persist({ cardNumber: cardStore.cardNumber });
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/number/${targetCardId}`);
+
+      // Update the specific card's number
+      card.cardNumber = response.data;
+      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardNumber =
         error && typeof error === 'object' && 'message' in error
@@ -487,18 +578,29 @@ export default {
     }
   },
 
-  async fetchCardBalance(): Promise<void> {
-    if (!cardStore.cardData?.card_uuid) {
+  async fetchCardBalance(cardId?: string): Promise<void> {
+    // Use provided cardId or selected card
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) {
       return;
     }
+
+    const card = this.getCard(targetCardId);
+    if (!card) {
+      throw new Error(`Card with ID ${targetCardId} not found`);
+    }
+
     cardStore.loading.cardBalance = true;
     cardStore.errors.cardBalance = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
+
     try {
       const api = getCardApi();
-      const response = await api.axiosInstance.get(`/api/kaiserex/cards/balance/${cardStore.cardData?.card_uuid}`);
-      cardStore.cardBalance = response.data;
-      persist({ cardBalance: cardStore.cardBalance });
+      const response = await api.axiosInstance.get(`/api/kaiserex/cards/balance/${targetCardId}`);
+
+      // Update the specific card's balance
+      card.cardBalance = response.data;
+      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardBalance =
         error && typeof error === 'object' && 'message' in error
@@ -530,10 +632,18 @@ export default {
     }
   },
 
-  async fetchCardHistory(params: HistoryParams = {}): Promise<void> {
-    if (!cardStore.cardData?.card_uuid) {
+  async fetchCardHistory(params: HistoryParams = {}, cardId?: string): Promise<void> {
+    // Use provided cardId or selected card
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) {
       return;
     }
+
+    const card = this.getCard(targetCardId);
+    if (!card) {
+      throw new Error(`Card with ID ${targetCardId} not found`);
+    }
+
     cardStore.loading.cardHistory = true;
     cardStore.errors.cardHistory = null;
     persist({ loading: cardStore.loading, errors: cardStore.errors });
@@ -562,15 +672,14 @@ export default {
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.size) queryParams.append('size', params.size.toString());
 
-      const url = `/api/kaiserex/cards/history/${cardStore.cardData?.card_uuid}${
+      const url = `/api/kaiserex/cards/history/${targetCardId}${
         queryParams.toString() ? `?${queryParams.toString()}` : ''
       }`;
       const response = await api.axiosInstance.get(url);
-      cardStore.cardHistory = response.data;
-      cardStore.cardHistory.meta.totalRecords = response.data.meta.totalRecords;
-      cardStore.cardHistory.meta.page = response.data.meta.page;
-      cardStore.cardHistory.meta.records = response.data.meta.records;
-      persist({ cardHistory: cardStore.cardHistory });
+
+      // Update the specific card's history
+      card.cardHistory = response.data;
+      persist({ cards: cardStore.cards });
     } catch (error) {
       cardStore.errors.cardHistory =
         error && typeof error === 'object' && 'message' in error
@@ -694,31 +803,53 @@ export default {
   },
 
   // Top-up methods
-  updateCardBalance(additionalAmount: number): void {
-    if (cardStore.cardBalance) {
-      cardStore.cardBalance.currentBalance.amount += additionalAmount;
-      cardStore.totalDeposits += additionalAmount;
-      persist({ cardBalance: cardStore.cardBalance, totalDeposits: cardStore.totalDeposits });
+  updateCardBalance(additionalAmount: number, cardId?: string): void {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) return;
+
+    const card = this.getCard(targetCardId);
+    if (card && card.cardBalance) {
+      card.cardBalance.currentBalance.amount += additionalAmount;
+      card.totalDeposits += additionalAmount;
+      persist({ cards: cardStore.cards });
     }
   },
+
   async fetchCardPin(cardUuid: string): Promise<void> {
+    const card = this.getCard(cardUuid);
+    if (!card) {
+      throw new Error(`Card with ID ${cardUuid} not found`);
+    }
+
     const api = getCardApi();
     const response = await api.axiosInstance.get(`/api/kaiserex/cards/pin/${cardUuid}`);
-    cardStore.cardPin = response.data;
-    persist({ cardPin: cardStore.cardPin });
-    return response.data;
-  },
-  async fetchCardDetails(cardUuid: string): Promise<void> {
-    const api = getCardApi();
-    const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
-    cardStore.cardDetails = response.data;
-    persist({ cardDetails: cardStore.cardDetails });
+    card.cardPin = response.data;
+    persist({ cards: cardStore.cards });
     return response.data;
   },
 
-  addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string): void {
-    if (!cardStore.cardHistory) {
-      cardStore.cardHistory = {
+  async fetchCardDetails(cardUuid: string): Promise<void> {
+    const card = this.getCard(cardUuid);
+    if (!card) {
+      throw new Error(`Card with ID ${cardUuid} not found`);
+    }
+
+    const api = getCardApi();
+    const response = await api.axiosInstance.get(`/api/kaiserex/cards/details/${cardUuid}`);
+    card.cardDetails = response.data;
+    persist({ cards: cardStore.cards });
+    return response.data;
+  },
+
+  addTopUpTransaction(adaAmount: number, eurAmount: number, transactionId: string, cardId?: string): void {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) return;
+
+    const card = this.getCard(targetCardId);
+    if (!card) return;
+
+    if (!card.cardHistory) {
+      card.cardHistory = {
         meta: { page: 1, records: 0, totalRecords: 0 },
         records: [],
       };
@@ -748,22 +879,26 @@ export default {
         amount: 0,
         currencyCode: 'EUR',
       },
-      narrative: {
-        description: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`,
-      },
+      narrative: `ADA to EUR conversion: ${adaAmount} ADA → ${eurAmount} EUR`,
       debit: false, // Credit transaction (adding money)
       state: 'SETTLED',
     };
 
     // Add to beginning of transactions array
-    cardStore.cardHistory.records.unshift(newTransaction);
-    cardStore.cardHistory.meta.records += 1;
-    cardStore.cardHistory.meta.totalRecords += 1;
+    card.cardHistory.records.unshift(newTransaction);
+    card.cardHistory.meta.records += 1;
+    card.cardHistory.meta.totalRecords += 1;
 
-    persist({ cardHistory: cardStore.cardHistory });
+    persist({ cards: cardStore.cards });
   },
 
-  addTopUpActivity(adaAmount: number, eurAmount: number): void {
+  addTopUpActivity(adaAmount: number, eurAmount: number, cardId?: string): void {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) return;
+
+    const card = this.getCard(targetCardId);
+    if (!card) return;
+
     const newActivity: Activity = {
       id: Date.now(), // Use timestamp as unique ID
       type: 'Top-up',
@@ -777,26 +912,31 @@ export default {
       status: 'Completed',
     };
 
-    // Add to beginning of activities array using Vue.set for reactivity
-    const newActivities = [newActivity, ...cardStore.activities];
-    Vue.set(cardStore, 'activities', newActivities);
-
-    persist({ activities: cardStore.activities });
+    // Add to beginning of activities array
+    card.activities.unshift(newActivity);
+    persist({ cards: cardStore.cards });
   },
 
-  async blockCard(): Promise<void> {
+  async blockCard(cardId?: string): Promise<void> {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) return;
+
     try {
       const api = getCardApi();
-      await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/block`);
+      await api.axiosInstance.post(`/api/kaiserex/cards/${targetCardId}/block`);
       await this.fetchCardData();
     } catch (error) {
       throw error;
     }
   },
-  async unblockCard(): Promise<void> {
+
+  async unblockCard(cardId?: string): Promise<void> {
+    const targetCardId = cardId || cardStore.selectedCardId;
+    if (!targetCardId) return;
+
     try {
       const api = getCardApi();
-      await api.axiosInstance.post(`/api/kaiserex/cards/${cardStore.cardData?.card_uuid}/unblock`);
+      await api.axiosInstance.post(`/api/kaiserex/cards/${targetCardId}/unblock`);
       await this.fetchCardData();
     } catch (error) {
       throw error;

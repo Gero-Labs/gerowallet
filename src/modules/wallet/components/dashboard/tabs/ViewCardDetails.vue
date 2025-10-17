@@ -55,19 +55,28 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import cardStoreModule, { cardStore } from '@/stores/modules/card';
+import cardStoreModule from '@/stores/modules/card';
 
 const showCvv = ref(false);
 const showPin = ref(false);
 const loading = ref(true);
 
-// Get card data from store
+// Get selected card data from store
+const selectedCard = computed(() => {
+  return cardStoreModule.getSelectedCard();
+});
+
 const cardData = computed(() => {
-  return cardStore.cardData;
+  return selectedCard.value?.cardData;
 });
 
 const cardDetailsFull = computed(() => {
-  return { ...cardStore.cardDetails, ...cardStore.cardPin } as any;
+  const card = selectedCard.value;
+  if (!card) return null;
+  return {
+    details: card.cardDetails,
+    pin: card.cardPin?.pin
+  } as any;
 });
 
 const toggleCvvVisibility = () => {
