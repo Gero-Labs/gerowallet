@@ -21,6 +21,7 @@ import { GroupedAddress, AddressType, KeyRole, AccountKeyDerivationPath, Communi
 import { Bip32PublicKey } from '@cardano-sdk/crypto';
 import { bech32 } from 'bech32';
 import { HexBlob } from '@cardano-sdk/util';
+import { debugLog } from '@/utils/debug';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -339,7 +340,7 @@ export default {
       });
     }
 
-    console.debug('[LEDGER] Created known addresses:', knownAddresses.length);
+    debugLog('[LEDGER] Created known addresses:', knownAddresses.length);
     return knownAddresses;
   },
 

@@ -1,10 +1,11 @@
 /**
  * Background Script Store Messaging Handler
- * 
+ *
  * Manages store synchronization from the background script side
  */
 
 import { getContextType } from '@/utils/storageSync';
+import { debugLog } from '@/utils/debug';
 
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
@@ -23,7 +24,7 @@ type Message = StoreUpdateMessage | StoreSubscribeMessage;
 class BackgroundStoreMessaging {
   private connectedPorts = new Set<chrome.runtime.Port>();
   private storeSubscriptions = new Map<string, Set<chrome.runtime.Port>>();
-  
+
   constructor() {
     this.initialize();
   }
@@ -33,7 +34,7 @@ class BackgroundStoreMessaging {
    */
   private initialize() {
     const context = getContextType();
-    
+
     // Only run in background context
     if (context !== 'background') {
       console.warn('⚠️ BackgroundStoreMessaging initialized in wrong context:', context);
@@ -42,34 +43,34 @@ class BackgroundStoreMessaging {
 
     // Listen for incoming connections
     chrome.runtime.onConnect.addListener((port) => {
-      console.debug('🔌 Port connection received:', port.name);
+      debugLog('🔌 Port connection received:', port.name);
       if (port.name === 'store-sync') {
         this.handleNewConnection(port);
       }
     });
 
-    console.debug('🎯 Background store messaging initialized in', context, 'context');
+    debugLog('🎯 Background store messaging initialized in', context, 'context');
   }
 
   /**
    * Handle a new port connection
    */
   private handleNewConnection(port: chrome.runtime.Port) {
-    console.debug('📡 New store sync connection established');
-    
+    debugLog('📡 New store sync connection established');
+
     // Add to connected ports
     this.connectedPorts.add(port);
-    
+
     // Handle messages from this port
     port.onMessage.addListener((message: Message) => {
       this.handleMessage(message, port);
     });
-    
+
     // Handle disconnection
     port.onDisconnect.addListener(() => {
-      console.debug('📡 Store sync connection disconnected');
+      debugLog('📡 Store sync connection disconnected');
       this.connectedPorts.delete(port);
-      
+
       // Remove from all subscriptions
       this.storeSubscriptions.forEach((ports) => {
         ports.delete(port);
@@ -96,8 +97,8 @@ class BackgroundStoreMessaging {
       this.storeSubscriptions.set(storeName, new Set());
     }
     this.storeSubscriptions.get(storeName)!.add(port);
-    
-    console.debug(`📊 Port subscribed to store: ${storeName}`);
+
+    debugLog(`📊 Port subscribed to store: ${storeName}`);
   }
 
   /**

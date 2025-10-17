@@ -1,10 +1,11 @@
 /**
  * Centralized Chrome Storage Observer Service
- * 
+ *
  * Provides a unified, debounced way to observe Chrome storage changes
  * across different contexts (background, frontend) while preventing
  * cascading update loops and redundant syncing.
  */
+import { debugLog } from '@/utils/debug';
 
 interface StorageChangeCallback {
   (changes: chrome.storage.StorageChange, key: string): void;
@@ -36,9 +37,9 @@ class StorageObserverService {
     if (!this.listeners.has(key)) {
       this.listeners.set(key, new Set());
     }
-    
+
     this.listeners.get(key)!.add(callback);
-    console.debug(`📝 StorageObserver: Subscribed to key '${key}', total listeners: ${this.listeners.get(key)!.size}`);
+    debugLog(`📝 StorageObserver: Subscribed to key '${key}', total listeners: ${this.listeners.get(key)!.size}`);
 
     // Return unsubscribe function
     return () => {
@@ -47,7 +48,7 @@ class StorageObserverService {
         keyListeners.delete(callback);
         if (keyListeners.size === 0) {
           this.listeners.delete(key);
-          console.debug(`🗑️ StorageObserver: Removed all listeners for key '${key}'`);
+          debugLog(`🗑️ StorageObserver: Removed all listeners for key '${key}'`);
         }
       }
     };
@@ -58,7 +59,7 @@ class StorageObserverService {
    */
   subscribeMultiple(keys: string[], callback: StorageChangeCallback): () => void {
     const unsubscribeFunctions = keys.map(key => this.subscribe(key, callback));
-    
+
     return () => {
       unsubscribeFunctions.forEach(unsub => unsub());
     };
@@ -68,22 +69,22 @@ class StorageObserverService {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
       if (this.isProcessing) {
-        console.debug('⏸️ StorageObserver: Skipping changes while processing');
+        debugLog('⏸️ StorageObserver: Skipping changes while processing');
         return;
       }
 
-      const relevantChanges = Object.entries(changes).filter(([key]) => 
+      const relevantChanges = Object.entries(changes).filter(([key]) =>
         this.listeners.has(key)
       );
 
       if (relevantChanges.length === 0) return;
 
-      console.debug('📨 StorageObserver: Received changes for keys:', relevantChanges.map(([key]) => key));
+      debugLog('📨 StorageObserver: Received changes for keys:', relevantChanges.map(([key]) => key));
 
       // Queue changes with deduplication
       for (const [key, change] of relevantChanges) {
         if (this.isDuplicateChange(key, change)) {
-          console.debug(`🔄 StorageObserver: Ignoring duplicate change for key '${key}'`);
+          debugLog(`🔄 StorageObserver: Ignoring duplicate change for key '${key}'`);
           continue;
         }
 
@@ -101,7 +102,7 @@ class StorageObserverService {
   private isDuplicateChange(key: string, change: chrome.storage.StorageChange): boolean {
     const lastValue = this.lastProcessedValues.get(key);
     const newValue = change.newValue;
-    
+
     // If we have a last processed value and it's the same as the new value, skip
     if (lastValue !== undefined && this.deepEqual(lastValue, newValue)) {
       return true;
@@ -109,7 +110,7 @@ class StorageObserverService {
 
     // Check if we have a queued change for this key that's very recent
     const queuedChange = this.changeQueue.get(key);
-    if (queuedChange && 
+    if (queuedChange &&
         Date.now() - queuedChange.timestamp < this.DUPLICATE_THRESHOLD_MS &&
         this.deepEqual(queuedChange.change.newValue, newValue)) {
       return true;
@@ -130,12 +131,12 @@ class StorageObserverService {
 
   private async processQueuedChanges(): Promise<void> {
     if (this.changeQueue.size === 0) return;
-    
+
     this.isProcessing = true;
     const changesToProcess = Array.from(this.changeQueue.values());
     this.changeQueue.clear();
 
-    console.debug(`🚀 StorageObserver: Processing ${changesToProcess.length} queued changes`);
+    debugLog(`🚀 StorageObserver: Processing ${changesToProcess.length} queued changes`);
 
     try {
       for (const { key, change } of changesToProcess) {
@@ -145,8 +146,8 @@ class StorageObserverService {
         // Update last processed value
         this.lastProcessedValues.set(key, change.newValue);
 
-        console.debug(`📤 StorageObserver: Notifying ${keyListeners.size} listeners for key '${key}'`);
-        
+        debugLog(`📤 StorageObserver: Notifying ${keyListeners.size} listeners for key '${key}'`);
+
         // Notify all listeners for this key
         for (const callback of keyListeners) {
           try {
@@ -169,9 +170,9 @@ class StorageObserverService {
 
     const keysA = Object.keys(a);
     const keysB = Object.keys(b);
-    
+
     if (keysA.length !== keysB.length) return false;
-    
+
     for (const key of keysA) {
       if (!keysB.includes(key)) return false;
       if (!this.deepEqual(a[key], b[key])) return false;
@@ -187,18 +188,18 @@ class StorageObserverService {
     try {
       const result = await chrome.storage.local.get(key);
       const value = result[key];
-      
+
       if (value !== undefined) {
         const change: chrome.storage.StorageChange = {
           newValue: value,
           oldValue: this.lastProcessedValues.get(key)
         };
-        
+
         const keyListeners = this.listeners.get(key);
         if (keyListeners && keyListeners.size > 0) {
-          console.debug(`🔄 StorageObserver: Manual sync triggered for key '${key}'`);
+          debugLog(`🔄 StorageObserver: Manual sync triggered for key '${key}'`);
           this.lastProcessedValues.set(key, value);
-          
+
           for (const callback of keyListeners) {
             try {
               callback(change, key);
@@ -220,7 +221,7 @@ class StorageObserverService {
     this.listeners.clear();
     this.changeQueue.clear();
     this.lastProcessedValues.clear();
-    
+
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
@@ -237,7 +238,7 @@ class StorageObserverService {
   } {
     const totalListeners = Array.from(this.listeners.values())
       .reduce((sum, set) => sum + set.size, 0);
-    
+
     return {
       totalListeners,
       keysWithListeners: Array.from(this.listeners.keys()),

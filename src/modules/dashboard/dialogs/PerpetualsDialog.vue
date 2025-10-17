@@ -906,7 +906,7 @@
                   </div>
                 </v-card-text>
               </v-card>
-              
+
               <!-- Limit Price Validation Warning -->
               <div
                 v-if="limitPriceValidation.isInvalid && positionData.limitPrice > 0"
@@ -1344,6 +1344,7 @@ import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 interface CandlestickDataPoint {
   time: Time;
@@ -1956,7 +1957,7 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
         close: parseFloat(candle[4])
       })).sort((a: any, b: any) => a.time - b.time);
 
-      console.debug(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
+      debugLog(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
       return chartData;
 
     } catch (error) {
@@ -1974,7 +1975,7 @@ const fetchTokenHistoryFromDexHunter = async (
   ticker: string
 ): Promise<CandlestickDataPoint[]> => {
   try {
-    console.debug(`[StrikeFinance] Fetching ${ticker} price history from DexHunter/TapTools`);
+    debugLog(`[StrikeFinance] Fetching ${ticker} price history from DexHunter/TapTools`);
 
     // Since the TradingViewChart component now handles the fetching,
     // we can just return the empty array and let the component handle it
@@ -2043,7 +2044,7 @@ const onChartReady = (chartInstance: IChartApi) => {
           const containerWidth = chartContainer.clientWidth;
           const containerHeight = 160;
 
-          console.debug("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
+          debugLog("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
 
           chart.value.applyOptions({
             width: containerWidth,
@@ -2074,7 +2075,7 @@ const startChartUpdates = () => {
   }
 
   // Chart component handles its own updates for all tickers
-  console.debug(
+  debugLog(
     `Chart updates for ${tickerSymbol.value} handled by TradingViewChart component`
   );
 
@@ -2094,7 +2095,7 @@ const startBorrowFeeUpdates = () => {
   // Update accumulated borrow fees every minute to reflect real-time changes
   borrowFeeUpdateInterval = setInterval(() => {
     borrowFeeUpdateTrigger.value += 1; // Trigger reactivity for computed values
-    console.debug("Updated real-time accumulated borrow fees");
+    debugLog("Updated real-time accumulated borrow fees");
   }, 60000); // Every 60 seconds
 
   // Update countdown every second for a real-time display
@@ -2384,7 +2385,7 @@ watch(
   () => props.isOpen,
   async (newVal) => {
     if (newVal) {
-      console.debug("PerpetualsDialog: Dialog opened, optimizing load sequence");
+      debugLog("PerpetualsDialog: Dialog opened, optimizing load sequence");
 
       // Start positions loading immediately for the main tab
       const positionsPromise = loadPositions(false);
@@ -2395,7 +2396,7 @@ watch(
         (async () => {
           try {
             chartData.value = await generateChartData();
-            console.debug("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
+            debugLog("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
           } catch (error) {
             console.error("Failed to initialize chart data:", error);
             chartData.value = generateSimpleOHLCData();
@@ -2406,7 +2407,7 @@ watch(
           if (!priceService.isConnected()) {
             try {
               await priceService.initialize();
-              console.debug("PerpetualsDialog: Price service initialized");
+              debugLog("PerpetualsDialog: Price service initialized");
             } catch (error) {
               console.warn("PerpetualsDialog: Failed to initialize price service:", error);
             }
@@ -2421,7 +2422,7 @@ watch(
       setTimeout(async () => {
         await nextTick();
         shouldFetchChartData.value = true;
-        console.debug("PerpetualsDialog: Enabled chart data fetching");
+        debugLog("PerpetualsDialog: Enabled chart data fetching");
         startChartUpdates();
       }, 10);
 
@@ -2435,14 +2436,14 @@ watch(
               const containerWidth = chartContainer.clientWidth;
               const containerHeight = 160; // Fixed height as specified
 
-              console.debug("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
+              debugLog("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
 
               chart.value.applyOptions({
                 width: containerWidth,
                 height: containerHeight,
               });
               chart.value.timeScale().fitContent();
-              console.debug("PerpetualsDialog: Chart resized successfully");
+              debugLog("PerpetualsDialog: Chart resized successfully");
             }
           } catch (error) {
             console.warn("PerpetualsDialog: Failed to resize chart:", error);
@@ -2456,15 +2457,15 @@ watch(
       // Let background tasks complete without blocking the UI
       backgroundTasks.catch(() => {}); // Silent catch for background tasks
 
-      console.debug("PerpetualsDialog: Fast load sequence completed");
+      debugLog("PerpetualsDialog: Fast load sequence completed");
     } else {
-      console.debug("PerpetualsDialog: Dialog closed, stopping updates");
+      debugLog("PerpetualsDialog: Dialog closed, stopping updates");
       shouldFetchChartData.value = false;
       stopChartUpdates();
 
       // Clean up all position closing polling intervals
       Object.entries(closingPositionIntervals.value).forEach(([positionKey, intervalId]) => {
-        console.debug(`[StrikeFinance] Clearing polling interval for position ${positionKey}`);
+        debugLog(`[StrikeFinance] Clearing polling interval for position ${positionKey}`);
         clearInterval(intervalId);
       });
       closingPositionIntervals.value = {};
@@ -2474,7 +2475,7 @@ watch(
 
       // Clean up all order cancelling polling intervals
       Object.entries(cancellingOrderIntervals.value).forEach(([orderKey, intervalId]) => {
-        console.debug(`[StrikeFinance] Clearing polling interval for order ${orderKey}`);
+        debugLog(`[StrikeFinance] Clearing polling interval for order ${orderKey}`);
         clearInterval(intervalId);
       });
       cancellingOrderIntervals.value = {};
@@ -2484,7 +2485,7 @@ watch(
 
       // Clean up opening position polling interval
       if (openingPositionInterval.value !== null) {
-        console.debug(`[StrikeFinance] Clearing polling interval for opening position`);
+        debugLog(`[StrikeFinance] Clearing polling interval for opening position`);
         clearInterval(openingPositionInterval.value);
         openingPositionInterval.value = null;
       }
@@ -2500,7 +2501,7 @@ watch(
   () => perpetualsPrice.value?.lastPrice,
   (newPrice, oldPrice) => {
     if (newPrice !== oldPrice && rawPositions.value.length > 0) {
-      console.debug(
+      debugLog(
         `🦑 💰 Kraken ADA price updated: $${oldPrice} → $${newPrice} - Recalculating ${rawPositions.value.length} positions`
       );
     }
@@ -2580,11 +2581,11 @@ const limitPriceValidation = computed(() => {
   const currentPrice = Number(perpetualsPrice.value?.lastPrice || 0);
   const limitPrice = positionData.value.limitPrice;
   const position = positionData.value.position;
-  
+
   if (!limitPrice || limitPrice <= 0 || !currentPrice) {
     return { isInvalid: false, message: '' };
   }
-  
+
   // For LONG positions: limit price should be BELOW current price
   if (position === 'LONG' && limitPrice >= currentPrice) {
     return {
@@ -2592,7 +2593,7 @@ const limitPriceValidation = computed(() => {
       message: `Long limit price must be below current price ($${currentPrice.toFixed(4)})`
     };
   }
-  
+
   // For SHORT positions: limit price should be ABOVE current price
   if (position === 'SHORT' && limitPrice <= currentPrice) {
     return {
@@ -2600,7 +2601,7 @@ const limitPriceValidation = computed(() => {
       message: `Short limit price must be above current price ($${currentPrice.toFixed(4)})`
     };
   }
-  
+
   return { isInvalid: false, message: '' };
 });
 
@@ -2613,8 +2614,8 @@ const canOpenPosition = computed(() => {
 
   // Additional validation for LIMIT orders
   if (positionData.value.orderType === "LIMIT") {
-    return hasRequiredFields && 
-           positionData.value.limitPrice > 0 && 
+    return hasRequiredFields &&
+           positionData.value.limitPrice > 0 &&
            !limitPriceValidation.value.isInvalid;
   }
 
@@ -2682,7 +2683,7 @@ const openMarketPosition = async (walletAddress: string) => {
     takeProfitPrice: positionData.value.takeProfitPrice,
   };
 
-  console.debug('[StrikeFinance] Opening position with request:', openPositionRequest);
+  debugLog('[StrikeFinance] Opening position with request:', openPositionRequest);
 
   // Get initial position count to detect new position
   const initialPositionCount = positions.value.length;
@@ -2712,14 +2713,14 @@ const openMarketPosition = async (walletAddress: string) => {
 
     // Set loading state and start polling for the new position
     openingPosition.value = true;
-    console.debug(`[StrikeFinance] Starting polling for new market position`);
+    debugLog(`[StrikeFinance] Starting polling for new market position`);
 
     let pollAttempts = 0;
     const maxPollAttempts = 24; // 2-minute max (24 * 5 seconds)
 
     openingPositionInterval.value = window.setInterval(async () => {
       pollAttempts++;
-      console.debug(`[StrikeFinance] Polling for new position (attempt ${pollAttempts}/${maxPollAttempts})`);
+      debugLog(`[StrikeFinance] Polling for new position (attempt ${pollAttempts}/${maxPollAttempts})`);
 
       await loadPositions(false); // Don't show loading spinner
 
@@ -2728,7 +2729,7 @@ const openMarketPosition = async (walletAddress: string) => {
 
       if (hasNewPosition || pollAttempts >= maxPollAttempts) {
         if (hasNewPosition) {
-          console.debug(`[StrikeFinance] New position detected, stopping poll`);
+          debugLog(`[StrikeFinance] New position detected, stopping poll`);
         } else {
           console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
         }
@@ -2760,7 +2761,7 @@ const openLimitPosition = async (walletAddress: string) => {
     limitUSDPrice: positionData.value.limitPrice,
   };
 
-  console.debug('[StrikeFinance] Opening limit position with request:', openPositionRequest);
+  debugLog('[StrikeFinance] Opening limit position with request:', openPositionRequest);
 
   // Get initial limit order count to detect new order
   const initialOrderCount = limitOrders.value.length;
@@ -2790,14 +2791,14 @@ const openLimitPosition = async (walletAddress: string) => {
 
     // Set loading state and start polling for the new limit order
     openingPosition.value = true;
-    console.debug(`[StrikeFinance] Starting polling for new limit order`);
+    debugLog(`[StrikeFinance] Starting polling for new limit order`);
 
     let pollAttempts = 0;
     const maxPollAttempts = 24; // 2 minutes max (24 * 5 seconds)
 
     openingPositionInterval.value = window.setInterval(async () => {
       pollAttempts++;
-      console.debug(`[StrikeFinance] Polling for new limit order (attempt ${pollAttempts}/${maxPollAttempts})`);
+      debugLog(`[StrikeFinance] Polling for new limit order (attempt ${pollAttempts}/${maxPollAttempts})`);
 
       await loadLimitOrders(false); // Don't show loading spinner
 
@@ -2806,7 +2807,7 @@ const openLimitPosition = async (walletAddress: string) => {
 
       if (hasNewOrder || pollAttempts >= maxPollAttempts) {
         if (hasNewOrder) {
-          console.debug(`[StrikeFinance] New limit order detected, stopping poll`);
+          debugLog(`[StrikeFinance] New limit order detected, stopping poll`);
         } else {
           console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
         }
@@ -2982,13 +2983,13 @@ const loadPositions = async (withLoading: boolean = true) => {
   }
   if (withLoading) loadingPositions.value = true;
   try {
-    console.debug('[StrikeFinance]  Loading positions for wallet:', walletAddress);
+    debugLog('[StrikeFinance]  Loading positions for wallet:', walletAddress);
     const res: AxiosResponse<PerpetualPosition[]> = await strikeFinanceApi.getPositions(walletAddress);
     if (res.status !== 200) {
       throw new Error(`Failed to load positions: ${res.statusText}`);
     }
     rawPositions.value = res.data
-    console.debug('[StrikeFinance]  Fetched positions from API:', rawPositions.value);
+    debugLog('[StrikeFinance]  Fetched positions from API:', rawPositions.value);
   } catch (error) {
     console.error("Failed to load positions:", (error as any)?.message || error);
     rawPositions.value = [];
@@ -3008,7 +3009,7 @@ const loadHistory = async () => {
   }
   loadingHistory.value = true;
   try {
-    console.debug('[StrikeFinance] Loading perpetual history for wallet:', walletAddress);
+    debugLog('[StrikeFinance] Loading perpetual history for wallet:', walletAddress);
 
     const historyRes = await strikeFinanceApi.getPerpetualHistory(walletAddress);
     const transactions = historyRes.data?.transactions || [];
@@ -3040,12 +3041,12 @@ const loadHistory = async () => {
 
     history.value = mappedHistory;
 
-    console.debug('[StrikeFinance] Perpetual history loaded:', {
+    debugLog('[StrikeFinance] Perpetual history loaded:', {
       transactions: transactions.length,
       mapped: mappedHistory.length
     });
 
-    console.debug('[StrikeFinance] Action breakdown:',
+    debugLog('[StrikeFinance] Action breakdown:',
       mappedHistory.reduce((acc, item) => {
         acc[item.action] = (acc[item.action] || 0) + 1;
         return acc;
@@ -3116,7 +3117,7 @@ onMounted(async () => {
   // Initialize chart data with real ADA data
   try {
     chartData.value = await generateChartData();
-    console.debug(
+    debugLog(
       "PerpetualsDialog: Initialized chart data with",
       chartData.value.length,
       "points"
@@ -3131,7 +3132,7 @@ onMounted(async () => {
   setTimeout(async () => {
     await nextTick();
     shouldFetchChartData.value = true;
-    console.debug("PerpetualsDialog: Enabled chart data fetching");
+    debugLog("PerpetualsDialog: Enabled chart data fetching");
     startChartUpdates();
   }, 100);
 });
@@ -3148,8 +3149,8 @@ const loadLimitOrders = async (withLoading: boolean = true) => {
   try {
     const response = await strikeFinanceApi.getLimitOrders(walletAddress);
     limitOrders.value = response.data;
-    console.debug('[StrikeFinance] Loaded limit orders:', limitOrders.value);
-    console.debug('[StrikeFinance] Limit orders data structure:', limitOrders.value.map(order => ({
+    debugLog('[StrikeFinance] Loaded limit orders:', limitOrders.value);
+    debugLog('[StrikeFinance] Limit orders data structure:', limitOrders.value.map(order => ({
       id: order.id,
       position: order.position,
       asset: order.asset,
@@ -3162,7 +3163,7 @@ const loadLimitOrders = async (withLoading: boolean = true) => {
 
     // Log first order completely to see all available fields
     if (limitOrders.value.length > 0) {
-      console.debug('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
+      debugLog('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
     }
   } catch (error) {
     console.error('Failed to load limit orders:', error);
@@ -3288,9 +3289,9 @@ const updatePosition = async () => {
       })
     };
 
-    console.debug('[StrikeFinance] Updating position:', updateRequest);
+    debugLog('[StrikeFinance] Updating position:', updateRequest);
     const cborResponse = await strikeFinanceApi.updatePosition(updateRequest);
-    console.debug('[StrikeFinance] Update position response:', cborResponse.data);
+    debugLog('[StrikeFinance] Update position response:', cborResponse.data);
 
     // Close the dialog and reload positions
     updatePositionDialog.value = false;

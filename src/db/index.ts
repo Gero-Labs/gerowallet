@@ -5,6 +5,7 @@ import {
   walletDBSchema,
   walletDBVersion,
 } from '@/db/schema';
+import { debugLog } from '@/utils/debug';
 
 let db: Dexie = null
 
@@ -24,7 +25,7 @@ export async function getBlockchainDb(chain: string, network: string): Promise<D
     blockchainDbCache.set(dbName, db);
     return db;
   } catch (error: DexieError | any) {
-    console.debug('Blockchain database error:', error)
+    debugLog('Blockchain database error:', error)
     if (error.name === 'NoSuchDatabaseError') {
       const db: Dexie = new Dexie(dbName);
       db.version(blockChainDBVersion).stores(blockChainDBSchema);

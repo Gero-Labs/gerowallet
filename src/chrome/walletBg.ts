@@ -71,6 +71,7 @@ import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
 import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
+import { debugLog } from '@/utils/debug';
 
 let blockchainDb: Dexie = null;
 
@@ -185,16 +186,16 @@ export class WalletBg {
   }
 
   async setUtxosAndAddresses(transactions: any[]) {
-    console.debug('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
+    debugLog('🔄 setUtxosAndAddresses called with', transactions?.length || 0, 'transactions');
 
     let stakeAddress: string = '';
     let address: string = '';
     if (this.isEnterpriseAddress()) {
       address = this.baseAddress;
-      console.debug('🏢 Using enterprise address:', address);
+      debugLog('🏢 Using enterprise address:', address);
     } else {
       stakeAddress = this.stakeAddress;
-      console.debug('🏛️ Using stake address:', stakeAddress);
+      debugLog('🏛️ Using stake address:', stakeAddress);
     }
 
     const utxos: Map<string, Cardano.Utxo> = new Map<string, Cardano.Utxo>();
@@ -202,7 +203,7 @@ export class WalletBg {
     addresses.add(this.baseAddress);
     const uniqueAssets: Set<string> = new Set<string>();
 
-    console.debug('🔍 Processing transactions for UTXOs...');
+    debugLog('🔍 Processing transactions for UTXOs...');
     for (const transaction of transactions) {
       if (transaction.body) {
         for (const inp of transaction.body.inputs) {
@@ -308,28 +309,28 @@ export class WalletBg {
     // For regular logins, assets are already cached in NetworkStore
     const lastSyncInfo = await this.getLastSyncInfo();
     if (!lastSyncInfo) {
-      console.debug('🔄 First-time import detected - waiting for assets to load...');
+      debugLog('🔄 First-time import detected - waiting for assets to load...');
       await this.waitForAssetsToLoad(Array.from(uniqueAssets));
     } else {
-      console.debug('✅ Regular login - assets already cached in NetworkStore');
+      debugLog('✅ Regular login - assets already cached in NetworkStore');
     }
 
     // Resolve Assets from UTxOs
     this.setAssets(Array.from(utxos.values()));
 
     // Keys
-    console.debug('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
+    debugLog('🔑 Wallet type check for keys sync:', this.type, 'WalletType.Google:', WalletType.Google);
     if (this.type !== WalletType.Google) {
       const keys = await this.syncService.syncKeys(Array.from(addresses));
       WalletStore.setKeys(keys);
     } else {
-      console.debug('🔑 Skipping key sync for Google wallet type');
+      debugLog('🔑 Skipping key sync for Google wallet type');
     }
 
     // UTxOs
-    console.debug('💰 Setting', utxos.size, 'UTXOs to store');
+    debugLog('💰 Setting', utxos.size, 'UTXOs to store');
     WalletStore.setUtxos(Array.from(utxos.values()));
-    console.debug('✅ setUtxosAndAddresses completed successfully');
+    debugLog('✅ setUtxosAndAddresses completed successfully');
   }
 
   /**
@@ -343,7 +344,7 @@ export class WalletBg {
       return;
     }
 
-    console.debug(`⏳ Waiting for ${assetUnits.length} assets to load into NetworkStore...`);
+    debugLog(`⏳ Waiting for ${assetUnits.length} assets to load into NetworkStore...`);
     const startTime = Date.now();
     const checkInterval = 50; // Check every 50ms
 
@@ -352,7 +353,7 @@ export class WalletBg {
       const allAssetsLoaded = assetUnits.every(unit => NetworkStore.state.assets[unit]);
 
       if (allAssetsLoaded) {
-        console.debug(`✅ All assets loaded into NetworkStore in ${Date.now() - startTime}ms`);
+        debugLog(`✅ All assets loaded into NetworkStore in ${Date.now() - startTime}ms`);
         return;
       }
 
@@ -569,7 +570,7 @@ export class WalletBg {
         return accountTable.where({ walletId: this.id }).first();
       })
       .catch(err => {
-        console.debug(`Failed to open database: ${err.stack || err}`);
+        debugLog(`Failed to open database: ${err.stack || err}`);
       });
   }
 
@@ -659,10 +660,10 @@ export class WalletBg {
 
           // Only update if there are changes
           if (txsToUpdate.length > 0) {
-            console.debug(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
+            debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
           } else {
-            console.debug(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
+            debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
         }
       })
