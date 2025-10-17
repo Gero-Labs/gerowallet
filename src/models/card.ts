@@ -45,7 +45,7 @@ export interface CardBalance {
     amount: number;
     currencyCode: string;
   };
-  state: string;
+  state: 'ACTIVE' | 'BLOCKED';
 }
 
 // Card Transaction Types
@@ -166,7 +166,7 @@ export interface CardState {
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
-    kycStatus: 'unverified' | 'pending' | 'approved' | 'rejected' | 'registered';
+    kycStatus: 'unverified' | 'pending' | 'approved' | 'rejected' | 'registered' | 'not_started';
     kycData: any;
     loadingMessage: string;
     error: string | null;

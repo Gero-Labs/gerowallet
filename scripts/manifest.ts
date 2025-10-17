@@ -76,6 +76,7 @@ async function getManifest() {
       'storage',
       'favicon',
       'alarms',
+      'cookies',
       'unlimitedStorage',
       'webNavigation',
       'notifications',

@@ -37,18 +37,6 @@
           </div>
         </div>
       </div>
-
-      <div class="form-row">
-        <div class="pin-container">
-          <label class="input-label">PIN</label>
-          <div class="pin-input">
-            <span class="pin-text">{{ showPin ? cardDetailsFull?.pin : '••••' }}</span>
-            <v-btn icon small class="eye-btn" @click="togglePinVisibility">
-              <v-icon small>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
-            </v-btn>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -83,9 +71,6 @@ const toggleCvvVisibility = () => {
   showCvv.value = !showCvv.value;
 };
 
-const togglePinVisibility = () => {
-  showPin.value = !showPin.value;
-};
 
 // Initialize card data when component mounts
 onMounted(async () => {
