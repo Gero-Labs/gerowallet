@@ -246,6 +246,7 @@ import { useIntervalFn } from '@vueuse/core';
 import charli3Store from '@/stores/charli3Store';
 // import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
 import assts from '@/utils/assets';
+import { debugLog } from '@/utils/debug';
 
 // Reactive state
 const logoLoadingActive = ref(false);
@@ -347,7 +348,7 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
       ],
     };
 
-    console.debug('Using mock market data:', mockData);
+    debugLog('Using mock market data:', mockData);
 
     charli3Store.setMarketData(mockData as any);
 

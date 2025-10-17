@@ -2,6 +2,7 @@ import { getDb } from '@/db/wallet-db';
 import tapToolsApi from '@/api/tap-tools-api';
 import { walletStore } from '@/stores/walletStore';
 import { getTimeframeBasedOnExpiry } from '@/shared/utils/timeframe';
+import { debugLog } from '@/utils/debug';
 
 export interface PortfolioChartsEntry {
   id?: number;
@@ -26,7 +27,7 @@ async function getWalletDb(): Promise<any> {
   try {
     const walletId = walletStore.loggedWallet?.id;
     if (!walletId) {
-      console.debug('No wallet logged in for portfolio cache');
+      debugLog('No wallet logged in for portfolio cache');
       return null;
     }
     return await getDb(walletId);
@@ -63,7 +64,7 @@ async function safeGetPortfolioTable(db: any): Promise<any> {
 
     const hasTable = await hasPortfolioChartsTable(db);
     if (!hasTable) {
-      console.debug('portfolio_charts table does not exist yet (old wallet database)');
+      debugLog('portfolio_charts table does not exist yet (old wallet database)');
       return null;
     }
 
@@ -136,7 +137,7 @@ export class PortfolioCacheService {
 
       // Guard against undefined db
       if (!db) {
-        console.debug('Database not available for cache retrieval');
+        debugLog('Database not available for cache retrieval');
         return null;
       }
 
@@ -236,7 +237,7 @@ export class PortfolioCacheService {
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available, skipping cache save');
+        debugLog('portfolio_charts table not available, skipping cache save');
         return; // Table doesn't exist for old users
       }
 
@@ -266,7 +267,7 @@ export class PortfolioCacheService {
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available, skipping cache removal');
+        debugLog('portfolio_charts table not available, skipping cache removal');
         return; // Table doesn't exist for old users
       }
 
@@ -283,7 +284,7 @@ export class PortfolioCacheService {
             console.warn('Found portfolio cache entry without id, cannot delete:', entry);
           }
         }
-        console.debug(`🗑️ Delete successful`);
+        debugLog(`🗑️ Delete successful`);
       } catch (error: any) {
         console.error(`🗑️ Error during delete:`, error);
         throw error;
@@ -302,14 +303,14 @@ export class PortfolioCacheService {
 
       // Guard against undefined db
       if (!db) {
-        console.debug('Database not available for cache clearing');
+        debugLog('Database not available for cache clearing');
         return;
       }
 
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available, skipping cache clearing');
+        debugLog('portfolio_charts table not available, skipping cache clearing');
         return; // Table doesn't exist for old users
       }
 
@@ -340,14 +341,14 @@ export class PortfolioCacheService {
 
       // Guard against undefined db
       if (!db) {
-        console.debug('Database not available for cache cleanup');
+        debugLog('Database not available for cache cleanup');
         return 0;
       }
 
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available, skipping cache cleanup');
+        debugLog('portfolio_charts table not available, skipping cache cleanup');
         return 0; // Table doesn't exist for old users
       }
 
@@ -539,14 +540,14 @@ export class PortfolioCacheService {
 
       // Guard against undefined db
       if (!db) {
-        console.debug('Database not available for loading all portfolio data');
+        debugLog('Database not available for loading all portfolio data');
         return { adaData: [], usdData: [], eurData: [] };
       }
 
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available, skipping cache load');
+        debugLog('portfolio_charts table not available, skipping cache load');
         // For old users without the table, just load fresh data
         const currenciesToLoad = ['ADA', 'USD', 'EUR'] as const;
         const loadPromises = currenciesToLoad.map(async currency => {
@@ -679,7 +680,7 @@ export class PortfolioCacheService {
 
       // Guard against undefined db
       if (!db) {
-        console.debug('Database not available for cache status check');
+        debugLog('Database not available for cache status check');
         return {
           ada: { hasData: false, dataPoints: 0, expiresAt: null },
           usd: { hasData: false, dataPoints: 0, expiresAt: null },
@@ -690,7 +691,7 @@ export class PortfolioCacheService {
       // Safely get the portfolio table
       const portfolioTable = await safeGetPortfolioTable(db);
       if (!portfolioTable) {
-        console.debug('portfolio_charts table not available for cache status check');
+        debugLog('portfolio_charts table not available for cache status check');
         return {
           ada: { hasData: false, dataPoints: 0, expiresAt: null },
           usd: { hasData: false, dataPoints: 0, expiresAt: null },

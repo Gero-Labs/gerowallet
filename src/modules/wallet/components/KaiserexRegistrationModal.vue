@@ -47,6 +47,7 @@
 import { ref, watch, nextTick } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
+import { debugLog } from '@/utils/debug';
 
 const props = defineProps<{
   open: boolean;
@@ -71,7 +72,7 @@ watch(() => props.open, (newVal) => {
     isLoading.value = true;
     iframeLoaded.value = false;
     registrationComplete.value = false;
-    console.debug('Kaiserex registration modal opened');
+    debugLog('Kaiserex registration modal opened');
 
     // Force iframe reload by changing the src slightly to prevent caching issues
     nextTick(() => {
@@ -95,7 +96,7 @@ watch(() => props.open, (newVal) => {
 const onIframeLoad = () => {
   isLoading.value = false;
   iframeLoaded.value = true;
-  console.debug('Kaiserex registration iframe loaded');
+  debugLog('Kaiserex registration iframe loaded');
 
   // Don't inject any CSS - let the iframe scroll naturally on smaller screens
 };

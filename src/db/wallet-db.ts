@@ -1,8 +1,9 @@
 import Dexie, { DexieError } from 'dexie';
-import { 
-  walletDBSchema, 
+import {
+  walletDBSchema,
   walletDBVersion
 } from '@/db/schema';
+import { debugLog } from '@/utils/debug';
 
 const dbCache: Map<string, Dexie> = new Map();
 
@@ -101,7 +102,7 @@ export async function getDb(id: number): Promise<Dexie | null> {
         dbCache.set(dbName, db);
         return db;
     } catch (error: DexieError | any) {
-        console.debug('Database error:', error)
+      debugLog('Database error:', error)
         if (error.name === 'NoSuchDatabaseError') {
             const db: Dexie = new Dexie(dbName);
             db.version(walletDBVersion).stores(walletDBSchema);

@@ -39,6 +39,8 @@ class AblyService {
       realtimeRequestTimeout: 5000, // Reduce from default 10s to 5s
       disconnectedRetryTimeout: 3000, // Faster reconnection attempts
       suspendedRetryTimeout: 5000, // Faster recovery from suspension
+      // Token expiration handling
+      renewTokenOnAuthFailure: true, // Automatically renew token on auth failure
     };
 
     this.client = new Ably.Realtime(clientOptions);
@@ -73,9 +75,42 @@ class AblyService {
       return callback(errorInfo, null);
     }
 
+    debugLog('🔑 Fetching fresh Ably token for address:', this.authParams.address);
     this.api.ablyToken(this.authParams.address)
       .then(res => {
         const tokenData = typeof res.data === 'string' ? res.data : res.data.token;
+
+        // Log the raw token data for debugging
+        console.log('🔍 Raw Ably token data:', {
+          type: typeof tokenData,
+          isString: typeof tokenData === 'string',
+          length: typeof tokenData === 'string' ? tokenData.length : 'N/A',
+          preview: typeof tokenData === 'string' ? tokenData.substring(0, 100) + '...' : tokenData
+        });
+
+        // Parse token to check expiration (if it's a JWT-style token)
+        try {
+          if (typeof tokenData === 'string') {
+            // Try to parse as token request (JSON string)
+            const parsed = JSON.parse(tokenData);
+            console.log('🔍 Parsed Ably token:', parsed);
+            if (parsed.timestamp) {
+              const tokenAge = Date.now() - parsed.timestamp;
+              console.log('✅ Fresh Ably token obtained, age:', tokenAge, 'ms');
+              console.log('🔍 Token expiry check:', {
+                timestamp: parsed.timestamp,
+                ttl: parsed.ttl,
+                expiresAt: parsed.timestamp + (parsed.ttl * 1000),
+                now: Date.now(),
+                isExpired: (parsed.timestamp + (parsed.ttl * 1000)) < Date.now()
+              });
+            }
+          }
+        } catch (e) {
+          // Not JSON, probably a plain token string
+          debugLog('✅ Fresh Ably token obtained (plain format)');
+        }
+
         callback(null, tokenData);
       })
       .catch(err => {
@@ -109,7 +144,15 @@ class AblyService {
     });
 
     this.client.connection.on('disconnected', (connectionStateChange: Ably.ConnectionStateChange) => {
-      console.warn('❌ Ably disconnected:', connectionStateChange.reason);
+      const reason = connectionStateChange.reason;
+
+      // Check if disconnection is due to token expiration
+      if (reason && (reason.message?.includes('token') || reason.code === 40142)) {
+        console.warn('🔑 Ably token expired, will automatically renew on reconnection');
+      } else {
+        console.warn('❌ Ably disconnected:', reason);
+      }
+
       LoadingState.setText('Wallet is Disconnected from the Network.<br>Reconnecting ...');
       LoadingState.setConnected(false);
       LoadingState.setConnecting(false);
@@ -138,7 +181,8 @@ class AblyService {
       this.unsubscribeAll();
       this.client.connection?.close();
       this.client.close();
-      this.api = null;
+      // DON'T clear api here - it will be set immediately after by setApi()
+      // this.api = null;
 
       // Clear any pending message chunks
       messageReconstructionService.clearAll();

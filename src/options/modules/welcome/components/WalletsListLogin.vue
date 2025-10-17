@@ -57,6 +57,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
 
 const selectedWallet = ref<string | null>(null);
 
@@ -112,22 +113,22 @@ const submitLogin = async (walletId: string): Promise<void> => {
     // Small delay to ensure store messaging has propagated (100ms vs 5000ms max before)
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    console.debug('✅ Login complete, wallet logged in:', !!loggedWallet.value);
+    debugLog('✅ Login complete, wallet logged in:', !!loggedWallet.value);
 
     const queryParams = vmProxy.$route.query;
-    console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
-    console.debug('🧭 Query params:', queryParams);
+    debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
+    debugLog('🧭 Query params:', queryParams);
 
     if (queryParams['redirect']) {
       const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
-      console.debug('🧭 Navigating to redirect path:', redirectPath);
+      debugLog('🧭 Navigating to redirect path:', redirectPath);
       await vmProxy.$router.push(redirectPath).catch(err => {
         if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
           console.error('Navigation error:', err);
         }
       });
     } else {
-      console.debug('🧭 Navigating to home page: /');
+      debugLog('🧭 Navigating to home page: /');
       await vmProxy.$router.push("/").catch(err => {
         if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
           console.error('Navigation error:', err);
@@ -135,7 +136,7 @@ const submitLogin = async (walletId: string): Promise<void> => {
       });
     }
 
-    console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
+    debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);
   }

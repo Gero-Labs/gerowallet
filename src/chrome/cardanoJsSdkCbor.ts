@@ -3,6 +3,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { minAdaRequired as minAdaRequiredSDK, minFee as minFeeSDK } from '@cardano-sdk/tx-construction';
 import { Ed25519SignatureHex, Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
+import { debugLog } from '@/utils/debug';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -183,7 +184,7 @@ export class BrowserTxConstruction {
       // the protocol's minUTxOValue calculation (same as Lace wallet uses)
       const minAda = minAdaRequiredSDK(output, coinsPerUtxoByte);
 
-      console.debug('MinAda calculation (SDK):', {
+      debugLog('MinAda calculation (SDK):', {
         coinsPerUtxoByte: coinsPerUtxoByte.toString(),
         minAda: minAda.toString(),
         minAdaInAda: (Number(minAda) / 1000000).toFixed(6)

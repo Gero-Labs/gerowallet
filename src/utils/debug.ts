@@ -9,13 +9,12 @@ const isDebugEnabled = import.meta.env.VITE_DEBUG_STORES === 'true';
 
 /**
  * Conditional debug logger that respects the global debug flag
- * @param args - Arguments to pass to console.debug
+ * Binds directly to console.log to preserve source location in Chrome DevTools
+ * @param args - Arguments to pass to console.log
  */
-export function debugLog(...args: any[]): void {
-  if (isDebugEnabled) {
-    console.debug(...args);
-  }
-}
+export const debugLog: (...args: any[]) => void = isDebugEnabled
+  ? console.debug.bind(console)
+  : () => {};
 
 /**
  * Check if debug mode is currently enabled
