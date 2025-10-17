@@ -47,9 +47,9 @@
 
       <!-- Switch Button -->
       <div class="switch-button">
-        <v-btn icon class="switch-icon" @click="() => {}">
-          <v-icon color="white" size="20">mdi-swap-vertical</v-icon>
-        </v-btn>
+        <v-avatar size="32" style="border: 1px solid #00c7f3">
+          <v-icon color="primary" size="20">mdi-arrow-down</v-icon>
+        </v-avatar>
       </div>
 
       <!-- Second Input (EUR or ADA based on switch state) -->
@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted } from 'vue';
+import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
 import cardStore from '@/stores/modules/card';
 
@@ -194,10 +194,6 @@ const handleSecondInput = () => {
   };
   console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
   emit('update:modelValue', emitData);
-};
-
-const switchCurrencies = () => {
-  isSwitched.value = !isSwitched.value;
 };
 
 // Watch for external changes

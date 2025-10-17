@@ -1,5 +1,5 @@
-import { computed, onMounted } from 'vue';
-import cardStore from '@/stores/modules/card';
+import { computed } from 'vue';
+import cardStoreModule from '@/stores/modules/card';
 
 /**
  * SIMPLE composable for wallet status management
@@ -11,22 +11,22 @@ export function useWalletStatus() {
   // ============================================================================
 
   // Core state
-  const currentState = computed(() => cardStore.currentState);
-  const isLoading = computed(() => cardStore.state.loading?.initialize || false);
-  const error = computed(() => cardStore.state.walletStatus?.error || null);
-  const loadingMessage = computed(() => cardStore.state.walletStatus?.loadingMessage || '');
+  const currentState = computed(() => cardStoreModule.currentState);
+  const isLoading = computed(() => cardStoreModule.state.loading?.initialize || false);
+  const error = computed(() => cardStoreModule.state.walletStatus?.error || null);
+  const loadingMessage = computed(() => cardStoreModule.state.walletStatus?.loadingMessage || '');
 
   // Authentication state
-  const isKaiserexAuthenticated = computed(() => cardStore.state.walletStatus?.isKaiserexAuthenticated || false);
+  const isKaiserexAuthenticated = computed(() => cardStoreModule.state.walletStatus?.isKaiserexAuthenticated || false);
 
   // KYC state
-  const kycStatus = computed(() => cardStore.state.walletStatus?.kycStatus || 'unverified');
-  const kycData = computed(() => cardStore.state.walletStatus?.kycData || null);
+  const kycStatus = computed(() => cardStoreModule.state.walletStatus?.kycStatus || 'unverified');
+  const kycData = computed(() => cardStoreModule.state.walletStatus?.kycData || null);
 
   // Card data
-  const isCardAuthenticated = computed(() => cardStore.isAuthenticated);
-  const hasUserInfo = computed(() => !!cardStore.state.userInfo);
-  const hasCardData = computed(() => !!cardStore.state.cardData);
+  const isCardAuthenticated = computed(() => cardStoreModule.isAuthenticated);
+  const hasUserInfo = computed(() => !!cardStoreModule.state.userInfo);
+  const hasCardData = computed(() => !!cardStoreModule.getSelectedCard()?.cardData);
 
   // State-specific computed properties for component visibility
   const showAuthPage = computed(() => currentState.value === 'auth');
@@ -39,43 +39,47 @@ export function useWalletStatus() {
   /**
    * Initialize card store
    */
-  async function initialize(wallet?: any): Promise<void> {
-    await cardStore.initialize(wallet);
+  async function initialize(): Promise<void> {
+    await cardStoreModule.initialize();
   }
 
   /**
    * Set Kaiserex authentication status
    */
   function setKaiserexAuthentication(isAuthenticated: boolean): void {
-    cardStore.setKaiserexAuthentication(isAuthenticated);
+    cardStoreModule.setKaiserexAuthentication(isAuthenticated);
   }
 
   /**
    * Set KYC status with optional data
    */
   function setKYCStatus(status: string, data?: any): void {
-    cardStore.setKYCStatus(status, data);
+    // Direct state mutation for testing/development
+    cardStoreModule.state.walletStatus.kycStatus = status as any;
+    if (data) {
+      cardStoreModule.state.walletStatus.kycData = data;
+    }
   }
 
   /**
    * Set error state
    */
   function setError(errorMessage: string): void {
-    cardStore.setError(errorMessage);
+    cardStoreModule.setError(errorMessage);
   }
 
   /**
    * Clear error state
    */
   function clearError(): void {
-    cardStore.clearError();
+    cardStoreModule.clearError();
   }
 
   /**
    * Clear all data (logout)
    */
   async function clearAll(): Promise<void> {
-    await cardStore.logout();
+    await cardStoreModule.logout();
   }
 
   /**

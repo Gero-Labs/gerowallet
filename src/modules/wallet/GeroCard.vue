@@ -28,14 +28,12 @@
 import { computed, onMounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';
-import geroStore from '@/stores/geroStore';
 
 // Import components
 import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
-import { walletStore } from '@/stores/walletStore';
 
 // ============================================================================
 // COMPOSABLES AND STORES
@@ -133,7 +131,7 @@ async function handleRetry(): Promise<void> {
 
 onMounted(async () => {
   try {
-    await initialize(walletStore.loggedWallet);
+    await initialize();
   } catch (error) {
     handleError('Failed to initialize wallet. Please refresh the page.');
   }

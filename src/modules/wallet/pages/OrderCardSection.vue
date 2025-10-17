@@ -1,6 +1,8 @@
 <template>
   <div class="block">
-    <HeroSection />
+    <div>
+      <img src="@/modules/wallet/icons/cardBanner.svg" alt="card-banner" class="card-banner" />
+    </div>
     <CallToActionSection />
     <CardManagementSection />
     <FeatureGridSection />
@@ -8,7 +10,6 @@
 </template>
 
 <script setup lang="ts">
-import HeroSection from '@/modules/wallet/components/HeroSection.vue';
 import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
 import CardManagementSection from '@/modules/wallet/components/CardManagementSection.vue';
 import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';
