@@ -58,16 +58,45 @@ export const cardStore = Vue.observable<CardState>({
   },
 });
 
+/**
+ * Initialize card store with split storage model:
+ * 
+ * COOKIES (chrome.cookies API):
+ * - accessToken: Sensitive auth token
+ * - refreshToken: Token refresh credential
+ * - tokenExpiry: Token expiration timestamp
+ * 
+ * CHROME STORAGE (chrome.storage.local):
+ * - All other card state (user info, cards, balances, etc.)
+ * - Tokens are explicitly excluded from chrome.storage for better security
+ * 
+ * Why split storage?
+ * - Cookies provide better security boundaries (domain isolation, auto-expiry)
+ * - Chrome storage provides larger storage capacity for card data
+ * - Tokens don't need to be serialized with other state
+ */
 async function initCardStore() {
-  cardStore.accessToken = await getTokenFromCookie('kaiserex_access_token');
-  cardStore.refreshToken = await getTokenFromCookie('kaiserex_refresh_token');
-  cardStore.tokenExpiry = parseInt((await getTokenFromCookie('kaiserex_token_expiry')) || '0', 10);
+  try {
+    // Load tokens from cookies (secure storage)
+    cardStore.accessToken = await getTokenFromCookie('kaiserex_access_token');
+    cardStore.refreshToken = await getTokenFromCookie('kaiserex_refresh_token');
+    const expiryValue = await getTokenFromCookie('kaiserex_token_expiry');
+    cardStore.tokenExpiry = expiryValue ? parseInt(expiryValue, 10) : null;
 
-  // Load stored data from chrome storage
-  chrome.storage.local.get('cardStore', res => {
-    if (res['cardStore']) {
+    // Load other state from chrome.storage.local (promisified to avoid race conditions)
+    const result = await new Promise<{ cardStore?: Partial<CardState> }>((resolve, reject) => {
+      try {
+        chrome.storage.local.get('cardStore', res => {
+          resolve(res);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    if (result.cardStore) {
       // Ensure walletStatus exists before assignment
-      const storedData = res['cardStore'];
+      const storedData = result.cardStore;
       if (!storedData.walletStatus) {
         storedData.walletStatus = {
           currentState: 'loading',
@@ -79,33 +108,58 @@ async function initCardStore() {
         };
       }
 
+      // Merge stored state (tokens are loaded from cookies separately)
       Object.assign(cardStore, storedData);
     }
-  });
+  } catch (error) {
+    console.error('Failed to initialize card store:', error);
+  }
 }
 initCardStore();
 
-// Persist data to chrome storage
+/**
+ * Persist card store data to chrome.storage.local
+ * 
+ * IMPORTANT: Tokens are NOT persisted here!
+ * - accessToken, refreshToken, tokenExpiry are stored in cookies
+ * - They are explicitly deleted before saving to chrome.storage
+ * - This ensures tokens have proper security boundaries and auto-expiry
+ */
 function persist(patch: Partial<CardState>) {
-  const next = { ...cardStore, ...patch };
+  try {
+    const next = { ...cardStore, ...patch };
 
-  delete next.accessToken;
-  delete next.refreshToken;
-  delete next.tokenExpiry;
+    // Remove sensitive tokens from chrome.storage (stored in cookies instead)
+    delete next.accessToken;
+    delete next.refreshToken;
+    delete next.tokenExpiry;
 
-  chrome.storage.local.set({ cardStore: next });
+    chrome.storage.local.set({ cardStore: next });
+  } catch (error) {
+    console.error('Failed to persist card store to chrome.storage:', error);
+  }
 }
 
-// Helper to get token from cookie
+/**
+ * Helper to retrieve authentication tokens from cookies
+ * 
+ * Returns null on failure to allow graceful fallback.
+ * Used for lazy-loading tokens when not available in memory.
+ */
 async function getTokenFromCookie(name: string): Promise<string | null> {
-  if (typeof chrome !== 'undefined' && chrome.cookies) {
-    const cookie = await chrome.cookies.get({
-      url: import.meta.env['VITE_BACKEND_URL'],
-      name,
-    });
-    return cookie?.value || null;
+  try {
+    if (typeof chrome !== 'undefined' && chrome.cookies) {
+      const cookie = await chrome.cookies.get({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name,
+      });
+      return cookie?.value || null;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Failed to get cookie ${name}:`, error);
+    return null;
   }
-  return null;
 }
 
 // Create API instance for card operations
@@ -116,18 +170,29 @@ function getCardApi(): Api {
   api.axiosInstance.defaults.withCredentials = true;
 
   // Add auth interceptor for card operations
-  api.axiosInstance.interceptors.request.use(async config => {
-    // Try to get token from memory first, then from cookie
-    let token = cardStore.accessToken;
-    if (!token) {
-      token = await getTokenFromCookie('kaiserex_access_token');
-    }
+  api.axiosInstance.interceptors.request.use(
+    async config => {
+      try {
+        // Try to get token from memory first, then from cookie
+        let token = cardStore.accessToken;
+        if (!token) {
+          token = await getTokenFromCookie('kaiserex_access_token');
+        }
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      } catch (error) {
+        console.error('Failed to add auth token to request:', error);
+        return config;
+      }
+    },
+    error => {
+      console.error('Request interceptor error:', error);
+      return Promise.reject(error);
     }
-    return config;
-  });
+  );
 
   // Add response interceptor for token refresh
   api.axiosInstance.interceptors.response.use(
@@ -206,62 +271,93 @@ const cardStoreInstance = {
   },
 };
 
+/**
+ * Store authentication tokens in secure cookies
+ * 
+ * Uses chrome.cookies API instead of chrome.storage.local for enhanced security:
+ * - Domain isolation: Cookies are bound to backend domain
+ * - Auto-expiry: Cookies automatically expire based on token lifetime
+ * - Secure flag: HTTPS-only transmission
+ * - SameSite protection: CSRF protection
+ * 
+ * NOTE: While we can't set httpOnly from client-side, this is still more secure
+ * than chrome.storage.local. For full httpOnly protection, backend should set
+ * cookies via Set-Cookie headers.
+ */
 async function storeTokens(tokens: AuthTokens): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.cookies) {
-    const domain = new URL(import.meta.env['VITE_BACKEND_URL']).hostname;
-    const expirationDate = Math.floor(Date.now() / 1000) + tokens.expires_in;
+  try {
+    if (typeof chrome !== 'undefined' && chrome.cookies) {
+      const domain = new URL(import.meta.env['VITE_BACKEND_URL']).hostname;
+      const expirationDate = Math.floor(Date.now() / 1000) + tokens.expires_in;
 
-    // Store access token in cookie
-    await chrome.cookies.set({
-      url: import.meta.env['VITE_BACKEND_URL'],
-      name: 'kaiserex_access_token',
-      value: tokens.access_token,
-      domain: domain,
-      path: '/',
-      secure: true,
-      sameSite: 'no_restriction',
-      expirationDate: expirationDate,
-    });
+      // Store access token in cookie
+      await chrome.cookies.set({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_access_token',
+        value: tokens.access_token,
+        domain: domain,
+        path: '/',
+        secure: true,
+        sameSite: 'lax',
+        expirationDate: expirationDate,
+      });
 
-    // Store refresh token in cookie (longer expiration, e.g., 30 days)
-    await chrome.cookies.set({
-      url: import.meta.env['VITE_BACKEND_URL'],
-      name: 'kaiserex_refresh_token',
-      value: tokens.refresh_token,
-      domain: domain,
-      path: '/',
-      secure: true,
-      sameSite: 'no_restriction',
-      expirationDate: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days
-    });
+      // Store refresh token in cookie (longer expiration, e.g., 30 days)
+      await chrome.cookies.set({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_refresh_token',
+        value: tokens.refresh_token,
+        domain: domain,
+        path: '/',
+        secure: true,
+        sameSite: 'lax',
+        expirationDate: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days
+      });
 
-    // Store token expiry
-    await chrome.cookies.set({
-      url: import.meta.env['VITE_BACKEND_URL'],
-      name: 'kaiserex_token_expiry',
-      value: (Date.now() + tokens.expires_in * 1000).toString(),
-      domain: domain,
-      path: '/',
-      secure: true,
-      sameSite: 'no_restriction',
-      expirationDate: expirationDate,
-    });
+      // Store token expiry
+      await chrome.cookies.set({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_token_expiry',
+        value: (Date.now() + tokens.expires_in * 1000).toString(),
+        domain: domain,
+        path: '/',
+        secure: true,
+        sameSite: 'lax',
+        expirationDate: expirationDate,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to store tokens in cookies:', error);
+    throw new Error('Failed to store authentication tokens');
   }
 }
 
+/**
+ * Clear all authentication tokens from cookies
+ * 
+ * Called during logout to ensure tokens are properly removed.
+ * Does not throw on failure to ensure logout succeeds even if cookie removal fails.
+ */
 async function clearStoredTokens(): Promise<void> {
-  await chrome.cookies.remove({
-    url: import.meta.env['VITE_BACKEND_URL'],
-    name: 'kaiserex_access_token',
-  });
-  await chrome.cookies.remove({
-    url: import.meta.env['VITE_BACKEND_URL'],
-    name: 'kaiserex_refresh_token',
-  });
-  await chrome.cookies.remove({
-    url: import.meta.env['VITE_BACKEND_URL'],
-    name: 'kaiserex_token_expiry',
-  });
+  try {
+    await Promise.all([
+      chrome.cookies.remove({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_access_token',
+      }),
+      chrome.cookies.remove({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_refresh_token',
+      }),
+      chrome.cookies.remove({
+        url: import.meta.env['VITE_BACKEND_URL'],
+        name: 'kaiserex_token_expiry',
+      }),
+    ]);
+  } catch (error) {
+    console.error('Failed to clear stored tokens from cookies:', error);
+    // Don't throw - we want logout to succeed even if cookie removal fails
+  }
 }
 export default {
   // ============================================================================
@@ -470,7 +566,6 @@ export default {
       expires_in: tokens.expires_in || 3600,
     });
 
-    console.log('setKaiserExTokens', tokens);
     // Set authentication status
     await this.setKaiserexAuthentication(true);
 
@@ -826,19 +921,24 @@ export default {
     try {
       // Read tokens from cookies
       if (typeof chrome !== 'undefined' && chrome.cookies) {
-        const url = import.meta.env['VITE_BACKEND_URL'];
+        try {
+          const url = import.meta.env['VITE_BACKEND_URL'];
 
-        const [accessTokenCookie, refreshTokenCookie, tokenExpiryCookie] = await Promise.all([
-          chrome.cookies.get({ url, name: 'kaiserex_access_token' }),
-          chrome.cookies.get({ url, name: 'kaiserex_refresh_token' }),
-          chrome.cookies.get({ url, name: 'kaiserex_token_expiry' }),
-        ]);
+          const [accessTokenCookie, refreshTokenCookie, tokenExpiryCookie] = await Promise.all([
+            chrome.cookies.get({ url, name: 'kaiserex_access_token' }),
+            chrome.cookies.get({ url, name: 'kaiserex_refresh_token' }),
+            chrome.cookies.get({ url, name: 'kaiserex_token_expiry' }),
+          ]);
 
-        if (accessTokenCookie?.value && tokenExpiryCookie?.value) {
-          cardStore.accessToken = accessTokenCookie.value;
-          cardStore.refreshToken = refreshTokenCookie?.value || null;
-          cardStore.tokenExpiry = parseInt(tokenExpiryCookie.value, 10);
-          cardStore.walletStatus.isKaiserexAuthenticated = true;
+          if (accessTokenCookie?.value && tokenExpiryCookie?.value) {
+            cardStore.accessToken = accessTokenCookie.value;
+            cardStore.refreshToken = refreshTokenCookie?.value || null;
+            cardStore.tokenExpiry = parseInt(tokenExpiryCookie.value, 10);
+            cardStore.walletStatus.isKaiserexAuthenticated = true;
+          }
+        } catch (cookieError) {
+          console.error('Failed to read tokens from cookies during initialization:', cookieError);
+          // Continue initialization even if cookie reading fails
         }
       }
 
