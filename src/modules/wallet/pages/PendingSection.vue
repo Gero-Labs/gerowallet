@@ -3,22 +3,12 @@
     <ApplicationStatusSection />
     <div class="soon">
       <div class="soon-content">
-        <AccountOverviewHeader />
-
-        <BalanceCardsSection 
-          :card-balance="'0'" 
-          :card-balance-ada="'₳0.00'" 
-          :gero-earned="'0'" 
-          :total-deposit="'0'" 
-          :total-deposit-ada="'₳0.00'" 
-        />
         <div class="dashboard-layout">
           <div class="left-column">
             <RecentTransactionsSection :transactions="[]" />
           </div>
           <div class="right-column">
             <ChartSection />
-            <ExchangeRateSection />
             <RecentActivitiesSection />
           </div>
         </div>
@@ -50,22 +40,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
-import HeroSection from '@/modules/wallet/components/HeroSection.vue';
-import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
-import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';
-import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
-import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';
+// import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
+// import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';
 import ChartSection from '@/modules/wallet/components/dashboard/ChartSection.vue';
 import RecentTransactionsSection from '@/modules/wallet/components/dashboard/RecentTransactionsSection.vue';
-import ExchangeRateSection from '@/modules/wallet/components/dashboard/ExchangeRateSection.vue';
 import RecentActivitiesSection from '@/modules/wallet/components/dashboard/RecentActivitiesSection.vue';
-import cardStore from '@/stores/modules/card';
-
-const cardHistoryRecords = computed(() => {
-  return cardStore.state.cardHistory?.history.records || [];
-});
 </script>
 
 <style lang="scss" scoped>

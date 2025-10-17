@@ -2,6 +2,7 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { minAdaRequired as minAdaRequiredSDK, minFee as minFeeSDK } from '@cardano-sdk/tx-construction';
+import { Ed25519SignatureHex, Ed25519PublicKeyHex } from '@cardano-sdk/crypto';
 
 /**
  * CBOR Serialization utilities for Cardano JS SDK transactions
@@ -108,13 +109,16 @@ export class BrowserTxConstruction {
         // CRITICAL FIX: Create dummy witnesses with realistic structure
         // This ensures the CBOR serialization includes the actual witness Map structure
         // which has different encoding overhead than an empty Map
-        const dummySignatures = new Map<Cardano.Ed25519PublicKeyHex, Cardano.Ed25519SignatureHex>();
+        const dummySignatures = new Map<Ed25519PublicKeyHex, Ed25519SignatureHex>();
 
         // Add dummy signatures (32 byte vkey + 64 byte signature in hex)
-        // These are just placeholders - the actual values don't matter for fee calculation
+        // IMPORTANT: Each signature must have a UNIQUE key to ensure proper CBOR Map encoding
+        // Using the same key for all signatures can cause CBOR to optimize the encoding
         for (let i = 0; i < estimatedSignatures; i++) {
-          const dummyVKey = '0'.repeat(64) as Cardano.Ed25519PublicKeyHex; // 32 bytes = 64 hex chars
-          const dummySignature = '0'.repeat(128) as Cardano.Ed25519SignatureHex; // 64 bytes = 128 hex chars
+          // Create unique dummy keys by varying the first byte
+          const keyPrefix = i.toString(16).padStart(2, '0');
+          const dummyVKey = (keyPrefix + '0'.repeat(62)) as Ed25519PublicKeyHex; // 32 bytes = 64 hex chars
+          const dummySignature = '0'.repeat(128) as Ed25519SignatureHex; // 64 bytes = 128 hex chars
           dummySignatures.set(dummyVKey, dummySignature);
         }
 
@@ -128,10 +132,19 @@ export class BrowserTxConstruction {
         };
 
         // Now call SDK's minFee with the transaction that has proper witness structure
-        const calculatedFee = minFeeSDK(txWithDummyWitnesses, resolvedInputs, protocolParams);
+        const baseFee = minFeeSDK(txWithDummyWitnesses, resolvedInputs, protocolParams);
 
-        console.log('🔧 Fee calculation (SDK with dummy witnesses):', {
-          fee: calculatedFee.toString(),
+        // Add a small safety margin to account for CBOR encoding variations
+        // Typically 60-80 bytes (~2,640-3,520 lovelace with minFeeCoefficient=44)
+        // This ensures we never underestimate the fee
+        const safetyMarginBytes = BigInt(80);
+        const safetyMarginFee = safetyMarginBytes * BigInt(protocolParams.minFeeCoefficient);
+        const calculatedFee = baseFee + safetyMarginFee;
+
+        console.log('🔧 Fee calculation (SDK with dummy witnesses + safety margin):', {
+          baseFee: baseFee.toString(),
+          safetyMarginFee: safetyMarginFee.toString(),
+          totalFee: calculatedFee.toString(),
           feeAda: (Number(calculatedFee) / 1000000).toFixed(6),
           witnessCount: estimatedSignatures,
           minFeeCoefficient: protocolParams.minFeeCoefficient
