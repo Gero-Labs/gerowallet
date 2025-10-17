@@ -40,9 +40,8 @@
                 <div class="debit-card-text">
                   <v-card-title class="pt-0 pb-0 white--text text-center debit-card-title" style="margin-bottom: 0;">{{ item.title }}</v-card-title>
                   <div class="debit-card-description white--text text-center mb-2">
-                    Top up and pay with ADA
+                    {{item.subtitle}}
                   </div>
-                  <v-card-subtitle class="pb-0 white--text text-center debit-card-coming-soon">Coming soon</v-card-subtitle>
                 </div>
               </slot>
             </div>
