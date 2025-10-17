@@ -95,7 +95,7 @@
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
 
     <!-- Confirmation Modal -->
-    <ConfirmationModal
+    <ConfirmationPasswordModal
       :open="showConfirmationModal"
       @close="showConfirmationModal = false"
       @confirm="toggleCardVisibility"
@@ -103,7 +103,7 @@
       :subtitle="'View the details of your card. This action cannot be undone.'"
     />
     <!-- Confirmation Modal Manage Card-->
-    <ConfirmationModal
+    <ConfirmationPasswordModal
       :open="showManageCardConfirmationModal"
       @close="showManageCardConfirmationModal = false"
       @confirm="showManageCardModal = true"
@@ -118,7 +118,7 @@ import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import cardStoreModule from '@/stores/modules/card';
-import ConfirmationModal from './dashboard/ConfirmationModal.vue';
+import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 
 const currentCardIndex = ref(0);
 const cardTiltStyle = ref<any>({});
