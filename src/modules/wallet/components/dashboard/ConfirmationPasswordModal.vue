@@ -29,15 +29,20 @@
               <template v-slot:activator="{}">
                 <v-text-field
                   v-model="password"
-                  type="password"
                   dense
                   outlined
                   class="password-input"
                   label="Spending Password"
+                  :type="showPassword ? 'text' : 'password'"
                   hide-details
-                  placeholder="**********"
                   @keyup.enter="verifyPassword"
-                />
+                >
+                  <template v-slot:append>
+                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
+                      {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
+                    </v-icon>
+                  </template>
+                </v-text-field>
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
@@ -72,6 +77,8 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const showPassword = ref(false);
 
 const password = ref('');
 const errorMessage = ref('');

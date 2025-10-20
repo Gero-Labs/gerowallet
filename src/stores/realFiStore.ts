@@ -113,7 +113,8 @@ export default {
           }
         }
       } catch (e) {
-        console.warn(`Failed to fetch RealFi history for ${unit}:`, e);
+        // RealFi API failures are expected for some tokens - silently skip
+        debugLog(`⚠️ RealFi: Historical data unavailable for ${unit}`);
       }
     }
   },

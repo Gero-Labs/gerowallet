@@ -14,6 +14,31 @@ export const sharedConfig: UserConfig = {
   root: r('src'),
   envDir: r('.'),
   base: './',
+  customLogger: {
+    info(msg, options) {
+      console.log(msg);
+    },
+    warn(msg, options) {
+      // Suppress externalized module warnings (vm, fs, etc. - expected in browser builds)
+      if (msg.includes('externalized for browser compatibility')) return;
+      // Suppress eval warnings from third-party dependencies (protobufjs)
+      if (msg.includes('Use of eval') && msg.includes('node_modules')) return;
+      // Show other warnings
+      console.warn(msg);
+    },
+    error(msg, options) {
+      console.error(msg);
+    },
+    clearScreen() {},
+    hasErrorLogged() { return false; },
+    hasWarned: false,
+    warnOnce(msg, options) {
+      // Apply same filtering as warn()
+      if (msg.includes('externalized for browser compatibility')) return;
+      if (msg.includes('Use of eval') && msg.includes('node_modules')) return;
+      console.warn(msg);
+    },
+  },
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
@@ -29,7 +54,8 @@ export const sharedConfig: UserConfig = {
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
   define: {
-    'global': 'window',
+    // Note: 'global' is handled by nodePolyfills plugin below
+    // Don't define it here to avoid conflicts that create spurious window/window imports
     '__DEV__': isDev,
     '__NAME__': JSON.stringify(packageJson.name),
     'APP_VERSION': JSON.stringify(packageJson.version),
@@ -68,31 +94,7 @@ export const sharedConfig: UserConfig = {
     AutoImport({
       imports: ['vue', { 'webextension-polyfill': [['=', 'browser']] }],
       dts: r('src/auto-imports.d.ts'),
-    }),
-    {
-      name: 'cbor-fix-dev',
-      resolveId(id, importer) {
-        if (id === 'cbor') {
-          return r('src/shims/cbor.js');
-        }
-        return null;
-      },
-    },
-    {
-      name: 'fix-web-encoding',
-      transform(code, id) {
-        // Fix web-encoding import in @cardano-sdk/core
-        if (id.includes('@cardano-sdk/core') && code.includes("from 'web-encoding'")) {
-          return code.replace(
-            /import \{ TextDecoder \} from 'web-encoding';/g,
-            "const TextDecoder = globalThis.TextDecoder;"
-          );
-        }
-        return null;
-      }
-    },
-    // TODO: Add image optimization later
-    // !isDev && viteImagemin({...}),
+    })
   ],
   optimizeDeps: {
     include: [
@@ -131,7 +133,7 @@ export const sharedConfig: UserConfig = {
         '.ts': 'tsx',
       },
     },
-    force: false, // Enable caching
+    force: isDev, // Force re-optimization in dev mode to catch changes
     holdUntilCrawlEnd: false, // Don't wait for all files
   },
   worker: {
@@ -154,6 +156,14 @@ export const sharedConfig: UserConfig = {
     rollupOptions: {
       output: {
         manualChunks: undefined, // Disable manual chunking for faster builds
+      },
+      onwarn(warning, warn) {
+        // Suppress externalized module warnings (vm, fs, etc. - expected in browser builds)
+        if (warning.code === 'PLUGIN_WARNING' && warning.message?.includes('externalized')) return;
+        // Suppress eval warnings from third-party dependencies (protobufjs)
+        if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+        // Use default warning handler for everything else
+        warn(warning);
       },
     },
   },
@@ -210,9 +220,21 @@ export default defineConfig(({ command }) => {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
         treeshake: false, // Disable for faster builds
-        external: ['window/window'], // Fix for fake external created by global replacement
         input: {
           options: r('src/options/index.html'),
+        },
+        onwarn(warning, warn) {
+          // Suppress window/window warnings - harmless artifacts from terser minification
+          if (warning.message && warning.message.includes('window/window')) return;
+          // Suppress eval warnings from third-party dependencies (protobufjs)
+          if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+          // Use default warning handler for everything else
+          warn(warning);
+        },
+        external: (id) => {
+          // Ignore spurious window/window imports created by terser minification
+          if (id === 'window/window' || id.includes('window/window')) return true;
+          return false;
         },
         output: {
           chunkFileNames: 'js/[name].[hash].js',
@@ -235,90 +257,6 @@ export default defineConfig(({ command }) => {
             copySync: false, // Async copying
             flatten: false,
           }) as any,
-          {
-            name: 'cbor-fix',
-            resolveId(id, importer) {
-              if (id === 'cbor') {
-                return r('src/shims/cbor.js');
-              }
-              return null;
-            }
-          },
-          {
-            name: 'remove-window-window-imports-and-fix-request-response',
-            generateBundle(options, bundle) {
-              // Remove window/window imports and fix Request/Response destructuring from all chunks and assets
-              for (const [fileName, chunk] of Object.entries(bundle)) {
-                if (chunk.type === 'chunk' || (chunk.type === 'asset' && fileName.endsWith('.js'))) {
-                  const code = chunk.type === 'chunk' ? chunk.code : chunk.source?.toString();
-                  if (code) {
-                    // Replace import from "window/window" with const undefined (handles both default and side-effect imports)
-                    let newCode = code.replace(/import\s+([^;]+)\s+from\s+["']window\/window["'];?\s*\n?/g, 'const $1 = undefined;');
-
-                    // Also handle side-effect imports: import "window/window";
-                    newCode = newCode.replace(/import\s+["']window\/window["'];?\s*\n?/g, '// removed window/window import\n');
-
-                    // Fix Request/Response destructuring patterns (same as background script fixes)
-                    // Pattern 1: const globalFetchAPI = (({Request, Response}) => ({...}))(something.global);
-                    newCode = newCode.replace(
-                      /const globalFetchAPI = \(\(\{ Request, Response }\) => \(\{[^}]+}\)\)\(([^)]+)\);/g,
-                      'const globalFetchAPI = (() => { try { const g = $1 || globalThis; const { Request, Response } = g; return { Request, Response }; } catch(e) { return { Request: globalThis.Request, Response: globalThis.Response }; } })();'
-                    );
-
-                    // Pattern 2: Minified destructuring (({Request:e,Response:t})=>({Request:e,Response:t}))(xxx.global)
-                    newCode = newCode.replace(
-                      /\(\(\{Request:(\w+),Response:(\w+)\}\)=>\(\{Request:\1,Response:\2\}\)\)\((\w+)\.global\)/g,
-                      '(()=>{try{const g=$3.global||globalThis;return{Request:g.Request,Response:g.Response}}catch(e){return{Request:globalThis.Request,Response:globalThis.Response}}})()'
-                    );
-
-                    // Pattern 3: Fix destructuring after merge that might have undefined properties
-                    // const { fetch: envFetch, Request, Response } = env;
-                    newCode = newCode.replace(
-                      /const\s+\{\s*fetch:\s*(\w+),\s*Request,\s*Response\s*\}\s*=\s*(\w+);/g,
-                      'const $1 = $2?.fetch; const Request = $2?.Request || globalThis.Request; const Response = $2?.Response || globalThis.Response;'
-                    );
-
-                    // Pattern 4: Fix ReadableStream and TextEncoder destructuring (all variants)
-                    // const { ReadableStream: ReadableStream$1, TextEncoder: TextEncoder$1 } = utils$y.global;
-                    newCode = newCode.replace(
-                      /const\s+\{\s*ReadableStream:\s*(\w+),\s*TextEncoder:\s*(\w+)\s*\}\s*=\s*([^;]+);/gs,
-                      'const $1 = $3?.ReadableStream || globalThis.ReadableStream; const $2 = $3?.TextEncoder || globalThis.TextEncoder;'
-                    );
-
-                    // Pattern 4b: Handle multiline pattern with newlines
-                    newCode = newCode.replace(
-                      /const\s+\{\s*\n\s*ReadableStream:\s*(\w+),\s*\n\s*TextEncoder:\s*(\w+)\s*\n\s*\}\s*=\s*([^;]+);/g,
-                      'const $1 = $3?.ReadableStream || globalThis.ReadableStream; const $2 = $3?.TextEncoder || globalThis.TextEncoder;'
-                    );
-
-                    // Pattern 4c: Handle exact pattern from the error (no newlines but with spaces)
-                    newCode = newCode.replace(
-                      /const\s+\{\s*ReadableStream:\s*(\w+),[\s\n]*TextEncoder:\s*(\w+)[\s\n]*\}\s*=\s*([^;]+);/g,
-                      'const $1 = $3?.ReadableStream || globalThis.ReadableStream; const $2 = $3?.TextEncoder || globalThis.TextEncoder;'
-                    );
-
-                    // Pattern 4d: Handle the exact multiline destructuring pattern from build output
-                    newCode = newCode.replace(
-                      /const\s+\{\s*\n\s*ReadableStream:\s*(\w+),\s*\n\s*TextEncoder:\s*(\w+)\s*\n\s*\}\s*=\s*([^;]+);/gm,
-                      'const $1 = $3?.ReadableStream || globalThis.ReadableStream;\nconst $2 = $3?.TextEncoder || globalThis.TextEncoder;'
-                    );
-
-                    // Pattern 4e: Handle the exact pattern from the current error (very specific formatting)
-                    newCode = newCode.replace(
-                      /const\s+\{\s*\n\s*ReadableStream:\s*(\w+\$\d+),\s*\n\s*TextEncoder:\s*(\w+\$\d+)\s*\n\}\s*=\s*utils\$y\.global;/g,
-                      'const $1 = utils$y.global?.ReadableStream || globalThis.ReadableStream;\nconst $2 = utils$y.global?.TextEncoder || globalThis.TextEncoder;'
-                    );
-
-                    if (chunk.type === 'chunk') {
-                      chunk.code = newCode;
-                    } else if (chunk.type === 'asset' && typeof chunk.source === 'string') {
-                      chunk.source = newCode;
-                    }
-                  }
-                }
-              }
-            }
-          }
         ]
       },
     },

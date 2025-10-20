@@ -243,7 +243,6 @@ import { themes, iconFilters } from '@/config/themes';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
-import timePlugin from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { setConfiguration } from '@/db/gero-db';
@@ -340,16 +339,10 @@ const primaryColor = computed(() => {
   return isApex.value ? themes.apex.primary : themes.cardano.primary;
 });
 
-function openSwapDialog() {
-  if (!isApex.value) {
-    swapDialog.value = true;
-  }
-}
-
 function closeSwapDialog() {
   swapDialog.value = false;
 }
-const time = timePlugin;
+
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
   // Use reactive config from store for proper sync between empty and populated states
@@ -400,7 +393,6 @@ const nextSyncDisplay = computed(() => {
     const CARDANO_BLOCK_TIME = 20000; // 20 seconds in milliseconds
     const lastSyncTime = new Date(tip.value.time).getTime();
     const now = currentTime.value; // Use reactive time for countdown
-    const timeSinceLastSync = now - lastSyncTime;
     const nextSyncEstimate = lastSyncTime + CARDANO_BLOCK_TIME;
 
     // If we're past the expected next block time, sync is due now

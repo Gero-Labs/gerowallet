@@ -33,9 +33,10 @@ const context = getContextType();
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
   debugLog(`🔌 Initializing loading store messaging in browser context`);
+
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
-    debugLog('📥 Received loading store update:', updates);
+    console.log('📥 Received loading store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -45,11 +46,17 @@ if (context === 'browser') {
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
+  // Initial hydration from chrome.storage
+  // This is important because the port connection might happen AFTER critical state changes
   chrome.storage.local.get(STORE_NAME, (result) => {
     if (result[STORE_NAME]) {
+      // Hydrate from storage immediately - this ensures we have the latest persisted state
       Object.assign(loadingState, result[STORE_NAME]);
-      debugLog('💾 Hydrated loading store from storage:', result[STORE_NAME]);
+      console.log('💾 Hydrated loading store from storage:', {
+        connected: result[STORE_NAME].connected,
+        connecting: result[STORE_NAME].connecting,
+        full: result[STORE_NAME]
+      });
     }
   });
 }
@@ -60,7 +67,7 @@ let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 /**
  * Broadcast updates from background context
  */
-function broadcastFromBackground(updates: Partial<LoadingState>) {
+function broadcastFromBackground(updates: Partial<LoadingState>, immediate = false) {
   if (context === 'background') {
     // Apply updates locally first
     Object.assign(loadingState, updates);
@@ -68,14 +75,25 @@ function broadcastFromBackground(updates: Partial<LoadingState>) {
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
 
-    // Debounced storage write to reduce I/O operations during rapid updates
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-    }
-
-    storageWriteTimeout = setTimeout(() => {
+    // For critical state changes (connected/connecting), write immediately to storage
+    // so browser context gets correct state on hydration
+    if (immediate || 'connected' in updates || 'connecting' in updates) {
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+        storageWriteTimeout = null;
+      }
       chrome.storage.local.set({ [STORE_NAME]: loadingState });
-    }, 300); // 300ms debounce
+      console.log('💾 LoadingState persisted immediately:', updates);
+    } else {
+      // Debounced storage write for other updates to reduce I/O
+      if (storageWriteTimeout) {
+        clearTimeout(storageWriteTimeout);
+      }
+
+      storageWriteTimeout = setTimeout(() => {
+        chrome.storage.local.set({ [STORE_NAME]: loadingState });
+      }, 300); // 300ms debounce
+    }
   }
 }
 
@@ -146,13 +164,13 @@ export default {
 
   setConnected: createSetter('connected', (v) => {
     if (loadingState.connected !== v) {
-      debugLog(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
+      console.log(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
     }
   }),
 
   setConnecting: createSetter('connecting', (v) => {
     if (loadingState.connecting !== v) {
-      debugLog(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
+      console.log(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
     }
   }),
 

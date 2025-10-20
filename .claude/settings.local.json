@@ -12,7 +12,16 @@
       "Bash(npx tsc:*)",
       "Bash(cd:*)",
       "Read(//Users/dudiedri/IdeaProjects/**)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(for i in {1..10})",
+      "Bash(do echo \"=== Build $i ===\")",
+      "Bash(npm run clear:*)",
+      "Bash(/dev/null)",
+      "Bash(npm run build:background:*)",
+      "Bash(done)",
+      "Bash(npm view:*)",
+      "Bash(npm info:*)",
+      "Bash(gh issue create:*)"
     ],
     "deny": [],
     "ask": []
