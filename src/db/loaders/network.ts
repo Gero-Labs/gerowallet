@@ -2,7 +2,6 @@ import Dexie from 'dexie';
 import { BaseLoader } from './base';
 import NetworkStore from '@/stores/networkStore';
 import { Cardano } from '@cardano-sdk/core';
-import networks from '@/utils/networks';
 
 /**
  * Loader for assets data
@@ -57,7 +56,7 @@ export class GenesisLoader extends BaseLoader {
  * Loader for epoch parameters
  */
 export class EpochParamsLoader extends BaseLoader {
-  constructor(private getBlockchainDb: () => Promise<Dexie>, private chain: any, private network: any) {
+  constructor(private getBlockchainDb: () => Promise<Dexie>) {
     super('epoch_params');
   }
 
@@ -83,6 +82,10 @@ export class EpochParamsLoader extends BaseLoader {
           dRepDeposit: 500000000,
           dRepInactivityPeriod: Cardano.EpochNo(20),
           dRepVotingThresholds: {
+            motionNoConfidence: { denominator: 100, numerator: 67 },
+            committeeNormal: { denominator: 100, numerator: 67 },
+            committeeNoConfidence: { denominator: 100, numerator: 60 },
+            hardForkInitiation: { denominator: 100, numerator: 60 },
             ppEconomicGroup: { denominator: 100, numerator: 67 },
             ppGovernanceGroup: { denominator: 4, numerator: 3 },
             ppNetworkGroup: { denominator: 100, numerator: 67 },
@@ -194,6 +197,18 @@ export class EpochParamsLoader extends BaseLoader {
               : defaultEpochParams.poolVotingThresholds,
             dRepVotingThresholds: epochParams?.dvt_update_to_constitution
               ? ({
+                  motionNoConfidence: epochParams.dvt_motion_no_confidence
+                    ? Cardano.FractionUtils.toFraction(epochParams.dvt_motion_no_confidence)
+                    : defaultEpochParams.dRepVotingThresholds.motionNoConfidence,
+                  committeeNormal: epochParams.dvt_committee_normal
+                    ? Cardano.FractionUtils.toFraction(epochParams.dvt_committee_normal)
+                    : defaultEpochParams.dRepVotingThresholds.committeeNormal,
+                  committeeNoConfidence: epochParams.dvt_committee_no_confidence
+                    ? Cardano.FractionUtils.toFraction(epochParams.dvt_committee_no_confidence)
+                    : defaultEpochParams.dRepVotingThresholds.committeeNoConfidence,
+                  hardForkInitiation: epochParams.dvt_hard_fork_initiation
+                    ? Cardano.FractionUtils.toFraction(epochParams.dvt_hard_fork_initiation)
+                    : defaultEpochParams.dRepVotingThresholds.hardForkInitiation,
                   updateConstitution: Cardano.FractionUtils.toFraction(epochParams.dvt_update_to_constitution),
                   ppNetworkGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_network_group),
                   ppEconomicGroup: Cardano.FractionUtils.toFraction(epochParams.dvt_p_p_economic_group),

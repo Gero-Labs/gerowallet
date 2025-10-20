@@ -51,7 +51,20 @@
                         :class="{ 'current-playing': isCurrentTrack(track) }"
                       >
                           <v-list-item-avatar>
-                            <v-img :src="track.img" contain></v-img>
+                            <v-img :src="track.img" contain>
+                              <template v-slot:placeholder>
+                                <v-row
+                                  class="fill-height ma-0"
+                                  align="center"
+                                  justify="center"
+                                >
+                                  <v-progress-circular
+                                    indeterminate
+                                    color="grey lighten-5"
+                                  ></v-progress-circular>
+                                </v-row>
+                              </template>
+                            </v-img>
                           </v-list-item-avatar>
                           <v-list-item-content>
                             <v-list-item-title>{{ track.title }}</v-list-item-title>

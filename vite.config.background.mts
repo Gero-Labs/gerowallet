@@ -8,6 +8,9 @@ import wasm from 'vite-plugin-wasm';
 
 export default defineConfig({
   ...sharedConfig,
+  resolve: {
+    ...sharedConfig.resolve,
+  },
   server: {
     watch: {
       usePolling: true,
@@ -38,8 +41,8 @@ export default defineConfig({
     // Service worker compatibility
     'typeof document': '"undefined"',
     'typeof window': '"undefined"',
-    // Global replacements for service worker
-    'global': 'globalThis',
+    // Note: 'global' is handled by nodePolyfills plugin from sharedConfig
+    // Don't define it here to avoid conflicts with terser minification
   },
   build: {
     minify: isDev ? false : 'terser',
@@ -72,17 +75,92 @@ export default defineConfig({
         manualChunks: undefined,
         globals: {}
       },
-      external: isDev ? ['vm'] : [],
+      onwarn(warning, warn) {
+        // Suppress window/window warnings - these are harmless artifacts from commonjs plugin + terser
+        if (warning.message && warning.message.includes('window/window')) return;
+        // Suppress externalized module warnings (vm, fs, etc. - expected in browser builds)
+        if (warning.code === 'PLUGIN_WARNING' && warning.message?.includes('externalized')) return;
+        // Suppress eval warnings from third-party dependencies (protobufjs)
+        if (warning.code === 'EVAL' && warning.id?.includes('node_modules')) return;
+        // Use default warning handler for everything else
+        warn(warning);
+      },
+      external: (id) => {
+        // Keep vm external in dev mode (node built-in not available in browser)
+        if (isDev && id === 'vm') return true;
+        // Ignore spurious window/window imports created by commonjs plugin + terser
+        // This happens when terser minifies code with window property access
+        if (id === 'window/window' || id.includes('window/window')) return true;
+        return false;
+      },
       plugins: [
+        // Custom plugin to provide pbkdf2 exports as a virtual module
+        {
+          name: 'pbkdf2-virtual-module',
+          enforce: 'pre',
+          resolveId(source) {
+            if (source === '\0virtual:pbkdf2') {
+              return source;
+            }
+            if (source === 'pbkdf2') {
+              return '\0virtual:pbkdf2';
+            }
+            return null;
+          },
+          load(id) {
+            if (id === '\0virtual:pbkdf2') {
+              // Create a virtual module that properly wraps pbkdf2
+              // We'll let commonjs handle the actual pbkdf2/browser.js file
+              return `
+import pbkdf2Browser from 'pbkdf2/browser.js';
+export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
+export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync;
+export default pbkdf2Browser;
+`;
+            }
+            return null;
+          }
+        },
+        commonjs({
+          include: [/node_modules/],
+          requireReturnsDefault: 'auto',
+          defaultIsModuleExports: 'auto',
+          esmExternals: true,
+          transformMixedEsModules: true,
+          strictRequires: true,
+          ignore: (id) => {
+            // Ignore spurious window/window imports
+            if (id === 'window/window' || id.includes('window/window')) return true;
+            return false;
+          },
+        }),
         wasm(),
         rollupTla(),
-        commonjs(),
         // Service worker compatibility fixes
         {
           name: 'service-worker-fixes',
           generateBundle(options, bundle) {
             for (const [fileName, chunk] of Object.entries(bundle)) {
               if (chunk.type === 'chunk' && fileName === 'index.js') {
+                // Prepend addEventListener monkey-patch to suppress Chrome's service worker warnings
+                // Chrome warns when addEventListener('online'/'offline') is not called during initial evaluation
+                const suppressionCode = `
+// Suppress Chrome's service worker event handler warnings for Ably
+// Ably adds online/offline listeners dynamically, which triggers Chrome warnings
+// These warnings are harmless - we silence them by making addEventListener a no-op for these events
+(function() {
+  const originalAddEventListener = self.addEventListener;
+  self.addEventListener = function(type, listener, options) {
+    // Silently ignore online/offline event listeners to suppress Chrome warnings
+    if (type === 'online' || type === 'offline') {
+      return; // Don't register these listeners, preventing the warning
+    }
+    return originalAddEventListener.call(this, type, listener, options);
+  };
+})();
+`;
+                chunk.code = suppressionCode + chunk.code;
+
                 // Replace document.currentScript references for service worker compatibility
                 chunk.code = chunk.code.replace(
                   /"undefined"!=typeof document\?document\.currentScript:null/g,

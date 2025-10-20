@@ -286,8 +286,8 @@ export class TransactionsLoader extends BaseLoader {
     sentAssets.forEach((sentAsset, unit) => {
       const receivedAsset = receivedAssets.get(unit);
       const quantity = receivedAsset
-        ? sentAsset.quantity - receivedAsset.quantity
-        : sentAsset.quantity;
+        ? Number(receivedAsset.quantity) - Number(sentAsset.quantity)
+        : -Number(sentAsset.quantity);
 
       if (quantity !== 0) {
         finalAssets.push({

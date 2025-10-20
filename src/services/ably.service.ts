@@ -39,8 +39,6 @@ class AblyService {
       realtimeRequestTimeout: 5000, // Reduce from default 10s to 5s
       disconnectedRetryTimeout: 3000, // Faster reconnection attempts
       suspendedRetryTimeout: 5000, // Faster recovery from suspension
-      // Token expiration handling
-      renewTokenOnAuthFailure: true, // Automatically renew token on auth failure
     };
 
     this.client = new Ably.Realtime(clientOptions);
@@ -135,12 +133,11 @@ class AblyService {
     });
 
     this.client.connection.on('connected', (connectionStateChange: Ably.ConnectionStateChange) => {
-      if (connectionStateChange.current === 'connected') {
-        LoadingState.setText('');
-        LoadingState.setConnected(true);
-        LoadingState.setConnecting(false);
-        debugLog('✅ Ably connected');
-      }
+      console.log('✅ Ably connected event fired, state:', connectionStateChange.current);
+      LoadingState.setText('');
+      LoadingState.setConnected(true);
+      LoadingState.setConnecting(false);
+      debugLog('✅ Ably connected');
     });
 
     this.client.connection.on('disconnected', (connectionStateChange: Ably.ConnectionStateChange) => {

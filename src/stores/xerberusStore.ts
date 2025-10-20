@@ -111,7 +111,8 @@ export default {
       .map(fingerprint =>
         xerberusApi.assetRisk(fingerprint)
           .catch(() => {
-            console.warn('Failed to fetch risk for:', fingerprint);
+            // Xerberus API failures are expected for some tokens - silently skip
+            debugLog('⚠️ Xerberus: Risk data unavailable for:', fingerprint);
             return null;
           })
       );
