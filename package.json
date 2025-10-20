@@ -151,7 +151,7 @@
     "stream-browserify": "^3.0.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.2",
-    "unplugin-auto-import": "^0.18.3",
+    "unplugin-auto-import": "^20.2.0",
     "unplugin-vue-components": "^0.25.2",
     "vite": "^4.5.5",
     "vite-bundle-analyzer": "^1.1.0",
