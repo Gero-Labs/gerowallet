@@ -37,7 +37,8 @@ class BackgroundStoreMessaging {
 
     // Only run in background context
     if (context !== 'background') {
-      console.warn('⚠️ BackgroundStoreMessaging initialized in wrong context:', context);
+      // This is expected when stores import this module - it safely no-ops in browser context
+      debugLog('ℹ️ BackgroundStoreMessaging skipping init in', context, 'context (expected)');
       return;
     }
 

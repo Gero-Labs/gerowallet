@@ -1,84 +1,9 @@
 /**
  * Storage Sync Utilities
  *
- * Helper functions to integrate stores with the centralized storage observer
+ * Helper functions for context detection and storage operations.
+ * Store syncing is now handled by the messaging system (storeMessaging.service.ts and storeMessagingBg.ts).
  */
-
-import storageObserver from '@/services/storageObserver.service';
-
-interface StoreSyncOptions {
-  storeName: string;
-  syncKeys?: string[]; // Specific keys to sync, or all if not provided
-  onSync?: (newValue: any, key: string) => void;
-  debugPrefix?: string;
-}
-
-/**
- * Create a storage sync handler for a store
- */
-export function createStorageSync<T extends Record<string, any>>(
-  store: T,
-  options: StoreSyncOptions
-) {
-  const { storeName, syncKeys, onSync, debugPrefix = '🔄' } = options;
-
-  // Subscribe to the main store key
-  const unsubscribeMain = storageObserver.subscribe(storeName, (change, key) => {
-    const newValue = change.newValue;
-    if (!newValue) return;
-
-    // Only log if there are actual sync conflicts or errors
-
-    // If specific sync keys are defined, only sync those
-    if (syncKeys) {
-      let hasChanges = false;
-      for (const syncKey of syncKeys) {
-        if (newValue[syncKey] !== undefined && store[syncKey] !== newValue[syncKey]) {
-          (store as any)[syncKey] = newValue[syncKey];
-          hasChanges = true;
-        }
-      }
-      if (hasChanges && onSync) {
-        onSync(newValue, key);
-      }
-    } else {
-      // Sync all properties
-      let hasChanges = false;
-      for (const [prop, value] of Object.entries(newValue)) {
-        if (store[prop] !== value) {
-          (store as any)[prop] = value;
-          hasChanges = true;
-        }
-      }
-      if (hasChanges && onSync) {
-        onSync(newValue, key);
-      }
-    }
-  });
-
-  // Subscribe to individual sync keys if specified
-  const unsubscribeKeys: (() => void)[] = [];
-  if (syncKeys) {
-    for (const syncKey of syncKeys) {
-      const unsub = storageObserver.subscribe(syncKey, (change, key) => {
-        const newValue = change.newValue;
-        if (newValue !== undefined && store[syncKey] !== newValue) {
-          (store as any)[syncKey] = newValue;
-          if (onSync) {
-            onSync({ [syncKey]: newValue }, key);
-          }
-        }
-      });
-      unsubscribeKeys.push(unsub);
-    }
-  }
-
-  // Return cleanup function
-  return () => {
-    unsubscribeMain();
-    unsubscribeKeys.forEach(unsub => unsub());
-  };
-}
 
 /**
  * Debounced storage writer to prevent excessive writes

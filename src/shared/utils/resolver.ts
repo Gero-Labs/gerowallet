@@ -10,39 +10,21 @@ import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
 import { debugLog } from '@/utils/debug';
+import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
-// Import assets from a centralized location
-let greenSvg = '';
-let purpleSvg = '';
-let pinkSvg = '';
-let orangeSvg = '';
-let blueSvg = '';
-let greySvg = '';
-let errorImage = '';
-
-if (!isServiceWorker) {
-  try {
-    // Use centralized assets instead of require
-    import('@/utils/assets').then(assets => {
-      greenSvg = assets.default.greenSvg;
-      purpleSvg = assets.default.purpleSvg;
-      pinkSvg = assets.default.pinkSvg;
-      orangeSvg = assets.default.orangeSvg;
-      blueSvg = assets.default.blueSvg;
-      greySvg = assets.default.greySvg;
-      errorImage = assets.default.errorImage;
-    }).catch(e => {
-      console.warn('Failed to load assets:', e);
-    });
-  } catch (e) {
-    // Fallback if imports fail
-    console.warn('Failed to load assets:', e);
-  }
-}
+// Import assets from a centralized location (static import)
+// In service worker context, these will be empty strings and the bundler will tree-shake the unused module
+const greenSvg = isServiceWorker ? '' : assetsModule.greenSvg;
+const purpleSvg = isServiceWorker ? '' : assetsModule.purpleSvg;
+const pinkSvg = isServiceWorker ? '' : assetsModule.pinkSvg;
+const orangeSvg = isServiceWorker ? '' : assetsModule.orangeSvg;
+const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
+const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
+const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
 
 function detectCIDVersion(cidStr: string) {
   try {

@@ -67,7 +67,8 @@ async function getManifest() {
       }
       : {
         service_worker: './background/index.js',
-        type: 'module'
+        // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
+        // This was causing "Failed to resolve module specifier" errors
       },
     permissions: [
       'tabs',

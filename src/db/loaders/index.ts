@@ -46,8 +46,6 @@ export class LoaderFactory {
       'epoch_params',
       new EpochParamsLoader(
         this.walletContext.getBlockchainDb.bind(this.walletContext),
-        this.walletContext.chain,
-        this.walletContext.network
       )
     );
 
