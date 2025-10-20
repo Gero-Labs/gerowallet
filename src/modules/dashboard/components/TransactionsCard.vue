@@ -1,11 +1,9 @@
 <template>
   <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
     <v-card-title class="pb-2 flex-grow-0">
-      <router-link
-        v-if="!isFullList"
-        to="/transactions"
-        style="text-decoration: auto; color: white;"
-      >Transactions</router-link>
+      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white"
+        >Transactions</router-link
+      >
       <span v-else>Transactions</span>
       <v-spacer />
       <!-- Search box -->
@@ -44,7 +42,7 @@
                   <span class="activity-text">{{ getTransactionStatus(item) }}</span>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
-                  <v-tooltip  content-class="custom-tooltip" top>
+                  <v-tooltip content-class="custom-tooltip" top>
                     <template v-slot:activator="{ on, attrs }">
                       <span v-bind="attrs" v-on="on">
                         {{ time.format(new Date(item.tx_timestamp * 1000)) }}
@@ -53,7 +51,7 @@
                     <span>
                       {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}
                       <br v-if="item.epoch_no" />
-                      {{ item.epoch_no ? `Epoch: ${item.epoch_no}` : ''}}
+                      {{ item.epoch_no ? `Epoch: ${item.epoch_no}` : '' }}
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>
@@ -74,7 +72,7 @@
                     class="px-1"
                     color="red"
                     style="margin-right: 4px !important"
-                  >Stake Deregistration</v-chip
+                    >Stake Deregistration</v-chip
                   >
                   <v-chip
                     v-if="isWithdrawal(item)"
@@ -101,7 +99,8 @@
                     x-small
                     color="#E77DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >Cashback</v-chip>
+                    >Cashback</v-chip
+                  >
                   <v-chip
                     v-if="getContactName(item)"
                     outlined
@@ -109,7 +108,8 @@
                     x-small
                     color="#FF9800"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ getContactName(item) }}</v-chip>
+                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ getContactName(item) }}</v-chip
+                  >
                   <v-chip
                     v-if="isInternalTransfer(item)"
                     outlined
@@ -117,7 +117,8 @@
                     x-small
                     color="#9C27B0"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >Internal</v-chip>
+                    >Internal</v-chip
+                  >
                   <v-chip
                     v-if="isStrike(item)"
                     outlined
@@ -125,7 +126,8 @@
                     x-small
                     color="#26FAB0"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >Strike</v-chip>
+                    >Strike</v-chip
+                  >
                   <v-chip
                     v-if="isDexHunter(item)"
                     outlined
@@ -133,7 +135,8 @@
                     x-small
                     color="#007DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >DexHunter</v-chip>
+                    >DexHunter</v-chip
+                  >
                   <v-chip
                     v-if="isMinswap(item)"
                     outlined
@@ -141,7 +144,8 @@
                     x-small
                     color="#89AAFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >Minswap</v-chip>
+                    >Minswap</v-chip
+                  >
                   <v-chip
                     v-if="isJpgStore(item)"
                     outlined
@@ -149,7 +153,8 @@
                     x-small
                     color="#ffdb24"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >jpg.store</v-chip>
+                    >jpg.store</v-chip
+                  >
                   <v-chip
                     v-if="isWingRiders(item)"
                     outlined
@@ -157,7 +162,8 @@
                     x-small
                     color="#e5e7eb"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >WingRiders</v-chip>
+                    >WingRiders</v-chip
+                  >
                   <v-chip
                     v-if="isMuesliSwap(item)"
                     outlined
@@ -165,19 +171,11 @@
                     x-small
                     color="#5B4EFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                  >MuesliSwap</v-chip>
-                  <span
-                    v-if="isVyFi(item)"
-                    class="vyfi-chip"
-                  ></span>
-                  <span
-                    v-if="isSundaeSwap(item)"
-                    class="sundaeswap-chip"
-                  ></span>
-                  <span
-                    v-if="isSplash(item)"
-                    class="splash-chip"
-                  ></span>
+                    >MuesliSwap</v-chip
+                  >
+                  <span v-if="isVyFi(item)" class="vyfi-chip"></span>
+                  <span v-if="isSundaeSwap(item)" class="sundaeswap-chip"></span>
+                  <span v-if="isSplash(item)" class="splash-chip"></span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -210,7 +208,7 @@
                   )
                 }}
               </div>
-              <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap;">
+              <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
                 {{ filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
@@ -241,7 +239,10 @@
         </v-data-table>
       </div>
     </v-card-text>
-    <v-card-actions v-if="!props.isFullList && transactions.length > itemsPerPage" class="pa-0 no-hover text-center justify-center">
+    <v-card-actions
+      v-if="!props.isFullList && transactions.length > itemsPerPage"
+      class="pa-0 no-hover text-center justify-center"
+    >
       <v-pagination
         v-model="currentPage"
         :length="Math.ceil(transactions.length / itemsPerPage)"
@@ -333,7 +334,7 @@ const itemsPerBatch = computed(() => {
 const vmProxy = getCurrentInstance()!.proxy as any;
 const state = computed(() => vmProxy.$route.path);
 
-const transactions = computed(() => {
+const transactions = computed<any[]>(() => {
   const filtered = txs.value.filter((tx: any) => {
     if (search.value) {
       const searchLower = search.value.toLowerCase();
@@ -366,10 +367,10 @@ const transactions = computed(() => {
         ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
         ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
         ('pending'.includes(searchLower) && tx.pending) ||
-        (tx.body?.certificates?.some((cert: any) => {
+        tx.body?.certificates?.some((cert: any) => {
           const certType = cert.__typename;
-          return (certType.toLowerCase().includes(searchLower))
-        }));
+          return certType.toLowerCase().includes(searchLower);
+        });
 
       // Check contact name
       const contactName = getContactName(tx);
@@ -389,7 +390,7 @@ const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
 const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
-  const promises = transactions.map(async (item) => {
+  const promises = transactions.map(async item => {
     const txId = item.id;
 
     // Skip if already loaded
@@ -448,14 +449,19 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
   const baseStatus = getCertificateBaseStatus(certificate.__typename);
 
   // For delegation certificates, try to get enhanced status with pool ticker
-  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
-       certificate.__typename === Cardano.CertificateType.StakeDelegation) && loadPoolData) {
+  if (
+    (certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
+      certificate.__typename === Cardano.CertificateType.StakeDelegation) &&
+    loadPoolData
+  ) {
     const pool = await getPoolByIdFromApi(certificate.poolId);
     if (pool && pool.ticker) {
       return 'Delegating to ' + pool.ticker;
     }
-  } else if ((certificate.__typename === Cardano.CertificateType.Unregistration ||
-              certificate.__typename === Cardano.CertificateType.StakeDeregistration)) {
+  } else if (
+    certificate.__typename === Cardano.CertificateType.Unregistration ||
+    certificate.__typename === Cardano.CertificateType.StakeDeregistration
+  ) {
     return 'Stake Deregistration';
   }
 
@@ -577,11 +583,7 @@ const resetInfiniteScroll = async () => {
   // Clear cached transaction statuses
   transactionStatuses.value = {};
 
-  if (props.isFullList) {
-    await loadMoreTransactions();
-  } else {
-    await loadMoreTransactions();
-  }
+  await loadMoreTransactions();
 };
 
 // Watch for search term changes to reset infinite scroll
@@ -598,11 +600,11 @@ watch(
 // Only reset if the transaction count changes (not for status updates)
 const transactionCount = ref(0);
 watch(
-  () => transactions.value.length,
-  async (newCount, oldCount) => {
+  () => transactions.value,
+  async (newTransactions, oldTransactions) => {
     // Only reset if transaction count actually changed
-    if (newCount !== oldCount || newCount !== transactionCount.value) {
-      transactionCount.value = newCount;
+    if (newTransactions !== oldTransactions || newTransactions.length !== transactionCount.value) {
+      transactionCount.value = newTransactions.length;
       await resetInfiniteScroll();
 
       // Recreate intersection observer after reset
@@ -615,7 +617,8 @@ watch(
         setupIntersectionObserver();
       }
     }
-  }
+  },
+  { deep: true }
 );
 
 // Setup intersection observer for infinite scroll
@@ -690,7 +693,7 @@ const isWithdrawal = item => {
   );
 };
 
-const getContactName = (item) => {
+const getContactName = item => {
   // Check if contacts are available (contacts is an object, not an array)
   if (!contacts.value || !item.utxo) {
     return null;
@@ -710,23 +713,23 @@ const getContactName = (item) => {
   }
 
   // Check inputs for contact addresses
-  for (const input of (item.utxo.inputs || [])) {
+  for (const input of item.utxo.inputs || []) {
     if (contactMap.has(input.address)) {
       return contactMap.get(input.address);
     }
   }
 
   // Check outputs for contact addresses
-  for (const output of (item.body?.outputs || [])) {
+  for (const output of item.body?.outputs || []) {
     if (contactMap.has(output.address)) {
       return contactMap.get(output.address);
     }
   }
 
   return null;
-}
+};
 
-const isInternalTransfer = (item) => {
+const isInternalTransfer = item => {
   // Check if keys are available
   if (!keys.value || !item.utxo) {
     return false;
@@ -759,20 +762,16 @@ const isInternalTransfer = (item) => {
   }
 
   // Check all input addresses
-  const allInputsInternal = item.utxo.inputs?.every((input: any) =>
-    walletAddresses.has(input.address)
-  );
+  const allInputsInternal = item.utxo.inputs?.every((input: any) => walletAddresses.has(input.address));
 
   // Check all output addresses
-  const allOutputsInternal = item.body?.outputs?.every((output: any) =>
-    walletAddresses.has(output.address)
-  );
+  const allOutputsInternal = item.body?.outputs?.every((output: any) => walletAddresses.has(output.address));
 
   // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
   return allInputsInternal && allOutputsInternal;
-}
+};
 
-const isStrike = (item) => {
+const isStrike = item => {
   // Strike Finance perpetual trading transactions
   const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
   const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
@@ -783,63 +782,64 @@ const isStrike = (item) => {
     item.body?.outputs?.some((output: any) => output.address === STRIKE_CONTRACT_ADDRESS);
 
   // Check for Strike script hash in witness (indicates contract execution)
-  const hasStrikeScript = item.witness?.scripts?.some(script =>
-    Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
+  const hasStrikeScript = item.witness?.scripts?.some(
+    script => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
   );
 
   // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
   return hasStrikeAddress || hasStrikeScript;
-}
+};
 
-const isDexHunter = (item) => {
+const isDexHunter = item => {
   // Check for DexHunter order contract address (primary indicator)
-  const DEXHUNTER_ORDER_ADDRESS = 'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
+  const DEXHUNTER_ORDER_ADDRESS =
+    'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
   const hasDexHunterOrderAddress =
     item.utxo?.inputs?.some((input: any) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
     item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_ORDER_ADDRESS);
 
   // Check for DexHunter fee address (indicates completed trade)
-  const DEXHUNTER_FEE_ADDRESS = 'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
-  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) =>
-    output.address === DEXHUNTER_FEE_ADDRESS
-  );
+  const DEXHUNTER_FEE_ADDRESS =
+    'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
+  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_FEE_ADDRESS);
 
   // Check metadata for DexHunter Trade message (indicates trade execution)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
-  const hasDexHunterMetadata = msg && Array.isArray(msg)
-    ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter'))
-    : false;
+  const hasDexHunterMetadata =
+    msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
 
   // Only tag as DexHunter if there's actual platform interaction
   return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata;
-}
+};
 
-const isMinswap = (item) => {
+const isMinswap = item => {
   // Minswap V1 addresses
   const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
-  const MINSWAP_V1_LIMIT_ORDER_ADDRESS = 'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
+  const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
+    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
 
   // Minswap V2 order contract address
-  const MINSWAP_V2_ORDER_ADDRESS = 'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
+  const MINSWAP_V2_ORDER_ADDRESS =
+    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
 
   // Check for Minswap order contract addresses (indicates DEX interaction)
   const hasMinswapOrderAddress =
-    item.utxo?.inputs?.some((input: any) =>
-      input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
-      input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
-      input.address === MINSWAP_V2_ORDER_ADDRESS
+    item.utxo?.inputs?.some(
+      (input: any) =>
+        input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
+        input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
+        input.address === MINSWAP_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some((output: any) =>
-      output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
-      output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
-      output.address === MINSWAP_V2_ORDER_ADDRESS
+    item.body?.outputs?.some(
+      (output: any) =>
+        output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
+        output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
+        output.address === MINSWAP_V2_ORDER_ADDRESS
     );
 
   // Check for Minswap metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
-  const hasMinswapMetadata = msg && Array.isArray(msg)
-    ? msg.some((m: string) => m.includes('Minswap'))
-    : false;
+  const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
 
   // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMinswapInOutputDatum = item.body?.outputs?.some((output: any) =>
@@ -853,45 +853,45 @@ const isMinswap = (item) => {
 
   // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
   return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum;
-}
+};
 
-const isJpgStore = (item) => {
+const isJpgStore = item => {
   // Check for jpg.store marketplace script address
-  const JPGSTORE_SCRIPT_ADDRESS = 'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
+  const JPGSTORE_SCRIPT_ADDRESS =
+    'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
 
   // Check for jpg.store Ask V1 Contract address (inputs only)
-  const JPGSTORE_ASK_V1_ADDRESS = 'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
+  const JPGSTORE_ASK_V1_ADDRESS =
+    'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
 
   const hasJpgStoreAddress =
-    item.utxo?.inputs?.some((input: any) =>
-      input.address === JPGSTORE_SCRIPT_ADDRESS ||
-      input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) ||
-    item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+    item.utxo?.inputs?.some(
+      (input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
+    ) || item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
-  const hasJpgStoreMetadata = item.auxiliaryData?.blob && (
-    item.auxiliaryData.blob[0] ||
-    item.auxiliaryData.blob[1] ||
-    item.auxiliaryData.blob[2] ||
-    item.auxiliaryData.blob[3] ||
-    item.auxiliaryData.blob[4] ||
-    item.auxiliaryData.blob[5] ||
-    item.auxiliaryData.blob[6] ||
-    item.auxiliaryData.blob[7] ||
-    item.auxiliaryData.blob[8] ||
-    item.auxiliaryData.blob[9] ||
-    item.auxiliaryData.blob[10] ||
-    item.auxiliaryData.blob[30]
-  );
+  const hasJpgStoreMetadata =
+    item.auxiliaryData?.blob &&
+    (item.auxiliaryData.blob[0] ||
+      item.auxiliaryData.blob[1] ||
+      item.auxiliaryData.blob[2] ||
+      item.auxiliaryData.blob[3] ||
+      item.auxiliaryData.blob[4] ||
+      item.auxiliaryData.blob[5] ||
+      item.auxiliaryData.blob[6] ||
+      item.auxiliaryData.blob[7] ||
+      item.auxiliaryData.blob[8] ||
+      item.auxiliaryData.blob[9] ||
+      item.auxiliaryData.blob[10] ||
+      item.auxiliaryData.blob[30]);
 
   // Check for datum hash (indicating a marketplace listing)
   const hasDatumHash = item.body?.outputs?.some((output: any) => output.datumHash);
 
   return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash);
-}
+};
 
-const isWingRiders = (item) => {
+const isWingRiders = item => {
   // WingRiders V1 order address
   const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
 
@@ -900,60 +900,67 @@ const isWingRiders = (item) => {
 
   // Check for WingRiders order contract addresses (indicates DEX interaction)
   const hasWingRidersOrderAddress =
-    item.utxo?.inputs?.some((input: any) =>
-      input.address === WINGRIDERS_V1_ORDER_ADDRESS ||
-      input.address === WINGRIDERS_V2_ORDER_ADDRESS
+    item.utxo?.inputs?.some(
+      (input: any) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some((output: any) =>
-      output.address === WINGRIDERS_V1_ORDER_ADDRESS ||
-      output.address === WINGRIDERS_V2_ORDER_ADDRESS
+    item.body?.outputs?.some(
+      (output: any) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
     );
 
   // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
-  const hasWingRidersV1InDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
-  ) || item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
-  );
+  const hasWingRidersV1InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
+    );
 
   // Check for WingRiders V2 pool validity asset policy in datum CBOR (indicates pool interaction)
-  const hasWingRidersV2InDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
-  ) || item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
-  );
+  const hasWingRidersV2InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
+    );
 
   return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum;
-}
+};
 
-const isVyFi = (item) => {
+const isVyFi = item => {
   // Check for VyFi metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
   return typeof msg === 'string' && msg.includes('VyFi');
-}
+};
 
-const isSundaeSwap = (item) => {
+const isSundaeSwap = item => {
   // SundaeSwap V1 addresses
   const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
   const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
 
   // SundaeSwap V3 pool address (primary indicator)
-  const SUNDAESWAP_V3_POOL_ADDRESS = 'addr1x8srqftqemf0mjlukfszd97ljuxdp44r372txfcr75wrz26rnxqnmtv3hdu2t6chcfhl2zzjh36a87nmd6dwsu3jenqsslnz7e';
+  const SUNDAESWAP_V3_POOL_ADDRESS =
+    'addr1x8srqftqemf0mjlukfszd97ljuxdp44r372txfcr75wrz26rnxqnmtv3hdu2t6chcfhl2zzjh36a87nmd6dwsu3jenqsslnz7e';
 
   // Check for SundaeSwap contract addresses (indicates DEX interaction)
-  return item.utxo?.inputs?.some((input: any) =>
-      input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
-      input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
-      input.address === SUNDAESWAP_V3_POOL_ADDRESS
+  return (
+    item.utxo?.inputs?.some(
+      (input: any) =>
+        input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
+        input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
+        input.address === SUNDAESWAP_V3_POOL_ADDRESS
     ) ||
-    item.body?.outputs?.some((output: any) =>
-      output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
-      output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
-      output.address === SUNDAESWAP_V3_POOL_ADDRESS
-    );
-}
+    item.body?.outputs?.some(
+      (output: any) =>
+        output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
+        output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
+        output.address === SUNDAESWAP_V3_POOL_ADDRESS
+    )
+  );
+};
 
-const isSplash = (item) => {
+const isSplash = item => {
   // Splash DEX batcher key (primary indicator)
   const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
 
@@ -961,21 +968,18 @@ const isSplash = (item) => {
   const SPLASH_ORDER_SCRIPT_HASH = '464eeee89f05aff787d40045af2a40a83fd96c513197d32fbc54ff02';
 
   // Check for Splash batcher key in required signatures (indicates DEX interaction)
-  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some(
-    (sig: any) => sig === SPLASH_BATCHER_KEY
-  );
+  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some((sig: any) => sig === SPLASH_BATCHER_KEY);
 
   // Check for Splash order script in witness scripts
-  const hasSplashScript = item.witness?.scripts?.some(
-    (script: any) => script?.hash === SPLASH_ORDER_SCRIPT_HASH
-  );
+  const hasSplashScript = item.witness?.scripts?.some((script: any) => script?.hash === SPLASH_ORDER_SCRIPT_HASH);
 
   return hasSplashBatcherKey || hasSplashScript;
-}
+};
 
-const isMuesliSwap = (item) => {
+const isMuesliSwap = item => {
   // MuesliSwap order address
-  const MUESLISWAP_ORDER_ADDRESS = 'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
+  const MUESLISWAP_ORDER_ADDRESS =
+    'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
 
   // Check for MuesliSwap order contract address (indicates DEX interaction)
   const hasMuesliSwapOrderAddress =
@@ -983,18 +987,22 @@ const isMuesliSwap = (item) => {
     item.body?.outputs?.some((output: any) => output.address === MUESLISWAP_ORDER_ADDRESS);
 
   // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMuesliSwapV1InDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
-  ) || item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
-  );
+  const hasMuesliSwapV1InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
+    );
 
   // Check for MuesliSwap V2 pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMuesliSwapV2InDatum = item.witness?.datums?.some((datum: any) =>
-    datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
-  ) || item.body?.outputs?.some((output: any) =>
-    output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
-  );
+  const hasMuesliSwapV2InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
+    );
 
   // Check for MuesliSwap factory token in assets (indicates pool interaction)
   const hasMuesliSwapFactoryToken = item.assets?.some((asset: any) =>
@@ -1002,14 +1010,16 @@ const isMuesliSwap = (item) => {
   );
 
   return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken;
-}
+};
 
-const isCashback = (item) => {
-  return !!item.utxo?.inputs?.some(input => [
-    'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
-    'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd'
-  ].includes(input.address));
-}
+const isCashback = item => {
+  return !!item.utxo?.inputs?.some(input =>
+    [
+      'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
+      'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd',
+    ].includes(input.address)
+  );
+};
 
 const isStakeRegistration = item => {
   return (
@@ -1496,7 +1506,7 @@ onUnmounted(() => {
   bottom: 0;
   border-radius: 12px;
   padding: 1px;
-  background: linear-gradient(90deg, #0059FF, #00FFF6);
+  background: linear-gradient(90deg, #0059ff, #00fff6);
   -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
   -webkit-mask-clip: content-box, padding-box;
   -webkit-mask-composite: xor;
@@ -1511,7 +1521,7 @@ onUnmounted(() => {
   z-index: 1;
   padding: 0 4px;
   display: inline-block;
-  background: linear-gradient(90deg, #0059FF, #00FFF6);
+  background: linear-gradient(90deg, #0059ff, #00fff6);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
