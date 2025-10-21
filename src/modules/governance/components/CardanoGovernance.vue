@@ -319,7 +319,9 @@ const { transactions: txs } = toRefs(walletStore);
 const currentDrepTxIsPending = computed(() => {
   const pendingTx = txs.value?.find(tx => tx.pending);
   const isDrepTx = pendingTx?.body.certificates.some(
-    cert => cert.__typename === Cardano.CertificateType.VoteDelegation
+    cert =>
+      cert.__typename === Cardano.CertificateType.VoteDelegation ||
+      cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation
   );
   return !!isDrepTx;
 });
