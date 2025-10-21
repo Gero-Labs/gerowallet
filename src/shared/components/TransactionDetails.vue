@@ -960,7 +960,6 @@ const txAssets = computed(() => {
 });
 
 const receivedAssets = computed(() => {
-  console.log(props.transactionInfo)
   const assts = props.transactionInfo['assets']
     .filter((asset: any) => asset.policy_id !== '')
     .map((asset: any) => {
