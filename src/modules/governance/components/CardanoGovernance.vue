@@ -317,8 +317,6 @@ const { currentDRep } = toRefs(governanceStoreActions.state);
 const { transactions: txs } = toRefs(walletStore);
 
 const currentDrepTxIsPending = computed(() => {
-  console.log(currentDRep.value, 'currentDRep');
-  console.log(' txs.value?.[0].status', txs.value?.[0]);
   const pendingTx = txs.value?.find(tx => tx.pending);
   const isDrepTx = pendingTx?.body.certificates.some(
     cert => cert.__typename === Cardano.CertificateType.VoteDelegation
