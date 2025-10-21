@@ -489,7 +489,7 @@ const delegate = async () => {
         __typename: 'AlwaysAbstain',
       } as Cardano.AlwaysAbstain;
     } else if (delegationModel.value === 'No Confidence') {
-      dRep = dRep = {
+      dRep = {
         __typename: 'AlwaysNoConfidence',
       } as Cardano.AlwaysNoConfidence;
     } else if (delegationModel.value === 'Gero DRep') {
