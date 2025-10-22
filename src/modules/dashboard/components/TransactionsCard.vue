@@ -384,8 +384,15 @@ const transactions = computed<any[]>(() => {
     return tx;
   });
 
-  // Sort by timestamp descending (most recent first)
-  return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  // Calculate ada field dynamically and sort by timestamp descending (most recent first)
+  return filtered
+    .map(tx => {
+      // Calculate ada amount from received and sent amounts
+      // This ensures the field is always up-to-date even after UTXO refreshes
+      const ada = (tx.receivedAmount || 0) - (tx.sentAmount || 0);
+      return { ...tx, ada };
+    })
+    .sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
 // Store for transaction statuses with loaded pool data
