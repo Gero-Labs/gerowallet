@@ -40,6 +40,12 @@
               <v-list-item-content class="px-0 py-1">
                 <v-list-item-title class="activity-title">
                   <span class="activity-text">{{ getTransactionStatus(item) }}</span>
+                  <v-tooltip v-if="item.pending" content-class="custom-tooltip" top>
+                    <template v-slot:activator="{ on, attrs }">
+                      <span v-bind="attrs" v-on="on" class="pending-indicator"></span>
+                    </template>
+                    <span>Transaction pending confirmation</span>
+                  </v-tooltip>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
                   <v-tooltip content-class="custom-tooltip" top>
@@ -82,15 +88,6 @@
                     color="blue"
                     style="margin-right: 4px !important"
                     >Withdrawal</v-chip
-                  >
-                  <v-chip
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#FEC84B"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    v-if="item.pending"
-                    >Pending</v-chip
                   >
                   <v-chip
                     v-if="isCashback(item)"
@@ -199,7 +196,7 @@
               >
                 {{
                   filters.toCurrency(
-                    item.ada,
+                    item.ada ?? 0,
                     true,
                     0,
                     networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
@@ -209,7 +206,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{ filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
@@ -437,6 +434,10 @@ const getCertificateBaseStatus = (certificateType: string): string => {
       return 'DRep Registration';
     case Cardano.CertificateType.VoteDelegation:
       return 'Vote Delegation';
+    case Cardano.CertificateType.VoteRegistrationDelegation:
+      return 'Vote Registration & Delegation';
+    case Cardano.CertificateType.StakeVoteRegistrationDelegation:
+      return 'Stake & Vote Registration';
     case Cardano.CertificateType.UnregisterDelegateRepresentative:
       return 'DRep Deregistration';
     default:
@@ -471,7 +472,7 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 // Add fund transfer status if applicable
 const addFundTransferStatus = (item: any, statuses: string[]): void => {
   // Skip if transaction has certificates (delegation, registration, etc.)
-  if (item.body?.certificates) {
+  if (item.body?.certificates && item.body.certificates.length > 0) {
     return;
   }
 
@@ -600,11 +601,11 @@ watch(
 // Only reset if the transaction count changes (not for status updates)
 const transactionCount = ref(0);
 watch(
-  () => transactions.value,
-  async (newTransactions, oldTransactions) => {
+  () => transactions.value.length,
+  async (newLength, oldLength) => {
     // Only reset if transaction count actually changed
-    if (newTransactions !== oldTransactions || newTransactions.length !== transactionCount.value) {
-      transactionCount.value = newTransactions.length;
+    if (newLength !== oldLength) {
+      transactionCount.value = newLength;
       await resetInfiniteScroll();
 
       // Recreate intersection observer after reset
@@ -617,6 +618,29 @@ watch(
         setupIntersectionObserver();
       }
     }
+  }
+);
+
+// Watch for changes in transaction data (e.g., pending status updates)
+// This updates displayed transactions without clearing the table
+watch(
+  () => transactions.value,
+  (newTransactions, oldTransactions) => {
+    // Only update if it's a data change (not a count change)
+    if (newTransactions.length === oldTransactions?.length) {
+      // Update displayed transactions to reflect changes (like pending -> confirmed)
+      if (!props.isFullList) {
+        // Pagination mode - update the current page
+        const start = (currentPage.value - 1) * itemsPerPage.value;
+        const end = start + itemsPerPage.value;
+        displayedTransactions.value = transactions.value.slice(start, end);
+      } else {
+        // Infinite scroll mode - update existing items while maintaining scroll position
+        const currentLength = displayedTransactions.value.length;
+        displayedTransactions.value = transactions.value.slice(0, currentLength);
+      }
+    }
+    // If length changed, the other watcher will handle it
   },
   { deep: true }
 );
@@ -1542,6 +1566,29 @@ onUnmounted(() => {
 
   .table-container {
     max-height: calc(100vh - 150px);
+  }
+}
+
+/* Pending indicator - pulsing yellow circle */
+.pending-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #FEC84B;
+  margin-left: 6px;
+  animation: pulse-pending 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-pending {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
   }
 }
 </style>
