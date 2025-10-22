@@ -27,13 +27,13 @@
                         {{ delegatingTo }}
                       </v-list-item-title>
                       <v-list-item-subtitle
-                        v-if="currentDRep && !currentDrepTxIsPending"
+                        v-if="currentDRep && !currentDrepTxIsPending && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
                         class="white--text font-weight-semibold"
                       >
                         {{ truncate(currentDRep.drep_id) }}<CopyButton small :value="currentDRep.drep_id"></CopyButton>
                       </v-list-item-subtitle>
                       <v-list-item-subtitle
-                        v-if="currentDRep && !currentDrepTxIsPending"
+                        v-if="currentDRep && !currentDrepTxIsPending && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
                         class="gradient-text text-subtitle-2 font-weight-semibold"
                       >
                         Voting Power:
