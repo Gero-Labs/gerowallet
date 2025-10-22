@@ -4,6 +4,9 @@ import { walletStore } from '@/stores/walletStore';
 import { getTimeframeBasedOnExpiry } from '@/shared/utils/timeframe';
 import { debugLog } from '@/utils/debug';
 
+// TypeScript types for portfolio data points
+export type PortfolioDataPoint = [timestamp: number, value: number];
+
 export interface PortfolioChartsEntry {
   id?: number;
   address: string;
@@ -101,7 +104,7 @@ export class PortfolioCacheService {
   /**
    * Professional data merging with deduplication and validation
    */
-  private mergePortfolioData(existingData: any[], newData: any[]): any[] {
+  private mergePortfolioData(existingData: PortfolioDataPoint[], newData: PortfolioDataPoint[]): PortfolioDataPoint[] {
     const dataMap = new Map<number, number>();
 
     // Add existing data first (preserve history)
@@ -120,14 +123,14 @@ export class PortfolioCacheService {
 
     // Convert to sorted array
     return Array.from(dataMap.entries())
-      .map(([timestamp, value]) => [timestamp, value])
+      .map(([timestamp, value]): PortfolioDataPoint => [timestamp, value])
       .sort((a, b) => a[0] - b[0]);
   }
 
   /**
    * Get cached portfolio data for address and currency
    */
-  async getCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[] | null> {
+  async getCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[] | null> {
     if (!this.enableCache || !address) {
       return null;
     }
@@ -205,7 +208,7 @@ export class PortfolioCacheService {
   /**
    * Save portfolio data to cache
    */
-  async saveToCache(address: string, currency: 'ADA' | 'USD' | 'EUR', data: any[]): Promise<void> {
+  async saveToCache(address: string, currency: 'ADA' | 'USD' | 'EUR', data: PortfolioDataPoint[]): Promise<void> {
     if (!this.enableCache || !address || !data) {
       return;
     }
@@ -420,15 +423,41 @@ export class PortfolioCacheService {
   /**
    * Load portfolio data with caching
    */
-  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> {
+  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
     if (!address) {
       return [];
     }
 
     // Check cache first
     const cachedData = await this.getCachedData(address, currency);
-    if (cachedData) {
-      return cachedData;
+
+    // If we have valid cached data, check if it's recent enough
+    if (cachedData && cachedData.length > 0) {
+      // Validate data points before processing
+      const validData = cachedData.filter(point =>
+        Array.isArray(point) &&
+        typeof point[0] === 'number' &&
+        !isNaN(point[0]) &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[1])
+      );
+
+      if (validData.length === 0) {
+        debugLog('No valid data points in cache, fetching fresh data');
+        return null;
+      }
+
+      // Find the latest timestamp in cached data using Math.max for better performance
+      const maxCachedTimestamp = Math.max(...validData.map(point => point[0]));
+
+      const now = Date.now();
+      const cacheAgeMinutes = (now - maxCachedTimestamp) / (1000 * 60);
+
+      // If cache is fresh (less than 15 minutes old), use it
+      if (cacheAgeMinutes < 15) {
+        return validData;
+      }
+      // Cache is stale, continue to fetch fresh data below
     }
 
 
@@ -527,9 +556,9 @@ export class PortfolioCacheService {
    * Load all portfolio data for address with smart caching
    */
   async loadAllPortfolioData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     if (!address) {
       return { adaData: [], usdData: [], eurData: [] };
@@ -650,9 +679,9 @@ export class PortfolioCacheService {
    * Refresh portfolio data (ignores cache)
    */
   async refreshPortfolioData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     await this.clearAddressCache(address);
     return this.loadAllPortfolioData(address);
@@ -765,7 +794,7 @@ export class PortfolioCacheService {
   /**
    * Force load specific currency data (ignores cache)
    */
-  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> {
+  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
     try {
       // Determine timeframe based on existing expired data before removing it
       let timeframe = 'all'; // default
@@ -856,9 +885,9 @@ export class PortfolioCacheService {
    * Load missing data only (doesn't touch the existing cache)
    */
   async loadMissingData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     const status = await this.getCacheStatus(address);
     const currenciesToLoad: ('ADA' | 'USD' | 'EUR')[] = [];
