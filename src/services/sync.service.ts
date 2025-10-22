@@ -344,6 +344,7 @@ export class SyncService {
                   tx_timestamp: txCbor.tx_timestamp || tx.block_time,
                   tx_size: txCbor.tx_size,
                   cbor: txCbor.cbor,
+                  pending: false, // Transactions from blockchain are confirmed (not pending)
                   ...txDeserialized,
                 }
               })
