@@ -948,7 +948,11 @@ const getFingerprint = (asset: any) => {
 
 const txAssets = computed(() => {
   if (props.transactionInfo) {
-    return [...props.transactionInfo['receivedAssets'], ...props.transactionInfo['sentAssets']]
+    // Guard against missing asset arrays (pending transactions may not have these fields yet)
+    const receivedAssets = props.transactionInfo['receivedAssets'] || [];
+    const sentAssets = props.transactionInfo['sentAssets'] || [];
+
+    return [...receivedAssets, ...sentAssets]
       .filter((asset: any) => asset.policy_id !== '')
       .reduce((map: Record<string, any>, asset: any) => {
         map[asset.unit] = resolveAsset(asset);
@@ -960,8 +964,8 @@ const txAssets = computed(() => {
 });
 
 const receivedAssets = computed(() => {
-  // Safety check: return empty array if assets is undefined
-  if (!props.transactionInfo['assets']) {
+  // Guard against undefined assets (pending transactions may not have this field yet)
+  if (!props.transactionInfo['assets'] || !Array.isArray(props.transactionInfo['assets'])) {
     return [];
   }
 

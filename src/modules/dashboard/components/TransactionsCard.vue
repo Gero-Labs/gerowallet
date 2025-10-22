@@ -195,24 +195,18 @@
                 }"
               >
                 {{
-                  item.ada !== undefined && !isNaN(item.ada)
-                    ? filters.toCurrency(
-                        item.ada,
-                        true,
-                        0,
-                        networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
-                        '',
-                        false
-                      )
-                    : '+ $0'
+                  filters.toCurrency(
+                    item.ada ?? 0,
+                    true,
+                    0,
+                    networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
+                    '',
+                    false
+                  )
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{
-                  item.ada !== undefined && !isNaN(item.ada)
-                    ? filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6)
-                    : '$0.00'
-                }}
+                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
@@ -384,15 +378,8 @@ const transactions = computed<any[]>(() => {
     return tx;
   });
 
-  // Calculate ada field dynamically and sort by timestamp descending (most recent first)
-  return filtered
-    .map(tx => {
-      // Calculate ada amount from received and sent amounts
-      // This ensures the field is always up-to-date even after UTXO refreshes
-      const ada = (tx.receivedAmount || 0) - (tx.sentAmount || 0);
-      return { ...tx, ada };
-    })
-    .sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  // Sort by timestamp descending (most recent first)
+  return filtered.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 });
 
 // Store for transaction statuses with loaded pool data
