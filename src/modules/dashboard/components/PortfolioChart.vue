@@ -113,7 +113,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, toRefs } from 'vue';
+import { computed, onMounted, ref, watch, toRefs, nextTick } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';
@@ -221,19 +221,25 @@ const isRefreshing = ref(false);
 // Portfolio mode: 'full' (TapTools) or 'ada-only' (UTXO)
 const portfolioMode = ref<'full' | 'ada-only'>('full');
 
-// Load portfolio mode preference from localStorage
+// Load portfolio mode preference from localStorage (scoped to wallet ID)
 const loadPortfolioMode = (): 'full' | 'ada-only' => {
   try {
-    return (localStorage.getItem('portfolioMode') as 'full' | 'ada-only') || 'full';
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'full';
+    const storageKey = `portfolioMode_${walletId}`;
+    return (localStorage.getItem(storageKey) as 'full' | 'ada-only') || 'full';
   } catch {
     return 'full';
   }
 };
 
-// Save portfolio mode preference to localStorage
+// Save portfolio mode preference to localStorage (scoped to wallet ID)
 const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
   try {
-    localStorage.setItem('portfolioMode', mode);
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioMode_${walletId}`;
+    localStorage.setItem(storageKey, mode);
   } catch {
     // Silently fail if localStorage is not available
   }
@@ -243,18 +249,16 @@ const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
 portfolioMode.value = loadPortfolioMode();
 
 // Toggle portfolio mode
-const togglePortfolioMode = () => {
+const togglePortfolioMode = async () => {
   portfolioMode.value = portfolioMode.value === 'full' ? 'ada-only' : 'full';
   savePortfolioMode(portfolioMode.value);
 
   // Force chart reload
   chartKey.value += 1;
-  createTimeout(() => {
-    loadChart();
-    createTimeout(() => {
-      handleTabClick(tab.value);
-    }, 100);
-  }, 50);
+  await nextTick();
+  loadChart();
+  await nextTick();
+  handleTabClick(tab.value);
 };
 
 // Handle refresh button click
@@ -268,10 +272,13 @@ const handleRefresh = async () => {
   }, 500);
 };
 
-// Load tab preference from localStorage or default to WEEK (7D)
+// Load tab preference from localStorage or default to WEEK (7D) (scoped to wallet ID)
 const loadPortfolioTabSetting = (): string => {
   try {
-    return localStorage.getItem('portfolioTab') || 'WEEK';
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'WEEK';
+    const storageKey = `portfolioTab_${walletId}`;
+    return localStorage.getItem(storageKey) || 'WEEK';
   } catch {
     return 'WEEK';
   }
@@ -280,10 +287,13 @@ const isReadyToRender = computed(() => {
   return hasAnyChartData.value && !globalLoading.value;
 });
 
-// Save tab preference to localStorage
+// Save tab preference to localStorage (scoped to wallet ID)
 const savePortfolioTabSetting = (tabValue: string): void => {
   try {
-    localStorage.setItem('portfolioTab', tabValue);
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioTab_${walletId}`;
+    localStorage.setItem(storageKey, tabValue);
   } catch {
     // Silently fail if localStorage is not available
   }

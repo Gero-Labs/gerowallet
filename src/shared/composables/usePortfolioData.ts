@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import { PortfolioCacheService } from '@/db/portfolio-cache';
+import { PortfolioCacheService, PortfolioDataPoint } from '@/db/portfolio-cache';
 
 interface UsePortfolioDataOptions {
   cacheTimeMs?: number; // Cache time in milliseconds, default 1 minute for testing
@@ -24,9 +24,9 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   const loadingEur = ref(false);
 
   // Data refs
-  const adaData = ref<any[]>([]);
-  const usdData = ref<any[]>([]);
-  const eurData = ref<any[]>([]);
+  const adaData = ref<PortfolioDataPoint[]>([]);
+  const usdData = ref<PortfolioDataPoint[]>([]);
+  const eurData = ref<PortfolioDataPoint[]>([]);
 
   // Track loading order
   const loadingOrder = ref<Array<'ADA' | 'USD' | 'EUR'>>([]);
@@ -45,24 +45,30 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   // CRITICAL FIX: Find the data point with the MAXIMUM timestamp to ensure we get the most recent value
   // This fixes the issue where cached/merged data might not be properly sorted
   const latestPortfolioValues = computed(() => {
-    const getLatestValue = (data: any[], currency: string): number | null => {
+    const getLatestValue = (data: PortfolioDataPoint[], currency: string): number | null => {
       if (!data || data.length === 0) return null;
 
-      // Find the data point with the maximum timestamp (most recent)
-      let maxTimestamp = -Infinity;
-      let latestValue = null;
+      // Find the data point with the maximum timestamp (most recent) using Math.max for better performance
+      // Add validation to ensure data points are valid before processing
+      const validData = data.filter(point =>
+        Array.isArray(point) &&
+        typeof point[0] === 'number' &&
+        !isNaN(point[0]) &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[1])
+      );
 
-      for (const point of data) {
-        if (point[0] > maxTimestamp) {
-          maxTimestamp = point[0];
-          latestValue = point[1];
-        }
-      }
+      if (validData.length === 0) return null;
 
-      // Check if data is stale (older than 30 minutes) and return null to trigger fallback
+      const timestamps = validData.map(point => point[0]);
+      const maxTimestamp = Math.max(...timestamps);
+      const maxIndex = timestamps.indexOf(maxTimestamp);
+      const latestValue = maxIndex !== -1 ? validData[maxIndex][1] : null;
+
+      // Check if data is stale (older than 15 minutes to match cache service) and return null to trigger fallback
       const now = Date.now();
-      const thirtyMinutesAgo = now - (30 * 60 * 1000);
-      const isStale = maxTimestamp < thirtyMinutesAgo;
+      const fifteenMinutesAgo = now - (15 * 60 * 1000);
+      const isStale = maxTimestamp < fifteenMinutesAgo;
 
       // If data is stale, return null to force fallback to computedValues
       if (isStale) {
@@ -80,7 +86,7 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   });
 
   // Load portfolio data for specific currency
-  const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> => {
+  const loadPortfolioData = async (address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> => {
     if (!address) {
       console.warn('No address provided for portfolio data');
       return [];
