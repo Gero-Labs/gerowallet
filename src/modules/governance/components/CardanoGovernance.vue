@@ -357,10 +357,20 @@ const search = ref('');
  * Tracks UTXOs that have been spent on the blockchain but still exist in wallet state.
  * When a transaction fails with BadInputsUTxO error, the UTXO is added here and
  * filtered out from subsequent transaction building attempts.
- * Uses a Set for O(1) lookup performance.
+ * Uses a Set for O(1) lookup performance and persists to localStorage.
  * This prevents repeated failures and provides better UX without forcing wallet resync.
  */
-const spentUtxos = ref<Set<string>>(new Set());
+const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+const loadSpentUtxos = (): Set<string> => {
+  try {
+    const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch (e) {
+    console.warn('Failed to load spent UTXOs from localStorage:', e);
+    return new Set();
+  }
+};
+const spentUtxos = ref<Set<string>>(loadSpentUtxos());
 const drepsHeaders = [
   { text: 'ID', sortable: false, align: 'transparent', value: 'id' },
   { text: 'Name', sortable: true, align: 'left', value: 'name' },
@@ -650,22 +660,35 @@ const drepDelegate = async (row: any) => {
 /**
  * Marks a UTXO as spent to prevent it from being used in future transactions.
  * Called from DRepDelegateDialog when a transaction fails with BadInputsUTxO error.
+ * Persists to localStorage to survive page refreshes.
  *
  * @param utxoId - The UTXO identifier in format "txHash#index" (e.g., "abc123...#0")
  */
 const markUtxoAsSpent = (utxoId: string) => {
   spentUtxos.value.add(utxoId);
+  // Persist to localStorage
+  try {
+    localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(Array.from(spentUtxos.value)));
+  } catch (e) {
+    console.warn('Failed to save spent UTXOs to localStorage:', e);
+  }
   console.log('✅ Marked UTXO as spent:', utxoId);
 };
 
 /**
  * Clears the spent UTXOs list after a successful transaction.
  * This cleanup ensures we don't indefinitely track spent UTXOs after the wallet syncs.
+ * Also clears from localStorage.
  */
 const clearSpentUtxos = () => {
   if (spentUtxos.value.size > 0) {
     console.log('🧹 Clearing spent UTXOs list');
     spentUtxos.value.clear();
+    try {
+      localStorage.removeItem(SPENT_UTXOS_KEY);
+    } catch (e) {
+      console.warn('Failed to clear spent UTXOs from localStorage:', e);
+    }
   }
 };
 
