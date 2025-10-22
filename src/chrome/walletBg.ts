@@ -662,11 +662,9 @@ export class WalletBg {
           if (txsToUpdate.length > 0) {
             debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
-
-            // Reload all transactions from database and update store
-            // This ensures the UI reflects pending status changes
-            const allTransactions = await txsTable.toArray();
-            WalletStore.setTransactions(allTransactions);
+            // Note: Don't manually call WalletStore.setTransactions here.
+            // The database subscription in walletLoader.ts will automatically trigger
+            // and properly calculate derived fields (ada, assets, etc.) for ALL transactions
           } else {
             debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
