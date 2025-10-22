@@ -662,9 +662,17 @@ export class WalletBg {
           if (txsToUpdate.length > 0) {
             debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
-            // Note: Don't manually call WalletStore.setTransactions here.
-            // The database subscription in walletLoader.ts will automatically trigger
-            // and properly calculate derived fields (ada, assets, etc.) for ALL transactions
+
+            // IMPORTANT ARCHITECTURAL PATTERN:
+            // Don't manually call WalletStore.setTransactions() here. Instead, rely on the
+            // Dexie subscription pattern used throughout the codebase:
+            //   1. Database write (bulkPut) triggers Dexie subscription
+            //   2. TransactionsLoader in walletLoader.ts processes ALL transactions
+            //   3. Loader calculates derived fields (ada, assets, sentAssets, receivedAssets)
+            //   4. Loader updates WalletStore with fully processed transactions
+            //
+            // This ensures consistent processing for both pending and confirmed transactions
+            // and prevents duplicate processing or stale data issues.
           } else {
             debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
