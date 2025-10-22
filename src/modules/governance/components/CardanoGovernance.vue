@@ -58,7 +58,7 @@
                       size="80"
                       rounded
                     >
-                      <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>/
+                      <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>
                     </v-list-item-avatar>
                     <v-list-item-content v-if="currentDrepTxIsPending">
                       <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
