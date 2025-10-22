@@ -625,18 +625,22 @@ watch(
 // This updates displayed transactions without clearing the table
 watch(
   () => transactions.value,
-  () => {
-    // Update displayed transactions to reflect changes (like pending -> confirmed)
-    if (!props.isFullList) {
-      // Pagination mode - update the current page
-      const start = (currentPage.value - 1) * itemsPerPage.value;
-      const end = start + itemsPerPage.value;
-      displayedTransactions.value = transactions.value.slice(start, end);
-    } else {
-      // Infinite scroll mode - update existing items while maintaining scroll position
-      const currentLength = displayedTransactions.value.length;
-      displayedTransactions.value = transactions.value.slice(0, currentLength);
+  (newTransactions, oldTransactions) => {
+    // Only update if it's a data change (not a count change)
+    if (newTransactions.length === oldTransactions?.length) {
+      // Update displayed transactions to reflect changes (like pending -> confirmed)
+      if (!props.isFullList) {
+        // Pagination mode - update the current page
+        const start = (currentPage.value - 1) * itemsPerPage.value;
+        const end = start + itemsPerPage.value;
+        displayedTransactions.value = transactions.value.slice(start, end);
+      } else {
+        // Infinite scroll mode - update existing items while maintaining scroll position
+        const currentLength = displayedTransactions.value.length;
+        displayedTransactions.value = transactions.value.slice(0, currentLength);
+      }
     }
+    // If length changed, the other watcher will handle it
   },
   { deep: true }
 );
