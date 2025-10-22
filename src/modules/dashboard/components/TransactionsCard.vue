@@ -195,18 +195,24 @@
                 }"
               >
                 {{
-                  filters.toCurrency(
-                    item.ada,
-                    true,
-                    0,
-                    networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
-                    '',
-                    false
-                  )
+                  item.ada !== undefined && !isNaN(item.ada)
+                    ? filters.toCurrency(
+                        item.ada,
+                        true,
+                        0,
+                        networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
+                        '',
+                        false
+                      )
+                    : '+ $0'
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{ filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                {{
+                  item.ada !== undefined && !isNaN(item.ada)
+                    ? filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6)
+                    : '$0.00'
+                }}
               </div>
             </div>
           </template>
