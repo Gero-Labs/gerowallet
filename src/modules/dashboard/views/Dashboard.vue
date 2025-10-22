@@ -39,6 +39,9 @@
                     :portfolio-value-ada="currentPortfolioValues.ada"
                     :portfolio-value-usd="currentPortfolioValues.usd"
                     :portfolio-value-eur="currentPortfolioValues.eur"
+                    :ada-only-value-ada="adaBalance"
+                    :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                    :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
                     :loading="portfolioLoading"
                     :progressive-loading="true"
                     :first-loaded-currency="firstLoadedCurrency"
@@ -87,6 +90,9 @@
                 :portfolio-value-ada="currentPortfolioValues.ada"
                 :portfolio-value-usd="currentPortfolioValues.usd"
                 :portfolio-value-eur="currentPortfolioValues.eur"
+                :ada-only-value-ada="adaBalance"
+                :ada-only-value-usd="adaBalance * (price?.lastPrice || 0)"
+                :ada-only-value-eur="adaBalance * (price?.lastPrice || 0) * usdToEurRate"
                 :loading="portfolioLoading"
                 :progressive-loading="true"
                 :first-loaded-currency="firstLoadedCurrency"
@@ -603,6 +609,11 @@ const handleBackupWallet = () => {
 // Portfolio data loading is now handled by usePortfolioData composable
 const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME || loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
+
+// Pure ADA balance from UTXOs (for ADA-only mode)
+const adaBalance = computed(() => {
+  return Number(getBalance(utxos.value, collateral.value).coin().toString()) / 1000000;
 });
 // Utility function to refresh portfolio data
 const refreshPortfolioChart = async () => {
