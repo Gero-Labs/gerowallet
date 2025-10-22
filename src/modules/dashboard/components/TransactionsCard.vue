@@ -196,7 +196,7 @@
               >
                 {{
                   filters.toCurrency(
-                    item.ada,
+                    item.ada ?? 0,
                     true,
                     0,
                     networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
@@ -206,7 +206,7 @@
                 }}
               </div>
               <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
-                {{ filters.toCurrency(convertFiat(item.ada * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
+                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
