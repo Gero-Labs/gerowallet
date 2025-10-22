@@ -180,22 +180,47 @@ function getCardApi(): Api {
     }
   );
 
-  // Add response interceptor for token refresh
+  // Add response interceptor for token refresh and 401 handling
   api.axiosInstance.interceptors.response.use(
     response => response,
     async error => {
-      if (error.response?.status === 401 && cardStore.refreshToken) {
-        try {
-          await cardStoreInstance.refreshAccessToken();
-          // Retry original request
-          const originalRequest = error.config;
-          originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
-          return api.axiosInstance(originalRequest);
-        } catch (refreshError) {
+      // Handle 401 Unauthorized errors
+      if (error.response?.status === 401) {
+        const originalRequest = error.config;
+        
+        // Prevent infinite retry loops
+        if (originalRequest._retry) {
+          console.warn('Token refresh failed, clearing session');
           await cardStoreInstance.logout();
-          throw refreshError;
+          throw error;
+        }
+
+        // If we have a refresh token, try to refresh
+        if (cardStore.refreshToken) {
+          originalRequest._retry = true;
+          
+          try {
+            await cardStoreInstance.refreshAccessToken();
+            // Retry original request with new token
+            originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
+            return api.axiosInstance(originalRequest);
+          } catch (refreshError) {
+            console.warn('Token refresh failed, clearing session');
+            await cardStoreInstance.logout();
+            throw refreshError;
+          }
+        } else {
+          // No refresh token available - session is invalid, clear everything
+          console.warn('No refresh token available, clearing session');
+          await clearStoredTokens();
+          cardStore.accessToken = null;
+          cardStore.refreshToken = null;
+          cardStore.tokenExpiry = null;
+          cardStore.walletStatus.isKaiserexAuthenticated = false;
+          throw error;
         }
       }
+      
       throw error;
     }
   );
@@ -203,10 +228,24 @@ function getCardApi(): Api {
   return api;
 }
 
-// Create store instance for internal use
+/**
+ * Internal card store instance for token management
+ * 
+ * Handles token refresh and logout with proper cookie cleanup
+ */
 const cardStoreInstance = {
+  /**
+   * Refresh access token using refresh token
+   * 
+   * If refresh fails (e.g., refresh token expired or invalid), automatically
+   * logs out user and clears all cookies
+   */
   async refreshAccessToken(): Promise<void> {
-    if (!cardStore.refreshToken) throw new Error('No refresh token available');
+    if (!cardStore.refreshToken) {
+      console.warn('No refresh token available for refresh');
+      await this.logout();
+      throw new Error('No refresh token available');
+    }
 
     try {
       const api = getCardApi();
@@ -219,24 +258,56 @@ const cardStoreInstance = {
       cardStore.refreshToken = tokens.refresh_token;
       cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
 
+      // Update tokens in cookies
       await storeTokens(tokens);
     } catch (error) {
-      await cardStoreInstance.logout();
+      // Refresh failed - logout and clear cookies
+      console.warn('Token refresh failed, logging out');
+      await this.logout();
       throw error;
     }
   },
 
+  /**
+   * Logout user and clear all session data
+   * 
+   * Clears:
+   * - Access and refresh tokens from memory
+   * - All cookies (via clearStoredTokens)
+   * - User data, cards, balances
+   * - Calls backend logout endpoint
+   * 
+   * Always succeeds even if backend logout fails
+   */
   async logout(): Promise<void> {
-    cardStore.accessToken = null;
-    cardStore.refreshToken = null;
-    cardStore.tokenExpiry = null;
-    cardStore.userInfo = null;
-    cardStore.cardanoAddress = null;
-    cardStore.cards = []; // NEW: Clear all cards
-    cardStore.selectedCardId = null; // NEW
-    cardStore.exchangeRate = null;
+    try {
+      const api = getCardApi();
+      
+      // Clear tokens and user data from memory
+      cardStore.accessToken = null;
+      cardStore.refreshToken = null;
+      cardStore.tokenExpiry = null;
+      cardStore.userInfo = null;
+      cardStore.cardanoAddress = null;
+      cardStore.cards = [];
+      cardStore.selectedCardId = null;
+      cardStore.exchangeRate = null;
+      cardStore.walletStatus.isKaiserexAuthenticated = false;
 
-    await clearStoredTokens();
+      // Call backend logout endpoint and clear cookies
+      try {
+        await api.axiosInstance.get('/api/kaiserex/logout');
+      } catch (backendError) {
+        console.warn('Backend logout failed, continuing with local cleanup:', backendError);
+      }
+
+      // Always clear cookies regardless of backend response
+      await clearStoredTokens();
+    } catch (error) {
+      console.error('Failed to logout from card store:', error);
+      // Ensure cookies are cleared even if something fails
+      await clearStoredTokens();
+    }
   },
 };
 
@@ -573,6 +644,11 @@ export default {
     cardStore.errors.userInfo = null;
     try {
       const api = getCardApi();
+      await api.axiosInstance.get('/api/kaiserex/logout');
+      await api.axiosInstance.get('/api/kaiserex/logout');
+      await api.axiosInstance.get('/api/kaiserex/logout');
+
+
       const response = await api.axiosInstance.get('/api/kaiserex/user');
       cardStore.userInfo = response.data;
     } catch (error) {
@@ -807,7 +883,6 @@ export default {
   // Wallet Status Methods - SIMPLE!
   async setKaiserexAuthentication(isAuthenticated: boolean): Promise<void> {
     cardStore.walletStatus.isKaiserexAuthenticated = isAuthenticated;
-    console.log('setKaiserexAuthentication', isAuthenticated);
     if (isAuthenticated) {
       await this.initialize();
     }
