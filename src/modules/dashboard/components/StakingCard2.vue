@@ -324,7 +324,13 @@
         </v-row>
       </v-layout>
     </v-card-text>
-    <UnstakeDialog :is-open="unstakeDialog" @close="unstakeDialog = false" :tx="txData"></UnstakeDialog>
+    <UnstakeDialog
+      :is-open="unstakeDialog"
+      @close="unstakeDialog = false"
+      @utxo-spent="markUtxoAsSpent"
+      @tx-success="clearSpentUtxos"
+      :tx="txData"
+    ></UnstakeDialog>
     <WithdrawalDialog :is-open="withdrawalDialog" @close="withdrawalDialog = false" :tx="txData"></WithdrawalDialog>
   </v-card>
 </template>
@@ -435,6 +441,31 @@ const unstake = async () => {
       throw new Error('Wallet keys not available. Please reload the extension.');
     }
 
+    // Filter out spent UTXOs from localStorage
+    const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+    let availableUtxos = utxos.value;
+    try {
+      const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+      if (stored) {
+        const spentUtxosArray = JSON.parse(stored);
+        if (spentUtxosArray.length > 0) {
+          const spentUtxosSet = new Set(spentUtxosArray);
+          console.log('🚫 Filtering out spent UTXOs for unstake:', Array.from(spentUtxosSet));
+          availableUtxos = utxos.value.filter(u => {
+            const utxoId = `${u[0].txId}#${u[0].index}`;
+            return !spentUtxosSet.has(utxoId);
+          });
+          console.log('🔍 Available UTXOs for unstake:', availableUtxos.length);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load spent UTXOs from localStorage:', e);
+    }
+
+    if (availableUtxos.length === 0) {
+      throw new Error('No available UTXOs. Please refresh the page (F5) to sync your wallet.');
+    }
+
     const certificates: Cardano.Certificate[] = [];
 
     // Create stake credential from the key hash
@@ -463,12 +494,12 @@ const unstake = async () => {
       });
     }
 
-    // Use the generic transaction builder
+    // Use the generic transaction builder with filtered UTXOs
     // For unstaking, deposit is returned (negative implicit coin)
     txData.value = await buildCardanoTransaction({
       certificates,
       withdrawals,
-      utxos: utxos.value,
+      utxos: availableUtxos,
       epochParams: epochParams.value,
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
@@ -501,6 +532,63 @@ watch(
   },
   { immediate: true }
 );
+
+/**
+ * Marks a UTXO as spent in localStorage to prevent it from being used in future transactions.
+ * Called from UnstakeDialog when a transaction fails with BadInputsUTxO error.
+ *
+ * @param utxoId - The UTXO identifier in format "txHash#index" (e.g., "abc123...#0")
+ */
+const markUtxoAsSpent = (utxoId: string) => {
+  const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+  try {
+    const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    const spentUtxosArray = stored ? JSON.parse(stored) : [];
+    const spentUtxosSet = new Set(spentUtxosArray);
+    spentUtxosSet.add(utxoId);
+    localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(Array.from(spentUtxosSet)));
+    console.log('✅ Marked UTXO as spent:', utxoId);
+  } catch (e) {
+    console.warn('Failed to mark UTXO as spent in localStorage:', e);
+  }
+};
+
+/**
+ * Clears spent UTXOs that are no longer in the current UTXO set.
+ * Only removes UTXOs that are confirmed to be absent from wallet state.
+ */
+const clearSpentUtxos = () => {
+  const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+  try {
+    const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    if (!stored) return;
+
+    const spentUtxosArray = JSON.parse(stored);
+    if (spentUtxosArray.length === 0) return;
+
+    console.log('🧹 Cleaning up spent UTXOs list');
+
+    // Build a Set of current UTXO IDs for O(1) lookup
+    const currentUtxoIds = new Set(
+      utxos.value.map(u => `${u[0].txId}#${u[0].index}`)
+    );
+
+    // Only remove spent UTXOs that are no longer in wallet state
+    const remainingUtxos = spentUtxosArray.filter((utxoId: string) => currentUtxoIds.has(utxoId));
+
+    if (remainingUtxos.length === 0) {
+      // All spent UTXOs have been confirmed removed from wallet
+      localStorage.removeItem(SPENT_UTXOS_KEY);
+      console.log('✅ All spent UTXOs confirmed removed from wallet state');
+    } else if (remainingUtxos.length < spentUtxosArray.length) {
+      // Some spent UTXOs confirmed removed, update localStorage
+      localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(remainingUtxos));
+      console.log(`✅ Removed ${spentUtxosArray.length - remainingUtxos.length} confirmed spent UTXOs from tracking`);
+    }
+  } catch (e) {
+    console.warn('Failed to clean up spent UTXOs from localStorage:', e);
+  }
+};
 
 onMounted(async () => {
   if (account.value?.pool_id) {
