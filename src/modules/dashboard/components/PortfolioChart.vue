@@ -52,17 +52,50 @@
             </v-tabs>
           </div>
 
-          <!-- Refresh Button -->
-          <v-btn
-            icon
-            x-small
-            class="refresh-btn ml-2"
-            @click="handleRefresh"
-            :loading="isRefreshing"
-            :disabled="isRefreshing"
-          >
-            <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
-          </v-btn>
+          <!-- Chart Options Menu -->
+          <v-menu offset-y left>
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn
+                icon
+                x-small
+                class="ml-2"
+                v-bind="attrs"
+                v-on="on"
+              >
+                <v-icon small>mdi-dots-vertical</v-icon>
+              </v-btn>
+            </template>
+            <v-list dense>
+              <!-- Portfolio Mode Toggle (Cardano only) -->
+              <template v-if="!isApex">
+                <v-list-item @click="togglePortfolioMode">
+                  <v-list-item-icon class="mr-2">
+                    <v-icon small>{{ portfolioMode === 'full' ? 'mdi-chart-line' : 'mdi-circle' }}</v-icon>
+                  </v-list-item-icon>
+                  <v-list-item-content>
+                    <v-list-item-title>
+                      {{ portfolioMode === 'full' ? 'Full Portfolio' : 'ADA Only' }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle style="font-size: 10px;">
+                      {{ portfolioMode === 'full' ? 'Switch to ADA balance' : 'Switch to full portfolio' }}
+                    </v-list-item-subtitle>
+                  </v-list-item-content>
+                </v-list-item>
+
+                <v-divider></v-divider>
+              </template>
+
+              <!-- Refresh Button -->
+              <v-list-item @click="handleRefresh" :disabled="isRefreshing">
+                <v-list-item-icon class="mr-2">
+                  <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
+                </v-list-item-icon>
+                <v-list-item-content>
+                  <v-list-item-title>Refresh Data</v-list-item-title>
+                </v-list-item-content>
+              </v-list-item>
+            </v-list>
+          </v-menu>
         </div>
       </div>
     </div>
@@ -80,7 +113,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, toRefs } from 'vue';
+import { computed, onMounted, ref, watch, toRefs, nextTick } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';
@@ -162,6 +195,19 @@ const props = defineProps({
     type: String,
     default: null,
   },
+  // ADA-only mode values (just the current balance from UTXOs, no chart data needed)
+  adaOnlyValueAda: {
+    type: Number,
+    default: 0,
+  },
+  adaOnlyValueUsd: {
+    type: Number,
+    default: 0,
+  },
+  adaOnlyValueEur: {
+    type: Number,
+    default: 0,
+  },
 });
 
 // Define emits
@@ -171,6 +217,49 @@ const emit = defineEmits<{
 
 // Refresh state
 const isRefreshing = ref(false);
+
+// Portfolio mode: 'full' (TapTools) or 'ada-only' (UTXO)
+const portfolioMode = ref<'full' | 'ada-only'>('full');
+
+// Load portfolio mode preference from localStorage (scoped to wallet ID)
+const loadPortfolioMode = (): 'full' | 'ada-only' => {
+  try {
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'full';
+    const storageKey = `portfolioMode_${walletId}`;
+    return (localStorage.getItem(storageKey) as 'full' | 'ada-only') || 'full';
+  } catch {
+    return 'full';
+  }
+};
+
+// Save portfolio mode preference to localStorage (scoped to wallet ID)
+const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
+  try {
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioMode_${walletId}`;
+    localStorage.setItem(storageKey, mode);
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+};
+
+// Initialize portfolio mode from localStorage
+portfolioMode.value = loadPortfolioMode();
+
+// Toggle portfolio mode
+const togglePortfolioMode = async () => {
+  portfolioMode.value = portfolioMode.value === 'full' ? 'ada-only' : 'full';
+  savePortfolioMode(portfolioMode.value);
+
+  // Force chart reload
+  chartKey.value += 1;
+  await nextTick();
+  loadChart();
+  await nextTick();
+  handleTabClick(tab.value);
+};
 
 // Handle refresh button click
 const handleRefresh = async () => {
@@ -183,10 +272,13 @@ const handleRefresh = async () => {
   }, 500);
 };
 
-// Load tab preference from localStorage or default to WEEK (7D)
+// Load tab preference from localStorage or default to WEEK (7D) (scoped to wallet ID)
 const loadPortfolioTabSetting = (): string => {
   try {
-    return localStorage.getItem('portfolioTab') || 'WEEK';
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return 'WEEK';
+    const storageKey = `portfolioTab_${walletId}`;
+    return localStorage.getItem(storageKey) || 'WEEK';
   } catch {
     return 'WEEK';
   }
@@ -195,10 +287,13 @@ const isReadyToRender = computed(() => {
   return hasAnyChartData.value && !globalLoading.value;
 });
 
-// Save tab preference to localStorage
+// Save tab preference to localStorage (scoped to wallet ID)
 const savePortfolioTabSetting = (tabValue: string): void => {
   try {
-    localStorage.setItem('portfolioTab', tabValue);
+    const walletId = loggedWallet.value?.id;
+    if (!walletId) return;
+    const storageKey = `portfolioTab_${walletId}`;
+    localStorage.setItem(storageKey, tabValue);
   } catch {
     // Silently fail if localStorage is not available
   }
@@ -316,6 +411,7 @@ const currentCurrencyConfig = computed(() => {
 });
 
 const activeChartData = computed(() => {
+  // Chart data is the same for both modes (we just change the displayed value)
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
       return props.chartDataUsd || [];
@@ -328,14 +424,19 @@ const activeChartData = computed(() => {
 });
 
 const activePortfolioValue = computed(() => {
+  // Select value source based on portfolio mode
+  // ADA Only mode shows just the ADA balance from UTXOs
+  // Full Portfolio mode shows the complete portfolio value from TapTools API
+  const isAdaOnly = portfolioMode.value === 'ada-only';
+
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return props.portfolioValueUsd;
+      return isAdaOnly ? props.adaOnlyValueUsd : props.portfolioValueUsd;
     case CurrencyType.EUR:
-      return props.portfolioValueEur;
+      return isAdaOnly ? props.adaOnlyValueEur : props.portfolioValueEur;
     case CurrencyType.ADA:
     default:
-      return props.portfolioValueAda;
+      return isAdaOnly ? props.adaOnlyValueAda : props.portfolioValueAda;
   }
 });
 
