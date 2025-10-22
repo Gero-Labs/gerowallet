@@ -35,6 +35,8 @@
     <DelegateDialog
       :isOpen="isDelegateDialogOpen"
       @close="isDelegateDialogOpen = false"
+      @utxo-spent="markUtxoAsSpent"
+      @tx-success="clearSpentUtxos"
       :pool="selectedPool"
       :tx="txData"
     ></DelegateDialog>
@@ -95,6 +97,49 @@ const delegateToGero = async () => {
       throw new Error('Epoch parameters not available');
     }
 
+    // Filter out spent UTXOs from localStorage
+    const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+    let availableUtxos = utxos.value;
+
+    console.log('🔍 Starting UTXO filtering for GERO delegation');
+    console.log('   Total UTXOs available:', utxos.value.length);
+    console.log('   UTXO IDs:', utxos.value.map(u => `${u[0].txId}#${u[0].index}`));
+
+    try {
+      const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+      console.log('   localStorage spent UTXOs raw:', stored);
+
+      if (stored) {
+        const spentUtxosArray = JSON.parse(stored);
+        console.log('   Parsed spent UTXOs:', spentUtxosArray);
+
+        if (spentUtxosArray.length > 0) {
+          const spentUtxosSet = new Set(spentUtxosArray);
+          console.log('🚫 Filtering out spent UTXOs for GERO delegation:', Array.from(spentUtxosSet));
+
+          availableUtxos = utxos.value.filter(u => {
+            const utxoId = `${u[0].txId}#${u[0].index}`;
+            const isSpent = spentUtxosSet.has(utxoId);
+            if (isSpent) {
+              console.log('   ❌ Excluding spent UTXO:', utxoId);
+            }
+            return !isSpent;
+          });
+          console.log('🔍 Available UTXOs after filtering:', availableUtxos.length);
+        } else {
+          console.log('   No spent UTXOs in localStorage');
+        }
+      } else {
+        console.log('   No spent UTXOs localStorage key found');
+      }
+    } catch (e) {
+      console.warn('Failed to load spent UTXOs from localStorage:', e);
+    }
+
+    if (availableUtxos.length === 0) {
+      throw new Error('No available UTXOs. Please refresh the page (F5) to sync your wallet.');
+    }
+
     const certificates: Cardano.Certificate[] = [];
 
     // Create stake credential from the key hash
@@ -130,10 +175,10 @@ const delegateToGero = async () => {
     }
     certificates.push(certificate);
 
-    // Build the delegation transaction
+    // Build the delegation transaction with filtered UTXOs
     txData.value = await buildCardanoTransaction({
       certificates,
-      utxos: utxos.value,
+      utxos: availableUtxos,
       epochParams: epochParams.value,
       changeAddress: keys.value.payment[0].address,
       tip: tip.value,
@@ -148,6 +193,66 @@ const delegateToGero = async () => {
     } else {
       snackbar.setError('Failed to build delegation transaction: ' + (error.message || 'Unknown error'));
     }
+  }
+};
+
+/**
+ * Marks a UTXO as spent in localStorage to prevent it from being used in future transactions.
+ */
+const markUtxoAsSpent = (utxoId: string) => {
+  const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+  console.log('📝 markUtxoAsSpent called with:', utxoId);
+  try {
+    const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    console.log('   Current localStorage value:', stored);
+    const spentUtxosArray = stored ? JSON.parse(stored) : [];
+    console.log('   Current spent UTXOs array:', spentUtxosArray);
+    const spentUtxosSet = new Set(spentUtxosArray);
+    spentUtxosSet.add(utxoId);
+    const updatedArray = Array.from(spentUtxosSet);
+    console.log('   Updated spent UTXOs array:', updatedArray);
+    localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(updatedArray));
+    console.log('✅ Marked UTXO as spent in localStorage:', utxoId);
+
+    // Verify it was written
+    const verification = localStorage.getItem(SPENT_UTXOS_KEY);
+    console.log('   Verification read:', verification);
+  } catch (e) {
+    console.warn('Failed to mark UTXO as spent in localStorage:', e);
+  }
+};
+
+/**
+ * Clears spent UTXOs that are no longer in the current UTXO set.
+ */
+const clearSpentUtxos = () => {
+  const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+  try {
+    const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    if (!stored) return;
+
+    const spentUtxosArray = JSON.parse(stored);
+    if (spentUtxosArray.length === 0) return;
+
+    console.log('🧹 Cleaning up spent UTXOs list');
+
+    // Build a Set of current UTXO IDs for O(1) lookup
+    const currentUtxoIds = new Set(
+      utxos.value.map(u => `${u[0].txId}#${u[0].index}`)
+    );
+
+    // Only remove spent UTXOs that are no longer in wallet state
+    const remainingUtxos = spentUtxosArray.filter((utxoId: string) => currentUtxoIds.has(utxoId));
+
+    if (remainingUtxos.length === 0) {
+      localStorage.removeItem(SPENT_UTXOS_KEY);
+      console.log('✅ All spent UTXOs confirmed removed from wallet state');
+    } else if (remainingUtxos.length < spentUtxosArray.length) {
+      localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(remainingUtxos));
+      console.log(`✅ Removed ${spentUtxosArray.length - remainingUtxos.length} confirmed spent UTXOs from tracking`);
+    }
+  } catch (e) {
+    console.warn('Failed to clean up spent UTXOs from localStorage:', e);
   }
 };
 </script>
