@@ -644,11 +644,6 @@ export default {
     cardStore.errors.userInfo = null;
     try {
       const api = getCardApi();
-      await api.axiosInstance.get('/api/kaiserex/logout');
-      await api.axiosInstance.get('/api/kaiserex/logout');
-      await api.axiosInstance.get('/api/kaiserex/logout');
-
-
       const response = await api.axiosInstance.get('/api/kaiserex/user');
       cardStore.userInfo = response.data;
     } catch (error) {
