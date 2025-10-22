@@ -493,6 +493,8 @@ watch(
     if (val) {
       spendingPassword.value = '';
       showPassword.value = false;
+      txCbor.value = '';
+      txWitnesses.value = null;
       isSubmit.value = false;
       if (form.value) {
         form.value.resetValidation();

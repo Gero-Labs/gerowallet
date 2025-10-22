@@ -622,12 +622,7 @@ const drepDelegate = async (row: any) => {
       implicitCoin,
     });
 
-    console.log('DRep delegation transaction built successfully');
-    console.log('Transaction outputs:', txData.value.body.outputs);
-    console.log('Selected DRep:', selectedDRep.value);
-    console.log('Opening dialog with isDelegateDialogOpen:', isDelegateDialogOpen.value);
     isDelegateDialogOpen.value = true;
-    console.log('Dialog opened, isDelegateDialogOpen:', isDelegateDialogOpen.value);
   } catch (error) {
     console.error('Error building DRep delegation transaction:', error);
     snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
