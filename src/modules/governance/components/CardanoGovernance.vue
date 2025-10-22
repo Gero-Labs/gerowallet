@@ -361,7 +361,7 @@ const drepsHeaders = [
 
 // Computed properties
 const delegatingTo = computed(() => {
-  let res = 'N/A';
+  let res = 'Undelegated';
   if (currentDRep.value) {
     if (currentDRep.value.drep_id == 'drep_always_no_confidence') {
       res = 'No Confidence';
