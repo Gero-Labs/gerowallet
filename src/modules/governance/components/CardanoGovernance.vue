@@ -90,10 +90,11 @@
                           delegationModel === undefined ||
                           delegateLoading ||
                           delegationModel === 'Own Account (soon)' ||
-                          delegationModel === 'Gero DRep (soon)'
+                          delegationModel === 'Gero DRep (soon)' ||
+                          currentDrepTxIsPending
                         "
                         @click="delegate"
-                        :loading="delegateLoading || currentDrepTxIsPending"
+                        :loading="delegateLoading"
                       >
                         Delegate
                       </v-btn>
