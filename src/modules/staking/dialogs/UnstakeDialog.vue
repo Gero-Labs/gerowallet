@@ -116,7 +116,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'utxo-spent', 'tx-success']);
 
 const { toCurrency } = filters;
 const { loggedWallet, utxos, keys, account, config } = toRefs(walletStore);
@@ -267,10 +267,61 @@ const submitTx = async () => {
         utxos: utxos.value
       }
     }) as { data: { txId?: string; error?: string } };
+
     if (submitResult.data.error) {
+      // Check for BadInputsUTxO error and extract spent UTXO
+      if (submitResult.data.error.includes('BadInputsUTxO')) {
+        // Extract UTXO hash and index from Cardano node error format:
+        // TxIn (TxId {unTxId = SafeHash \"abc123...\"}) (TxIx {unTxIx = 0})
+        const txHashMatch = submitResult.data.error.match(/SafeHash\s*\\*"([a-f0-9]+)\\*"/);
+        const txIndexMatch = submitResult.data.error.match(/TxIx\s*\{\s*unTxIx\s*=\s*(\d+)\s*\}/);
+
+        const txHash = txHashMatch ? txHashMatch[1] : null;
+        const txIndex = txIndexMatch ? txIndexMatch[1] : null;
+
+        console.log('🚫 BadInputsUTxO error detected in unstake');
+        console.log('   Extracted tx hash:', txHash);
+        console.log('   Extracted tx index:', txIndex);
+
+        // Fallback to matching transaction inputs if index not in error
+        if (txHash && !txIndex && props.tx?.body?.inputs) {
+          const matchingInput = props.tx.body.inputs.find(input => input.txId === txHash);
+          if (matchingInput) {
+            const fullUtxoId = `${matchingInput.txId}#${matchingInput.index}`;
+            emit('utxo-spent', fullUtxoId);
+            console.log('✅ Emitted utxo-spent event for:', fullUtxoId);
+          }
+        } else if (txHash && txIndex) {
+          // Both hash and index extracted from error
+          const fullUtxoId = `${txHash}#${txIndex}`;
+          emit('utxo-spent', fullUtxoId);
+          console.log('✅ Emitted utxo-spent event for:', fullUtxoId);
+        }
+
+        throw new Error(
+          'Transaction failed because a UTXO has already been spent.\n\n' +
+          'Close this dialog and try unstaking again - the spent UTXO will be automatically excluded.'
+        );
+      }
       throw new Error(submitResult.data.error);
     }
+
     snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+
+    // Trigger lightweight UTXO refresh (runs in background without loading overlay)
+    console.log('🔄 Triggering lightweight UTXO refresh after successful unstake transaction...');
+    try {
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.REFRESH_UTXOS,
+        data: {},
+      });
+      console.log('✅ UTXOs refreshed successfully');
+    } catch (e) {
+      console.warn('⚠️ Failed to trigger UTXO refresh:', e);
+    }
+
+    // Clear spent UTXOs list and close dialog
+    emit('tx-success');
     emit('close');
   } catch (e) {
     console.error('Error submitting unstake transaction:', e);
