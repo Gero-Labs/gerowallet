@@ -229,7 +229,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['close', 'utxo-spent']);
+const emit = defineEmits(['close', 'utxo-spent', 'tx-success']);
 
 const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
 
@@ -426,16 +426,32 @@ const submitTx = async () => {
        * component so it can be excluded from future transaction attempts.
        */
       if (submitResult.data.error.includes('BadInputsUTxO')) {
-        // Extract UTXO hash from Cardano node error format: SafeHash \"abc123...\"
-        const utxoMatch = submitResult.data.error.match(/SafeHash\s*\\*"([a-f0-9]+)\\*"/);
-        const utxoId = utxoMatch ? utxoMatch[1] : null;
+        // Extract UTXO hash and index from Cardano node error format:
+        // TxIn (TxId {unTxId = SafeHash \"abc123...\"}) (TxIx {unTxIx = 0})
+        const txHashMatch = submitResult.data.error.match(/SafeHash\s*\\*"([a-f0-9]+)\\*"/);
+        const txIndexMatch = submitResult.data.error.match(/TxIx\s*\{\s*unTxIx\s*=\s*(\d+)\s*\}/);
 
-        console.log('🚫 BadInputsUTxO error detected, extracted UTXO:', utxoId);
+        const txHash = txHashMatch ? txHashMatch[1] : null;
+        const txIndex = txIndexMatch ? txIndexMatch[1] : null;
 
-        // Notify parent component to mark this UTXO as spent
-        if (utxoId) {
-          emit('utxo-spent', `${utxoId}#0`);
-          console.log('✅ Emitted utxo-spent event for:', `${utxoId}#0`);
+        console.log('🚫 BadInputsUTxO error detected');
+        console.log('   Extracted tx hash:', txHash);
+        console.log('   Extracted tx index:', txIndex);
+
+        // If we couldn't extract from error, try matching against transaction inputs
+        if (txHash && !txIndex && props.tx?.body?.inputs) {
+          const matchingInput = props.tx.body.inputs.find(input => input.txId === txHash);
+          if (matchingInput) {
+            const fullUtxoId = `${matchingInput.txId}#${matchingInput.index}`;
+            console.log('   Matched against tx input:', fullUtxoId);
+            emit('utxo-spent', fullUtxoId);
+            console.log('✅ Emitted utxo-spent event for:', fullUtxoId);
+          }
+        } else if (txHash && txIndex) {
+          // Both hash and index extracted from error
+          const fullUtxoId = `${txHash}#${txIndex}`;
+          emit('utxo-spent', fullUtxoId);
+          console.log('✅ Emitted utxo-spent event for:', fullUtxoId);
         }
 
         throw new Error(
@@ -447,6 +463,8 @@ const submitTx = async () => {
     }
 
     snackbar.fireSuccess(`DRep Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    // Emit success event so parent can clear spent UTXOs list
+    emit('tx-success');
     emit('close');
   } catch (e) {
     console.error('Error submitting DRep delegation transaction:', e);

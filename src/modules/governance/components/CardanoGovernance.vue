@@ -285,6 +285,7 @@
             :isOpen="isDelegateDialogOpen"
             @close="isDelegateDialogOpen = false"
             @utxo-spent="markUtxoAsSpent"
+            @tx-success="clearSpentUtxos"
             :drep="selectedDRep"
             :tx="txData"
           ></DRepDelegateDialog>
@@ -356,9 +357,10 @@ const search = ref('');
  * Tracks UTXOs that have been spent on the blockchain but still exist in wallet state.
  * When a transaction fails with BadInputsUTxO error, the UTXO is added here and
  * filtered out from subsequent transaction building attempts.
+ * Uses a Set for O(1) lookup performance.
  * This prevents repeated failures and provides better UX without forcing wallet resync.
  */
-const spentUtxos = ref<string[]>([]);
+const spentUtxos = ref<Set<string>>(new Set());
 const drepsHeaders = [
   { text: 'ID', sortable: false, align: 'transparent', value: 'id' },
   { text: 'Name', sortable: true, align: 'left', value: 'name' },
@@ -570,11 +572,11 @@ const drepDelegate = async (row: any) => {
   try {
     // Filter out known spent UTXOs
     let availableUtxos = utxos.value;
-    if (spentUtxos.value.length > 0) {
-      console.log('🚫 Filtering out spent UTXOs:', spentUtxos.value);
+    if (spentUtxos.value.size > 0) {
+      console.log('🚫 Filtering out spent UTXOs:', Array.from(spentUtxos.value));
       availableUtxos = utxos.value.filter(u => {
         const utxoId = `${u[0].txId}#${u[0].index}`;
-        return !spentUtxos.value.includes(utxoId);
+        return !spentUtxos.value.has(utxoId);
       });
     }
 
@@ -652,9 +654,18 @@ const drepDelegate = async (row: any) => {
  * @param utxoId - The UTXO identifier in format "txHash#index" (e.g., "abc123...#0")
  */
 const markUtxoAsSpent = (utxoId: string) => {
-  if (!spentUtxos.value.includes(utxoId)) {
-    spentUtxos.value.push(utxoId);
-    console.log('✅ Marked UTXO as spent:', utxoId);
+  spentUtxos.value.add(utxoId);
+  console.log('✅ Marked UTXO as spent:', utxoId);
+};
+
+/**
+ * Clears the spent UTXOs list after a successful transaction.
+ * This cleanup ensures we don't indefinitely track spent UTXOs after the wallet syncs.
+ */
+const clearSpentUtxos = () => {
+  if (spentUtxos.value.size > 0) {
+    console.log('🧹 Clearing spent UTXOs list');
+    spentUtxos.value.clear();
   }
 };
 
