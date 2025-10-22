@@ -1,5 +1,4 @@
 import Vue from 'vue';
-import { Api } from '@/api/api';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
 import blockchainApi from '@/api/blockchain-api';
 
@@ -63,7 +62,14 @@ const governanceStoreActions = {
     governanceStore.drepError = null;
 
     try {
-      const drep = await blockchainApi.getDRepById(drepId, wallet.chain, wallet.network);
+      let drep;
+      if (drepId == 'drep_always_abstain' || drepId == 'drep_always_no_confidence') {
+        drep = {
+          drep_id: drepId
+        }
+      } else {
+        drep = await blockchainApi.getDRepById(drepId, wallet.chain, wallet.network);
+      }
 
       if (drep) {
         governanceStore.currentDRep = drep;
