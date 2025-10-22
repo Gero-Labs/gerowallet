@@ -205,6 +205,36 @@ export class SyncService {
   }
 
   /**
+   * Lightweight refresh of account transactions and UTXOs
+   * Does NOT trigger loading overlay or full wallet sync
+   * Useful after successful transaction submission to update UTXO list
+   */
+  async refreshUtxos() {
+    try {
+      console.log('🔄 Starting lightweight UTXO refresh...');
+
+      // Get latest block height from existing transactions
+      const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
+      const from = latestTxBlockHeight + 1 || 0;
+
+      // Sync latest transactions (which updates UTXOs via setAccountTransactions)
+      const newTransactions = await this.syncAccountTransactions(from);
+
+      if (newTransactions && newTransactions.length > 0) {
+        console.log(`✅ Refreshed UTXOs: ${newTransactions.length} new transactions processed`);
+
+        // Update UTXOs and addresses based on new transactions
+        await this.walletBg.setUtxosAndAddresses(newTransactions);
+      } else {
+        console.log('✅ UTXO refresh complete: no new transactions');
+      }
+    } catch (err) {
+      console.error('❌ UTXO refresh error:', err);
+      debugLog(err);
+    }
+  }
+
+  /**
    * Process sync object received from sync channel
    * @param syncObject - Sync data object containing various blockchain data
    */

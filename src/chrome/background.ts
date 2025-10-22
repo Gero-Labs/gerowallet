@@ -1387,6 +1387,38 @@ app.addToOptions(MessageTypes.RESYNC, async (request, sendResponse) => {
   }
 });
 
+app.addToOptions(MessageTypes.REFRESH_UTXOS, async (request, sendResponse) => {
+  try {
+    const currentWallet = walletManager.getWallet();
+    if (currentWallet) {
+      // Run lightweight UTXO refresh in background without loading overlay
+      await currentWallet.syncService.refreshUtxos();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('refresh UTXOs error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
+  }
+});
+
 const openUI = async () => {
   await openDashboard();
 };
