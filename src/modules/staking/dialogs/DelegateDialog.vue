@@ -180,7 +180,20 @@
             </h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly">
-            <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet.type === WalletType.Normal">
+            <!-- Show success state when transaction is signed -->
+            <v-alert
+              v-if="isSubmit"
+              type="success"
+              dense
+              border="left"
+              colored-border
+              class="mb-0"
+              style="width: 100%;"
+            >
+              <span>Transaction signed! Click submit to broadcast.</span>
+            </v-alert>
+            <!-- Password input (hidden after signing) -->
+            <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet.type === WalletType.Normal && !isSubmit">
               <template v-slot:activator="{}">
                 <v-text-field
                   flat
@@ -194,11 +207,11 @@
                   :rules="passwordRules"
                   hide-details
                   required
-                  :disabled="loading || isSubmit"
+                  :disabled="loading"
                   @keydown.enter.prevent="signDelegationTx"
                 >
                   <template v-slot:append>
-                    <v-icon @click="showPassword = !showPassword" tabindex="-1" :disabled="isSubmit">
+                    <v-icon @click="showPassword = !showPassword" tabindex="-1">
                       {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
                     </v-icon>
                   </template>
@@ -206,7 +219,7 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <div v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0" style="align-content: center">
+            <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
                   text-left="USB"
@@ -223,12 +236,12 @@
               elevation="0"
               @click="signDelegationTx"
               height="40"
-              :disabled="loading || !valid"
+              :disabled="loading || (!valid && !isSubmit)"
               :loading="loading"
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              {{ isSubmit ? 'Submit' : 'Delegate' }}
+              {{ isSubmit ? 'Submit Transaction' : 'Sign & Delegate' }}
             </v-btn>
           </v-col>
         </v-row>
@@ -386,6 +399,7 @@ watch(
     if (val) {
       spendingPassword.value = '';
       showPassword.value = false;
+      isSubmit.value = false;
       if (formRef.value) {
         formRef.value.resetValidation();
       }
