@@ -229,7 +229,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'utxo-spent']);
 
 const { loggedWallet, utxos, account, keys, config } = toRefs(walletStore);
 
@@ -408,6 +408,7 @@ const submitTx = async () => {
   try {
     loading.value = true;
     console.log('Submitting Cardano JS SDK DRep delegation transaction');
+
     const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
@@ -418,6 +419,30 @@ const submitTx = async () => {
     })) as { data: { txId?: string; error?: string } };
 
     if (submitResult.data.error) {
+      /**
+       * Handle BadInputsUTxO error (spent UTXO detection)
+       * When the blockchain rejects a transaction because a UTXO no longer exists,
+       * we extract the UTXO ID from the error message and emit it to the parent
+       * component so it can be excluded from future transaction attempts.
+       */
+      if (submitResult.data.error.includes('BadInputsUTxO')) {
+        // Extract UTXO hash from Cardano node error format: SafeHash \"abc123...\"
+        const utxoMatch = submitResult.data.error.match(/SafeHash\s*\\*"([a-f0-9]+)\\*"/);
+        const utxoId = utxoMatch ? utxoMatch[1] : null;
+
+        console.log('🚫 BadInputsUTxO error detected, extracted UTXO:', utxoId);
+
+        // Notify parent component to mark this UTXO as spent
+        if (utxoId) {
+          emit('utxo-spent', `${utxoId}#0`);
+          console.log('✅ Emitted utxo-spent event for:', `${utxoId}#0`);
+        }
+
+        throw new Error(
+          'Transaction failed because a UTXO has already been spent.\n\n' +
+            'Close this dialog and try delegating again - the spent UTXO will be automatically excluded.'
+        );
+      }
       throw new Error(submitResult.data.error);
     }
 
