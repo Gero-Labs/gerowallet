@@ -42,7 +42,15 @@
                         )
                       }}
                     </h4>
-                    <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
+                    <v-tooltip top v-if="account?.withdrawable_amount > 0 && !account?.drep_id" max-width="250">
+                      <template v-slot:activator="{ on, attrs }">
+                        <v-btn x-small text color="warning" v-bind="attrs" v-on="on" @click="withdraw">
+                          Withdraw
+                        </v-btn>
+                      </template>
+                      <span>DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.</span>
+                    </v-tooltip>
+                    <v-btn v-else-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
                       Withdraw
                     </v-btn>
                   </v-col>
@@ -385,6 +393,14 @@ const rewardsChartData = computed(() => {
 
 const withdraw = async () => {
   try {
+    // Check if user has DRep delegation
+    if (!account.value?.drep_id) {
+      console.warn('Cannot withdraw: DRep delegation required');
+      // Dialog will still open and show the warning with "Go to Governance" button
+      withdrawalDialog.value = true;
+      return;
+    }
+
     // Prepare withdrawals if there are any rewards
     const withdrawals: Cardano.Withdrawal[] = [];
     if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {

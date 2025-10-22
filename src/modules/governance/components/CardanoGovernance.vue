@@ -549,6 +549,27 @@ const delegate = async () => {
     }
     certificates.push(certificate);
 
+    // Set the selected DRep info first
+    if (delegationModel.value === 'Abstain') {
+      selectedDRep.value = {
+        id: '',
+        name: 'Abstain',
+        image: '',
+        delegators: 0,
+        votes: 0,
+        voting_power: 0,
+      };
+    } else if (delegationModel.value === 'No Confidence') {
+      selectedDRep.value = {
+        id: '',
+        name: 'No Confidence',
+        image: '',
+        delegators: 0,
+        votes: 0,
+        voting_power: 0,
+      };
+    }
+
     // Use the generic transaction builder
     txData.value = await buildCardanoTransaction({
       certificates,
@@ -558,16 +579,9 @@ const delegate = async () => {
       tip: tip.value,
       implicitCoin,
     });
-    isDelegateDialogOpen.value = true;
-    selectedDRep.value = {
-      id: '',
-      name: 'Abstain',
-      image: '',
-      delegators: 0,
-      votes: 0,
-      voting_power: 0,
-    };
+
     console.log('Vote delegation transaction built successfully');
+    isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building vote delegation transaction:', error);
     snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);

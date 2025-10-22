@@ -83,11 +83,11 @@ watch(() => props.tokens, (newVal) => {
 })
 
 const residue = computed(() => {
-  return props.tokens && props.tokens.length > 4 ? props.tokens.length - 4 : 0;
+  return props.tokens?.length > 4 ? props.tokens.length - 4 : 0;
 })
 
 onMounted(async () => {
-  if (props.tokens && props.tokens.length) {
+  if (props.tokens?.length) {
     await updateTokens(props.tokens);
   }
 })

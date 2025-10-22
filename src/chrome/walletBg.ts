@@ -662,6 +662,11 @@ export class WalletBg {
           if (txsToUpdate.length > 0) {
             debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
+
+            // Reload all transactions from database and update store
+            // This ensures the UI reflects pending status changes
+            const allTransactions = await txsTable.toArray();
+            WalletStore.setTransactions(allTransactions);
           } else {
             debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }
