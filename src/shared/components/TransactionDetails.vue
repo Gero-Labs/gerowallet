@@ -960,6 +960,11 @@ const txAssets = computed(() => {
 });
 
 const receivedAssets = computed(() => {
+  // Safety check: return empty array if assets is undefined
+  if (!props.transactionInfo['assets']) {
+    return [];
+  }
+
   const assts = props.transactionInfo['assets']
     .filter((asset: any) => asset.policy_id !== '')
     .map((asset: any) => {
