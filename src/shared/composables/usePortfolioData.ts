@@ -42,17 +42,40 @@ export function usePortfolioData(options: UsePortfolioDataOptions = {}) {
   });
 
   // Get latest portfolio values (most recent data point from each currency)
+  // CRITICAL FIX: Find the data point with the MAXIMUM timestamp to ensure we get the most recent value
+  // This fixes the issue where cached/merged data might not be properly sorted
   const latestPortfolioValues = computed(() => {
+    const getLatestValue = (data: any[], currency: string): number | null => {
+      if (!data || data.length === 0) return null;
+
+      // Find the data point with the maximum timestamp (most recent)
+      let maxTimestamp = -Infinity;
+      let latestValue = null;
+
+      for (const point of data) {
+        if (point[0] > maxTimestamp) {
+          maxTimestamp = point[0];
+          latestValue = point[1];
+        }
+      }
+
+      // Check if data is stale (older than 30 minutes) and return null to trigger fallback
+      const now = Date.now();
+      const thirtyMinutesAgo = now - (30 * 60 * 1000);
+      const isStale = maxTimestamp < thirtyMinutesAgo;
+
+      // If data is stale, return null to force fallback to computedValues
+      if (isStale) {
+        return null;
+      }
+
+      return latestValue;
+    };
+
     return {
-      ada: adaData.value && adaData.value.length > 0
-        ? adaData.value[adaData.value.length - 1][1]
-        : null,
-      usd: usdData.value && usdData.value.length > 0
-        ? usdData.value[usdData.value.length - 1][1]
-        : null,
-      eur: eurData.value && eurData.value.length > 0
-        ? eurData.value[eurData.value.length - 1][1]
-        : null,
+      ada: getLatestValue(adaData.value, 'ADA'),
+      usd: getLatestValue(usdData.value, 'USD'),
+      eur: getLatestValue(eurData.value, 'EUR'),
     };
   });
 

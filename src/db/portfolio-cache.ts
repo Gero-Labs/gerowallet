@@ -427,8 +427,25 @@ export class PortfolioCacheService {
 
     // Check cache first
     const cachedData = await this.getCachedData(address, currency);
-    if (cachedData) {
-      return cachedData;
+
+    // If we have valid cached data, check if it's recent enough
+    if (cachedData && cachedData.length > 0) {
+      // Find the latest timestamp in cached data
+      let maxCachedTimestamp = 0;
+      for (const point of cachedData) {
+        if (point[0] > maxCachedTimestamp) {
+          maxCachedTimestamp = point[0];
+        }
+      }
+
+      const now = Date.now();
+      const cacheAgeMinutes = (now - maxCachedTimestamp) / (1000 * 60);
+
+      // If cache is fresh (less than 15 minutes old), use it
+      if (cacheAgeMinutes < 15) {
+        return cachedData;
+      }
+      // Cache is stale, continue to fetch fresh data below
     }
 
 
