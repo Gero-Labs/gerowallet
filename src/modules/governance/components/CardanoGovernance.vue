@@ -676,18 +676,48 @@ const markUtxoAsSpent = (utxoId: string) => {
 };
 
 /**
- * Clears the spent UTXOs list after a successful transaction.
+ * Clears spent UTXOs that are no longer in the current UTXO set.
  * This cleanup ensures we don't indefinitely track spent UTXOs after the wallet syncs.
+ * Only removes UTXOs that are confirmed to be absent from wallet state.
  * Also clears from localStorage.
  */
 const clearSpentUtxos = () => {
   if (spentUtxos.value.size > 0) {
-    console.log('🧹 Clearing spent UTXOs list');
-    spentUtxos.value.clear();
-    try {
-      localStorage.removeItem(SPENT_UTXOS_KEY);
-    } catch (e) {
-      console.warn('Failed to clear spent UTXOs from localStorage:', e);
+    console.log('🧹 Cleaning up spent UTXOs list');
+
+    // Build a Set of current UTXO IDs for O(1) lookup
+    const currentUtxoIds = new Set(
+      utxos.value.map(u => `${u[0].txId}#${u[0].index}`)
+    );
+
+    // Only remove spent UTXOs that are no longer in wallet state
+    let removedCount = 0;
+    for (const spentUtxoId of Array.from(spentUtxos.value)) {
+      if (!currentUtxoIds.has(spentUtxoId)) {
+        spentUtxos.value.delete(spentUtxoId);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      console.log(`✅ Removed ${removedCount} confirmed spent UTXOs from tracking`);
+    }
+
+    // If all spent UTXOs have been removed from wallet state, clear the entire list
+    if (spentUtxos.value.size === 0) {
+      console.log('✅ All spent UTXOs confirmed removed from wallet state');
+      try {
+        localStorage.removeItem(SPENT_UTXOS_KEY);
+      } catch (e) {
+        console.warn('Failed to clear spent UTXOs from localStorage:', e);
+      }
+    } else {
+      // Update localStorage with remaining spent UTXOs
+      try {
+        localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(Array.from(spentUtxos.value)));
+      } catch (e) {
+        console.warn('Failed to update spent UTXOs in localStorage:', e);
+      }
     }
   }
 };
