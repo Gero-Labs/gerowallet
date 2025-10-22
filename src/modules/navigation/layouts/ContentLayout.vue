@@ -249,6 +249,7 @@ import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
+import dexHunterStoreActions from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
@@ -271,6 +272,9 @@ loadExchangeRate();
 // GERO token unit
 const GERO_UNIT = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b64745524f';
 
+// Reactive GERO price fallback (used when token not in dexHunterTokens)
+const geroFallbackPrice = ref<number>(0);
+
 const geroPriceInAda = computed(() => {
   // For Apex, we show the native token price (AP3X = 1, like ADA = 1 for Cardano)
   if (isApex.value) {
@@ -282,6 +286,12 @@ const geroPriceInAda = computed(() => {
   if (geroToken?.price && geroToken.price > 0) {
     return Number(geroToken.price);
   }
+
+  // Fallback: Use separately fetched price if token not in wallet
+  if (geroFallbackPrice.value > 0) {
+    return geroFallbackPrice.value;
+  }
+
   return 0;
 });
 
@@ -472,6 +482,31 @@ watch(
   { immediate: true }
 );
 
+// Fetch GERO price even if user doesn't own the token
+const fetchGeroPrice = async () => {
+  try {
+    // Only fetch for Cardano chains
+    if (isApex.value) return;
+
+    // Check if GERO is already loaded
+    const geroToken = dexHunterTokens.value[GERO_UNIT];
+    if (geroToken?.price && geroToken.price > 0) {
+      return; // Already have the price
+    }
+
+    // Import dexHunterApi directly to fetch price in browser context
+    const dexHunterApi = await import('@/api/dexhunter-api');
+    const res = await dexHunterApi.default.mCap(GERO_UNIT);
+
+    if (res.status === 200 && res.data?.price) {
+      const price = Number(res.data.price);
+      geroFallbackPrice.value = price;
+    }
+  } catch (error) {
+    console.warn('Failed to fetch GERO price for ticker:', error);
+  }
+};
+
 // Preload background image for better LCP performance
 const preloadBackgroundImage = () => {
   const currentChain = loggedWallet.value?.chain;
@@ -500,6 +535,9 @@ let timeInterval: ReturnType<typeof setInterval> | null = null;
 onMounted(async () => {
   // Ensure colors are set on mount
   updateThemeColors();
+
+  // Fetch GERO price for ticker (non-blocking)
+  fetchGeroPrice();
 
   // Preload background image after critical content
   requestIdleCallback(
