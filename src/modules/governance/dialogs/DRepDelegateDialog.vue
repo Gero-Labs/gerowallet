@@ -463,7 +463,20 @@ const submitTx = async () => {
     }
 
     snackbar.fireSuccess(`DRep Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
-    // Emit success event so parent can clear spent UTXOs list
+
+    // Trigger wallet resync to update UTXO list after successful transaction
+    console.log('🔄 Triggering wallet resync after successful transaction...');
+    try {
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.RESYNC,
+        data: {},
+      });
+      console.log('✅ Wallet resynced successfully');
+    } catch (e) {
+      console.warn('⚠️ Failed to trigger resync:', e);
+    }
+
+    // Clear spent UTXOs list and close dialog
     emit('tx-success');
     emit('close');
   } catch (e) {
