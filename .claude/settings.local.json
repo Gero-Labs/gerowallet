@@ -21,7 +21,16 @@
       "Bash(done)",
       "Bash(npm view:*)",
       "Bash(npm info:*)",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(git checkout:*)",
+      "Bash(git push:*)",
+      "Bash(git remote get-url:*)",
+      "Bash(curl -s \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=1y&quote=ADA\")",
+      "Bash(curl -s \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=1y&quote=USD\")",
+      "Bash(curl -s \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=1y&quote=EUR\")",
+      "Bash(curl -s -H \"Accept: application/json\" \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=7d&quote=ADA\")",
+      "Bash(python3:*)",
+      "Bash(curl -s -H \"Accept: application/json\" \"https://dev.gerowallet.io/api/wallet/value/trended?address=addr1qyx2ymk0sa79uyap0vdvz3ayxglz5nx0ktc9792gljeaha664arus97u6mw2q8rtpjrvcr9qn3vfa25gp6zedwjhacjscv3w4f&timeframe=7d&quote=USD\")"
     ],
     "deny": [],
     "ask": []
