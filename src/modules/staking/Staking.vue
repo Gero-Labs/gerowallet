@@ -645,19 +645,37 @@ async function delegate(row: any) {
     // Filter out spent UTXOs from localStorage
     const SPENT_UTXOS_KEY = 'gero_spent_utxos';
     let availableUtxos = utxos.value;
+
+    console.log('🔍 Starting UTXO filtering for pool delegation');
+    console.log('   Total UTXOs available:', utxos.value.length);
+    console.log('   UTXO IDs:', utxos.value.map(u => `${u[0].txId}#${u[0].index}`));
+
     try {
       const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+      console.log('   localStorage spent UTXOs raw:', stored);
+
       if (stored) {
         const spentUtxosArray = JSON.parse(stored);
+        console.log('   Parsed spent UTXOs:', spentUtxosArray);
+
         if (spentUtxosArray.length > 0) {
           const spentUtxosSet = new Set(spentUtxosArray);
           console.log('🚫 Filtering out spent UTXOs for pool delegation:', Array.from(spentUtxosSet));
+
           availableUtxos = utxos.value.filter(u => {
             const utxoId = `${u[0].txId}#${u[0].index}`;
-            return !spentUtxosSet.has(utxoId);
+            const isSpent = spentUtxosSet.has(utxoId);
+            if (isSpent) {
+              console.log('   ❌ Excluding spent UTXO:', utxoId);
+            }
+            return !isSpent;
           });
-          console.log('🔍 Available UTXOs for pool delegation:', availableUtxos.length);
+          console.log('🔍 Available UTXOs after filtering:', availableUtxos.length);
+        } else {
+          console.log('   No spent UTXOs in localStorage');
         }
+      } else {
+        console.log('   No spent UTXOs localStorage key found');
       }
     } catch (e) {
       console.warn('Failed to load spent UTXOs from localStorage:', e);
@@ -736,13 +754,22 @@ const closeDelegateDialog = () => {
  */
 const markUtxoAsSpent = (utxoId: string) => {
   const SPENT_UTXOS_KEY = 'gero_spent_utxos';
+  console.log('📝 markUtxoAsSpent called with:', utxoId);
   try {
     const stored = localStorage.getItem(SPENT_UTXOS_KEY);
+    console.log('   Current localStorage value:', stored);
     const spentUtxosArray = stored ? JSON.parse(stored) : [];
+    console.log('   Current spent UTXOs array:', spentUtxosArray);
     const spentUtxosSet = new Set(spentUtxosArray);
     spentUtxosSet.add(utxoId);
-    localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(Array.from(spentUtxosSet)));
-    console.log('✅ Marked UTXO as spent:', utxoId);
+    const updatedArray = Array.from(spentUtxosSet);
+    console.log('   Updated spent UTXOs array:', updatedArray);
+    localStorage.setItem(SPENT_UTXOS_KEY, JSON.stringify(updatedArray));
+    console.log('✅ Marked UTXO as spent in localStorage:', utxoId);
+
+    // Verify it was written
+    const verification = localStorage.getItem(SPENT_UTXOS_KEY);
+    console.log('   Verification read:', verification);
   } catch (e) {
     console.warn('Failed to mark UTXO as spent in localStorage:', e);
   }
