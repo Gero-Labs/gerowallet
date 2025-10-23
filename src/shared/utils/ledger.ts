@@ -429,7 +429,9 @@ export default {
           snackbar.setError('Invalid data sent to Ledger device. Please try again.');
           break;
         default:
-          snackbar.setError('Ledger device error. Please ensure the Cardano app is open and try again.');
+          // Keep error details for debugging while providing user-friendly message
+          const errorCode = error.code ? ` (Error code: 0x${error.code.toString(16).toUpperCase()})` : '';
+          snackbar.setError(`Ledger device error${errorCode}. Please ensure the Cardano app is open and try again.`);
       }
     } else if (e?.message?.includes('NetworkError') || e?.message?.includes('Unable to reset the device')) {
       snackbar.setError('Connection error with Ledger device. Please ensure the Cardano app is open and try again.');
@@ -439,7 +441,9 @@ export default {
       snackbar.setError('Cannot connect to Cardano app. Please ensure the Cardano app is open on your Ledger device.');
     } else {
       console.error('Error signing with Ledger:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed. Please try again.');
+      // Keep error details for debugging
+      const errorMessage = e instanceof Error ? e.message : 'Ledger signing failed';
+      snackbar.setError(`${errorMessage}. Please try again.`);
     }
   }
 };
