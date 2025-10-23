@@ -407,12 +407,39 @@ export default {
         case 0x6E11:
           snackbar.setError('Ledger device is locked. Please unlock it and try again.');
           break;
+        case 0x6E01:
+          snackbar.setError('Please open the Cardano app on your Ledger device and try again.');
+          break;
+        case 0x6E00:
+          snackbar.setError('Invalid Ledger state. Please reconnect your Ledger device.');
+          break;
+        case 0x6E04:
+          snackbar.setError('The Cardano app version on your Ledger is not supported. Please update the Cardano app.');
+          break;
+        case 0x6E10:
+          snackbar.setError('Ledger device is in an invalid state. Please restart the Cardano app.');
+          break;
+        case 0x6982:
+          snackbar.setError('Ledger device: Security status not satisfied. Please check your device.');
+          break;
+        case 0x6985:
+          snackbar.setError('Transaction rejected on Ledger device.');
+          break;
+        case 0x6A80:
+          snackbar.setError('Invalid data sent to Ledger device. Please try again.');
+          break;
         default:
-          snackbar.setError('Ledger device error: ' + error.message);
+          snackbar.setError('Ledger device error. Please ensure the Cardano app is open and try again.');
       }
+    } else if (e?.message?.includes('NetworkError') || e?.message?.includes('Unable to reset the device')) {
+      snackbar.setError('Connection error with Ledger device. Please ensure the Cardano app is open and try again.');
+    } else if (e?.message?.includes('No device selected') || e?.message?.includes('device not found')) {
+      snackbar.setError('No Ledger device found. Please connect your Ledger device and try again.');
+    } else if (e?.message?.includes('Failed to Retrieve Cardano App Version')) {
+      snackbar.setError('Cannot connect to Cardano app. Please ensure the Cardano app is open on your Ledger device.');
     } else {
       console.error('Error signing with Ledger:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+      snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed. Please try again.');
     }
   }
 };
