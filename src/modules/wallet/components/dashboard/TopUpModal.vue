@@ -26,8 +26,32 @@
 
           <!-- Actions Section -->
           <div v-if="currentStep < 3" class="modal-actions-wrapper">
-            <!-- Password field for Normal wallet on step 2 -->
-            <div v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal" class="password-section">
+            <!-- Show success alert when transaction is signed -->
+            <v-alert
+              v-if="currentStep === 2 && isSubmit"
+              type="success"
+              dense
+              border="left"
+              colored-border
+              class="mx-6 mb-0"
+            >
+              <span>Transaction signed! Click submit to broadcast.</span>
+            </v-alert>
+
+            <!-- Show info alert when Ledger is signing (buttons disabled) -->
+            <v-alert
+              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit && txSubmitLoading"
+              type="info"
+              dense
+              border="left"
+              colored-border
+              class="mx-6 mb-0"
+            >
+              <span>Please review and approve the transaction on your Ledger device to continue.</span>
+            </v-alert>
+
+            <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
+            <div v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit" class="password-section">
               <v-text-field
                 v-model="spendingPassword"
                 outlined
@@ -47,11 +71,23 @@
               </v-text-field>
             </div>
 
+            <!-- USB/Bluetooth toggle for Ledger wallet on step 2 (hidden after signing) -->
+            <div v-else-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit" class="ledger-section">
+              <ToggleSwitch
+                text-left="USB"
+                icon-left="mdi-usb"
+                text-right="Bluetooth"
+                icon-right="mdi-bluetooth"
+                v-model="isBT"
+                :disabled="txSubmitLoading"
+              />
+            </div>
+
             <!-- Action Buttons -->
             <div class="modal-actions">
               <SecondaryButton text="Cancel" @click="closeModal()" :disabled="txSubmitLoading" />
               <GradientButton
-                :text="currentStep === 1 ? 'Continue' : 'Top Up'"
+                :text="currentStep === 1 ? 'Continue' : (isSubmit ? 'Submit Transaction' : 'Sign & Top Up')"
                 @click="handleTopUp"
                 :disabled="!canTopUp || txSubmitLoading"
                 :loading="txSubmitLoading"
@@ -84,9 +120,12 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
+import ledgerUtils from '@/shared/utils/ledger';
+import networks from '@/utils/networks';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
 defineProps<{
   open: boolean;
@@ -110,6 +149,8 @@ const txSubmitLoading = ref(false);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref('');
 const txWitnesses = ref('');
+const isBT = ref(false); // Bluetooth toggle for Ledger
+const isSubmit = ref(false); // Track if transaction is signed and ready to submit
 
 // Computed: Check if Top Up button should be enabled
 const canTopUp = computed(() => {
@@ -120,10 +161,10 @@ const canTopUp = computed(() => {
   }
   if (currentStep.value === 2) {
     // Step 2: Check if password is required for Normal wallet
-    if (walletStore.loggedWallet?.type === WalletType.Normal) {
+    if (walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit.value) {
       return spendingPassword.value !== '';
     }
-    return true; // Other wallet types don't need password
+    return true; // Other wallet types don't need password, or transaction is already signed
   }
   return true;
 });
@@ -151,6 +192,8 @@ const closeModal = () => {
   tx.value = undefined;
   txCbor.value = '';
   txWitnesses.value = '';
+  isBT.value = false;
+  isSubmit.value = false;
 };
 
 const updateAmounts = (newAmounts: { adaAmount: string; eurAmount: string }) => {
@@ -211,7 +254,7 @@ const buildTx = async () => {
   }
 };
 
-// Sign transaction
+// Sign transaction (Normal wallet)
 const signTx = async (): Promise<boolean> => {
   txSubmitLoading.value = true;
   try {
@@ -245,6 +288,56 @@ const signTx = async (): Promise<boolean> => {
   } catch (e) {
     console.error('❌ Error signing transaction:', e);
     snackbar.setError(e instanceof Error ? e.message : 'Failed to sign transaction');
+    return false;
+  } finally {
+    txSubmitLoading.value = false;
+  }
+};
+
+// Sign transaction (Ledger wallet)
+const signLedgerTx = async (): Promise<boolean> => {
+  txSubmitLoading.value = true;
+  try {
+    console.log('🔏 Signing transaction with Ledger...');
+
+    if (!tx.value) {
+      throw new Error('No transaction to sign');
+    }
+
+    // Serialize transaction
+    txCbor.value = serializeCardanoJsSdkTx(tx.value);
+    console.log('📦 Serialized transaction CBOR for Ledger');
+
+    // Sign with Ledger device
+    const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+      tx.value,
+      walletStore.keys,
+      walletStore.utxos,
+      !isBT.value, // isUsb flag (inverted from isBT)
+      networks.resolveNetwork(walletStore.loggedWallet.chain, walletStore.loggedWallet.network)
+    );
+
+    // Validate signatures were returned
+    if (!signatures || (signatures instanceof Map && signatures.size === 0)) {
+      throw new Error('No signatures returned from Ledger device. Please try again.');
+    }
+
+    // Create witness set from signatures
+    const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+      signatures,
+    });
+
+    const witnessCbor = transactionWitnessSet.toCbor();
+    if (!witnessCbor || witnessCbor.length === 0) {
+      throw new Error('Failed to create witness set from Ledger signatures.');
+    }
+
+    console.log('✅ Ledger signing successful:', witnessCbor);
+    txWitnesses.value = witnessCbor;
+    return true;
+  } catch (e) {
+    console.error('❌ Error signing transaction with Ledger:', e);
+    ledgerUtils.ledgerErrorHandling(e);
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -294,6 +387,30 @@ const handleTopUp = async () => {
   } else if (currentStep.value === 2) {
     console.log('📈 Step 2 → Processing transaction...');
 
+    // If transaction is already signed, just submit it
+    if (isSubmit.value) {
+      console.log('📤 Transaction already signed, submitting...');
+
+      // Validate that transaction and witnesses exist before submitting
+      if (!tx.value || !txCbor.value || !txWitnesses.value) {
+        console.error('❌ Missing transaction data:', { tx: !!tx.value, txCbor: !!txCbor.value, txWitnesses: !!txWitnesses.value });
+        snackbar.setError('Transaction data is missing. Please sign the transaction again.');
+        isSubmit.value = false;
+        return;
+      }
+
+      const success = await submitTx();
+      if (success) {
+        // Go to loading step
+        currentStep.value = 3;
+        // Wait for loading animation (minimum 3 seconds for UX)
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log('✅ Transaction successful!');
+        // handleLoadingComplete will be called automatically
+      }
+      return;
+    }
+
     // Store transaction amounts for later use
     transactionAmounts.value = {
       adaAmount: amounts.value.adaAmount,
@@ -308,8 +425,11 @@ const handleTopUp = async () => {
       return;
     }
 
-    // Verify spending password for Normal wallet
+    let signSuccess = false;
+
+    // Sign transaction based on wallet type
     if (walletStore.loggedWallet?.type === WalletType.Normal) {
+      // Verify spending password for Normal wallet
       const passwordVerification = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
         data: { password: spendingPassword.value }
@@ -319,35 +439,42 @@ const handleTopUp = async () => {
         snackbar.setError('Invalid spending password');
         return;
       }
-    }
 
-    // Go to loading step
-    currentStep.value = 3;
-
-    let success = false;
-
-    // Sign and submit transaction
-    if (walletStore.loggedWallet?.type === WalletType.Normal) {
-      const signSuccess = await signTx();
-      if (signSuccess) {
-        success = await submitTx();
-      }
+      // Sign with password
+      signSuccess = await signTx();
+    } else if (walletStore.loggedWallet?.type === WalletType.Ledger) {
+      // Sign with Ledger device
+      signSuccess = await signLedgerTx();
     } else {
-      // For non-Normal wallets (if needed in future)
+      // For other wallet types
       snackbar.setError('Unsupported wallet type');
-      currentStep.value = 2;
       return;
     }
 
-    // Wait for loading animation (minimum 3 seconds for UX)
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (!signSuccess) {
+      console.error('❌ Failed to sign transaction');
+      return;
+    }
 
-    if (success) {
-      console.log('✅ Transaction successful!');
-      // handleLoadingComplete will be called automatically
+    // Check if auto-submit is enabled
+    if (walletStore.config?.txAutoSubmit === true) {
+      // Auto-submit enabled, proceed to loading and submit
+      currentStep.value = 3;
+      const success = await submitTx();
+
+      if (success) {
+        // Wait for loading animation (minimum 3 seconds for UX) only on success
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log('✅ Transaction successful!');
+        // handleLoadingComplete will be called automatically
+      } else {
+        console.error('❌ Transaction failed, returning to summary immediately');
+        currentStep.value = 2; // Go back to summary immediately on failure
+      }
     } else {
-      console.error('❌ Transaction failed, returning to summary');
-      currentStep.value = 2; // Go back to summary
+      // Auto-submit disabled, show success alert and wait for user to click submit
+      console.log('✅ Transaction signed, waiting for user to submit');
+      isSubmit.value = true;
     }
   }
 };
@@ -426,6 +553,14 @@ const handleBackToAccount = () => {
   :deep(.v-text-field__details) {
     display: none;
   }
+}
+
+.ledger-section {
+  padding: 0 24px 12px 24px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .modal-actions {
