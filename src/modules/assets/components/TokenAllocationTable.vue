@@ -1,7 +1,7 @@
 <template>
   <v-card outlined class="no-gutters fill-height liquid-glass" :loading="loadingTxs">
     <v-card-title class="token-allocation-title" ref="headerRef">
-      Token Allocation
+      Token Holdings
       <!-- Top-level search box -->
       <v-text-field
         v-model="searchTerm"
