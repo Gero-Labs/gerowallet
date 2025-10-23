@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { onMounted, ref } from 'vue';
 import assets from '@/utils/assets';
 
@@ -59,6 +60,8 @@ import TreasuryTab from './Tabs/TreasuryTab.vue';
 import MembersTab from './Tabs/MembersTab.vue';
 import GovernanceTab from './Tabs/GovernanceTab.vue';
 
+
+const { t } = useTranslation();
 const tab = ref(0);
 
 onMounted(() => {});

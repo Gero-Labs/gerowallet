@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Your Rewards"
-    subtitle="View your pending and historical rewards"
+    :title="$t('cashback.yourRewards')"
+    :subtitle="$t('cashback.viewPendingHistorical')"
     :min-height="0"
     :persistent="false"
   >
@@ -14,7 +14,7 @@
             <div style="justify-content: flex-start; align-items: center; gap: 16px; display: inline-flex">
               <div style="flex-direction: column; justify-content: flex-start; align-items: flex-start; display: inline-flex">
                 <div style="justify-content: center; align-items: center; display: inline-flex">
-                  <div class="header-text">Ready to Claim</div>
+                  <div class="header-text">{{ $t('cashback.readyToClaim') }}</div>
                 </div>
                 <div class="amount-section">
                   <div class="amount">
@@ -25,13 +25,13 @@
                   </div>
                 </div>
               </div>
-              <v-btn class="geroButton" :loading="loading" icon height="80" width="80" style="letter-spacing: normal; font-size: 20px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount || loading" @click="claim">Claim</v-btn>
+              <v-btn class="geroButton" :loading="loading" icon height="80" width="80" style="letter-spacing: normal; font-size: 20px; text-transform: capitalize; color: black!important; background: linear-gradient(134deg, #00C7F3 40%, #00FFD1 100%);" :disabled="!eligible || eligible.minimumClaimThreshold > eligible.tokenAmount || loading" @click="claim">{{ $t('cashback.claim') }}</v-btn>
             </div>
           </div>
         </v-col>
         <v-col cols="12" xl="5" lg="5" md="5" class="text-center" style="align-content: center;">
           <div>
-            <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">Pending Rewards</div>
+            <div style="color: white; font-size: 16px; font-weight: 600; line-height: 24px; word-wrap: break-word">{{ $t('cashback.pendingRewards') }}</div>
             <div style="align-self: stretch; color: #A3A3A3; font-size: 30px; font-weight: 600; line-height: 38px; word-wrap: break-word">
               {{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}
             </div>
@@ -43,13 +43,13 @@
       </v-row>
     </div>
     <v-card-title>
-      Rewards Details
+      {{ $t('cashback.rewardsDetails') }}
       <v-spacer></v-spacer>
       <v-btn-toggle mandatory active-class="highlight" @change="handleSwitchTab">
-        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> Deals
+        <v-btn color="black" :value="0" rounded style="text-transform: capitalize"> {{ $t('cashback.deals') }}
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{deals?.length}}</v-chip>
         </v-btn>
-        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> Claims
+        <v-btn color="black" :value="1" rounded style="text-transform: capitalize" :disabled="claims?.length === 0"> {{ $t('cashback.claims') }}
           <v-chip small outlined color="#009DAB" style="background-color: #00555C!important; color: #CECFD2;" class="ml-1 px-2">{{claims.length}}</v-chip>
         </v-btn>
       </v-btn-toggle>

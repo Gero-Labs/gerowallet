@@ -2,20 +2,17 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Delegate Your Stake"
+    :title="$t('staking.delegateYourStake')"
     :loading="loading"
     :min-height="639"
-    :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(
-      loggedWallet?.chain,
-      loggedWallet?.network
-    )} to a stake pool.`"
+    :subtitle="$t('staking.delegateSubtitle', { currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) })"
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert border="left" color="primary" type="info" prominent class="text-left">
         <ul>
-          <li>You can only delegate to one stake pool at a time</li>
-          <li>You can switch to delegate to a different stake pool at any time</li>
-          <li>You can cancel your delegation at any time</li>
+          <li>{{ $t('staking.youCanOnlyDelegateToOne') }}</li>
+          <li>{{ $t('staking.canSwitchPools') }}</li>
+          <li>{{ $t('staking.canCancelDelegation') }}</li>
         </ul>
       </v-alert>
       <v-list-item three-line>
@@ -228,7 +225,7 @@
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              {{ isSubmit ? 'Submit' : 'Delegate' }}
+              {{ isSubmit ? $t('staking.submit') : $t('staking.delegate') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -318,6 +315,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, watch, computed } from 'vue';
 // import { nextTick } from 'vue'; // TODO: Needed for Keystone QR code functionality
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -338,6 +336,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import filters from '@/shared/utils/filters';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

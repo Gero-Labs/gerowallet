@@ -40,6 +40,7 @@
     </v-card>
   </template>
   <script setup lang="ts">
+  import { useTranslation } from '@/shared/composables/useTranslation';
   import { ref, computed, toRefs } from 'vue';
   import { walletStore } from '@/stores/walletStore';
   import Select from '@/shared/components/Select.vue';

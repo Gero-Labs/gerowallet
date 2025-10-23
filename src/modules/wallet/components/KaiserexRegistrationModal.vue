@@ -44,10 +44,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, nextTick } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import { debugLog } from '@/utils/debug';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{
   open: boolean;

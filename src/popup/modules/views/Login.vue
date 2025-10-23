@@ -54,6 +54,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
@@ -62,6 +63,9 @@ import assets from '@/utils/assets';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
+
+
+const { t } = useTranslation();
 
 const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);

@@ -329,6 +329,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
@@ -343,6 +344,9 @@ import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 import { Blockchain } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);

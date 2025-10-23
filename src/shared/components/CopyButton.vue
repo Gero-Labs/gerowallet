@@ -10,7 +10,11 @@
   </v-btn>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted } from 'vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   value: {

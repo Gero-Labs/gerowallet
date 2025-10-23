@@ -4,7 +4,7 @@
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
           <v-card-title class="justify-center text-center" style="font-size: 32px">
-            Cashback
+            {{ $t('cashback.title') }}
           </v-card-title>
           <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
             Powered By <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
@@ -12,11 +12,11 @@
           </v-btn>
           </v-card-subtitle>
           <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
-            Pay with any credit card online, and receive ADA Cashback!
+            {{ $t('cashback.payAndReceive') }}
           </v-card-subtitle>
           <v-card-subtitle class="justify-center text-center pt-2 pb-8">
             <v-btn small outlined rounded color="#00DFF3" @click="isHowItWorksDialogOpen = true">
-              How it works
+              {{ $t('cashback.howItWorks') }}
             </v-btn>
           </v-card-subtitle>
           <v-card-text>
@@ -29,7 +29,7 @@
                     </v-list-item-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="font-size: 14px">
-                        Ready to Claim
+                        {{ $t('cashback.readyToClaim') }}
                       </v-list-item-title>
                       <v-list-item-subtitle style="display: flex; align-items: center;">
                         <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
@@ -45,7 +45,7 @@
                     </v-list-item-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="font-size: 14px">
-                        Pending rewards
+                        {{ $t('cashback.pendingRewards') }}
                       </v-list-item-title>
                       <v-list-item-subtitle style="display: flex; align-items: center;">
                         <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
@@ -56,7 +56,7 @@
                 </div>
                 <v-btn elevation="0" height="50" color="#0B141B" @click="isRewardsDialogOpen = true" :disabled="!supported">
                   <div class="btn-content">
-                    <div :class="supported ? 'btn-text' : 'btn-text-disabled'">View Rewards</div>
+                    <div :class="supported ? 'btn-text' : 'btn-text-disabled'">{{ $t('cashback.viewRewards') }}</div>
                   </div>
                 </v-btn>
               </div>

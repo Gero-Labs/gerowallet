@@ -763,6 +763,7 @@
   </v-card-text>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';

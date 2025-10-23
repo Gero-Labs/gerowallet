@@ -3,7 +3,7 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-          <v-card-title class="justify-center text-center" style="font-size: 32px"> Blog Posts </v-card-title>
+          <v-card-title class="justify-center text-center" style="font-size: 32px"> {{ $t('blog.title') }} </v-card-title>
           <v-card-text class="pb-0">
             <v-row>
               <v-col cols="12" xl="8" lg="8" md="8"> </v-col>
@@ -16,7 +16,7 @@
                   solo
                   dense
                   prepend-inner-icon="mdi-magnify"
-                  label="Search"
+                  :label="$t('blog.search')"
                   outlined
                 ></v-text-field>
               </v-col>

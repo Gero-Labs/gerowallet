@@ -22,11 +22,15 @@
   </v-menu>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
 import { toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import languages from '@/plugins/languages';
 import { geroStore } from '@/stores/geroStore';
+
+
+const { t } = useTranslation();
 
 const { locale } = toRefs(geroStore);
 const selectedLang = ref(-1);

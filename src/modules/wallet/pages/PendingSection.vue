@@ -40,6 +40,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
 // import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
 // import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';

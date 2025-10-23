@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import BlockCard from './tabs/BlockCard.vue';
 import OrderPhysicalCard from './tabs/OrderPhysicalCard.vue';

@@ -2,9 +2,9 @@
   <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
     <v-card-title class="pb-2 flex-grow-0">
       <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white"
-        >Transactions</router-link
+        >{{ $t('transactions.title') }}</router-link
       >
-      <span v-else>Transactions</span>
+      <span v-else>{{ $t('transactions.title') }}</span>
       <v-spacer />
       <!-- Search box -->
       <v-text-field
@@ -13,7 +13,7 @@
         flat
         solo
         hide-details
-        placeholder="Search"
+        :placeholder="$t('transactions.search')"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px"
@@ -51,7 +51,7 @@
                     <span>
                       {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}
                       <br v-if="item.epoch_no" />
-                      {{ item.epoch_no ? `Epoch: ${item.epoch_no}` : '' }}
+                      {{ item.epoch_no ? `${$t('transactions.epoch')}: ${item.epoch_no}` : '' }}
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>
@@ -63,7 +63,7 @@
                     class="px-1"
                     color="red"
                     style="margin-right: 4px !important"
-                    >Stake Registration</v-chip
+                    >{{ $t('transactions.stakeRegistration') }}</v-chip
                   >
                   <v-chip
                     v-if="isStakeDeRegistration(item)"
@@ -72,7 +72,7 @@
                     class="px-1"
                     color="red"
                     style="margin-right: 4px !important"
-                    >Stake Deregistration</v-chip
+                    >{{ $t('transactions.stakeDeregistration') }}</v-chip
                   >
                   <v-chip
                     v-if="isWithdrawal(item)"
@@ -81,7 +81,7 @@
                     class="px-1"
                     color="blue"
                     style="margin-right: 4px !important"
-                    >Withdrawal</v-chip
+                    >{{ $t('transactions.withdrawal') }}</v-chip
                   >
                   <v-chip
                     outlined
@@ -90,7 +90,7 @@
                     color="#FEC84B"
                     style="margin-left: 1px; margin-bottom: 1px"
                     v-if="item.pending"
-                    >Pending</v-chip
+                    >{{ $t('transactions.pending') }}</v-chip
                   >
                   <v-chip
                     v-if="isCashback(item)"
@@ -144,7 +144,7 @@
                     x-small
                     color="#89AAFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >Minswap</v-chip
+                    >{{ $t('transactions.minswap') }}</v-chip
                   >
                   <v-chip
                     v-if="isJpgStore(item)"
@@ -171,11 +171,11 @@
                     x-small
                     color="#5B4EFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >MuesliSwap</v-chip
+                    >{{ $t('transactions.muesliswap') }}</v-chip
                   >
                   <span v-if="isVyFi(item)" class="vyfi-chip"></span>
-                  <span v-if="isSundaeSwap(item)" class="sundaeswap-chip"></span>
-                  <span v-if="isSplash(item)" class="splash-chip"></span>
+                  <span v-if="isSundaeSwap(item)" class="sundaeswap-chip" :data-label="$t('transactions.sundaeswap')"></span>
+                  <span v-if="isSplash(item)" class="splash-chip" :data-label="$t('transactions.splash')"></span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -218,14 +218,14 @@
             <tr v-if="props.isFullList && isLoadingMore" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
-                <span class="ml-2">Loading more transactions...</span>
+                <span class="ml-2">{{ $t('transactions.loadingMoreTransactions') }}</span>
               </td>
             </tr>
             <!-- End of list indicator for infinite scroll -->
             <tr v-else-if="props.isFullList && hasReachedEnd && !search" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <span class="text-caption text--secondary">
-                  {{ displayedTransactions.length > 0 ? 'No more transactions to load' : 'No transactions found' }}
+                  {{ displayedTransactions.length > 0 ? $t('transactions.noMoreTransactions') : $t('transactions.noTransactionsFound') }}
                 </span>
               </td>
             </tr>
@@ -276,6 +276,14 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
+// Get instance for i18n
+const instance = getCurrentInstance();
+const t = (key: string, params?: any) => {
+  if (params) {
+    return instance?.proxy.$t(key, params) || key;
+  }
+  return instance?.proxy.$t(key) || key;
+};
 const props = defineProps({
   selectedTransaction: {
     type: Object,
@@ -297,9 +305,9 @@ const { loadingTxs } = toRefs(loadingState);
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 
-const activityHeaders = ref([
-  { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
-  { text: 'Amount', align: 'center text-nowrap', sortable: false, value: 'amount' },
+const activityHeaders = computed(() => [
+  { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
+  { text: t('transactions.amount'), align: 'center text-nowrap', sortable: false, value: 'amount' },
   { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: 110 },
 ]);
 
@@ -429,16 +437,16 @@ const getCertificateBaseStatus = (certificateType: string): string => {
   switch (certificateType) {
     case Cardano.CertificateType.StakeRegistrationDelegation:
     case Cardano.CertificateType.StakeDelegation:
-      return 'Delegating to Pool';
+      return (instance?.proxy.$t('transactions.delegatingToPool') as string) || 'Delegating to Pool';
     case Cardano.CertificateType.Unregistration:
     case Cardano.CertificateType.StakeDeregistration:
-      return 'Stake Deregistration';
+      return (instance?.proxy.$t('transactions.stakeDeregistration') as string) || 'Stake Deregistration';
     case Cardano.CertificateType.RegisterDelegateRepresentative:
-      return 'DRep Registration';
+      return (instance?.proxy.$t('dashboard.dRepRegistration') as string) || 'DRep Registration';
     case Cardano.CertificateType.VoteDelegation:
-      return 'Vote Delegation';
+      return (instance?.proxy.$t('transactions.voteDelegation') as string) || 'Vote Delegation';
     case Cardano.CertificateType.UnregisterDelegateRepresentative:
-      return 'DRep Deregistration';
+      return (instance?.proxy.$t('dashboard.dRepDeregistration') as string) || 'DRep Deregistration';
     default:
       return '';
   }
@@ -456,13 +464,13 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
   ) {
     const pool = await getPoolByIdFromApi(certificate.poolId);
     if (pool && pool.ticker) {
-      return 'Delegating to ' + pool.ticker;
+      return (instance?.proxy.$t('transactions.delegatingTo', { pool: pool.ticker }) as string) || 'Delegating to {pool}';
     }
   } else if (
     certificate.__typename === Cardano.CertificateType.Unregistration ||
     certificate.__typename === Cardano.CertificateType.StakeDeregistration
   ) {
-    return 'Stake Deregistration';
+    return (instance?.proxy.$t('transactions.stakeDeregistration') as string) || 'Stake Deregistration';
   }
 
   return baseStatus;
@@ -482,21 +490,21 @@ const addFundTransferStatus = (item: any, statuses: string[]): void => {
 
   // Build smart status message
   if (hasReceivedFunds && hasReceivedTokens) {
-    statuses.push('Received Funds & Tokens');
+    statuses.push((instance?.proxy.$t('transactions.receivedFundsAndTokens') as string) || 'Received Funds & Tokens');
   } else if (hasSentFunds && hasSentTokens) {
-    statuses.push('Sent Funds & Tokens');
+    statuses.push((instance?.proxy.$t('transactions.sentFundsAndTokens') as string) || 'Sent Funds & Tokens');
   } else if (hasReceivedFunds && hasSentTokens) {
-    statuses.push('Received Funds & Sent Tokens');
+    statuses.push((instance?.proxy.$t('transactions.receivedFundsAndSentTokens') as string) || 'Received Funds & Sent Tokens');
   } else if (hasSentFunds && hasReceivedTokens) {
-    statuses.push('Sent Funds & Received Tokens');
+    statuses.push((instance?.proxy.$t('transactions.sentFundsAndReceivedTokens') as string) || 'Sent Funds & Received Tokens');
   } else if (hasReceivedFunds) {
-    statuses.push('Received Funds');
+    statuses.push((instance?.proxy.$t('transactions.receivedFunds') as string) || 'Received Funds');
   } else if (hasSentFunds) {
-    statuses.push('Sent Funds');
+    statuses.push((instance?.proxy.$t('transactions.sentFunds') as string) || 'Sent Funds'    );
   } else if (hasReceivedTokens) {
-    statuses.push('Received Tokens');
+    statuses.push((instance?.proxy.$t('transactions.receivedTokens') as string) || 'Received Tokens');
   } else if (hasSentTokens) {
-    statuses.push('Sent Tokens');
+    statuses.push((instance?.proxy.$t('transactions.sentTokens') as string) || 'Sent Tokens');
   }
 };
 
@@ -1516,7 +1524,7 @@ onUnmounted(() => {
 }
 
 .splash-chip::after {
-  content: 'Splash';
+  content: attr(data-label);
   position: relative;
   z-index: 1;
   padding: 0 4px;

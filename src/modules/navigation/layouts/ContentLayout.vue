@@ -25,14 +25,14 @@
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    This is a <b>Beta Version</b>. For the Official Release visit
+                    <span v-html="$t('navigation.betaVersionNotice')"></span>
                     <a
                       style="color: black; font-weight: 700"
                       href="https://chromewebstore.google.com/detail/gero-dashboard/bgpipimickeadkjlklgciifhnalhdjhe?hl=en-US&utm_source=ext_sidebar"
                       target="_blank"
-                      >Gero Dashboard</a
+                      >{{ $t('navigation.geroDashboard') }}</a
                     >
-                    in Chrome Store.
+                    {{ $t('navigation.inChromeStore') }}
                   </v-alert>
                 </v-col>
               </v-row>
@@ -96,18 +96,18 @@
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
-                      <div><strong>Last Sync:</strong> {{ lastSyncTimestamp }}</div>
-                      <div><strong>Next Sync:</strong> {{ nextSyncDisplay }}</div>
-                      <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
+                      <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                      <div><strong>{{ t('navigation.nextSync') }}:</strong> {{ nextSyncDisplay }}</div>
+                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
-                        <strong class="mr-1">Status:</strong>
+                        <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
                             connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
                           "
-                          >{{ connected ? 'Online' : connecting ? 'Connecting...' : 'Offline' }}</span
+                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
                         >
                       </div>
                     </div>
@@ -128,7 +128,7 @@
                       </v-btn>
                     </template>
                     <v-card outlined class="notifications-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6"> Notifications </v-card-title>
+                      <v-card-title class="pa-2 text-h6"> {{ t('navigation.notifications') }} </v-card-title>
                       <v-card-text class="pa-0">
                         <v-list class="transparent">
                           <v-list-item>
@@ -137,7 +137,7 @@
                                 <v-avatar size="30" color="#333" class="mr-2">
                                   <v-icon small color="#CCC"> mdi-message-text-outline </v-icon>
                                 </v-avatar>
-                                Nothing New
+                                {{ t('navigation.nothingNew') }}
                               </v-list-item-title>
                             </v-list-item-content>
                           </v-list-item>
@@ -226,6 +226,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, onBeforeUnmount, toRefs, watch, getCurrentInstance } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
@@ -253,6 +254,8 @@ import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
+
+const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);

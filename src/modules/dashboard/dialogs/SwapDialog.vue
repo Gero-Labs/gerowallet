@@ -14,8 +14,12 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

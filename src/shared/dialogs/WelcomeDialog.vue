@@ -35,7 +35,7 @@
           />
         </v-card>
         <div style="position: absolute; bottom: 50px; justify-self: anchor-center; z-index: 2; font-size: 14px">
-          Check out whats new!
+          {{ $t('navigation.checkOutWhatsNew') }}
         </div>
       </v-carousel-item>
       <v-carousel-item>
@@ -44,7 +44,7 @@
             <v-col cols="6">
               <v-card class="transparent">
                 <v-card-title class="justify-center pb-0">
-                  What's New?
+                  {{ $t('navigation.whatsNew') }}
                 </v-card-title>
                 <v-card-text>
                   <v-list class="transparent">
@@ -55,7 +55,7 @@
                         style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover;"
                       />
                       <v-list-item-title class="text-left" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: white; font-weight: 500; z-index: 1;">
-                        Improved Performance and UX
+                        {{ $t('navigation.improvedPerformanceAndUX') }}
                       </v-list-item-title>
                     </v-list-item>
                     <v-list-item link @mouseenter="setGeroCard" class="my-3 px-0" style="position: relative; overflow: hidden; background-color: #0F0F0F; border-radius: 12px; height: 54px;">
@@ -341,8 +341,12 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch } from 'vue';
 import assets from '@/utils/assets';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

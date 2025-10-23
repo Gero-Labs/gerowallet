@@ -3,12 +3,9 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-          <v-card-title class="justify-center text-center pb-8 text-h3"> Cardano Governance </v-card-title>
+          <v-card-title class="justify-center text-center pb-8 text-h3"> {{ $t('governance.title') }} </v-card-title>
           <v-card-subtitle class="justify-center text-center text-subtitle-1">
-            Cardano Governance empowers ADA holders to actively participate in shaping the network's future. You can
-            cast your vote directly, choose a representative to act on your behalf, or take on the role of representing
-            others. Additionally, you can propose your own changes to the network, engage in discussions, and ultimately
-            bring them to a vote.
+            {{ $t('governance.subtitle') }}
           </v-card-subtitle>
           <v-card-text>
             <v-row no-gutters>
@@ -17,7 +14,7 @@
                 <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card" style="z-index: 1">
                   <v-list-item three-line>
                     <v-list-item-content>
-                      <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
+                      <div class="white--text font-weight-semibold text-subtitle-2">{{ $t('governance.currentDelegation') }}</div>
                       <v-list-item-title class="gradient-text text-h6 font-weight-semibold">
                         {{ delegatingTo }}
                       </v-list-item-title>
@@ -25,7 +22,7 @@
                         {{ truncate(currentDRep.drep_id) }}<CopyButton small :value="currentDRep.drep_id"></CopyButton>
                       </v-list-item-subtitle>
                       <v-list-item-subtitle v-if="currentDRep" class="gradient-text text-subtitle-2 font-weight-semibold">
-                        Voting Power:
+                        {{ $t('governance.votingPowerLabel') }}:
                         {{
                           toCurrency(
                             currentDRep.amount,
@@ -46,9 +43,9 @@
                     <div class="d-flex">
                       <v-select
                         v-model="delegationModel"
-                        label="New Delegation"
+                        :label="$t('governance.newDelegation')"
                         outlined
-                        :items="['Own Account (soon)', 'Gero DRep (soon)', 'Abstain', 'No Confidence']"
+                        :items="[$t('governance.ownAccount'), $t('governance.geroDRep'), $t('governance.abstain'), $t('governance.noConfidence')]"
                         dense
                         hide-details
                         :menu-props="{ offsetY: true }"
@@ -61,13 +58,13 @@
                         :disabled="
                           delegationModel === undefined ||
                           delegateLoading ||
-                          delegationModel === 'Own Account (soon)' ||
-                          delegationModel === 'Gero DRep (soon)'
+                          delegationModel === $t('governance.ownAccount') ||
+                          delegationModel === $t('governance.geroDRep')
                         "
                         @click="delegate"
                         :loading="delegateLoading"
                       >
-                        Delegate
+                        {{ $t('governance.delegate') }}
                       </v-btn>
                     </div>
                   </v-card-text>
@@ -79,9 +76,9 @@
                     type="info"
                     elevation="0"
                   >
-                    Delegate to a DRep for governance actions;
+                    {{ $t('governance.delegateToDRep') }};
                     <br />
-                    It will be required to withdraw staking rewards
+                    {{ $t('governance.requiredToWithdrawRewards') }}
                   </v-alert>
                 </v-card>
               </v-col>
@@ -90,24 +87,22 @@
                 <v-card outlined flat class="pa-0 fill-height liquid-glass">
                   <v-card-title class="text-subtitle-2">
                     <a class="white--text" href="https://gov.tools/" target="_blank">
-                      Cardano Governance Tool<v-icon class="ml-1" small>mdi-open-in-new</v-icon>
+                      {{ $t('governance.cardanoGovernanceTool') }}<v-icon class="ml-1" small>mdi-open-in-new</v-icon>
                     </a>
                   </v-card-title>
-                  <v-card-subtitle class="text-body-2"> The official Cardano DApp for governance </v-card-subtitle>
+                  <v-card-subtitle class="text-body-2"> {{ $t('governance.officialDApp') }} </v-card-subtitle>
                   <v-card-title class="pt-0 text-subtitle-2">
                     <a class="white--text" href="https://www.1694.io/en" target="_blank">
-                      An On-Chain Decentralized Governance Mechanism for Voltaire<v-icon class="ml-1" small
+                      {{ $t('governance.onChainGovernance') }}<v-icon class="ml-1" small
                         >mdi-open-in-new</v-icon
                       >
                     </a>
                   </v-card-title>
                   <v-card-subtitle class="text-body-2">
-                    Cardano decentralized governance proposal - CIP 1694
+                    {{ $t('governance.cip1694') }}
                   </v-card-subtitle>
                   <v-card-subtitle class="pt-0 text-subtitle-2 white--text">
-                    To participate in governance, every stake credential must be delegated to a DRep. ADA holders will
-                    typically assign their voting rights to a registered DRep who will vote on their behalf.
-                    Additionally, there are two predefined DRep options available:
+                    {{ $t('governance.governanceParticipation') }}
                   </v-card-subtitle>
                   <div class="px-4 py-0 text-center">
                     <v-tooltip bottom content-class="custom-tooltip">
@@ -117,26 +112,21 @@
                           v-on="on"
                           class="mr-8 white--text text-decoration-underline cursor-pointer"
                         >
-                          Abstain<v-icon class="ml-1" small>mdi-information-outline</v-icon>
+                          {{ $t('governance.abstain') }}<v-icon class="ml-1" small>mdi-information-outline</v-icon>
                         </span>
                       </template>
                       <div class="w-250">
-                        When an ADA holder delegates to Abstain, their stake is marked as not participating in
-                        governance and is excluded from the active voting stake on-chain. However, it remains registered
-                        for incentive purposes.
+                        {{ $t('governance.abstainInfo') }}
                       </div>
                     </v-tooltip>
                     <v-tooltip bottom content-class="custom-tooltip">
                       <template v-slot:activator="{ on, attrs }">
                         <span v-bind="attrs" v-on="on" class="mr-8 white--text text-decoration-underline cursor-pointer"
-                          >No Confidence<v-icon class="ml-1" small>mdi-information-outline</v-icon>
+                          >{{ $t('governance.noConfidence') }}<v-icon class="ml-1" small>mdi-information-outline</v-icon>
                         </span>
                       </template>
                       <div class="w-250">
-                        Delegating to No Confidence means an ADA holder's stake votes "no" on all governance actions
-                        except "Motions of No Confidence," where it votes "yes," indicating distrust in the
-                        constitutional committee. This stake is part of the active voting stake and provides an
-                        auditable measure of holders' confidence.
+                        {{ $t('governance.noConfidenceInfo') }}
                       </div>
                     </v-tooltip>
                   </div>
@@ -148,7 +138,7 @@
               <v-col cols="12" class="px-2">
                 <v-card outlined flat class="pa-0 fill-height liquid-glass">
                   <v-card-title
-                    >Delegated Representatives (DReps)
+                    >{{ t('governance.delegatedRepresentatives') }}
                     <v-spacer></v-spacer>
                     <v-text-field
                       v-model="search"
@@ -156,7 +146,7 @@
                       flat
                       solo
                       hide-details
-                      placeholder="Search DReps"
+                      :placeholder="t('governance.searchDReps')"
                       prepend-inner-icon="mdi-magnify"
                       clearable
                       style="max-width: 200px"
@@ -166,8 +156,12 @@
                   </v-card-title>
                   <!-- Debug pagination info -->
                   <v-card-subtitle v-if="paginationMeta" class="text-caption">
-                    Showing {{ governanceDReps?.length || 0 }} of {{ paginationMeta.total_items }} DReps (Page
-                    {{ paginationMeta.page }} of {{ paginationMeta.total_pages }})
+                    {{ t('governance.showingDReps', { 
+                      showing: governanceDReps?.length || 0, 
+                      total: paginationMeta.total_items,
+                      page: paginationMeta.page,
+                      totalPages: paginationMeta.total_pages
+                    }) }}
                   </v-card-subtitle>
                   <v-card-text class="px-0">
                     <v-data-table
@@ -266,8 +260,11 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
+
+const { t } = useTranslation();
 import governanceStoreActions from '@/stores/governanceStore';
 import networks from '@/utils/networks';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';

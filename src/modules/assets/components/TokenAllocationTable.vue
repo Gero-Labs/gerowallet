@@ -1,7 +1,7 @@
 <template>
   <v-card outlined class="no-gutters fill-height liquid-glass" :loading="loadingTxs">
     <v-card-title class="token-allocation-title" ref="headerRef">
-      Token Allocation
+      {{ $t('assets.tokenAllocation') }}
       <!-- Top-level search box -->
       <v-text-field
         v-model="searchTerm"
@@ -9,7 +9,7 @@
         flat
         solo
         hide-details
-        :placeholder="currentTab === 0 ? 'Search Assets' : 'Search Collections'"
+        :placeholder="currentTab === 0 ? $t('assets.searchAssets') : $t('assets.searchCollections')"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px; margin-left: 16px;"
@@ -49,7 +49,7 @@
           <v-card-text class="pa-0">
             <div class="filter-header px-3 py-2" style="background-color: rgba(255, 255, 255, 0.05); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
               <div class="text-caption" style="color: #00c7f3; font-weight: 600;">
-                {{ currentTab === 0 ? 'ASSETS FILTERS' : 'COLLECTIBLES FILTERS' }}
+                {{ currentTab === 0 ? $t('assets.assetsFilters') : $t('assets.collectiblesFilters') }}
               </div>
             </div>
             <v-list dense class="transparent">
@@ -58,7 +58,7 @@
                   <v-switch v-model="hideUnverified" inset dense class="mr-5 mt-0" hide-details/>
                 </v-list-item-action>
                 <v-list-item-title>
-                  Hide Unverified Tokens
+                  {{ $t('assets.hideUnverifiedTokens') }}
                 </v-list-item-title>
               </v-list-item>
               <v-list-item>
@@ -67,7 +67,7 @@
                   <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="currentTab === 1"/>
                 </v-list-item-action>
                 <v-list-item-title>
-                  {{ currentTab === 0 ? 'Hide Scam Tokens' : 'Hide Scam Collectibles' }}
+                  {{ currentTab === 0 ? $t('assets.hideScamTokens') : $t('assets.hideScamCollectibles') }}
                 </v-list-item-title>
               </v-list-item>
               <v-list-item v-if="currentTab === 0">
@@ -75,7 +75,7 @@
                   <v-switch v-model="hideUnrated" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"/>
                 </v-list-item-action>
                 <v-list-item-title>
-                  Hide Unrated Tokens
+                  {{ $t('assets.hideUnratedTokens') }}
                 </v-list-item-title>
               </v-list-item>
               <v-list-item v-if="currentTab === 1">
@@ -144,6 +144,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, onMounted, onUnmounted, watch } from 'vue';
 import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import TokensTab from '@/modules/assets/components/TokensTab.vue';
@@ -152,6 +153,9 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import WalletStore from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, config, collections, tokens } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);

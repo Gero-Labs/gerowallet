@@ -32,7 +32,7 @@
                 v-model="spendingPassword"
                 outlined
                 dense
-                label="Spending Password"
+                :label="$t('wallet.spendingPassword')"
                 :type="showPassword ? 'text' : 'password'"
                 hide-details
                 class="password-field"
@@ -49,9 +49,9 @@
 
             <!-- Action Buttons -->
             <div class="modal-actions">
-              <SecondaryButton text="Cancel" @click="closeModal()" :disabled="txSubmitLoading" />
+              <SecondaryButton :text="$t('wallet.cancel')" @click="closeModal()" :disabled="txSubmitLoading" />
               <GradientButton
-                :text="currentStep === 1 ? 'Continue' : 'Top Up'"
+                :text="currentStep === 1 ? $t('wallet.continue') : $t('wallet.topUp')"
                 @click="handleTopUp"
                 :disabled="!canTopUp || txSubmitLoading"
                 :loading="txSubmitLoading"
@@ -61,7 +61,7 @@
 
           <!-- Success Actions -->
           <div v-if="currentStep === 4" class="modal-actions">
-            <SecondaryButton text="Back to Your Account" @click="handleBackToAccount" />
+            <SecondaryButton :text="$t('wallet.backToYourAccount')" @click="handleBackToAccount" />
           </div>
         </div>
       </v-card>
@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
@@ -87,6 +88,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 defineProps<{
   open: boolean;
@@ -172,13 +176,13 @@ const buildTx = async () => {
     console.log('💰 Cardano address:', cardanoAddress);
 
     if (!cardanoAddress) {
-      throw new Error('Cardano address not found. Please ensure you are authenticated.');
+      throw new Error(t('errors.invalidAddress'));
     }
 
     // Parse ADA amount and convert to Lovelace
     const adaAmount = parseFloat(amounts.value.adaAmount);
     if (isNaN(adaAmount) || adaAmount <= 0) {
-      throw new Error('Invalid ADA amount');
+      throw new Error(t('errors.invalidAmount'));
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
@@ -206,7 +210,7 @@ const buildTx = async () => {
     return true;
   } catch (e) {
     console.error('❌ Error building transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to build transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.buildTransactionFailed'));
     return false;
   }
 };
@@ -244,7 +248,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('❌ Error signing transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to sign transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.signTransactionFailed'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -274,11 +278,11 @@ const submitTx = async () => {
     transactionId.value = submitResult.data.txId || Math.floor(Math.random() * 100000000).toString();
     console.log('📝 Transaction ID:', transactionId.value);
 
-    snackbar.fireSuccess(`Top-up transaction sent successfully!`);
+    snackbar.fireSuccess(t('notifications.transactionSubmitted'));
     return true;
   } catch (e) {
     console.error('❌ Error submitting transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to submit transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.submitTransactionFailed'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -316,7 +320,7 @@ const handleTopUp = async () => {
       }) as { data: { isValid: boolean; error?: string } };
       console.log('🔏 passwordVerification:', passwordVerification);
       if (!passwordVerification.data.isValid) {
-        snackbar.setError('Invalid spending password');
+        snackbar.setError(t('wallet.invalidSpendingPassword'));
         return;
       }
     }
@@ -334,7 +338,7 @@ const handleTopUp = async () => {
       }
     } else {
       // For non-Normal wallets (if needed in future)
-      snackbar.setError('Unsupported wallet type');
+      snackbar.setError(t('wallet.unsupportedWalletType'));
       currentStep.value = 2;
       return;
     }

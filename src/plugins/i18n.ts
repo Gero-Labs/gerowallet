@@ -17,12 +17,14 @@ import jp from '@/plugins/i18n/jp';
 import nl from '@/plugins/i18n/nl';
 import pk from '@/plugins/i18n/pk';
 import pt from '@/plugins/i18n/pt';
-import ru from '@/plugins/i18n/ru';
 import th from '@/plugins/i18n/th';
 import tr from '@/plugins/i18n/tr';
 import tz from '@/plugins/i18n/tz';
-import us from '@/plugins/i18n/us';
 import vn from '@/plugins/i18n/vn';
+
+// New modular structure for EN and RU
+import en from '@/plugins/i18n/en';
+import ru from '@/plugins/i18n/ru';
 
 const messages = {
   cn: cn,
@@ -41,18 +43,33 @@ const messages = {
   nl: nl,
   pk: pk,
   pt: pt,
-  ru: ru,
+  ru: ru, // New modular structure
   tr: tr,
   th: th,
   tz: tz,
-  us: us,
+  us: en, // New modular structure (en = English)
   vn: vn,
 };
 
 Vue.use(VueI18n);
 
+// Получаем сохраненный язык из конфигурации или используем 'us' по умолчанию
+const getSavedLocale = (): string => {
+  try {
+    // Пытаемся получить из walletStore (если уже загружен)
+    const savedConfig = localStorage.getItem('walletStore');
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      return config?.config?.locale || 'us';
+    }
+  } catch (e) {
+    console.warn('Failed to load saved locale:', e);
+  }
+  return 'us';
+};
+
 const i18n: VueI18n = new VueI18n({
-  locale: 'us', // set locale
+  locale: getSavedLocale(), // set locale from saved config
   fallbackLocale: 'us', // set fallback locale
   messages, // set locale messages
 });

@@ -1,6 +1,6 @@
 <template>
   <v-card flat outlined class="liquid-glass" :loading="loadingTxs || poolLoading">
-    <v-card-title>Staking</v-card-title>
+    <v-card-title>{{ $t('staking.title') }}</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters>
@@ -9,12 +9,12 @@
               <v-card-title class="staking-card-title pa-2">
                 <v-row no-gutters class="staking-info-row py-4">
                   <v-col cols="6" class="px-1 text-center">
-                    <span class="staking-label">Delegating to</span>
+                    <span class="staking-label">{{ $t('staking.delegatingTo') }}</span>
                     <h4 class="staking-value" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h4>
-                    <v-btn x-small text color="#F97066" @click="unstake">Unstake</v-btn>
+                    <v-btn x-small text color="#F97066" @click="unstake">{{ $t('staking.unstake') }}</v-btn>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span class="staking-label">Total</span>
+                    <span class="staking-label">{{ $t('common.total') }}</span>
                     <h4 class="staking-value" v-if="loggedWallet && account">
                       {{
                         filters.toCurrency(
@@ -29,7 +29,7 @@
                     </h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span class="staking-label">Rewards</span>
+                    <span class="staking-label">{{ $t('staking.rewards') }}</span>
                     <h4 class="staking-value" v-if="account">
                       {{
                         filters.toCurrency(
@@ -43,7 +43,7 @@
                       }}
                     </h4>
                     <v-btn v-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
-                      Withdraw
+                      {{ $t('staking.withdraw') }}
                     </v-btn>
                   </v-col>
                 </v-row>
@@ -310,6 +310,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
@@ -324,6 +325,9 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);

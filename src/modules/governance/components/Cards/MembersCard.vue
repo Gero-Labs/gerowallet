@@ -38,11 +38,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import { onMounted } from 'vue';
 import clarityApi from '@/api/clarity-api';
 import snackbar from '@/plugins/snackbar';
 
+
+const { t } = useTranslation();
 const members = ref<Record<string, number>>({});
 
 const formatAddress = (address: string): string => {

@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { IChartApi, SolidColor, Time } from 'lightweight-charts';
 import { CandlestickSeries, createChart } from 'lightweight-charts';

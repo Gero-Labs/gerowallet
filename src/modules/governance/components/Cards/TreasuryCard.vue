@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import geroLogo from '@/assets/svg/gero-logo.svg'
 

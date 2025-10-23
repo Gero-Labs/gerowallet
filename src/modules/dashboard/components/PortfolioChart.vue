@@ -3,7 +3,7 @@
     <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
-          <div class="portfolio-label">Portfolio</div>
+          <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <div class="portfolio-amount-row">
             <div
               class="portfolio-amount"
@@ -68,19 +68,20 @@
     </div>
     <div v-if="globalLoading" class="loading-container">
       <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
-      <div class="loading-text">Loading Chart</div>
+      <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
     </div>
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
         <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
       </v-avatar>
-      <span>There seems to be no data in this wallet</span>
+      <span>{{ $t('dashboard.noDataInWallet') }}</span>
     </v-card-text>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, toRefs } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, onMounted, ref, watch, toRefs, getCurrentInstance } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
 import isEqual from 'lodash/isEqual';
@@ -92,6 +93,11 @@ import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+
+
+const { t } = useTranslation();
+
+const instance = getCurrentInstance();
 const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
@@ -111,11 +117,11 @@ interface CurrencyConfig {
 const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   [CurrencyType.ADA]: {
     symbol: '', // Will be defined dynamically
-    displayName: 'Native Currency',
+    displayName: instance?.proxy.$t('dashboard.nativeCurrency') || 'Native Currency',
   },
   [CurrencyType.USD]: {
     symbol: '$',
-    displayName: 'US Dollar',
+    displayName: instance?.proxy.$t('dashboard.usDollar') || 'US Dollar',
   },
   [CurrencyType.EUR]: {
     symbol: '€',

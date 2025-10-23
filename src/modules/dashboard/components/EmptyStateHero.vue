@@ -14,7 +14,7 @@
       <!-- Welcome message -->
       <div class="welcome-section">
         <h1 class="hero-title">
-          {{ isNewUser ? 'Welcome to Gero Wallet!' : 'Your wallet is empty' }}
+          {{ isNewUser ? $t('dashboard.welcomeToGeroWallet') : $t('dashboard.emptyWallet') }}
         </h1>
 
         <p class="hero-subtitle">
@@ -36,12 +36,12 @@
               </v-icon>
               <div>
                 <h3 class="backup-title mb-1">
-                  {{ isBackupComplete ? 'Wallet Secured' : 'Secure Your Wallet' }}
+                  {{ isBackupComplete ? $t('dashboard.walletSecured') : $t('dashboard.secureYourWallet') }}
                 </h3>
                 <p class="backup-subtitle mb-0">
                   {{ isBackupComplete
-                    ? 'Your seed phrase has been safely backed up'
-                    : 'Back up your seed phrase to protect your funds'
+                    ? $t('dashboard.seedPhraseBackedUp')
+                    : $t('dashboard.backupSeedPhrase')
                   }}
                 </p>
               </div>
@@ -54,8 +54,7 @@
                 text
                 class="mb-3 backup-alert"
               >
-                Your 24-word seed phrase is the only way to recover your wallet.
-                Store it securely offline.
+                {{ $t('dashboard.seedPhraseRecoveryWarning') }}
               </v-alert>
 
               <div class="text-center">
@@ -65,10 +64,10 @@
                   class="backup-btn"
                 >
                   <v-icon left small>mdi-content-save</v-icon>
-                  Export Seed Phrase
+                  {{ $t('dashboard.exportSeedPhrase') }}
                 </v-btn>
                 <p class="mt-1 mb-0 text-caption backup-help-text">
-                  Quick and secure • Takes 2 minutes
+                  {{ $t('dashboard.quickAndSecure') }}
                 </p>
               </div>
             </template>
@@ -81,7 +80,7 @@
                 class="mb-0 backup-alert"
                 :icon="false"
               >
-                Great job! Your wallet is protected. Keep your seed phrase safe.
+                {{ $t('dashboard.greatJobProtected') }}
               </v-alert>
             </template>
           </v-card-text>
@@ -296,11 +295,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();

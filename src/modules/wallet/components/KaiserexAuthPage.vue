@@ -3,8 +3,8 @@
     <div class="auth-container">
       <!-- Header -->
       <div class="auth-header">
-        <h1 class="page-title">Get Your Gero Crypto Card</h1>
-        <p class="page-description">Choose an option below to get started with your crypto card order</p>
+        <h1 class="page-title">{{ t('card.getYourGeroCryptoCard') }}</h1>
+        <p class="page-description">{{ t('card.chooseOptionBelow') }}</p>
       </div>
 
       <!-- Auth Options -->
@@ -19,23 +19,23 @@
           </div>
 
           <div class="option-content">
-            <h3 class="option-title">Register to order your card</h3>
+            <h3 class="option-title">{{ t('card.registerToOrderCard') }}</h3>
             <p class="option-description">
-              Create your Kaiserex account and complete the verification process to order your card.
+              {{ t('card.createKaiserexAccount') }}
             </p>
 
             <div class="option-steps">
               <div class="step-item">
                 <span class="step-number">1</span>
-                <span class="step-text">Create account</span>
+                <span class="step-text">{{ t('card.createAccount') }}</span>
               </div>
               <div class="step-item">
                 <span class="step-number">2</span>
-                <span class="step-text">Complete KYC</span>
+                <span class="step-text">{{ t('card.completeKYC') }}</span>
               </div>
               <div class="step-item">
                 <span class="step-number">3</span>
-                <span class="step-text">Order your card</span>
+                <span class="step-text">{{ t('card.orderYourCard') }}</span>
               </div>
             </div>
           </div>
@@ -54,7 +54,7 @@
               </v-tooltip>?
             </p>
             <GradientButton
-              text="Order Your Gero Card"
+              :text="t('card.orderYourGeroCard')"
               @click="handleRegister"
               class="full-width"
             />
@@ -73,30 +73,30 @@
             </div>
 
             <div class="option-content">
-              <h3 class="option-title">Already have a Kaiserex account?</h3>
+              <h3 class="option-title">{{ t('card.alreadyHaveAccount') }}</h3>
               <p class="option-description">
-                Sign in to your existing account to continue with your card order or check your status.
+                {{ t('card.signInToExisting') }}
               </p>
 
               <div class="option-features">
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Check order status</span>
+                  <span class="feature-text">{{ t('card.checkOrderStatus') }}</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Manage account settings</span>
+                  <span class="feature-text">{{ t('card.manageAccountSettings') }}</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Order additional cards</span>
+                  <span class="feature-text">{{ t('card.orderAdditionalCards') }}</span>
                 </div>
               </div>
             </div>
 
             <div class="option-action">
               <SecondaryButton
-                :text="kaiserExLoading ? 'Signing In...' : 'Sign In'"
+                :text="kaiserExLoading ? t('card.signingIn') : t('card.signIn')"
                 :disabled="kaiserExLoading"
                 @click="handleLogin"
                 class="full-width gradient-text-button"
@@ -112,26 +112,26 @@
                 Back
               </button>
               <h3 class="form-title">Sign in to Kaiserex</h3>
-              <p class="form-description">Enter your credentials to continue with your card order.</p>
+              <p class="form-description">{{ t('card.enterCredentialsToContinue') }}</p>
             </div>
 
             <div class="form-content">
               <div class="form-group">
-                <label class="form-label">Username or Email</label>
-                <input v-model="username" type="text" class="form-input" placeholder="Enter your username or email" />
+                <label class="form-label">{{ t('card.usernameOrEmail') }}</label>
+                <input v-model="username" type="text" class="form-input" :placeholder="t('card.enterUsernameOrEmail')" />
               </div>
 
               <div class="form-group">
-                <label class="form-label">Password</label>
-                <input v-model="password" type="password" class="form-input" placeholder="Enter your password" />
+                <label class="form-label">{{ t('card.password') }}</label>
+                <input v-model="password" type="password" class="form-input" :placeholder="t('card.enterPassword')" />
               </div>
 
               <div class="form-actions">
-                <GradientButton text="Sign In" @click="handleLoginSubmit" class="full-width" />
+                <GradientButton :text="t('card.signIn')" @click="handleLoginSubmit" class="full-width" />
               </div>
 
               <div class="forgot-password">
-                <button class="forgot-link">Forgot your password?</button>
+                <button class="forgot-link">{{ t('card.forgotPassword') }}</button>
               </div>
             </div>
           </div>
@@ -230,12 +230,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 const emit = defineEmits<{
   (e: 'auth-complete'): void;
 }>();

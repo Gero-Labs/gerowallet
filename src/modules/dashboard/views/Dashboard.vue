@@ -184,6 +184,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';

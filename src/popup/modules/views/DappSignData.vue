@@ -75,6 +75,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
@@ -89,6 +90,9 @@ import ledger from '@/shared/utils/ledger';
 import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/dist/types/public';
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;

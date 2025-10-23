@@ -3,8 +3,8 @@
     <v-layout class="py-0" column>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Wallet Name</h3>
-          <span class="helper my-0">Edit your wallet name</span>
+          <h3 style="color: white">{{ $t('settings.walletName') }}</h3>
+          <span class="helper my-0">{{ $t('settings.editWalletName') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <EditableTextField
@@ -25,8 +25,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Wallet Profile Picture</h3>
-          <span class="helper">Choose a profile picture for your wallet</span>
+          <h3 style="color: white">{{ $t('settings.walletProfilePicture') }}</h3>
+          <span class="helper">{{ $t('settings.chooseProfilePicture') }}</span>
         </v-col>
         <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap">
           <v-row no-gutters>
@@ -37,14 +37,14 @@
             </v-col>
             <v-col cols="12" class="py-2">
               <v-btn block outlined color="grey" autocapitalize="on" @click="uploadPicture">
-                <span>Upload Picture</span>
+                <span>{{ $t('settings.uploadPicture') }}</span>
                 <v-icon right dark> mdi-cloud-upload-outline </v-icon>
               </v-btn>
               <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="onFileChange" />
             </v-col>
             <v-col cols="12" class="py-2">
               <v-btn block outlined color="grey" disabled>
-                <span>Choose NFT</span>
+                <span>{{ $t('settings.chooseNFT') }}</span>
                 <v-icon right dark> mdi-account-box-outline </v-icon>
               </v-btn>
             </v-col>
@@ -53,8 +53,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Currency Preference</h3>
-          <span class="helper">Choose your preferred currency</span>
+          <h3 style="color: white">{{ $t('settings.currencyPreference') }}</h3>
+          <span class="helper">{{ $t('settings.choosePreferredCurrency') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
@@ -71,8 +71,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Display Language</h3>
-          <span class="helper">Set the language for Gero Dashboard</span>
+          <h3 style="color: white">{{ $t('settings.displayLanguage') }}</h3>
+          <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
@@ -82,7 +82,7 @@
             outlined
             dense
             hide-details
-            disabled
+            
           >
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
@@ -108,8 +108,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Region</h3>
-          <span class="helper">Choose region, affects dates & time</span>
+          <h3 style="color: white">{{ $t('settings.region') }}</h3>
+          <span class="helper">{{ $t('settings.regionHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
@@ -117,12 +117,12 @@
       </v-row>
       <v-row no-gutters class="pt-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Welcome Guide</h3>
-          <span class="helper">Display the introductory guide to help you navigate your wallet</span>
+          <h3 style="color: white">{{ $t('settings.welcomeGuide') }}</h3>
+          <span class="helper">{{ $t('settings.welcomeGuideHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-btn block outlined color="grey" @click="showGuide">
-            <span>Show Guide</span>
+            <span>{{ $t('settings.showGuide') }}</span>
           </v-btn>
         </v-col>
       </v-row>
@@ -130,6 +130,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';

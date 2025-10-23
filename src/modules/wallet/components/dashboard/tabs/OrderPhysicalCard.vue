@@ -102,10 +102,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { reactive, ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
 import GradientButton from '../../GradientButton.vue';
 import SecondaryButton from '../../SecondaryButton.vue';
+
+
+const { t } = useTranslation();
 
 const loading = ref(false);
 

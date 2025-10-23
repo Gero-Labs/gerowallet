@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';

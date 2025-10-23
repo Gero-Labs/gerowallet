@@ -207,6 +207,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
@@ -219,6 +220,9 @@ import FundWallet from '@/modules/multisig/dialogs/FundWallet.vue';
 import MultisigTransaction from '@/modules/multisig/dialogs/MultisigTransaction.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { Transaction, WalletInfo, MultisigWalletInterface } from '@/modules/multisig/types/MultiSigTypes';
+
+
+const { t } = useTranslation();
 
 const MAX_MULTISIG_WALLETS_PER_USER = 3;
 

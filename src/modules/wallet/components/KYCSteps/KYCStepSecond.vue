@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch } from 'vue';
 
 interface Props {

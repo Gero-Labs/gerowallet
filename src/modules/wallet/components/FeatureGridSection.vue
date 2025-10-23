@@ -13,8 +13,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import FeatureCard from './FeatureCard.vue';
 import type { FeatureCardProps } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const features: FeatureCardProps[] = [
   {

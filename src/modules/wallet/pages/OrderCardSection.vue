@@ -10,6 +10,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
 import CardManagementSection from '@/modules/wallet/components/CardManagementSection.vue';
 import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';

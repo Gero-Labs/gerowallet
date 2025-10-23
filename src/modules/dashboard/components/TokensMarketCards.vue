@@ -6,8 +6,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -83,8 +83,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -167,8 +167,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -241,12 +241,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import charli3Store from '@/stores/charli3Store';
 // import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
 import assts from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+
+const { t } = useTranslation();
 
 // Reactive state
 const logoLoadingActive = ref(false);

@@ -109,6 +109,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import rules from '@/utils/rules';

@@ -6,7 +6,7 @@
     </div>
     <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
-      <span style="color: #ccc">Website:&nbsp;</span>
+      <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
           <img :src="favicon" alt="Dapp Website favicon" />
@@ -19,7 +19,7 @@
         </v-avatar>
       </div>
       <div v-else>
-        N/A
+        {{ $t('navigation.notAvailable') }}
       </div>
     </v-card-title>
     <Select
@@ -33,6 +33,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { getCurrentInstance, ref, toRefs, computed, onMounted } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';

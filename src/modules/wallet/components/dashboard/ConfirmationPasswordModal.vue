@@ -32,7 +32,7 @@
                   dense
                   outlined
                   class="password-input"
-                  label="Spending Password"
+                  :label="$t('wallet.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   hide-details
                   @keyup.enter="verifyPassword"
@@ -50,8 +50,8 @@
           <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
           <div class="buttons-section">
-            <v-btn class="cancel-btn" @click="closeModal"> Cancel </v-btn>
-            <v-btn color="error" class="delete-btn" @click="verifyPassword" :disabled="!password"> Confirm </v-btn>
+            <v-btn class="cancel-btn" @click="closeModal"> {{ $t('common.cancel') }} </v-btn>
+            <v-btn color="error" class="delete-btn" @click="verifyPassword" :disabled="!password"> {{ $t('common.confirm') }} </v-btn>
           </div>
         </div>
       </div>
@@ -60,9 +60,13 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { ref, watch } from 'vue';
+
+
+const { t } = useTranslation();
 
 interface Props {
   open: boolean;
@@ -94,7 +98,7 @@ const enableToolTip = () => {
 };
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 // Password verification
 const verifyPassword = async () => {

@@ -155,6 +155,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';

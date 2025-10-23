@@ -46,6 +46,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch } from 'vue';
 import snackbar from '@/plugins/snackbar';
 

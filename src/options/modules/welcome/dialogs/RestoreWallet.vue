@@ -10,9 +10,9 @@
     <v-card class="py-0 rounded-xxl transparent fill-height">
       <v-stepper v-model="step" flat style="background-color: transparent; height: 100%" non-linear>
         <v-stepper-header style="box-shadow: none">
-          <v-stepper-step :complete="step > 1" step="1"> Recovery Phrase </v-stepper-step>
+          <v-stepper-step :complete="step > 1" step="1"> {{ $t('welcome.seedPhrase') }} </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="step > 2" step="2"> Wallet Setup </v-stepper-step>
+          <v-stepper-step :complete="step > 2" step="2"> {{ $t('walletSetup') }} </v-stepper-step>
         </v-stepper-header>
 
         <v-stepper-items>
@@ -25,11 +25,10 @@
               >
                 <v-card-text class="px-0 pb-0 justify-space-around no-gutters">
                   <v-alert color="primary" dense outlined type="info" prominent border="left" class="mb-2">
-                    Enter your wallet recovery phrase word for word.<br />Make sure you enter the words in the correct
-                    order. Also ensure nobody is looking at your screen.
+                    {{ $t('welcome.recoveryPhraseAlert') }}
                   </v-alert>
                   <v-row no-gutters class="pb-2">
-                    <strong style="align-content: center; color: white">Choose recovery phrase length</strong>
+                    <strong style="align-content: center; color: white">{{ $t('welcome.chooseRecoveryPhraseLength') }}</strong>
                     <v-spacer></v-spacer>
                     <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
                       <v-btn small value="12">
@@ -69,7 +68,7 @@
                   <!--                  </v-btn>-->
                   <v-spacer></v-spacer>
                   <v-btn color="primary" @click="walletCreationStep1" elevation="0" :disabled="!valid">
-                    Continue
+                    {{ $t('wallet.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -241,6 +240,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';

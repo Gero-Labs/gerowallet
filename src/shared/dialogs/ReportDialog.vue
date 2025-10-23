@@ -3,8 +3,8 @@
     :img="cardanoShieldLogo"
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="'Report '+ (reportSite ? 'Website' : 'Transaction')"
-    :subtitle="'Improve Cardano Shield by letting us know if a '+ (reportSite ? 'website' : 'transaction') + ' is fraudulent or trustworthy.'"
+    :title="reportSite ? $t('navigation.reportWebsite') : $t('navigation.reportTransaction')"
+    :subtitle="$t('navigation.improveCardanoShield', { type: reportSite ? $t('navigation.website').toLowerCase() : $t('navigation.transactionId').toLowerCase() })"
     :min-height="0"
     :persistent="false"
   >
@@ -47,11 +47,11 @@
         <v-stepper-content step="1">
           <v-form ref="form" v-model="valid" >
             <div class="d-flex mb-1" v-if="reportSite">
-              <v-label small class="white--text pr-1" style="align-content: center;">Website:</v-label>
+              <v-label small class="white--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}:</v-label>
               {{ reportSite }}
             </div>
             <div class="d-flex mb-3" v-if="reportTx">
-              <v-label small class="white--text" style="align-content: center;">Transaction ID:</v-label>
+              <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
               <div>
                 <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
@@ -168,6 +168,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch } from 'vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -180,6 +181,9 @@ import snackbar from '@/plugins/snackbar';
 import { AxiosError } from 'axios';
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

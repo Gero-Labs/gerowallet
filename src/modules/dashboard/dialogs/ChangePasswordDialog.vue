@@ -26,7 +26,7 @@
           style="width: 350px"
         ></v-text-field>
         <v-divider class="mb-3"></v-divider>
-        <h4 class="mb-3">Spending Lock Type</h4>
+        <h4 class="mb-3">{{ $t('wallet.spendingLockType') }}</h4>
         <v-btn-toggle class="mb-6" color="primary" dense v-model="spendingPasswordType" mandatory block>
           <v-btn value="password" class="px-5">
             <v-icon>mdi-form-textbox-password</v-icon>
@@ -75,6 +75,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import rules from '@/utils/rules';

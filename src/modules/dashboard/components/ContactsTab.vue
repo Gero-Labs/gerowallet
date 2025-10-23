@@ -13,7 +13,7 @@
         <v-toolbar flat class="transparent my-2">
           <v-toolbar-title>
             Add, Edit or Delete contacts<br/>
-            <span class="subtitle">Contacts can be selected in the various send screens to save time</span>
+            <span class="subtitle">{{ $t('common.contactsHelper') }}</span>
           </v-toolbar-title>
           <v-spacer></v-spacer>
           <v-dialog
@@ -90,7 +90,7 @@
               <v-card-title>Are you sure you want to delete this item?</v-card-title>
               <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn color="primary" text @click="closeDelete">Cancel</v-btn>
+                <v-btn color="primary" text @click="closeDelete">{{ $t('common.cancel') }}</v-btn>
                 <v-btn color="primary" @click="deleteItemConfirm">OK</v-btn>
                 <v-spacer></v-spacer>
               </v-card-actions>
@@ -120,6 +120,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import filters from '@/shared/utils/filters';

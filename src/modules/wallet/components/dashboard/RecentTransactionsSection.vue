@@ -72,6 +72,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import type { CardTransactionHistory } from '@/models/card';
 import cardStore from '@/stores/modules/card';

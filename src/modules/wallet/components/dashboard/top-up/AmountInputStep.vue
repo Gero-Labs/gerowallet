@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
 import cardStore from '@/stores/modules/card';

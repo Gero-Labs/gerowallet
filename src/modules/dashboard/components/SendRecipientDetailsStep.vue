@@ -7,7 +7,7 @@
             <Select
               :value="sendData.selectedWallet"
               :items="[sendData.selectedWallet]"
-              label="Wallet"
+              :label="$t('wallet.wallet')"
               :readonly="true"
             ></Select>
           </v-col>
@@ -31,7 +31,7 @@
                     </v-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="color: white; font-size: 11px">
-                        {{ contacts && contacts[paymentAddress] != null ? 'Edit Contact' : 'Save Contact'}}
+                        {{ contacts && contacts[paymentAddress] != null ? $t('wallet.editContact') : $t('wallet.saveContact')}}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -39,7 +39,7 @@
               </template>
               <v-card>
                 <v-card-title>
-                  Contact Added
+                  {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
                   <v-btn icon small @click="saveContactMenu = false" :disabled="!valid">
                     <v-icon>
@@ -71,7 +71,7 @@
                           v-model="contact.name"
                           dense
                           outlined
-                          label="Name"
+                          :label="$t('wallet.name')"
                           hide-details
                           :maxlength="40"
                           counter="40"
@@ -83,7 +83,7 @@
                           v-model="contact.address"
                           dense
                           outlined
-                          label="Address"
+                          :label="$t('wallet.address')"
                           hide-details
                           :disabled="contacts && contacts[contact.address] != null"
                           :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
@@ -94,10 +94,10 @@
                 </v-card-text>
                 <v-card-actions class="justify-center">
                   <v-btn text @click="saveContactMenu = false" :disabled="!valid">
-                    Done
+                    {{ $t('wallet.done') }}
                   </v-btn>
                   <v-btn color="primary" text @click="removeCont">
-                    Remove
+                    {{ $t('wallet.remove') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -224,6 +224,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, watch, nextTick } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";

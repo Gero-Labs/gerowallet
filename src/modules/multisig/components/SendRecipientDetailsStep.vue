@@ -173,6 +173,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, onBeforeMount, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';

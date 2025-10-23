@@ -1,8 +1,8 @@
 <template>
   <div class="step-content">
     <div class="modal-header">
-      <h2 class="modal-title">Upload Your ID</h2>
-      <p class="modal-subtitle">Government issued ID only (Passport, Driving License)</p>
+      <h2 class="modal-title">{{ $t('navigation.uploadYourId') }}</h2>
+      <p class="modal-subtitle">{{ $t('navigation.governmentIdOnly') }}</p>
     </div>
 
     <div class="upload-section">
@@ -21,8 +21,8 @@
           <img src="@/modules/wallet/icons/upload.svg" alt="upload" />
         </div>
         <div class="upload-text">
-          <span class="upload-action">Click to upload</span>
-          <span class="upload-hint">or drag and drop</span>
+          <span class="upload-action">{{ $t('navigation.clickToUpload') }}</span>
+          <span class="upload-hint">{{ $t('navigation.dragAndDrop') }}</span>
         </div>
         <p class="upload-info">SVG, PNG, JPG or GIF (max. 800x400px)</p>
       </div>
@@ -32,6 +32,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 
 interface Props {

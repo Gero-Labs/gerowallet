@@ -1,6 +1,6 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" title="Withdraw Staking Rewards" :loading="loading"
-              subtitle="Claim your accumulated rewards from staking. Confirm the details and enter your password to proceed.">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="$t('staking.withdrawStakingRewards')" :loading="loading"
+              :subtitle="$t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         border="left"
@@ -10,10 +10,10 @@
         class="text-left"
       >
         <ul>
-          <li>Staking rewards are earned by delegating your ADA to a stake pool.</li>
-          <li>Staking allows ADA holders to earn passive income.</li>
-          <li>Rewards are typically distributed every epoch (about every 5 days).</li>
-          <li>Rewards are automatically re-staked, so you don’t need to withdraw them for your earnings to compound.</li>
+          <li>{{ $t('staking.rewardsEarnedByDelegating') }}</li>
+          <li>{{ $t('staking.stakingAllowsPassiveIncome') }}</li>
+          <li>{{ $t('staking.rewardsDistributedEveryEpoch') }}</li>
+          <li>{{ $t('staking.rewardsAutoRestaked') }}</li>
         </ul>
       </v-alert>
     </v-card-text>
@@ -21,7 +21,7 @@
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
-            <h4>Rewards Amount
+            <h4>{{ $t('staking.rewardsAmount') }}
               <v-btn x-small icon>
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
@@ -29,11 +29,11 @@
             <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Tx Fee</h4>
+            <h4>{{ $t('staking.txFee') }}</h4>
             <h4><strong>{{ toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Total</h4>
+            <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ toCurrency(withdrawals-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
@@ -51,7 +51,7 @@
                   dense
                   v-model="spendingPassword"
                   outlined
-                  label="Spending Password"
+                  :label="$t('wallet.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="passwordRules"
                   hide-details
@@ -83,6 +83,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
@@ -98,6 +99,9 @@ import { walletStore } from '@/stores/walletStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

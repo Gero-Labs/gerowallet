@@ -12,7 +12,7 @@
                 <v-chip x-small color="#F97066" class="px-2 ma-2">
                   <v-icon color="white" x-small style="margin-right: 3px">
                     mdi-alert-decagram
-                  </v-icon>Scam Token
+                  </v-icon>{{ t('assets.scamToken') }}
                 </v-chip>
               </div>
               <div class="collectible-text-container">
@@ -24,14 +24,18 @@
       <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
-      <v-btn text elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">Back</v-btn>
+      <v-btn text elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">{{ t('common.back') }}</v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   modalData: {

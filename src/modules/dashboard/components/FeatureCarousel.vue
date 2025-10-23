@@ -106,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted } from 'vue';
 
 // Define and export carousel item interface

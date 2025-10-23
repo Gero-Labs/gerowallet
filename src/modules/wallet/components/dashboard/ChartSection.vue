@@ -61,9 +61,13 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch, computed } from 'vue';
 import Highcharts from 'highcharts';
 import cardStore from '@/stores/modules/card';
+
+
+const { t } = useTranslation();
 
 const activeTab = ref('12months');
 const chartContainer = ref<HTMLElement>();

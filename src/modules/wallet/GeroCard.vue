@@ -3,15 +3,15 @@
     <!-- Loading State -->
     <div v-if="showLoadingState" class="loading-container">
       <div class="loading-spinner"></div>
-      <p class="loading-message">{{ loadingMessage || 'Loading your wallet...' }}</p>
+      <p class="loading-message">{{ loadingMessage || $t('wallet.loadingYourWallet') }}</p>
     </div>
 
     <!-- Error State -->
     <div v-else-if="showErrorState" class="error-container">
       <div class="error-icon">⚠️</div>
-      <h3 class="error-title">Something went wrong</h3>
-      <p class="error-message">{{ error || 'An unexpected error occurred' }}</p>
-      <button @click="handleRetry" class="retry-button">Try Again</button>
+      <h3 class="error-title">{{ $t('wallet.somethingWentWrong') }}</h3>
+      <p class="error-message">{{ error || $t('wallet.unexpectedError') }}</p>
+      <button @click="handleRetry" class="retry-button">{{ $t('wallet.tryAgain') }}</button>
     </div>
     <!-- Main Content -->
     <component
@@ -25,6 +25,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
 import cardStore from '@/stores/modules/card';

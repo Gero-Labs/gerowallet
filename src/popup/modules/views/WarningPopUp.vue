@@ -44,9 +44,13 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
+
+
+const { t } = useTranslation();
 
 const valid = ref(false);
 const checkbox1 = ref(false);

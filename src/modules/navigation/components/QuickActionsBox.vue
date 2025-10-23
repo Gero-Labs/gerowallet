@@ -21,7 +21,7 @@
               contain
             ></v-img>
           </v-avatar>
-          <span class="button-text">Buy / Sell</span>
+          <span class="button-text">{{ $t('navigation.buySell') }}</span>
         </v-btn>
       </div>
 
@@ -42,7 +42,7 @@
               style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Send</span>
+          <span class="button-text">{{ $t('navigation.send') }}</span>
         </v-btn>
       </div>
 
@@ -63,7 +63,7 @@
               style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Receive</span>
+          <span class="button-text">{{ $t('navigation.receive') }}</span>
         </v-btn>
       </div>
 
@@ -117,6 +117,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref, getCurrentInstance } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
@@ -126,6 +127,9 @@ import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any

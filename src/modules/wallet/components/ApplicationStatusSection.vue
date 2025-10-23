@@ -25,7 +25,11 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from './SecondaryButton.vue';
+
+
+const { t } = useTranslation();
 
 const handleContactSupport = () => {
   console.log('Contact support clicked');

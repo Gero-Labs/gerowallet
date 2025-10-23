@@ -1,10 +1,10 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="$t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
-          You're giving
+          {{ $t('navigation.youreGiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -20,7 +20,7 @@
           </v-tooltip>
         </TransactionCard>
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.receive" :risk="risks?.receivingRisk">
-          You're receiving
+          {{ $t('navigation.youreReceiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -60,8 +60,8 @@
                     v-model="spendingPassword"
                     outlined
                     hide-details
-                    placeholder="Type your spending password"
-                    label="Spending Password"
+                    :placeholder="$t('navigation.typeYourSpendingPassword')"
+                    :label="$t('wallet.spendingPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required()]"
                     required
@@ -105,6 +105,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -130,6 +131,8 @@ import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);

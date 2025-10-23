@@ -95,9 +95,13 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const currentSlide = ref(0)
 

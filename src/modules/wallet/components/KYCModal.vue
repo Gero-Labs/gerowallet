@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';

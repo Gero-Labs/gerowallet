@@ -1,6 +1,6 @@
 <template>
-    <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="New Multisig Transaction" :loading="txSubmitLoading" :min-height="0"
-                :subtitle="'A multisig wallet requires multiple parties signatures to authorize any transaction.'">
+    <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.newMultisigTransactionFull')" :loading="txSubmitLoading" :min-height="0"
+                :subtitle="$t('multisig.multisigRequiresSignatures')">
       <v-card-title style="display: block;" class="py-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
@@ -66,13 +66,13 @@
             v-if="!keystoneScan"
             class="mt-10 mb-0"
           >
-            <b>Instructions</b>
+            <b>{{ $t('multisig.instructions') }}</b>
             <div v-if="loggedWallet?.type === WalletType.Keystone">
               <ul class="text-left" style="line-height: 1.5">
-                <li>Unlock your Keystone device.</li>
-                <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-                <li>Use your Keystone device to scan the QR code.</li>
-                <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+                <li>{{ $t('multisig.unlockKeystoneDevice') }}</li>
+                <li>{{ $t('multisig.selectScanQROption') }} <v-icon small>mdi-line-scan</v-icon></li>
+                <li>{{ $t('multisig.useKeystoneToScan') }}</li>
+                <li>{{ $t('multisig.approveAndNext') }}</li>
               </ul>
             </div>
           </v-alert>
@@ -190,6 +190,7 @@
   </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
@@ -219,6 +220,9 @@ import { UREncoder } from '@keystonehq/keystone-sdk';
 // import { multisigStore } from '@/stores/modules/multisig';
 import { Step, Token, SendData, Tooltip } from '@/modules/multisig/types/MultiSigTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{
   isOpen: boolean;

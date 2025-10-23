@@ -54,10 +54,10 @@
                           prominent
                           border="left"
                         >
-                          Hardware wallets, a type of cold wallet, provide one of the most secure ways to keep cryptocurrencies. They work by storing your private keys in an external, physical device (usually a USB or Bluetooth device)
+                          {{ $t('welcome.hardwareWalletDescription') }}
                         </v-alert>
                         <v-card-title class="justify-center" style="font-weight: 700; word-break: break-word">
-                          What Type of Hardware Wallet Would You Like to Connect With?
+                          {{ $t('welcome.hardwareWalletType') }}
                         </v-card-title>
                         <v-card-text class="text-center">
                           <v-item-group v-model="walletType" active-class="primary" class="pb-10">
@@ -334,6 +334,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, getCurrentInstance, computed, nextTick } from 'vue';
 import rules from "@/utils/rules";
 import { purpose, Theme, WalletType } from '@/models/types';

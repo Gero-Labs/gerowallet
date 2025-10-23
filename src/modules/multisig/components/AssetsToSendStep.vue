@@ -115,6 +115,7 @@
     </v-card>
   </template>
   <script setup lang="ts">
+  import { useTranslation } from '@/shared/composables/useTranslation';
   import { ref, computed, watch, onMounted, toRefs } from 'vue';
   import { walletStore } from '@/stores/walletStore';
   import { networkStore } from '@/stores/networkStore';

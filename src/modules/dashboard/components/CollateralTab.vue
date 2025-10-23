@@ -42,6 +42,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';

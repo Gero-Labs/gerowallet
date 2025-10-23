@@ -17,7 +17,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Send</span>
+              <span>{{ $t('wallet.send') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;">
@@ -34,7 +34,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Receive</span>
+              <span>{{ $t('wallet.receive') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
@@ -53,7 +53,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Swap</span>
+              <span>{{ $t('swap.swap') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isBuyDisabled">
@@ -72,7 +72,7 @@
                   <v-img :src="assets.dollarShieldSvg" alt="Buy" contain></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Buy</span>
+              <span>{{ $t('navigation.buy') }}</span>
             </v-layout>
           </v-col>
         </v-row>
@@ -86,6 +86,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
@@ -94,6 +95,9 @@ import SendDialog from "../dialogs/SendDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   utxos: {

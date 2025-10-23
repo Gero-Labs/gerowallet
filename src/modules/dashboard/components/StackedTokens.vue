@@ -35,6 +35,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref, watch, withDefaults } from 'vue';
 import { resolveAsset } from '@/shared/utils/resolver';
 import assts from '@/utils/assets';

@@ -20,10 +20,14 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 

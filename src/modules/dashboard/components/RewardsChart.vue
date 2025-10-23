@@ -2,12 +2,16 @@
   <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 

@@ -31,9 +31,13 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import cardStore from '@/stores/modules/card';
 import type { Activity } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const activities = computed(() => {
   // Force reactivity by accessing the store directly

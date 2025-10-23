@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    title="Quick Send"
+    :title="$t('wallet.quickSend')"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`"
+    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
   >
     <v-card-title style="display: block;" class="py-0">
@@ -70,24 +70,24 @@
           v-if="!keystoneScan"
           class="mt-10 mb-0"
         >
-          <b>Instructions</b>
+          <b>{{ $t('wallet.instructions') }}</b>
           <div v-if="loggedWallet?.type === WalletType.Keystone">
             <ul class="text-left" style="line-height: 1.5">
-              <li>Unlock your Keystone device.</li>
-              <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-              <li>Use your Keystone device to scan the QR code.</li>
-              <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+              <li>{{ $t('wallet.unlockKeystone') }}</li>
+              <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+              <li>{{ $t('wallet.useKeystoneToScan') }}</li>
+              <li>{{ $t('wallet.approveAndScanNext') }}</li>
             </ul>
           </div>
         </v-alert>
         <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
           <v-card-title>
-            Scan QR Code
+            {{ $t('wallet.scanQRCode') }}
           </v-card-title>
           <v-card-subtitle>
             <ul class="text-left" style="line-height: 1.5">
-              <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-              <li>Use a low density setting for animated QR codes if required.</li>
+              <li>{{ $t('wallet.adjustDistance') }}</li>
+              <li>{{ $t('wallet.useLowDensity') }}</li>
             </ul>
           </v-card-subtitle>
           <v-card-text class="text-center">
@@ -194,6 +194,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
@@ -205,7 +206,7 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 // import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { toRefs, onMounted, computed, ref, watch } from 'vue';
+import { toRefs, onMounted, computed, ref, watch, getCurrentInstance } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
 // import { UREncoder } from '@keystonehq/keystone-sdk';
@@ -227,6 +228,9 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
+const instance = getCurrentInstance();
+const t = (key: string) => instance?.proxy.$t(key) || key;
+
 const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
@@ -244,20 +248,20 @@ const spendingPassword = ref<string>('');
 const steps = ref<any[]>([
   {
     name: 'recipientDetails',
-    label: 'Recipient Details',
+    label: t('wallet.recipientDetails'),
   },
   {
     name: 'assetsToSend',
-    label: 'Assets to Send',
+    label: t('wallet.assetsToSend'),
   },
   {
     name: 'summary',
-    label: 'Summary',
+    label: t('wallet.summary'),
   },
 ]);
 const tooltip = ref<any>({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref<string>('');

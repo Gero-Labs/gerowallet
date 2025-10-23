@@ -58,8 +58,12 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, connectedDapps } = toRefs(walletStore);
 

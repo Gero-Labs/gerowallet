@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Buy / Sell"
-    subtitle="Choose your favorite Provider for On-ramp / Off-ramp"
+    :title="$t('wallet.buySell')"
+    :subtitle="$t('wallet.buySellSubtitle')"
     :min-height="300"
     :persistent="false"
   >
@@ -15,20 +15,20 @@
               :complete="step > 1"
               step="1"
             >
-              Buy / Sell
+              {{ $t('wallet.buySell') }}
             </v-stepper-step>
             <v-divider></v-divider>
             <v-stepper-step
               :complete="step > 2"
               step="2"
             >
-              Provider
+              {{ $t('wallet.provider') }}
             </v-stepper-step>
             <v-divider></v-divider>
             <v-stepper-step
               step="3"
             >
-              Finalize
+              {{ $t('wallet.finalize') }}
             </v-stepper-step>
           </v-stepper-header>
           <v-stepper-items>
@@ -47,8 +47,8 @@
                           style="margin-left: auto; margin-right: auto;"
                           :data-image="assets.buyAda"
                         >
-                          <h1 slot="header" style="line-height: 1;">Buy ADA</h1>
-                          <p slot="content">Use Credit Card or Other Payment Methods to Buy ADA</p>
+                          <h1 slot="header" style="line-height: 1;">{{ $t('wallet.buyADA') }}</h1>
+                          <p slot="content">{{ $t('wallet.buyADADescription') }}</p>
                         </parallax-card>
                       </div>
                     </v-card>
@@ -65,8 +65,8 @@
                           style="margin-left: auto; margin-right: auto;"
                           :data-image="assets.sellAda"
                         >
-                          <h1 slot="header" style="line-height: 1;">Sell ADA</h1>
-                          <p slot="content">Choose from multiple methods to instantly convert your ADA to cash</p>
+                          <h1 slot="header" style="line-height: 1;">{{ $t('wallet.sellADA') }}</h1>
+                          <p slot="content">{{ $t('wallet.sellADADescription') }}</p>
                         </parallax-card>
                       </div>
                     </v-card>
@@ -138,12 +138,16 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
 const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;

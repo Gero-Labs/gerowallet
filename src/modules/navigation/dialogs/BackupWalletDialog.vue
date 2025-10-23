@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    title="Wallet Backup"
+    :title="$t('navigation.walletBackup')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -48,7 +48,7 @@
             :complete="step > 1"
             step="1"
           >
-            Wallet Creation
+            {{ $t('navigation.walletCreation') }}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
@@ -232,6 +232,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import * as bip39 from 'bip39';

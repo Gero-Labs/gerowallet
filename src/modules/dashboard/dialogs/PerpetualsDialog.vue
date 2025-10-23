@@ -3,8 +3,8 @@
     <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Strike Perpetuals"
-    subtitle="Trade perpetual futures with leverage on Cardano"
+    :title="t('perpetuals.strikePerpetuals')"
+    :subtitle="t('perpetuals.tradePerpetualFutures')"
     :min-height="734"
     :height="734"
     :width="1100"
@@ -20,7 +20,7 @@
             style="margin-top: 5px; margin-bottom: 5px;"
           >
             <h4 class="column-title compact">{{ tickerSymbol }}/USD</h4>
-            <span class="chart-timeframe">24H Price Action</span>
+            <span class="chart-timeframe">{{ t('perpetuals.24hPriceAction') }}</span>
           </div>
 
           <!-- TradingView ADA/USD Histogram Chart -->
@@ -96,7 +96,7 @@
               <!-- Empty state -->
               <div v-else-if="positions.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-                <p class="mt-2">No Open Positions</p>
+                <p class="mt-2">{{ t('perpetuals.noOpenPositions') }}</p>
                 <p class="mt-1 text-caption">
                   Your perpetual positions will appear here
                 </p>
@@ -720,7 +720,7 @@
           <div
             class="d-flex align-items-center justify-space-between mb-2"
           >
-            <h4 class="column-title compact" style="align-content: center;">Open New Position</h4>
+            <h4 class="column-title compact" style="align-content: center;">{{ t('perpetuals.openNewPosition') }}</h4>
             <!-- Real-time ADA Price Ticker -->
             <div
               class="ada-ticker-compact-corner"
@@ -782,7 +782,7 @@
 
           <!-- Step 1: Position Direction -->
             <div class="form-section compact">
-              <div class="form-label compact">Position Direction</div>
+              <div class="form-label compact">{{ t('perpetuals.positionDirection') }}</div>
               <v-btn-toggle
                 mandatory
                 active-class="geroButton"
@@ -813,7 +813,7 @@
 
             <!-- Step 2: Order Type -->
             <div class="form-section compact">
-              <div class="form-label compact">Order Type</div>
+              <div class="form-label compact">{{ t('perpetuals.orderType') }}</div>
               <v-btn-toggle
                 mandatory
                 :active-class="
@@ -920,7 +920,7 @@
             <!-- Step 3: Collateral Amount -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between">
-                <div class="form-label compact">Collateral</div>
+                <div class="form-label compact">{{ t('perpetuals.collateral') }}</div>
                 <span class="available-balance compact"
                 >Available: {{ availableAdaBalance }} ADA</span
                 >
@@ -961,7 +961,7 @@
             <!-- Step 4: Leverage -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between mb-1">
-                <div class="form-label compact">Leverage</div>
+                <div class="form-label compact">{{ t('perpetuals.leverage') }}</div>
                 <div
                   class="leverage-display compact"
                   :class="{
@@ -1321,6 +1321,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
@@ -1345,6 +1346,8 @@ import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
+
+const { t } = useTranslation();
 
 interface CandlestickDataPoint {
   time: Time;

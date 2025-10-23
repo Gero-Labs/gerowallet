@@ -114,11 +114,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
+
+
+const { t } = useTranslation();
 
 const currentCardIndex = ref(0);
 const cardTiltStyle = ref<any>({});

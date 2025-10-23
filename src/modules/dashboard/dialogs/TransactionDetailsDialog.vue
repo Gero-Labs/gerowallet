@@ -11,6 +11,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TransactionDetails from '@/shared/components/TransactionDetails.vue';
 

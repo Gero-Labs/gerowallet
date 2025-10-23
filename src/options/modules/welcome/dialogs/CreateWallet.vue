@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    title="Create New Wallet"
+    :title="$t('welcome.createNewWallet')"
     :subtitle="props.network.title"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
@@ -15,18 +15,18 @@
       <v-form ref="form" v-model="valid">
         <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 540px;">
           <v-card-text class="pa-0 d-flex row no-gutters">
-            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-            <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.</h3>
+            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
+            <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.chooseNameToIdentify') }}</h3>
             <v-text-field
               style="width: 100%"
               v-model="newWallet.name"
               dense
               filled
-              label="Wallet Name"
-              placeholder="e.g. My New Wallet"
+              :label="$t('welcome.walletName')"
+              :placeholder="$t('welcome.walletNamePlaceholder')"
               :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
             ></v-text-field>
-            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
             <v-radio-group v-model="newWallet.icon" style="width: 100%; display: grid;" row mandatory class="no-gutters justify-space-around mt-2 mb-2" hide-details>
               <v-radio value="green">
                 <template v-slot:label>
@@ -71,8 +71,8 @@
                 </template>
               </v-radio>
             </v-radio-group>
-            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-            <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.</h3>
+            <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpSpendingPassword') }}</h2>
+            <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.youllUseThisToLogin') }}</h3>
             <v-text-field
               style="width: 100%"
               block
@@ -121,8 +121,8 @@
             >
               <template v-slot:label>
                 <div>
-                  I have read and agree to the
-                  <a @click.stop href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true" target="_blank">Terms of Service</a>.
+                  {{ $t('welcome.iHaveReadTerms') }}
+                  <a @click.stop href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true" target="_blank">{{ $t('welcome.termsOfService') }}</a>.
                 </div>
               </template>
             </v-checkbox>
@@ -140,12 +140,13 @@
         :disabled="isDisabled"
         :loading="creatingWalletLoader"
       >
-        CREATE WALLET
+        {{ $t('welcome.createWallet') }}
       </v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, reactive, nextTick, getCurrentInstance } from 'vue';
 import rules from "@/utils/rules";
 import { Theme } from "@/models/types";

@@ -46,8 +46,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
+
+
+const { t } = useTranslation();
 
 const loading = ref(false);
 const showPin = ref(false);

@@ -34,6 +34,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';

@@ -33,7 +33,7 @@
         <v-col cols="6">
           <v-select label="Min. Required Signers" dense v-model="requiredSigners" :items="signersArray" required
             prepend-inner-icon="mdi-account-multiple-outline" outlined hide-details />
-          <div class="helper signers-note mt-2">The minimum signers required to execute a transaction</div>
+          <div class="helper signers-note mt-2">{{ $t('multisig.minimumSignersNote') }}</div>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-4">
@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
@@ -163,6 +164,9 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import db from '@/db';
 import { resolvePaymentKeyHash } from '@/shared/utils/resolver';
 import { isPaymentAddress } from '@/chrome/serialization';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{ isOpen: boolean }>()
 const emit = defineEmits(['close']);
