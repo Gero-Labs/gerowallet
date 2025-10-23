@@ -86,8 +86,13 @@ export function useWalletStatus() {
    * Handle authentication completion from KaiserexAuthPage
    */
   async function handleAuthComplete(): Promise<void> {
+    console.log('🔄 handleAuthComplete: Re-initializing card store after authentication...');
     setKaiserexAuthentication(true);
     clearError();
+
+    // Re-initialize to fetch user data and determine correct state
+    await cardStoreModule.initialize();
+    console.log('✅ handleAuthComplete: Card store re-initialized, current state:', cardStoreModule.currentState);
   }
 
   /**
