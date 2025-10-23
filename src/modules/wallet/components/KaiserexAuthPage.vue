@@ -7,7 +7,7 @@
         <p class="page-description">Choose an option below to get started with your crypto card order</p>
       </div>
 
-      <!-- Auth Options -->
+      <!-- Auth Options Grid (3 columns) -->
       <div class="auth-options">
         <!-- Register Option -->
         <div class="auth-option register-option liquid-glass-card">
@@ -191,33 +191,41 @@
             </div>
           </div>
         </div>
-      </div>
-      <!-- Card Management Info -->
-      <div class="management-section">
-        <div class="management-content liquid-glass-card">
-          <img src="@/modules/wallet/icons/card.svg" alt="card" />
-          <div class="management-column-content">
-            <h3 class="management-heading">Manage Your Card in Seconds</h3>
-            <p class="management-description">
-              An all-in-one platform that helps you manage everything about your Gero Card
-            </p>
-            <div class="feature-list">
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">Enjoy 6 months of ZERO FEES</span>
-              </div>
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">0% monthly & issuance fees</span>
-              </div>
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">0% fees on ADA-to-euro conversions and spending.</span>
+
+        <!-- Card Management Option -->
+        <div class="auth-option management-option liquid-glass-card">
+          <div class="default-card-view">
+            <div class="option-icon">
+              <img src="@/modules/wallet/icons/card.svg" alt="card" class="card-image" />
+            </div>
+
+            <div class="option-content">
+              <h3 class="option-title">Manage Your Card in Seconds</h3>
+              <p class="option-description">
+                An all-in-one platform that helps you manage everything about your Gero Card
+              </p>
+
+              <div class="option-features">
+                <div class="feature-item">
+                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                  <span class="feature-text">Enjoy 6 months of ZERO FEES</span>
+                </div>
+                <div class="feature-item">
+                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                  <span class="feature-text">0% monthly & issuance fees</span>
+                </div>
+                <div class="feature-item">
+                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                  <span class="feature-text">0% fees on ADA-to-euro conversions</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Kaiserex Partnership Info -->
+      <KaiserexPartnershipSection />
     </div>
 
     <!-- Modals -->
@@ -234,6 +242,7 @@ import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
+import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
 const emit = defineEmits<{
@@ -444,7 +453,7 @@ const handleRegistrationComplete = () => {
 }
 
 .auth-container {
-  max-width: 900px;
+  max-width: 1400px;
   width: 100%;
   position: relative;
   z-index: 1; // Above the background
@@ -473,9 +482,14 @@ const handleRegistrationComplete = () => {
 
 .auth-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: $spacing-3xl;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $spacing-2xl;
   margin-bottom: $spacing-4xl;
+
+  @media (max-width: 1400px) {
+    grid-template-columns: 1fr;
+    gap: $spacing-2xl;
+  }
 }
 
 .auth-option {
@@ -531,6 +545,11 @@ const handleRegistrationComplete = () => {
   justify-content: center;
   margin-top: 40px; // Position icon between top and header
   margin-bottom: 30px; // Space before header
+
+  .card-image {
+    width: 120px;
+    height: auto;
+  }
 }
 
 .icon-circle {
@@ -677,59 +696,6 @@ const handleRegistrationComplete = () => {
   }
 }
 
-.management-section {
-  text-align: center;
-}
-
-.management-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-4xl;
-  padding: 28px; // Reduced by 4px from $spacing-3xl (32px)
-  border-radius: $border-radius-lg;
-}
-
-.management-column-content {
-  @include flex-column;
-  gap: $spacing-lg;
-}
-
-.management-heading {
-  @include heading-style($font-size-2xl);
-  color: $text-primary;
-  margin: 0;
-}
-
-.management-description {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-  margin: 0;
-  line-height: 1.6;
-}
-
-.feature-list {
-  @include flex-column;
-  gap: $spacing-md;
-}
-
-.feature-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-}
-
-.feature-icon {
-  font-size: 18px;
-  color: rgba(0, 199, 243, 0.7);
-  flex-shrink: 0;
-}
-
-.feature-text {
-  @include body-text($font-size-sm);
-  color: $text-secondary;
-}
-
 // Responsive Design
 @media (max-width: $breakpoint-lg) {
   .auth-options {
@@ -739,12 +705,6 @@ const handleRegistrationComplete = () => {
 
   .auth-option {
     padding: $spacing-2xl;
-  }
-
-  .management-content {
-    flex-direction: column;
-    gap: $spacing-2xl;
-    text-align: center;
   }
 }
 
