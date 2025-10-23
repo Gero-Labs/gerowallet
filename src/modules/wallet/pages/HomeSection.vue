@@ -10,6 +10,9 @@
          <ChartSection @filter="handleFilter" /
       </div>> -->
     </div>
+
+    <!-- Kaiserex Partnership Info -->
+    <KaiserexPartnershipBadge />
   </div>
 </template>
 
@@ -18,6 +21,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import cardStore from '@/stores/modules/card';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import HeroSection from '../components/HeroSection.vue';
+import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
 import { useIntervalFn } from '@vueuse/core';
 const loading = ref(false);
 

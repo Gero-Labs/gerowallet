@@ -6,6 +6,7 @@
     <CallToActionSection />
     <CardManagementSection />
     <FeatureGridSection />
+    <KaiserexPartnershipSection />
   </div>
 </template>
 
@@ -13,6 +14,7 @@
 import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
 import CardManagementSection from '@/modules/wallet/components/CardManagementSection.vue';
 import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';
+import KaiserexPartnershipSection from '@/modules/wallet/components/KaiserexPartnershipSection.vue';
 </script>
 
 <style scoped>
