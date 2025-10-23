@@ -1,5 +1,14 @@
 <template>
   <section class="call-to-action-section">
+    <v-btn
+      icon
+      class="logout-btn"
+      @click="handleLogout"
+      title="Logout"
+    >
+      <v-icon>mdi-logout</v-icon>
+    </v-btn>
+
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
     <p class="cta-description">Your digital assets, now swipe-ready. Use your crypto like cash</p>
     <GradientButton v-if="kycStatus === 'approved'" text="Order your card today" @click="handleOrderCard" />
@@ -27,6 +36,14 @@ const handleOrderCard = async () => {
 const startKYC = () => {
   cardStore.fetchKYCLink();
 };
+
+const handleLogout = async () => {
+  try {
+    await cardStore.logout();
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
+};
 </script>
 
 <style lang="scss" scoped>
@@ -35,6 +52,29 @@ const startKYC = () => {
 .call-to-action-section {
   @include flex-column;
   @include flex-center;
+  position: relative;
+}
+
+.logout-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 77, 77, 0.15) !important;
+    border-color: rgba(255, 77, 77, 0.3);
+  }
+
+  :deep(.v-icon) {
+    color: $text-secondary;
+  }
+
+  &:hover :deep(.v-icon) {
+    color: #ff4d4d;
+  }
 }
 
 .new-tag {
