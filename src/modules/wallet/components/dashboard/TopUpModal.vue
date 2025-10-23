@@ -38,6 +38,21 @@
               <span>Transaction signed! Click submit to broadcast.</span>
             </v-alert>
 
+            <!-- Show info alert when Ledger is signing (buttons disabled) -->
+            <v-alert
+              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit && txSubmitLoading"
+              type="info"
+              dense
+              border="left"
+              colored-border
+              class="mx-6 mb-0"
+            >
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <v-icon small color="info">mdi-information</v-icon>
+                <span>Please review and approve the transaction on your Ledger device to continue.</span>
+              </div>
+            </v-alert>
+
             <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
             <div v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit" class="password-section">
               <v-text-field
