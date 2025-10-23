@@ -305,13 +305,23 @@ const signLedgerTx = async (): Promise<boolean> => {
       networks.resolveNetwork(walletStore.loggedWallet.chain, walletStore.loggedWallet.network)
     );
 
+    // Validate signatures were returned
+    if (!signatures || (signatures instanceof Map && signatures.size === 0)) {
+      throw new Error('No signatures returned from Ledger device. Please try again.');
+    }
+
     // Create witness set from signatures
     const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
       signatures,
     });
 
-    console.log('✅ Ledger signing successful:', transactionWitnessSet.toCbor());
-    txWitnesses.value = transactionWitnessSet.toCbor();
+    const witnessCbor = transactionWitnessSet.toCbor();
+    if (!witnessCbor || witnessCbor.length === 0) {
+      throw new Error('Failed to create witness set from Ledger signatures.');
+    }
+
+    console.log('✅ Ledger signing successful:', witnessCbor);
+    txWitnesses.value = witnessCbor;
     return true;
   } catch (e) {
     console.error('❌ Error signing transaction with Ledger:', e);
@@ -368,6 +378,15 @@ const handleTopUp = async () => {
     // If transaction is already signed, just submit it
     if (isSubmit.value) {
       console.log('📤 Transaction already signed, submitting...');
+
+      // Validate that transaction and witnesses exist before submitting
+      if (!tx.value || !txCbor.value || !txWitnesses.value) {
+        console.error('❌ Missing transaction data:', { tx: !!tx.value, txCbor: !!txCbor.value, txWitnesses: !!txWitnesses.value });
+        snackbar.setError('Transaction data is missing. Please sign the transaction again.');
+        isSubmit.value = false;
+        return;
+      }
+
       const success = await submitTx();
       if (success) {
         // Go to loading step
@@ -426,19 +445,19 @@ const handleTopUp = async () => {
     }
 
     // Check if auto-submit is enabled
-    if (walletStore.config?.txAutoSubmit) {
+    if (walletStore.config?.txAutoSubmit === true) {
       // Auto-submit enabled, proceed to loading and submit
       currentStep.value = 3;
       const success = await submitTx();
-      // Wait for loading animation (minimum 3 seconds for UX)
-      await new Promise(resolve => setTimeout(resolve, 3000));
 
       if (success) {
+        // Wait for loading animation (minimum 3 seconds for UX) only on success
+        await new Promise(resolve => setTimeout(resolve, 3000));
         console.log('✅ Transaction successful!');
         // handleLoadingComplete will be called automatically
       } else {
-        console.error('❌ Transaction failed, returning to summary');
-        currentStep.value = 2; // Go back to summary
+        console.error('❌ Transaction failed, returning to summary immediately');
+        currentStep.value = 2; // Go back to summary immediately on failure
       }
     } else {
       // Auto-submit disabled, show success alert and wait for user to click submit
