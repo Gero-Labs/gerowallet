@@ -30,7 +30,7 @@
       :is="currentComponent"
       @auth-complete="handleAuthComplete"
       @kyc-complete="handleKYCComplete"
-      @error="handleError"
+      @error="setError"
     />
   </div>
 </template>
@@ -84,7 +84,7 @@ async function handleAuthComplete(): Promise<void> {
     clearError();
   } catch (error) {
     console.error('Authentication completion failed:', error);
-    handleError('Authentication failed. Please try again.');
+    setError('Authentication failed. Please try again.');
   }
 }
 
@@ -97,15 +97,8 @@ async function handleKYCComplete(status: string = 'pending', data?: any): Promis
     clearError();
   } catch (error) {
     console.error('KYC completion failed:', error);
-    handleError('KYC submission failed. Please try again.');
+    setError('KYC submission failed. Please try again.');
   }
-}
-
-/**
- * Handle errors from child components
- */
-function handleError(errorMessage: string): void {
-  setError(errorMessage);
 }
 
 /**
@@ -117,7 +110,7 @@ async function handleRetry(): Promise<void> {
   try {
     await cardStore.initialize();
   } catch (error) {
-    handleError('Failed to retry. Please refresh the page.');
+    setError('Failed to retry. Please refresh the page.');
   }
 }
 
@@ -129,7 +122,7 @@ async function handleLogout(): Promise<void> {
     await cardStore.logout();
   } catch (error) {
     console.error('Logout failed:', error);
-    handleError('Logout failed. Please try again.');
+    setError('Logout failed. Please try again.');
   }
 }
 
@@ -157,7 +150,7 @@ onMounted(async () => {
   try {
     await initialize();
   } catch (error) {
-    handleError('Failed to initialize wallet. Please refresh the page.');
+    setError('Failed to initialize wallet. Please refresh the page.');
   }
 });
 </script>
