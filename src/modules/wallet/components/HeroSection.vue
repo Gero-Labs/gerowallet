@@ -1,5 +1,14 @@
 <template>
   <div class="hero-section">
+    <v-btn
+      icon
+      class="logout-btn"
+      @click="handleLogout"
+      title="Logout"
+    >
+      <v-icon>mdi-logout</v-icon>
+    </v-btn>
+
     <!-- Card Carousel and Balance Section -->
     <v-card v-if="cards.length > 0" flat class="transparent">
       <v-row>
@@ -285,6 +294,14 @@ const formatADA = (eurAmount: number) => {
   const adaAmount = eurAmount / exchangeRate.value;
   return adaAmount.toFixed(2);
 };
+
+const handleLogout = async () => {
+  try {
+    await cardStoreModule.logout();
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
+};
 </script>
 
 <style lang="scss" scoped>
@@ -295,6 +312,29 @@ const formatADA = (eurAmount: number) => {
   width: 100%;
   position: relative;
   min-height: 320px;
+
+  .logout-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    z-index: 100;
+
+    &:hover {
+      background: rgba(255, 77, 77, 0.15) !important;
+      border-color: rgba(255, 77, 77, 0.3);
+    }
+
+    :deep(.v-icon) {
+      color: $text-secondary;
+    }
+
+    &:hover :deep(.v-icon) {
+      color: #ff4d4d;
+    }
+  }
 }
 
 // Card Layout (side by side)
