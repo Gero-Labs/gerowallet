@@ -1,5 +1,16 @@
 <template>
   <div class="gero-wallet">
+    <!-- Logout Button (shown for all states except auth and loading) -->
+    <v-btn
+      v-if="!showAuthPage && !showLoadingState && !showErrorState"
+      icon
+      class="logout-btn"
+      @click="handleLogout"
+      title="Logout"
+    >
+      <v-icon>mdi-logout</v-icon>
+    </v-btn>
+
     <!-- Loading State -->
     <div v-if="showLoadingState" class="loading-container">
       <div class="loading-spinner"></div>
@@ -45,6 +56,7 @@ const {
   loadingMessage,
   showLoadingState,
   showErrorState,
+  showAuthPage,
   initialize,
   handleAuthComplete: onAuthComplete,
   handleKYCComplete: onKYCComplete,
@@ -109,6 +121,18 @@ async function handleRetry(): Promise<void> {
   }
 }
 
+/**
+ * Handle logout action
+ */
+async function handleLogout(): Promise<void> {
+  try {
+    await cardStore.logout();
+  } catch (error) {
+    console.error('Logout failed:', error);
+    handleError('Logout failed. Please try again.');
+  }
+}
+
 // ============================================================================
 // DEVELOPMENT HELPERS
 // ============================================================================
@@ -147,10 +171,38 @@ onMounted(async () => {
   gap: 32px;
   width: 100%;
   height: 100%;
+  position: relative;
 
   // Only add padding for non-auth pages (auth page handles its own layout)
   &:not(:has(.kaiserex-auth-page)) {
     padding: 32px;
+  }
+}
+
+// ============================================================================
+// LOGOUT BUTTON
+// ============================================================================
+
+.logout-btn {
+  position: absolute;
+  top: 32px;
+  right: 32px;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+  z-index: 1000;
+
+  &:hover {
+    background: rgba(255, 77, 77, 0.15) !important;
+    border-color: rgba(255, 77, 77, 0.3);
+  }
+
+  :deep(.v-icon) {
+    color: #cecfd2;
+  }
+
+  &:hover :deep(.v-icon) {
+    color: #ff4d4d;
   }
 }
 

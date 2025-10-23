@@ -1,14 +1,5 @@
 <template>
   <section class="application-status-section">
-    <v-btn
-      icon
-      class="logout-btn"
-      @click="handleLogout"
-      title="Logout"
-    >
-      <v-icon>mdi-logout</v-icon>
-    </v-btn>
-
     <div class="status-content">
       <div class="card-container">
         <img src="@/modules/wallet/icons/card.svg" alt="card" />
@@ -35,18 +26,9 @@
 
 <script setup lang="ts">
 import SecondaryButton from './SecondaryButton.vue';
-import cardStore from '@/stores/modules/card';
 
 const handleContactSupport = () => {
   console.log('Contact support clicked');
-};
-
-const handleLogout = async () => {
-  try {
-    await cardStore.logout();
-  } catch (error) {
-    console.error('Logout failed:', error);
-  }
 };
 </script>
 
@@ -58,30 +40,6 @@ const handleLogout = async () => {
   border-radius: $border-radius-lg;
   border: 1px solid $border-secondary;
   background: linear-gradient(100deg, $primary-cyan -35.87%, $background-dark 40.02%, $background-dark 84.89%);
-  position: relative;
-}
-
-.logout-btn {
-  position: absolute;
-  top: $spacing-lg;
-  right: $spacing-lg;
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
-  z-index: 10;
-
-  &:hover {
-    background: rgba(255, 77, 77, 0.15) !important;
-    border-color: rgba(255, 77, 77, 0.3);
-  }
-
-  :deep(.v-icon) {
-    color: $text-secondary;
-  }
-
-  &:hover :deep(.v-icon) {
-    color: #ff4d4d;
-  }
 }
 
 .status-content {
