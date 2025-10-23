@@ -47,10 +47,7 @@
               colored-border
               class="mx-6 mb-0"
             >
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <v-icon small color="info">mdi-information</v-icon>
-                <span>Please review and approve the transaction on your Ledger device to continue.</span>
-              </div>
+              <span>Please review and approve the transaction on your Ledger device to continue.</span>
             </v-alert>
 
             <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
