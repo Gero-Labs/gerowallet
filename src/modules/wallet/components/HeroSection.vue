@@ -82,7 +82,11 @@
             </div>
           </div>
           <!-- Waiting Status Card - Show when order is in progress -->
-          <v-card v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id" outlined class="waiting-status-card mt-6">
+          <v-card
+            v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
+            outlined
+            class="waiting-status-card mt-6"
+          >
             <div class="status-card-gradient"></div>
             <v-card-text class="status-card-content">
               <div class="status-icon-wrapper">
@@ -116,7 +120,7 @@
             <p class="order-description">
               Spend your crypto anywhere with our premium debit card. Convert and use your ADA instantly.
             </p>
-            <v-btn class="order-card-btn" large :loading="orderingCard" @click="handleOrderCard">
+            <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
               <v-icon left>mdi-credit-card-plus</v-icon>
               Order Your Card Now
             </v-btn>
@@ -150,6 +154,14 @@
       :title="'Manage Card'"
       :subtitle="'Manage the details of your card. This action cannot be undone.'"
     />
+    <!-- Confirmation Modal Order Card-->
+    <ConfirmationPasswordModal
+      :open="showOrderCardConfirmationModal"
+      @close="showOrderCardConfirmationModal = false"
+      @confirm="handleOrderCard"
+      :title="'Order New Card'"
+      :subtitle="'Are you sure you want to order a new Gero Card? This action will initiate the card ordering process.'"
+    />
   </div>
 </template>
 
@@ -159,6 +171,7 @@ import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
+import snackbar from '@/plugins/snackbar';
 
 const currentCardIndex = ref(0);
 const cardTiltStyle = ref<any>({});
@@ -168,6 +181,7 @@ const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
 const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
+const showOrderCardConfirmationModal = ref(false);
 const orderingCard = ref(false);
 
 // Get cards from the real card store
@@ -196,10 +210,16 @@ const cardsWithOrderSlot = computed(() => {
 const handleOrderCard = async () => {
   try {
     orderingCard.value = true;
+    showOrderCardConfirmationModal.value = false;
     await cardStoreModule.orderCard();
     await cardStoreModule.fetchCardData();
+
+    // Show success message
+    snackbar.fireSuccess(`Card ordered successfully! Your card is being processed.`);
   } catch (error) {
     console.error('Failed to order card:', error);
+    // Show error message
+    snackbar.setError('Failed to order card. Please try again.');
   } finally {
     orderingCard.value = false;
   }
@@ -600,17 +620,6 @@ const formatADA = (eurAmount: number) => {
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(0, 199, 243, 0.1), transparent);
-    animation: shimmer 3s infinite;
-  }
 
   .order-title {
     font-family: $font-family-primary;
