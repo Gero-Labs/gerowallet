@@ -4,7 +4,7 @@
       <div class="modal-content">
         <div class="content-wrapper" v-if="!registrationComplete">
           <!-- Close button positioned absolutely -->
-          <v-btn icon small @click="closeModal" class="modal-close-btn">
+          <v-btn icon small @click="emit('close')" class="modal-close-btn">
             <v-icon>mdi-close</v-icon>
           </v-btn>
 
@@ -102,20 +102,6 @@ const onIframeLoad = () => {
   debugLog('Kaiserex registration iframe loaded');
 
   // Don't inject any CSS - let the iframe scroll naturally on smaller screens
-};
-
-const closeModal = () => {
-  if (registrationComplete.value) {
-    emit('close');
-  }
-};
-
-const confirmRegistration = () => {
-  // Show confirmation dialog
-  if (confirm('Have you successfully completed your Kaiserex registration?')) {
-    registrationComplete.value = true;
-    // Store registration status
-  }
 };
 
 const proceedToKYC = () => {
