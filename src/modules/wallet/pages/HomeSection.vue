@@ -1,23 +1,25 @@
 <template>
   <div class="home-section">
-    <HeroSection />
+    <div class="content-wrapper">
+      <HeroSection />
 
-    <div class="dashboard-layout">
-      <!-- <div class="left-column"> -->
-      <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
-      <!-- </div> -->
-      <!-- <div class="right-column">
-         <ChartSection @filter="handleFilter" /
-      </div>> -->
+      <div class="dashboard-layout">
+        <!-- <div class="left-column"> -->
+        <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
+        <!-- </div> -->
+        <!-- <div class="right-column">
+           <ChartSection @filter="handleFilter" /
+        </div>> -->
+      </div>
     </div>
 
-    <!-- Kaiserex Partnership Info -->
-    <KaiserexPartnershipBadge />
+    <!-- Kaiserex Partnership Info - Always at bottom -->
+    <KaiserexPartnershipBadge/>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import HeroSection from '../components/HeroSection.vue';
@@ -57,8 +59,18 @@ const cardHistoryRecords = computed(() => {
 @import '../styles/mixins';
 
 .home-section {
-  min-height: 100vh;
-  padding: 12px 32px 96px;
+  padding: 12px 32px 32px;
+  height: 100%;
+  position: relative;
+  overflow-y: auto;
+  min-height: calc(100vh - 130px);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  justify-content: space-between;
+}
+
+.content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -99,7 +111,7 @@ const cardHistoryRecords = computed(() => {
 
 @media (max-width: $breakpoint-md) {
   .home-section {
-    padding: 8px 16px 64px;
+    padding: 8px 16px 16px;
   }
 
   .dashboard-layout {
