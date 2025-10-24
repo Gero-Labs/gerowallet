@@ -107,10 +107,6 @@
                     <v-icon small class="step-icon">mdi-progress-clock</v-icon>
                     <span class="step-text">Verification</span>
                   </div>
-                  <div class="step">
-                    <v-icon small class="step-icon">mdi-circle-outline</v-icon>
-                    <span class="step-text">Card Issued</span>
-                  </div>
                 </div>
               </div>
             </v-card-text>
