@@ -166,7 +166,7 @@ export interface CardState {
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
-    kycStatus: 'verified' | 'approved' | 'rejected' | 'registered' | 'verification_started';
+    kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started';
     kycData: any;
     loadingMessage: string;
     error: string | null;

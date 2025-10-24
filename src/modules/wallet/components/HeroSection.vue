@@ -14,7 +14,7 @@
                   class="credit-card"
                   @mousemove="handleCardMouseMove"
                   @mouseleave="handleCardMouseLeave"
-                  @click="showManageCardConfirmationModal = true && currentCardHasUUID"
+                  @click="currentCardHasUUID && (showManageCardConfirmationModal = true)"
                   :style="cardTiltStyle"
                 >
                   <!-- Shine effect -->
@@ -107,9 +107,7 @@
           </v-card>
           <div v-else class="order-card-section mt-6">
             <h2 class="order-title">Get Your Gero Card</h2>
-            <p class="order-description">
-              Spend your crypto anywhere with our premium debit card.
-            </p>
+            <p class="order-description">Spend your crypto anywhere with our premium debit card.</p>
             <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
               <v-icon left>mdi-credit-card-plus</v-icon>
               Order New Card
