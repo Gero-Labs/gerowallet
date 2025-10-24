@@ -1,7 +1,7 @@
 <template>
   <div class="hero-section">
     <!-- Card Carousel and Balance Section -->
-    <v-card v-if="cards.length > 0" flat class="transparent">
+    <v-card v-if="cards.length > 0 && getSelectedCard?.cardData.card_uuid" flat class="transparent">
       <v-row>
         <v-col cols="12" md="7" class="py-0" style="align-content: center; justify-items: center">
           <div class="card-carousel">
@@ -86,8 +86,86 @@
 
     <!-- No Cards State -->
     <div v-else class="no-cards">
-      <img src="@/modules/wallet/icons/cardBanner.svg" alt="card-banner" class="card-banner" />
-      <p class="no-cards-text">No cards available</p>
+      <v-window continuous>
+        <v-window-item>
+          <div
+            class="credit-card"
+            @mousemove="handleCardMouseMove"
+            @mouseleave="handleCardMouseLeave"
+            :style="cardTiltStyle"
+          >
+            <!-- Shine effect -->
+            <div class="card-shine" :style="cardShineStyle"></div>
+
+            <!-- Card Number -->
+            <p class="card-number">
+              {{ '**** **** **** ****' }}
+            </p>
+
+            <!-- Card Bottom Info -->
+            <div class="card-bottom" style="max-width: 310px">
+              <div class="card-holder">
+                <p class="label">CARDHOLDER NAME</p>
+                <p class="value">GERO WALLET</p>
+              </div>
+              <div class="card-cvv">
+                <p class="label">CVV</p>
+                <p class="value">
+                  {{ '***' }}
+                </p>
+              </div>
+              <div class="card-expiry">
+                <p class="label">EXP.</p>
+                <p class="value">MM/YY</p>
+              </div>
+            </div>
+          </div>
+        </v-window-item>
+      </v-window>
+
+      <!-- Order Card Section - Show when ready to order -->
+      <div v-if="showOrderSection" class="order-card-section mt-6">
+        <h2 class="order-title">Get Your Gero Card</h2>
+        <p class="order-description">
+          Spend your crypto anywhere with our premium debit card. Convert and use your ADA instantly.
+        </p>
+        <v-btn class="order-card-btn" large :loading="orderingCard" @click="handleOrderCard">
+          <v-icon left>mdi-credit-card-plus</v-icon>
+          Order Your Card Now
+        </v-btn>
+      </div>
+
+      <!-- Waiting Status Card - Show when order is in progress -->
+      <v-card v-if="showWaitingStatus" outlined class="waiting-status-card mt-6">
+        <div class="status-card-gradient"></div>
+        <v-card-text class="status-card-content">
+          <div class="status-icon-wrapper">
+            <v-progress-circular indeterminate color="primary" size="40" width="3" class="status-spinner" />
+            <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
+          </div>
+          <div class="status-text-wrapper">
+            <div class="status-title-wrapper">
+              <p class="status-title mb-1">Card Order in Progress</p>
+              <v-chip small color="primary" class="status-chip">Pending</v-chip>
+            </div>
+            <p class="status-subtitle mb-0">Your card order is being processed. We'll notify you once it's ready.</p>
+            <div class="status-steps mt-3">
+              <div class="step completed">
+                <v-icon small class="step-icon">mdi-check-circle</v-icon>
+                <span class="step-text">Order Placed</span>
+              </div>
+              <div class="step active">
+                <v-icon small class="step-icon">mdi-progress-clock</v-icon>
+                <span class="step-text">Verification</span>
+              </div>
+              <div class="step">
+                <v-icon small class="step-icon">mdi-circle-outline</v-icon>
+                <span class="step-text">Card Issued</span>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
     </div>
 
     <!-- Modals -->
@@ -128,15 +206,39 @@ const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
 const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
+const orderingCard = ref(false);
 
+const getSelectedCard = computed(() => {
+  return cardStoreModule.getSelectedCard();
+});
 // Get cards from the real card store
 const cards = computed(() => {
   return cardStoreModule.state.cards || [];
 });
 
+const handleOrderCard = async () => {
+  try {
+    orderingCard.value = true;
+    await cardStoreModule.orderCard();
+    await cardStoreModule.fetchCardData();
+  } catch (error) {
+    console.error('Failed to order card:', error);
+  } finally {
+    orderingCard.value = false;
+  }
+};
 // Get exchange rate from store (fallback to mock rate if not available)
 const exchangeRate = computed(() => {
   return cardStoreModule.state.exchangeRate?.sell ? parseFloat(cardStoreModule.state.exchangeRate.sell) : 0.35;
+});
+
+// Determine which section to show based on card status
+const showOrderSection = computed(() => {
+  return cards.value.length === 0;
+});
+
+const showWaitingStatus = computed(() => {
+  return getSelectedCard.value?.cardData.card_uuid === null;
 });
 
 // Watch for selected card changes and update current index
@@ -495,9 +597,7 @@ const formatADA = (eurAmount: number) => {
 }
 
 .no-cards {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  @include flex-center;
   gap: $spacing-md;
   padding: $spacing-lg;
 
@@ -508,7 +608,7 @@ const formatADA = (eurAmount: number) => {
     height: auto;
   }
 
-  .no-cards-text {
+  .no-cards {
     font-family: $font-family-primary;
     font-size: $font-size-base;
     color: $text-secondary;
@@ -516,15 +616,372 @@ const formatADA = (eurAmount: number) => {
   }
 }
 
+// Order Card Section
+.order-card-section {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 32px;
+  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 199, 243, 0.1), transparent);
+    animation: shimmer 3s infinite;
+  }
+
+  .order-title {
+    font-family: $font-family-primary;
+    font-size: 2rem;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin: 0 0 16px 0;
+    letter-spacing: -0.02em;
+    position: relative;
+    z-index: 1;
+  }
+
+  .order-description {
+    font-family: $font-family-primary;
+    font-size: $font-size-base;
+    color: rgba($text-secondary, 0.9);
+    margin: 0 0 32px 0;
+    line-height: 1.6;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .order-card-btn {
+    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%) !important;
+    color: #0c0e12 !important;
+    font-family: $font-family-primary;
+    font-size: $font-size-base;
+    font-weight: $font-weight-bold;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    border-radius: 12px;
+    padding: 12px 32px !important;
+    height: auto !important;
+    min-height: 52px;
+    box-shadow: 0 4px 16px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(0, 199, 243, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    :deep(.v-icon) {
+      color: #0c0e12 !important;
+    }
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+// Waiting Status Card - Enhanced Design
+.waiting-status-card {
+  max-width: 600px;
+  margin: 0 auto;
+  position: relative;
+  background: linear-gradient(135deg, rgba(12, 14, 18, 0.95) 0%, rgba(20, 24, 30, 0.95) 100%);
+  border: 2px solid transparent !important;
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 199, 243, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(0, 199, 243, 0.1) 0%, rgba(0, 255, 209, 0.05) 100%);
+    pointer-events: none;
+  }
+
+  &:hover {
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(0, 199, 243, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .status-card-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(
+      90deg,
+      rgba(0, 199, 243, 0.8) 0%,
+      rgba(0, 255, 209, 0.8) 50%,
+      rgba(0, 199, 243, 0.8) 100%
+    );
+    background-size: 200% 100%;
+    animation: gradientShift 3s ease infinite;
+  }
+
+  .status-card-content {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding: 24px !important;
+    position: relative;
+    z-index: 1;
+  }
+
+  .status-icon-wrapper {
+    position: relative;
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(0, 199, 243, 0.15) 0%, rgba(0, 255, 209, 0.1) 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 199, 243, 0.2);
+
+    .status-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .status-icon {
+      font-size: 28px !important;
+      color: $primary-cyan;
+      animation: pulse 2s ease-in-out infinite;
+    }
+  }
+
+  .status-text-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .status-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .status-title {
+    font-family: $font-family-primary;
+    font-size: 1.125rem;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+
+  .status-chip {
+    font-size: 0.75rem !important;
+    font-weight: $font-weight-semibold;
+    height: 24px !important;
+    padding: 0 10px !important;
+    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 255, 209, 0.15) 100%) !important;
+    border: 1px solid rgba(0, 199, 243, 0.3);
+    color: $primary-cyan !important;
+  }
+
+  .status-subtitle {
+    font-family: $font-family-primary;
+    font-size: $font-size-sm;
+    color: rgba($text-secondary, 0.9);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .status-steps {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+
+      .step-icon {
+        color: rgba($text-secondary, 0.4);
+        transition: color 0.3s ease;
+      }
+
+      .step-text {
+        font-family: $font-family-primary;
+        font-size: 0.8125rem;
+        font-weight: $font-weight-medium;
+        color: rgba($text-secondary, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color 0.3s ease;
+      }
+
+      &.completed {
+        .step-icon {
+          color: #4caf50;
+        }
+
+        .step-text {
+          color: rgba($text-secondary, 0.7);
+        }
+      }
+
+      &.active {
+        .step-icon {
+          color: $primary-cyan;
+          animation: pulse 2s ease-in-out infinite;
+        }
+
+        .step-text {
+          color: $primary-cyan;
+          font-weight: $font-weight-semibold;
+        }
+      }
+    }
+  }
+}
+
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
+}
+
 @media (max-width: $breakpoint-md) {
   .credit-card {
     width: 30rem;
+  }
+
+  .order-card-section {
+    padding: 24px;
+
+    .order-title {
+      font-size: 1.5rem;
+    }
+
+    .order-description {
+      font-size: $font-size-sm;
+    }
+  }
+
+  .waiting-status-card {
+    .status-steps {
+      flex-direction: column;
+      gap: 12px;
+
+      .step {
+        justify-content: flex-start;
+      }
+    }
   }
 }
 
 @media (max-width: 425px) {
   .credit-card {
     width: 28rem;
+  }
+
+  .order-card-section {
+    padding: 20px;
+
+    .order-title {
+      font-size: 1.25rem;
+    }
+
+    .order-description {
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+    }
+
+    .order-card-btn {
+      width: 100%;
+    }
+  }
+
+  .waiting-status-card {
+    .status-card-content {
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px !important;
+    }
+
+    .status-icon-wrapper {
+      width: 48px;
+      height: 48px;
+
+      .status-icon {
+        font-size: 24px !important;
+      }
+    }
+
+    .status-title {
+      font-size: 1rem;
+    }
+
+    .status-steps {
+      gap: 10px;
+
+      .step {
+        .step-text {
+          font-size: 0.75rem;
+        }
+      }
+    }
   }
 }
 </style>

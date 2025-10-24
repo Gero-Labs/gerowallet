@@ -2,9 +2,7 @@
   <section class="call-to-action-section">
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
     <p class="cta-description">Your digital assets, now swipe-ready. Use your crypto like cash</p>
-    <GradientButton v-if="kycStatus === 'approved'" text="Order your card today" @click="handleOrderCard" />
-
-    <GradientButton v-else text="Start KYC" @click="startKYC" />
+    <GradientButton text="Start KYC" @click="startKYC" />
 
     <OrderCardModal :open="showModal" @close="showModal = false" />
   </section>
@@ -19,10 +17,6 @@ const showModal = ref(false);
 
 const kycStatus = computed(() => cardStore.state.walletStatus.kycStatus);
 
-const handleOrderCard = async () => {
-  await cardStore.orderCard();
-  await cardStore.fetchCardData();
-};
 
 const startKYC = () => {
   cardStore.fetchKYCLink();
