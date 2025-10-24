@@ -425,7 +425,6 @@ const handleRegistrationComplete = () => {
 @import '../styles/mixins';
 
 .kaiserex-auth-page {
-  min-height: 100vh;
   display: flex;
   align-items: flex-start; // Changed from center to flex-start
   justify-content: center;
