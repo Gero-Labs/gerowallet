@@ -148,7 +148,10 @@
               <p class="status-title mb-1">Card Order in Progress</p>
               <v-chip small color="primary" class="status-chip">Pending</v-chip>
             </div>
-            <p class="status-subtitle mb-0">Your card order is being processed. We'll notify you once it's ready.</p>
+            <p class="status-subtitle mb-0">
+              Your card order is being processed. <br />
+              This process may take up to 24 hours
+            </p>
             <div class="status-steps mt-3">
               <div class="step completed">
                 <v-icon small class="step-icon">mdi-check-circle</v-icon>
