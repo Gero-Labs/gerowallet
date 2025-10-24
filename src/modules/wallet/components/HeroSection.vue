@@ -1,17 +1,20 @@
 <template>
   <div class="hero-section">
     <!-- Card Carousel and Balance Section -->
-    <v-card v-if="cards.length > 0 && getSelectedCard?.cardData.card_uuid" flat class="transparent">
+    <v-card flat class="transparent">
       <v-row>
         <v-col cols="12" md="7" class="py-0" style="align-content: center; justify-items: center">
           <div class="card-carousel">
-            <v-window v-model="currentCardIndex" :show-arrows="cards.length > 1" continuous>
-              <v-window-item v-for="card in cards" :key="card.cardData.card_uuid">
+            <v-window v-model="currentCardIndex" show-arrows continuous>
+              <v-window-item
+                v-for="(card, index) in cardsWithOrderSlot"
+                :key="card.cardData?.card_uuid || `empty-${index}`"
+              >
                 <div
                   class="credit-card"
                   @mousemove="handleCardMouseMove"
                   @mouseleave="handleCardMouseLeave"
-                  @click="showManageCardConfirmationModal = true"
+                  @click="showManageCardConfirmationModal = true && currentCardHasUUID"
                   :style="cardTiltStyle"
                 >
                   <!-- Shine effect -->
@@ -44,8 +47,11 @@
             </v-window>
           </div>
         </v-col>
+
+        <!-- Order Card Section - Show when ready to order -->
+
         <v-col cols="12" md="5" class="py-0" style="align-content: center; justify-items: center">
-          <div class="balance-section">
+          <div class="balance-section" v-if="currentCardHasUUID">
             <div class="balance-container">
               <p class="balance-label">Total Balance</p>
               <p class="balance-amount">
@@ -75,6 +81,50 @@
               </div>
             </div>
           </div>
+          <!-- Waiting Status Card - Show when order is in progress -->
+          <v-card v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id" outlined class="waiting-status-card mt-6">
+            <div class="status-card-gradient"></div>
+            <v-card-text class="status-card-content">
+              <div class="status-icon-wrapper">
+                <v-progress-circular indeterminate color="primary" size="40" width="3" class="status-spinner" />
+                <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
+              </div>
+              <div class="status-text-wrapper">
+                <div class="status-title-wrapper">
+                  <p class="status-title mb-1">Card Order in Progress</p>
+                  <v-chip small color="primary" class="status-chip">Pending</v-chip>
+                </div>
+                <p class="status-subtitle mb-0">
+                  Your card order is being processed. <br />
+                  This process may take up to 24 hours
+                </p>
+                <div class="status-steps mt-3">
+                  <div class="step completed">
+                    <v-icon small class="step-icon">mdi-check-circle</v-icon>
+                    <span class="step-text">Order Placed</span>
+                  </div>
+                  <div class="step active">
+                    <v-icon small class="step-icon">mdi-progress-clock</v-icon>
+                    <span class="step-text">Verification</span>
+                  </div>
+                  <div class="step">
+                    <v-icon small class="step-icon">mdi-circle-outline</v-icon>
+                    <span class="step-text">Card Issued</span>
+                  </div>
+                </div>
+              </div>
+            </v-card-text>
+          </v-card>
+          <div v-else class="order-card-section mt-6">
+            <h2 class="order-title">Get Your Gero Card</h2>
+            <p class="order-description">
+              Spend your crypto anywhere with our premium debit card. Convert and use your ADA instantly.
+            </p>
+            <v-btn class="order-card-btn" large :loading="orderingCard" @click="handleOrderCard">
+              <v-icon left>mdi-credit-card-plus</v-icon>
+              Order Your Card Now
+            </v-btn>
+          </div>
         </v-col>
       </v-row>
       <div class="card-layout">
@@ -83,93 +133,6 @@
         <!-- Balance Section -->
       </div>
     </v-card>
-
-    <!-- No Cards State -->
-    <div v-else class="no-cards">
-      <v-window continuous>
-        <v-window-item>
-          <div
-            class="credit-card"
-            @mousemove="handleCardMouseMove"
-            @mouseleave="handleCardMouseLeave"
-            :style="cardTiltStyle"
-          >
-            <!-- Shine effect -->
-            <div class="card-shine" :style="cardShineStyle"></div>
-
-            <!-- Card Number -->
-            <p class="card-number">
-              {{ '**** **** **** ****' }}
-            </p>
-
-            <!-- Card Bottom Info -->
-            <div class="card-bottom" style="max-width: 310px">
-              <div class="card-holder">
-                <p class="label">CARDHOLDER NAME</p>
-                <p class="value">GERO WALLET</p>
-              </div>
-              <div class="card-cvv">
-                <p class="label">CVV</p>
-                <p class="value">
-                  {{ '***' }}
-                </p>
-              </div>
-              <div class="card-expiry">
-                <p class="label">EXP.</p>
-                <p class="value">MM/YY</p>
-              </div>
-            </div>
-          </div>
-        </v-window-item>
-      </v-window>
-
-      <!-- Order Card Section - Show when ready to order -->
-      <div v-if="showOrderSection" class="order-card-section mt-6">
-        <h2 class="order-title">Get Your Gero Card</h2>
-        <p class="order-description">
-          Spend your crypto anywhere with our premium debit card. Convert and use your ADA instantly.
-        </p>
-        <v-btn class="order-card-btn" large :loading="orderingCard" @click="handleOrderCard">
-          <v-icon left>mdi-credit-card-plus</v-icon>
-          Order Your Card Now
-        </v-btn>
-      </div>
-
-      <!-- Waiting Status Card - Show when order is in progress -->
-      <v-card v-if="showWaitingStatus" outlined class="waiting-status-card mt-6">
-        <div class="status-card-gradient"></div>
-        <v-card-text class="status-card-content">
-          <div class="status-icon-wrapper">
-            <v-progress-circular indeterminate color="primary" size="40" width="3" class="status-spinner" />
-            <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
-          </div>
-          <div class="status-text-wrapper">
-            <div class="status-title-wrapper">
-              <p class="status-title mb-1">Card Order in Progress</p>
-              <v-chip small color="primary" class="status-chip">Pending</v-chip>
-            </div>
-            <p class="status-subtitle mb-0">
-              Your card order is being processed. <br />
-              This process may take up to 24 hours
-            </p>
-            <div class="status-steps mt-3">
-              <div class="step completed">
-                <v-icon small class="step-icon">mdi-check-circle</v-icon>
-                <span class="step-text">Order Placed</span>
-              </div>
-              <div class="step active">
-                <v-icon small class="step-icon">mdi-progress-clock</v-icon>
-                <span class="step-text">Verification</span>
-              </div>
-              <div class="step">
-                <v-icon small class="step-icon">mdi-circle-outline</v-icon>
-                <span class="step-text">Card Issued</span>
-              </div>
-            </div>
-          </div>
-        </v-card-text>
-      </v-card>
-    </div>
 
     <!-- Modals -->
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
@@ -211,12 +174,27 @@ const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const orderingCard = ref(false);
 
-const getSelectedCard = computed(() => {
-  return cardStoreModule.getSelectedCard();
-});
 // Get cards from the real card store
 const cards = computed(() => {
   return cardStoreModule.state.cards || [];
+});
+
+// Cards array with empty slot at the end for ordering new card
+const cardsWithOrderSlot = computed(() => {
+  const emptyCard = {
+    cardData: {
+      id: null,
+      card_uuid: null,
+    },
+    cardDetails: null,
+    cardPin: null,
+    cardNumber: null,
+    cardBalance: null,
+    cardHistory: null,
+    totalDeposits: 0,
+    activities: [],
+  };
+  return [...cards.value, emptyCard];
 });
 
 const handleOrderCard = async () => {
@@ -235,13 +213,8 @@ const exchangeRate = computed(() => {
   return cardStoreModule.state.exchangeRate?.sell ? parseFloat(cardStoreModule.state.exchangeRate.sell) : 0.35;
 });
 
-// Determine which section to show based on card status
-const showOrderSection = computed(() => {
-  return cards.value.length === 0;
-});
-
-const showWaitingStatus = computed(() => {
-  return getSelectedCard.value?.cardData.card_uuid === null;
+const currentCardHasUUID = computed(() => {
+  return cardsWithOrderSlot.value[currentCardIndex.value]?.cardData.card_uuid !== null;
 });
 
 // Watch for selected card changes and update current index
