@@ -118,7 +118,7 @@
           <div v-else class="order-card-section mt-6">
             <h2 class="order-title">Get Your Gero Card</h2>
             <p class="order-description">
-              Spend your crypto anywhere with our premium debit card. Convert and use your ADA instantly.
+              Spend your crypto anywhere with our premium debit card.
             </p>
             <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
               <v-icon left>mdi-credit-card-plus</v-icon>
@@ -613,7 +613,7 @@ const formatADA = (eurAmount: number) => {
   max-width: 600px;
   margin: 0 auto;
   text-align: center;
-  padding: 32px;
+  padding: 24px;
   background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -623,20 +623,20 @@ const formatADA = (eurAmount: number) => {
 
   .order-title {
     font-family: $font-family-primary;
-    font-size: 2rem;
+    font-size: 1.125rem;
     font-weight: $font-weight-bold;
     color: $text-primary;
-    margin: 0 0 16px 0;
-    letter-spacing: -0.02em;
+    margin: 0 0 8px 0;
+    letter-spacing: 0.02em;
     position: relative;
     z-index: 1;
   }
 
   .order-description {
     font-family: $font-family-primary;
-    font-size: $font-size-base;
+    font-size: $font-size-sm;
     color: rgba($text-secondary, 0.9);
-    margin: 0 0 32px 0;
+    margin: 0 0 16px 0;
     line-height: 1.6;
     max-width: 500px;
     margin-left: auto;
@@ -654,9 +654,9 @@ const formatADA = (eurAmount: number) => {
     text-transform: none;
     letter-spacing: 0.02em;
     border-radius: 12px;
-    padding: 12px 32px !important;
+    padding: 10px 24px !important;
     height: auto !important;
-    min-height: 52px;
+    min-height: 44px;
     box-shadow: 0 4px 16px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transition: all 0.3s ease;
     position: relative;
@@ -691,12 +691,11 @@ const formatADA = (eurAmount: number) => {
   max-width: 600px;
   margin: 0 auto;
   position: relative;
-  background: linear-gradient(135deg, rgba(12, 14, 18, 0.95) 0%, rgba(20, 24, 30, 0.95) 100%);
-  border: 2px solid transparent !important;
+  background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(10px);
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 199, 243, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
   &::before {
     content: '';
@@ -705,7 +704,7 @@ const formatADA = (eurAmount: number) => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.1) 0%, rgba(0, 255, 209, 0.05) 100%);
+    background: transparent;
     pointer-events: none;
   }
 
