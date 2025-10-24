@@ -171,7 +171,19 @@ const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
 const orderingCard = ref(false);
-
+const emptyCard = {
+  cardData: {
+    id: null,
+    card_uuid: null,
+  },
+  cardDetails: null,
+  cardPin: null,
+  cardNumber: null,
+  cardBalance: null,
+  cardHistory: null,
+  totalDeposits: 0,
+  activities: [],
+};
 // Get cards from the real card store
 const cards = computed(() => {
   return cardStoreModule.state.cards || [];
@@ -179,19 +191,6 @@ const cards = computed(() => {
 
 // Cards array with empty slot at the end for ordering new card
 const cardsWithOrderSlot = computed(() => {
-  const emptyCard = {
-    cardData: {
-      id: null,
-      card_uuid: null,
-    },
-    cardDetails: null,
-    cardPin: null,
-    cardNumber: null,
-    cardBalance: null,
-    cardHistory: null,
-    totalDeposits: 0,
-    activities: [],
-  };
   return [...cards.value, emptyCard];
 });
 
