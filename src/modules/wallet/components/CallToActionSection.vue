@@ -1,7 +1,7 @@
 <template>
   <section class="call-to-action-section">
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
-    <p class="cta-description">Your digital assets, now swipe-ready. Use your crypto like cash</p>
+    <p class="cta-description">Before ordering your Gero Card, please complete a quick KYC process with our institutional partner, Kaiserex.</p>
     <GradientButton text="Start KYC" @click="startKYC" />
 
     <OrderCardModal :open="showModal" @close="showModal = false" />

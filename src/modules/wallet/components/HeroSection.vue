@@ -50,7 +50,7 @@
 
         <!-- Order Card Section - Show when ready to order -->
 
-        <v-col cols="12" md="5" class="py-0" style="align-content: center; justify-items: center">
+        <v-col cols="12" md="5" class="py-0 card-status-column" style="align-content: center; justify-items: center">
           <div class="balance-section" v-if="currentCardHasUUID">
             <div class="balance-container">
               <p class="balance-label">Total Balance</p>
@@ -95,23 +95,13 @@
               </div>
               <div class="status-text-wrapper">
                 <div class="status-title-wrapper">
-                  <p class="status-title mb-1">Card Order in Progress</p>
+                  <p class="status-title">Card Order in Progress</p>
                   <v-chip small color="primary" class="status-chip">Pending</v-chip>
                 </div>
-                <p class="status-subtitle mb-0">
+                <p class="status-subtitle">
                   Your card order is being processed. <br />
                   This process may take up to 24 hours
                 </p>
-                <div class="status-steps mt-3">
-                  <div class="step completed">
-                    <v-icon small class="step-icon">mdi-check-circle</v-icon>
-                    <span class="step-text">Order Placed</span>
-                  </div>
-                  <div class="step active">
-                    <v-icon small class="step-icon">mdi-progress-clock</v-icon>
-                    <span class="step-text">Verification</span>
-                  </div>
-                </div>
               </div>
             </v-card-text>
           </v-card>
@@ -122,7 +112,7 @@
             </p>
             <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
               <v-icon left>mdi-credit-card-plus</v-icon>
-              Order Your Card Now
+              Order New Card
             </v-btn>
           </div>
         </v-col>
@@ -249,8 +239,13 @@ watch(
 
 // Update selected card when carousel index changes
 watch(currentCardIndex, newIndex => {
-  if (cards.value[newIndex]) {
-    cardStoreModule.selectCard(cards.value[newIndex].cardData.card_uuid);
+  const card = cardsWithOrderSlot.value[newIndex];
+  if (card && card.cardData.card_uuid) {
+    // Valid card with UUID - select it and fetch its data
+    cardStoreModule.selectCard(card.cardData.card_uuid);
+  } else {
+    // Empty card slot (order card) or pending card without UUID - clear selection
+    cardStoreModule.selectCard(null);
   }
 });
 
@@ -339,19 +334,18 @@ const formatCurrency = (amount: number) => {
 const getFormattedCardNumber = (card: any) => {
   const pan = card.cardDetails?.details?.pan;
 
-  if (!pan) return '**** **** **** ****';
+  if (!pan || !showCardDetails.value) return '**** **** **** ****';
 
-  if (showCardDetails.value) {
-    // Show full number with spacing: 1234 5678 9012 3456
-    return pan.match(/.{1,4}/g)?.join(' ') || pan;
-  }
-
-  // Format as: **** **** **** 1234 (masked)
-  const lastFour = pan.slice(-4);
-  return `**** **** **** ${lastFour}`;
+  // Show full number with spacing: 1234 5678 9012 3456
+  return pan.match(/.{1,4}/g)?.join(' ') || pan;
 };
 
 const formatExpiryDate = (card: any) => {
+  // Only show expiry when card details are visible
+  if (!showCardDetails.value) {
+    return 'MM/YY';
+  }
+
   // Try to get expiry from card details first (format: "YYYY-MM")
   const apiExpiry = card.cardDetails?.details?.expiryDate;
 
@@ -389,6 +383,13 @@ const formatADA = (eurAmount: number) => {
   width: 100%;
   position: relative;
   min-height: 320px;
+}
+
+.card-status-column {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 // Card Layout (side by side)
@@ -611,6 +612,8 @@ const formatADA = (eurAmount: number) => {
 // Order Card Section
 .order-card-section {
   max-width: 600px;
+  width: 100%;
+  min-height: 180px;
   margin: 0 auto;
   text-align: center;
   padding: 24px;
@@ -620,10 +623,28 @@ const formatADA = (eurAmount: number) => {
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(
+      90deg,
+      rgba(0, 199, 243, 0.8) 0%,
+      rgba(0, 255, 209, 0.8) 50%,
+      rgba(0, 199, 243, 0.8) 100%
+    );
+    background-size: 200% 100%;
+    animation: gradientShift 3s ease infinite;
+  }
 
   .order-title {
     font-family: $font-family-primary;
-    font-size: 1.125rem;
+    font-size: 1.5rem;
     font-weight: $font-weight-bold;
     color: $text-primary;
     margin: 0 0 8px 0;
@@ -689,6 +710,8 @@ const formatADA = (eurAmount: number) => {
 // Waiting Status Card - Enhanced Design
 .waiting-status-card {
   max-width: 600px;
+  width: 100%;
+  min-height: 180px;
   margin: 0 auto;
   position: relative;
   background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
@@ -696,6 +719,7 @@ const formatADA = (eurAmount: number) => {
   border-radius: 16px;
   backdrop-filter: blur(10px);
   overflow: hidden;
+  box-sizing: border-box;
 
   &::before {
     content: '';
@@ -726,11 +750,12 @@ const formatADA = (eurAmount: number) => {
 
   .status-card-content {
     display: flex;
-    gap: 20px;
-    align-items: flex-start;
-    padding: 24px !important;
+    gap: 24px;
+    align-items: center;
+    padding: 32px 24px !important;
     position: relative;
     z-index: 1;
+    min-height: 132px;
   }
 
   .status-icon-wrapper {
@@ -762,21 +787,24 @@ const formatADA = (eurAmount: number) => {
   .status-text-wrapper {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .status-title-wrapper {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
 
   .status-title {
     font-family: $font-family-primary;
-    font-size: 1.125rem;
+    font-size: 1.5rem;
     font-weight: $font-weight-bold;
     color: $text-primary;
-    margin: 0;
+    margin: 0 !important;
     letter-spacing: 0.02em;
   }
 
@@ -795,7 +823,7 @@ const formatADA = (eurAmount: number) => {
     font-size: $font-size-sm;
     color: rgba($text-secondary, 0.9);
     line-height: 1.6;
-    margin: 0;
+    margin: 0 !important;
   }
 
   .status-steps {

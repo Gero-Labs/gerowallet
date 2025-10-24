@@ -426,7 +426,13 @@ export default {
    * Select a card by UUID
    * @param cardId - The card UUID to select
    */
-  selectCard(cardId: string): void {
+  selectCard(cardId: string | null): void {
+    if (cardId === null) {
+      // Clear selection (for empty card slot or pending cards)
+      cardStore.selectedCardId = null;
+      return;
+    }
+
     const card = cardStore.cards.find(c => c.cardData.card_uuid === cardId);
     if (card) {
       cardStore.selectedCardId = cardId;
@@ -537,7 +543,6 @@ export default {
     if (!this.isAuthenticated) {
       return 'auth';
     }
-
     switch (walletStatus.kycStatus) {
       case 'registered':
         return 'new';
