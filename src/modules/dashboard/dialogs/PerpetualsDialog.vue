@@ -2690,11 +2690,10 @@ const openMarketPosition = async (walletAddress: string) => {
 
   const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
   const txCbor: string = cborResponse.data['cbor'];
-
   // Sign the transaction with partial signing to add user's witness
   const signaturesRes: any = await Messaging.sendToBackground({
     method: METHOD.signTx,
-    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
   });
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
@@ -2772,7 +2771,7 @@ const openLimitPosition = async (walletAddress: string) => {
   // Sign the transaction with partial signing to add user's witness
   const signaturesRes: any = await Messaging.sendToBackground({
     method: METHOD.signTx,
-    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
   });
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
@@ -2860,7 +2859,7 @@ const closePosition = async (position: PerpetualPosition) => {
     // Sign the transaction with partial signing to add user's witness
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
@@ -3204,7 +3203,7 @@ const cancelLimitOrder = async (order: LimitOrder) => {
     // Sign the transaction with partial signing to add user's witness
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
