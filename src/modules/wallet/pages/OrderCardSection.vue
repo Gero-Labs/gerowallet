@@ -1,8 +1,5 @@
 <template>
   <div class="block">
-    <div>
-      <img src="@/modules/wallet/icons/cardBanner.svg" alt="card-banner" class="card-banner" />
-    </div>
     <CallToActionSection />
     <FeatureGridSection />
     <KaiserexPartnershipSection />

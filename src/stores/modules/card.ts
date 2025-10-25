@@ -543,6 +543,7 @@ export default {
     if (!this.isAuthenticated) {
       return 'auth';
     }
+return 'approved';
     switch (walletStatus.kycStatus) {
       case 'registered':
         return 'new';

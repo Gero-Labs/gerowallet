@@ -21,7 +21,6 @@ defineProps<Props>();
 @import '../../styles/mixins';
 
 .welcome-container {
-  background-image: url('@/modules/wallet/icons/cardBanner.svg') !important;
   background-repeat: no-repeat;
   height: 273px;
   border-radius: $border-radius-lg;

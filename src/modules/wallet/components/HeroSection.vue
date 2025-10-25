@@ -122,13 +122,33 @@
               </div>
             </v-card-text>
           </v-card>
-          <div v-else class="order-card-section mt-10" style="height: 230px">
+          <div v-else class="order-card-section mt-10">
             <h2 class="order-title">Get Your Gero Card</h2>
-            <p class="order-description">Spend your crypto anywhere with our premium debit card.</p>
-            <v-btn class="order-card-btn mt-6" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
-              <v-icon left>mdi-credit-card-plus</v-icon>
-              Order New Card
-            </v-btn>
+            <p class="order-description">Spend your crypto anywhere with your Gero Card.</p>
+
+            <!-- Promo and Button Row -->
+            <div class="promo-button-row">
+              <!-- Promo Section -->
+              <div class="promo-section">
+                <p class="promo-title">Enjoy ZERO FEES until May 1st</p>
+                <div class="promo-features">
+                  <div class="promo-item">
+                    <v-icon class="promo-icon">mdi-check-circle</v-icon>
+                    <span class="promo-text">0% monthly & issuance fees</span>
+                  </div>
+                  <div class="promo-item">
+                    <v-icon class="promo-icon">mdi-check-circle</v-icon>
+                    <span class="promo-text">0% fees on ADA-to-EUR conversions</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Button -->
+              <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
+                <v-icon left>mdi-credit-card-plus</v-icon>
+                Order New Card
+              </v-btn>
+            </div>
           </div>
         </v-col>
       </v-row>
@@ -752,6 +772,55 @@ const formatADA = (eurAmount: number) => {
     margin-right: auto;
     position: relative;
     z-index: 1;
+  }
+
+  .promo-button-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .promo-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    .promo-title {
+      font-family: $font-family-primary;
+      font-size: $font-size-base;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      text-align: center;
+      margin: 0 0 12px 0;
+    }
+
+    .promo-features {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .promo-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .promo-icon {
+      font-size: 16px;
+      color: rgba(0, 199, 243, 0.7);
+    }
+
+    .promo-text {
+      font-family: $font-family-primary;
+      font-size: $font-size-sm;
+      color: $text-secondary;
+    }
   }
 
   .order-card-btn {
