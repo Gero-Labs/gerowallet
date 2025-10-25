@@ -1,8 +1,8 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="800px" @click:outside="closeModal" persistent>
+  <v-dialog v-model="isOpen" max-width="800px" @click:outside="closeModal">
     <v-card class="promotion-modal">
       <v-card-title class="modal-header">
-        <v-btn icon @click="closeModal" class="close-btn">
+        <v-btn icon @click="closeModal" class="close-btn" aria-label="Close promotional modal">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -22,9 +22,7 @@
           <div class="token-section">
             <div class="token-banner">
               <v-icon class="token-icon">mdi-star-circle</v-icon>
-              <p class="token-message">
-              Starting May 1st, <strong>$GERO holders</strong> will enjoy token incentives in the form of fee waivers
-              </p>
+              <p class="token-message">Starting May 1st, <strong>$GERO holders</strong> will enjoy token incentives in the form of fee waivers</p>
             </div>
 
             <div class="tiers-vertical">
@@ -163,7 +161,9 @@ interface Props {
   open: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  open: false,
+});
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
@@ -315,18 +315,6 @@ const closeModal = () => {
   }
 }
 
-// Gero Logo
-.gero-logo-container {
-  display: flex;
-  justify-content: center;
-  margin-bottom: $spacing-xl;
-
-  .gero-logo {
-    width: 120px;
-    height: auto;
-  }
-}
-
 .token-banner {
   display: flex;
   align-items: center;
@@ -423,13 +411,6 @@ const closeModal = () => {
   }
 
   .tier-benefits {
-    .benefits-title {
-      @include body-text($font-size-sm);
-      color: $text-secondary;
-      font-weight: $font-weight-semibold;
-      margin: 0 0 $spacing-md 0;
-    }
-
     .benefit-item {
       display: flex;
       align-items: center;
