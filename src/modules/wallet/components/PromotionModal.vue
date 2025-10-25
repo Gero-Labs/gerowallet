@@ -183,8 +183,8 @@ const closeModal = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
+@import '../styles/_variables';
+@import '../styles/_mixins';
 
 .promotion-modal {
   background: $background-card;
@@ -337,7 +337,7 @@ const closeModal = () => {
 
   .token-icon {
     font-size: 32px;
-    color: #ffc107;
+    color: $tier-gold;
   }
 
   .token-message {
@@ -346,7 +346,7 @@ const closeModal = () => {
     margin: 0;
 
     strong {
-      color: #ffc107;
+      color: $tier-gold;
       font-weight: $font-weight-semibold;
     }
   }
@@ -372,17 +372,17 @@ const closeModal = () => {
   }
 
   &.basic-tier {
-    border-top: 3px solid #4caf50;
+    border-top: 3px solid $tier-basic-green;
   }
 
   &.core-tier {
-    border-top: 3px solid #2196f3;
+    border-top: 3px solid $tier-core-blue;
   }
 
   &.pro-tier {
-    border-top: 3px solid #9c27b0;
-    background: linear-gradient(135deg, rgba(156, 39, 176, 0.15) 0%, rgba(233, 30, 99, 0.15) 100%);
-    box-shadow: 0 0 30px rgba(156, 39, 176, 0.4), 0 0 60px rgba(233, 30, 99, 0.2);
+    border-top: 3px solid $tier-pro-purple;
+    background: linear-gradient(135deg, rgba($tier-pro-purple, 0.15) 0%, rgba($tier-pro-pink, 0.15) 100%);
+    box-shadow: 0 0 30px rgba($tier-pro-purple, 0.4), 0 0 60px rgba($tier-pro-pink, 0.2);
   }
 
   .tier-header {
