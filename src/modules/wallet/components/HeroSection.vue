@@ -130,7 +130,18 @@
             <div class="promo-button-row">
               <!-- Promo Section -->
               <div class="promo-section">
-                <p class="promo-title">Enjoy ZERO FEES until May 1st</p>
+                <p
+                  class="promo-title"
+                  @click="showPromotionModal = true"
+                  @keydown.enter="showPromotionModal = true"
+                  @keydown.space.prevent="showPromotionModal = true"
+                  role="button"
+                  tabindex="0"
+                  aria-label="View promotional details and fee information"
+                >
+                  <span class="clickable-text">Enjoy ZERO FEES until May 1st</span>
+                  <v-icon small class="info-icon">mdi-information-outline</v-icon>
+                </p>
                 <div class="promo-features">
                   <div class="promo-item">
                     <v-icon class="promo-icon">mdi-check-circle</v-icon>
@@ -157,6 +168,7 @@
     <!-- Modals -->
     <ManageCardModal :open="showManageCardModal" @close="showManageCardModal = false" />
     <TopUpModal :open="showTopUpModal" @close="showTopUpModal = false" />
+    <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
 
     <!-- Confirmation Modal -->
     <ConfirmationPasswordModal
@@ -189,6 +201,7 @@
 import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
+import PromotionModal from './PromotionModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
@@ -199,6 +212,7 @@ const cardShineStyle = ref<any>({});
 const showCardDetails = ref(false);
 const showManageCardModal = ref(false);
 const showTopUpModal = ref(false);
+const showPromotionModal = ref(false);
 const showConfirmationModal = ref(false);
 const showManageCardConfirmationModal = ref(false);
 const showOrderCardConfirmationModal = ref(false);
@@ -796,6 +810,32 @@ const formatADA = (eurAmount: number) => {
       color: $text-primary;
       text-align: center;
       margin: 0 0 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+
+      .clickable-text {
+        color: $primary-cyan;
+        border-bottom: 1px dotted $primary-cyan;
+        transition: all 0.2s ease;
+      }
+
+      &:hover {
+        .clickable-text {
+          color: lighten($primary-cyan, 10%);
+          border-bottom-color: lighten($primary-cyan, 10%);
+        }
+
+        .info-icon {
+          color: lighten($primary-cyan, 10%);
+        }
+      }
+
+      .info-icon {
+        color: $primary-cyan;
+        transition: all 0.2s ease;
+      }
     }
 
     .promo-features {
