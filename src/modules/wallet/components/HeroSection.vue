@@ -130,7 +130,15 @@
             <div class="promo-button-row">
               <!-- Promo Section -->
               <div class="promo-section">
-                <p class="promo-title" @click="showPromotionModal = true">
+                <p
+                  class="promo-title"
+                  @click="showPromotionModal = true"
+                  @keydown.enter="showPromotionModal = true"
+                  @keydown.space.prevent="showPromotionModal = true"
+                  role="button"
+                  tabindex="0"
+                  aria-label="View promotional details and fee information"
+                >
                   <span class="clickable-text">Enjoy ZERO FEES until May 1st</span>
                   <v-icon small class="info-icon">mdi-information-outline</v-icon>
                 </p>
@@ -805,7 +813,7 @@ const formatADA = (eurAmount: number) => {
       display: flex;
       align-items: center;
       gap: 6px;
-      cursor: help;
+      cursor: pointer;
 
       .clickable-text {
         color: $primary-cyan;
