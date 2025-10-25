@@ -3,12 +3,13 @@
     <!-- Card Carousel and Balance Section -->
     <v-card flat class="transparent">
       <v-row>
-        <v-col cols="12" md="7" class="py-0" style="align-content: center; justify-items: center">
+        <v-col cols="12" md="6" class="py-0" style="align-content: center; justify-items: center">
           <div class="card-carousel">
-            <v-window v-model="currentCardIndex" show-arrows continuous>
+            <v-window v-model="currentCardIndex" :show-arrows="cardsWithOrderSlot.length > 1" continuous>
               <v-window-item
                 v-for="(card, index) in cardsWithOrderSlot"
                 :key="card.cardData?.card_uuid || `empty-${index}`"
+                style="height: 280px;"
               >
                 <div
                   class="credit-card"
@@ -45,12 +46,30 @@
                 </div>
               </v-window-item>
             </v-window>
+            <!-- Status Chip under the card -->
+            <div class="card-status-chip-container">
+              <v-chip
+                v-if="currentCardHasUUID"
+                class="card-status-chip active-chip"
+                small
+              >
+                <v-icon small left>mdi-check-circle</v-icon>
+                Active
+              </v-chip>
+              <v-chip
+                v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
+                class="card-status-chip pending-chip"
+                small
+              >
+                <v-icon small left>mdi-clock-outline</v-icon>
+                Pending
+              </v-chip>
+            </div>
           </div>
         </v-col>
 
         <!-- Order Card Section - Show when ready to order -->
-
-        <v-col cols="12" md="5" class="py-0 card-status-column" style="align-content: center; justify-items: center">
+        <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center">
           <div class="balance-section" v-if="currentCardHasUUID">
             <div class="balance-container">
               <p class="balance-label">Total Balance</p>
@@ -90,13 +109,11 @@
             <div class="status-card-gradient"></div>
             <v-card-text class="status-card-content">
               <div class="status-icon-wrapper">
-                <v-progress-circular indeterminate color="primary" size="40" width="3" class="status-spinner" />
                 <v-icon class="status-icon">mdi-credit-card-clock-outline</v-icon>
               </div>
               <div class="status-text-wrapper">
                 <div class="status-title-wrapper">
                   <p class="status-title">Card Order in Progress</p>
-                  <v-chip small color="primary" class="status-chip">Pending</v-chip>
                 </div>
                 <p class="status-subtitle">
                   Your card order is being processed. <br />
@@ -105,21 +122,16 @@
               </div>
             </v-card-text>
           </v-card>
-          <div v-else class="order-card-section mt-6">
+          <div v-else class="order-card-section mt-10" style="height: 230px">
             <h2 class="order-title">Get Your Gero Card</h2>
             <p class="order-description">Spend your crypto anywhere with our premium debit card.</p>
-            <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
+            <v-btn class="order-card-btn mt-6" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
               <v-icon left>mdi-credit-card-plus</v-icon>
               Order New Card
             </v-btn>
           </div>
         </v-col>
       </v-row>
-      <div class="card-layout">
-        <!-- Card Carousel -->
-
-        <!-- Balance Section -->
-      </div>
     </v-card>
 
     <!-- Modals -->
@@ -191,7 +203,11 @@ const cards = computed(() => {
 
 // Cards array with empty slot at the end for ordering new card
 const cardsWithOrderSlot = computed(() => {
-  return [...cards.value, emptyCard];
+  if (cards.value.length === 0) {
+    return [emptyCard];
+  } else {
+    return [...cards.value];
+  }
 });
 
 const handleOrderCard = async () => {
@@ -203,10 +219,30 @@ const handleOrderCard = async () => {
 
     // Show success message
     snackbar.fireSuccess(`Card ordered successfully! Your card is being processed.`);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to order card:', error);
-    // Show error message
-    snackbar.setError('Failed to order card. Please try again.');
+
+    // Extract error reason from response
+    // Backend may return error in different formats, so check all possibilities
+    let errorReason: string;
+
+    // Check if error.response.data is a string (direct error message)
+    if (typeof error?.response?.data === 'string' && error.response.data) {
+      errorReason = '<b>Failed to order card.</b><br>' + error.response.data;
+    }
+    // Otherwise check for object-based error formats
+    else {
+      errorReason = 'Failed to order card. ' +
+        (error?.response?.data?.error?.message ||  // Laravel-style error object
+        error?.response?.data?.error ||            // Direct error string in error field
+        error?.response?.data?.reason ||           // Custom reason field
+        error?.response?.data?.message ||          // Standard message field
+        error?.message ||                          // Axios error message
+        'Please try again.'); // Fallback
+    }
+
+    // Show error message with reason
+    snackbar.setError(errorReason);
   } finally {
     orderingCard.value = false;
   }
@@ -380,6 +416,7 @@ const formatADA = (eurAmount: number) => {
   width: 100%;
   position: relative;
   min-height: 320px;
+  align-content: center;
 }
 
 .card-status-column {
@@ -400,7 +437,61 @@ const formatADA = (eurAmount: number) => {
 .card-carousel {
   flex: 1;
   display: flex;
+  flex-direction: column;
   justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+// Card Status Chip Container
+.card-status-chip-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-top: -8px;
+}
+
+// Card Status Chips
+.card-status-chip {
+  font-size: 0.75rem !important;
+  font-weight: $font-weight-semibold;
+  height: 28px !important;
+  padding: 0 12px !important;
+  border-radius: 14px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+
+  &.active-chip {
+    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 199, 243, 0.15) 100%) !important;
+    border: 1px solid rgba(0, 199, 243, 0.4) !important;
+    color: $primary-cyan !important;
+
+
+    .v-icon {
+      color: $primary-cyan !important;
+    }
+  }
+
+  &.pending-chip {
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%) !important;
+    border: 1px solid rgba(255, 152, 0, 0.4) !important;
+    color: #ff9800 !important;
+
+    .v-icon {
+      color: #ff9800 !important;
+    }
+  }
+
+  &.inactive-chip {
+    background: linear-gradient(135deg, rgba(158, 158, 158, 0.2) 0%, rgba(158, 158, 158, 0.15) 100%) !important;
+    border: 1px solid rgba(158, 158, 158, 0.4) !important;
+    color: #9e9e9e !important;
+
+    .v-icon {
+      color: #9e9e9e !important;
+    }
+  }
 }
 
 // Credit Card Styling
@@ -704,11 +795,20 @@ const formatADA = (eurAmount: number) => {
   }
 }
 
+.status-chip {
+  font-size: 0.75rem !important;
+  font-weight: $font-weight-semibold;
+  height: 24px !important;
+  padding: 0 10px !important;
+  background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 255, 209, 0.15) 100%) !important;
+  border: 1px solid rgba(0, 199, 243, 0.3);
+  color: $primary-cyan !important;
+}
+
 // Waiting Status Card - Enhanced Design
 .waiting-status-card {
   max-width: 600px;
   width: 100%;
-  min-height: 180px;
   margin: 0 auto;
   position: relative;
   background: linear-gradient(135deg, rgba(12, 14, 18, 0.6) 0%, rgba(20, 24, 30, 0.6) 100%);
@@ -803,16 +903,6 @@ const formatADA = (eurAmount: number) => {
     color: $text-primary;
     margin: 0 !important;
     letter-spacing: 0.02em;
-  }
-
-  .status-chip {
-    font-size: 0.75rem !important;
-    font-weight: $font-weight-semibold;
-    height: 24px !important;
-    padding: 0 10px !important;
-    background: linear-gradient(135deg, rgba(0, 199, 243, 0.2) 0%, rgba(0, 255, 209, 0.15) 100%) !important;
-    border: 1px solid rgba(0, 199, 243, 0.3);
-    color: $primary-cyan !important;
   }
 
   .status-subtitle {

@@ -18,6 +18,6 @@ import KaiserexPartnershipSection from '@/modules/wallet/components/KaiserexPart
 .block {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 20px;
 }
 </style>

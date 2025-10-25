@@ -1,5 +1,5 @@
 <template>
-  <section class="partnership-section">
+  <section class="partnership-section mb-2">
     <div class="partnership-header">
       <div class="kaiserex-logo">
         <img src="@/assets/svg/Icon-Kaiserex.svg" alt="Kaiserex" class="logo-icon" />

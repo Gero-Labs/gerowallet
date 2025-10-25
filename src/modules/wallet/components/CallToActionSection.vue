@@ -2,8 +2,13 @@
   <section class="call-to-action-section">
     <h2 class="cta-heading">Spend Crypto Anywhere, Instantly</h2>
     <p class="cta-description">Before ordering your Gero Card, please complete a quick KYC process with our institutional partner, Kaiserex.</p>
-    <GradientButton text="Start KYC" @click="startKYC" />
-
+    <GradientButton v-if="kycStatus !== 'verified'" text="Start KYC" @click="startKYC" />
+    <v-alert :type="kycStatus === 'verified' ? 'info' : 'warning'" color="primary" prominent outlined>
+      Your KYC Status: <b>{{ filters.capitalize(kycStatus) }}</b>
+    </v-alert>
+    <v-alert type="info" color="primary" prominent outlined v-if="!cardanoAddress && kycStatus === 'verified'">
+      Your documents has been received and your application is currently under review.
+    </v-alert>
     <OrderCardModal :open="showModal" @close="showModal = false" />
   </section>
 </template>
@@ -13,10 +18,11 @@ import GradientButton from './GradientButton.vue';
 import OrderCardModal from './OrderCardModal.vue';
 import { ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
+import filters from '@/shared/utils/filters';
 const showModal = ref(false);
 
 const kycStatus = computed(() => cardStore.state.walletStatus.kycStatus);
-
+const cardanoAddress = computed(() => cardStore.state.cardanoAddress)
 
 const startKYC = () => {
   cardStore.fetchKYCLink();
