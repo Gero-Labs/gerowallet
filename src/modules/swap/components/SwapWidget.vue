@@ -656,18 +656,15 @@ const prepareSwap = async () => {
     }
     const txCbor = swapRes.cbor
     const partialSign = true
-    console.log('txCbor', txCbor)
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     console.log('signaturesRes', signaturesRes)
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
     } else {
-      console.log(signaturesRes)
       const signRes: any = await dexHunterApi.swapSign(signaturesRes.data, txCbor)
-      console.log('signRes', signRes)
       await submit(signRes.cbor)
     }
   } catch (error: any) {
