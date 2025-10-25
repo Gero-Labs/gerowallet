@@ -4,13 +4,20 @@
     <div class="management-column-content">
       <h3 class="management-heading">Manage Your Card in Seconds</h3>
       <p class="management-description">
-        An all-in-one platform that helps you manage everything about <br />
-        your Gero Card account
+        Get your Gero Card ready in just a few steps:
       </p>
-      <div class="feature-list">
-        <FeatureListItem text="Enjoy 6 months of ZERO FEES" icon="check" />
-        <FeatureListItem text="0% monthly & issuance fees" icon="check" />
-        <FeatureListItem text="0% fees on ADA-to-euro conversions and spending." icon="check" />
+      <div class="feature-list steps-list">
+        <FeatureListItem text="Register on Kaiserex" icon="check" />
+        <FeatureListItem text="Activate your account via email" icon="check" />
+        <FeatureListItem text="Sign in and complete KYC" icon="check" />
+        <FeatureListItem text="Once approved, order your card!" icon="check" />
+      </div>
+      <div class="promo-section">
+        <p class="promo-title">Enjoy ZERO FEES until May 1 (6 months)</p>
+        <div class="feature-list">
+          <FeatureListItem text="0% monthly & issuance fees" icon="check" />
+          <FeatureListItem text="0% fees on ADA-to-EUR conversions" icon="check" />
+        </div>
       </div>
     </div>
   </div>
@@ -60,6 +67,25 @@ import FeatureListItem from '@/modules/wallet/components/FeatureListItem.vue';
   .feature-list {
     @include flex-column;
     gap: $spacing-md;
+
+    &.steps-list {
+      margin-bottom: $spacing-xl;
+    }
+  }
+
+  .promo-section {
+    @include flex-column;
+    gap: $spacing-md;
+    margin-top: $spacing-lg;
+    padding-top: $spacing-lg;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+    .promo-title {
+      @include body-text($font-size-lg);
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      margin: 0;
+    }
   }
 }
 </style>

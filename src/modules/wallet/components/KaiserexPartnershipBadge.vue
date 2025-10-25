@@ -50,11 +50,12 @@ const trackBlogClick = () => {
 
 .partnership-badge-compact {
   padding: $spacing-lg;
-  background: linear-gradient(135deg, rgba(11, 74, 111, 0.1) 0%, rgba(8, 93, 58, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(11, 74, 111, 0.1) 0%, rgba(0, 199, 243, 0.1) 100%);
   border-radius: $border-radius-lg;
-  border: 1px solid rgba(117, 224, 167, 0.2);
+  border: 1px solid rgba(0, 199, 243, 0.2);
   position: relative;
   overflow: hidden;
+  width: 100%;
 
   &::before {
     content: '';
@@ -66,7 +67,7 @@ const trackBlogClick = () => {
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(117, 224, 167, 0.4) 50%,
+      rgba(0, 199, 243, 0.4) 50%,
       transparent 100%
     );
   }
@@ -132,7 +133,7 @@ const trackBlogClick = () => {
   align-items: center;
   gap: $spacing-xs;
   @include text-style($font-size-sm, $font-weight-medium, $line-height-normal);
-  color: #75e0a7;
+  color: #6ecbdf;
   text-decoration: none;
   padding: $spacing-xs $spacing-md;
   border-radius: $border-radius-md;
@@ -140,7 +141,7 @@ const trackBlogClick = () => {
   white-space: nowrap;
 
   &:hover {
-    background: rgba(117, 224, 167, 0.1);
+    background: rgba(0, 199, 243, 0.1);
     gap: $spacing-sm;
   }
 
@@ -162,7 +163,7 @@ const trackBlogClick = () => {
     color: $text-secondary;
 
     &:hover {
-      color: #75e0a7;
+      color: $primary-cyan;;
     }
   }
 }

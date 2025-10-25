@@ -40,7 +40,12 @@
 
             <!-- Show info alert when Ledger is signing (buttons disabled) -->
             <v-alert
-              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit && txSubmitLoading"
+              v-if="
+                currentStep === 2 &&
+                walletStore.loggedWallet?.type === WalletType.Ledger &&
+                !isSubmit &&
+                txSubmitLoading
+              "
               type="info"
               dense
               border="left"
@@ -51,7 +56,10 @@
             </v-alert>
 
             <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
-            <div v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit" class="password-section">
+            <div
+              v-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Normal && !isSubmit"
+              class="password-section"
+            >
               <v-text-field
                 v-model="spendingPassword"
                 outlined
@@ -72,7 +80,10 @@
             </div>
 
             <!-- USB/Bluetooth toggle for Ledger wallet on step 2 (hidden after signing) -->
-            <div v-else-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit" class="ledger-section">
+            <div
+              v-else-if="currentStep === 2 && walletStore.loggedWallet?.type === WalletType.Ledger && !isSubmit"
+              class="ledger-section"
+            >
               <ToggleSwitch
                 text-left="USB"
                 icon-left="mdi-usb"
@@ -87,7 +98,7 @@
             <div class="modal-actions">
               <SecondaryButton text="Cancel" @click="closeModal()" :disabled="txSubmitLoading" />
               <GradientButton
-                :text="currentStep === 1 ? 'Continue' : (isSubmit ? 'Submit Transaction' : 'Sign & Top Up')"
+                :text="currentStep === 1 ? 'Continue' : isSubmit ? 'Submit Transaction' : 'Sign & Top Up'"
                 @click="handleTopUp"
                 :disabled="!canTopUp || txSubmitLoading"
                 :loading="txSubmitLoading"
@@ -228,13 +239,15 @@ const buildTx = async () => {
     console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${cardanoAddress}`);
 
     // Create output
-    const outputs: Cardano.TxOut[] = [{
-      address: cardanoAddress as Cardano.PaymentAddress,
-      value: {
-        coins: lovelaceAmount,
-        assets: new Map()
-      }
-    }];
+    const outputs: Cardano.TxOut[] = [
+      {
+        address: cardanoAddress as Cardano.PaymentAddress,
+        value: {
+          coins: lovelaceAmount,
+          assets: new Map(),
+        },
+      },
+    ];
 
     // Build transaction
     tx.value = await buildCardanoTransaction({
@@ -242,7 +255,7 @@ const buildTx = async () => {
       utxos: walletStore.utxos,
       epochParams: networkStore.epochParams,
       changeAddress: walletStore.loggedWallet.baseAddress,
-      tip: networkStore.tip
+      tip: networkStore.tip,
     });
 
     console.log('✅ Transaction built successfully');
@@ -265,7 +278,7 @@ const signTx = async (): Promise<boolean> => {
     console.log('📦 Serialized transaction CBOR');
 
     // Sign transaction
-    const witnessResult = await Messaging.sendToBackgroundFromOptions({
+    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
         txCbor: txCbor.value,
@@ -275,8 +288,8 @@ const signTx = async (): Promise<boolean> => {
         utxos: walletStore.utxos,
         addresses: walletStore.keys,
         mergeWitnesses: false,
-      }
-    }) as { data: { witnesses?: any; error?: string } };
+      },
+    })) as { data: { witnesses?: any; error?: string } };
 
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
@@ -350,14 +363,14 @@ const submitTx = async () => {
     txSubmitLoading.value = true;
     console.log('📤 Submitting transaction...');
 
-    const submitResult = await Messaging.sendToBackgroundFromOptions({
+    const submitResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SUBMIT_TX,
       data: {
         txCbor: txCbor.value,
         witnessHex: txWitnesses.value,
-        utxos: walletStore.utxos
-      }
-    }) as { data: { txId?: string; error?: string } };
+        utxos: walletStore.utxos,
+      },
+    })) as { data: { txId?: string; error?: string } };
 
     if (submitResult.data.error) {
       throw new Error(submitResult.data.error);
@@ -393,7 +406,11 @@ const handleTopUp = async () => {
 
       // Validate that transaction and witnesses exist before submitting
       if (!tx.value || !txCbor.value || !txWitnesses.value) {
-        console.error('❌ Missing transaction data:', { tx: !!tx.value, txCbor: !!txCbor.value, txWitnesses: !!txWitnesses.value });
+        console.error('❌ Missing transaction data:', {
+          tx: !!tx.value,
+          txCbor: !!txCbor.value,
+          txWitnesses: !!txWitnesses.value,
+        });
         snackbar.setError('Transaction data is missing. Please sign the transaction again.');
         isSubmit.value = false;
         return;
@@ -430,10 +447,10 @@ const handleTopUp = async () => {
     // Sign transaction based on wallet type
     if (walletStore.loggedWallet?.type === WalletType.Normal) {
       // Verify spending password for Normal wallet
-      const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+      const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-        data: { password: spendingPassword.value }
-      }) as { data: { isValid: boolean; error?: string } };
+        data: { password: spendingPassword.value },
+      })) as { data: { isValid: boolean; error?: string } };
       console.log('🔏 passwordVerification:', passwordVerification);
       if (!passwordVerification.data.isValid) {
         snackbar.setError('Invalid spending password');
@@ -479,30 +496,9 @@ const handleTopUp = async () => {
   }
 };
 
-const handleLoadingComplete = () => {
-  console.log('🎉 Top up completed successfully!');
-
-  // Update card balance and add transaction using stored amounts
-  const adaAmt = parseFloat(transactionAmounts.value.adaAmount) || 0;
-  const eurAmt = parseFloat(transactionAmounts.value.eurAmount) || 0;
-
-  console.log('🔄 Using stored transaction amounts:', { adaAmt, eurAmt });
-  console.log('📝 Transaction ID:', transactionId.value);
-
-  if (adaAmt > 0 && eurAmt > 0) {
-    // Update card balance
-    cardStore.updateCardBalance(eurAmt);
-
-    // // Add transaction to history
-    // cardStore.addTopUpTransaction(adaAmt, eurAmt, transactionId.value);
-    //
-    // // Add activity to recent activities
-    // cardStore.addTopUpActivity(adaAmt, eurAmt);
-
-    console.log(`✅ Balance updated: +€${eurAmt}, Transaction added: ${transactionId.value}, Activity added`);
-  } else {
-    console.error('❌ Invalid stored amounts:', { adaAmt, eurAmt });
-  }
+const handleLoadingComplete = async () => {
+  await cardStore.fetchCardBalance();
+  await cardStore.fetchCardHistory();
 
   currentStep.value = 4;
 };
