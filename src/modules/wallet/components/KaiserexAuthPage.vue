@@ -9,6 +9,52 @@
 
       <!-- Auth Options Grid (3 columns) -->
       <div class="auth-options">
+        <!-- Card Management Option (moved to first position) -->
+        <div class="auth-option management-option liquid-glass-card">
+          <div class="default-card-view">
+            <div class="option-icon">
+              <img src="@/modules/wallet/icons/card.svg" alt="card" class="card-image" />
+            </div>
+
+            <div class="option-content">
+              <h3 class="option-title">Get your Gero Card in just a few steps:</h3>
+
+              <div class="option-features steps-list">
+                <div class="feature-item">
+                  <span class="step-number-inline">1.</span>
+                  <span class="feature-text">Register on Kaiserex</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">2.</span>
+                  <span class="feature-text">Activate your account via email</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">3.</span>
+                  <span class="feature-text">Sign in and complete KYC</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">4.</span>
+                  <span class="feature-text">Once approved, order your card!</span>
+                </div>
+              </div>
+
+              <div class="promo-section">
+                <p class="promo-title">Enjoy ZERO FEES until May 1 (6 months)</p>
+                <div class="option-features promo-list">
+                  <div class="feature-item">
+                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                    <span class="feature-text">0% monthly & issuance fees</span>
+                  </div>
+                  <div class="feature-item">
+                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                    <span class="feature-text">0% fees on ADA-to-EUR conversions</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Register Option -->
         <div class="auth-option register-option liquid-glass-card">
           <div class="default-card-view">
@@ -23,21 +69,6 @@
             <p class="option-description">
               Create your Kaiserex account and complete the verification process to order your card.
             </p>
-
-            <div class="option-steps">
-              <div class="step-item">
-                <span class="step-number">1</span>
-                <span class="step-text">Create account</span>
-              </div>
-              <div class="step-item">
-                <span class="step-number">2</span>
-                <span class="step-text">Complete KYC</span>
-              </div>
-              <div class="step-item">
-                <span class="step-number">3</span>
-                <span class="step-text">Order your card</span>
-              </div>
-            </div>
           </div>
 
           <div class="option-action">
@@ -75,7 +106,7 @@
             <div class="option-content">
               <h3 class="option-title">Already have a Kaiserex account?</h3>
               <p class="option-description">
-                Sign in to your existing account to continue with your card order or check your status.
+                Sign in to your existing account to top up your card, order additional cards, or check your balance.
               </p>
 
               <div class="option-features">
@@ -85,7 +116,7 @@
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Manage account settings</span>
+                  <span class="feature-text">Top-up card with ADA</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
@@ -187,37 +218,6 @@
 
               <div class="resend-code">
                 <button class="resend-link" @click="handleResendCode">Didn't receive a code? Resend</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card Management Option -->
-        <div class="auth-option management-option liquid-glass-card">
-          <div class="default-card-view">
-            <div class="option-icon">
-              <img src="@/modules/wallet/icons/card.svg" alt="card" class="card-image" />
-            </div>
-
-            <div class="option-content">
-              <h3 class="option-title">Manage Your Card in Seconds</h3>
-              <p class="option-description">
-                An all-in-one platform that helps you manage everything about your Gero Card
-              </p>
-
-              <div class="option-features">
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Enjoy 6 months of ZERO FEES</span>
-                </div>
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">0% monthly & issuance fees</span>
-                </div>
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">0% fees on ADA-to-euro conversions</span>
-                </div>
               </div>
             </div>
           </div>
@@ -425,7 +425,6 @@ const handleRegistrationComplete = () => {
 @import '../styles/mixins';
 
 .kaiserex-auth-page {
-  min-height: 100vh;
   display: flex;
   align-items: flex-start; // Changed from center to flex-start
   justify-content: center;
@@ -656,6 +655,40 @@ const handleRegistrationComplete = () => {
 .feature-text {
   @include body-text($font-size-sm);
   color: $text-secondary;
+}
+
+.step-number-inline {
+  @include text-style($font-size-sm, $font-weight-semibold);
+  color: $primary-cyan;
+  min-width: 20px;
+}
+
+.steps-list {
+  margin-bottom: $spacing-lg;
+
+  .feature-item {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+.promo-section {
+  margin-top: $spacing-lg;
+  padding-top: $spacing-lg;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+  .promo-title {
+    @include text-style($font-size-base, $font-weight-semibold);
+    color: $text-primary;
+    text-align: center;
+    margin: 0 0 $spacing-md 0;
+  }
+
+  .promo-list {
+    .feature-item {
+      justify-content: center;
+    }
+  }
 }
 
 .option-action {

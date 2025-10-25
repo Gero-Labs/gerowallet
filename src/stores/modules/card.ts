@@ -25,7 +25,7 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'not_started' as 'unverified' | 'pending' | 'approved' | 'rejected',
+    kycStatus: 'not_started' as 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started',
     kycData: null as any,
     loadingMessage: '',
     error: null as string | null,
@@ -101,7 +101,7 @@ async function initCardStore() {
         storedData.walletStatus = {
           currentState: 'loading',
           isKaiserexAuthenticated: false,
-          kycStatus: 'not_started',
+          kycStatus: 'registered',
           kycData: null,
           loadingMessage: '',
           error: null,
@@ -187,7 +187,7 @@ function getCardApi(): Api {
       // Handle 401 Unauthorized errors
       if (error.response?.status === 401) {
         const originalRequest = error.config;
-        
+
         // Prevent infinite retry loops
         if (originalRequest._retry) {
           console.warn('Token refresh failed, clearing session');
@@ -198,7 +198,7 @@ function getCardApi(): Api {
         // If we have a refresh token, try to refresh
         if (cardStore.refreshToken) {
           originalRequest._retry = true;
-          
+
           try {
             await cardStoreInstance.refreshAccessToken();
             // Retry original request with new token
@@ -220,7 +220,7 @@ function getCardApi(): Api {
           throw error;
         }
       }
-      
+
       throw error;
     }
   );
@@ -230,13 +230,13 @@ function getCardApi(): Api {
 
 /**
  * Internal card store instance for token management
- * 
+ *
  * Handles token refresh and logout with proper cookie cleanup
  */
 const cardStoreInstance = {
   /**
    * Refresh access token using refresh token
-   * 
+   *
    * If refresh fails (e.g., refresh token expired or invalid), automatically
    * logs out user and clears all cookies
    */
@@ -270,19 +270,19 @@ const cardStoreInstance = {
 
   /**
    * Logout user and clear all session data
-   * 
+   *
    * Clears:
    * - Access and refresh tokens from memory
    * - All cookies (via clearStoredTokens)
    * - User data, cards, balances
    * - Calls backend logout endpoint
-   * 
+   *
    * Always succeeds even if backend logout fails
    */
   async logout(): Promise<void> {
     try {
       const api = getCardApi();
-      
+
       // Clear tokens and user data from memory
       cardStore.accessToken = null;
       cardStore.refreshToken = null;
@@ -426,7 +426,13 @@ export default {
    * Select a card by UUID
    * @param cardId - The card UUID to select
    */
-  selectCard(cardId: string): void {
+  selectCard(cardId: string | null): void {
+    if (cardId === null) {
+      // Clear selection (for empty card slot or pending cards)
+      cardStore.selectedCardId = null;
+      return;
+    }
+
     const card = cardStore.cards.find(c => c.cardData.card_uuid === cardId);
     if (card) {
       cardStore.selectedCardId = cardId;
@@ -537,53 +543,18 @@ export default {
     if (!this.isAuthenticated) {
       return 'auth';
     }
-
-    const selectedCard = this.getSelectedCard();
-
     switch (walletStatus.kycStatus) {
-      case 'unverified':
-        return 'new';
-      case 'pending':
-        return 'pending';
       case 'registered':
+        return 'new';
+      case 'verification_started':
         return 'pending';
       case 'approved':
-        if (selectedCard?.cardData?.card_uuid) {
-          return 'approved';
-        } else if (selectedCard?.cardData?.id && !selectedCard?.cardData?.card_uuid) {
-          return 'pending';
-        } else {
-          return 'new';
-        }
+        return 'approved';
       case 'rejected':
         return 'auth';
       default:
         return 'new';
     }
-  },
-
-  get showAuthPage() {
-    return this.currentState === 'auth';
-  },
-
-  get showNewUserFlow() {
-    return this.currentState === 'new';
-  },
-
-  get showPendingKYC() {
-    return this.currentState === 'pending';
-  },
-
-  get showApprovedHome() {
-    return this.currentState === 'approved';
-  },
-
-  get showLoadingState() {
-    return this.currentState === 'loading';
-  },
-
-  get showErrorState() {
-    return this.currentState === 'error';
   },
 
   // Auth methods
@@ -784,9 +755,8 @@ export default {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/user-verifications`);
       cardStore.walletStatus.kycStatus = response.data.status.name;
-      //cardStore.walletStatus.kycStatus = 'approved';
     } catch (error) {
-      cardStore.walletStatus.kycStatus = 'unverified';
+      cardStore.walletStatus.kycStatus = 'registered';
       throw error;
     } finally {
     }
