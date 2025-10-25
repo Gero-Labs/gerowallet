@@ -139,7 +139,7 @@
                   tabindex="0"
                   aria-label="View promotional details and fee information"
                 >
-                  <span class="clickable-text">Enjoy ZERO FEES until May 1st</span>
+                  <span class="clickable-text">Enjoy ZERO FEES until May 1st 2026</span>
                   <v-icon small class="info-icon">mdi-information-outline</v-icon>
                 </p>
                 <div class="promo-features">

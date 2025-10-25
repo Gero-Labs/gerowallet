@@ -11,7 +11,7 @@
         <!-- Zero Fees Promotion -->
         <div class="promo-banner">
           <div class="promo-text">
-            <h3 class="promo-heading">Enjoy ZERO FEES until May 1st, 2025</h3>
+            <h3 class="promo-heading">Enjoy ZERO FEES until May 1st, 2026</h3>
             <p class="promo-subheading">Get started with your Gero Card completely free</p>
           </div>
         </div>
@@ -22,7 +22,7 @@
           <div class="token-section">
             <div class="token-banner">
               <v-icon class="token-icon">mdi-star-circle</v-icon>
-              <p class="token-message">Starting May 1st, <strong>$GERO holders</strong> will enjoy token incentives in the form of fee waivers</p>
+              <p class="token-message">Starting May 1st, 2026 <strong>$GERO holders</strong> will enjoy token incentives in the form of fee waivers</p>
             </div>
 
             <div class="tiers-vertical">
