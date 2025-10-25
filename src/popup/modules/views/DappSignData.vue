@@ -252,6 +252,9 @@ onMounted(async () => {
     controller.value = Messaging.createInternalController();
   }
   await init();
+
+  // Set document title
+  document.title = 'Gero Dashboard | Sign Data';
 });
 </script>
 <style scoped>

@@ -500,6 +500,9 @@ onMounted(async () => {
   }
 
   await init();
+
+  // Set document title
+  document.title = 'Gero Dashboard | Sign Transaction';
 });
 </script>
 
