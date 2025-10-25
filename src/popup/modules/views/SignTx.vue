@@ -137,7 +137,7 @@ const risks = ref<any>(undefined);
 const spendingPassword = ref('');
 const showPassword = ref(false);
 const request = ref<any>(null);
-const tx = ref<Cardano.Tx>(undefined);
+const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
 const tooltip = ref({
   enabled: false,
@@ -163,15 +163,15 @@ const useSidePanel = computed(() => {
   return config.value?.useSidePanel;
 });
 
-const txFee = computed<bigint>(() => {
+const txFee = computed<bigint | undefined>(() => {
   return txBody.value?.fee;
 });
 
 const txMetadata = computed(() => {
-  return tx.value.auxiliaryData?.blob;
+  return tx.value?.auxiliaryData?.blob;
 });
 
-const txBody = computed<Cardano.TxBody>(() => {
+const txBody = computed<Cardano.TxBody | undefined>(() => {
   return tx.value?.body;
 })
 
@@ -192,11 +192,11 @@ const script = computed(() => {
 });
 
 const outputs = computed<Cardano.TxOut[]>(() => {
-  return txBody.value.outputs;
+  return txBody.value?.outputs || [];
 });
 
 const inputs = computed<Cardano.TxIn[]>(() => {
-  return txBody.value.inputs;
+  return txBody.value?.inputs || [];
 });
 
 const changeAddress = computed(() => {
@@ -348,18 +348,56 @@ const sign = async () => {
         }
       } else if (loggedWallet.value.type === WalletType.Ledger) {
         const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
+
+        // Extract existing witnesses if this is a partial sign (multisig transaction)
+        let existingWitnesses: Serialization.TransactionWitnessSet | undefined;
+        if (mergeWitnesses || partialSign) {
+          try {
+            const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
+            existingWitnesses = fullTx.witnessSet();
+          } catch (e) {
+            console.warn('[LEDGER-SIGN] Could not extract existing witnesses:', e);
+          }
+        }
+
         const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
           tx,
           keys.value,
           utxos.value,
           !isBT.value, // isUsb flag (inverted from isBT)
           networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
+          txCbor // Pass original CBOR for multisig transactions to preserve exact byte representation
         );
-        const transactionWitnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({
-          signatures,
-        })
-        console.log('[LEDGER-SIGN] signing successful:', transactionWitnessSet.toCbor());
-        witnesses.value = transactionWitnessSet.toCbor();
+
+        // Merge Ledger signatures with existing witnesses
+        let finalWitnessSet: Serialization.TransactionWitnessSet;
+        if (existingWitnesses) {
+          // Convert existing witnesses to Core format
+          const existingCore = existingWitnesses.toCore();
+
+          // Merge signatures (combine both Maps)
+          const mergedSignatures = new Map([
+            ...(existingCore.signatures || new Map()),
+            ...(signatures || new Map()),
+          ]);
+
+          // Create merged witness set - only include properties that are defined
+          const mergedWitnessCore: Cardano.Witness = {
+            signatures: mergedSignatures,
+            ...(existingCore.bootstrap && { bootstrap: existingCore.bootstrap }),
+            ...(existingCore.scripts && { scripts: existingCore.scripts }),
+            ...(existingCore.redeemers && { redeemers: existingCore.redeemers }),
+            ...(existingCore.datums && { datums: existingCore.datums }),
+          };
+
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore(mergedWitnessCore);
+        } else {
+          finalWitnessSet = Serialization.TransactionWitnessSet.fromCore({
+            signatures,
+          });
+        }
+
+        witnesses.value = finalWitnessSet.toCbor();
         if (txAutoSubmit.value) {
           await confirm();
         }

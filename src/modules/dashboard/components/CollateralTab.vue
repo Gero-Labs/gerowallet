@@ -113,7 +113,7 @@ const setCollateral = async () => {
 
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     console.log('signaturesRes', signaturesRes)
     if (signaturesRes.error) {

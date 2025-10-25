@@ -679,7 +679,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.signTx}` +
-      `?website=${encodeURIComponent(requestCopy.origin)}` +
+      `?website=${encodeURIComponent(requestCopy.data.origin)}` +
       `&tabId=${requestCopy.send.tab.id}`;
 
     responsePromise = openSidebar(requestCopy.send.tab.id, url).then((tabId) =>
@@ -699,9 +699,8 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
         }
       }
     }
-
     const popupURL = chrome.runtime.getURL(
-      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.origin)}`
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.data.origin)}`
     );
     responsePromise = focusOrCreatePopup(popupURL, 470, 852).then((tab) =>
       Messaging.sendToPopupInternal(tab.id, requestCopy)

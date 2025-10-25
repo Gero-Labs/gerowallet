@@ -166,13 +166,19 @@ export default {
     keys: Keys,
     utxos: Cardano.Utxo[],
     isUsb: boolean,
-    network: NetworkInfo
+    network: NetworkInfo,
+    originalTxCbor?: string
   ): Promise<Cardano.Signatures> {
-    const deserializedTx: Serialization.Transaction = Serialization.Transaction.fromCore(tx)
+    // Use original CBOR if provided (for multisig) to preserve exact byte representation
+    // This is critical for multisig transactions where another party has already signed the original bytes
+    const deserializedTx: Serialization.Transaction = originalTxCbor
+      ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
+      : Serialization.Transaction.fromCore(tx);
     const txBody: Cardano.TxBody = tx.body;
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
     const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
     const txInKeyPathMap = await util.createTxInKeyPathMap(txBody, knownAddresses, inputResolver);
+
     const ledgerTxTransformerContext: LedgerTxTransformerContext = {
       chainId: Cardano.ChainIds.Mainnet,
       accountIndex: 0,
@@ -294,7 +300,6 @@ export default {
           const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
           const pathArray = hdPathToArray(key.path);
           const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
-          console.log('[LEDGER] Processing change address:', Cardano.Address.fromString(keys.stake[0].address).toBech32());
           knownAddresses.push({
             type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
@@ -318,7 +323,6 @@ export default {
             const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
             const pathArray = hdPathToArray(key.path);
             const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
-            console.log('[LEDGER] Processing stake address:', key.address);
 
             // For stake addresses, we add them as reward accounts
             knownAddresses.push({
