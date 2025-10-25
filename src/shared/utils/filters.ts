@@ -168,6 +168,20 @@ const filters = {
     value = value / 100
     const hue = ((1 - value) * 120).toString(10);
     return ["hsl(", hue, ",100%,48%)"].join("");
+  },
+  extractHostname(url: string): string {
+    let hostname;
+    // Find & remove protocol (http, ftp, etc.) and get hostname
+    if (url.indexOf('//') > -1) {
+      hostname = url.split('/')[2];
+    } else {
+      hostname = url.split('/')[0];
+    }
+    // Find & remove port number
+    hostname = hostname.split(':')[0];
+    // Find & remove "?"
+    hostname = hostname.split('?')[0];
+    return hostname;
   }
 };
 

@@ -74,6 +74,7 @@
                   </template>
                 </v-img>
               </v-avatar>
+              <span v-else class="ml-2"></span>
               {{
                 filters.toCurrency(
                   asset.quantity,
@@ -416,7 +417,7 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['auxiliaryData']">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMetadata(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
@@ -431,18 +432,18 @@
               <CopyButton :value="getMetadata(transactionInfo)" small></CopyButton>
             </v-card-title>
             <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
-              <pre>{{ JSON.stringify(transactionInfo['auxiliaryData']['blob'], null, 2) }}</pre>
+              <pre>{{ getMetadata(transactionInfo) }}</pre>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['assets_minted']?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMint(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
-            <h3>Assets Minted ({{ transactionInfo['assets_minted']?.length }})</h3>
+            <h3>Assets Minted/Burned ({{ getMint(transactionInfo)?.length }})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -450,40 +451,40 @@
             <v-card-text class="px-0">
               <v-simple-table class="transparent" dense>
                 <thead class="grey--text">
-                  <tr>
-                    <td class="text-left">Policy Id</td>
-                    <td class="text-left">Asset Name</td>
-                    <td class="text-left">Fingerprint</td>
-                    <td class="text-left">Quantity</td>
-                  </tr>
+                <tr>
+                  <td class="text-left">Policy Id</td>
+                  <td class="text-left">Asset Name</td>
+                  <td class="text-left">Fingerprint</td>
+                  <td class="text-left">Quantity</td>
+                </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(asset_minted, index) in transactionInfo['assets_minted']" :key="`asset_minted_${index}`">
-                    <td class="text-left">
-                      {{ filters.truncate(asset_minted.policy_id)
-                      }}<CopyButton
-                        v-if="asset_minted"
-                        x-small
-                        class="ml-1"
-                        :value="asset_minted.policy_id"
-                      ></CopyButton>
-                    </td>
-                    <td class="text-left">
-                      {{ getAssetName(asset_minted, false) }}
-                    </td>
-                    <td class="text-left">
-                      {{ getFingerprint(asset_minted)
-                      }}<CopyButton x-small class="ml-1" :value="getFingerprint(asset_minted)"></CopyButton>
-                    </td>
-                    <td class="text-center">
-                      {{
-                        (
-                          Number(asset_minted.quantity) /
-                          (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1)
-                        )?.toLocaleString('en-US', { maximumFractionDigits: 6 })
-                      }}
-                    </td>
-                  </tr>
+                <tr v-for="(mint, index) in getMint(transactionInfo)" :key="`asset_minted_${index}`">
+                  <td class="text-left">
+                    {{ filters.truncate(mint.policyId) }}
+                    <CopyButton
+                      v-if="mint"
+                      x-small
+                      class="ml-1"
+                      :value="mint.policyId"
+                    ></CopyButton>
+                  </td>
+                  <td class="text-left">
+                    {{ mint.assetName }}
+                  </td>
+                  <td class="text-left">
+                    {{ filters.truncate(mint.fingerprint) }}
+                    <CopyButton x-small class="ml-1" :value="mint.fingerprint"></CopyButton>
+                  </td>
+                  <td class="text-center">
+                    {{
+                      (
+                        Number(mint.quantity) /
+                        (mint.decimals ? Math.pow(10, mint.decimals) : 1)
+                      )?.toLocaleString('en-US', { maximumFractionDigits: 6 })
+                    }}
+                  </td>
+                </tr>
                 </tbody>
               </v-simple-table>
             </v-card-text>
@@ -923,9 +924,27 @@ const getAssetChip = (asset: any) => {
   );
 };
 
+const getMint = (transactionInfo: any) => {
+  if (transactionInfo.body?.mint) {
+    const mintArray = []
+    Object.entries(transactionInfo.body.mint).forEach(([unit, quantity]) => {
+      const assetId = Cardano.AssetId(unit)
+      mintArray.push({
+        assetId,
+        assetName: getAssetName(unit, true),
+        policyId: Cardano.AssetId.getPolicyId(assetId),
+        fingerprint: Cardano.AssetFingerprint.fromParts(Cardano.AssetId.getPolicyId(assetId), Cardano.AssetId.getAssetName(assetId)),
+        quantity: quantity,
+      })
+    });
+    return mintArray;
+  }
+  return null;
+}
+
 const getMetadata = (transactionInfo: any) => {
   return JSON.stringify(
-    Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData().metadata().toCore(),
+    Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData()?.metadata()?.toCore(),
     (_key, value) => {
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
@@ -940,10 +959,6 @@ const getMetadata = (transactionInfo: any) => {
     },
     2
   );
-};
-
-const getFingerprint = (asset: any) => {
-  return filters.truncate(Cardano.AssetFingerprint.fromParts(asset.policy_id, asset.asset_name));
 };
 
 const txAssets = computed(() => {
@@ -1083,6 +1098,7 @@ watch(
   () => props.transactionInfo,
   async () => {
     const value = props.transactionInfo;
+    console.log(value)
     if (!value) return;
     const dRep = value.body?.certificates?.find((certificate: any) => certificate.dRep)?.dRep;
     const poolId = value.body?.certificates?.find((certificate: any) => certificate.poolId)?.poolId;

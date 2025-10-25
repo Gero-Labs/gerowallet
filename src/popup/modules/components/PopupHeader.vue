@@ -39,6 +39,7 @@ import Select from '@/shared/components/Select.vue';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import filters from '@/shared/utils/filters';
 
 defineProps({
   title: {
@@ -75,7 +76,9 @@ const favicon = computed(() => {
 
 const domain = computed(() => {
   if (queryParams.value?.website) {
-    return extractHostname(queryParams.value?.website);
+    const hostname = filters.extractHostname(queryParams.value?.website);
+    validateDomain(hostname);
+    return hostname;
   }
   return '';
 });
@@ -84,26 +87,7 @@ const websiteRiskIcon = computed(() => {
   return assets.resolveDappRisk(dappRisk.value)
 });
 
-function extractHostname(url) {
-  let hostname;
-  //find & remove protocol (http, ftp, etc.) and get hostname
-
-  if (url.indexOf('//') > -1) {
-    hostname = url.split('/')[2];
-  } else {
-    hostname = url.split('/')[0];
-  }
-
-  //find & remove port number
-  hostname = hostname.split(':')[0];
-  //find & remove "?"
-  hostname = hostname.split('?')[0];
-
-  validateDomain(hostname);
-  return hostname;
-}
-
-function validateDomain(s) {
+function validateDomain(s: string) {
   try {
     new URL('https://' + s);
     return true;

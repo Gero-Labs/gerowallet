@@ -36,6 +36,7 @@ import { walletManager } from '@/services/walletManager.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
+import { debugLog } from '@/utils/debug';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -487,15 +488,15 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
-  console.log('🔍 getCollateral::Request', request);
+  debugLog('[CIP-30] getCollateral::Request', request);
   const storedUtxos = WalletStore.state.utxos;
-  console.log('📦 Stored UTXOs for collateral:', {
+  debugLog('[CIP-30] Stored UTXOs for collateral:', {
     count: storedUtxos?.length || 0,
     hasUtxos: !!storedUtxos && storedUtxos.length > 0
   });
   try {
-    const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
-    console.log('✅ getCollateral::Response', { count: utxos?.length || 0 });
+    const utxos: string[] = getCollateral(request.data.params, storedUtxos)
+    debugLog('[CIP-30] getCollateral::Response', { count: utxos?.length || 0 });
     sendResponse({
       id: request.id,
       data: utxos,
@@ -503,7 +504,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
-    console.error('❌ getCollateral::Error', e);
+    debugLog('[CIP-30] getCollateral::Error', e);
     sendResponse({
       id: request.id,
       error: e,
@@ -515,7 +516,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  console.log('getUsedAddresses::Request', request)
+  debugLog('getUsedAddresses::Request', request)
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {

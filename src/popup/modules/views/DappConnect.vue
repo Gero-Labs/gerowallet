@@ -42,12 +42,13 @@
   </PopupHeader>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import WalletStore, { walletStore } from '@/stores/walletStore';
+import filters from '@/shared/utils/filters';
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
@@ -85,6 +86,16 @@ onMounted(() => {
     controller.value = Messaging.createInternalSidePanelController(tabId.value);
   } else {
     controller.value = Messaging.createInternalController();
+  }
+
+  // Set document title with domain
+  const route = vmProxy.$route;
+  const website = route.query?.website;
+  if (website) {
+    const domain = filters.extractHostname(website);
+    document.title = `Gero Dashboard | Connect to ${domain}`;
+  } else {
+    document.title = 'Gero Dashboard | Connect';
   }
 });
 </script>
