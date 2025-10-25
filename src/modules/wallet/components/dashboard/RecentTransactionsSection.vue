@@ -24,18 +24,20 @@
               <v-list-item-title class="px-0">
                 {{ filters.truncate(item.reference) }}<CopyButton style="margin-bottom: 1px;" x-small :value="item.reference" />
               </v-list-item-title>
-              <v-list-item-subtitle class="px-0" style="font-size: 12px">
-                {{ new Date(item.date).toLocaleString('en-US') }}
-              </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
         </template>
 
-        <!-- Date column -->
-        <template v-slot:item.date="{ item }">
+        <!-- Date & Time column -->
+        <template v-slot:item.datetime="{ item }">
           <v-list-item class="px-0">
             <v-list-item-content class="px-0">
-              <v-list-item-title class="px-0">{{ item.name }}</v-list-item-title>
+              <v-list-item-title class="px-0" style="font-size: 13px">
+                {{ item.dateFormatted }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="px-0" style="font-size: 12px">
+                {{ item.timeFormatted }}
+              </v-list-item-subtitle>
             </v-list-item-content>
           </v-list-item>
         </template>
@@ -89,9 +91,10 @@ const emit = defineEmits(['orderCard']);
 
 // Define table headers
 const headers = [
-  { text: 'Reference', value: 'reference', sortable: true, align: 'start', width: '100' },
+  { text: 'Date & Time', value: 'datetime', sortable: true, align: 'start', width: '150' },
   { text: 'Category', value: 'category', sortable: false, align: 'start' },
   { text: 'Transaction', value: 'name', sortable: false, align: 'start' },
+  { text: 'Reference', value: 'reference', sortable: true, align: 'start', width: '150' },
   { text: 'Amount', value: 'amount', sortable: false, align: 'start' },
 ];
 
@@ -135,9 +138,28 @@ const formattedTransactions = computed(() => {
     const categoryClass = getCategoryClass(category);
     const categoryDotClass = getCategoryDotClass(category);
 
+    // Parse date and convert to local time
+    const localDate = parseEuropeanDate(tx.createTime);
+
+    // Format date as MM/DD/YYYY
+    const dateFormatted = localDate.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    });
+
+    // Format time as HH:mm AM/PM
+    const timeFormatted = localDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
     return {
       id: index + 1,
-      date: parseEuropeanDate(tx.createTime).getTime(),
+      date: localDate.getTime(),
+      dateFormatted,
+      timeFormatted,
       name: merchantName,
       avatarText: merchantName.substring(0, 2).toUpperCase(),
       avatarClass: 'avatar-default',

@@ -24,7 +24,7 @@
       <!-- Actions -->
       <div class="modal-actions">
         <div class="actions-content">
-          <div class="password-section">
+          <div class="password-section" v-if="loggedWallet.type === 'Normal'">
             <v-tooltip v-model="tooltip.enabled" top color="red">
               <template v-slot:activator="{}">
                 <v-text-field
@@ -47,22 +47,30 @@
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
           </div>
+          <div v-if="loggedWallet.type === 'Ledger'" class="ledger-section">
+            <p class="ledger-instruction">You will be prompted to sign with your Ledger device.</p>
+          </div>
           <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
           <div class="buttons-section">
-            <v-btn class="cancel-btn" @click="closeModal"> Cancel </v-btn>
-            <v-btn color="error" class="delete-btn" @click="verifyPassword" :disabled="!password"> Confirm </v-btn>
+            <v-btn class="cancel-btn" @click="closeModal" :disabled="loading"> Cancel </v-btn>
+            <v-btn v-if="loggedWallet.type === 'Ledger'" color="error" class="delete-btn" @click="sign" :loading="loading"> Sign </v-btn>
+            <v-btn v-else color="error" class="delete-btn" @click="verifyPassword" :disabled="!password"> Confirm </v-btn>
           </div>
         </div>
       </div>
     </v-card>
   </v-dialog>
 </template>
-
 <script setup lang="ts">
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { ref, watch } from 'vue';
+import { METHOD } from '@/chrome/config';
+import { ref, watch, toRefs } from 'vue';
+import { walletStore } from '@/stores/walletStore';
+import { stringToHex } from '@/shared/utils/converter';
+import snackbar from '@/plugins/snackbar';
+import verifyDataSignature from '@cardano-foundation/cardano-verify-datasignature';
 
 interface Props {
   open: boolean;
@@ -77,6 +85,10 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const { loggedWallet } = toRefs(walletStore);
+
+const loading = ref(false);
 
 const showPassword = ref(false);
 
@@ -113,6 +125,70 @@ const verifyPassword = async () => {
     enableToolTip();
   }
 };
+
+const sign = async () => {
+  try {
+    loading.value = true;
+    errorMessage.value = '';
+
+    // Create a message to sign that proves wallet ownership
+    // Using current timestamp to prevent replay attacks
+    const timestamp = Date.now();
+    const messageToSign = `Gero Wallet Verification - ${timestamp}`;
+
+    // Use METHOD.signData pattern like in ViewRewardsDialog
+    const request = {
+      method: METHOD.signData,
+      data: {
+        address: loggedWallet.value.baseAddress,
+        payload: stringToHex(messageToSign)
+      },
+    };
+
+    const signatureResult: any = await Messaging.sendToBackground(request);
+
+    if (signatureResult.error) {
+      snackbar.setError(signatureResult.error.info || signatureResult.error.message || 'Failed to sign with Ledger');
+      errorMessage.value = signatureResult.error.info || signatureResult.error.message || 'Failed to sign with Ledger device';
+    } else {
+      // Verify the signature using @cardano-foundation/cardano-verify-datasignature
+      console.log(signatureResult)
+      try {
+        const isValid = verifyDataSignature(
+          signatureResult.data.signature,
+          signatureResult.data.key,
+          messageToSign,
+          loggedWallet.value.baseAddress
+        );
+
+        if (!isValid) {
+          const errorMsg = 'Signature verification failed. Please try again.';
+          errorMessage.value = errorMsg;
+          snackbar.setError(errorMsg);
+          console.error('❌ Signature verification failed');
+          return;
+        }
+
+        console.log('✅ Ledger signature verified successfully');
+        // If verification succeeds, emit confirm event
+        emit('confirm');
+        closeModal();
+      } catch (verifyError: any) {
+        console.error('❌ Error verifying signature:', verifyError);
+        const errorMsg = verifyError?.message || 'Failed to verify signature. Please try again.';
+        errorMessage.value = errorMsg;
+        snackbar.setError(errorMsg);
+      }
+    }
+  } catch (error: any) {
+    console.error('Error signing with Ledger:', error);
+    const errorMsg = error?.message || 'Failed to sign with Ledger device. Please try again.';
+    errorMessage.value = errorMsg;
+    snackbar.setError(errorMsg);
+  } finally {
+    loading.value = false;
+  }
+}
 
 watch(
   () => props.open,
@@ -221,6 +297,21 @@ watch(
   position: relative;
   @include flex-column;
   gap: $spacing-xs;
+}
+
+.ledger-section {
+  margin-top: 36px;
+  @include flex-column;
+  gap: $spacing-md;
+  align-items: center;
+}
+
+.ledger-instruction {
+  @include body-text($font-size-sm);
+  color: $text-muted;
+  text-align: center;
+  margin: 0;
+  line-height: 1.5;
 }
 
 .input-label {

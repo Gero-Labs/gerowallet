@@ -4,7 +4,7 @@
     <v-btn
       v-if="!showAuthPage && !showLoadingState && !showErrorState"
       icon
-      class="logout-btn"
+      class="logout-btn ma-3"
       @click="handleLogout"
       title="Logout"
     >
@@ -168,7 +168,7 @@ onMounted(async () => {
 
   // Only add padding for non-auth pages (auth page handles its own layout)
   &:not(:has(.kaiserex-auth-page)) {
-    padding: 32px;
+    padding: 32px 0 0;
   }
 }
 

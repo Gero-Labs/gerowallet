@@ -1,5 +1,5 @@
 <template>
-  <section class="partnership-section">
+  <section class="partnership-section mb-2">
     <div class="partnership-header">
       <div class="kaiserex-logo">
         <img src="@/assets/svg/Icon-Kaiserex.svg" alt="Kaiserex" class="logo-icon" />
@@ -53,7 +53,6 @@
           @click="trackKaiserexClick"
         >
           Learn more about Kaiserex
-          <img src="@/modules/wallet/icons/arrow-right.svg" alt="arrow" class="link-arrow" />
         </a>
         <a
           href="https://www.gerowallet.io/post/gero-card-satchel-eu-integration-cardano-crypto-card"
@@ -63,7 +62,6 @@
           @click="trackBlogClick"
         >
           Read our announcement
-          <img src="@/modules/wallet/icons/arrow-right.svg" alt="arrow" class="link-arrow" />
         </a>
       </div>
     </div>

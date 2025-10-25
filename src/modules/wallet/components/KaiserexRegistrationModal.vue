@@ -4,7 +4,7 @@
       <div class="modal-content">
         <div class="content-wrapper" v-if="!registrationComplete">
           <!-- Close button positioned absolutely -->
-          <v-btn icon small @click="closeModal" class="modal-close-btn">
+          <v-btn icon small @click="emit('close')" class="modal-close-btn">
             <v-icon>mdi-close</v-icon>
           </v-btn>
 
@@ -32,13 +32,12 @@
           </div>
           <h3 class="success-title">Registration Complete!</h3>
           <p class="success-text">
-            Your Kaiserex account has been created. You can now proceed with the KYC verification
-            to order your Gero Crypto Card.
+            Your Kaiserex account has been created. You can now proceed with the KYC verification to order your Gero
+            Crypto Card.
           </p>
           <GradientButton text="Continue to KYC" @click="proceedToKYC" />
         </div>
       </div>
-
     </v-card>
   </v-dialog>
 </template>
@@ -67,31 +66,35 @@ const registrationComplete = ref(false);
 const iframeUrl = 'https://www.kaiserex.com/gerocard';
 
 // Reset state when modal opens
-watch(() => props.open, (newVal) => {
-  if (newVal) {
-    isLoading.value = true;
-    iframeLoaded.value = false;
-    registrationComplete.value = false;
-    debugLog('Kaiserex registration modal opened');
+watch(
+  () => props.open,
+  newVal => {
+    if (newVal) {
+      isLoading.value = true;
+      iframeLoaded.value = false;
+      registrationComplete.value = false;
+      debugLog('Kaiserex registration modal opened');
 
-    // Force iframe reload by changing the src slightly to prevent caching issues
-    nextTick(() => {
-      if (registrationIframe.value) {
-        const timestamp = Date.now();
-        registrationIframe.value.src = `${iframeUrl}?_t=${timestamp}`;
-      }
-    });
+      // Force iframe reload by changing the src slightly to prevent caching issues
+      nextTick(() => {
+        if (registrationIframe.value) {
+          const timestamp = Date.now();
+          registrationIframe.value.src = `${iframeUrl}?_t=${timestamp}`;
+        }
+      });
 
-    // Fallback timeout in case iframe load event doesn't fire
-    setTimeout(() => {
-      if (isLoading.value && newVal) { // Only if still loading and modal is still open
-        console.warn('Iframe load timeout, hiding loading state');
-        isLoading.value = false;
-        iframeLoaded.value = true;
-      }
-    }, 5000); // 5 second timeout
+      // Fallback timeout in case iframe load event doesn't fire
+      setTimeout(() => {
+        if (isLoading.value && newVal) {
+          // Only if still loading and modal is still open
+          console.warn('Iframe load timeout, hiding loading state');
+          isLoading.value = false;
+          iframeLoaded.value = true;
+        }
+      }, 5000); // 5 second timeout
+    }
   }
-});
+);
 
 const onIframeLoad = () => {
   isLoading.value = false;
@@ -100,22 +103,6 @@ const onIframeLoad = () => {
 
   // Don't inject any CSS - let the iframe scroll naturally on smaller screens
 };
-
-const closeModal = () => {
-  if (registrationComplete.value ||
-      confirm('Are you sure you want to cancel? You need to complete registration to order your Gero Card.')) {
-    emit('close');
-  }
-};
-
-const confirmRegistration = () => {
-  // Show confirmation dialog
-  if (confirm('Have you successfully completed your Kaiserex registration?')) {
-    registrationComplete.value = true;
-    // Store registration status
-  }
-};
-
 
 const proceedToKYC = () => {
   emit('complete');
