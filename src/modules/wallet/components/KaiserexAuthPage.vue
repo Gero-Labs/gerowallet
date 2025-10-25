@@ -39,7 +39,10 @@
               </div>
 
               <div class="promo-section">
-                <p class="promo-title">Enjoy ZERO FEES until May 1 (6 months)</p>
+                <p class="promo-title" @click="showPromotionModal = true">
+                  <span class="clickable-text">Enjoy ZERO FEES until May 1st (6 months)</span>
+                  <v-icon small class="info-icon">mdi-information-outline</v-icon>
+                </p>
                 <div class="option-features promo-list">
                   <div class="feature-item">
                     <v-icon class="feature-icon">mdi-check-circle</v-icon>
@@ -234,6 +237,7 @@
       @close="showRegistrationModal = false"
       @complete="handleRegistrationComplete"
     />
+    <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
   </div>
 </template>
 
@@ -242,6 +246,7 @@ import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
+import PromotionModal from './PromotionModal.vue';
 import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
@@ -250,6 +255,7 @@ const emit = defineEmits<{
 }>();
 
 const showRegistrationModal = ref(false);
+const showPromotionModal = ref(false);
 const showLoginForm = ref(false);
 const show2FAForm = ref(false);
 const username = ref('');
@@ -682,6 +688,33 @@ const handleRegistrationComplete = () => {
     color: $text-primary;
     text-align: center;
     margin: 0 0 $spacing-md 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: help;
+
+    .clickable-text {
+      color: $primary-cyan;
+      border-bottom: 1px dotted $primary-cyan;
+      transition: all 0.2s ease;
+    }
+
+    &:hover {
+      .clickable-text {
+        color: lighten($primary-cyan, 10%);
+        border-bottom-color: lighten($primary-cyan, 10%);
+      }
+
+      .info-icon {
+        color: lighten($primary-cyan, 10%);
+      }
+    }
+
+    .info-icon {
+      color: $primary-cyan;
+      transition: all 0.2s ease;
+    }
   }
 
   .promo-list {
