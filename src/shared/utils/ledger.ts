@@ -166,13 +166,19 @@ export default {
     keys: Keys,
     utxos: Cardano.Utxo[],
     isUsb: boolean,
-    network: NetworkInfo
+    network: NetworkInfo,
+    originalTxCbor?: string
   ): Promise<Cardano.Signatures> {
-    const deserializedTx: Serialization.Transaction = Serialization.Transaction.fromCore(tx)
+    // Use original CBOR if provided (for multisig) to preserve exact byte representation
+    // This is critical for multisig transactions where another party has already signed the original bytes
+    const deserializedTx: Serialization.Transaction = originalTxCbor
+      ? Serialization.Transaction.fromCbor(Serialization.TxCBOR(originalTxCbor))
+      : Serialization.Transaction.fromCore(tx);
     const txBody: Cardano.TxBody = tx.body;
     const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
     const inputResolver: Cardano.InputResolver = this.createInputResolver(utxos);
     const txInKeyPathMap = await util.createTxInKeyPathMap(txBody, knownAddresses, inputResolver);
+
     const ledgerTxTransformerContext: LedgerTxTransformerContext = {
       chainId: Cardano.ChainIds.Mainnet,
       accountIndex: 0,
@@ -294,7 +300,6 @@ export default {
           const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
           const pathArray = hdPathToArray(key.path);
           const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
-          console.log('[LEDGER] Processing change address:', Cardano.Address.fromString(keys.stake[0].address).toBech32());
           knownAddresses.push({
             type: AddressType.Internal, // Change addresses are internal
             index: derivationIndex,
@@ -318,7 +323,6 @@ export default {
             const networkId = network.networkId === 1 ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet;
             const pathArray = hdPathToArray(key.path);
             const derivationIndex = pathArray[pathArray.length - 1]; // Last index in the path
-            console.log('[LEDGER] Processing stake address:', key.address);
 
             // For stake addresses, we add them as reward accounts
             knownAddresses.push({
@@ -407,12 +411,43 @@ export default {
         case 0x6E11:
           snackbar.setError('Ledger device is locked. Please unlock it and try again.');
           break;
+        case 0x6E01:
+          snackbar.setError('Please open the Cardano app on your Ledger device and try again.');
+          break;
+        case 0x6E00:
+          snackbar.setError('Invalid Ledger state. Please reconnect your Ledger device.');
+          break;
+        case 0x6E04:
+          snackbar.setError('The Cardano app version on your Ledger is not supported. Please update the Cardano app.');
+          break;
+        case 0x6E10:
+          snackbar.setError('Ledger device is in an invalid state. Please restart the Cardano app.');
+          break;
+        case 0x6982:
+          snackbar.setError('Ledger device: Security status not satisfied. Please check your device.');
+          break;
+        case 0x6985:
+          snackbar.setError('Transaction rejected on Ledger device.');
+          break;
+        case 0x6A80:
+          snackbar.setError('Invalid data sent to Ledger device. Please try again.');
+          break;
         default:
-          snackbar.setError('Ledger device error: ' + error.message);
+          // Keep error details for debugging while providing user-friendly message
+          const errorCode = error.code ? ` (Error code: 0x${error.code.toString(16).toUpperCase()})` : '';
+          snackbar.setError(`Ledger device error${errorCode}. Please ensure the Cardano app is open and try again.`);
       }
+    } else if (e?.message?.includes('NetworkError') || e?.message?.includes('Unable to reset the device')) {
+      snackbar.setError('Connection error with Ledger device. Please ensure the Cardano app is open and try again.');
+    } else if (e?.message?.includes('No device selected') || e?.message?.includes('device not found')) {
+      snackbar.setError('No Ledger device found. Please connect your Ledger device and try again.');
+    } else if (e?.message?.includes('Failed to Retrieve Cardano App Version')) {
+      snackbar.setError('Cannot connect to Cardano app. Please ensure the Cardano app is open on your Ledger device.');
     } else {
       console.error('Error signing with Ledger:', e);
-      snackbar.setError(e instanceof Error ? e.message : 'Ledger signing failed');
+      // Keep error details for debugging
+      const errorMessage = e instanceof Error ? e.message : 'Ledger signing failed';
+      snackbar.setError(`${errorMessage}. Please try again.`);
     }
   }
 };

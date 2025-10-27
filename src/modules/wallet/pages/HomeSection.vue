@@ -1,44 +1,57 @@
 <template>
   <div class="home-section">
-    <HeroSection />
+    <div class="content-wrapper">
+      <HeroSection />
 
-    <div class="dashboard-layout">
-      <!-- <div class="left-column"> -->
-      <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
-      <!-- </div> -->
-      <!-- <div class="right-column">
-         <ChartSection @filter="handleFilter" /
-      </div>> -->
+      <div class="dashboard-layout" v-if="selectedCard">
+        <!-- <div class="left-column"> -->
+        <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
+        <!-- </div> -->
+        <!-- <div class="right-column">
+           <ChartSection @filter="handleFilter" /
+        </div>> -->
+      </div>
     </div>
+
+    <!-- Kaiserex Partnership Info - Always at bottom -->
+    <v-footer class="footer transparent px-0">
+      <KaiserexPartnershipBadge/>
+    </v-footer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import HeroSection from '../components/HeroSection.vue';
+import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
 import { useIntervalFn } from '@vueuse/core';
 
 const { t } = useTranslation();
 const loading = ref(false);
 
+const currentState = computed(() => cardStore.currentState)
+
+const selectedCard = computed(() => cardStore.getSelectedCard());
+
 onMounted(async () => {
   loading.value = true;
 
-  await cardStore.fetchCardHistory();
-  await cardStore.fetchCardBalance();
+  await Promise.all([cardStore.fetchCardHistory(), cardStore.fetchCardBalance()])
   loading.value = false;
-  useIntervalFn(() => {
+  useIntervalFn(() => { //TODO need to fix this to occur only when the card is active or becoming active - terminate when logging out
     initData();
   }, 60000);
 });
 
 const initData = () => {
-  cardStore.fetchCardHistory();
-  cardStore.fetchCardBalance();
-  cardStore.getExchangeRate();
+  if (cardStore.isAuthenticated && (currentState.value === 'approved' || currentState.value === 'new')) {
+    cardStore.fetchCardHistory();
+    cardStore.fetchCardBalance();
+    cardStore.getExchangeRate();
+  }
 };
 
 const cardHistoryRecords = computed(() => {
@@ -56,8 +69,18 @@ const cardHistoryRecords = computed(() => {
 @import '../styles/mixins';
 
 .home-section {
-  min-height: 100vh;
-  padding: 12px 32px 96px;
+  padding: 12px 32px 0;
+  height: 100%;
+  position: relative;
+  overflow-y: auto;
+  min-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  justify-content: space-between;
+}
+
+.content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -98,7 +121,7 @@ const cardHistoryRecords = computed(() => {
 
 @media (max-width: $breakpoint-md) {
   .home-section {
-    padding: 8px 16px 64px;
+    padding: 8px 16px 0;
   }
 
   .dashboard-layout {

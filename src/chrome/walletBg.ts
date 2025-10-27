@@ -204,11 +204,9 @@ export class WalletBg {
     const uniqueAssets: Set<string> = new Set<string>();
 
     debugLog('🔍 Processing transactions for UTXOs...');
+
     for (const transaction of transactions) {
       if (transaction.body) {
-        for (const inp of transaction.body.inputs) {
-          utxos.delete(`${inp.txId}#${inp.index}`);
-        }
         transaction.body.outputs.forEach((out, idx) => {
           let outAddress = out.address;
           const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
@@ -252,9 +250,6 @@ export class WalletBg {
           }
         });
       } else {
-        for (const inp of transaction.utxo.inputs) {
-          utxos.delete(`${inp.tx_hash}#${inp.output_index}`);
-        }
         transaction.utxo.outputs.forEach((out, idx) => {
           let outAddress = out.address;
           const outAddressType: Cardano.AddressType = Cardano.Address.fromString(outAddress).getType();
@@ -270,7 +265,6 @@ export class WalletBg {
             }
             if (address === outAddress || stakeAddress === outAddress) {
               addresses.add(out.address);
-              console.log('transaction', transaction)
               const utxoId: string = `${transaction.id || transaction.tx_hash}#${out.output_index}`;
               utxos.set(utxoId, [
                 {
@@ -300,6 +294,22 @@ export class WalletBg {
         })
       }
     }
+
+    for (const transaction of transactions) {
+      if (transaction.body) {
+        for (const inp of transaction.body.inputs) {
+          const utxoKey = `${inp.txId}#${inp.index}`;
+          utxos.delete(utxoKey);
+        }
+      } else {
+        for (const inp of transaction.utxo.inputs) {
+          const utxoKey = `${inp.tx_hash}#${inp.output_index}`;
+          utxos.delete(utxoKey);
+        }
+      }
+    }
+
+    debugLog(`✅ UTXO processing complete: ${utxos.size} UTXOs remaining`);
 
     // Set Assets Info in Network DB
     await this.syncService.syncAssets(Array.from(uniqueAssets));
@@ -662,6 +672,17 @@ export class WalletBg {
           if (txsToUpdate.length > 0) {
             debugLog(`Saving ${txsToUpdate.length} transactions to database (${convertedTxs.length} total processed)`);
             await txsTable.bulkPut(txsToUpdate);
+
+            // IMPORTANT ARCHITECTURAL PATTERN:
+            // Don't manually call WalletStore.setTransactions() here. Instead, rely on the
+            // Dexie subscription pattern used throughout the codebase:
+            //   1. Database write (bulkPut) triggers Dexie subscription
+            //   2. TransactionsLoader in walletLoader.ts processes ALL transactions
+            //   3. Loader calculates derived fields (ada, assets, sentAssets, receivedAssets)
+            //   4. Loader updates WalletStore with fully processed transactions
+            //
+            // This ensures consistent processing for both pending and confirmed transactions
+            // and prevents duplicate processing or stale data issues.
           } else {
             debugLog(`No transaction updates needed - all ${convertedTxs.length} transactions unchanged`);
           }

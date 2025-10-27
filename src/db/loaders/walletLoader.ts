@@ -174,7 +174,6 @@ export class TransactionsLoader extends BaseLoader {
             };
 
             newTransactions.sort((a, b) => a.tx_timestamp - b.tx_timestamp);
-            console.log('newTransactions', newTransactions)
             transactions = newTransactions.map((tx) => {
               let sentAmount = 0;
               let receivedAmount = 0;

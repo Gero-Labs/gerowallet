@@ -7,8 +7,65 @@
         <p class="page-description">{{ t('card.chooseOptionBelow') }}</p>
       </div>
 
-      <!-- Auth Options -->
+      <!-- Auth Options Grid (3 columns) -->
       <div class="auth-options">
+        <!-- Card Management Option (moved to first position) -->
+        <div class="auth-option management-option liquid-glass-card">
+          <div class="default-card-view">
+            <div class="option-icon">
+              <img src="@/modules/wallet/icons/card.svg" alt="card" class="card-image" />
+            </div>
+
+            <div class="option-content">
+              <h3 class="option-title">Get your Gero Card in just a few steps:</h3>
+
+              <div class="option-features steps-list">
+                <div class="feature-item">
+                  <span class="step-number-inline">1.</span>
+                  <span class="feature-text">Register on Kaiserex</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">2.</span>
+                  <span class="feature-text">Activate your account via email</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">3.</span>
+                  <span class="feature-text">Sign in and complete KYC</span>
+                </div>
+                <div class="feature-item">
+                  <span class="step-number-inline">4.</span>
+                  <span class="feature-text">Once approved, order your card!</span>
+                </div>
+              </div>
+
+              <div class="promo-section">
+                <p
+                  class="promo-title"
+                  @click="showPromotionModal = true"
+                  @keydown.enter="showPromotionModal = true"
+                  @keydown.space.prevent="showPromotionModal = true"
+                  role="button"
+                  tabindex="0"
+                  aria-label="View promotional details and fee information"
+                >
+                  <span class="clickable-text">Enjoy ZERO FEES until May 1st 2026 (6 months)</span>
+                  <v-icon small class="info-icon">mdi-information-outline</v-icon>
+                </p>
+                <div class="option-features promo-list">
+                  <div class="feature-item">
+                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                    <span class="feature-text">0% monthly & issuance fees</span>
+                  </div>
+                  <div class="feature-item">
+                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
+                    <span class="feature-text">0% fees on ADA-to-EUR conversions</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Register Option -->
         <div class="auth-option register-option liquid-glass-card">
           <div class="default-card-view">
@@ -23,21 +80,6 @@
             <p class="option-description">
               {{ t('card.createKaiserexAccount') }}
             </p>
-
-            <div class="option-steps">
-              <div class="step-item">
-                <span class="step-number">1</span>
-                <span class="step-text">{{ t('card.createAccount') }}</span>
-              </div>
-              <div class="step-item">
-                <span class="step-number">2</span>
-                <span class="step-text">{{ t('card.completeKYC') }}</span>
-              </div>
-              <div class="step-item">
-                <span class="step-number">3</span>
-                <span class="step-text">{{ t('card.orderYourCard') }}</span>
-              </div>
-            </div>
           </div>
 
           <div class="option-action">
@@ -75,7 +117,7 @@
             <div class="option-content">
               <h3 class="option-title">{{ t('card.alreadyHaveAccount') }}</h3>
               <p class="option-description">
-                {{ t('card.signInToExisting') }}
+                Sign in to your existing account to top up your card, order additional cards, or check your balance.
               </p>
 
               <div class="option-features">
@@ -85,7 +127,7 @@
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">{{ t('card.manageAccountSettings') }}</span>
+                  <span class="feature-text">Top-up card with ADA</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
@@ -192,32 +234,9 @@
           </div>
         </div>
       </div>
-      <!-- Card Management Info -->
-      <div class="management-section">
-        <div class="management-content liquid-glass-card">
-          <img src="@/modules/wallet/icons/card.svg" alt="card" />
-          <div class="management-column-content">
-            <h3 class="management-heading">Manage Your Card in Seconds</h3>
-            <p class="management-description">
-              An all-in-one platform that helps you manage everything about your Gero Card
-            </p>
-            <div class="feature-list">
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">Enjoy 6 months of ZERO FEES</span>
-              </div>
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">0% monthly & issuance fees</span>
-              </div>
-              <div class="feature-item">
-                <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                <span class="feature-text">0% fees on ADA-to-euro conversions and spending.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
+      <!-- Kaiserex Partnership Info -->
+      <KaiserexPartnershipSection />
     </div>
 
     <!-- Modals -->
@@ -226,6 +245,7 @@
       @close="showRegistrationModal = false"
       @complete="handleRegistrationComplete"
     />
+    <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
   </div>
 </template>
 
@@ -235,6 +255,8 @@ import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
+import PromotionModal from './PromotionModal.vue';
+import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
 
@@ -244,6 +266,7 @@ const emit = defineEmits<{
 }>();
 
 const showRegistrationModal = ref(false);
+const showPromotionModal = ref(false);
 const showLoginForm = ref(false);
 const show2FAForm = ref(false);
 const username = ref('');
@@ -419,7 +442,6 @@ const handleRegistrationComplete = () => {
 @import '../styles/mixins';
 
 .kaiserex-auth-page {
-  min-height: 100vh;
   display: flex;
   align-items: flex-start; // Changed from center to flex-start
   justify-content: center;
@@ -447,7 +469,7 @@ const handleRegistrationComplete = () => {
 }
 
 .auth-container {
-  max-width: 900px;
+  max-width: 1400px;
   width: 100%;
   position: relative;
   z-index: 1; // Above the background
@@ -476,9 +498,14 @@ const handleRegistrationComplete = () => {
 
 .auth-options {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: $spacing-3xl;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $spacing-2xl;
   margin-bottom: $spacing-4xl;
+
+  @media (max-width: 1400px) {
+    grid-template-columns: 1fr;
+    gap: $spacing-2xl;
+  }
 }
 
 .auth-option {
@@ -534,6 +561,11 @@ const handleRegistrationComplete = () => {
   justify-content: center;
   margin-top: 40px; // Position icon between top and header
   margin-bottom: 30px; // Space before header
+
+  .card-image {
+    width: 120px;
+    height: auto;
+  }
 }
 
 .icon-circle {
@@ -642,6 +674,67 @@ const handleRegistrationComplete = () => {
   color: $text-secondary;
 }
 
+.step-number-inline {
+  @include text-style($font-size-sm, $font-weight-semibold);
+  color: $primary-cyan;
+  min-width: 20px;
+}
+
+.steps-list {
+  margin-bottom: $spacing-lg;
+
+  .feature-item {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+.promo-section {
+  margin-top: $spacing-lg;
+  padding-top: $spacing-lg;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+  .promo-title {
+    @include text-style($font-size-base, $font-weight-semibold);
+    color: $text-primary;
+    text-align: center;
+    margin: 0 0 $spacing-md 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+
+    .clickable-text {
+      color: $primary-cyan;
+      border-bottom: 1px dotted $primary-cyan;
+      transition: all 0.2s ease;
+    }
+
+    &:hover {
+      .clickable-text {
+        color: lighten($primary-cyan, 10%);
+        border-bottom-color: lighten($primary-cyan, 10%);
+      }
+
+      .info-icon {
+        color: lighten($primary-cyan, 10%);
+      }
+    }
+
+    .info-icon {
+      color: $primary-cyan;
+      transition: all 0.2s ease;
+    }
+  }
+
+  .promo-list {
+    .feature-item {
+      justify-content: center;
+    }
+  }
+}
+
 .option-action {
   margin-top: auto;
   flex-shrink: 0;
@@ -680,59 +773,6 @@ const handleRegistrationComplete = () => {
   }
 }
 
-.management-section {
-  text-align: center;
-}
-
-.management-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-4xl;
-  padding: 28px; // Reduced by 4px from $spacing-3xl (32px)
-  border-radius: $border-radius-lg;
-}
-
-.management-column-content {
-  @include flex-column;
-  gap: $spacing-lg;
-}
-
-.management-heading {
-  @include heading-style($font-size-2xl);
-  color: $text-primary;
-  margin: 0;
-}
-
-.management-description {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-  margin: 0;
-  line-height: 1.6;
-}
-
-.feature-list {
-  @include flex-column;
-  gap: $spacing-md;
-}
-
-.feature-item {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-}
-
-.feature-icon {
-  font-size: 18px;
-  color: rgba(0, 199, 243, 0.7);
-  flex-shrink: 0;
-}
-
-.feature-text {
-  @include body-text($font-size-sm);
-  color: $text-secondary;
-}
-
 // Responsive Design
 @media (max-width: $breakpoint-lg) {
   .auth-options {
@@ -742,12 +782,6 @@ const handleRegistrationComplete = () => {
 
   .auth-option {
     padding: $spacing-2xl;
-  }
-
-  .management-content {
-    flex-direction: column;
-    gap: $spacing-2xl;
-    text-align: center;
   }
 }
 

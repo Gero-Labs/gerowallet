@@ -3,6 +3,21 @@
               :subtitle="$t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
+        v-if="!account?.drep_id"
+        border="left"
+        color="warning"
+        type="warning"
+        prominent
+        class="text-left mb-3"
+      >
+        <strong>DRep Delegation Required</strong>
+        <p class="mb-0 mt-2">
+          On Cardano, you must be delegated to a DRep (Delegated Representative) to withdraw staking rewards.
+          Please visit the <router-link to="/governance" style="color: white; font-weight: bold;">Governance tab</router-link>
+          to delegate to a DRep before withdrawing your rewards.
+        </p>
+      </v-alert>
+      <v-alert
         border="left"
         color="primary"
         type="info"
@@ -36,12 +51,30 @@
             <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ toCurrency(withdrawals-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
-          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
+          <v-col cols="12" class="pt-6" v-if="!account?.drep_id">
+            <v-btn color="primary" elevation="2" block to="/governance" class="mx-2">
+              Go to Governance to Delegate
+            </v-btn>
+          </v-col>
+          <v-col cols="12" class="pt-6" v-else style="display: flex; justify-content: space-evenly;">
+            <!-- Show success state when transaction is signed -->
+            <v-alert
+              v-if="isSubmit"
+              type="success"
+              dense
+              border="left"
+              colored-border
+              class="mb-0"
+              style="width: 100%;"
+            >
+              <span>Transaction signed! Click submit to broadcast.</span>
+            </v-alert>
+            <!-- Password input (hidden after signing) -->
             <v-tooltip
               v-model="tooltip.enabled"
               top
               color="red"
-              v-if="loggedWallet?.type === WalletType.Normal"
+              v-if="loggedWallet?.type === WalletType.Normal && !isSubmit"
             >
               <template v-slot:activator="{ }">
                 <v-text-field
@@ -68,13 +101,13 @@
               </template>
               <span>{{ tooltip.text }}</span>
             </v-tooltip>
-            <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="py-0" style="align-content: center;">
+            <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
-            <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || !valid" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              Withdraw
+            <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
+              {{ isSubmit ? 'Submit Transaction' : 'Sign & Withdraw' }}
             </v-btn>
           </v-col>
         </v-row>
@@ -319,6 +352,7 @@ const signWithdrawalTx = async () => {
 watch(() => props.isOpen, (val) => {
   if (val) {
     spendingPassword.value = '';
+    isSubmit.value = false;
     if (form.value) {
       form.value.resetValidation();
     }

@@ -11,17 +11,28 @@
             <v-row no-gutters>
               <!-- Left Column -->
               <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-                <v-card outlined flat class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card" style="z-index: 1">
+                <v-card
+                  outlined
+                  flat
+                  class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card"
+                  style="z-index: 1"
+                >
                   <v-list-item three-line>
-                    <v-list-item-content>
+                    <v-list-item-content v-if="!currentDrepTxIsPending">
                       <div class="white--text font-weight-semibold text-subtitle-2">{{ $t('governance.currentDelegation') }}</div>
                       <v-list-item-title class="gradient-text text-h6 font-weight-semibold">
                         {{ delegatingTo }}
                       </v-list-item-title>
-                      <v-list-item-subtitle v-if="currentDRep" class="white--text font-weight-semibold">
+                      <v-list-item-subtitle
+                        v-if="currentDRep && !currentDrepTxIsPending && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
+                        class="white--text font-weight-semibold"
+                      >
                         {{ truncate(currentDRep.drep_id) }}<CopyButton small :value="currentDRep.drep_id"></CopyButton>
                       </v-list-item-subtitle>
-                      <v-list-item-subtitle v-if="currentDRep" class="gradient-text text-subtitle-2 font-weight-semibold">
+                      <v-list-item-subtitle
+                        v-if="currentDRep && !currentDrepTxIsPending && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
+                        class="gradient-text text-subtitle-2 font-weight-semibold"
+                      >
                         {{ $t('governance.votingPowerLabel') }}:
                         {{
                           toCurrency(
@@ -35,8 +46,25 @@
                         }}
                       </v-list-item-subtitle>
                     </v-list-item-content>
-                    <v-list-item-avatar v-if="currentDRep && currentDRep['metadata']?.meta_json?.body?.image?.contentUrl" size="80" rounded>
-                      <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>/
+                    <v-list-item-avatar
+                      v-if="
+                        currentDRep &&
+                        currentDRep['metadata']?.meta_json?.body?.image?.contentUrl &&
+                        !currentDrepTxIsPending
+                      "
+                      size="80"
+                      rounded
+                    >
+                      <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>
+                    </v-list-item-avatar>
+                    <v-list-item-content v-if="currentDrepTxIsPending">
+                      <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
+                      <v-list-item-title class="gradient-text text-h6 font-weight-semibold">
+                        Delegating...
+                      </v-list-item-title>
+                    </v-list-item-content>
+                    <v-list-item-avatar v-if="currentDrepTxIsPending" size="80" rounded>
+                      <v-progress-circular indeterminate color="white"></v-progress-circular>
                     </v-list-item-avatar>
                   </v-list-item>
                   <v-card-text class="px-0 pb-0">
@@ -59,7 +87,8 @@
                           delegationModel === undefined ||
                           delegateLoading ||
                           delegationModel === $t('governance.ownAccount') ||
-                          delegationModel === $t('governance.geroDRep')
+                          delegationModel === $t('governance.geroDRep')||
+                          currentDrepTxIsPending
                         "
                         @click="delegate"
                         :loading="delegateLoading"
@@ -156,8 +185,8 @@
                   </v-card-title>
                   <!-- Debug pagination info -->
                   <v-card-subtitle v-if="paginationMeta" class="text-caption">
-                    {{ t('governance.showingDReps', { 
-                      showing: governanceDReps?.length || 0, 
+                    {{ t('governance.showingDReps', {
+                      showing: governanceDReps?.length || 0,
                       total: paginationMeta.total_items,
                       page: paginationMeta.page,
                       totalPages: paginationMeta.total_pages
@@ -283,6 +312,17 @@ const { epochParams, tip } = toRefs(networkStore);
 // Governance store
 const { dreps: governanceDReps, loading: drepsLoading, paginationMeta } = toRefs(governanceStoreActions.state);
 const { currentDRep } = toRefs(governanceStoreActions.state);
+const { transactions: txs } = toRefs(walletStore);
+
+const currentDrepTxIsPending = computed(() => {
+  const pendingTx = txs.value?.find(tx => tx.pending);
+  const isDrepTx = pendingTx?.body.certificates.some(
+    cert =>
+      cert.__typename === Cardano.CertificateType.VoteDelegation ||
+      cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation
+  );
+  return !!isDrepTx;
+});
 
 // Create a computed property for dreps that combines governance data
 const dreps = computed(() => {
@@ -321,7 +361,6 @@ const drepsHeaders = [
 const delegatingTo = computed(() => {
   let res = 'Undelegated';
   if (currentDRep.value) {
-    res = 'N/A';
     if (currentDRep.value.drep_id == 'drep_always_no_confidence') {
       res = 'No Confidence';
     } else if (currentDRep.value.drep_id == 'drep_always_abstain') {
@@ -446,11 +485,11 @@ const delegate = async () => {
     let dRep: Cardano.DelegateRepresentative;
     if (delegationModel.value === 'Abstain') {
       dRep = {
-        __typename: 'AlwaysAbstain'
+        __typename: 'AlwaysAbstain',
       } as Cardano.AlwaysAbstain;
     } else if (delegationModel.value === 'No Confidence') {
-      dRep = dRep = {
-        __typename: 'AlwaysNoConfidence'
+      dRep = {
+        __typename: 'AlwaysNoConfidence',
       } as Cardano.AlwaysNoConfidence;
     } else if (delegationModel.value === 'Gero DRep') {
       delegateLoading.value = false;
@@ -487,6 +526,27 @@ const delegate = async () => {
     }
     certificates.push(certificate);
 
+    // Set the selected DRep info first
+    if (delegationModel.value === 'Abstain') {
+      selectedDRep.value = {
+        id: '',
+        name: 'Abstain',
+        image: '',
+        delegators: 0,
+        votes: 0,
+        voting_power: 0,
+      };
+    } else if (delegationModel.value === 'No Confidence') {
+      selectedDRep.value = {
+        id: '',
+        name: 'No Confidence',
+        image: '',
+        delegators: 0,
+        votes: 0,
+        voting_power: 0,
+      };
+    }
+
     // Use the generic transaction builder
     txData.value = await buildCardanoTransaction({
       certificates,
@@ -498,7 +558,7 @@ const delegate = async () => {
     });
 
     console.log('Vote delegation transaction built successfully');
-
+    isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building vote delegation transaction:', error);
     snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -521,9 +581,9 @@ const drepDelegate = async (row: any) => {
 
     // Create DRep object from selected DRep data
     console.log('selectedDRep', selectedDRep.value);
-    const dRep = selectedDRep.value.has_script ?
-      Serialization.DRep.newScriptHash(selectedDRep.value.hex) :
-      Serialization.DRep.newKeyHash(selectedDRep.value.hex);
+    const dRep = selectedDRep.value.has_script
+      ? Serialization.DRep.newScriptHash(selectedDRep.value.hex)
+      : Serialization.DRep.newKeyHash(selectedDRep.value.hex);
 
     // Use proper deposit from epoch parameters - ensure BigInt conversion
     const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
@@ -559,8 +619,6 @@ const drepDelegate = async (row: any) => {
       implicitCoin,
     });
 
-    console.log('DRep delegation transaction built successfully');
-    console.log('Transaction outputs:', txData.value.body.outputs);
     isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building DRep delegation transaction:', error);

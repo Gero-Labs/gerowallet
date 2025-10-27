@@ -125,7 +125,7 @@ export interface CardDetails {
     pan: string;
     expiryDate: string;
     cvc2: string;
-  }
+  };
 }
 
 export interface CardPin {
@@ -166,7 +166,7 @@ export interface CardState {
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
-    kycStatus: 'unverified' | 'pending' | 'approved' | 'rejected' | 'registered' | 'not_started';
+    kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started';
     kycData: any;
     loadingMessage: string;
     error: string | null;

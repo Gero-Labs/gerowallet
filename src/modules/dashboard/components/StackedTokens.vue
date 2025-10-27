@@ -41,11 +41,12 @@ import { resolveAsset } from '@/shared/utils/resolver';
 import assts from '@/utils/assets';
 
 interface Props {
-  tokens: Array<any>
+  tokens?: Array<any>
   tokenSize?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  tokens: () => [],
   tokenSize: 40
 })
 
@@ -83,11 +84,11 @@ watch(() => props.tokens, (newVal) => {
 })
 
 const residue = computed(() => {
-  return props.tokens.length > 4 ? props.tokens.length - 4 : 0;
+  return props.tokens?.length > 4 ? props.tokens.length - 4 : 0;
 })
 
 onMounted(async () => {
-  if (props.tokens.length) {
+  if (props.tokens?.length) {
     await updateTokens(props.tokens);
   }
 })
