@@ -24,6 +24,7 @@ import {
   Tip,
   WalletType,
   WalletTypePurpose,
+  Key,
 } from '@/models/types';
 import {
   addrToSignWith,
@@ -37,6 +38,7 @@ import {
   getPaymentKeyInternal,
   getRewardAddress,
   getStakeKey,
+  hdPathToArray,
   keyHashFromAddress,
   toPaymentCredential, toValueCore,
 } from '@/chrome/serialization';
@@ -819,19 +821,12 @@ export class WalletBg {
     return getStakeKey(this.publicKey, 0);
   }
 
-  drepKey(): Ed25519PublicKey {
-    return getDrepKey(this.publicKey, 0);
-  }
-
   requestAccountKey(
+    type: 'stake' | 'payment' | 'change' | 'drep',
     password: string,
-    accountIndex: number
-  ): {
-    accountKey: Bip32PrivateKey;
-    paymentKey: Ed25519PrivateKey;
-    stakeKey: Ed25519PrivateKey;
-    drepKey: Ed25519PrivateKey;
-  } {
+    accountIndex: number,
+    index: number,
+  ): Ed25519PrivateKey {
     let accountKey: Bip32PrivateKey;
     try {
       const decrypted = decrypt(this.encryptedPrivateKey, password);
@@ -844,13 +839,15 @@ export class WalletBg {
     } catch (e) {
       throw ERROR.wrongPassword;
     }
-
-    return {
-      accountKey,
-      paymentKey: accountKey.derive([ChainDerivations.EXTERNAL, 0]).toRawKey(),
-      stakeKey: accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, 0]).toRawKey(),
-      drepKey: accountKey.derive([ChainDerivations.DREP, 0]).toRawKey(),
-    };
+    if (type === 'stake') {
+      return accountKey.derive([ChainDerivations.CHIMERIC_ACCOUNT, index]).toRawKey();
+    } else if (type === 'payment') {
+      return accountKey.derive([ChainDerivations.EXTERNAL, index]).toRawKey()
+    } else if (type === 'change') {
+      return accountKey.derive([ChainDerivations.INTERNAL, index]).toRawKey()
+    } else { //drep
+      return accountKey.derive([ChainDerivations.DREP, index]).toRawKey()
+    }
   }
 
   async restore(tip: Tip): Promise<void> {
@@ -1050,31 +1047,59 @@ export class WalletBg {
     payload: string,
     password: string,
     accountIndex: number,
+    keys: Keys,
   ) {
-    let signatureHex: string, keyHex: string;
+    // Parse address once and reuse
     const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
-    const addressBytes = toHexArray(Cardano.Address.fromBech32(addr).toBytes());
-    const credential: Cardano.Credential = toPaymentCredential(Cardano.Address.fromBech32(addr));
+    const cardanoAddr = Cardano.Address.fromBech32(addr);
+    const addressBytes = toHexArray(cardanoAddr.toBytes());
+    const credential: Cardano.Credential = toPaymentCredential(cardanoAddr);
     const keyHash: string = credential.hash;
-    let accountKey: Ed25519PrivateKey;
-    const { paymentKey, stakeKey, drepKey } = this.requestAccountKey(password, accountIndex);
-    if (keyHash === this.paymentKeyExternal(0).hash().hex()) {
-      accountKey = paymentKey;
-    } else if (keyHash === this.paymentKeyInternal(0).hash().hex()) {
-      accountKey = paymentKey;
-    } else if (keyHash === this.stakeKey().hash().hex()) {
-      accountKey = stakeKey;
-    } else if (keyHash === this.drepKey().hash().hex()) {
-      accountKey = drepKey;
+
+    // Determine key type based on address type
+    const isRewardAccount = Cardano.isRewardAccount(addr);
+    const addressType = cardanoAddr.getType();
+
+    // Map address type to key types to search (in priority order)
+    let keyTypesToSearch: Array<{ type: 'payment' | 'change' | 'stake' | 'drep'; keyArray: Key[] }>;
+
+    if (isRewardAccount) {
+      // Reward account -> stake key
+      keyTypesToSearch = [{ type: 'stake', keyArray: keys.stake }];
+    } else if (addressType === Cardano.AddressType.RewardKey || addressType === Cardano.AddressType.RewardScript) {
+      // DRep or stake key
+      keyTypesToSearch = [
+        { type: 'drep', keyArray: keys.drep129 },
+        { type: 'stake', keyArray: keys.stake }
+      ];
     } else {
-      throw DataSignError.ProofGeneration;
+      // Payment address -> payment or change key
+      keyTypesToSearch = [
+        { type: 'payment', keyArray: keys.payment },
+        { type: 'change', keyArray: keys.change }
+      ];
     }
+
+    // Search for matching key in the determined key types
+    for (const { type, keyArray } of keyTypesToSearch) {
+      const foundKey = keyArray.find((key: Key) => key.cred === keyHash);
+      if (foundKey) {
+        const accountKey = this.requestAccountKey(type, password, accountIndex, hdPathToArray(foundKey.path)[4]);
+        return this.buildSignatureAndCoseKey(addressBytes, payload, accountKey);
+      }
+    }
+
+    throw DataSignError.ProofGeneration;
+  }
+
+  private buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLike>, payload: string, accountKey: Ed25519PrivateKey) {
     const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
     const toSign = builder.make_data_to_sign().to_bytes();
-    signatureHex = buildAndSignData(builder, toSign, accountKey);
     const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-    keyHex = util.bytesToHex(coseKey.to_bytes());
-    return { signature: signatureHex, key: keyHex };
+    return {
+      signature: buildAndSignData(builder, toSign, accountKey),
+      key: util.bytesToHex(coseKey.to_bytes())
+    };
   }
 
   isEnterpriseAddress(): boolean {
