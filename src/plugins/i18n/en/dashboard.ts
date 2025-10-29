@@ -1,10 +1,66 @@
 export default {
+  // Empty State Actions
+  learnAboutStaking: 'Learn about staking',
+  learnAboutDexs: 'Learn about DEXs',
+  exploreNftMarketplaces: 'Explore NFT Marketplaces',
+  getStarted: 'Get Started',
+  browseDeals: 'Browse Deals',
+  getCurrencyToStake: 'Get {currency} to Stake',
+  getCurrency: 'Get {currency}',
+  
+  // Empty State Titles
+  readyToEarnRewards: 'Ready to Earn Rewards',
+  tokenSwapping: 'Token Swapping',
+  noNftsYet: 'No NFTs Yet',
+  defiOpportunitiesAwait: 'DeFi Opportunities Await',
+  cashbackReady: 'Cashback Ready',
+  
+  // Empty State Descriptions
+  addToStartStaking: 'Add {currency} to your wallet to start earning staking rewards',
+  getFirstThenSwap: 'Get {currency} first, then you can swap for other tokens',
+  nftCollectionAppearHere: 'Your NFT collection will appear here',
+  addToExploreDeFi: 'Add {currency} to start exploring DeFi protocols and earning yields',
+  shopEarnCashback: 'Shop online and earn {currency} cashback on your purchases',
+  
+  // Empty State - Additional
+  tokenDistribution: 'Token Distribution',
+  tokenAllocationDisplayed: 'Your token allocation will be displayed here once you have tokens',
+  addTokens: 'Add Tokens',
+  marketOverview: 'Market Overview',
+  trackPriceAndTrends: 'Track {currency} price and market trends',
+  buyCurrency: 'Buy {currency}',
+  
+  // Help Tips - New User
+  walletAddressTip: 'This is your wallet address - share it to receive tokens',
+  seedPhraseSafeTip: 'Keep your seed phrase safe - it\'s the only way to recover your wallet',
+  startSmallAmountTip: 'Start with a small amount to get familiar with the wallet',
+  joinCommunityTip: 'Join the community to learn more about the ecosystem',
+  
+  // Help Tips - Portfolio
+  portfolioTracksTip: 'Your portfolio tracks your total balance over time',
+  viewMultipleCurrenciesTip: 'You can view your balance in multiple currencies',
+  historicalDataTip: 'Historical data helps you understand your investment performance',
+  
+  // Help Tips - Staking
+  stakingRewardsTip: 'Staking earns you rewards approximately every 5 days',
+  chooseStakePoolTip: 'Choose a stake pool with good performance and low fees',
+  tokensRemainControlTip: 'Your tokens remain in your control while staking',
+  
+  // Help Tips - Swap
+  swapDirectlyTip: 'Swap tokens directly from your wallet',
+  compareRatesTip: 'Compare rates across multiple DEXs',
+  slippageToleranceTip: 'Set slippage tolerance for better control',
+  
   // Main Dashboard
   dashboard: 'Dashboard',
   portfolio: 'Portfolio',
   portfolioValue: 'Portfolio Value',
   totalBalance: 'Total Balance',
   marketData: 'Market Data',
+  
+  // Carousel - Apex
+  apexFusion: 'Apex Fusion',
+  nextGenerationBlockchain: 'Next-generation blockchain technology',
   
   // Portfolio Chart
   loadingChart: 'Loading Chart',
@@ -15,6 +71,12 @@ export default {
   month: '30D',
   vsLastQuarter: 'vs last quarter',
   vsLastMonth: 'vs last month',
+  fullPortfolio: 'Full Portfolio',
+  adaOnly: 'ADA Only',
+  switchToAdaBalance: 'Switch to ADA balance',
+  switchToFullPortfolio: 'Switch to full portfolio',
+  refreshData: 'Refresh Data',
+  transactionPendingConfirmation: 'Transaction pending confirmation',
   
   // Months
   january: 'January',
@@ -80,11 +142,12 @@ export default {
   // Empty State
   emptyState: 'No assets yet',
   emptyStateMessage: 'Your wallet is empty',
-  getStarted: 'Get Started',
   welcomeToDashboard: 'Welcome to Dashboard',
   welcomeToGeroWallet: 'Welcome to Gero Wallet',
   emptyWallet: 'Empty Wallet',
   letsGetStarted: 'Let\'s get started by adding some {assetType} to your wallet!',
+  letsGetYouStarted: 'Let\'s get you started with some {currency} to explore the {blockchain} ecosystem',
+  addCurrencyToStart: 'Add {currency} to start using your wallet and explore all features',
   claimYourTokens: 'Claim your {assetType} tokens from an airdrop or faucet',
   stakeYourAssets: 'Stake Your {assetType}',
   earnRewardsByStaking: 'Earn rewards by staking your {assetType} on the {chain} blockchain',
@@ -103,6 +166,21 @@ export default {
   walletProtected: 'Great job! Your wallet is protected. Keep your seed phrase safe.',
   copyAddress: 'Copy Address',
   copied: 'Copied!',
+
+  // Empty State Hero - Feature Cards
+  buy: 'Buy',
+  purchaseWithCreditCard: 'Purchase with credit card',
+  instant: 'Instant',
+  receiveAction: 'Receive',
+  shareYourAddress: 'Share your address',
+  geroCard: 'Gero Card',
+  topUpWithAda: 'Top up with ADA',
+  comingSoon: 'Coming Soon',
+  stakingRewards: 'Staking Rewards',
+  earnRewardsByStakingShort: 'Earn rewards by staking',
+  exploreStaking: 'Explore Staking',
+  cashbackAction: 'Cashback',
+  earnCashbackOnline: 'Earn cashback online',
   
   // Swap Card
   swap: 'Swap',
@@ -136,6 +214,8 @@ export default {
   confirmNewPassword: 'Confirm New Password',
   passwordsMustMatch: 'Passwords must match',
   newPasswordMustDifferent: 'New password must be different from current password',
+  updatePassword: 'UPDATE PASSWORD',
+  spendingPasswordChanged: 'Spending password successfully changed.',
   
   // Hardware Wallet
   usb: 'USB',
@@ -145,5 +225,23 @@ export default {
   // Misc
   epoch: 'Epoch',
   cardanoShieldScanTimeout: 'Cardano Shield scan timeout',
+  
+  // Market Data
+  topVolume: 'Top Volume',
+  topGainers: 'Top Gainers',
+  topTVL: 'Top TVL',
+  lastUpdated: 'Last Updated',
+  nextUpdate: 'Next Update',
+  noVolumeData: 'No volume data available',
+  noGainersData: 'No gainers available',
+  noTVLData: 'No TVL data available',
+  token: 'Token',
+  trend: 'Trend',
+  
+  // Time
+  now: 'Now',
+  inSeconds: 'In {seconds} seconds',
+  inOneMinute: 'In 1 minute',
+  inMinutes: 'In {minutes} minutes',
 }
 

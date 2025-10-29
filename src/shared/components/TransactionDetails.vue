@@ -844,15 +844,15 @@ const getScriptDataBytes = (script: Cardano.Script) => {
 const scriptType = (scriptLanguage: number) => {
   switch (scriptLanguage) {
     case 0:
-      return 'Native'
+      return t('transactions.native')
     case 1:
-      return 'Plutus V1';
+      return t('transactions.plutusV1');
     case 2:
-      return 'Plutus V2';
+      return t('transactions.plutusV2');
     case 3:
-      return 'Plutus V3';
+      return t('transactions.plutusV3');
     default:
-      return 'Unknown';
+      return t('common.unknown');
   }
 };
 

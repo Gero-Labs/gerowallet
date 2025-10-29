@@ -19,7 +19,7 @@
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">For your security, any future transactions from this website will require additional verification by {{ loggedWallet.type === WalletType.Normal ? ' entering your spending password ' : ' interacting with your hardware wallet ' }} before signing.</p>
+              <p class="ml-9">{{ $t('navigation.futureTransactionsRequire', { action: loggedWallet.type === WalletType.Normal ? $t('navigation.enteringYourSpendingPassword') : $t('navigation.interactingWithHardware') }) }}</p>
             </div>
           </section>
     </v-card-text>
@@ -97,9 +97,9 @@ onMounted(() => {
   const website = route.query?.website;
   if (website) {
     const domain = filters.extractHostname(website);
-    document.title = `Gero Dashboard | Connect to ${domain}`;
+    document.title = `Gero Dashboard | ${t('common.connectTo')} ${domain}`;
   } else {
-    document.title = 'Gero Dashboard | Connect';
+    document.title = `Gero Dashboard | ${t('common.connect')}`;
   }
 });
 </script>

@@ -84,20 +84,20 @@
                 :disabled="creatingWalletLoader"
               >
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
                   <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">
-                    Choose a name to help you identify your wallet.
+                    {{ $t('welcome.chooseNameToIdentify') }}
                   </h3>
                   <v-text-field
                     style="width: 100%"
                     v-model="newWallet.name"
                     dense
                     filled
-                    label="Wallet Name"
-                    placeholder="e.g. My New Wallet"
+                    :label="$t('welcome.walletName')"
+                    :placeholder="$t('welcome.walletNamePlaceholder')"
                     :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
                     <v-radio value="green">
                       <template v-slot:label>
@@ -154,7 +154,7 @@
                     dense
                     v-model="newWallet.password"
                     filled
-                    label="Spending Password"
+                    :label="$t('wallet.spendingPassword')"
                     :type="show1 ? 'text' : 'password'"
                     :rules="[
                       rules.required(),
@@ -177,11 +177,11 @@
                     dense
                     v-model="newWallet.confirmPassword"
                     filled
-                    label="Confirm Password"
+                    :label="$t('welcome.confirmPassword')"
                     :type="show2 ? 'text' : 'password'"
                     :rules="[
                       rules.required(),
-                      newWallet.password === newWallet.confirmPassword || 'Passwords must match',
+                      newWallet.password === newWallet.confirmPassword || $t('welcome.passwordsMustMatch'),
                     ]"
                   >
                     <template v-slot:append>
@@ -195,7 +195,7 @@
                     class="mt-0 text-left"
                     hide-details
                     v-model="newWallet.recoverPasswordChecked"
-                    label="I understand that GeroWallet cannot recover this password for me."
+                    :label="$t('welcome.understandPasswordRecovery')"
                     :rules="[newWallet.recoverPasswordChecked]"
                   ></v-checkbox>
                   <v-checkbox

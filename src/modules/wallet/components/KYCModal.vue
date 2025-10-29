@@ -29,8 +29,8 @@
 
         <!-- Actions -->
         <div class="modal-actions">
-          <SecondaryButton text="Cancel" @click="closeModal" />
-          <GradientButton :text="currentStep === 1 ? 'Next' : 'Submit'" @click="handleNext" />
+          <SecondaryButton :text="t('common.cancel')" @click="closeModal" />
+          <GradientButton :text="currentStep === 1 ? t('card.next') : t('card.submit')" @click="handleNext" />
         </div>
       </div>
     </v-card>
@@ -45,6 +45,8 @@ import GradientButton from './GradientButton.vue';
 import KYCProgress from './KYCSteps/KYCProgress.vue';
 import KYCStepFirst from './KYCSteps/KYCStepFirst.vue';
 import KYCStepSecond from './KYCSteps/KYCStepSecond.vue';
+
+const { t } = useTranslation();
 
 defineProps<{
   open: boolean;
@@ -168,14 +170,14 @@ const startCamera = async () => {
     console.error('Error accessing camera:', error);
     isCameraActive.value = false;
 
-    let errorMessage = 'Unable to access camera. ';
+    let errorMessage = t('wallet.unableToAccessCamera');
     if (error && typeof error === 'object' && 'message' in error) {
       if (error.name === 'NotAllowedError') {
-        errorMessage += 'Please allow camera access in your browser settings.';
+        errorMessage += t('wallet.pleaseAllowCameraAccess');
       } else if (error.name === 'NotFoundError') {
-        errorMessage += 'No camera found on your device.';
+        errorMessage += t('wallet.noCameraFound');
       } else if (error.name === 'NotSupportedError') {
-        errorMessage += 'Camera is not supported in this browser.';
+        errorMessage += t('wallet.cameraNotSupported');
       } else {
         errorMessage += error.message;
       }
@@ -227,7 +229,7 @@ const onVideoLoaded = () => {
 const onVideoError = (error: Event) => {
   console.error('Video error:', error);
   isCameraActive.value = false;
-  alert('Error loading camera stream. Please try again.');
+  alert(t('common.errorLoadingCamera'));
 };
 
 const retakePhoto = () => {
@@ -241,7 +243,7 @@ const handleNext = () => {
       resetCameraState();
       currentStep.value = 2;
     } else {
-      alert('Please upload an ID document first.');
+      alert(t('common.uploadIdFirst'));
     }
   } else if (currentStep.value === 2) {
     if (capturedPhoto.value) {
@@ -250,7 +252,7 @@ const handleNext = () => {
       emit('complete', true);
       closeModal();
     } else {
-      alert('Please take a photo first.');
+      alert(t('common.takePhotoFirst'));
     }
   }
 };

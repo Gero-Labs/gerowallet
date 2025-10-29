@@ -122,7 +122,7 @@
                     </v-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="color: white; font-size: 11px">
-                        Contacts
+                        {{ $t('wallet.contacts') }}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -130,7 +130,7 @@
               </template>
               <v-card>
                 <v-card-title>
-                  Contacts
+                  {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
                   <v-btn icon small @click="contactsMenu = false">
                     <v-icon>
@@ -165,7 +165,7 @@
                 </v-avatar>
                 <v-list-item-content>
                   <v-list-item-title style="color: white; font-size: 11px">
-                    QR Scan
+                    {{ $t('wallet.qrScan') }}
                   </v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
@@ -175,8 +175,8 @@
             <v-textarea
               v-if="loggedWallet"
               v-model="recipientAddress"
-              label="Recipient Address"
-              :placeholder="`Enter a Recipient Address${loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? ' or an ADA Handle' : ''}`"
+              :label="$t('wallet.recipientAddress')"
+              :placeholder="loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
               rows="3"
               outlined
               :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
@@ -246,6 +246,8 @@ const emit = defineEmits(['updateRecipientAddress'])
 
 const { loggedWallet, contacts } = toRefs(walletStore)
 
+
+
 const form = ref<any>(null);
 const valid = ref<boolean>(false);
 const paymentAddress = ref<string>('');
@@ -260,9 +262,12 @@ const contact = ref<any>({
   address: '',
   img: undefined
 });
+
+const { t } = useTranslation();
+
 const contactsHeaders = ref<any[]>([
-  { text: 'Name', value: 'name' },
-  { text: 'Address', value: 'address' },
+  { text: t('common.name') as string, value: 'name' },
+  { text: t('common.address') as string, value: 'address' },
   { text: '', align: 'right', sortable: false, value: 'actions' },
 ]);
 

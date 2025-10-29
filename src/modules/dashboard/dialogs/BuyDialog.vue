@@ -116,7 +116,7 @@
                     width="100%"
                     @load="onIframeLoad"
                   >
-                    <p>Your browser does not support iframes.</p>
+                    <p>{{ $t('common.browserNotSupportIframes') }}</p>
                   </iframe>
                 </v-card-text>
               </v-card>
@@ -130,7 +130,7 @@
           color="primary"
           @click="step--"
         >
-          Back
+          {{ $t('common.back') }}
         </v-btn>
         <div v-else style="height: 36px" />
       </v-card-actions>
@@ -145,9 +145,6 @@ import ParallaxCard from '@/modules/welcome/components/ParallaxCard.vue';
 import moonPayApi from '@/api/moonpay-api';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-
-
-const { t } = useTranslation();
 
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
 const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
@@ -168,8 +165,10 @@ const methods = {
   BUY: 'BUY',
   SELL: 'SELL'
 };
+const { t } = useTranslation();
+
 const providers = [
-  {name: 'guardarian', image: assets.guardarian, subtitle: 'Limited Offer - 0% Wallet Fees' },
+  {name: 'guardarian', image: assets.guardarian, subtitle: t('wallet.guardarianOffer') },
   {name: 'moonpay', image: assets.moonpay },
 ];
 const method = ref<string | undefined>(undefined);

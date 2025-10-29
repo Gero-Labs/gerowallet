@@ -7,8 +7,8 @@
             {{ $t('cashback.title') }}
           </v-card-title>
           <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
-            Powered By <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
-            <v-img class="bring-web3-logo" max-height="36" height="36" width="40" :src="assets.bringWhite" contain alt="Bring Logo" />
+            {{ $t('cashback.poweredBy') }} <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
+            <v-img class="bring-web3-logo" max-height="36" height="36" width="40" :src="assets.bringWhite" contain :alt="$t('cashback.bringLogo')" />
           </v-btn>
           </v-card-subtitle>
           <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
@@ -87,7 +87,7 @@
                   v-model="model"
                   :items="searchTerms"
                   :loading="isLoading2"
-                  label="Brand, product, destination"
+                  :label="$t('cashback.brandProductDestination')"
                   outlined
                   class="cashback-search"
                   solo
@@ -103,7 +103,7 @@
                 >
                 </v-autocomplete>
                 <div class="pt-4" v-if="totalItems > 0">
-                  {{ totalItems }} Deals Found
+                  {{ totalItems }} {{ $t('cashback.dealsFound') }}
                 </div>
               </v-col>
             </v-row>

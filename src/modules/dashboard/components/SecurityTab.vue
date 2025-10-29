@@ -102,7 +102,7 @@
       <v-divider />
       <v-list-item>
         <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
-          <v-img :src="assets.cardanoShieldLogo" alt="Cardano Shield Logo" contain />
+          <v-img :src="assets.cardanoShieldLogo" :alt="$t('common.cardanoShieldLogo')" contain />
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
@@ -116,10 +116,10 @@
         </v-list-item-avatar>
         <v-list-item-content class="py-0">
           <v-list-item-title class="text-left">
-            <h3 style="color: white; font-size: 16px;">Website Protection</h3>
+            <h3 style="color: white; font-size: 16px;">{{ $t('settings.websiteProtection') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            Protect against malicious websites and scams
+            {{ $t('settings.protectAgainstMalicious') }}
           </v-list-item-subtitle>
         </v-list-item-content>
         <v-list-item-action class="my-0">

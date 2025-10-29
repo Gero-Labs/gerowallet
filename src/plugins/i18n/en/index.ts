@@ -1,3 +1,4 @@
+import { en } from 'vuetify/src/locale'
 import common from './common'
 import wallet from './wallet'
 import dashboard from './dashboard'
@@ -13,8 +14,13 @@ import settings from './settings'
 import card from './card'
 import perpetuals from './perpetuals'
 import transactions from './transactions'
+import blog from './blog'
+import emptyState from './emptyState'
 
 export default {
+  rtl: 'false',
+  locale: 'en-US',
+  $vuetify: { ...en },
   common,
   wallet,
   dashboard,
@@ -30,5 +36,7 @@ export default {
   card,
   perpetuals,
   transactions,
+  blog,
+  emptyState,
 }
 

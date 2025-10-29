@@ -23,18 +23,18 @@ const { t } = useTranslation();
 const features: FeatureCardProps[] = [
   {
     icon: 'conversion',
-    title: 'Real-Time Conversion',
-    description: 'Your crypto is instantly converted to fiat at the moment of top-up.',
+    title: t('card.realTimeConversion'),
+    description: t('card.realTimeConversionDesc'),
   },
   {
     icon: 'global',
-    title: 'Global Acceptance',
-    description: 'Shop online or in-store worldwide, just like a traditional debit or credit card.',
+    title: t('card.globalAcceptance'),
+    description: t('card.globalAcceptanceDesc'),
   },
   {
     icon: 'track',
-    title: 'Track & Manage Easily',
-    description: 'Monitor balances, spending, and top-upsall in one sleek wallet app.',
+    title: t('card.trackManageEasily'),
+    description: t('card.trackManageEasilyDesc'),
   },
 ];
 </script>

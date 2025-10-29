@@ -169,6 +169,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
@@ -187,8 +188,7 @@ import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 
-const instance = getCurrentInstance();
-const t = (key: string) => instance?.proxy.$t(key) || key;
+const { t } = useTranslation();
 
 const emit = defineEmits(['onSwap'])
 
@@ -390,7 +390,7 @@ const slippageDisplay = computed(() => {
 
 const pairPrice = computed(() => {
   if (poolError.value) {
-    return 'Pool Not Found'
+    return t('swap.poolNotFound')
   }
   const tokenA = selectedTokenA.value?.ticker;
   const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;

@@ -19,7 +19,7 @@
     </div>
 
     <div id="risk-indicator">
-      <img id="risk-level" alt="Risk Level" :src="icon" />
+      <img id="risk-level" :alt="$t('common.riskLevel')" :src="icon" />
 
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
@@ -31,7 +31,7 @@
     <div id="risk-powered">
       <span>{{ $t('security.poweredBy') }}</span>
       <a href="https://cardanoshield.com/" target="_blank">
-        <img alt="Cardano Shield" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
+        <img :alt="$t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>
     </div>
   </div>
@@ -59,16 +59,16 @@ const props = defineProps({
 console.log('TransactionRisk loading prop:', props.loading);
 
 const getLabel = (risk: string | undefined) => {
-  if (!risk) return 'N/A';
+  if (!risk) return t('common.na');
   switch (DappScore[risk as keyof typeof DappScore]) {
     case DappScore.low:
-      return 'LOW';
+      return t('common.low');
     case DappScore.medium:
-      return 'MED';
+      return t('common.medium');
     case DappScore.high:
-      return 'HIGH';
+      return t('common.high');
     default:
-      return 'N/A';
+      return t('common.na');
   }
 };
 

@@ -26,7 +26,7 @@
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-title class="staking-support-title"> {{ $t('staking.considerSupportingUsShort') }} </v-card-title>
                 <v-card-subtitle>
-                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">Stake with GERO</v-btn>
+                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -391,7 +391,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span class="pool-card-label">Pledge</span>
+                          <span class="pool-card-label">{{ $t('staking.pledge') }}</span>
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
@@ -416,7 +416,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span class="pool-card-label">Fees</span>
+                          <span class="pool-card-label">{{ $t('staking.fees') }}</span>
                         </v-col>
                         <v-col cols="7">
                           <span class="pool-card-value" v-if="pool && loggedWallet"
@@ -548,16 +548,16 @@ const sortDesc = ref<boolean>(true);
 
 const headers = computed(() => {
   return [
-    { text: 'Name', sortable: true, align: 'left', value: 'name' },
+    { text: t('common.name'), sortable: true, align: 'left', value: 'name' },
     {
-      text: 'Delegators',
+      text: t('staking.delegators'),
       sortable: true,
       align: 'center d-none d-lg-table-cell',
       value: 'live_delegators',
       width: 122,
     },
-    { text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
-    { text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
+    { text: t('staking.ros') + ' (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
+    { text: t('staking.blocks'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
     {
       text: t('staking.saturation'),
       sortable: true,
@@ -569,8 +569,8 @@ const headers = computed(() => {
         return value < 99;
       },
     },
-    { text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-    { text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
+    { text: t('staking.fees'), sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
+    { text: t('staking.pledge'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
   ];
 });
 
@@ -641,7 +641,7 @@ async function delegate(row: any) {
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     const certificates: Cardano.Certificate[] = [];
@@ -692,9 +692,9 @@ async function delegate(row: any) {
   } catch (error: any) {
     console.error('Error building delegation transaction:', error);
     if (error.message?.includes('UTxO Balance Insufficient')) {
-      snackbar.setError('Insufficient ADA to complete staking transaction');
+      snackbar.setError(t('staking.insufficientAdaForStaking'));
     } else {
-      snackbar.setError('Failed to build delegation transaction');
+      snackbar.setError(t('staking.failedToBuildDelegation'));
     }
   }
 }

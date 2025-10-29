@@ -79,9 +79,9 @@
               </template>
               <template v-slot:[`item.eligibleDate`]="{ item }">
                 <Countdown v-if="item['eligibleDate']" :deadline="new Date(item['eligibleDate'])"></Countdown>
-                <span v-else-if="item.status === 'pending'">Pending</span>
-                <span v-else-if="item.status === 'completed'">Completed</span>
-                <span v-else>N/A</span>
+                <span v-else-if="item.status === 'pending'">{{ $t('common.pending') }}</span>
+                <span v-else-if="item.status === 'completed'">{{ $t('common.completed') }}</span>
+                <span v-else>{{ $t('common.na') }}</span>
               </template>
               <template v-slot:[`item.tokenAmount`]="{ item }">
                 <div>{{ filters.toCurrency(item.tokenAmount, false, 2, "", " "+item.tokenSymbol, true, 0) }}</div>
@@ -112,7 +112,7 @@
                       </div>
                     </v-timeline-item>
                   </v-timeline>
-                  <span v-else>No Data</span>
+                  <span v-else>{{ $t('common.noData') }}</span>
                 </td>
               </template>
             </v-data-table>
@@ -146,6 +146,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
@@ -171,6 +172,7 @@ defineEmits<{
   close: [];
 }>();
 
+const { t } = useTranslation();
 const { bringCache } = toRefs(bringStore);
 const { loggedWallet } = toRefs(walletStore);
 
@@ -179,15 +181,15 @@ const expanded = ref([]);
 const loading = ref(false);
 
 const dealsHeaders = ref([
-  { text: "Retailer Name", align: "start", sortable: true, value: "retailerName"},
-  { text: "Available In", align: "center", sortable: true, value: "eligibleDate"},
-  { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+  { text: t('cashback.retailerName'), align: "start", sortable: true, value: "retailerName"},
+  { text: t('cashback.availableIn'), align: "center", sortable: true, value: "eligibleDate"},
+  { text: t('cashback.claimedAmount'), align: "center", sortable: true, value: "tokenAmount"},
   { text: '', value: 'data-table-expand' },
 ]);
 
 const claimHeaders = ref([
-  { text: "Transaction Id", align: "start", sortable: true, value: "txid"},
-  { text: "Claimed Amount", align: "center", sortable: true, value: "tokenAmount"},
+  { text: t('cashback.transactionId'), align: "start", sortable: true, value: "txid"},
+  { text: t('cashback.claimedAmount'), align: "center", sortable: true, value: "tokenAmount"},
 ]);
 
 const baseAddress = computed(() => {

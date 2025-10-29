@@ -24,9 +24,9 @@
                   </v-icon>
                 </template>
                 <div>
-                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} and/or tokens<br>shown here will be </span>
-                  <span style="color: #FF7777">sent<br>from your wallet</span>
-                  <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
+                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} {{ $t('common.andOrTokensShownHere') }}<br></span>
+                  <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
+                  <span> {{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
                 </div>
               </v-tooltip>
             </TransactionCard>

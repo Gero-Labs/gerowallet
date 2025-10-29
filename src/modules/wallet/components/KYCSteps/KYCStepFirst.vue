@@ -8,23 +8,23 @@
     <div class="upload-section">
       <!-- Show uploaded file if exists -->
       <div v-if="uploadedFileUrl" class="uploaded-file">
-        <img :src="uploadedFileUrl" alt="Uploaded ID" class="uploaded-image" />
+        <img :src="uploadedFileUrl" :alt="$t('card.uploadedId')" class="uploaded-image" />
         <div class="file-info">
           <span class="file-name">{{ uploadedFile?.name }}</span>
-          <button class="change-file-btn" @click="triggerFileUpload">Change File</button>
+          <button class="change-file-btn" @click="triggerFileUpload">{{ $t('navigation.changeFile') }}</button>
         </div>
       </div>
 
       <!-- Upload area if no file -->
       <div v-else class="upload-area" @click="triggerFileUpload" @drop="handleFileDrop" @dragover.prevent>
         <div class="upload-icon">
-          <img src="@/modules/wallet/icons/upload.svg" alt="upload" />
+          <img src="@/modules/wallet/icons/upload.svg" :alt="$t('common.upload')" />
         </div>
         <div class="upload-text">
           <span class="upload-action">{{ $t('navigation.clickToUpload') }}</span>
           <span class="upload-hint">{{ $t('navigation.dragAndDrop') }}</span>
         </div>
-        <p class="upload-info">SVG, PNG, JPG or GIF (max. 800x400px)</p>
+        <p class="upload-info">{{ $t('navigation.fileFormatHint') }}</p>
       </div>
       <input ref="fileInput" type="file" accept="image/*" @change="handleFileSelect" style="display: none" />
     </div>
@@ -32,7 +32,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 
 interface Props {

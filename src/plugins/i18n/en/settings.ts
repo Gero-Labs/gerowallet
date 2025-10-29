@@ -14,6 +14,9 @@ export default {
   // Profile Tab
   walletName: 'Wallet Name',
   editWalletName: 'Edit Wallet Name',
+  walletNamePlaceholder: 'e.g. My New Wallet',
+  walletNameUpdated: 'Wallet name updated',
+  walletNameTaken: 'Wallet name already taken',
   walletProfilePicture: 'Wallet Profile Picture',
   chooseProfilePicture: 'Choose a profile picture for your wallet',
   uploadPicture: 'Upload Picture',
@@ -21,10 +24,11 @@ export default {
   currencyPreference: 'Currency Preference',
   choosePreferredCurrency: 'Choose your preferred currency',
   displayLanguage: 'Display Language',
-  chooseLanguageForGero: 'Choose your language for Gero dashboard',
   region: 'Region',
   chooseRegionAffectsDateTime: 'Choose your region, affects date and time',
+  regionValue: 'English (US)',
   welcomeGuide: 'Welcome Guide',
+  welcomeGuideHelper: 'Display an introductory guide for navigating the wallet',
   displayWelcomeGuide: 'Display an introductory guide for navigating the wallet',
   showGuide: 'Show Guide',
   
@@ -32,8 +36,12 @@ export default {
   whatIsCollateral: 'What is Collateral?',
   collateralDescription: 'Collateral is used to cover network fees for smart contract transactions',
   currentCollateral: 'Current Collateral',
+  utxo: 'UTxO',
   setCollateral: 'Set Collateral',
   removeCollateral: 'Remove Collateral',
+  insufficientAdaForCollateral: 'Insufficient ADA to set collateral. You need at least 5 ADA',
+  failedToBuildCollateral: 'Failed to build collateral transaction',
+  collateralTxSetSuccess: 'Collateral Tx Set Successfully. Tx ID: {txId}',
   
   // Contacts Tab
   addContact: 'Add Contact',
@@ -49,6 +57,16 @@ export default {
   disconnect: 'Disconnect',
   
   // Security Tab
+  extendedPublicKey: 'Extended Public Key',
+  ed25519ExtendedKey: 'Ed25519 extended key for the wallet',
+  recoveryPhrase: 'Recovery Phrase',
+  spendingSecuritySettings: 'Spending Security Settings',
+  modifySpendingSecuritySettings: 'Modify your Spending Security Settings',
+  websiteProtection: 'Website Protection',
+  protectAgainstMalicious: 'Protect against malicious websites and scams',
+  walletBackupRequired: 'Wallet backup required',
+  seedPhraseMasterKey: 'Seed phrase is the master key to your wallet',
+  yourWalletWasBackedUp: 'Your wallet was backed up',
   changePassword: 'Change Password',
   currentPassword: 'Current Password',
   newPassword: 'New Password',
@@ -65,5 +83,25 @@ export default {
   customRPC: 'Custom RPC',
   resetSettings: 'Reset Settings',
   resetDescription: 'Reset all settings to default values',
+  shopEarnPopups: 'Shop & Earn Popups',
+  shopEarnPopupsHelper: 'Enable popup notifications for cashback opportunities while shopping',
+  txAutoSubmit: 'Auto-submit Transactions',
+  txAutoSubmitHelper: 'Automatically submit signed transactions without additional confirmation',
+  promptDisplayMode: 'Prompt Display Mode',
+  promptDisplayModeHelper: 'Choose how transaction prompts are displayed',
+  reSyncWallet: 'Re-sync Wallet',
+  reSyncWalletHelper: 'Force synchronization with the blockchain',
+  reSync: 'Re-sync',
+  dangerZone: 'Danger Zone',
+  deleteWallet: 'Delete Wallet',
+  deleteWalletHelper: 'Permanently delete this wallet from Gero',
+  deleteWalletConfirmTitle: 'Delete Wallet',
+  deleteWalletConfirmMessage: 'Are you sure you want to delete this wallet? This action cannot be undone.',
+  walletDeletedSuccess: "Wallet '{name}' deleted successfully",
+  
+  // Connected Dapps
+  domain: 'Domain',
+  removeDappAccess: 'Remove Dapp Access',
+  removeDappConfirm: 'Are you sure you want to remove Dapp access for {domain}? This action cannot be undone.',
 }
 

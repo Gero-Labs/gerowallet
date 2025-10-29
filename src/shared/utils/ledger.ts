@@ -10,6 +10,7 @@ import {
 import { Key, Keys } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
+import i18n from '@/plugins/i18n';
 import Transport from '@ledgerhq/hw-transport';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { hdPathToArray, toStakeAddress } from '@/chrome/serialization';
@@ -85,7 +86,7 @@ export default {
       ]);
       return version;
     } catch (e) {
-      throw new Error('Failed to Retrieve Cardano App Version. Is the Cardano App Opened on Your Ledger?');
+      throw new Error(i18n.t('wallet.ledgerAppVersionFailed') as string);
     }
   },
   async connectViaUSB(): Promise<Transport> {
@@ -112,9 +113,9 @@ export default {
       });
       this.setActiveTransport(transport, 'WebUSB');
       return transport;
-    } else {
-      throw new Error('WebUSB not supported. Please check USB connection and/or choose another connection method.');
-    }
+      } else {
+        throw new Error(i18n.t('wallet.ledgerWebUSBNotSupported') as string);
+      }
   },
   async connectViaBT(): Promise<Transport> {
     console.log('[LEDGER-BT] Starting Bluetooth connection process...');
@@ -148,9 +149,9 @@ export default {
         console.error('[LEDGER-BT] Bluetooth transport creation failed:', error);
         throw error;
       }
-    } else {
-      throw new Error('Bluetooth not supported by Ledger device or platform. Please check bluetooth connection and/or choose another connection method in wallet settings.');
-    }
+      } else {
+        throw new Error(i18n.t('wallet.ledgerBluetoothNotSupported') as string);
+      }
   },
   setActiveTransport(transport: Transport, type: string) {
     this._transportClose = null;
@@ -206,7 +207,7 @@ export default {
   },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();
-    if (!version) throw new Error('Cardano app is closed');
+    if (!version) throw new Error(i18n.t('wallet.ledgerAppClosed') as string);
   },
   async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean, knownAddresses?: GroupedAddress[]): Promise<{signatureHex: string; signingPublicKeyHex: string; addressFieldHex: string}> {
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
@@ -409,45 +410,45 @@ export default {
       switch (error.code) {
         case 0x5515:
         case 0x6E11:
-          snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+          snackbar.setError(i18n.t('wallet.ledgerDeviceLockedError') as string);
           break;
         case 0x6E01:
-          snackbar.setError('Please open the Cardano app on your Ledger device and try again.');
+          snackbar.setError(i18n.t('wallet.ledgerOpenCardanoApp') as string);
           break;
         case 0x6E00:
-          snackbar.setError('Invalid Ledger state. Please reconnect your Ledger device.');
+          snackbar.setError(i18n.t('wallet.ledgerInvalidState') as string);
           break;
         case 0x6E04:
-          snackbar.setError('The Cardano app version on your Ledger is not supported. Please update the Cardano app.');
+          snackbar.setError(i18n.t('wallet.ledgerAppVersionNotSupported') as string);
           break;
         case 0x6E10:
-          snackbar.setError('Ledger device is in an invalid state. Please restart the Cardano app.');
+          snackbar.setError(i18n.t('wallet.ledgerInvalidStateRestart') as string);
           break;
         case 0x6982:
-          snackbar.setError('Ledger device: Security status not satisfied. Please check your device.');
+          snackbar.setError(i18n.t('wallet.ledgerSecurityNotSatisfied') as string);
           break;
         case 0x6985:
-          snackbar.setError('Transaction rejected on Ledger device.');
+          snackbar.setError(i18n.t('wallet.ledgerTransactionRejected') as string);
           break;
         case 0x6A80:
-          snackbar.setError('Invalid data sent to Ledger device. Please try again.');
+          snackbar.setError(i18n.t('wallet.ledgerInvalidData') as string);
           break;
         default:
           // Keep error details for debugging while providing user-friendly message
           const errorCode = error.code ? ` (Error code: 0x${error.code.toString(16).toUpperCase()})` : '';
-          snackbar.setError(`Ledger device error${errorCode}. Please ensure the Cardano app is open and try again.`);
+          snackbar.setError(`${i18n.t('common.error')}${errorCode}. ${i18n.t('wallet.ledgerConnectionError')}`);
       }
     } else if (e?.message?.includes('NetworkError') || e?.message?.includes('Unable to reset the device')) {
-      snackbar.setError('Connection error with Ledger device. Please ensure the Cardano app is open and try again.');
+      snackbar.setError(i18n.t('wallet.ledgerConnectionError') as string);
     } else if (e?.message?.includes('No device selected') || e?.message?.includes('device not found')) {
-      snackbar.setError('No Ledger device found. Please connect your Ledger device and try again.');
+      snackbar.setError(i18n.t('wallet.ledgerNoDevice') as string);
     } else if (e?.message?.includes('Failed to Retrieve Cardano App Version')) {
-      snackbar.setError('Cannot connect to Cardano app. Please ensure the Cardano app is open on your Ledger device.');
+      snackbar.setError(i18n.t('wallet.ledgerCannotConnectApp') as string);
     } else {
       console.error('Error signing with Ledger:', e);
       // Keep error details for debugging
-      const errorMessage = e instanceof Error ? e.message : 'Ledger signing failed';
-      snackbar.setError(`${errorMessage}. Please try again.`);
+      const errorMessage = e instanceof Error ? e.message : i18n.t('wallet.ledgerSigningFailed') as string;
+      snackbar.setError(`${errorMessage}. ${i18n.t('common.pleaseTryAgain')}`);
     }
   }
 };

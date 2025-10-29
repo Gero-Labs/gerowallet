@@ -116,7 +116,7 @@
         <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet?.type === WalletType.Normal">
           <template v-slot:activator="{ }">
             <v-text-field flat style="width: 295px" block dense v-model="spendingPassword" outlined
-              label="Spending Password" :type="show1 ? 'text' : 'password'" :rules="[rules.required()]" hide-details
+              :label="$t('wallet.spendingPassword')" :type="show1 ? 'text' : 'password'" :rules="[rules.required()]" hide-details
               class="mb-2" required :disabled="txSubmitLoading" @keydown.enter.prevent="nextStep">
               <template v-slot:append>
                 <v-icon @click="show1 = !show1" tabindex="-1">
@@ -129,7 +129,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="$t('multisig.usb')" icon-left="mdi-usb" :text-right="$t('multisig.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -190,15 +190,15 @@ const addresses = ref(new Set()); // Placeholder
 
 
 const steps: Step[] = [
-  { name: 'recipientDetails', label: 'Recipient Details' },
-  { name: 'assetsToSend', label: 'Assets to Send' },
-  { name: 'summary', label: 'Summary' }
+  { name: 'recipientDetails', label: t('multisig.recipientDetails') },
+  { name: 'assetsToSend', label: t('multisig.assetsToSend') },
+  { name: 'summary', label: t('multisig.summary') }
 ];
 
 const currentStep = ref(1);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!'
+  text: t('wallet.wrongSpendingPassword')
 });
 const txBody = ref<TransactionBody | undefined>();
 const txData = ref<Transaction | undefined>();
@@ -322,7 +322,7 @@ const onDecode = async (result: string) => {
   console.log(signedTx.to_json());
   const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId);
-  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+  snackbar.fireSuccess(t('multisig.txSubmittedSuccess', { txId }));
   emit('close');
 };
 
@@ -366,7 +366,7 @@ const signAndSubmitTx = async () => {
       console.log(signedTx.to_json());
       const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId);
-      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+      snackbar.fireSuccess(t('multisig.txSubmittedSuccess', { txId }));
       emit('close');
     } catch (e) {
       snackbar.setError(e as string);

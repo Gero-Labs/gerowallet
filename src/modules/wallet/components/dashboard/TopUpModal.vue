@@ -35,7 +35,7 @@
               colored-border
               class="mx-6 mb-0"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ t('card.transactionSigned') }}</span>
             </v-alert>
 
             <!-- Show info alert when Ledger is signing (buttons disabled) -->
@@ -52,7 +52,7 @@
               colored-border
               class="mx-6 mb-0"
             >
-              <span>Please review and approve the transaction on your Ledger device to continue.</span>
+              <span>{{ t('card.pleaseReviewLedger') }}</span>
             </v-alert>
 
             <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
@@ -85,9 +85,9 @@
               class="ledger-section"
             >
               <ToggleSwitch
-                text-left="USB"
+                :text-left="$t('wallet.usb')"
                 icon-left="mdi-usb"
-                text-right="Bluetooth"
+                :text-right="$t('wallet.bluetooth')"
                 icon-right="mdi-bluetooth"
                 v-model="isBT"
                 :disabled="txSubmitLoading"
@@ -98,7 +98,7 @@
             <div class="modal-actions">
               <SecondaryButton :text="$t('wallet.cancel')" @click="closeModal()" :disabled="txSubmitLoading" />
               <GradientButton
-                :text="currentStep === 1 ? 'Continue' : isSubmit ? 'Submit Transaction' : 'Sign & Top Up'"
+                :text="currentStep === 1 ? t('card.continueButton') : isSubmit ? t('card.submitTransaction') : t('card.signAndTopUp')"
                 @click="handleTopUp"
                 :disabled="!canTopUp || txSubmitLoading"
                 :loading="txSubmitLoading"
@@ -108,7 +108,7 @@
 
           <!-- Success Actions -->
           <div v-if="currentStep === 4" class="modal-actions">
-            <SecondaryButton :text="$t('wallet.backToYourAccount')" @click="handleBackToAccount" />
+            <SecondaryButton :text="t('card.backToYourAccount')" @click="handleBackToAccount" />
           </div>
         </div>
       </v-card>
@@ -318,7 +318,7 @@ const signLedgerTx = async (): Promise<boolean> => {
     console.log('🔏 Signing transaction with Ledger...');
 
     if (!tx.value) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
 
     // Serialize transaction
@@ -336,7 +336,7 @@ const signLedgerTx = async (): Promise<boolean> => {
 
     // Validate signatures were returned
     if (!signatures || (signatures instanceof Map && signatures.size === 0)) {
-      throw new Error('No signatures returned from Ledger device. Please try again.');
+      throw new Error(t('common.noSignaturesFromLedger'));
     }
 
     // Create witness set from signatures
@@ -346,7 +346,7 @@ const signLedgerTx = async (): Promise<boolean> => {
 
     const witnessCbor = transactionWitnessSet.toCbor();
     if (!witnessCbor || witnessCbor.length === 0) {
-      throw new Error('Failed to create witness set from Ledger signatures.');
+      throw new Error(t('common.failedToCreateWitnessSet'));
     }
 
     console.log('✅ Ledger signing successful:', witnessCbor);
@@ -415,7 +415,7 @@ const handleTopUp = async () => {
           txCbor: !!txCbor.value,
           txWitnesses: !!txWitnesses.value,
         });
-        snackbar.setError('Transaction data is missing. Please sign the transaction again.');
+        snackbar.setError(t('wallet.transactionDataMissing'));
         isSubmit.value = false;
         return;
       }

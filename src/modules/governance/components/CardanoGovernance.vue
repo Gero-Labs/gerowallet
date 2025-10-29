@@ -58,9 +58,9 @@
                       <v-img :src="currentDRep['metadata'].meta_json.body.image.contentUrl" contain></v-img>
                     </v-list-item-avatar>
                     <v-list-item-content v-if="currentDrepTxIsPending">
-                      <div class="white--text font-weight-semibold text-subtitle-2">Current Delegation</div>
+                      <div class="white--text font-weight-semibold text-subtitle-2">{{ $t('governance.currentDelegation') }}</div>
                       <v-list-item-title class="gradient-text text-h6 font-weight-semibold">
-                        Delegating...
+                        {{ $t('governance.delegating') }}
                       </v-list-item-title>
                     </v-list-item-content>
                     <v-list-item-avatar v-if="currentDrepTxIsPending" size="80" rounded>
@@ -160,7 +160,7 @@
                     </v-tooltip>
                   </div>
                   <v-card-actions class="justify-center">
-                    My DRep Id: {{ truncate(drepId) }}<CopyButton class="ml-1" small :value="drepId" v-if="drepId" />
+                    {{ $t('governance.myDRepId') }}: {{ truncate(drepId) }}<CopyButton class="ml-1" small :value="drepId" v-if="drepId" />
                   </v-card-actions>
                 </v-card>
               </v-col>
@@ -350,21 +350,21 @@ const sortBy = ref('voting_power');
 const sortDesc = ref(true);
 const search = ref('');
 const drepsHeaders = [
-  { text: 'ID', sortable: false, align: 'transparent', value: 'id' },
-  { text: 'Name', sortable: true, align: 'left', value: 'name' },
-  { text: 'Delegators', sortable: true, align: 'left', value: 'delegators', width: '120' },
-  { text: 'Votes', sortable: true, align: 'left', value: 'votes', width: '85' },
-  { text: 'Voting Power', sortable: true, align: 'left', value: 'voting_power', width: '131' },
+  { text: t('common.id'), sortable: false, align: 'transparent', value: 'id' },
+  { text: t('common.name'), sortable: true, align: 'left', value: 'name' },
+  { text: t('governance.delegators'), sortable: true, align: 'left', value: 'delegators', width: '120' },
+  { text: t('governance.votes'), sortable: true, align: 'left', value: 'votes', width: '85' },
+  { text: t('governance.votingPower'), sortable: true, align: 'left', value: 'voting_power', width: '131' },
 ];
 
 // Computed properties
 const delegatingTo = computed(() => {
-  let res = 'Undelegated';
+  let res = String(t('governance.undelegated'));
   if (currentDRep.value) {
     if (currentDRep.value.drep_id == 'drep_always_no_confidence') {
-      res = 'No Confidence';
+      res = String(t('governance.noConfidence'));
     } else if (currentDRep.value.drep_id == 'drep_always_abstain') {
-      res = 'Abstain';
+      res = String(t('governance.abstain'));
     } else {
       const drep = currentDRep.value;
       if (drep && drep['metadata']?.meta_json?.body?.givenName) {
@@ -470,7 +470,7 @@ const delegate = async () => {
 
   try {
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     const certificates: Cardano.Certificate[] = [];
@@ -483,11 +483,11 @@ const delegate = async () => {
 
     // Create DRep ID based on selection
     let dRep: Cardano.DelegateRepresentative;
-    if (delegationModel.value === 'Abstain') {
+    if (delegationModel.value === String(t('governance.abstain'))) {
       dRep = {
         __typename: 'AlwaysAbstain',
       } as Cardano.AlwaysAbstain;
-    } else if (delegationModel.value === 'No Confidence') {
+    } else if (delegationModel.value === String(t('governance.noConfidence'))) {
       dRep = {
         __typename: 'AlwaysNoConfidence',
       } as Cardano.AlwaysNoConfidence;
@@ -527,10 +527,10 @@ const delegate = async () => {
     certificates.push(certificate);
 
     // Set the selected DRep info first
-    if (delegationModel.value === 'Abstain') {
+    if (delegationModel.value === String(t('governance.abstain'))) {
       selectedDRep.value = {
         id: '',
-        name: 'Abstain',
+        name: String(t('governance.abstain')),
         image: '',
         delegators: 0,
         votes: 0,
@@ -561,7 +561,7 @@ const delegate = async () => {
     isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building vote delegation transaction:', error);
-    snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    snackbar.setError(`${t('errors.buildTransactionFailed')}: ${error instanceof Error ? error.message : t('errors.unknownError')}`);
   }
 
   delegateLoading.value = false;
@@ -622,7 +622,7 @@ const drepDelegate = async (row: any) => {
     isDelegateDialogOpen.value = true;
   } catch (error) {
     console.error('Error building DRep delegation transaction:', error);
-    snackbar.setError(`Error building transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    snackbar.setError(`${t('errors.buildTransactionFailed')}: ${error instanceof Error ? error.message : t('errors.unknownError')}`);
   }
 };
 
@@ -764,7 +764,7 @@ onUnmounted(() => {
   }
 
   .table-container {
-    max-height: calc(100vh - 150px); /* Меньший отступ для мобильных */
+    max-height: calc(100vh - 150px);
   }
 }
 </style>

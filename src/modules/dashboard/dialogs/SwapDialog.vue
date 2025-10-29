@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Swap"
-    subtitle="Effortlessly exchange tokens directly from your wallet."
+    :title="t('swap.title')"
+    :subtitle="t('swap.effortlesslyExchange')"
     :min-height="300"
     :width="550"
     :persistent="false"

@@ -74,10 +74,10 @@
                   </v-list-item-icon>
                   <v-list-item-content>
                     <v-list-item-title>
-                      {{ portfolioMode === 'full' ? 'Full Portfolio' : 'ADA Only' }}
+                      {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
                     </v-list-item-title>
                     <v-list-item-subtitle style="font-size: 10px;">
-                      {{ portfolioMode === 'full' ? 'Switch to ADA balance' : 'Switch to full portfolio' }}
+                      {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
@@ -91,7 +91,7 @@
                   <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
                 </v-list-item-icon>
                 <v-list-item-content>
-                  <v-list-item-title>Refresh Data</v-list-item-title>
+                  <v-list-item-title>{{ $t('dashboard.refreshData') }}</v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
             </v-list>
@@ -106,7 +106,7 @@
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
-        <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
+        <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
       </v-avatar>
       <span>{{ $t('dashboard.noDataInWallet') }}</span>
     </v-card-text>
@@ -129,8 +129,6 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 
 
 const { t } = useTranslation();
-
-const instance = getCurrentInstance();
 const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
@@ -150,11 +148,11 @@ interface CurrencyConfig {
 const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   [CurrencyType.ADA]: {
     symbol: '', // Will be defined dynamically
-    displayName: instance?.proxy.$t('dashboard.nativeCurrency') || 'Native Currency',
+    displayName: t('dashboard.nativeCurrency'),
   },
   [CurrencyType.USD]: {
     symbol: '$',
-    displayName: instance?.proxy.$t('dashboard.usDollar') || 'US Dollar',
+    displayName: t('dashboard.usDollar'),
   },
   [CurrencyType.EUR]: {
     symbol: '€',

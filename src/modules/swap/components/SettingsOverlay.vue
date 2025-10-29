@@ -123,11 +123,11 @@
                                      style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                                      @click="automaticSlippageTooltipEnabled = true"
                                      v-click-outside="disableAutomaticSlippageTooltip">
-                                Learn more
+                                {{ $t('common.learnMore') }}
                               </v-btn>
                             </template>
                             <div style="width: 190px; word-break: break-word; font-size: 10px;">
-                              The slippage tolerance is automatically adjusted based on the size of the swap to always account for the price impact plus a 1% buffer.
+                              {{ $t('swap.slippageToleranceDescription') }}
                             </div>
                           </v-tooltip>
                         </span>

@@ -15,6 +15,7 @@ export default {
   poolName: 'Pool Name',
   poolTicker: 'Pool Ticker',
   poolId: 'Pool ID',
+  poolLinks: 'Pool Links',
   delegators: 'Delegators',
   blocks: 'Blocks',
   saturation: 'Saturation',
@@ -23,6 +24,14 @@ export default {
   hideSaturated: 'Hide Saturated',
   searchByPoolNameOrTicker: 'Search by pool name or ticker',
   searchPoolNameTicker: 'Search by pool name or ticker',
+  website: 'Website',
+  facebook: 'Facebook',
+  twitter: 'Twitter',
+  youtube: 'YouTube',
+  discord: 'Discord',
+  telegram: 'Telegram',
+  noRewardsYet: 'No Rewards Yet',
+  noRewards: 'No Rewards',
   
   // Delegation
   delegate: 'Delegate',
@@ -42,6 +51,7 @@ export default {
   // Rewards
   rewards: 'Rewards',
   rewardsAmount: 'Rewards Amount',
+  rewardsHistory: 'Rewards History',
   claimRewards: 'Claim Rewards',
   withdrawal: 'Withdrawal',
   withdraw: 'Withdraw',
@@ -53,11 +63,23 @@ export default {
   stakingAllowsPassiveIncome: 'Staking allows you to earn passive income on your holdings',
   rewardsDistributedEveryEpoch: 'Rewards are distributed every epoch (5 days)',
   rewardsAutoRestaked: 'Your rewards are automatically re-staked to compound earnings',
+  epoch: 'Epoch',
+  reward: 'Reward',
+  change: 'Change',
+
   
   // Transaction Details
   txFee: 'Tx Fee',
+  txFeeTooltip: 'Network fee required to process this delegation transaction on the Cardano blockchain.',
   total: 'Total',
   spendingPassword: 'Spending Password',
+  transactionSigned: 'Transaction signed! Click submit to broadcast.',
+  submitTransaction: 'Submit Transaction',
+  signAndDelegate: 'Sign & Delegate',
+  txSubmittedSuccess: 'Tx Submitted Successfully. Tx ID: {txId}',
+  delegationTxSubmitted: 'Delegation Tx Submitted Successfully. Tx ID: {txId}',
+  unstakeTxSubmitted: 'Unstake Tx Submitted Successfully. Tx ID: {txId}',
+  withdrawalSubmitted: 'Withdrawal Submitted Successfully. Tx ID: {txId}',
   
   // Hardware Wallet
   usb: 'USB',
@@ -76,5 +98,40 @@ export default {
   retry: 'Retry',
   pro: 'PRO',
   back: 'Back',
+  drepDelegationRequired: 'DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.',
+  balance: 'Balance',
+  owned: 'Owned',
+
+  // Pool Details
+  lifetimeBlocks: 'Lifetime Blocks',
+  liveDelegators: 'Live Delegators',
+  liveStake: 'Live Stake',
+  ros: 'ROS',
+  liveSaturation: 'Live Saturation',
+  delegationAmt: 'Delegation Amt.',
+  delegationAmtTooltip: 'Total amount of ADA from your wallet that will be delegated to the stake pool. This includes all available balance.',
+  epochYield: 'Epoch Yield',
+  epochYieldTooltip: 'Estimated rewards you\'ll earn per epoch (~5 days) based on the pool\'s ROS (Return on Stake) rate and your delegation amount.',
+  delegateYourStake: 'Delegate Your Stake',
+  delegateSubtitle: 'Earn rewards by delegating your {currency}',
+  youCanOnlyDelegateToOne: 'You can only delegate to one pool at a time',
+  canSwitchPools: 'You can switch pools anytime without withdrawing',
+  canCancelDelegation: 'You can cancel delegation anytime',
+  signAndUnstake: 'Sign & Unstake',
+
+  drepDelegationRequiredTitle: 'DRep Delegation Required',
+  drepDelegationRequiredDesc: 'On Cardano, you must be delegated to a DRep (Delegated Representative) to withdraw staking rewards. Please visit the Governance tab to delegate to a DRep before withdrawing your rewards.',
+  goToGovernanceDelegate: 'Go to Governance to Delegate',
+  fees: 'Fees',
+  depositFee: 'Deposit Fee',
+  depositFeeDesc1: 'One-time deposit required to register',
+  depositFeeDesc2: 'your stake credential on the Cardano network.',
+  depositFeeDesc3: 'This deposit is refundable when you deregister.',
+  
+  // Keystone Instructions
+  unlockYourKeystone: 'Unlock your Keystone device.',
+  selectOptionToScan: 'Select the option to scan a QR code.',
+  useKeystoneToScan: 'Use your Keystone device to scan the QR code.',
+  approveOnKeystone: 'Approve on the Keystone device and then click \'Next\' to scan it with Gero.',
 }
 

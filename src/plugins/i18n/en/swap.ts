@@ -1,6 +1,9 @@
 export default {
   // Main Swap
   swap: 'Swap',
+  title: 'Swap',
+  limit: 'Limit',
+  poolNotFound: 'Pool Not Found',
   swapTokens: 'Swap Tokens',
   swapNow: 'Swap Now',
   pendingOrders: 'Pending Orders',
@@ -21,7 +24,6 @@ export default {
   
   // Pool Info
   pool: 'Pool',
-  poolNotFound: 'Pool Not Found',
   directSwap: 'Direct Swap',
   split: 'Split',
   
@@ -47,11 +49,18 @@ export default {
   minimumReceived: 'Minimum Received',
   slippage: 'Slippage',
   fee: 'Fee',
+  slippageToleranceDescription: 'The slippage tolerance is automatically adjusted based on the size of the swap to always account for the price impact plus a 1% buffer.',
   
   // Errors
   tokensNotInitialized: 'Tokens not properly initialized',
   
   // Misc
   cardano: 'Cardano',
+  select: 'Select',
+  selling: 'Selling',
+  buying: 'Buying',
+  balance: 'Balance',
+  owned: 'Owned',
+  effortlesslyExchange: 'Effortlessly exchange tokens directly from your wallet.',
 }
 

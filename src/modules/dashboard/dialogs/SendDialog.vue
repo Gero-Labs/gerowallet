@@ -147,7 +147,7 @@
               dense
               v-model="spendingPassword"
               outlined
-              label="Spending Password"
+              :label="$t('wallet.spendingPassword')"
               :type="show1 ? 'text' : 'password'"
               :rules="[rules.required()]"
               hide-details
@@ -167,7 +167,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -228,8 +228,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
-const instance = getCurrentInstance();
-const t = (key: string) => instance?.proxy.$t(key) || key;
+const { t } = useTranslation();
 
 const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
@@ -452,7 +451,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -476,11 +475,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     txSubmitLoading.value = false;
     isSubmit.value = false;
@@ -494,7 +493,7 @@ const signLedgerTx = async () => {
     console.log('Using Bluetooth connection:', isBT.value);
 
     if (!tx.value) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(

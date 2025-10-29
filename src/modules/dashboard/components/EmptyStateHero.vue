@@ -110,11 +110,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card-plus
                   </v-icon>
-                  <h3 class="feature-title">Buy {{ currencySymbol }}</h3>
-                  <p class="feature-description">Purchase with credit card</p>
+                  <h3 class="feature-title">{{ t('dashboard.buy') }} {{ currencySymbol }}</h3>
+                  <p class="feature-description">{{ t('dashboard.purchaseWithCreditCard') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Instant
+                  {{ t('dashboard.instant') }}
                 </v-chip>
               </div>
             </div>
@@ -139,8 +139,8 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-qrcode
                   </v-icon>
-                  <h3 class="feature-title">Receive</h3>
-                  <p class="feature-description">Share your address</p>
+                  <h3 class="feature-title">{{ t('dashboard.receiveAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.shareYourAddress') }}</p>
                 </div>
                 <v-chip
                   v-if="walletAddress"
@@ -150,7 +150,7 @@
                   @click.stop="copyToClipboard"
                 >
                   <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                  {{ copiedFeedback ? 'Copied!' : 'Copy Address' }}
+                  {{ copiedFeedback ? t('dashboard.copied') : t('dashboard.copyAddress') }}
                 </v-chip>
               </div>
             </div>
@@ -204,11 +204,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card
                   </v-icon>
-                  <h3 class="feature-title">Gero Card</h3>
-                  <p class="feature-description">Top up with ADA</p>
+                  <h3 class="feature-title">{{ t('dashboard.geroCard') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Coming Soon
+                  {{ t('dashboard.comingSoon') }}
                 </v-chip>
               </div>
             </div>
@@ -233,11 +233,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-clock
                   </v-icon>
-                  <h3 class="feature-title">Staking Rewards</h3>
-                  <p class="feature-description">Earn rewards by staking</p>
+                  <h3 class="feature-title">{{ t('dashboard.stakingRewards') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnRewardsByStakingShort') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Explore Staking
+                  {{ t('dashboard.exploreStaking') }}
                 </v-chip>
               </div>
             </div>
@@ -262,11 +262,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-refund
                   </v-icon>
-                  <h3 class="feature-title">Cashback</h3>
-                  <p class="feature-description">Earn cashback online</p>
+                  <h3 class="feature-title">{{ t('dashboard.cashbackAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnCashbackOnline') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Browse Deals
+                  {{ t('dashboard.browseDeals') }}
                 </v-chip>
               </div>
             </div>
@@ -355,9 +355,9 @@ const featureBackgroundImage = computed(() => {
 
 const subtitle = computed(() => {
   if (props.isNewUser) {
-    return `Let's get you started with some ${currencySymbol.value} to explore the ${blockchain.value} ecosystem`;
+    return t('dashboard.letsGetYouStarted', { currency: currencySymbol.value, blockchain: blockchain.value });
   }
-  return `Add ${currencySymbol.value} to start using your wallet and explore all features`;
+  return t('dashboard.addCurrencyToStart', { currency: currencySymbol.value });
 });
 
 const walletAddress = computed(() => loggedWallet.value?.baseAddress || '');

@@ -79,7 +79,7 @@
               dense
               v-model="newWallet.password"
               filled
-              label="Spending Password"
+              :label="$t('welcome.spendingPassword')"
               :type="show1 ? 'text' : 'password'"
               :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
             >
@@ -94,9 +94,9 @@
               dense
               v-model="newWallet.confirmPassword"
               filled
-              label="Confirm Password"
+              :label="$t('welcome.confirmPassword')"
               :type="show2 ? 'text' : 'password'"
-              :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
+              :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || $t('welcome.passwordsMustMatch')]"
             >
               <template v-slot:append>
                 <v-icon @click="show2 = !show2" tabindex="-1">
@@ -109,7 +109,7 @@
               class="mt-0 text-left"
               hide-details
               v-model="newWallet.recoverPasswordChecked"
-              label="I understand that GeroWallet cannot recover this password for me."
+              :label="$t('welcome.understandPasswordRecovery')"
               :rules="[(newWallet.recoverPasswordChecked)]"
             ></v-checkbox>
             <v-checkbox

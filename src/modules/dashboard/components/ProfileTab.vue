@@ -8,7 +8,7 @@
         </v-col>
         <v-col cols="5" style="align-content: center">
           <EditableTextField
-            placeholder="e.g. My New Wallet"
+            :placeholder="$t('settings.walletNamePlaceholder')"
             :rules="[
               rules.required(),
               rules.minCharacters(3),
@@ -112,7 +112,7 @@
           <span class="helper">{{ $t('settings.regionHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
-          <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
+          <v-text-field outlined disabled dense :value="$t('settings.regionValue')" hide-details></v-text-field>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-2">
@@ -199,7 +199,7 @@ const avatar = computed(() => {
 
 // Validation functions
 const invalidWalletNames = () => {
-  return (value: string) => !otherWalletNames.value.includes(value) || 'Wallet name already taken.';
+  return (value: string) => !otherWalletNames.value.includes(value) || t('settings.walletNameTaken');
 };
 
 const existedWalletName = () => {
@@ -237,15 +237,16 @@ const onFileChange = async (event: Event) => {
 };
 
 // Watchers
-watch(loc, val => {
+watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      WalletStore.setLocale(iso);
+      await WalletStore.setLocale(iso);
       vmProxy.$i18n.locale = iso;
+      await vmProxy.$nextTick();
     }
   }
-});
+}, { immediate: false });
 
 // Lifecycle
 onMounted(() => {

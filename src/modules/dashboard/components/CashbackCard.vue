@@ -46,7 +46,7 @@
               </div>
               <div class="deal-info">
                 <div class="deal-name">{{ deal.name }}</div>
-                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% cashback` }}</div>
+                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% ${$t('cashback.cashback')}` }}</div>
               </div>
             </div>
           </div>
@@ -63,7 +63,7 @@
               </div>
               <div class="deal-info">
                 <div class="deal-name">{{ deal.name }}</div>
-                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% cashback` }}</div>
+                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% ${$t('cashback.cashback')}` }}</div>
               </div>
             </div>
           </div>

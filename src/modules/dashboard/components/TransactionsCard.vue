@@ -44,7 +44,7 @@
                     <template v-slot:activator="{ on, attrs }">
                       <span v-bind="attrs" v-on="on" class="pending-indicator"></span>
                     </template>
-                    <span>Transaction pending confirmation</span>
+                    <span>{{ $t('dashboard.transactionPendingConfirmation') }}</span>
                   </v-tooltip>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
@@ -96,7 +96,7 @@
                     x-small
                     color="#E77DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >Cashback</v-chip
+                    >{{ $t('cashback.cashback') }}</v-chip
                   >
                   <v-chip
                     v-if="getContactName(item)"
@@ -114,7 +114,7 @@
                     x-small
                     color="#9C27B0"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >Internal</v-chip
+                    >{{ $t('common.internal') }}</v-chip
                   >
                   <v-chip
                     v-if="isStrike(item)"
@@ -123,7 +123,7 @@
                     x-small
                     color="#26FAB0"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >Strike</v-chip
+                    >{{ $t('transactions.strike') }}</v-chip
                   >
                   <v-chip
                     v-if="isDexHunter(item)"
@@ -132,7 +132,7 @@
                     x-small
                     color="#007DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >DexHunter</v-chip
+                    >{{ $t('transactions.dexHunter') }}</v-chip
                   >
                   <v-chip
                     v-if="isMinswap(item)"
@@ -159,7 +159,7 @@
                     x-small
                     color="#e5e7eb"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >WingRiders</v-chip
+                    >{{ $t('transactions.wingRiders') }}</v-chip
                   >
                   <v-chip
                     v-if="isMuesliSwap(item)"
@@ -258,6 +258,7 @@
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
@@ -274,13 +275,7 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Get instance for i18n
-const instance = getCurrentInstance();
-const t = (key: string, params?: any) => {
-  if (params) {
-    return instance?.proxy.$t(key, params) || key;
-  }
-  return instance?.proxy.$t(key) || key;
-};
+const { t } = useTranslation();
 const props = defineProps({
   selectedTransaction: {
     type: Object,
@@ -434,20 +429,20 @@ const getCertificateBaseStatus = (certificateType: string): string => {
   switch (certificateType) {
     case Cardano.CertificateType.StakeRegistrationDelegation:
     case Cardano.CertificateType.StakeDelegation:
-      return (instance?.proxy.$t('transactions.delegatingToPool') as string) || 'Delegating to Pool';
+      return t('transactions.delegatingToPool');
     case Cardano.CertificateType.Unregistration:
     case Cardano.CertificateType.StakeDeregistration:
-      return (instance?.proxy.$t('transactions.stakeDeregistration') as string) || 'Stake Deregistration';
+      return t('transactions.stakeDeregistration');
     case Cardano.CertificateType.RegisterDelegateRepresentative:
-      return (instance?.proxy.$t('dashboard.dRepRegistration') as string) || 'DRep Registration';
+      return t('dashboard.dRepRegistration');
     case Cardano.CertificateType.VoteDelegation:
-      return 'Vote Delegation';
+      return t('transactions.voteDelegation');
     case Cardano.CertificateType.VoteRegistrationDelegation:
-      return 'Vote Registration & Delegation';
+      return t('transactions.voteRegistrationDelegation');
     case Cardano.CertificateType.StakeVoteRegistrationDelegation:
-      return 'Stake & Vote Registration';
+      return t('transactions.stakeVoteRegistration');
     case Cardano.CertificateType.UnregisterDelegateRepresentative:
-      return (instance?.proxy.$t('dashboard.dRepDeregistration') as string) || 'DRep Deregistration';
+      return t('dashboard.dRepDeregistration');
     default:
       return '';
   }
@@ -465,13 +460,13 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
   ) {
     const pool = await getPoolByIdFromApi(certificate.poolId);
     if (pool && pool.ticker) {
-      return (instance?.proxy.$t('transactions.delegatingTo', { pool: pool.ticker }) as string) || 'Delegating to {pool}';
+      return t('transactions.delegatingTo', { pool: pool.ticker });
     }
   } else if (
     certificate.__typename === Cardano.CertificateType.Unregistration ||
     certificate.__typename === Cardano.CertificateType.StakeDeregistration
   ) {
-    return (instance?.proxy.$t('transactions.stakeDeregistration') as string) || 'Stake Deregistration';
+    return t('transactions.stakeDeregistration');
   }
 
   return baseStatus;
@@ -491,21 +486,21 @@ const addFundTransferStatus = (item: any, statuses: string[]): void => {
 
   // Build smart status message
   if (hasReceivedFunds && hasReceivedTokens) {
-    statuses.push((instance?.proxy.$t('transactions.receivedFundsAndTokens') as string) || 'Received Funds & Tokens');
+    statuses.push(t('transactions.receivedFundsAndTokens'));
   } else if (hasSentFunds && hasSentTokens) {
-    statuses.push((instance?.proxy.$t('transactions.sentFundsAndTokens') as string) || 'Sent Funds & Tokens');
+    statuses.push(t('transactions.sentFundsAndTokens'));
   } else if (hasReceivedFunds && hasSentTokens) {
-    statuses.push((instance?.proxy.$t('transactions.receivedFundsAndSentTokens') as string) || 'Received Funds & Sent Tokens');
+    statuses.push(t('transactions.receivedFundsAndSentTokens'));
   } else if (hasSentFunds && hasReceivedTokens) {
-    statuses.push((instance?.proxy.$t('transactions.sentFundsAndReceivedTokens') as string) || 'Sent Funds & Received Tokens');
+    statuses.push(t('transactions.sentFundsAndReceivedTokens'));
   } else if (hasReceivedFunds) {
-    statuses.push((instance?.proxy.$t('transactions.receivedFunds') as string) || 'Received Funds');
+    statuses.push(t('transactions.receivedFunds'));
   } else if (hasSentFunds) {
-    statuses.push((instance?.proxy.$t('transactions.sentFunds') as string) || 'Sent Funds'    );
+    statuses.push(t('transactions.sentFunds'));
   } else if (hasReceivedTokens) {
-    statuses.push((instance?.proxy.$t('transactions.receivedTokens') as string) || 'Received Tokens');
+    statuses.push(t('transactions.receivedTokens'));
   } else if (hasSentTokens) {
-    statuses.push((instance?.proxy.$t('transactions.sentTokens') as string) || 'Sent Tokens');
+    statuses.push(t('transactions.sentTokens'));
   }
 };
 

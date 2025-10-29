@@ -5,8 +5,8 @@
       <div class="flex-grow-1 d-flex flex-column">
         <v-card-title class="pb-2 pt-0 px-3" style="font-size: 14px">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
-            <v-btn value="swap" x-small rounded> SWAP </v-btn>
-            <v-btn value="limit" x-small rounded disabled> LIMIT </v-btn>
+            <v-btn value="swap" x-small rounded> {{ $t('swap.swap').toUpperCase() }} </v-btn>
+            <v-btn value="limit" x-small rounded disabled> {{ $t('swap.limit').toUpperCase() }} </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
           <v-btn icon x-small @click="refreshPrices">
@@ -80,7 +80,7 @@
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" outlined x-small color="primary" class="ml-1 px-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" outlined x-small color="primary" class="ml-1 px-1">{{ $t('common.owned') }}</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
@@ -125,8 +125,8 @@
 
           <!-- Buying Section -->
           <div class="d-flex align-center justify-space-between mb-2">
-            <span style="color: #75e0a7; font-size: 12px; font-weight: 200">Buying</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
+            <span style="color: #75e0a7; font-size: 12px; font-weight: 200">{{ $t('swap.buying') }}</span>
+            <span class="caption grey--text">{{ $t('swap.balance') }}: {{ getTokenBalance(selectedTokenB) }}</span>
           </div>
           <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1f242f">
             <v-card-text class="py-2 px-3">
@@ -186,7 +186,7 @@
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" x-small color="primary" outlined class="ml-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" x-small color="primary" outlined class="ml-1">{{ $t('common.owned') }}</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
@@ -266,7 +266,7 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 const router = instance?.proxy.$router;
-const t = (key: string) => instance?.proxy.$t(key) || key;
+const { t } = useTranslation();
 
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);

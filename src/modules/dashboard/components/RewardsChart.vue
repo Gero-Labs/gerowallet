@@ -39,7 +39,7 @@ const chartOptions = computed(() => {
     endOnTick: false,
     legend:{ enabled:false },
     title: {
-      text: 'Rewards History',
+      text: t('staking.rewardsHistory'),
       floating: true,
       align: 'center',
       verticalAlign: 'top',
@@ -87,7 +87,7 @@ const chartOptions = computed(() => {
 
         return { x, y };
       },
-      headerFormat: '<b>Epoch {point.key}</b><br/>',
+      headerFormat: `<b>${t('staking.epoch')} {point.key}</b><br/>`,
       pointFormat: `{point.y} ${networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)}`,
       outside: false,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',

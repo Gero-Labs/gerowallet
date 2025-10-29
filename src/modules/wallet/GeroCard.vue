@@ -6,7 +6,7 @@
       icon
       class="logout-btn ma-3"
       @click="handleLogout"
-      title="Logout"
+      :title="$t('wallet.logout')"
     >
       <v-icon>mdi-logout</v-icon>
     </v-btn>

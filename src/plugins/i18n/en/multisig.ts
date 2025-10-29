@@ -1,10 +1,27 @@
 export default {
+  // Multisig Transactions
+  txSubmittedSuccess: 'Tx Submitted Successfully. Tx ID: {txId}',
+  
+  // Assets to Send
+  addToken: 'Add token',
+  chooseCollectibles: 'Choose Collectibles',
+  searchForCollectibles: 'Search for collectibles',
+  scamToken: 'Scam Token',
+  
   // Main Multisig
+  enterpriseMultisigWallet: 'Enterprise Multisig Wallet',
   multisig: 'Multisig',
   multisigWallet: 'Multisig Wallet',
   newMultisigWallet: 'New Multisig Wallet',
+  fromWallet: 'From Wallet',
+  fromMultisigWallet: 'From Multisig Wallet',
   createMultisigWallet: 'Create Multisig Wallet',
   multisigWalletName: 'Multisig Wallet Name',
+  loadingTransactions: 'Loading transactions...',
+  noPendingTransactions: 'No pending multisig transactions',
+  paid: 'Paid',
+  expired: 'Expired',
+  sign: 'Sign',
   
   // Signers
   signers: 'Signers',
@@ -59,5 +76,21 @@ export default {
   contactSaved: 'Contact saved',
   contactRemoved: 'Contact removed',
   searchForCollectibles: 'Search for collectibles',
+  title: 'Multisig',
+  description: 'A multisig wallet requires multiple parties signatures to authorize any transaction.',
+  reachedLimit: 'You\'re reached your limit ({limit}) of multisig wallets',
+  allSignersReceiveRequest: 'All signers will receive a request to review and sign the transaction from their own wallets. The transaction will be submitted to the blockchain only after all required signatures have been collected.',
+  selectMultisigToManage: 'Select multisig to manage',
+  noWalletsToManage: 'No Wallets To Manage',
+  walletAddress: 'Wallet Address:',
+  signerNumber: 'Signer {number}',
+  contacts: 'Contacts',
+  addContact: 'Add Contact',
+  removeContact: 'Remove Contact',
+  minimumSignersNote: 'The minimum signers required to execute a transaction',
+  minimumRequiredSigners: 'Min. Required Signers',
+  selectDates: 'Select Dates',
+  applyFilters: 'Apply Filters',
+  confirmRemoveSigner: 'Are you sure you want to remove this signer?',
 }
 

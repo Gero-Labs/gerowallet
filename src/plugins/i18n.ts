@@ -53,10 +53,8 @@ const messages = {
 
 Vue.use(VueI18n);
 
-// Получаем сохраненный язык из конфигурации или используем 'us' по умолчанию
 const getSavedLocale = (): string => {
   try {
-    // Пытаемся получить из walletStore (если уже загружен)
     const savedConfig = localStorage.getItem('walletStore');
     if (savedConfig) {
       const config = JSON.parse(savedConfig);

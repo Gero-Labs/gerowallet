@@ -1,7 +1,7 @@
 <template>
   <v-card class="activities-card" outlined>
     <div class="card-header">
-      <h3 class="card-title">Recent Activities</h3>
+      <h3 class="card-title">{{ t('card.recentActivities') }}</h3>
     </div>
 
     <div class="activities-list" :key="activities.length">
@@ -25,7 +25,7 @@
     </div>
 
     <div class="see-all-section">
-      <span class="see-all-text">see all</span>
+      <span class="see-all-text">{{ t('card.seeAll') }}</span>
     </div>
   </v-card>
 </template>

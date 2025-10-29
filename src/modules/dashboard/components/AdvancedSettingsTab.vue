@@ -103,6 +103,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
@@ -214,7 +215,7 @@ const deleteWalletConfirm = async () => {
   await submitLogout();
   deleteWalletDialog.value = false;
   deleteWalletLoading.value = false;
-  snackbar.fireSuccess(`Wallet '${name}' Deleted Successfully.`);
+  snackbar.fireSuccess(t('settings.walletDeletedSuccess', { name }));
 };
 
 // Lifecycle

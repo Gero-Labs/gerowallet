@@ -4,20 +4,20 @@
       {{ asset.name }}
     </v-card-title>
     <v-card-subtitle class="pb-0">
-      Unit: {{ filters.truncate(asset.unit) }}
+      {{ $t('assets.unit') }}: {{ filters.truncate(asset.unit) }}
       <CopyButton class="ml-1" :value="asset.unit" x-small></CopyButton>
     </v-card-subtitle>
     <v-card-subtitle class="py-0 pb-3">
-      Fingerprint: {{  filters.truncate(asset.fingerprint) }}
+      {{ $t('assets.fingerprint') }}: {{  filters.truncate(asset.fingerprint) }}
       <CopyButton class="ml-1" :value="asset.fingerprint" x-small></CopyButton>
     </v-card-subtitle>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
         <v-tab>
-          Files
+          {{ $t('assets.files') }}
         </v-tab>
         <v-tab>
-          Metadata
+          {{ $t('assets.metadata') }}
         </v-tab>
       </v-tabs>
       <v-tabs-items

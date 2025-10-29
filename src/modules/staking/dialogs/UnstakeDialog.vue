@@ -53,7 +53,7 @@
               class="mb-0"
               style="width: 100%;"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
             <v-tooltip
@@ -89,11 +89,11 @@
             </v-tooltip>
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              {{ isSubmit ? 'Submit Transaction' : 'Sign & Unstake' }}
+              {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndUnstake') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -145,7 +145,7 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
@@ -238,7 +238,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     loading.value = false
@@ -249,7 +249,7 @@ const signLedgerTx = async () => {
   loading.value = true;
   try {
     if (!props.tx) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -288,11 +288,11 @@ const submitTx = async () => {
     if (submitResult.data.error) {
       throw new Error(submitResult.data.error);
     }
-    snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('staking.unstakeTxSubmitted', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'))
   } finally {
     loading.value = false
     isSubmit.value = false

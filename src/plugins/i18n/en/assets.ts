@@ -2,7 +2,9 @@ export default {
   // Main Assets
   assets: 'Assets',
   myAssets: 'My Assets',
+  tokenHoldings: 'Token Holdings',
   allAssets: 'All Assets',
+  searchByNameTickerPolicy: 'Search by name, ticker or policy',
   collectibles: 'Collectibles',
   
   // Token Table Headers
@@ -41,7 +43,23 @@ export default {
   apexFusionPrime: 'Apex Fusion Prime',
   apexFusionVector: 'Apex Fusion Vector',
   
+  // Asset Details
+  unit: 'Unit',
+  fingerprint: 'Fingerprint',
+  files: 'Files',
+  metadata: 'Metadata',
+  
   // Misc
   percentage: 'Percentage',
+  items: 'items',
+  scam: 'Scam',
+  sortBy: 'Sort By',
+  clearFilters: 'Clear Filters',
+  
+  // Sort Options
+  sortNameAZ: 'Name (A-Z)',
+  sortNameZA: 'Name (Z-A)',
+  sortQuantityHighLow: 'Quantity (High-Low)',
+  sortQuantityLowHigh: 'Quantity (Low-High)',
 }
 

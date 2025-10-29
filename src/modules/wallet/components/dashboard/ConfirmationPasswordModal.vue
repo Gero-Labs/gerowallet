@@ -166,7 +166,7 @@ const sign = async () => {
         );
 
         if (!isValid) {
-          const errorMsg = 'Signature verification failed. Please try again.';
+          const errorMsg = t('wallet.signatureVerificationFailed');
           errorMessage.value = errorMsg;
           snackbar.setError(errorMsg);
           console.error('❌ Signature verification failed');

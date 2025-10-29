@@ -21,17 +21,22 @@ export default {
   delegatingToPool: 'Delegating to Pool',
   delegatingTo: 'Delegating to {pool}',
   voteDelegation: 'Vote Delegation',
+  voteRegistrationDelegation: 'Vote Registration & Delegation',
+  stakeVoteRegistration: 'Stake & Vote Registration',
   
   // Status
   pending: 'Pending',
   confirmed: 'Confirmed',
   failed: 'Failed',
   
-  // DEX Labels
+  // DEX & Platform Labels
   minswap: 'Minswap',
   muesliswap: 'MuesliSwap',
   sundaeswap: 'SundaeSwap',
   splash: 'Splash',
+  strike: 'Strike',
+  dexHunter: 'DexHunter',
+  wingRiders: 'WingRiders',
   
   // Details
   transactionDetails: 'Transaction Details',
@@ -52,5 +57,11 @@ export default {
   
   // Misc
   moreTransactions: 'More Transactions',
+  
+  // Script Types
+  native: 'Native',
+  plutusV1: 'Plutus V1',
+  plutusV2: 'Plutus V2',
+  plutusV3: 'Plutus V3',
 }
 

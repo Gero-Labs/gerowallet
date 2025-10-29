@@ -44,13 +44,13 @@
             </div>
             <img
               :src="assets.frontCardNoMcx2"
-              alt="Gero Card"
+              :alt="$t('card.geroCard')"
               style="position: relative; max-width: 280px; width: 90%; height: auto; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5)); transform: rotateY(-5deg) rotateX(5deg); z-index: 1;"
             />
           </div>
         </v-carousel-item>
         <v-carousel-item>
-          <v-img :src="assets.cashbackBg" cover alt="Cashback" style="width: 100%; height: 100%" />
+          <v-img :src="assets.cashbackBg" cover :alt="$t('cashback.cashback')" style="width: 100%; height: 100%" />
         </v-carousel-item>
       </v-carousel>
       <img :src="assets.rectangle"  style="width: 72px; height: 72px; right: -40px; top: -43px; position: absolute; opacity: 0.96;" alt="">

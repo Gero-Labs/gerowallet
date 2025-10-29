@@ -1,6 +1,9 @@
 export default {
   // Main Navigation
+  quickActions: 'Quick Actions',
+  improvedUx: 'Improved UX',
   dashboard: 'Dashboard',
+  blog: 'Blog',
   assets: 'Assets',
   staking: 'Staking',
   governance: 'Governance',
@@ -12,6 +15,11 @@ export default {
   
   // Quick Actions
   buySell: 'Buy / Sell',
+  buyOrSellDescription: 'Buy or sell ADA with credit card or bank transfer',
+  sendDescription: 'Send ADA or other assets to any wallet address',
+  receiveDescription: 'Get your address and QR code to receive funds',
+  swapDescription: 'Exchange tokens directly from your wallet',
+  perpetualsDescription: 'Open long and short positions on ADA',
   send: 'Send',
   receive: 'Receive',
   perpetuals: 'Perpetuals',
@@ -19,14 +27,15 @@ export default {
   
   // Menu Items
   financialHub: 'Financial Hub',
+  activitiesRewards: 'Activities & Rewards',
   geroCard: 'Gero Card',
   claimRewards: 'Claim Rewards',
   referral: 'Referral',
+  media: 'Media',
+  mediaPlayer: 'Media Player',
   market: 'Market',
   notifications: 'Notifications',
   nothingNew: 'Nothing New',
-  media: 'Media',
-  mediaPlayer: 'Media Player',
   tools: 'Tools',
   
   // Backup Dialog
@@ -62,11 +71,47 @@ export default {
   improveCardanoShield: 'Improve Cardano Shield by letting us know if a {type} is fraudulent or trustworthy.',
   website: 'Website',
   transactionId: 'Transaction ID',
+  markAs: 'Mark as ',
+  descriptionOfScam: 'Description of the Scam',
+  writeDescriptionHere: 'Write your description here...',
+  evidence: 'Evidence',
+  writeEvidenceHere: 'Write your evidence here...',
+  referenceFile: 'Reference File',
+  selectedFile: 'Selected File:',
+  details: 'Details',
+  summary: 'Summary',
+  back: 'Back',
+  continue: 'Continue',
+  submitReport: 'Submit Report',
+  fileTooLarge: 'File is too large. Maximum size is 3 MB.',
+  attachScreenshots: '- Attach any screenshots, transaction details, communication logs, or other relevant documents.',
+  provideLinks: '- Provide links or references to any external information that supports your claim.',
   
   // Welcome Dialog
   checkOutWhatsNew: 'Check out whats new!',
   whatsNew: 'What\'s New?',
   improvedPerformanceAndUX: 'Improved Performance and UX',
+  improvedPerformanceDesc1: 'We\'ve supercharged both backend and frontend performance, making Gero Dashboard faster, smoother, and ready for the future.',
+  improvedPerformanceDesc2: 'This upgrade lays the foundation for upcoming features like the Gero Crypto Card, Enterprise Multisig Wallet, and the Bitcoin DeFi Portal.',
+  geroCryptoCardLaunching: 'Gero Crypto Card (Launching Soon)',
+  geroCryptoCardDesc1: 'The future of digital finance is here. Gero Dashboard is proud to bring you the first-ever Cardano non-custodial wallet with direct digital banking integration.',
+  geroCryptoCardDesc2: 'Enjoy our limited-time launch promotion with 0% fees on top-ups, monthly fees, and more—exclusively for early users.',
+  perpetualsWithStrike: 'Perpetuals with Strike Finance',
+  perpetualsDesc1: 'Take your trading further! You can now open long and short positions on ADA and other Cardano native assets directly inside Gero Dashboard.',
+  perpetualsDesc2: 'Powered by Strike Finance, perpetuals are now seamless, secure, and efficient.',
+  enterpriseMultisigWallet: 'Enterprise Multisig Wallet',
+  enterpriseMultisigDesc1: 'Managing business funds on Cardano just got easier. Our Enterprise Multisig Wallet is built for small and medium-sized teams who value security and collaboration.',
+  enterpriseMultisigDesc2: 'With built-in in-app messaging and an intuitive experience, handling treasury operations is finally simple, professional, and worry-free.',
+  moreCashbackDeals: 'More Cashback Deals!',
+  moreCashbackDesc1: 'Shop, swap, and save! We\'ve expanded our cashback offers, giving you even more ways to earn ADA when purchasing digitally from your favorite stores.',
+  moreCashbackDesc2: 'Explore the new Cashback Page to find deals tailored just for you.',
+  accessQuickActions: 'Access all quick actions from the toolbar at the top of your dashboard',
+  ourMission: 'Our mission is to unify Web2 and Web3',
+  checkOutBlog: 'We have many things in store, check out our blog posts for the latest news',
+  enjoyGeroDashboard: 'We hope you enjoy using Gero Dashboard',
+  availableOnSocial: 'We are available on social media',
+  getStarted: 'Get Started!',
+  needRefresher: 'Need a refresher? You can always revisit this guide via your wallet settings.',
   
   // Transaction Summary
   transactionSummary: 'Transaction Summary',
@@ -85,9 +130,34 @@ export default {
   decline: 'Decline',
   confirm: 'Confirm',
   
+  // Security Warnings
+  warningContinueCaution: 'Warning - Continue with Caution!',
+  websiteBlacklisted: 'This website is blacklisted by Cardano Shield',
+  acknowledgeFollowing: 'By checking the boxes below, you understand and acknowledge the following:',
+  websiteBlacklistedWarning: 'This Website is blacklisted or suspected of being malicious and may be impersonating another legitimate website.',
+  websiteMayStealFunds: 'This Website may attempt to steal my funds by presenting false or misleading information',
+  mustAgreeToContinue: 'You must agree to continue!',
+  reportSiteAsSafe: 'Report this site as safe!',
+  backToSafety: 'Back to Safety',
+  continueToSite: 'Continue to site',
+  
   // Misc
   hdPath: 'HD Path',
   cred: 'Cred',
   notAvailable: 'N/A',
+  signData: 'Sign Data',
+
+  // KYC Steps
+  uploadYourId: 'Upload Your ID',
+  governmentIdOnly: 'Government-issued ID only',
+  changeFile: 'Change File',
+  clickToUpload: 'Click to upload',
+  dragAndDrop: 'or drag and drop',
+  fileFormatHint: 'SVG, PNG, JPG or GIF (max. 800x400px)',
+  takeSelfie: 'Take a Selfie',
+  realTimeFaceScan: 'Real-time face scan to match ID',
+  retakePhoto: 'Retake Photo',
+  switchOnCamera: 'Switch on your camera',
+  positionFaceInFrame: 'Position your face in the frame',
 }
 

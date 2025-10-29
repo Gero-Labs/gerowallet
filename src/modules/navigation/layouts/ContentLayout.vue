@@ -149,11 +149,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" alt="Settings" />
+                        <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" alt="Settings" />
+                      <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -393,11 +393,11 @@ const lastSyncTimestamp = computed(() => {
 // we show "Real-time" when connected, or estimate based on average block time (20 seconds for Cardano)
 const nextSyncDisplay = computed(() => {
   if (!connected.value) {
-    return 'Waiting for connection...';
+    return t('common.waitingForConnection');
   }
 
   if (connecting.value) {
-    return 'Connecting...';
+    return t('common.connecting');
   }
 
   // For connected state, show real-time sync
@@ -410,7 +410,7 @@ const nextSyncDisplay = computed(() => {
 
     // If we're past the expected next block time, sync is due now
     if (now >= nextSyncEstimate) {
-      return 'Real-time (any moment)';
+      return t('common.realTimeAnyMoment');
     }
 
     // Otherwise calculate seconds until next expected sync
@@ -418,7 +418,7 @@ const nextSyncDisplay = computed(() => {
     return `~${secondsUntilNextSync}s`;
   }
 
-  return 'Real-time';
+  return t('common.realTime');
 });
 
 const isWelcomeDone = computed({

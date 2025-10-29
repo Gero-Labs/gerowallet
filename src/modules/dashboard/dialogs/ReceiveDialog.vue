@@ -178,35 +178,35 @@ const tabs = computed(() => {
   }
   return [
     {
-      label: 'Payment Address',
+      label: t('wallet.paymentAddress'),
       value: keys.value.payment[0].address,
       path: keys.value.payment[0].path,
       cred: keys.value.payment[0].cred,
-      info: `Share your payment address or scan the QR code to receive ${networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)} safely.`,
+      info: t('wallet.paymentAddressInfo', { ticker: networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) }),
       enabled: true,
     },
     {
-      label: 'Reward (Stake) Address',
+      label: t('wallet.rewardAddress'),
       value: keys.value.stake[0].address,
       path: keys.value.stake[0].path,
       cred: keys.value.stake[0].cred,
-      info: 'Use this to claim staking rewards.',
+      info: t('wallet.rewardAddressInfo'),
       enabled: true,
     },
     {
-      label: 'Delegated Representative ID (CIP-105)',
+      label: t('wallet.drepId105'),
       value: keys.value.drep105[0].address,
       path: keys.value.drep105[0].path,
       cred: keys.value.drep105[0].cred,
-      info: 'Used to Participate in Cardano Governance Actions.',
+      info: t('wallet.drepIdInfo'),
       enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
     {
-      label: 'Delegated Representative ID (CIP-129)',
+      label: t('wallet.drepId129'),
       value: keys.value.drep129[0].address,
       path: keys.value.drep129[0].path,
       cred: keys.value.drep129[0].cred,
-      info: 'Used to Participate in Cardano Governance Actions.',
+      info: t('wallet.drepIdInfo'),
       enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
   ]

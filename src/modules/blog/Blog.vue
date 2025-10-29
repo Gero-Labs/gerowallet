@@ -55,7 +55,7 @@
                                       {{
                                         `${new Date(post.lastPublishedDate).toLocaleDateString()} • ${
                                           post.minutesToRead
-                                        } min read`
+                                        } ${$t('blog.minRead')}`
                                       }}
                                     </v-card-subtitle>
                                     <v-card-title style="word-break: break-word; color: white" class="text-left">
@@ -67,7 +67,7 @@
                                   </v-card-text>
                                   <v-card-actions class="px-6" style="width: 100%">
                                     <div style="width: 100%; display: flex; align-items: center">
-                                      {{ `${post.metrics.views} views` }}
+                                      {{ `${post.metrics.views} ${$t('blog.views')}` }}
                                       <v-spacer></v-spacer>
                                       <div>
                                         {{ `${post.metrics.likes} ` }}
@@ -199,7 +199,6 @@ const loadPosts = async (isInitial = false) => {
       return;
     }
 
-    // Проверяем, есть ли еще посты для загрузки
     if (allPosts.length < currentPageSize.value) {
       hasMorePosts.value = false;
     }
@@ -228,7 +227,6 @@ const loadPosts = async (isInitial = false) => {
       await Promise.all(statsPromises);
     }
 
-    // Всегда заменяем все посты (так как мы загружаем все заново с увеличенным размером)
     posts.value = postsMap;
   } catch (e) {
     error.value = 'Failed to load blog posts. Please check your connection and try again.';
