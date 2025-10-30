@@ -1124,6 +1124,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
+        WalletStore.state.keys
       );
       sendResponse({
         id: request.id,
