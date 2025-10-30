@@ -78,6 +78,7 @@
     "howler": "^2.2.4",
     "javascript-time-ago": "^2.5.11",
     "json-bigint": "^1.0.0",
+    "launchdarkly-js-client-sdk": "^3.9.0",
     "lightweight-charts": "^5.0.8",
     "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",

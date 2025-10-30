@@ -1,5 +1,19 @@
 <template>
   <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%;">
+    <!-- Overlay when swap is disabled by feature flag -->
+    <v-overlay
+      v-if="!isSwapEnabled"
+      absolute
+      :value="true"
+      opacity="0.9"
+      color="#000000"
+      z-index="999"
+    >
+      <div class="overlay-content text-center">
+        <v-icon size="64" color="warning">mdi-alert-circle-outline</v-icon>
+        <h2 class="mt-4 white--text" style="line-height: 1.5">{{ $t('common.underMaintenance') }}</h2>
+      </div>
+    </v-overlay>
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden;">
       <div class="swap-content-wrapper">
         <v-card-title class="pb-0 pt-3 px-0">
@@ -187,10 +201,15 @@ import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
+import featureFlagsStore from '@/stores/featureFlagsStore';
+
+const emit = defineEmits(['onSwap']);
 
 const { t } = useTranslation();
 
-const emit = defineEmits(['onSwap'])
+const isSwapEnabled = computed(() => {
+  return featureFlagsStore.state.flags.swapEnabled;
+});
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
