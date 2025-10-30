@@ -34,7 +34,7 @@ export const featureFlagsStore = {
     featureFlagsState.isLoading = true;
 
     try {
-      await launchDarklyService.initialize(clientSideID, 'gero-extension');
+      await launchDarklyService.initialize(clientSideID, 'gero-extension', 5);
       this.loadFlags();
       this.subscribeToFlagChanges();
       featureFlagsState.isInitialized = true;
@@ -49,8 +49,7 @@ export const featureFlagsStore = {
    * Load all feature flags from LaunchDarkly
    */
   loadFlags(): void {
-    const swapEnabled = launchDarklyService.getFlag('isSwapEnabled', false);
-    Vue.set(featureFlagsState.flags, 'swapEnabled', swapEnabled);
+    featureFlagsState.flags.swapEnabled = launchDarklyService.getFlag('isSwapEnabled', false);
   },
 
   /**

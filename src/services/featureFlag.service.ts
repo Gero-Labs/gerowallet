@@ -17,9 +17,10 @@ class FeatureFlagService {
    * Initialize LaunchDarkly client
    * @param clientSideID - LaunchDarkly client-side ID
    * @param contextKey - Optional context key (defaults to 'anonymous-user')
+   * @param timeout - Optional timeout in seconds for initialization (defaults to 5)
    * @returns Promise that resolves when initialization is complete
    */
-  async initialize(clientSideID: string, contextKey?: string): Promise<void> {
+  async initialize(clientSideID: string, contextKey?: string, timeout?: number): Promise<void> {
     // If already initializing, return the existing promise
     if (this.initializationPromise) {
       return this.initializationPromise;
@@ -42,7 +43,8 @@ class FeatureFlagService {
         };
 
         this.client = LDClient.initialize(clientSideID, context);
-        await this.client.waitForInitialization(5); // 5 second timeout
+        const initTimeout = timeout ?? 5;
+        await this.client.waitForInitialization(initTimeout);
         this.isInitialized = true;
 
         // Re-attach existing listeners after initialization

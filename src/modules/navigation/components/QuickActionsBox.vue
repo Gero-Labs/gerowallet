@@ -117,7 +117,6 @@
     <SwapDialog
       v-if="!isSwapDisabled"
       :isOpen="currentDialog === dialogs.SWAP"
-      :isSwapEnabled="isSwapEnabledByFeatureFlag"
       @close="closeDialog"
     ></SwapDialog>
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
@@ -126,7 +125,6 @@
   </div>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref, getCurrentInstance } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
@@ -137,9 +135,6 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
-
-
-const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any

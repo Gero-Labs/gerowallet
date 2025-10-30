@@ -48,8 +48,12 @@ async function initializeFeatureFlags(): Promise<void> {
   }
 }
 
-loadPersistedWallet().then(async () => {
-  await initializeFeatureFlags();
+loadPersistedWallet().then(() => {
+  // Initialize feature flags in background (non-blocking)
+  // This prevents delaying app startup if LaunchDarkly is slow/down
+  initializeFeatureFlags().catch((error) => {
+    console.error('Feature flags initialization failed:', error);
+  });
 
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
