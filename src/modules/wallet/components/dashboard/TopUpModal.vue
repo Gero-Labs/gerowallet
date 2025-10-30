@@ -196,7 +196,7 @@ const disabledTooltip = computed(() => {
   if (currentStep.value === 1) {
     const adaAmount = parseFloat(amounts.value.adaAmount);
     if (isNaN(adaAmount) || adaAmount < 2) {
-      return t('wallet.enter-two-ada');
+      return t('card.enterTwoAda');
     }
   }
   return '';

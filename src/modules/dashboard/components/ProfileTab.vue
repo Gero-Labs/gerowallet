@@ -82,7 +82,7 @@
             outlined
             dense
             hide-details
-            
+            disabled
           >
             <template v-slot:item="{ item }">
               <v-list-item-avatar size="20">
@@ -202,11 +202,11 @@ const avatar = computed(() => {
 
 // Validation functions
 const invalidWalletNames = () => {
-  return (value: string) => !otherWalletNames.value.includes(value) || t('settings.walletNameTaken');
+  return (value: string): string | boolean => !otherWalletNames.value.includes(value) || t('settings.walletNameTaken');
 };
 
 const existedWalletName = () => {
-  return (value: string) => value !== loggedWallet.value.name || '';
+  return (value: string): string | boolean => value !== loggedWallet.value.name || '';
 };
 
 // Methods
@@ -248,7 +248,7 @@ watch(loc, async (val) => {
       const { loadLanguage } = await import('@/plugins/i18n');
       try {
         await loadLanguage(iso);
-        
+
         // Update store and i18n locale ONLY after successful load
         await WalletStore.setLocale(iso);
         vmProxy.$i18n.locale = iso;

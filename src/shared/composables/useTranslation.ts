@@ -21,12 +21,12 @@ export function useTranslation() {
     return (params ? instance.proxy.$t(key, params) : instance.proxy.$t(key)) as string;
   };
 
-  const tc = (key: string, choice?: number, params?: Record<string, any>) => {
+  const tc = (key: string, choice?: number, params?: Record<string, any>): string => {
     if (!instance?.proxy.$tc) {
       console.warn('Translation choice function not available');
       return key;
     }
-    return instance.proxy.$tc(key, choice, params);
+    return instance.proxy.$tc(key, choice, params) as string;
   };
 
   return {

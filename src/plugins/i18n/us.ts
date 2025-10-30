@@ -1,9 +1,6 @@
 /**
- * EN translations - Flat structure
- * All modules combined into one file
- * Total keys: 1667
+ * EN translations
  */
-
 export default {
   'assets.allAssets': 'All Assets',
   'assets.allocation': 'Allocation',
@@ -1678,4 +1675,5 @@ export default {
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\\\'ll use this to log into your wallet and make transactions.',
   'welcome.yourNew': 'Your New',
+  'enterTwoAda': 'Please enter an amount greater than or equal to 2 ADA to continue'
 }
