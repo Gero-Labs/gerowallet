@@ -23,7 +23,7 @@ const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
-const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue');
+// const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 
 import WalletStore from '@/stores/walletStore';
@@ -164,15 +164,16 @@ const routes = [
       requiresAuth: false,
     },
   },
-  {
-    path: '/multisig',
-    name: 'multisig',
-    component: MultiSig,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: false,
-    },
-  },
+  // MultiSig route disabled - under maintenance
+  // {
+  //   path: '/multisig',
+  //   name: 'multisig',
+  //   component: MultiSig,
+  //   meta: {
+  //     layout: ContentLayout,
+  //     requiresAuth: false,
+  //   },
+  // },
   {
     path: '/card',
     name: 'card',
