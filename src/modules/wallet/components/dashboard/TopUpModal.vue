@@ -97,12 +97,19 @@
             <!-- Action Buttons -->
             <div class="modal-actions">
               <SecondaryButton :text="$t('wallet.cancel')" @click="closeModal()" :disabled="txSubmitLoading" />
-              <GradientButton
-                :text="currentStep === 1 ? t('card.continueButton') : isSubmit ? t('card.submitTransaction') : t('card.signAndTopUp')"
-                @click="handleTopUp"
-                :disabled="!canTopUp || txSubmitLoading"
-                :loading="txSubmitLoading"
-              />
+              <v-tooltip top :disabled="canTopUp || currentStep !== 1">
+                <template v-slot:activator="{ on, attrs }">
+                  <div v-bind="attrs" v-on="on" style="flex: 1;">
+                    <GradientButton
+                      :text="currentStep === 1 ? t('card.continueButton') : isSubmit ? t('card.submitTransaction') : t('card.signAndTopUp')"
+                      @click="handleTopUp"
+                      :disabled="!canTopUp || txSubmitLoading"
+                      :loading="txSubmitLoading"
+                    />
+                  </div>
+                </template>
+                <span>{{ disabledTooltip }}</span>
+              </v-tooltip>
             </div>
           </div>
 
@@ -170,9 +177,9 @@ const isSubmit = ref(false); // Track if transaction is signed and ready to subm
 // Computed: Check if Top Up button should be enabled
 const canTopUp = computed(() => {
   if (currentStep.value === 1) {
-    // Step 1: Check if amounts are valid
+    // Step 1: Check if amounts are valid and meet minimum requirement (2 ADA)
     const adaAmount = parseFloat(amounts.value.adaAmount);
-    return !isNaN(adaAmount) && adaAmount > 0 && amounts.value.eurAmount !== '';
+    return !isNaN(adaAmount) && adaAmount >= 2 && amounts.value.eurAmount !== '';
   }
   if (currentStep.value === 2) {
     // Step 2: Check if password is required for Normal wallet
@@ -182,6 +189,17 @@ const canTopUp = computed(() => {
     return true; // Other wallet types don't need password, or transaction is already signed
   }
   return true;
+});
+
+// Computed: Tooltip message for disabled button
+const disabledTooltip = computed(() => {
+  if (currentStep.value === 1) {
+    const adaAmount = parseFloat(amounts.value.adaAmount);
+    if (isNaN(adaAmount) || adaAmount < 2) {
+      return t('wallet.enter-two-ada');
+    }
+  }
+  return '';
 });
 
 // Store amounts for the transaction (persists during loading)
