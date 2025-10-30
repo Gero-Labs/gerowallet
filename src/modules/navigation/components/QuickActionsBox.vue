@@ -67,7 +67,7 @@
         </v-btn>
       </div>
 
-      <div v-if="!isSwapDisabled" class="action-button-wrapper">
+      <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
         <v-btn
           ref="swapButton"
           class="expandable-button swap-button"
@@ -115,7 +115,7 @@
     </div>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
     <SwapDialog
-      v-if="!isSwapDisabled"
+      v-if="isSwapSupportedByNetwork"
       :isOpen="currentDialog === dialogs.SWAP"
       @close="closeDialog"
     ></SwapDialog>
@@ -176,10 +176,6 @@ const isSwapSupportedByNetwork = computed(() => {
     return networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
   return false;
-});
-
-const isSwapDisabled = computed(() => {
-  return !isSwapSupportedByNetwork.value;
 });
 
 const isPerpetualsDisabled = computed(() => {

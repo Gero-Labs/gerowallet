@@ -3,7 +3,6 @@ import { Api } from '@/api/api';
 import { Tip, Blockchain, Provider, Network } from '@/models/types';
 import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
-import ablyService from '@/services/ably.service';
 import { chunkArray } from 'array-chunk-by-size';
 import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
@@ -83,6 +82,13 @@ export class SyncService {
         // Process the sync response immediately
         if (syncResponse && syncResponse.success) {
           await this.setSync(syncResponse);
+        } else {
+          console.error('Sync failed: REST sync returned unsuccessful response', {
+            success: syncResponse?.success,
+            address,
+            from,
+            toHeight: tip.height,
+          });
         }
       }
     } catch (err) {
