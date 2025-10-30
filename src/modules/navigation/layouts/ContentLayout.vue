@@ -191,8 +191,6 @@
                   <keep-alive>
                     <router-view
                       @open-backup-dialog="handleOpenBackupDialog"
-                      @open-buy-dialog="handleOpenBuyDialog"
-                      @open-receive-dialog="handleOpenReceiveDialog"
                     />
                   </keep-alive>
                 </v-sheet>
@@ -215,19 +213,13 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
-
-      <SwapDialog :isOpen="isSwapDialogOpen" @close="closeSwapDialog" />
-
-      <BuyDialog :isOpen="buyDialog" @close="buyDialog = false" />
-
-      <ReceiveDialog :isOpen="receiveDialog" @close="receiveDialog = false" />
     </v-app>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, onMounted, onBeforeUnmount, toRefs, watch, getCurrentInstance } from 'vue';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -235,12 +227,9 @@ import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
-import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
-import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
-import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { themes, iconFilters } from '@/config/themes';
+import { iconFilters, themes } from '@/config/themes';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
@@ -250,7 +239,6 @@ import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
-import dexHunterStoreActions from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
@@ -326,15 +314,9 @@ const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
-const swapDialog = ref(false);
-const buyDialog = ref(false);
-const receiveDialog = ref(false);
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
-
-// Computed for proper reactivity with Vue 2 components
-const isSwapDialogOpen = computed(() => swapDialog.value);
 
 const tokenName = computed(() => {
   if (isApex.value) {
@@ -351,10 +333,6 @@ const isApex = computed(() => {
 const primaryColor = computed(() => {
   return isApex.value ? themes.apex.primary : themes.cardano.primary;
 });
-
-function closeSwapDialog() {
-  swapDialog.value = false;
-}
 
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
@@ -449,16 +427,6 @@ function handleOpenBackupDialog() {
   backupWalletDialog.value = true;
 }
 
-function handleOpenBuyDialog() {
-  console.log('Received buy dialog event from dashboard');
-  buyDialog.value = true;
-}
-
-function handleOpenReceiveDialog() {
-  console.log('Received receive dialog event from dashboard');
-  receiveDialog.value = true;
-}
-
 // Theme management - update colors when a chain changes
 const updateThemeColors = () => {
   const currentTheme = isApex.value ? themes.apex : themes.cardano;
@@ -502,8 +470,7 @@ const fetchGeroPrice = async () => {
     const res = await dexHunterApi.default.mCap(GERO_UNIT);
 
     if (res.status === 200 && res.data?.price) {
-      const price = Number(res.data.price);
-      geroFallbackPrice.value = price;
+      geroFallbackPrice.value = Number(res.data.price);
     }
   } catch (error) {
     console.warn('Failed to fetch GERO price for ticker:', error);
