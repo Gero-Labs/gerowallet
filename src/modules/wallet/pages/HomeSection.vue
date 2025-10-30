@@ -21,12 +21,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref } from 'vue';
 import cardStore from '@/stores/modules/card';
 import RecentTransactionsSection from '../components/dashboard/RecentTransactionsSection.vue';
 import HeroSection from '../components/HeroSection.vue';
 import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
 import { useIntervalFn } from '@vueuse/core';
+
+const { t } = useTranslation();
 const loading = ref(false);
 
 const currentState = computed(() => cardStore.currentState)

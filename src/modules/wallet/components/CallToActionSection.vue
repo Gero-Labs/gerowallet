@@ -19,23 +19,23 @@
       <!-- Right Column - KYC Info -->
       <v-col cols="12" md="6" class="kyc-column">
         <div class="kyc-content">
-          <h2 class="cta-heading">Spend ADA anywhere!</h2>
-          <p class="cta-description">Before ordering your Gero Card, please complete a quick KYC process with our institutional partner, Kaiserex.</p>
-          <GradientButton v-if="kycStatus !== 'verified'" text="Start KYC Process" @click="startKYC" class="kyc-button" />
+          <h2 class="cta-heading">{{ t('card.spendAdaAnywhere') }}</h2>
+          <p class="cta-description">{{ t('card.beforeOrderingKYC') }}</p>
+          <GradientButton v-if="kycStatus !== 'verified'" :text="t('card.startKYCProcess')" @click="startKYC" class="kyc-button" />
           <div class="kyc-status-text">
-            Your KYC Status:
+            {{ t('card.yourKYCStatus') }}
             <v-tooltip bottom :open-delay="300" content-class="custom-tooltip kyc-tooltip">
               <template v-slot:activator="{ on, attrs }">
                 <b v-bind="attrs" v-on="on" class="kyc-status-hover">{{ filters.capitalize(kycStatus) }}</b>
               </template>
               <div class="tooltip-content">
-                <div class="tooltip-item"><strong>Registered:</strong> KYC process not started yet</div>
-                <div class="tooltip-item"><strong>Verification Started:</strong> KYC in progress, pending approval</div>
+                <div class="tooltip-item"><strong>{{ t('card.kycRegistered') }}:</strong> {{ t('card.kycRegisteredDesc') }}</div>
+                <div class="tooltip-item"><strong>{{ t('card.kycVerificationStarted') }}:</strong> {{ t('card.kycVerificationStartedDesc') }}</div>
               </div>
             </v-tooltip>
           </div>
           <v-alert type="info" color="primary" prominent outlined v-if="!cardanoAddress && kycStatus === 'verified'" class="kyc-alert">
-            Your documents has been received and your application is currently under review.
+            {{ t('card.documentsReceivedReview') }}
           </v-alert>
         </div>
       </v-col>
@@ -45,11 +45,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import GradientButton from './GradientButton.vue';
 import OrderCardModal from './OrderCardModal.vue';
 import { ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
 import filters from '@/shared/utils/filters';
+
+const { t } = useTranslation();
 
 const showModal = ref(false);
 const cardTiltStyle = ref<any>({});

@@ -1,6 +1,6 @@
 <template>
   <v-card flat outlined class="fill-height liquid-glass cashback-card cashback-card-with-bg">
-    <v-card-title>Cashback</v-card-title>
+    <v-card-title>{{ $t('cashback.title') }}</v-card-title>
     <v-card-text class="pa-0" style="height: calc(100% - 64px); display: flex; flex-direction: column;">
       <div>
         <!-- Combined Ready to Claim and Pending Rewards Row -->
@@ -11,7 +11,7 @@
               <v-img :src="assets.giftSvg" contain></v-img>
             </v-list-item-avatar>
             <div class="cashback-content">
-              <div class="cashback-title">Claim</div>
+              <div class="cashback-title">{{ $t('cashback.claim') }}</div>
               <div class="cashback-amounts">
                 <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "₳", "", false, 6) }}</div>
               </div>
@@ -24,7 +24,7 @@
               <v-img :src="assets.pendingSvg" contain></v-img>
             </v-list-item-avatar>
             <div class="cashback-content">
-              <div class="cashback-title">Pending</div>
+              <div class="cashback-title">{{ $t('cashback.pending') }}</div>
               <div class="cashback-amounts">
                 <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
               </div>
@@ -46,7 +46,7 @@
               </div>
               <div class="deal-info">
                 <div class="deal-name">{{ deal.name }}</div>
-                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% cashback` }}</div>
+                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% ${$t('cashback.cashback')}` }}</div>
               </div>
             </div>
           </div>
@@ -63,7 +63,7 @@
               </div>
               <div class="deal-info">
                 <div class="deal-name">{{ deal.name }}</div>
-                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% cashback` }}</div>
+                <div class="deal-cashback">{{ deal.cashbackText || `${deal.cashbackPercentage}% ${$t('cashback.cashback')}` }}</div>
               </div>
             </div>
           </div>
@@ -73,7 +73,7 @@
       <!-- Go Cashback Button -->
       <div class="cashback-button-container">
         <v-btn elevation="0" height="36" color="#0B141B" @click="navigateToCashback" :disabled="!supported" block>
-          <div :class="supported ? 'btn-text' : 'btn-text-disabled'">Go Cashback!</div>
+          <div :class="supported ? 'btn-text' : 'btn-text-disabled'">{{ $t('cashback.goCashback') }}</div>
         </v-btn>
       </div>
     </v-card-text>
@@ -81,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs, getCurrentInstance, ref, onMounted } from 'vue'
 import filters from "@/shared/utils/filters"
 import { bringStore } from '@/stores/bringStore'

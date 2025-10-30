@@ -2,7 +2,7 @@
   <div class="view-card-details">
     <div v-if="loading" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="32"></v-progress-circular>
-      <span class="loading-text">Loading card details...</span>
+      <span class="loading-text">{{ $t('card.loadingCardDetails') }}</span>
     </div>
 
     <div v-else class="form-container">
@@ -10,21 +10,21 @@
         <!-- <div class="input-full">
           <label class="input-label">Name on card</label>
           <div class="card-number-input">
-            <span class="card-number-text">{{ cardData?.pan || 'Loading...' }}</span>
+            <span class="card-number-text">{{ cardData?.pan || $t('common.loadingEllipsis') }}</span>
           </div>
         </div> -->        <div class="input-full small-input">
-          <label class="input-label">Expiry</label>
+          <label class="input-label">{{ $t('card.expiry') }}</label>
           <div class="cvv-input">
-            <span class="cvv-text">{{ cardDetailsFull?.details.expiryDate || 'Loading...' }}</span>
+            <span class="cvv-text">{{ cardDetailsFull?.details.expiryDate || $t('common.loadingEllipsis') }}</span>
           </div>
         </div>
       </div>
       <div class="form-row">
         <div class="input-full">
-          <label class="input-label">Card number</label>
+          <label class="input-label">{{ $t('card.cardNumber') }}</label>
           <div class="card-number-input">
-            <img src="@/modules/wallet/icons/mastercard.svg" alt="Mastercard" class="card-icon" />
-            <span class="card-number-text">{{ cardDetailsFull?.details.pan || 'Loading...' }}</span>
+            <img src="@/modules/wallet/icons/mastercard.svg" :alt="$t('card.mastercard')" class="card-icon" />
+            <span class="card-number-text">{{ cardDetailsFull?.details.pan || $t('common.loadingEllipsis') }}</span>
           </div>
         </div>
         <div class="input-full small-input">
@@ -42,8 +42,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
+
+
+const { t } = useTranslation();
 
 const showCvv = ref(false);
 const showPin = ref(false);

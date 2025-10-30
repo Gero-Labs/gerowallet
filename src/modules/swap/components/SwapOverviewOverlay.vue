@@ -8,7 +8,7 @@
   >
     <v-card class="fill-height transparent">
       <v-card-title class="pb-4 pt-0 text--white" style="font-size: 14px;">
-        Swap Overview
+        {{ $t('swap.swapOverview') }}
         <v-spacer></v-spacer>
         <v-btn small icon @click="closeOverlay">
           <v-icon small>mdi-window-close</v-icon>
@@ -17,15 +17,15 @@
       <v-card-subtitle class="py-0" style="flex-flow: row; display: flex; justify-content: space-between;">
         <div>
           <v-card-title style="font-size: 12px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-            Routes
+            {{ $t('swap.routes') }}
           </v-card-title>
           <v-card-subtitle style="font-size: 12px; word-break: break-word; color: white;" class="text-left pa-0">
-            {{ estimation['splits']?.length > 1 ? estimation['splits'].length : 'Direct'  }}
+            {{ estimation['splits']?.length > 1 ? estimation['splits'].length : $t('swap.direct')  }}
           </v-card-subtitle>
         </div>
         <div>
           <v-card-title style="font-size: 12px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-            Net Price
+            {{ $t('swap.netPrice') }}
           </v-card-title>
           <v-card-subtitle style="font-size: 12px; color: white; word-break: break-word" class="text-left pa-0">
             {{ filters.toCurrency(estimation['net_price'] || 0, false, 4, '', ' '+tokenB['ticker'], false, 0) }}
@@ -33,7 +33,7 @@
         </div>
         <div>
           <v-card-title style="font-size: 12px; text-align: left; color: #88919e" class="text-left pa-0 pb-2" >
-            Min. Receive
+            {{ $t('swap.minReceive') }}
           </v-card-title>
           <v-card-subtitle style="font-size: 12px; word-break: break-word; color: white;" class="text-left pa-0">
             {{ filters.toCurrency(estimation['total_output'] || 0, false, 2, '', ' '+tokenB['ticker'], false, 0) }}

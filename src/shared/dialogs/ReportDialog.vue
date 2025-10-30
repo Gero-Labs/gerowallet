@@ -3,8 +3,8 @@
     :img="cardanoShieldLogo"
     :isOpen="isOpen"
     @close="$emit('close')"
-    :title="'Report '+ (reportSite ? 'Website' : 'Transaction')"
-    :subtitle="'Improve Cardano Shield by letting us know if a '+ (reportSite ? 'website' : 'transaction') + ' is fraudulent or trustworthy.'"
+    :title="reportSite ? String($t('navigation.reportWebsite')) : String($t('navigation.reportTransaction'))"
+    :subtitle="String($t('navigation.improveCardanoShield', { type: reportSite ? String($t('navigation.website')).toLowerCase() : String($t('navigation.transactionId')).toLowerCase() }))"
     :min-height="0"
     :persistent="false"
   >
@@ -13,8 +13,8 @@
         <v-stepper-header>
           <template v-for="(item, index) in steps">
             <div
-              class="custom-step"
               :key="item.name"
+              class="custom-step"
               :class="{
                 active: currentStep === index + 1,
                 done: currentStep > index + 1,
@@ -29,9 +29,9 @@
               <span class="step-label">{{ item.label }}</span>
             </div>
             <div
+              :key="`divider-${index}`"
               class="divider"
               :class="{ 'active-divider': currentStep > index + 1 }"
-              :key="index"
               v-if="index < steps.length - 1"
             ></div>
           </template>
@@ -47,11 +47,11 @@
         <v-stepper-content step="1">
           <v-form ref="form" v-model="valid" >
             <div class="d-flex mb-1" v-if="reportSite">
-              <v-label small class="white--text pr-1" style="align-content: center;">Website:</v-label>
+              <v-label small class="white--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}:</v-label>
               {{ reportSite }}
             </div>
             <div class="d-flex mb-3" v-if="reportTx">
-              <v-label small class="white--text" style="align-content: center;">Transaction ID:</v-label>
+              <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
               <div>
                 <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
@@ -60,7 +60,7 @@
             <v-select
               v-model="label"
               :items="labels"
-              label="Mark as "
+              :label="$t('navigation.markAs')"
               class="select-item width-50 mb-4"
               required
               hide-details
@@ -70,11 +70,11 @@
               attach
             ></v-select>
             <v-textarea
-              label="Description of the Scam"
+              :label="$t('navigation.descriptionOfScam')"
               rows="3"
               outlined
               v-model="description"
-              placeholder="Write your description here..."
+              :placeholder="$t('navigation.writeDescriptionHere')"
               required
               :maxlength="250"
               counter
@@ -84,19 +84,19 @@
               outlined
               rows="3"
               v-model="evidence"
-              label="Evidence"
+              :label="$t('navigation.evidence')"
               required
-              placeholder="Write your evidence here..."
+              :placeholder="$t('navigation.writeEvidenceHere')"
               :maxlength="250"
               :rules="[rules.required(), rules.maxCharacters(250)]"
               counter
             ></v-textarea>
             <v-list class="transparent py-0">
               <div>
-                - Attach any screenshots, transaction details, communication logs, or other relevant documents.
+                {{ $t('navigation.attachScreenshots') }}
               </div>
               <div>
-                - Provide links or references to any external information that supports your claim.
+                {{ $t('navigation.provideLinks') }}
               </div>
             </v-list>
             <v-file-input
@@ -106,7 +106,7 @@
               outlined type="file"
               ref="fileInput"
               @change="onFileChange"
-              label="Reference File"
+              :label="$t('navigation.referenceFile')"
               accept=".jpg, .jpeg, .png, .webp"
               color="primary"
               counter
@@ -127,23 +127,23 @@
         </v-stepper-content>
         <v-stepper-content step="2">
           <div class="mb-1" style="align-items: center;">
-            <v-label v-if="reportSite" small class="grey--text pr-1" style="align-content: center;">Website</v-label>
+            <v-label v-if="reportSite" small class="grey--text pr-1" style="align-content: center;">{{ $t('navigation.website') }}</v-label>
             <p class="d-flex" v-if="reportSite" style="align-items: center;">
               {{ reportSite }}
               <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
-            <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">Transaction ID</v-label>
+            <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
             <p class="d-flex" v-if="reportTx" style="align-items: center;">
               <a class="ml-1" style="color: #00DFF3; align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
           </div>
-          <v-label small class="grey--text">Description of the Scam</v-label>
+          <v-label small class="grey--text">{{ $t('navigation.descriptionOfScam') }}</v-label>
           <p>{{ description }}</p>
-          <v-label small class="grey--text mb-2">Evidence</v-label>
+          <v-label small class="grey--text mb-2">{{ $t('navigation.evidence') }}</v-label>
           <p>{{ evidence }}</p>
-          <p v-if="uploadFile" class="mb-0">Selected File: {{ uploadFile.name }}</p>
+          <p v-if="uploadFile" class="mb-0">{{ $t('navigation.selectedFile') }} {{ uploadFile.name }}</p>
           <div class="d-flex justify-center">
             <v-img v-if="imageUrl" :src="imageUrl" max-width="300" class="mt-4"></v-img>
           </div>
@@ -153,21 +153,22 @@
     <v-card-actions>
       <v-btn text v-if="currentStep === 2" @click="prevStep" :disabled="loading">
         <v-icon small class="mr-1">mdi-arrow-left</v-icon>
-        Back
+        {{ $t('navigation.back') }}
       </v-btn>
       <v-spacer></v-spacer>
       <v-btn v-if="currentStep === 1" :disabled="!valid" @click="nextStep" class="geroButton" style="color: black!important; text-transform: uppercase">
-        Continue
+        {{ $t('navigation.continue') }}
         <v-icon style="color: black!important;" small class="ml-1">mdi-arrow-right</v-icon>
       </v-btn>
       <v-btn v-if="currentStep === 2" @click="submitReport" :loading="loading" class="geroButton" style="color: black!important; text-transform: uppercase">
-        Submit Report
+        {{ $t('navigation.submitReport') }}
         <v-icon style="color: black!important;" small class="ml-1">mdi-file-document-outline</v-icon>
       </v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch } from 'vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -180,6 +181,8 @@ import snackbar from '@/plugins/snackbar';
 import { AxiosError } from 'axios';
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -214,11 +217,11 @@ const fileInput = ref<any>(null);
 const steps = [
   {
     name: 'details',
-    label: 'Details',
+    label: String(t('navigation.details')),
   },
   {
     name: 'summary',
-    label: 'Summary',
+    label: String(t('navigation.summary')),
   },
 ];
 
@@ -228,7 +231,7 @@ const loggedWallet = ref({ type: WalletType.Normal });
 const onFileChange = (file: File | null) => {
   const maxSize = 3 * 1024 * 1024; // 3 MB
   if (file && file.size > maxSize) {
-    alert("File is too large. Maximum size is 3 MB.");
+    alert(String(t('navigation.fileTooLarge')));
     uploadFile.value = null;
     return;
   }
@@ -275,7 +278,7 @@ const clearForm = () => {
 
 const submitReport = async () => {
   loading.value = true;
-  const reportType = props.reportTx ? ReportType.transaction : ReportType.web;
+  const reportType = props.reportTx ? ReportType.transaction : ReportType.website;
   const reportTypeStr = reportType === ReportType.transaction ? "Transaction" : "Website";
   const ref = props.reportTx ? props.reportTx : props.reportSite;
 
@@ -293,7 +296,7 @@ const submitReport = async () => {
     await cardanoShieldApi.submitReport(formData);
     emit('close');
     clearForm();
-    snackbar.fireSuccess('Report Submitted Successfully!');
+    snackbar.fireSuccess(t('common.reportSubmittedSuccess') as string);
   } catch (e) {
     if (e instanceof AxiosError && e.status === 409) {
       snackbar.setError(reportTypeStr + ' Already Reported!');

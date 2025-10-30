@@ -2,46 +2,44 @@
   <section class="partnership-section mb-2">
     <div class="partnership-header">
       <div class="kaiserex-logo">
-        <img src="@/assets/svg/Icon-Kaiserex.svg" alt="Kaiserex" class="logo-icon" />
+        <img src="@/assets/svg/Icon-Kaiserex.svg" :alt="$t('card.kaiserex')" class="logo-icon" />
       </div>
-      <h3 class="partnership-heading">Powered by Kaiserex</h3>
+      <h3 class="partnership-heading">{{ t('card.poweredByKaiserex') }}</h3>
       <p class="partnership-subheading">
-        Your Gero Card is powered by Kaiser Exchange International, a fully licensed and regulated cryptocurrency
-        financial services provider
+        {{ t('card.cardPoweredByKaiser') }}
       </p>
     </div>
 
     <div class="trust-grid">
       <!-- Regulatory Compliance -->
       <div class="trust-card">
-        <h4 class="trust-title">Licensed & Regulated</h4>
+        <h4 class="trust-title">{{ t('card.licensedRegulated') }}</h4>
         <p class="trust-description">
-          Registered with Lithuania's Financial Crime Investigation Service as a Virtual Currency Exchange and
-          Depository Wallet Operator
+          {{ t('card.licensedRegulatedDesc') }}
         </p>
       </div>
 
       <!-- Industry Experience -->
       <div class="trust-card">
-        <h4 class="trust-title">10+ Years Experience</h4>
+        <h4 class="trust-title">{{ t('card.yearsExperience') }}</h4>
         <p class="trust-description">
-          Over a decade of industry expertise serving 200+ high-value clients across multiple industries and countries
+          {{ t('card.yearsExperienceDesc') }}
         </p>
       </div>
 
       <!-- Security -->
       <div class="trust-card">
-        <h4 class="trust-title">Enterprise Security</h4>
+        <h4 class="trust-title">{{ t('card.enterpriseSecurity') }}</h4>
         <p class="trust-description">
-          Decentralized security protocols with frequent platform audits and compliance with global regulations
+          {{ t('card.enterpriseSecurityDesc') }}
         </p>
       </div>
     </div>
 
     <div class="partnership-footer">
       <div class="company-info">
-        <p class="company-name">Kaiser Exchange International UAB</p>
-        <p class="company-details">Company #304089907 · Vilnius, Lithuania</p>
+        <p class="company-name">{{ t('card.kaiserExchangeInternational') }}</p>
+        <p class="company-details">{{ t('card.companyDetails') }}</p>
       </div>
       <div class="footer-divider"></div>
       <div class="footer-links">
@@ -52,7 +50,7 @@
           class="kaiserex-link"
           @click="trackKaiserexClick"
         >
-          Learn more about Kaiserex
+          {{ t('card.learnMoreKaiserex') }}
         </a>
         <a
           href="https://www.gerowallet.io/post/gero-card-satchel-eu-integration-cardano-crypto-card"
@@ -61,7 +59,7 @@
           class="blog-link"
           @click="trackBlogClick"
         >
-          Read our announcement
+          {{ t('card.readOurAnnouncement') }}
         </a>
       </div>
     </div>
@@ -69,6 +67,10 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+
+const { t } = useTranslation();
+
 const trackKaiserexClick = () => {
   // Track external link click for analytics
   console.log('Kaiserex link clicked');

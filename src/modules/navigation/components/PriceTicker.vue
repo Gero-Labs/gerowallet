@@ -13,9 +13,13 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import { Blockchain } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 

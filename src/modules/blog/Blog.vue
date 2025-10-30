@@ -3,7 +3,7 @@
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
         <v-card class="transparent" flat>
-          <v-card-title class="justify-center text-center" style="font-size: 32px"> Blog Posts </v-card-title>
+          <v-card-title class="justify-center text-center" style="font-size: 32px"> {{ $t('blog.title') }} </v-card-title>
           <v-card-text class="pb-0">
             <v-row>
               <v-col cols="12" xl="8" lg="8" md="8"> </v-col>
@@ -16,7 +16,7 @@
                   solo
                   dense
                   prepend-inner-icon="mdi-magnify"
-                  label="Search"
+                  :label="$t('blog.search')"
                   outlined
                 ></v-text-field>
               </v-col>
@@ -55,7 +55,7 @@
                                       {{
                                         `${new Date(post.lastPublishedDate).toLocaleDateString()} • ${
                                           post.minutesToRead
-                                        } min read`
+                                        } ${$t('blog.minRead')}`
                                       }}
                                     </v-card-subtitle>
                                     <v-card-title style="word-break: break-word; color: white" class="text-left">
@@ -67,7 +67,7 @@
                                   </v-card-text>
                                   <v-card-actions class="px-6" style="width: 100%">
                                     <div style="width: 100%; display: flex; align-items: center">
-                                      {{ `${post.metrics.views} views` }}
+                                      {{ `${post.metrics.views} ${$t('blog.views')}` }}
                                       <v-spacer></v-spacer>
                                       <div>
                                         {{ `${post.metrics.likes} ` }}
@@ -199,7 +199,6 @@ const loadPosts = async (isInitial = false) => {
       return;
     }
 
-    // Проверяем, есть ли еще посты для загрузки
     if (allPosts.length < currentPageSize.value) {
       hasMorePosts.value = false;
     }
@@ -228,7 +227,6 @@ const loadPosts = async (isInitial = false) => {
       await Promise.all(statsPromises);
     }
 
-    // Всегда заменяем все посты (так как мы загружаем все заново с увеличенным размером)
     posts.value = postsMap;
   } catch (e) {
     error.value = 'Failed to load blog posts. Please check your connection and try again.';

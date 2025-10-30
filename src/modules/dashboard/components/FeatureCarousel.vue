@@ -32,7 +32,7 @@
                   <div class="debit-card-3d-wrapper" @mousemove="handleCardMouseMove" @mouseleave="handleCardMouseLeave" :style="debitCardStyle">
                     <img
                       :src="item.cardImage"
-                      alt="Gero Debit Card"
+                      :alt="$t('card.geroDebitCard')"
                       class="debit-card-floating"
                     />
                   </div>
@@ -52,7 +52,7 @@
                 <div class="cashback-container">
                   <img
                     :src="item.cardImage"
-                    alt="ADA Cashback"
+                    :alt="$t('cashback.adaCashback')"
                     class="cashback-floating"
                   />
                   <div class="debit-card-glow"></div>
@@ -106,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted } from 'vue';
 
 // Define and export carousel item interface

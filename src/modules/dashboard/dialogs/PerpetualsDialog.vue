@@ -3,8 +3,8 @@
     <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Strike Perpetuals"
-    subtitle="Trade perpetual futures with leverage on Cardano"
+    :title="t('perpetuals.strikePerpetuals').toString()"
+    :subtitle="t('perpetuals.tradePerpetualFutures').toString()"
     :min-height="734"
     :height="734"
     :width="1100"
@@ -20,7 +20,7 @@
             style="margin-top: 5px; margin-bottom: 5px;"
           >
             <h4 class="column-title compact">{{ tickerSymbol }}/USD</h4>
-            <span class="chart-timeframe">24H Price Action</span>
+            <span class="chart-timeframe">{{ t('perpetuals.24hPriceAction') }}</span>
           </div>
 
           <!-- TradingView ADA/USD Histogram Chart -->
@@ -49,19 +49,19 @@
             >
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">Positions</span>
+                  <span class="tab-text">{{ t('perpetuals.positions') }}</span>
                   <span v-if="positions.length > 0" class="tab-count ml-1">{{ positions.length }}</span>
                 </div>
               </v-tab>
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">Limit Orders</span>
+                  <span class="tab-text">{{ t('perpetuals.limitOrders') }}</span>
                   <span v-if="limitOrders.length > 0" class="tab-count ml-1">{{ limitOrders.length }}</span>
                 </div>
               </v-tab>
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">History</span>
+                  <span class="tab-text">{{ t('perpetuals.history') }}</span>
                   <span v-if="history.length > 0" class="tab-count ml-1">{{ history.length }}</span>
                 </div>
               </v-tab>
@@ -90,15 +90,15 @@
                   color="#26FAB0"
                   size="40"
                 />
-                <p class="mt-3">Loading positions...</p>
+                <p class="mt-3">{{ t('perpetuals.loadingPositions') }}</p>
               </div>
 
               <!-- Empty state -->
               <div v-else-if="positions.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-                <p class="mt-2">No Open Positions</p>
+                <p class="mt-2">{{ t('perpetuals.noOpenPositions') }}</p>
                 <p class="mt-1 text-caption">
-                  Your perpetual positions will appear here
+                  {{ t('perpetuals.yourPerpetualPositions') }}
                 </p>
               </div>
 
@@ -175,7 +175,7 @@
                   >
                     <v-img
                       :src="getPositionTrendIcon(item)"
-                      alt="P&L trend"
+                      :alt="t('perpetuals.pnlTrend')"
                     />
                   </v-avatar>
                 </div>
@@ -229,7 +229,7 @@
                       </div>
                     </template>
                     <div class="fees-tooltip-content">
-                      <div class="fees-title">Position Breakdown</div>
+                      <div class="fees-title">{{ t('perpetuals.positionBreakdown') }}</div>
                       <div class="position-main-info">
                         <div
                           style="
@@ -282,7 +282,7 @@
                           "
                       >
                         <div class="fee-item">
-                          <span>Opening Fee:</span>
+                          <span>{{ t('perpetuals.openingFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -293,7 +293,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Hourly Borrow Fee:</span>
+                          <span>{{ t('perpetuals.hourlyBorrowFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -310,7 +310,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Next Hourly Fee Update:</span>
+                          <span>{{ t('perpetuals.nextHourlyFeeUpdate') }}</span>
                           <span
                             style="
                                 color: #26fab0;
@@ -326,7 +326,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Liquidation After Hourly:</span>
+                          <span>{{ t('perpetuals.liquidationAfterHourly') }}</span>
                           <span
                           >${{
                               formatPriceWithMinDigits(
@@ -339,7 +339,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Accumulated Borrow Fee:</span>
+                          <span>{{ t('perpetuals.accumulatedBorrowFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -350,7 +350,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>PNL:</span>
+                          <span>{{ t('perpetuals.pnlLabel') }}</span>
                           <span
                             :class="
                                 calculatePositionFees(
@@ -379,7 +379,7 @@
                               border-top: 1px solid rgba(255, 255, 255, 0.1);
                             "
                         >
-                          <span><strong>PNL With Fees:</strong></span>
+                          <span><strong>{{ t('perpetuals.pnlWithFees') }}</strong></span>
                           <span
                             :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'"
                             style="font-weight: 600"
@@ -391,7 +391,7 @@
                         </div>
                       </div>
                       <div v-else class="fee-item">
-                        <span>Tooltip unavailable - missing market data</span>
+                        <span>{{ t('perpetuals.tooltipUnavailable') }}</span>
                       </div>
                     </div>
                   </v-tooltip>
@@ -440,7 +440,7 @@
                             ? assets.trendDownSvg
                             : assets.arrowRightSvg
                         "
-                      alt="trend"
+                      :alt="t('perpetuals.trend')"
                     />
                   </v-avatar>
                   <div class="pnl-values-compact">
@@ -495,15 +495,15 @@
                   color="#26FAB0"
                   size="40"
                 />
-                <p class="mt-3">Loading limit orders...</p>
+                <p class="mt-3">{{ t('perpetuals.loadingLimitOrders') }}</p>
               </div>
 
               <!-- Empty state -->
               <div v-else-if="limitOrders.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-target</v-icon>
-                <p class="mt-2">No Limit Orders</p>
+                <p class="mt-2">{{ t('perpetuals.noLimitOrders') }}</p>
                 <p class="mt-1 text-caption">
-                  Your pending limit orders will appear here
+                  {{ t('perpetuals.yourPendingLimitOrders') }}
                 </p>
               </div>
 
@@ -584,7 +584,7 @@
                       label
                       class="status-chip"
                     >
-                      {{ (item.status || 'unknown').toUpperCase() }}
+                      {{ (item.status || t('perpetuals.unknown')).toUpperCase() }}
                     </v-chip>
                   </template>
 
@@ -618,15 +618,15 @@
                       color="#26FAB0"
                       size="40"
                     />
-                    <p class="mt-3">Loading history...</p>
+                    <p class="mt-3">{{ t('perpetuals.loadingHistory') }}</p>
                   </div>
 
                   <!-- Empty state -->
                   <div v-else-if="history.length === 0" class="empty-state">
                     <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
-                    <p class="mt-2">No History</p>
+                    <p class="mt-2">{{ t('perpetuals.noHistory') }}</p>
                     <p class="mt-1 text-caption">
-                      All your positions and orders will appear here
+                      {{ t('perpetuals.allPositionsAndOrders') }}
                     </p>
                   </div>
 
@@ -684,7 +684,7 @@
                           <v-avatar tile size="10" class="mr-1 trend-icon-centered">
                             <v-img
                               :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
-                              alt="trend"
+                              :alt="t('perpetuals.trend')"
                             />
                           </v-avatar>
                           <div class="pnl-values-compact">
@@ -720,7 +720,7 @@
           <div
             class="d-flex align-items-center justify-space-between mb-2"
           >
-            <h4 class="column-title compact" style="align-content: center;">Open New Position</h4>
+            <h4 class="column-title compact" style="align-content: center;">{{ t('perpetuals.openNewPosition') }}</h4>
             <!-- Real-time ADA Price Ticker -->
             <div
               class="ada-ticker-compact-corner"
@@ -782,7 +782,7 @@
 
           <!-- Step 1: Position Direction -->
             <div class="form-section compact">
-              <div class="form-label compact">Position Direction</div>
+              <div class="form-label compact">{{ t('perpetuals.positionDirection') }}</div>
               <v-btn-toggle
                 mandatory
                 active-class="geroButton"
@@ -797,7 +797,7 @@
                   class="position-btn long-btn compact flex-btn"
                 >
                   <v-icon x-small class="mr-1">mdi-trending-up</v-icon>
-                  LONG
+                  {{ $t('perpetuals.long') }}
                 </v-btn>
                 <v-btn
                   value="SHORT"
@@ -806,14 +806,14 @@
                   class="position-btn short-btn compact flex-btn"
                 >
                   <v-icon x-small class="mr-1">mdi-trending-down</v-icon>
-                  SHORT
+                  {{ $t('perpetuals.short') }}
                 </v-btn>
               </v-btn-toggle>
             </div>
 
             <!-- Step 2: Order Type -->
             <div class="form-section compact">
-              <div class="form-label compact">Order Type</div>
+              <div class="form-label compact">{{ t('perpetuals.orderType') }}</div>
               <v-btn-toggle
                 mandatory
                 :active-class="
@@ -920,7 +920,7 @@
             <!-- Step 3: Collateral Amount -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between">
-                <div class="form-label compact">Collateral</div>
+                <div class="form-label compact">{{ t('perpetuals.collateral') }}</div>
                 <span class="available-balance compact"
                 >Available: {{ availableAdaBalance }} ADA</span
                 >
@@ -961,7 +961,7 @@
             <!-- Step 4: Leverage -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between mb-1">
-                <div class="form-label compact">Leverage</div>
+                <div class="form-label compact">{{ t('perpetuals.leverage') }}</div>
                 <div
                   class="leverage-display compact"
                   :class="{
@@ -1012,10 +1012,10 @@
                       >mdi-shield-check</v-icon
                       >
                       <span class="tp-sl-title compact"
-                      >Take Profit / Stop Loss</span
+                      >{{ t('perpetuals.takeProfitStopLoss') }}</span
                       >
                       <span class="tp-sl-subtitle compact"
-                      >(Optional)</span
+                      >({{ $t('common.optional') }})</span
                       >
                     </div>
                   </v-expansion-panel-header>
@@ -1025,7 +1025,7 @@
                     <!-- Take Profit -->
                     <div class="mb-2">
                       <div class="form-label small compact">
-                        Take Profit Price
+                        {{ t('perpetuals.takeProfitPrice') }}
                       </div>
                       <v-card
                         class="input-card small compact"
@@ -1064,7 +1064,7 @@
                     <!-- Stop Loss -->
                     <div class="mb-2">
                       <div class="form-label small compact">
-                        Stop Loss Price
+                        {{ t('perpetuals.stopLossPrice') }}
                       </div>
                       <v-card
                         class="input-card small compact"
@@ -1139,7 +1139,7 @@
                           <v-icon x-small class="mr-1"
                           >mdi-information</v-icon
                           >
-                          View Fees
+                          {{ t('perpetuals.viewFees') }}
                         </v-btn>
                       </template>
                       <div class="fees-tooltip-content">
@@ -1150,18 +1150,18 @@
                                 positionData.position === 'SHORT',
                             }"
                         >
-                          Trading Fees
+                          {{ t('perpetuals.tradingFees') }}
                         </div>
                         <div class="fee-item">
-                          <span>Opening Fee:</span>
+                          <span>{{ t('perpetuals.openingFee') }}</span>
                           <span>0.1%</span>
                         </div>
                         <div class="fee-item">
-                          <span>Hourly Borrow Fee:</span>
+                          <span>{{ t('perpetuals.hourlyBorrowFee') }}</span>
                           <span>~0.001%</span>
                         </div>
                         <div class="fee-item">
-                          <span>Accumulated Borrow Fee:</span>
+                          <span>{{ t('perpetuals.accumulatedBorrowFee') }}</span>
                           <span
                           >{{
                               (accumulatedBorrowFee * 100).toFixed(4)
@@ -1169,14 +1169,14 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Network Fee:</span>
+                          <span>{{ t('perpetuals.networkFee') }}</span>
                           <span>~2-5 ADA</span>
                         </div>
                       </div>
                     </v-tooltip>
                   </div>
                   <div class="summary-row compact">
-                    <span>Position Size:</span>
+                    <span>{{ t('perpetuals.positionSize') }}:</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1187,7 +1187,7 @@
                     >
                   </div>
                   <div class="summary-row compact">
-                    <span>Notional Value:</span>
+                    <span>{{ t('perpetuals.notionalValue') }}</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1198,7 +1198,7 @@
                     >
                   </div>
                   <div class="summary-row compact">
-                    <span>Est. Liquidation Price:</span>
+                    <span>{{ t('perpetuals.estLiqPrice') }}</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1239,10 +1239,10 @@
 
     <!-- Powered by Strike Finance Footer - positioned at dialog bottom -->
     <div class="d-flex align-center justify-center py-2 dialog-footer">
-      <span class="powered-by-text mr-2">Powered by</span>
+      <span class="powered-by-text mr-2">{{ t('perpetuals.poweredBy') }}</span>
       <img
         src="https://app.strikefinance.org/logo.svg"
-        alt="Strike Finance Logo"
+        :alt="t('perpetuals.strikeLogo').toString()"
         class="strike-logo"
         @error="onLogoError"
       />
@@ -1257,7 +1257,7 @@
   >
     <v-card>
       <v-card-title class="headline">
-        Update Position
+        {{ t('perpetuals.updatePosition') }}
       </v-card-title>
 
       <v-card-text>
@@ -1275,7 +1275,7 @@
 
           <v-text-field
             v-model="updatePositionData.stopLossPrice"
-            label="Stop Loss Price (USD)"
+            :label="t('perpetuals.stopLossPriceUsd')"
             type="number"
             step="0.01"
             min="0"
@@ -1288,7 +1288,7 @@
 
           <v-text-field
             v-model="updatePositionData.takeProfitPrice"
-            label="Take Profit Price (USD)"
+            :label="t('perpetuals.takeProfitPriceUsd')"
             type="number"
             step="0.01"
             min="0"
@@ -1306,13 +1306,13 @@
           text
           @click="updatePositionDialog = false"
         >
-          Cancel
+          {{ t('perpetuals.cancel') }}
         </v-btn>
         <v-btn
           color="primary"
           @click="updatePosition"
         >
-          Update
+          {{ t('perpetuals.update') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -1321,6 +1321,8 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
@@ -2248,36 +2250,36 @@ const positionData = ref({
 // Table headers for positions - ultra-compact for more space
 const positionHeaders = ref([
   {
-    text: "Asset",
+    text: String(t('perpetuals.asset')),
     align: "start",
     sortable: true,
     value: "asset",
     width: "35",
   },
   {
-    text: "Side",
+    text: String(t('perpetuals.side')),
     align: "center",
     sortable: true,
     value: "positionType",
     width: "28",
   },
   {
-    text: "Value",
+    text: String(t('perpetuals.value')),
     align: "center",
     sortable: true,
     value: "currentValue",
     width: "42",
   },
   {
-    text: "Entry/Mark",
+    text: String(t('perpetuals.entryMark')),
     align: "center",
     sortable: true,
     value: "entryPrice",
     width: "52",
   },
-  { text: "P&L", align: "center", sortable: true, value: "pnlWithFees", width: "42" },
+  { text: String(t('perpetuals.pnl')), align: "center", sortable: true, value: "pnlWithFees", width: "42" },
   {
-    text: "Collateral",
+    text: String(t('perpetuals.collateral')),
     align: "center",
     sortable: true,
     value: "collateral",
@@ -2289,35 +2291,35 @@ const positionHeaders = ref([
 // Limit Order Headers
 const limitOrderHeaders = ref([
   {
-    text: "Asset",
+    text: String(t('perpetuals.asset')),
     align: "start",
     sortable: true,
     value: "asset",
     width: "25",
   },
   {
-    text: "Side",
+    text: String(t('perpetuals.side')),
     align: "center",
     sortable: true,
     value: "positionType",
     width: "20",
   },
   {
-    text: "Price",
+    text: String(t('perpetuals.price')),
     align: "center",
     sortable: true,
     value: "limitPrice",
     width: "22",
   },
   {
-    text: "Collateral",
+    text: String(t('perpetuals.collateral')),
     align: "center",
     sortable: true,
     value: "collateral",
     width: "25",
   },
   {
-    text: "Status",
+    text: String(t('perpetuals.status')),
     align: "center",
     sortable: true,
     value: "status",
@@ -2329,35 +2331,35 @@ const limitOrderHeaders = ref([
 // History Headers
 const historyHeaders = ref([
   {
-    text: "Type",
+    text: String(t('perpetuals.type')),
     align: "start",
     sortable: true,
     value: "action",
     width: "164",
   },
   {
-    text: "Asset",
+    text: String(t('perpetuals.asset')),
     align: "center",
     sortable: true,
     value: "asset",
     width: "10",
   },
   {
-    text: "Entry Price",
+    text: String(t('perpetuals.entryPrice')),
     align: "start",
     sortable: true,
     value: "entryPrice",
     width: "20",
   },
   {
-    text: "Final P&L",
+    text: String(t('perpetuals.pnl')),
     align: "center",
     sortable: true,
     value: "finalPnl",
     width: "20",
   },
   {
-    text: "Date",
+    text: String(t('perpetuals.date')),
     align: "center",
     sortable: true,
     value: "closedTime",
@@ -2658,7 +2660,7 @@ const openPosition = async () => {
       snackbar.setError(error.response?.data?.error || error.message);
     } else {
       console.error("Failed to open position:", error);
-      snackbar.setError(`Failed to open position: ${error.message}`);
+      snackbar.setError(`${t('perpetuals.failedToOpenPosition')}: ${error.message}`);
     }
     // TODO: Show user-friendly error notification
   } finally {
@@ -2892,7 +2894,7 @@ const closePosition = async (position: PerpetualPosition) => {
             pollingIntervalId = null;
           }
           closingPositions.value[positionKey] = false;
-          snackbar.fireSuccess('Position closed successfully');
+          snackbar.fireSuccess(String(t('perpetuals.positionClosedSuccess')));
         } else if (pollingAttempts >= maxPollingAttempts) {
           // Max attempts reached
           console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
@@ -2927,7 +2929,7 @@ const closePosition = async (position: PerpetualPosition) => {
         enteredPositionTime: position.enteredPositionTime,
       }
     });
-    snackbar.setError('Failed to Close Position');
+    snackbar.setError(String(t('perpetuals.failedToClosePosition')));
     closingPositions.value[positionKey] = false;
 
     // Clean up polling interval on error
@@ -2951,7 +2953,7 @@ const submit = async (cborHex: string, witnessSetHex?: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+  snackbar.fireSuccess(t('perpetuals.txSentSuccess', { txId }));
   console.log(txId)
 }
 
@@ -3236,7 +3238,7 @@ const cancelLimitOrder = async (order: LimitOrder) => {
             pollingIntervalId = null;
           }
           cancellingOrders.value[orderKey] = false;
-          snackbar.fireSuccess('Order cancelled successfully');
+          snackbar.fireSuccess(String(t('perpetuals.orderCancelledSuccess')));
         } else if (pollingAttempts >= maxPollingAttempts) {
           // Max attempts reached
           console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
@@ -3259,7 +3261,7 @@ const cancelLimitOrder = async (order: LimitOrder) => {
 
   } catch (error: any) {
     console.error("[StrikeFinance] Failed to cancel limit order", error);
-    snackbar.setError(`Failed to Cancel Limit Order ${error.message}`);
+    snackbar.setError(`${t('perpetuals.failedToCancelLimitOrder')} ${error.message}`);
     cancellingOrders.value[orderKey] = false;
 
     // Clean up polling interval on error

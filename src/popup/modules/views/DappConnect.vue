@@ -1,11 +1,11 @@
 <template>
-  <PopupHeader title="Connect with Gero Wallet" ref="popupHeader">
+  <PopupHeader :title="$t('navigation.connectWithGeroWallet')" ref="popupHeader">
     <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
       <v-card-title class="justify-center pt-0" style="color: white; font-size: 14px">
-        Confirm URL before granting the access to DApps!
+        {{ $t('navigation.confirmUrlBeforeGranting') }}
       </v-card-title>
           <section style="font-weight: bold; color: white; font-size: 16px">
-            Allow the site to:
+            {{ $t('navigation.allowTheSiteTo') }}
           </section>
           <section style="font-size: 16px">
             <div id="dapp-consent-check">
@@ -14,12 +14,12 @@
                 color="#00DFF3"
                 v-model="consent"
                 hide-details
-                label="View the address and balance of the selected wallet."
+                :label="$t('navigation.viewAddressAndBalance')"
               ></v-checkbox>
             </div>
             <div style="color: white">
               <br/>
-              <p class="ml-9">For your security, any future transactions from this website will require additional verification by {{ loggedWallet.type === WalletType.Normal ? ' entering your spending password ' : ' interacting with your hardware wallet ' }} before signing.</p>
+              <p class="ml-9">{{ $t('navigation.futureTransactionsRequire', { action: loggedWallet.type === WalletType.Normal ? $t('navigation.enteringYourSpendingPassword') : $t('navigation.interactingWithHardware') }) }}</p>
             </div>
           </section>
     </v-card-text>
@@ -28,12 +28,12 @@
         <v-row>
           <v-col cols="6">
             <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline">
-              Decline
+              {{ $t('navigation.decline') }}
             </v-btn>
           </v-col>
           <v-col cols="6">
             <v-btn block class="geroButton" style="color: black!important;" :disabled="!consent" @click="confirm">
-              Confirm
+              {{ $t('navigation.confirm') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -42,6 +42,7 @@
   </PopupHeader>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -49,6 +50,9 @@ import { APIError } from '@/chrome/config';
 import { WalletType } from '@/models/types';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import filters from '@/shared/utils/filters';
+
+
+const { t } = useTranslation();
 
 const vmProxy = getCurrentInstance()!.proxy as any
 
@@ -93,9 +97,9 @@ onMounted(() => {
   const website = route.query?.website;
   if (website) {
     const domain = filters.extractHostname(website);
-    document.title = `Gero Dashboard | Connect to ${domain}`;
+    document.title = `Gero Dashboard | ${t('common.connectTo')} ${domain}`;
   } else {
-    document.title = 'Gero Dashboard | Connect';
+    document.title = `Gero Dashboard | ${t('common.connect')}`;
   }
 });
 </script>

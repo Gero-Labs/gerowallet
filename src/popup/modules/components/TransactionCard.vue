@@ -47,11 +47,15 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, onMounted, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano } from '@cardano-sdk/core';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   risk: {

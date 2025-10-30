@@ -14,10 +14,14 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
+
+
+const { t } = useTranslation();
 
 const width = ref<number>(2);
 const radius = ref<number>(0);

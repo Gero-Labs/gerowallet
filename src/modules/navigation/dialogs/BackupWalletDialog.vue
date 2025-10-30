@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    title="Wallet Backup"
+    :title="$t('navigation.walletBackup')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -48,7 +48,7 @@
             :complete="step > 1"
             step="1"
           >
-            Wallet Creation
+            {{ $t('navigation.walletCreation') }}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
@@ -101,10 +101,10 @@
                           <v-list-item class="px-0">
                             <v-list-item-content>
                               <v-list-item-title>
-                                Password Protected
+                                {{ $t('wallet.passwordProtected') }}
                               </v-list-item-title>
                               <v-list-item-subtitle>
-                                Enter your password to unlock the recovery phrase
+                                {{ $t('wallet.enterPasswordToUnlock') }}
                               </v-list-item-subtitle>
                             </v-list-item-content>
                           </v-list-item>
@@ -113,7 +113,7 @@
                             dense
                             v-model="password"
                             :rules="[rules.required()]"
-                            label="Password"
+                            :label="$t('wallet.password')"
                             :type="showPassword ? 'text' : 'password'"
                             @keydown.enter.stop="validUnlock && decryptMnemonic()"
                           >
@@ -130,7 +130,7 @@
                             @click="decryptMnemonic"
                           >
                             <v-icon class="mr-1">mdi-key</v-icon>
-                            Unlock
+                            {{ $t('wallet.unlock').toUpperCase() }}
                           </v-btn>
                         </v-form>
                       </v-overlay>
@@ -143,13 +143,13 @@
                     border="left"
                     class="text-left"
                   >
-                    Save the seed phrase somewhere safe and never share it with anyone.
+                    {{ $t('wallet.saveSeedPhraseSafe') }}
                   </v-alert>
                   <v-checkbox
                     class="mt-0"
                     hide-details
                     v-model="recoverSeedChecked"
-                    label="I understand that if I lose my secret backup phrase, I will not be able to access my funds."
+                    :label="$t('wallet.understandLosePhrase')"
                     :rules="[(recoverSeedChecked)]"
                   >
                   </v-checkbox>
@@ -232,6 +232,8 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { toRefs, ref, computed, nextTick, watch, getCurrentInstance } from 'vue'
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import * as bip39 from 'bip39';
@@ -342,7 +344,7 @@ const backupWalletStep2 = (): void => {
     emit('close')
     resetDialog()
     nextTick(() => {
-      snackbar.fireSuccess('Wallet Backed Up Successfully!')
+      snackbar.fireSuccess(t('wallet.walletBackedUp'))
     })
   }
 }
@@ -399,7 +401,7 @@ const decryptMnemonic = async (): Promise<void> => {
       [seedPhraseToConfirm.value, seedPhraseReplaced.value] = randomReplace(seedPhrase.value, 4);
       overlay.value = false
     } catch (e) {
-      snackbar.setError("Wrong Password")
+      snackbar.setError(t('common.wrongPassword'))
       console.log(e) //TODO
     }
   }

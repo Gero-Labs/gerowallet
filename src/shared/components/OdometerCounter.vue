@@ -5,6 +5,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import Odometer from 'odometer';
 import 'odometer/themes/odometer-theme-default.css';

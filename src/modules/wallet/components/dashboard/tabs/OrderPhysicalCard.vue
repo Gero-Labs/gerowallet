@@ -2,42 +2,42 @@
   <div class="order-physical-card">
     <div class="order-content">
       <div class="info-section">
-        <h3 class="info-title">Order a physical card</h3>
-        <p class="info-text">Write your delivery details, we will ship the card in 10-20 days.</p>
+        <h3 class="info-title">{{ $t('card.orderPhysicalCard') }}</h3>
+        <p class="info-text">{{ $t('card.writeDeliveryDetails') }}</p>
       </div>
 
       <div class="form-section">
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">Name *</label>
+            <label class="input-label">{{ $t('card.nameWithAsterisk') }}</label>
             <v-text-field
               v-model="formData.name"
               dense
               outlined
               class="form-input"
               hide-details
-              :placeholder="userName || 'Enter your name'"
+              :placeholder="userName || $t('card.enterYourName')"
             />
           </div>
         </div>
 
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">Street address *</label>
+            <label class="input-label">{{ $t('card.streetAddress') }}</label>
             <v-text-field v-model="formData.streetAddress" dense outlined class="form-input" hide-details />
           </div>
         </div>
 
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">City *</label>
+            <label class="input-label">{{ $t('card.city') }}</label>
             <v-text-field v-model="formData.city" dense outlined class="form-input" hide-details />
           </div>
         </div>
 
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">State / Province *</label>
+            <label class="input-label">{{ $t('card.stateProvince') }}</label>
             <div class="state-province-row">
               <v-text-field v-model="formData.state" dense outlined class="form-input state-input" hide-details />
               <v-text-field v-model="formData.postalCode" dense outlined class="form-input postal-input" hide-details />
@@ -47,7 +47,7 @@
 
         <div class="form-row">
           <div class="input-full">
-            <label class="input-label">Country *</label>
+            <label class="input-label">{{ $t('card.country') }}</label>
             <div class="country-select">
               <v-select
                 v-model="formData.country"
@@ -66,14 +66,14 @@
 
       <div class="shipping-section">
         <div class="form-row">
-          <label class="input-label">Shipping method</label>
+          <label class="input-label">{{ $t('card.shippingMethod') }}</label>
           <div class="shipping-options">
             <div
               class="shipping-option"
               :class="{ active: selectedShipping === 'express' }"
               @click="selectedShipping = 'express'"
             >
-              <span class="shipping-text">Express - 1 day</span>
+              <span class="shipping-text">{{ $t('card.expressShipping') }}</span>
             </div>
             <div
               class="shipping-option"
@@ -88,15 +88,15 @@
 
       <div class="shipping-fee">
         <div class="form-row">
-          <label class="input-label">Shipping fee</label>
+          <label class="input-label">{{ $t('card.shippingFee') }}</label>
           <span class="fee-amount">$3.99</span>
         </div>
       </div>
     </div>
 
     <div class="modal-actions">
-      <SecondaryButton text="Back" @click="$emit('close')" />
-      <GradientButton text="Place Order" @click="placeOrder" :loading="loading" />
+      <SecondaryButton :text="String($t('card.back'))" @click="$emit('close')" />
+      <GradientButton :text="String($t('card.placeOrder'))" @click="placeOrder" :loading="loading" />
     </div>
   </div>
 </template>

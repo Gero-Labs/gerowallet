@@ -1,12 +1,12 @@
 <template>
   <v-card flat outlined class="liquid-glass compact-swap-widget fill-height d-flex flex-column">
-    <v-card-title class="pb-2"> Swap </v-card-title>
+    <v-card-title class="pb-2"> {{ $t('swap.title') }} </v-card-title>
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column">
       <div class="flex-grow-1 d-flex flex-column">
         <v-card-title class="pb-2 pt-0 px-3" style="font-size: 14px">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
-            <v-btn value="swap" x-small rounded> SWAP </v-btn>
-            <v-btn value="limit" x-small rounded disabled> LIMIT </v-btn>
+            <v-btn value="swap" x-small rounded> {{ $t('swap.swap').toUpperCase() }} </v-btn>
+            <v-btn value="limit" x-small rounded disabled> {{ $t('swap.limit').toUpperCase() }} </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
           <v-btn icon x-small @click="refreshPrices">
@@ -19,8 +19,8 @@
         <v-card-text class="pb-0 px-3 pt-3 flex-grow-1 d-flex flex-column">
           <!-- Selling Section -->
           <div class="d-flex align-center justify-space-between mb-2">
-            <span style="color: #fda29b; font-size: 12px; font-weight: 200">Selling</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenA) }}</span>
+            <span style="color: #fda29b; font-size: 12px; font-weight: 200">{{ $t('swap.selling') }}</span>
+            <span class="caption grey--text">{{ $t('swap.balance') }}: {{ getTokenBalance(selectedTokenA) }}</span>
           </div>
           <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1f242f">
             <v-card-text class="py-2 px-3">
@@ -38,7 +38,7 @@
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
                       <span style="font-size: 14px; font-weight: 500">{{
-                        selectedTokenA ? selectedTokenA.ticker : 'Select'
+                        selectedTokenA ? selectedTokenA.ticker : $t('swap.select')
                       }}</span>
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
@@ -51,7 +51,7 @@
                         dense
                         outlined
                         hide-details
-                        placeholder="Search tokens"
+                        :placeholder="$t('swap.searchTokens')"
                         prepend-inner-icon="mdi-magnify"
                         class="mb-2"
                         clearable
@@ -80,7 +80,7 @@
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" outlined x-small color="primary" class="ml-1 px-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" outlined x-small color="primary" class="ml-1 px-1">{{ $t('common.owned') }}</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
@@ -125,8 +125,8 @@
 
           <!-- Buying Section -->
           <div class="d-flex align-center justify-space-between mb-2">
-            <span style="color: #75e0a7; font-size: 12px; font-weight: 200">Buying</span>
-            <span class="caption grey--text">Balance: {{ getTokenBalance(selectedTokenB) }}</span>
+            <span style="color: #75e0a7; font-size: 12px; font-weight: 200">{{ $t('swap.buying') }}</span>
+            <span class="caption grey--text">{{ $t('swap.balance') }}: {{ getTokenBalance(selectedTokenB) }}</span>
           </div>
           <v-card class="token-box" outlined style="background-color: #101828 !important; border: 1px solid #1f242f">
             <v-card-text class="py-2 px-3">
@@ -144,7 +144,7 @@
                         <v-icon v-else small>mdi-help-circle</v-icon>
                       </v-avatar>
                       <span style="font-size: 14px; font-weight: 500">{{
-                        selectedTokenB ? selectedTokenB.ticker : 'Select'
+                        selectedTokenB ? selectedTokenB.ticker : $t('dashboard.selectToken')
                       }}</span>
                       <v-icon x-small class="ml-1">mdi-chevron-down</v-icon>
                     </v-btn>
@@ -157,7 +157,7 @@
                         dense
                         outlined
                         hide-details
-                        placeholder="Search tokens"
+                        :placeholder="$t('dashboard.searchTokens')"
                         prepend-inner-icon="mdi-magnify"
                         class="mb-2"
                         clearable
@@ -186,7 +186,7 @@
                         <v-list-item-content>
                           <v-list-item-title>
                             {{ token.ticker }}
-                            <v-chip v-if="token.owned" x-small color="primary" outlined class="ml-1">Owned</v-chip>
+                            <v-chip v-if="token.owned" x-small color="primary" outlined class="ml-1">{{ $t('common.owned') }}</v-chip>
                           </v-list-item-title>
                           <v-list-item-subtitle class="text-truncate">
                             {{ token.name || token.unit.slice(0, 16) + '...' }}
@@ -252,6 +252,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, getCurrentInstance, onMounted } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import { walletStore } from '@/stores/walletStore';
@@ -265,6 +266,7 @@ import cardanoSvg from '@/assets/svg/cardano.svg';
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 const router = instance?.proxy.$router;
+const { t } = useTranslation();
 
 // Store refs
 const { loggedWallet, tokens } = toRefs(walletStore);
@@ -340,15 +342,15 @@ const canSwap = computed(() => {
 
 const swapButtonText = computed(() => {
   if (!selectedTokenA.value || !selectedTokenB.value) {
-    return 'Select Tokens';
+    return t('dashboard.selectTokens');
   }
   if (selectedTokenA.value.unit === selectedTokenB.value.unit) {
-    return 'Select Different Tokens';
+    return t('dashboard.selectDifferentTokens');
   }
   if (!amountA.value || Number(amountA.value) <= 0) {
-    return 'Enter Amount';
+    return t('dashboard.enterAmount');
   }
-  return 'Swap';
+  return t('dashboard.swap');
 });
 
 const availableTokens = computed(() => {

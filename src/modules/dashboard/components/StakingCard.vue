@@ -1,6 +1,6 @@
 <template>
   <v-card flat outlined class="liquid-glass" :loading="loadingTxs || poolLoading">
-    <v-card-title>Staking</v-card-title>
+    <v-card-title>{{ $t('staking.title') }}</v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters>
@@ -9,12 +9,12 @@
               <v-card-title class="staking-card-title pa-2">
                 <v-row no-gutters class="staking-info-row py-4">
                   <v-col cols="6" class="px-1 text-center">
-                    <span class="staking-label">Delegating to</span>
+                    <span class="staking-label">{{ $t('staking.delegatingTo') }}</span>
                     <h4 class="staking-value" v-if="pool">{{ `[${pool.ticker}] ${pool.name}` }}</h4>
-                    <v-btn x-small text color="#F97066" @click="unstake">Unstake</v-btn>
+                    <v-btn x-small text color="#F97066" @click="unstake">{{ $t('staking.unstake') }}</v-btn>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span class="staking-label">Total</span>
+                    <span class="staking-label">{{ $t('common.total') }}</span>
                     <h4 class="staking-value" v-if="loggedWallet && account">
                       {{
                         filters.toCurrency(
@@ -29,7 +29,7 @@
                     </h4>
                   </v-col>
                   <v-col cols="3" class="px-1 text-center">
-                    <span class="staking-label">Rewards</span>
+                    <span class="staking-label">{{ $t('staking.rewards') }}</span>
                     <h4 class="staking-value" v-if="account">
                       {{
                         filters.toCurrency(
@@ -45,13 +45,13 @@
                     <v-tooltip top v-if="account?.withdrawable_amount > 0 && !account?.drep_id" max-width="250">
                       <template v-slot:activator="{ on, attrs }">
                         <v-btn x-small text color="warning" v-bind="attrs" v-on="on" @click="withdraw">
-                          Withdraw
+                          {{ $t('staking.withdraw') }}
                         </v-btn>
                       </template>
-                      <span>DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.</span>
+                      <span>{{ $t('staking.drepDelegationRequired') }}</span>
                     </v-tooltip>
                     <v-btn v-else-if="account?.withdrawable_amount > 0" x-small text color="primary" @click="withdraw">
-                      Withdraw
+                      {{ $t('staking.withdraw') }}
                     </v-btn>
                   </v-col>
                 </v-row>
@@ -115,18 +115,18 @@
                 </div>
                 <v-row no-gutters class="pt-2 pb-1">
                   <v-col cols="6" class="staking-detail-col" v-if="account">
-                    <h5>Pool Id</h5>
+                    <h5>{{ $t('staking.poolId') }}</h5>
                     <span class="staking-detail-value">{{ filters.truncate(account?.pool_id) }}</span>
                     <CopyButton :value="account?.pool_id" x-small></CopyButton>
                   </v-col>
                   <v-col cols="6" class="staking-detail-col">
-                    <h5>ROS</h5>
+                    <h5>{{ $t('staking.ros') }}</h5>
                     <span class="staking-detail-value">{{ pool?.ros ? pool.ros.toFixed(2) + '%' : '0%' }}</span>
                   </v-col>
                 </v-row>
                 <v-row no-gutters>
                   <v-col cols="6" class="staking-detail-col" v-if="loggedWallet && pool">
-                    <h5>Fees</h5>
+                    <h5>{{ $t('staking.fees') }}</h5>
                     <span class="staking-fees-text"
                       >{{ pool.margin + '%' }} /
                       {{
@@ -140,7 +140,7 @@
                     >
                   </v-col>
                   <v-col cols="6" class="staking-detail-col" v-if="pool">
-                    <h5>Saturation</h5>
+                    <h5>{{ $t('staking.saturation') }}</h5>
                     <v-progress-linear
                       rounded
                       :color="filters.getColor(pool.live_saturation)"
@@ -318,6 +318,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
@@ -333,6 +334,9 @@ import { networkStore } from '@/stores/networkStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 
+
+const { t } = useTranslation();
+
 const { loggedWallet, rewards, account, keys, utxos } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
@@ -342,10 +346,10 @@ const hideZero = ref<boolean>(false);
 const sortBy = ref<string>('epoch');
 const sortDesc = ref<boolean>(true);
 const stakingHeaders = ref<any>([
-  { text: 'Pool Name', align: 'start', sortable: true, value: 'pool_id' },
-  { text: 'Epoch', align: 'start', sortable: true, value: 'epoch', width: 88 },
-  { text: 'Reward', align: 'start', sortable: true, value: 'amount', width: 100 },
-  { text: 'Change', align: 'start', sortable: true, value: 'change', width: 120 },
+  { text: String(t('staking.poolName')), align: 'start', sortable: true, value: 'pool_id' },
+  { text: String(t('staking.epoch')), align: 'start', sortable: true, value: 'epoch', width: 88 },
+  { text: String(t('staking.reward')), align: 'start', sortable: true, value: 'amount', width: 100 },
+  { text: String(t('staking.change')), align: 'start', sortable: true, value: 'change', width: 120 },
 ]);
 const unstakeDialog = ref<boolean>(false);
 const withdrawalDialog = ref<boolean>(false);
@@ -429,12 +433,12 @@ const unstake = async () => {
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     // Check if stake key is registered
     if (!account.value?.active) {
-      throw new Error('Cannot unstake: stake key is not registered');
+      throw new Error(t('common.cannotUnstake'));
     }
 
     const certificates: Cardano.Certificate[] = [];

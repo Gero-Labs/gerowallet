@@ -2,7 +2,7 @@
   <v-card flat outlined>
     <v-card-title class="d-flex align-center">
       <v-icon color="primary" class="mr-2">mdi-chart-line</v-icon>
-      Overview
+      {{ $t('governance.overview') }}
     </v-card-title>
     <v-card-text>
       <v-row>
@@ -19,17 +19,17 @@
             <div class="statistics-container d-flex flex-column justify-center align-center">
               <div class="d-flex flex-column justify-center align-center mb-4">
                 <div class="stat-number text-h4 font-weight-bold primary--text">1</div>
-                <div class="stat-label text-subtitle-1">Admin</div>
+                <div class="stat-label text-subtitle-1">{{ $t('governance.admin') }}</div>
               </div>
 
               <div class="d-flex flex-column justify-center align-center mb-4">
                 <div class="stat-number text-h4 font-weight-bold success--text">9</div>
-                <div class="stat-label text-subtitle-1">Members</div>
+                <div class="stat-label text-subtitle-1">{{ $t('governance.members') }}</div>
               </div>
 
               <div class="d-flex flex-column justify-center align-center">
                 <div class="stat-number text-h4 font-weight-bold info--text">9</div>
-                <div class="stat-label text-subtitle-1">Members All Time</div>
+                <div class="stat-label text-subtitle-1">{{ $t('governance.membersAllTime') }}</div>
               </div>
             </div>
           </v-card>
@@ -40,9 +40,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
 
+
+const { t } = useTranslation();
 const chartOptions = computed(() => ({
   chart: {
     type: 'area',

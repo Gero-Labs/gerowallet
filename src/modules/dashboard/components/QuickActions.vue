@@ -9,7 +9,7 @@
                 <v-avatar tile size="50">
                   <v-img
                     :src="assets.sendSvg"
-                    alt="Send"
+                    :alt="$t('common.send')"
                     contain
                     style="
                       filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);
@@ -17,7 +17,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Send</span>
+              <span>{{ $t('wallet.send') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;">
@@ -26,7 +26,7 @@
                 <v-avatar tile size="50">
                   <v-img
                     :src="assets.qrCodeSvg"
-                    alt="Receive"
+                    :alt="$t('common.receive')"
                     contain
                     style="
                       filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);
@@ -34,7 +34,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Receive</span>
+              <span>{{ $t('wallet.receive') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
@@ -45,7 +45,7 @@
                 <v-avatar tile size="50">
                   <v-img
                     :src="assets.swapSvg"
-                    alt="Swap"
+                    :alt="$t('swap.swap')"
                     contain
                     style="
                       filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);
@@ -53,7 +53,7 @@
                   ></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Swap</span>
+              <span>{{ $t('swap.swap') }}</span>
             </v-layout>
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isBuyDisabled">
@@ -69,10 +69,10 @@
                 :style="isBuyDisabled ? { filter: 'brightness(0.5)' } : {}"
               >
                 <v-avatar tile size="50">
-                  <v-img :src="assets.dollarShieldSvg" alt="Buy" contain></v-img>
+                  <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" contain></v-img>
                 </v-avatar>
               </v-btn>
-              <span>Buy</span>
+              <span>{{ $t('navigation.buy') }}</span>
             </v-layout>
           </v-col>
         </v-row>
@@ -86,6 +86,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import ReceiveDialog from "@/modules/dashboard/dialogs/ReceiveDialog.vue";
 import SwapDialog from "@/modules/dashboard/dialogs/SwapDialog.vue";
@@ -94,6 +95,9 @@ import SendDialog from "../dialogs/SendDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   utxos: {

@@ -2,10 +2,10 @@
   <v-form ref="form" class="fill-height">
     <v-card outlined class="pa-4 fill-height transparent">
       <div style="width: 100px; margin: auto" class="py-3">
-        <img alt="Gero Logo" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
-        <img alt="Gero Logo" id="modal-logo-text" width="100" :src="assets.geroText"/>
+        <img :alt="$t('common.geroLogo')" id="modal-logo-icon" width="100" :src="assets.geroLogo"/>
+        <img :alt="$t('common.geroLogo')" id="modal-logo-text" width="100" :src="assets.geroText"/>
       </div>
-      <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">Select a Wallet to Login</v-card-title>
+      <v-card-title class="justify-center" style="font-size: 20px; font-weight: bold; color: white; word-break: break-word">{{ $t('wallet.selectWalletToLogin') }}</v-card-title>
       <v-card-text class="px-2 py-0 fill-height" style="max-width: 400px; margin: auto; height: 100%; max-height: 220px; overflow-y: auto">
         <v-list nav dense class="pa-0" style="background-color: #ffffff0a;" v-if="availableWallets?.length > 0">
           <v-list-item-group v-model="selectedWallet" color="primary">
@@ -46,14 +46,14 @@
           </v-list-item-group>
         </v-list>
         <div v-else>
-          No Cardano mainnet wallets detected!<br>
-          Please close this window and create a wallet to continue.
+          {{ $t('wallet.noCardanoMainnetWallets') }}
         </div>
       </v-card-text>
     </v-card>
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType } from '@/models/types';
@@ -62,6 +62,9 @@ import assets from '@/utils/assets';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
+
+
+const { t } = useTranslation();
 
 const { wallets } = toRefs(geroStore);
 const { config } = toRefs(walletStore);
