@@ -10,12 +10,14 @@ import { debugLog } from '@/utils/debug';
 export interface DexHunterStore {
   dexHunterTokens: {};
   blacklistPolicies: string[];
+  registeredAddresses: string[];
 }
 
 // Create an observable state
 export const dexHunterStore = Vue.observable<DexHunterStore>({
   dexHunterTokens: {},
   blacklistPolicies: [],
+  registeredAddresses: [],
 });
 
 const STORE_NAME = 'dexHunterStore';
@@ -57,7 +59,7 @@ function broadcastFromBackground(updates: Partial<DexHunterStore>) {
 
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [] };
+      const current = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [], registeredAddresses: [] };
       chrome.storage.local.set({
         [STORE_NAME]: { ...current, ...updates }
       });
@@ -72,7 +74,7 @@ async function broadcastTokenPatch(unit: string, patch: { price: number; mcap: n
   if (context === 'background') {
     // Get current state
     const result = await chrome.storage.local.get(STORE_NAME);
-    const saved: DexHunterStore = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [] };
+    const saved: DexHunterStore = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [], registeredAddresses: [] };
 
     // Create updated tokens object
     const updatedTokens = {
@@ -220,9 +222,53 @@ export default {
     const resetState: DexHunterStore = {
       dexHunterTokens: {},
       blacklistPolicies: [],
+      registeredAddresses: [],
     };
 
     Object.assign(dexHunterStore, resetState);
     broadcastFromBackground(resetState);
+  },
+
+  /**
+   * Check if an address is already registered with DexHunter
+   */
+  isAddressRegistered(address: string): boolean {
+    return dexHunterStore.registeredAddresses.includes(address);
+  },
+
+  /**
+   * Register address with DexHunter backend (for wallet balance tracking)
+   * This should be called before performing swaps to enable DexHunter to track wallet state
+   * Called from browser context (SwapWidget), so we update store directly
+   */
+  async registerAddress(address: string): Promise<void> {
+    // Check if already registered
+    if (this.isAddressRegistered(address)) {
+      debugLog(`📝 Address already registered with DexHunter: ${address}`);
+      return;
+    }
+
+    try {
+      debugLog(`📝 Registering address with DexHunter: ${address}`);
+      const res = await dexHunterApi.walletBalance([address]);
+
+      if (res.status === 200) {
+        // Update store directly (browser context)
+        dexHunterStore.registeredAddresses = [...dexHunterStore.registeredAddresses, address];
+
+        // Persist to storage
+        const result = await chrome.storage.local.get(STORE_NAME);
+        const current = result[STORE_NAME] || { dexHunterTokens: {}, blacklistPolicies: [], registeredAddresses: [] };
+        await chrome.storage.local.set({
+          [STORE_NAME]: { ...current, registeredAddresses: dexHunterStore.registeredAddresses }
+        });
+
+        debugLog(`✅ Address registered successfully with DexHunter: ${address}`);
+      } else {
+        console.warn(`Failed to register address with DexHunter: ${parseHttpError(res)}`);
+      }
+    } catch (e) {
+      console.error(`Error registering address with DexHunter:`, e);
+    }
   }
 };

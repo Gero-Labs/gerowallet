@@ -43,7 +43,6 @@ export const sharedConfig: UserConfig = {
     alias: {
       '@/': `${r('src')}/`,
       'buffer': 'buffer',
-      '@emurgo/cardano-serialization-lib-nodejs': '@emurgo/cardano-serialization-lib-browser',
       '@emurgo/cardano-message-signing-nodejs': '@emurgo/cardano-message-signing-browser',
       'lodash': 'lodash-es',
       'cbor': r('src/shims/cbor.js'),
@@ -118,7 +117,7 @@ export const sharedConfig: UserConfig = {
       'blake2b',
       'crypto-ts',
     ],
-    exclude: ['vue-demi', '@emurgo/cardano-serialization-lib-browser', 'cbor'],
+    exclude: ['vue-demi', 'cbor'],
     esbuildOptions: {
       plugins: [],
       target: 'es2020',

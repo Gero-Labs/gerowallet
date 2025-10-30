@@ -47,18 +47,10 @@
   import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';
   import DappAddress from '@/popup/modules/components/DappAddress.vue';
   import TransactionCard from '@/popup/modules/components/TransactionCard.vue';
-  import { BigNum, Value, Transaction } from '@emurgo/cardano-serialization-lib-browser';
-  import { Buffer } from 'buffer';
-  import { AssetWithQuantity } from '@/shared/models/asset-quantity';
   import networks from '@/utils/networks';
-  import {
-    diffAssetsFromIncomingToOutgoing,
-    getAssetsFromMultiAsset,
-    getPayAndReceiveTokens,
-  } from '@/shared/utils/builder';
   import cardanoShieldApi from '@/api/cardano-shield-api';
   import { DappRisk } from '@/models/cardano-shield-types';
-  import type { TxData, Risks, SwapDetails } from '@/modules/multisig/types/MultiSigTypes';
+  import type { TxData, Risks } from '@/modules/multisig/types/MultiSigTypes';
 
   interface SendData {
     selectedWallet: string;
