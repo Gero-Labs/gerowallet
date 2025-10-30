@@ -1,67 +1,115 @@
 import Vue from 'vue';
 import VueI18n from 'vue-i18n';
 
-// Vuetify locales
-import { en as vuetifyEn, ru as vuetifyRu } from 'vuetify/src/locale';
+// Vuetify locales - import all available
+import {
+  en as vuetifyEn,
+  ru as vuetifyRu,
+  de as vuetifyDe,
+  es as vuetifyEs,
+  fr as vuetifyFr,
+  it as vuetifyIt,
+  ja as vuetifyJa,
+  nl as vuetifyNl,
+  pt as vuetifyPt,
+  tr as vuetifyTr,
+  zhHans as vuetifyCn,
+  th as vuetifyTh,
+  pl as vuetifyPl,
+  el as vuetifyGr,
+  he as vuetifyHe,
+} from 'vuetify/src/locale';
 
-// Flat structure - one file per language (includes all modules)
-import cn from '@/plugins/i18n/cn';
-import cz from '@/plugins/i18n/cz';
-import de from '@/plugins/i18n/de';
+// Only load US English by default (other languages lazy-loaded on demand)
 import us from '@/plugins/i18n/us';
-import es from '@/plugins/i18n/es';
-import fr from '@/plugins/i18n/fr';
-import gb from '@/plugins/i18n/gb';
-import gr from '@/plugins/i18n/gr';
-import he from '@/plugins/i18n/he';
-import hr from '@/plugins/i18n/hr';
-import id from '@/plugins/i18n/id';
-import ind from '@/plugins/i18n/in';
-import it from '@/plugins/i18n/it';
-import jp from '@/plugins/i18n/jp';
-import nl from '@/plugins/i18n/nl';
-import pk from '@/plugins/i18n/pk';
-import pt from '@/plugins/i18n/pt';
-import ru from '@/plugins/i18n/ru';
-import th from '@/plugins/i18n/th';
-import tr from '@/plugins/i18n/tr';
-import tz from '@/plugins/i18n/tz';
-import vn from '@/plugins/i18n/vn';
 
 /**
  * Wrap translations with Vuetify locale support
  */
 const wrapWithVuetify = (translations: any, vuetifyLocale: any, rtl = false, locale = 'en-US') => ({
-  rtl: rtl ? 'true' : 'false',
+  rtl, // Fixed: Boolean instead of string
   locale,
   $vuetify: { ...vuetifyLocale },
   ...translations,
 });
 
-const messages = {
-  cn: wrapWithVuetify(cn, vuetifyEn, false, 'zh-CN'),
-  cz: wrapWithVuetify(cz, vuetifyEn, false, 'cs-CZ'),
-  de: wrapWithVuetify(de, vuetifyEn, false, 'de-DE'),
-  gb: wrapWithVuetify(gb, vuetifyEn, false, 'en-GB'),
-  es: wrapWithVuetify(es, vuetifyEn, false, 'es-ES'),
-  fr: wrapWithVuetify(fr, vuetifyEn, false, 'fr-FR'),
-  gr: wrapWithVuetify(gr, vuetifyEn, false, 'el-GR'),
-  he: wrapWithVuetify(he, vuetifyEn, true, 'he-IL'), // RTL
-  hr: wrapWithVuetify(hr, vuetifyEn, false, 'hr-HR'),
-  id: wrapWithVuetify(id, vuetifyEn, false, 'id-ID'),
-  in: wrapWithVuetify(ind, vuetifyEn, false, 'hi-IN'),
-  it: wrapWithVuetify(it, vuetifyEn, false, 'it-IT'),
-  jp: wrapWithVuetify(jp, vuetifyEn, false, 'ja-JP'),
-  nl: wrapWithVuetify(nl, vuetifyEn, false, 'nl-NL'),
-  pk: wrapWithVuetify(pk, vuetifyEn, true, 'ur-PK'), // RTL
-  pt: wrapWithVuetify(pt, vuetifyEn, false, 'pt-PT'),
-  ru: wrapWithVuetify(ru, vuetifyRu, false, 'ru-RU'),
-  tr: wrapWithVuetify(tr, vuetifyEn, false, 'tr-TR'),
-  th: wrapWithVuetify(th, vuetifyEn, false, 'th-TH'),
-  tz: wrapWithVuetify(tz, vuetifyEn, false, 'sw-TZ'),
-  us: wrapWithVuetify(us, vuetifyEn, false, 'en-US'),
-  vn: wrapWithVuetify(vn, vuetifyEn, false, 'vi-VN'),
+// Vuetify locale mapping
+const vuetifyLocales: Record<string, any> = {
+  cn: vuetifyCn,
+  de: vuetifyDe,
+  es: vuetifyEs,
+  fr: vuetifyFr,
+  gb: vuetifyEn,
+  gr: vuetifyGr,
+  he: vuetifyHe,
+  it: vuetifyIt,
+  jp: vuetifyJa,
+  nl: vuetifyNl,
+  pt: vuetifyPt,
+  pl: vuetifyPl,
+  ru: vuetifyRu,
+  th: vuetifyTh,
+  tr: vuetifyTr,
+  us: vuetifyEn,
 };
+
+// Initial messages with only US English
+const messages: Record<string, any> = {
+  us: wrapWithVuetify(us, vuetifyEn, false, 'en-US'),
+};
+
+/**
+ * Lazy load language file
+ */
+async function loadLanguage(lang: string): Promise<void> {
+  if (messages[lang]) return; // Already loaded
+
+  try {
+    const translations = await import(`@/plugins/i18n/${lang}.ts`);
+    const vuetifyLocale = vuetifyLocales[lang] || vuetifyEn;
+    const isRTL = lang === 'he' || lang === 'pk'; // Hebrew and Urdu are RTL
+
+    messages[lang] = wrapWithVuetify(translations.default, vuetifyLocale, isRTL, getLocaleCode(lang));
+
+    i18n.setLocaleMessage(lang, messages[lang]);
+  } catch (error) {
+    console.warn(`Failed to load language ${lang}:`, error);
+    // Fallback to English if language fails to load
+    messages[lang] = messages['us'];
+    i18n.setLocaleMessage(lang, messages[lang]);
+  }
+}
+
+/**
+ * Get full locale code for a language
+ */
+function getLocaleCode(lang: string): string {
+  const localeCodes: Record<string, string> = {
+    cn: 'zh-CN',
+    cz: 'cs-CZ',
+    de: 'de-DE',
+    es: 'es-ES',
+    fr: 'fr-FR',
+    gb: 'en-GB',
+    gr: 'el-GR',
+    he: 'he-IL',
+    hr: 'hr-HR',
+    id: 'id-ID',
+    in: 'hi-IN',
+    it: 'it-IT',
+    jp: 'ja-JP',
+    nl: 'nl-NL',
+    pk: 'ur-PK',
+    pt: 'pt-PT',
+    ru: 'ru-RU',
+    th: 'th-TH',
+    tr: 'tr-TR',
+    tz: 'sw-TZ',
+    us: 'en-US',
+    vn: 'vi-VN',
+  };
+  return localeCodes[lang] || 'en-US';
+}
 
 Vue.use(VueI18n);
 
@@ -79,9 +127,22 @@ const getSavedLocale = (): string => {
 };
 
 const i18n: VueI18n = new VueI18n({
-  locale: getSavedLocale(), // set locale from saved config
-  fallbackLocale: 'us', // set fallback locale
-  messages, // set locale messages
+  locale: 'us', // Initial locale
+  fallbackLocale: 'us', // Fallback to US English
+  messages, // Initial messages (only US)
+  silentTranslationWarn: false, // Show warnings for missing keys in development
+  silentFallbackWarn: false, // Show warnings when falling back
 });
 
+// Load saved locale on initialization
+(async () => {
+  const savedLocale = getSavedLocale();
+  if (savedLocale !== 'us') {
+    await loadLanguage(savedLocale);
+    i18n.locale = savedLocale;
+  }
+})();
+
+// Export both i18n and loadLanguage helper
+export { loadLanguage };
 export default i18n;
