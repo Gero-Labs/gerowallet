@@ -12,7 +12,8 @@ import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
 import walletStore from '@/stores/geroStore';
-import Notifications from '@voerro/vue-notifications'
+import Notifications from '@voerro/vue-notifications';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -33,15 +34,31 @@ function loadPersistedWallet(): Promise<void> {
   });
 }
 
-async function initializeApp() {
-  await loadPersistedWallet();
-  
+async function initializeFeatureFlags(): Promise<void> {
+  //@ts-ignore
+  const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
+  if (ldClientId) {
+    try {
+      await featureFlagsStore.initialize(ldClientId);
+    } catch (error) {
+      console.error('Failed to initialize feature flags:', error);
+    }
+  } else {
+    console.warn('LaunchDarkly client ID not found in environment');
+  }
+}
+
+loadPersistedWallet().then(() => {
+  // Initialize feature flags in background (non-blocking)
+  // This prevents delaying app startup if LaunchDarkly is slow/down
+  initializeFeatureFlags().catch((error) => {
+    console.error('Feature flags initialization failed:', error);
+  });
+
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
-    // set default flavor of showdown
     flavor: 'github',
-    // set default options of showdown (will override the flavor options)
     options: {
       emoji: false,
     },
@@ -51,7 +68,7 @@ async function initializeApp() {
   Vue.directive('click-outside', ClickOutside);
   Vue.component('notifications', Notifications);
 
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
       if (saved?.loggedWallet?.id && saved?.config?.locale) {
         console.log('🌐 Setting initial locale from storage:', saved.config.locale);
@@ -69,6 +86,4 @@ async function initializeApp() {
       render: h => h(App)
     }).$mount('#app');
   });
-}
-
-initializeApp();
+});
