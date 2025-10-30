@@ -99,9 +99,6 @@ export default defineConfig({
           name: 'pbkdf2-virtual-module',
           enforce: 'pre',
           resolveId(source) {
-            if (source === '\0virtual:pbkdf2') {
-              return source;
-            }
             if (source === 'pbkdf2') {
               return '\0virtual:pbkdf2';
             }
@@ -114,7 +111,7 @@ export default defineConfig({
               return `
 import pbkdf2Browser from 'pbkdf2/browser.js';
 export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
-export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync;
+export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync || pbkdf2Browser;
 export default pbkdf2Browser;
 `;
             }
