@@ -241,6 +241,14 @@ watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
+      // CRITICAL FIX: Load language file before switching
+      const { loadLanguage } = await import('@/plugins/i18n');
+      try {
+        await loadLanguage(iso);
+      } catch (error) {
+        console.error(`Failed to load language ${iso}:`, error);
+      }
+      
       await WalletStore.setLocale(iso);
       vmProxy.$i18n.locale = iso;
       await vmProxy.$nextTick();

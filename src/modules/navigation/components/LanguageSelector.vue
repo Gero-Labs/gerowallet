@@ -28,6 +28,7 @@ import { toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import languages from '@/plugins/languages';
 import { geroStore } from '@/stores/geroStore';
+import { loadLanguage } from '@/plugins/i18n';
 
 
 const { t } = useTranslation();
@@ -37,19 +38,38 @@ const selectedLang = ref(-1);
 const instance = getCurrentInstance();
 
 const currentLanguage = computed(() => {
-  return languages[instance?.proxy?.$i18n?.locale || 'en']
+  return languages[instance?.proxy?.$i18n?.locale || 'us']
 });
 
-watch(selectedLang, (val) => {
+watch(selectedLang, async (val) => {
   const localeKey = Object.keys(languages)[val]
+  
+  // CRITICAL FIX: Lazy load language file before switching
+  try {
+    await loadLanguage(localeKey);
+  } catch (error) {
+    console.error(`Failed to load language ${localeKey}:`, error);
+    // Continue anyway - will fallback to English
+  }
+  
+  // Update store and i18n locale
   walletStore.setLocale(localeKey)
   if (instance?.proxy?.$i18n) {
-    instance.proxy.$i18n.locale = Object.keys(languages)[val];
+    instance.proxy.$i18n.locale = localeKey;
   }
 });
 
-onMounted(() => {
+onMounted(async () => {
   selectedLang.value = Object.keys(languages).indexOf(locale.value)
+  
+  // Load saved language on mount if not 'us'
+  if (locale.value !== 'us') {
+    try {
+      await loadLanguage(locale.value);
+    } catch (error) {
+      console.error(`Failed to load saved language ${locale.value}:`, error);
+    }
+  }
 });
 </script>
 <style>
