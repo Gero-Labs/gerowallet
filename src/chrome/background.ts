@@ -78,30 +78,30 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 // Initialize background store messaging (the import alone initializes it)
 console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
-const currentVersion: string = chrome.runtime.getManifest().version;
+// const currentVersion: string = chrome.runtime.getManifest().version;
 
-if (!isBeta) {
-  chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'update') {
-      chrome.notifications.create('updateNotification', {
-        type: 'image',
-        title: 'Extension Updated',
-        message: `Gero Dashboard has been updated to version ${currentVersion}!`,
-        iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/2.6.0.png'),
-      });
-    }
-  });
-  chrome.notifications.onClicked.addListener(function(notificationId) {
-    if (notificationId === 'updateNotification') {
-      // Perform your action here, for example, open a URL in a new tab
-      chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
-
-      // Optionally, clear the notification if needed
-      chrome.notifications.clear(notificationId);
-    }
-  });
-}
+// if (!isBeta) {
+//   chrome.runtime.onInstalled.addListener((details) => {
+//     if (details.reason === 'update') {
+//       chrome.notifications.create('updateNotification', {
+//         type: 'image',
+//         title: 'Extension Updated',
+//         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
+//         iconUrl: chrome.runtime.getURL('public/logo128.png'),
+//         imageUrl: chrome.runtime.getURL('public/2.6.1.png'),
+//       });
+//     }
+//   });
+//   chrome.notifications.onClicked.addListener(function(notificationId) {
+//     if (notificationId === 'updateNotification') {
+//       // Perform your action here, for example, open a URL in a new tab
+//       chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
+//
+//       // Optionally, clear the notification if needed
+//       chrome.notifications.clear(notificationId);
+//     }
+//   });
+// }
 
 export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
