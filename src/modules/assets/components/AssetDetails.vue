@@ -4,20 +4,20 @@
       {{ asset.name }}
     </v-card-title>
     <v-card-subtitle class="pb-0">
-      Unit: {{ filters.truncate(asset.unit) }}
+      {{ $t('assets.unit') }}: {{ filters.truncate(asset.unit) }}
       <CopyButton class="ml-1" :value="asset.unit" x-small></CopyButton>
     </v-card-subtitle>
     <v-card-subtitle class="py-0 pb-3">
-      Fingerprint: {{  filters.truncate(asset.fingerprint) }}
+      {{ $t('assets.fingerprint') }}: {{  filters.truncate(asset.fingerprint) }}
       <CopyButton class="ml-1" :value="asset.fingerprint" x-small></CopyButton>
     </v-card-subtitle>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
         <v-tab>
-          Files
+          {{ $t('assets.files') }}
         </v-tab>
         <v-tab>
-          Metadata
+          {{ $t('assets.metadata') }}
         </v-tab>
       </v-tabs>
       <v-tabs-items
@@ -105,10 +105,14 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue'
 import CopyButton from '@/shared/components/CopyButton.vue';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   asset: {

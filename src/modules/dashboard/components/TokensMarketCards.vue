@@ -6,8 +6,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -22,15 +22,15 @@
                 </v-icon>
               </template>
               <div class="refresh-tooltip-content">
-                <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
-                <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.lastUpdated') }}:</strong> {{ formatFullRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.nextUpdate') }}:</strong> {{ formatNextRefreshTime() }}</div>
               </div>
             </v-tooltip>
           </div>
 
           <v-card-title class="px-2 py-1">
             <v-icon left size="16" class="volume-icon">mdi-trending-up</v-icon>
-            <span class="text-subtitle-1">Top Volume</span>
+            <span class="text-subtitle-1">{{ t('dashboard.topVolume') }}</span>
           </v-card-title>
           <v-card-text class="px-2 pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
@@ -40,7 +40,7 @@
               <div class="caption grey--text">{{ error }}</div>
             </div>
             <div v-else-if="marketData.topVolume.length === 0" class="text-center py-4">
-              <div class="caption grey--text">No volume data available</div>
+              <div class="caption grey--text">{{ t('dashboard.noVolumeData') }}</div>
             </div>
             <template v-else>
               <div
@@ -63,7 +63,7 @@
                   </v-avatar>
                   <div class="token-info">
                     <div class="font-weight-medium token-ticker">{{ token.ticker || token.symbol }}</div>
-                    <div class="caption grey--text token-name">{{ token.name || 'Token' }}</div>
+                    <div class="caption grey--text token-name">{{ token.name || t('dashboard.token') }}</div>
                   </div>
                 </div>
                 <div class="text-right">
@@ -83,8 +83,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -99,15 +99,15 @@
                 </v-icon>
               </template>
               <div class="refresh-tooltip-content">
-                <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
-                <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.lastUpdated') }}:</strong> {{ formatFullRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.nextUpdate') }}:</strong> {{ formatNextRefreshTime() }}</div>
               </div>
             </v-tooltip>
           </div>
 
           <v-card-title class="px-2 py-1">
             <v-icon left size="16" class="gainers-icon">mdi-chart-line</v-icon>
-            <span class="text-subtitle-1">Top Gainers</span>
+            <span class="text-subtitle-1">{{ t('dashboard.topGainers') }}</span>
           </v-card-title>
           <v-card-text class="px-2 pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
@@ -117,7 +117,7 @@
               <div class="caption grey--text">{{ error }}</div>
             </div>
             <div v-else-if="marketData.topGainers.length === 0" class="text-center py-4">
-              <div class="caption grey--text">No gainers available</div>
+              <div class="caption grey--text">{{ t('dashboard.noGainersData') }}</div>
             </div>
             <template v-else>
               <div
@@ -140,13 +140,13 @@
                   </v-avatar>
                   <div class="token-info">
                     <div class="font-weight-medium token-ticker">{{ token.ticker || token.symbol }}</div>
-                    <div class="caption grey--text token-name">{{ token.name || 'Token' }}</div>
+                    <div class="caption grey--text token-name">{{ token.name || t('dashboard.token') }}</div>
                   </div>
                 </div>
                 <div class="text-right">
                   <div class="d-flex align-center">
                     <v-avatar tile size="12" class="mr-1">
-                      <v-img :src="getChangeIcon(token.dailyPriceChange)" alt="trend" />
+                      <v-img :src="getChangeIcon(token.dailyPriceChange)" :alt="t('dashboard.trend')" />
                     </v-avatar>
                     <span :class="getChangeColor(token.dailyPriceChange)">
                       {{ formatPercentage(token.dailyPriceChange) }}
@@ -167,8 +167,8 @@
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
-            <div class="market-data-label">Market Data</div>
-            <div class="coming-soon-text">COMING SOON</div>
+            <div class="market-data-label">{{ t('dashboard.marketData') }}</div>
+            <div class="coming-soon-text">{{ t('common.comingSoon') }}</div>
           </div>
         </div>
 
@@ -183,15 +183,15 @@
                 </v-icon>
               </template>
               <div class="refresh-tooltip-content">
-                <div><strong>Last Updated:</strong> {{ formatFullRefreshTime() }}</div>
-                <div><strong>Next Update:</strong> {{ formatNextRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.lastUpdated') }}:</strong> {{ formatFullRefreshTime() }}</div>
+                <div><strong>{{ t('dashboard.nextUpdate') }}:</strong> {{ formatNextRefreshTime() }}</div>
               </div>
             </v-tooltip>
           </div>
 
           <v-card-title class="py-1">
             <v-icon left size="16" class="mcap-icon">mdi-finance</v-icon>
-            <span class="text-subtitle-1">Top TVL</span>
+            <span class="text-subtitle-1">{{ t('dashboard.topTVL') }}</span>
           </v-card-title>
           <v-card-text class="pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
@@ -201,7 +201,7 @@
               <div class="caption grey--text">{{ error }}</div>
             </div>
             <div v-else-if="marketData.topTvl.length === 0" class="text-center py-4">
-              <div class="caption grey--text">No TVL data available</div>
+              <div class="caption grey--text">{{ t('dashboard.noTVLData') }}</div>
             </div>
             <template v-else>
               <div
@@ -224,7 +224,7 @@
                   </v-avatar>
                   <div class="token-info">
                     <div class="font-weight-medium token-ticker">{{ token.ticker || token.symbol }}</div>
-                    <div class="caption grey--text token-name">{{ token.name || 'Token' }}</div>
+                    <div class="caption grey--text token-name">{{ token.name || t('dashboard.token') }}</div>
                   </div>
                 </div>
                 <div class="text-right">
@@ -241,12 +241,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref } from 'vue';
 import { useIntervalFn } from '@vueuse/core';
 import charli3Store from '@/stores/charli3Store';
 // import Charli3API from '@/api/charli3-api'  // Commented out - using mock data
 import assts from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
+
+const { t } = useTranslation();
 
 // Reactive state
 const logoLoadingActive = ref(false);
@@ -549,10 +552,10 @@ const formatNextRefreshTime = () => {
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffMs / 60000);
 
-  if (diffMs <= 0) return 'Now';
-  if (diffSeconds < 60) return `In ${diffSeconds} seconds`;
-  if (diffMinutes === 1) return 'In 1 minute';
-  return `In ${diffMinutes} minutes`;
+  if (diffMs <= 0) return t('dashboard.now');
+  if (diffSeconds < 60) return t('dashboard.inSeconds', { seconds: diffSeconds });
+  if (diffMinutes === 1) return t('dashboard.inOneMinute');
+  return t('dashboard.inMinutes', { minutes: diffMinutes });
 };
 
 // Lifecycle hooks

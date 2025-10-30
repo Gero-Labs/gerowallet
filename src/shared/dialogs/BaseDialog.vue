@@ -40,9 +40,13 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

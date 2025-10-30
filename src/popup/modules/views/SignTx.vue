@@ -1,10 +1,10 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Transaction Summary" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
+    <PopupHeader :title="String($t('navigation.transactionSummary'))" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)" :disabled="txSignLoading">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
-          You're giving
+          {{ $t('navigation.youreGiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -12,15 +12,12 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }} and/or tokens<br>shown here will be </span>
-              <span class="warn">sent<br>from your wallet</span>
-              <span> to the<br>address listed above.
-                <br /><br />Once signed, this action<br>is irreversible.</span>
+              <span>{{ $t('wallet.tokensWillBeSent', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }) }}</span>
             </div>
           </v-tooltip>
         </TransactionCard>
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.receive" :risk="risks?.receivingRisk">
-          You're receiving
+          {{ $t('navigation.youreReceiving') }}
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -28,9 +25,7 @@
               </v-icon>
             </template>
             <div>
-              <span>{{ networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }} and/or tokens<br>shown here will be </span>
-              <span class="succ">sent<br />to your wallet.</span>
-              <span><br /><br />Once signed, this action<br>is irreversible.</span>
+              <span>{{ $t('wallet.tokensWillBeReceived', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) }) }}</span>
             </div>
           </v-tooltip>
         </TransactionCard>
@@ -60,8 +55,8 @@
                     v-model="spendingPassword"
                     outlined
                     hide-details
-                    placeholder="Type your spending password"
-                    label="Spending Password"
+                    :placeholder="$t('navigation.typeYourSpendingPassword')"
+                    :label="$t('wallet.spendingPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required()]"
                     required
@@ -80,22 +75,21 @@
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="py-0">
               <v-alert type="warning" outlined prominent class="py-2 my-1" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
-                  Please review the transaction details carefully before proceeding. Confirm the transaction by signing with your
-                {{ loggedWallet.type }} device.
+                  {{ $t('wallet.pleaseReviewCarefully', { walletType: loggedWallet.type }) }}
                 </span>
               </v-alert>
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
+                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSignLoading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
               <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
-                Decline
+                {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
             <v-col cols="6">
               <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
-                {{txAutoSubmit ? 'Sign & Confirm' : !witnesses ? 'SIGN' : 'CONFIRM'}}
+                {{txAutoSubmit ? $t('wallet.signAndConfirm') : !witnesses ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
             </v-col>
           </v-row>
@@ -105,6 +99,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -130,6 +125,8 @@ import { coalesceValueQuantities } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
@@ -141,7 +138,7 @@ const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.invalidSpendingPassword'),
 });
 const txSignLoading = ref(false);
 const loading = ref(true);
@@ -408,10 +405,10 @@ const sign = async () => {
         switch (error.code) {
           case 0x5515:
           case 0x6E11:
-            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            snackbar.setError(String(t('wallet.ledgerDeviceLocked')));
             break;
           default:
-            snackbar.setError('Ledger device error: ' + error.message);
+            snackbar.setError(String(t('wallet.ledgerDeviceError', { message: error.message })));
         }
       } else {
         console.log(e);
@@ -502,7 +499,7 @@ onMounted(async () => {
   await init();
 
   // Set document title
-  document.title = 'Gero Dashboard | Sign Transaction';
+  document.title = `Gero Dashboard | ${t('wallet.signTransaction')}`;
 });
 </script>
 

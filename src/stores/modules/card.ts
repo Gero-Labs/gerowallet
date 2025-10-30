@@ -878,7 +878,6 @@ export default {
       if (typeof chrome !== 'undefined' && chrome.cookies) {
         try {
           const url = import.meta.env['VITE_BACKEND_URL'];
-
           const [accessTokenCookie, refreshTokenCookie, tokenExpiryCookie] = await Promise.all([
             chrome.cookies.get({ url, name: 'kaiserex_access_token' }),
             chrome.cookies.get({ url, name: 'kaiserex_refresh_token' }),

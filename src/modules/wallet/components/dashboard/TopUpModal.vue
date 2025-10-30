@@ -35,7 +35,7 @@
               colored-border
               class="mx-6 mb-0"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ t('card.transactionSigned') }}</span>
             </v-alert>
 
             <!-- Show info alert when Ledger is signing (buttons disabled) -->
@@ -52,7 +52,7 @@
               colored-border
               class="mx-6 mb-0"
             >
-              <span>Please review and approve the transaction on your Ledger device to continue.</span>
+              <span>{{ t('card.pleaseReviewLedger') }}</span>
             </v-alert>
 
             <!-- Password field for Normal wallet on step 2 (hidden after signing) -->
@@ -64,7 +64,7 @@
                 v-model="spendingPassword"
                 outlined
                 dense
-                label="Spending Password"
+                :label="$t('wallet.spendingPassword')"
                 :type="showPassword ? 'text' : 'password'"
                 hide-details
                 class="password-field"
@@ -85,9 +85,9 @@
               class="ledger-section"
             >
               <ToggleSwitch
-                text-left="USB"
+                :text-left="$t('wallet.usb')"
                 icon-left="mdi-usb"
-                text-right="Bluetooth"
+                :text-right="$t('wallet.bluetooth')"
                 icon-right="mdi-bluetooth"
                 v-model="isBT"
                 :disabled="txSubmitLoading"
@@ -96,12 +96,12 @@
 
             <!-- Action Buttons -->
             <div class="modal-actions">
-              <SecondaryButton text="Cancel" @click="closeModal()" :disabled="txSubmitLoading" />
+              <SecondaryButton :text="$t('wallet.cancel')" @click="closeModal()" :disabled="txSubmitLoading" />
               <v-tooltip top :disabled="canTopUp || currentStep !== 1">
                 <template v-slot:activator="{ on, attrs }">
                   <div v-bind="attrs" v-on="on" style="flex: 1;">
                     <GradientButton
-                      :text="currentStep === 1 ? 'Continue' : isSubmit ? 'Submit Transaction' : 'Sign & Top Up'"
+                      :text="currentStep === 1 ? t('card.continueButton') : isSubmit ? t('card.submitTransaction') : t('card.signAndTopUp')"
                       @click="handleTopUp"
                       :disabled="!canTopUp || txSubmitLoading"
                       :loading="txSubmitLoading"
@@ -115,7 +115,7 @@
 
           <!-- Success Actions -->
           <div v-if="currentStep === 4" class="modal-actions">
-            <SecondaryButton text="Back to Your Account" @click="handleBackToAccount" />
+            <SecondaryButton :text="t('card.backToYourAccount')" @click="handleBackToAccount" />
           </div>
         </div>
       </v-card>
@@ -124,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
@@ -144,6 +145,9 @@ import { WalletType } from '@/models/types';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+
+
+const { t } = useTranslation();
 
 defineProps<{
   open: boolean;
@@ -192,7 +196,7 @@ const disabledTooltip = computed(() => {
   if (currentStep.value === 1) {
     const adaAmount = parseFloat(amounts.value.adaAmount);
     if (isNaN(adaAmount) || adaAmount < 2) {
-      return 'Please enter an amount greater than or equal to 2 ADA to continue';
+      return t('card.enterTwoAda');
     }
   }
   return '';
@@ -244,13 +248,13 @@ const buildTx = async () => {
     console.log('💰 Cardano address:', cardanoAddress);
 
     if (!cardanoAddress) {
-      throw new Error('Cardano address not found. Please ensure you are authenticated.');
+      throw new Error(t('errors.invalidAddress'));
     }
 
     // Parse ADA amount and convert to Lovelace
     const adaAmount = parseFloat(amounts.value.adaAmount);
     if (isNaN(adaAmount) || adaAmount <= 0) {
-      throw new Error('Invalid ADA amount');
+      throw new Error(t('errors.invalidAmount'));
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
@@ -280,7 +284,7 @@ const buildTx = async () => {
     return true;
   } catch (e) {
     console.error('❌ Error building transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to build transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.buildTransactionFailed'));
     return false;
   }
 };
@@ -318,7 +322,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('❌ Error signing transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to sign transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.signTransactionFailed'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -332,7 +336,7 @@ const signLedgerTx = async (): Promise<boolean> => {
     console.log('🔏 Signing transaction with Ledger...');
 
     if (!tx.value) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
 
     // Serialize transaction
@@ -350,7 +354,7 @@ const signLedgerTx = async (): Promise<boolean> => {
 
     // Validate signatures were returned
     if (!signatures || (signatures instanceof Map && signatures.size === 0)) {
-      throw new Error('No signatures returned from Ledger device. Please try again.');
+      throw new Error(t('common.noSignaturesFromLedger'));
     }
 
     // Create witness set from signatures
@@ -360,7 +364,7 @@ const signLedgerTx = async (): Promise<boolean> => {
 
     const witnessCbor = transactionWitnessSet.toCbor();
     if (!witnessCbor || witnessCbor.length === 0) {
-      throw new Error('Failed to create witness set from Ledger signatures.');
+      throw new Error(t('common.failedToCreateWitnessSet'));
     }
 
     console.log('✅ Ledger signing successful:', witnessCbor);
@@ -398,11 +402,11 @@ const submitTx = async () => {
     transactionId.value = submitResult.data.txId || Math.floor(Math.random() * 100000000).toString();
     console.log('📝 Transaction ID:', transactionId.value);
 
-    snackbar.fireSuccess(`Top-up transaction sent successfully!`);
+    snackbar.fireSuccess(t('notifications.transactionSubmitted'));
     return true;
   } catch (e) {
     console.error('❌ Error submitting transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Failed to submit transaction');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.submitTransactionFailed'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -429,7 +433,7 @@ const handleTopUp = async () => {
           txCbor: !!txCbor.value,
           txWitnesses: !!txWitnesses.value,
         });
-        snackbar.setError('Transaction data is missing. Please sign the transaction again.');
+        snackbar.setError(t('wallet.transactionDataMissing'));
         isSubmit.value = false;
         return;
       }
@@ -471,7 +475,7 @@ const handleTopUp = async () => {
       })) as { data: { isValid: boolean; error?: string } };
       console.log('🔏 passwordVerification:', passwordVerification);
       if (!passwordVerification.data.isValid) {
-        snackbar.setError('Invalid spending password');
+        snackbar.setError(t('wallet.invalidSpendingPassword'));
         return;
       }
 
@@ -482,7 +486,7 @@ const handleTopUp = async () => {
       signSuccess = await signLedgerTx();
     } else {
       // For other wallet types
-      snackbar.setError('Unsupported wallet type');
+      snackbar.setError(t('wallet.unsupportedWalletType'));
       return;
     }
 

@@ -1,30 +1,31 @@
 <template>
   <BaseDialog
-    :isOpen="isOpen"
+    :isOpen="props.isOpen"
     @close="$emit('close')"
-    title="Swap"
-    subtitle="Effortlessly exchange tokens directly from your wallet."
+    :title="t('swap.title')"
+    :subtitle="t('swap.effortlesslyExchange')"
     :min-height="300"
     :width="550"
     :persistent="false"
   >
-    <v-card-text class="text-center justify-center pt-6">
+    <v-card-text class="text-center justify-center pt-6" style="position: relative;">
       <SwapWidget @onSwap="$emit('close')"></SwapWidget>
     </v-card-text>
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
 
-const props = defineProps({
-  isOpen: {
-    type: Boolean,
-    default: false,
-  },
-});
-
+interface Props {
+  isOpen: boolean;
+}
+const props = defineProps<Props>();
 const emit = defineEmits(['close']);
-</script>
 
-<style scoped></style>
+const { t } = useTranslation();
+</script>
+<style scoped>
+
+</style>

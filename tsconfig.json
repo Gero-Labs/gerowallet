@@ -42,5 +42,6 @@
     },
     "lib": ["DOM", "ESNext"]
   },
+  "include": ["src/**/*", "src/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]
 }

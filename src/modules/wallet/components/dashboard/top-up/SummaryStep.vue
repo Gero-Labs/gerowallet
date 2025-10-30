@@ -2,14 +2,14 @@
   <div class="summary-step">
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Fee & Order Summary</h2>
-      <p class="modal-subtitle">Confirm your preferred payment</p>
+      <h2 class="modal-title">{{ t('card.feeOrderSummary') }}</h2>
+      <p class="modal-subtitle">{{ t('card.confirmPreferredPayment') }}</p>
     </div>
 
     <!-- Exchange Rate Table -->
     <div class="exchange-rate-table">
       <div class="rate-row">
-        <span class="rate-label">Today's Rate</span>
+        <span class="rate-label">{{ t('card.todaysRate') }}</span>
       </div>
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
@@ -35,7 +35,7 @@
       <!-- Fee Payment Options -->
       <div class="summary-container">
         <div class="summary-header">
-          <span class="summary-label">Fee Payment</span>
+          <span class="summary-label">{{ t('card.feePayment') }}</span>
           <div class="fee-options">
             <div
               class="fee-option"
@@ -63,7 +63,7 @@
         <!-- Transfer Details -->
         <div class="transfer-details">
           <div class="transfer-row">
-            <span class="transfer-label">Transfer Amount</span>
+            <span class="transfer-label">{{ t('card.transferAmount') }}</span>
             <div class="transfer-amount">
               <span class="amount-value">₳{{ adaAmount || '1000' }}</span>
               <span class="currency-badge">ADA</span>
@@ -71,14 +71,14 @@
           </div>
 
           <div class="transfer-row">
-            <span class="transfer-label">Transfer Fee</span>
+            <span class="transfer-label">{{ t('card.transferFee') }}</span>
             <span class="fee-amount">₳0.00 ADA</span>
           </div>
 
           <div class="divider"></div>
 
           <div class="transfer-row">
-            <span class="transfer-label">Total Spend</span>
+            <span class="transfer-label">{{ t('card.totalSpend') }}</span>
             <span class="total-amount"
               >₳{{ Number(adaAmount).toFixed(2) }} ADA</span
             >
@@ -89,7 +89,7 @@
       <!-- You Receive Section -->
       <div class="summary-container">
         <div class="transfer-row">
-          <span class="transfer-label">Card will receive exactly</span>
+          <span class="transfer-label">{{ t('card.cardWillReceiveExactly') }}</span>
           <span class="receive-amount">€{{ eurAmount || '1' }} EUR</span>
         </div>
       </div>
@@ -99,9 +99,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
 import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 // Props
 interface Props {

@@ -3,8 +3,8 @@
     <v-layout class="py-2" column>
       <v-row no-gutters class="py-2" v-if="networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">Shop & Earn Pop-ups</h3>
-          <span class="helper my-0">Get real-time cashback notifications as you explore supported retailer websites.</span>
+          <h3 style="color: white">{{ $t('settings.shopEarnPopups') }}</h3>
+          <span class="helper my-0">{{ $t('settings.shopEarnPopupsHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
           <v-switch dense inset v-model="cashbackPopups" hide-details style="margin: auto"></v-switch>
@@ -12,8 +12,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">Tx Auto Submit</h3>
-          <span class="helper my-0">Automatically submit transactions after signing</span>
+          <h3 style="color: white">{{ $t('settings.txAutoSubmit') }}</h3>
+          <span class="helper my-0">{{ $t('settings.txAutoSubmitHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
           <v-switch dense inset v-model="txAutoSubmit" hide-details style="margin: auto"></v-switch>
@@ -21,8 +21,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">Prompt Display Mode</h3>
-          <span class="helper my-0">Select pop-ups or side panel for signing and approval prompts</span>
+          <h3 style="color: white">{{ $t('settings.promptDisplayMode') }}</h3>
+          <span class="helper my-0">{{ $t('settings.promptDisplayModeHelper') }}</span>
         </v-col>
         <v-col cols="3" style="display: flex;">
           <ToggleSwitch text-left="POPUP" text-right="SIDEPANEL" font-size="10px" v-model="useSidePanel" />
@@ -30,8 +30,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
-          <h3 style="color: white">Re-Sync Wallet</h3>
-          <span class="helper my-0">Replacing wallet data from the blockchain. (Might take a while)</span>
+          <h3 style="color: white">{{ $t('settings.reSyncWallet') }}</h3>
+          <span class="helper my-0">{{ $t('settings.reSyncWalletHelper') }}</span>
         </v-col>
         <v-col cols="3" style="align-content: center;">
           <v-btn
@@ -49,7 +49,7 @@
             >
               mdi-sync
             </v-icon>
-            <span class="capitalize">ReSync</span>
+            <span class="capitalize">{{ $t('settings.reSync') }}</span>
             <template v-slot:loader>
               <span class="custom-loader">
                 <v-icon light>mdi-cached</v-icon>
@@ -58,13 +58,13 @@
           </v-btn>
         </v-col>
       </v-row>
-      <h2 class="text-left pb-2" style="color: #ff6464">Danger Zone</h2>
+      <h2 class="text-left pb-2" style="color: #ff6464">{{ $t('settings.dangerZone') }}</h2>
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
           <v-row no-gutters class="py-2">
             <v-col cols="9" class="text-left pr-1">
-              <h3 class="white--text">Delete Wallet</h3>
-              <span class="helper my-0">Deleting this wallet removes it from Gero Dashboard, and any remaining funds will be inaccessible. To regain access, restore using your recovery phrase</span>
+              <h3 class="white--text">{{ $t('settings.deleteWallet') }}</h3>
+              <span class="helper my-0">{{ $t('settings.deleteWalletHelper') }}</span>
             </v-col>
             <v-col cols="3" style="align-content: center;">
               <v-btn
@@ -78,7 +78,7 @@
                 <v-icon right class="mr-1 ml-0">
                   mdi-delete
                 </v-icon>
-                Delete Wallet
+                {{ $t('settings.deleteWallet') }}
               </v-btn>
             </v-col>
           </v-row>
@@ -86,14 +86,14 @@
       </v-card>
       <v-dialog v-model="deleteWalletDialog" max-width="500px">
         <v-card>
-          <v-card-title>Are you sure you want to delete this wallet?</v-card-title>
+          <v-card-title>{{ $t('settings.deleteWalletConfirmTitle') }}</v-card-title>
           <v-card-text>
-            Please note that this operation will log you out from the Dashboard
+            {{ $t('settings.deleteWalletConfirmMessage') }}
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn color="error" text @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">Cancel</v-btn>
-            <v-btn color="error" @click="deleteWalletConfirm" :disabled="deleteWalletLoading" :loading="deleteWalletLoading">YES</v-btn>
+            <v-btn color="error" text @click="deleteWalletDialog = false" :disabled="deleteWalletLoading">{{ $t('common.cancel') }}</v-btn>
+            <v-btn color="error" @click="deleteWalletConfirm" :disabled="deleteWalletLoading" :loading="deleteWalletLoading">{{ $t('common.yes') }}</v-btn>
             <v-spacer></v-spacer>
           </v-card-actions>
         </v-card>
@@ -102,6 +102,8 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
@@ -213,7 +215,7 @@ const deleteWalletConfirm = async () => {
   await submitLogout();
   deleteWalletDialog.value = false;
   deleteWalletLoading.value = false;
-  snackbar.fireSuccess(`Wallet '${name}' Deleted Successfully.`);
+  snackbar.fireSuccess(t('settings.walletDeletedSuccess', { name }));
 };
 
 // Lifecycle

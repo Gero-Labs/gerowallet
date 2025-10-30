@@ -1,25 +1,25 @@
 <template>
   <v-card outlined class="pa-4 d-flex flex-column justify-space-between fill-height transparent" :disabled="disabled">
     <div style="width: 52px; margin-left: auto; margin-right: auto">
-      <img alt="Gero Logo" id="modal-logo-icon" width="52" :src="assets.geroLogo"/>
-      <img alt="Gero Text" id="modal-logo-text" width="52" :src="assets.geroText"/>
+      <img :alt="$t('common.geroLogo')" id="modal-logo-icon" width="52" :src="assets.geroLogo"/>
+      <img :alt="$t('common.geroText')" id="modal-logo-text" width="52" :src="assets.geroText"/>
     </div>
     <v-card-title class="justify-center py-0" style="font-size: 20px; font-weight: bold; color: white">{{ title }}</v-card-title>
     <v-card-title class="justify-center py-0" style="font-size: 16px;" v-if="showWebsite">
-      <span style="color: #ccc">Website:&nbsp;</span>
+      <span style="color: #ccc">{{ $t('navigation.websiteLabel') }}:&nbsp;</span>
       <div v-if="domain" style="display: contents;">
         <v-avatar size="16">
-          <img :src="favicon" alt="Dapp Website favicon" />
+          <img :src="favicon" :alt="$t('common.dappWebsiteFavicon')" />
         </v-avatar>&nbsp;
         <span style="color: white">{{ domain }}</span>
         <v-progress-circular size="16" class="ml-1" indeterminate v-if="loading" color="white"
                              width="3"></v-progress-circular>
         <v-avatar v-else tile size="16" class="ml-1 text-center">
-          <v-img contain :src="websiteRiskIcon" alt="Website Risk Icon" />
+          <v-img contain :src="websiteRiskIcon" :alt="$t('common.websiteRiskIcon')" />
         </v-avatar>
       </div>
       <div v-else>
-        N/A
+        {{ $t('navigation.notAvailable') }}
       </div>
     </v-card-title>
     <Select
@@ -33,6 +33,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { getCurrentInstance, ref, toRefs, computed, onMounted } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import Select from '@/shared/components/Select.vue';

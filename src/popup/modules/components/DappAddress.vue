@@ -11,7 +11,7 @@
     } : {}">
       <v-card-subtitle id="dapp-receiver-address" class="pa-0" style="display: flex; flex-direction: row; text-align: left;">
         <div style="width: 18px; height: 18px" id="dapp-receiver-check">
-          <img alt="Trusted Address" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
+          <img :alt="$t('common.trustedAddress')" height="18" width="16" style="margin-right: 2px" :src="riskIcon" v-if="risk" />
           <v-progress-circular size="18" indeterminate v-else color="white" width="3"></v-progress-circular>
         </div>
         {{ address }}
@@ -20,10 +20,14 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs } from 'vue';
 import { DappRisk } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 

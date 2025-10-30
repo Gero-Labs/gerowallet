@@ -25,14 +25,14 @@
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
-                    This is a <b>Beta Version</b>. For the Official Release visit
+                    <span v-html="$t('navigation.betaVersionNotice')"></span>
                     <a
                       style="color: black; font-weight: 700"
                       href="https://chromewebstore.google.com/detail/gero-dashboard/bgpipimickeadkjlklgciifhnalhdjhe?hl=en-US&utm_source=ext_sidebar"
                       target="_blank"
-                      >Gero Dashboard</a
+                      >{{ $t('navigation.geroDashboard') }}</a
                     >
-                    in Chrome Store.
+                    {{ $t('navigation.inChromeStore') }}
                   </v-alert>
                 </v-col>
               </v-row>
@@ -96,18 +96,18 @@
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>Network:</strong> {{ loggedWallet?.network }}</div>
-                      <div><strong>Last Sync:</strong> {{ lastSyncTimestamp }}</div>
-                      <div><strong>Next Sync:</strong> {{ nextSyncDisplay }}</div>
-                      <div><strong>Epoch:</strong> {{ tip?.epoch || 'N/A' }}</div>
-                      <div><strong>Progress:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
+                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
+                      <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
+                      <div><strong>{{ t('navigation.nextSync') }}:</strong> {{ nextSyncDisplay }}</div>
+                      <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                      <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       <div>
-                        <strong class="mr-1">Status:</strong>
+                        <strong class="mr-1">{{ t('navigation.status') }}:</strong>
                         <span
                           :style="
                             connected ? { color: 'inherit' } : connecting ? { color: '#FFA500' } : { color: '#ff6464' }
                           "
-                          >{{ connected ? 'Online' : connecting ? 'Connecting...' : 'Offline' }}</span
+                          >{{ connected ? t('navigation.online') : connecting ? t('navigation.connecting') : t('navigation.offline') }}</span
                         >
                       </div>
                     </div>
@@ -128,7 +128,7 @@
                       </v-btn>
                     </template>
                     <v-card outlined class="notifications-card" min-width="200">
-                      <v-card-title class="pa-2 text-h6"> Notifications </v-card-title>
+                      <v-card-title class="pa-2 text-h6"> {{ t('navigation.notifications') }} </v-card-title>
                       <v-card-text class="pa-0">
                         <v-list class="transparent">
                           <v-list-item>
@@ -137,7 +137,7 @@
                                 <v-avatar size="30" color="#333" class="mr-2">
                                   <v-icon small color="#CCC"> mdi-message-text-outline </v-icon>
                                 </v-avatar>
-                                Nothing New
+                                {{ t('navigation.nothingNew') }}
                               </v-list-item-title>
                             </v-list-item-content>
                           </v-list-item>
@@ -149,11 +149,11 @@
                   <v-btn @click="currentDialog = dialogs.SETTINGS" class="ml-3 toolbar-icon-btn" icon>
                     <v-badge bordered color="error" dot v-if="shouldBackup">
                       <v-avatar size="20">
-                        <img :src="assets.settingsSvg" alt="Settings" />
+                        <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                       </v-avatar>
                     </v-badge>
                     <v-avatar size="20" v-else>
-                      <img :src="assets.settingsSvg" alt="Settings" />
+                      <img :src="assets.settingsSvg" :alt="$t('common.settings')" />
                     </v-avatar>
                   </v-btn>
                 </v-app-bar>
@@ -191,8 +191,6 @@
                   <keep-alive>
                     <router-view
                       @open-backup-dialog="handleOpenBackupDialog"
-                      @open-buy-dialog="handleOpenBuyDialog"
-                      @open-receive-dialog="handleOpenReceiveDialog"
                     />
                   </keep-alive>
                 </v-sheet>
@@ -215,18 +213,13 @@
       />
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
-
-      <SwapDialog :isOpen="isSwapDialogOpen" @close="closeSwapDialog" />
-
-      <BuyDialog :isOpen="buyDialog" @close="buyDialog = false" />
-
-      <ReceiveDialog :isOpen="receiveDialog" @close="receiveDialog = false" />
     </v-app>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, toRefs, watch, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
 import Player from '@/modules/media-player/Player.vue';
@@ -234,12 +227,9 @@ import QuickActionsBox from '@/modules/navigation/components/QuickActionsBox.vue
 import WelcomeDialog from '@/shared/dialogs/WelcomeDialog.vue';
 import ChangeLogDialog from '@/options/modules/navigation/dialogs/ChangeLogDialog.vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
-import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
-import BuyDialog from '@/modules/dashboard/dialogs/BuyDialog.vue';
-import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
-import { themes, iconFilters } from '@/config/themes';
+import { iconFilters, themes } from '@/config/themes';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
@@ -249,11 +239,12 @@ import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
 import { musicStore } from '@/stores/musicStore';
 import { dexHunterStore } from '@/stores/dexHunterStore';
-import dexHunterStoreActions from '@/stores/dexHunterStore';
 import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import PriceTicker from '@/modules/navigation/components/PriceTicker.vue';
 import networks from '@/utils/networks';
+
+const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy as any;
 const currentPage = computed(() => vmProxy.$route);
@@ -323,15 +314,9 @@ const drawer = ref<boolean>(false);
 const currentDialog = ref<string | null>(null);
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
-const swapDialog = ref(false);
-const buyDialog = ref(false);
-const receiveDialog = ref(false);
 
 // Background image loading state for performance optimization
 const backgroundImageLoaded = ref(false);
-
-// Computed for proper reactivity with Vue 2 components
-const isSwapDialogOpen = computed(() => swapDialog.value);
 
 const tokenName = computed(() => {
   if (isApex.value) {
@@ -348,10 +333,6 @@ const isApex = computed(() => {
 const primaryColor = computed(() => {
   return isApex.value ? themes.apex.primary : themes.cardano.primary;
 });
-
-function closeSwapDialog() {
-  swapDialog.value = false;
-}
 
 const changeLog = changeLogPlugin;
 const shouldBackup = computed(() => {
@@ -390,11 +371,11 @@ const lastSyncTimestamp = computed(() => {
 // we show "Real-time" when connected, or estimate based on average block time (20 seconds for Cardano)
 const nextSyncDisplay = computed(() => {
   if (!connected.value) {
-    return 'Waiting for connection...';
+    return t('common.waitingForConnection');
   }
 
   if (connecting.value) {
-    return 'Connecting...';
+    return t('common.connecting');
   }
 
   // For connected state, show real-time sync
@@ -407,7 +388,7 @@ const nextSyncDisplay = computed(() => {
 
     // If we're past the expected next block time, sync is due now
     if (now >= nextSyncEstimate) {
-      return 'Real-time (any moment)';
+      return t('common.realTimeAnyMoment');
     }
 
     // Otherwise calculate seconds until next expected sync
@@ -415,7 +396,7 @@ const nextSyncDisplay = computed(() => {
     return `~${secondsUntilNextSync}s`;
   }
 
-  return 'Real-time';
+  return t('common.realTime');
 });
 
 const isWelcomeDone = computed({
@@ -444,16 +425,6 @@ function closeDialog() {
 function handleOpenBackupDialog() {
   console.log('Received backup dialog event from dashboard');
   backupWalletDialog.value = true;
-}
-
-function handleOpenBuyDialog() {
-  console.log('Received buy dialog event from dashboard');
-  buyDialog.value = true;
-}
-
-function handleOpenReceiveDialog() {
-  console.log('Received receive dialog event from dashboard');
-  receiveDialog.value = true;
 }
 
 // Theme management - update colors when a chain changes
@@ -499,8 +470,7 @@ const fetchGeroPrice = async () => {
     const res = await dexHunterApi.default.mCap(GERO_UNIT);
 
     if (res.status === 200 && res.data?.price) {
-      const price = Number(res.data.price);
-      geroFallbackPrice.value = price;
+      geroFallbackPrice.value = Number(res.data.price);
     }
   } catch (error) {
     console.warn('Failed to fetch GERO price for ticker:', error);

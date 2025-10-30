@@ -11,8 +11,8 @@
         <!-- Zero Fees Promotion -->
         <div class="promo-banner">
           <div class="promo-text">
-            <h3 class="promo-heading">Enjoy ZERO FEES until May 1st, 2026</h3>
-            <p class="promo-subheading">Get started with your Gero Card completely free</p>
+            <h3 class="promo-heading">{{ t('card.enjoyZeroFeesUntilDate') }}</h3>
+            <p class="promo-subheading">{{ t('card.getStartedFree') }}</p>
           </div>
         </div>
 
@@ -22,7 +22,7 @@
           <div class="token-section">
             <div class="token-banner">
               <v-icon class="token-icon">mdi-star-circle</v-icon>
-              <p class="token-message">Starting May 1st, 2026 <strong>$GERO holders</strong> will enjoy token incentives in the form of fee waivers</p>
+              <p class="token-message">{{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong> {{ t('card.willEnjoyTokenIncentives') }}</p>
             </div>
 
             <div class="tiers-vertical">
@@ -30,21 +30,21 @@
               <div class="tier-card basic-tier">
                 <div class="tier-header">
                   <div class="tier-title-row">
-                    <h4 class="tier-name">Baby Gero</h4>
+                    <h4 class="tier-name">{{ t('card.babyGero') }}</h4>
                     <div class="tier-requirement">
                       <span class="tier-price">€15</span>
-                      <span class="tier-details">in $GERO</span>
+                      <span class="tier-details">{{ t('card.inGero') }}</span>
                     </div>
                   </div>
                 </div>
                 <div class="tier-benefits">
                   <div class="benefit-item">
                     <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>Free ATM withdrawals</span>
+                    <span>{{ t('card.freeAtmWithdrawals') }}</span>
                   </div>
                   <div class="benefit-item">
                     <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>No Monthly Fee</span>
+                    <span>{{ t('card.noMonthlyFee') }}</span>
                   </div>
                 </div>
               </div>
@@ -53,21 +53,21 @@
               <div class="tier-card core-tier">
                 <div class="tier-header">
                   <div class="tier-title-row">
-                    <h4 class="tier-name">Gero Pro</h4>
+                    <h4 class="tier-name">{{ t('card.geroPro') }}</h4>
                     <div class="tier-requirement">
                       <span class="tier-price">€50</span>
-                      <span class="tier-details">in $GERO</span>
+                      <span class="tier-details">{{ t('card.inGero') }}</span>
                     </div>
                   </div>
                 </div>
                 <div class="tier-benefits">
                   <div class="benefit-item">
                     <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>Basic +</span>
+                    <span>{{ t('card.basicPlus') }}</span>
                   </div>
                   <div class="benefit-item">
                     <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>All EU + INT POS fees waived</span>
+                    <span>{{ t('card.allEuIntPosFeesWaived') }}</span>
                   </div>
                 </div>
               </div>
@@ -76,17 +76,17 @@
               <div class="tier-card pro-tier">
                 <div class="tier-header">
                   <div class="tier-title-row">
-                    <h4 class="tier-name">Gerobanga!</h4>
+                    <h4 class="tier-name">{{ t('card.gerobanga') }}</h4>
                     <div class="tier-requirement">
                       <span class="tier-price">€200</span>
-                      <span class="tier-details">in $GERO</span>
+                      <span class="tier-details">{{ t('card.inGero') }}</span>
                     </div>
                   </div>
                 </div>
                 <div class="tier-benefits">
                   <div class="benefit-item">
                     <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>ALL FEES waived</span>
+                    <span>{{ t('card.allFeesWaived') }}</span>
                   </div>
                 </div>
               </div>
@@ -95,51 +95,51 @@
 
           <!-- Right Column: Standard Fees Table -->
           <div class="fees-section">
-            <h3 class="section-title">Standard Fees (After Promotional Period)</h3>
+            <h3 class="section-title">{{ t('card.standardFees') }}</h3>
             <div class="fees-table">
               <div class="table-row table-header">
-                <div class="table-cell">Fee Type</div>
-                <div class="table-cell">Fee</div>
+                <div class="table-cell">{{ t('card.feeType') }}</div>
+                <div class="table-cell">{{ t('card.fee') }}</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">Card Issuance</div>
+                <div class="table-cell">{{ t('card.cardIssuance') }}</div>
                 <div class="table-cell">€3</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">Monthly Fee</div>
-                <div class="table-cell">€3 Physical / Virtual</div>
+                <div class="table-cell">{{ t('card.monthlyFee') }}</div>
+                <div class="table-cell">€3 {{ t('card.physicalVirtual') }}</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">Top-Up (ADA → EUR)</div>
+                <div class="table-cell">{{ t('card.topUpAdaEur') }}</div>
                 <div class="table-cell">1.5%</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">ATM Withdrawal (EU)</div>
+                <div class="table-cell">{{ t('card.atmWithdrawalEu') }}</div>
                 <div class="table-cell">€1.50</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">ATM Withdrawal (Intl)</div>
+                <div class="table-cell">{{ t('card.atmWithdrawalIntl') }}</div>
                 <div class="table-cell">2% + €2</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">POS Purchases (EU)</div>
+                <div class="table-cell">{{ t('card.posPurchasesEu') }}</div>
                 <div class="table-cell">0.5% + €0.15</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">POS Purchases (Intl)</div>
+                <div class="table-cell">{{ t('card.posPurchasesIntl') }}</div>
                 <div class="table-cell">2.0% + €0.75</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">FX Conversion Markup</div>
+                <div class="table-cell">{{ t('card.fxConversionMarkup') }}</div>
                 <div class="table-cell">1%</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">Transaction Decline</div>
+                <div class="table-cell">{{ t('card.transactionDecline') }}</div>
                 <div class="table-cell">€0.50</div>
               </div>
               <div class="table-row">
-                <div class="table-cell">Replacement Card (Physical)</div>
-                <div class="table-cell">+€5 (Express +€10)</div>
+                <div class="table-cell">{{ t('card.replacementCard') }}</div>
+                <div class="table-cell">+€5 ({{ t('card.expressShipping') }} +€10)</div>
               </div>
             </div>
           </div>
@@ -148,14 +148,17 @@
 
       <div class="modal-footer">
         <v-icon small class="footer-icon">mdi-wallet-outline</v-icon>
-        <span>Your tier is detected automatically by holding $GERO tokens in your wallet</span>
+        <span>{{ t('card.tierDetectedAutomatically') }}</span>
       </div>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
+
+const { t } = useTranslation();
 
 interface Props {
   open: boolean;

@@ -21,21 +21,20 @@
             />
             <div v-if="isLoading" class="loading-overlay">
               <v-progress-circular indeterminate color="primary" size="48" />
-              <p class="loading-text">Loading secure registration form...</p>
+              <p class="loading-text">{{ t('card.loadingSecureForm') }}</p>
             </div>
           </div>
         </div>
 
         <div v-else class="completion-message">
           <div class="success-icon">
-            <img src="@/modules/wallet/icons/check-blue.svg" alt="Success" />
+            <img src="@/modules/wallet/icons/check-blue.svg" :alt="$t('common.success')" />
           </div>
-          <h3 class="success-title">Registration Complete!</h3>
+          <h3 class="success-title">{{ t('card.registrationComplete') }}</h3>
           <p class="success-text">
-            Your Kaiserex account has been created. You can now proceed with the KYC verification to order your Gero
-            Crypto Card.
+            {{ t('card.kaiserexAccountCreated') }}
           </p>
-          <GradientButton text="Continue to KYC" @click="proceedToKYC" />
+          <GradientButton :text="t('card.continueToKYC')" @click="proceedToKYC" />
         </div>
       </div>
     </v-card>
@@ -43,10 +42,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, nextTick } from 'vue';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import { debugLog } from '@/utils/debug';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{
   open: boolean;

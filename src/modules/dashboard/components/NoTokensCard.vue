@@ -1,11 +1,11 @@
 <template>
   <v-card outlined class="card-container justify-center liquid-glass">
-    <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
+    <v-card-title class="subtitle-1">{{ $t('dashboard.welcomeToDashboard') }}</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
-      <p class="display-1">Let's start by getting some {{ assetType }} into your wallet!</p>
+      <p class="display-1">{{ $t('dashboard.letsGetStarted', { assetType }) }}</p>
       <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">
-        Claim your {{ assetType }} tokens with your Wallet by using the DApp below
+        {{ $t('dashboard.claimYourTokens', { assetType }) }}
       </p>
       <v-btn class="claim-apex-button" v-if="assetType === Blockchain.APEX_PRIME"></v-btn>
     </section>
@@ -15,22 +15,21 @@
       :class="{ 'no-apex': !hasAssets }"
     >
       <div class="stake-apex-info">
-        <h1 class="display-1">Stake Your {{ assetType }} and Earn Rewards</h1>
-        <v-card-text class="subtitle-1" v-if="loggedWallet"
-          >Earn rewards by staking your {{ assetType }} tokens with {{ loggedWallet?.chain }}'s extensive network of
-          stake pools.</v-card-text
-        >
+        <h1 class="display-1">{{ $t('dashboard.stakeYourAssets', { assetType }) }}</h1>
+        <v-card-text class="subtitle-1" v-if="loggedWallet">
+          {{ $t('dashboard.earnRewardsByStaking', { assetType, chain: loggedWallet?.chain }) }}
+        </v-card-text>
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
-          Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
+          {{ $t('dashboard.considerSupportingUs') }}
         </p>
 
         <div class="d-flex align-center justify-center flex-column">
-          <v-btn class="stake-button-gero" v-if="geroPoolExists" @click="delegateToGero">Stake with GERO</v-btn>
-          <v-btn class="stake-button-pools" to="/staking">Browse Stake Pools</v-btn>
+          <v-btn class="stake-button-gero" v-if="geroPoolExists" @click="delegateToGero">{{ $t('dashboard.stakeWithGero') }}</v-btn>
+          <v-btn class="stake-button-pools" to="/staking">{{ $t('dashboard.browseStakePools') }}</v-btn>
         </div>
       </div>
 
-      <h2 class="error-message">You need to have {{ assetType }} in your wallet before staking!</h2>
+      <h2 class="error-message">{{ $t('dashboard.needTokensBeforeStaking', { assetType }) }}</h2>
     </section>
     <DelegateDialog
       :isOpen="isDelegateDialogOpen"
@@ -41,7 +40,8 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, ref, toRefs, getCurrentInstance } from 'vue';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { Cardano } from '@cardano-sdk/core';
@@ -51,6 +51,9 @@ import { networkStore } from '@/stores/networkStore';
 import stakingStore from '@/stores/stakingStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
 const { epochParams, tip } = toRefs(networkStore);
@@ -84,7 +87,7 @@ const delegateToGero = async () => {
     await stakingStore.loadPoolById(loggedWallet.value, poolId);
 
     if (!stakingStore.state.currentPool) {
-      snackbar.setError('Failed to load GERO pool information');
+      snackbar.setError(t('errors.unknownError'));
       return;
     }
 
@@ -92,7 +95,7 @@ const delegateToGero = async () => {
 
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('errors.networkError'));
     }
 
     const certificates: Cardano.Certificate[] = [];
@@ -144,9 +147,9 @@ const delegateToGero = async () => {
   } catch (error: any) {
     console.error('Error building delegation transaction:', error);
     if (error.message?.includes('UTxO Balance Insufficient')) {
-      snackbar.setError('Insufficient ADA to complete staking transaction');
+      snackbar.setError(t('errors.insufficientBalance'));
     } else {
-      snackbar.setError('Failed to build delegation transaction: ' + (error.message || 'Unknown error'));
+      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
     }
   }
 };

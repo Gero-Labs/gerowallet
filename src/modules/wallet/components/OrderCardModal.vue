@@ -5,16 +5,15 @@
         <div class="modal-content">
           <div class="card-mockup-section">
             <div class="cards-wrapper">
-              <img src="@/modules/wallet/icons/multiCards.svg" alt="Cards" class="card" />
+              <img src="@/modules/wallet/icons/multiCards.svg" :alt="$t('card.cards')" class="card" />
             </div>
           </div>
 
           <div class="modal-header">
             <div class="header-content">
-              <h2 class="modal-title">Get Started with Gero Crypto Card</h2>
+              <h2 class="modal-title">{{ t('card.getStartedWithGeroCard') }}</h2>
               <p class="modal-subtitle">
-                First, you'll create an account with Kaiserex, our trusted banking partner. Then complete verification
-                to order your card.
+                {{ t('card.firstCreateKaiserex') }}
               </p>
             </div>
 
@@ -23,26 +22,26 @@
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">Step 1: Create your Kaiserex account (our banking partner)</span>
+                <span class="check-text">{{ t('card.step1CreateKaiserex') }}</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">Step 2: Complete KYC verification with ID and face scan</span>
+                <span class="check-text">{{ t('card.step2CompleteKYC') }}</span>
               </div>
               <div class="check-item">
                 <div class="check-icon">
                   <img src="@/modules/wallet/icons/check-blue.svg" alt="check" />
                 </div>
-                <span class="check-text">Step 3: Receive your Gero Crypto Card</span>
+                <span class="check-text">{{ t('card.step3ReceiveCard') }}</span>
               </div>
             </div>
           </div>
 
           <div class="modal-actions">
-            <SecondaryButton text="Cancel" @click="closeModal()" />
-            <GradientButton text="Get Started" @click="handleGetStarted()" />
+            <SecondaryButton :text="t('common.cancel')" @click="closeModal()" />
+            <GradientButton :text="t('card.getStarted')" @click="handleGetStarted()" />
           </div>
         </div>
       </v-card>
@@ -61,12 +60,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from './SecondaryButton.vue';
 import GradientButton from './GradientButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
 import KYCModal from './KYCModal.vue';
 import { ref } from 'vue';
 import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 defineProps<{
   open: boolean;

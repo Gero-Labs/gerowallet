@@ -2,7 +2,7 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    title="My Wallet Addresses"
+    :title="$t('wallet.myWalletAddresses')"
     subtitle=""
     :min-height="300"
     :height="600"
@@ -14,8 +14,8 @@
         centered
         background-color="transparent"
       >
-        <v-tab>Payment</v-tab>
-        <v-tab>Reward</v-tab>
+        <v-tab>{{ $t('wallet.payment') }}</v-tab>
+        <v-tab>{{ $t('wallet.reward') }}</v-tab>
         <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 105</v-tab>
         <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 129</v-tab>
       </v-tabs>
@@ -39,8 +39,8 @@
               </span>
                 <CopyButton class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
               </div>
-              <p class="path-text">HD Path: {{ item.path }}</p>
-              <p class="path-text">Cred: {{ filters.truncate(item.cred) }}<CopyButton class="ml-1" :value="item.cred" x-small /></p>
+              <p class="path-text">{{ $t('navigation.hdPath') }}: {{ item.path }}</p>
+              <p class="path-text">{{ $t('navigation.cred') }}: {{ filters.truncate(item.cred) }}<CopyButton class="ml-1" :value="item.cred" x-small /></p>
               <p class="info-text">{{ item.info }}</p>
             </v-list-item-content>
           </v-list-item>
@@ -55,7 +55,7 @@
               <div class="icon-container">
                 <v-icon color="#333741">mdi-wallet-outline</v-icon>
               </div>
-              <h3>Used Addresses ({{ usedAddresses.length }})</h3>
+              <h3>{{ $t('wallet.usedAddresses') }} ({{ usedAddresses.length }})</h3>
               <v-spacer />
               <v-switch
                 inset
@@ -63,7 +63,7 @@
                 v-model="showInternal"
                 dense
                 hide-details
-                label="Show Internal"
+                :label="$t('wallet.showInternal')"
                 @click.stop
               />
             </div>
@@ -74,9 +74,9 @@
                 <v-simple-table dense style="background-color: transparent">
                   <thead>
                     <tr>
-                      <th class="text-left grey--text">Address</th>
-                      <th class="text-left grey--text">Path</th>
-                      <th class="text-center grey--text">Type</th>
+                      <th class="text-left grey--text">{{ $t('wallet.address') }}</th>
+                      <th class="text-left grey--text">{{ $t('wallet.path') }}</th>
+                      <th class="text-center grey--text">{{ $t('wallet.type') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -119,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, nextTick, toRefs, computed } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -128,6 +129,9 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{ isOpen: boolean }>();
 const emit = defineEmits(['close']);
@@ -174,35 +178,35 @@ const tabs = computed(() => {
   }
   return [
     {
-      label: 'Payment Address',
+      label: t('wallet.paymentAddress'),
       value: keys.value.payment[0].address,
       path: keys.value.payment[0].path,
       cred: keys.value.payment[0].cred,
-      info: `Share your payment address or scan the QR code to receive ${networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)} safely.`,
+      info: t('wallet.paymentAddressInfo', { ticker: networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) }),
       enabled: true,
     },
     {
-      label: 'Reward (Stake) Address',
+      label: t('wallet.rewardAddress'),
       value: keys.value.stake[0].address,
       path: keys.value.stake[0].path,
       cred: keys.value.stake[0].cred,
-      info: 'Use this to claim staking rewards.',
+      info: t('wallet.rewardAddressInfo'),
       enabled: true,
     },
     {
-      label: 'Delegated Representative ID (CIP-105)',
+      label: t('wallet.drepId105'),
       value: keys.value.drep105[0].address,
       path: keys.value.drep105[0].path,
       cred: keys.value.drep105[0].cred,
-      info: 'Used to Participate in Cardano Governance Actions.',
+      info: t('wallet.drepIdInfo'),
       enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
     {
-      label: 'Delegated Representative ID (CIP-129)',
+      label: t('wallet.drepId129'),
       value: keys.value.drep129[0].address,
       path: keys.value.drep129[0].path,
       cred: keys.value.drep129[0].cred,
-      info: 'Used to Participate in Cardano Governance Actions.',
+      info: t('wallet.drepIdInfo'),
       enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
   ]

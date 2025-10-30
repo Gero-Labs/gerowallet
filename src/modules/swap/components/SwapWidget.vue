@@ -1,14 +1,28 @@
 <template>
   <v-card flat outlined class="mx-auto liquid-glass d-flex flex-column px-2" style="height: 100%;">
+    <!-- Overlay when swap is disabled by feature flag -->
+    <v-overlay
+      v-if="!isSwapEnabled"
+      absolute
+      :value="true"
+      opacity="0.9"
+      color="#000000"
+      z-index="999"
+    >
+      <div class="overlay-content text-center">
+        <v-icon size="64" color="warning">mdi-alert-circle-outline</v-icon>
+        <h2 class="mt-4 white--text" style="line-height: 1.5">{{ $t('common.underMaintenance') }}</h2>
+      </div>
+    </v-overlay>
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column" style="overflow: hidden;">
       <div class="swap-content-wrapper">
         <v-card-title class="pb-0 pt-3 px-0">
           <v-btn-toggle mandatory active-class="geroButton" v-model="swapType" dense>
             <v-btn value="swap" x-small rounded>
-              SWAP
+              {{ $t('swap.swap') }}
             </v-btn>
             <v-btn value="limit" x-small rounded>
-              LIMIT
+              {{ $t('swap.limit') }}
             </v-btn>
           </v-btn-toggle>
           <v-spacer></v-spacer>
@@ -28,7 +42,7 @@
             v-model="selectedTokenA"
             :available="availableTokens"
             :index="0"
-            title="Selling"
+            :title="$t('swap.selling')"
             titleColor="#FDA29B"
             :price="getPrice(selectedTokenA)"
             @change="tokenAQuantityChange"
@@ -44,7 +58,7 @@
             v-model="selectedTokenB"
             :available="availableTokens"
             :index="0"
-            title="Buying"
+            :title="$t('swap.buying')"
             titleColor="#75E0A7"
             background-color="#161B26"
             :max-button-enabled="false"
@@ -161,14 +175,15 @@
         @click="prepareSwap"
         :loading="loading"
       >
-        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? 'Pool Not Found' : swapButtonText }}</span>
+        <span style="font-size: 13px; font-weight: 600;">{{ poolError ? $t('swap.poolNotFound') : swapButtonText }}</span>
       </v-btn>
     </v-card-actions>
     <SettingsOverlay ref="settings" v-model="settingsToggle" @setSlippage="setSlippage" />
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import SettingsOverlay from '@/modules/swap/components/SettingsOverlay.vue';
 import SwapOverviewOverlay from '@/modules/swap/components/SwapOverviewOverlay.vue';
@@ -186,8 +201,15 @@ import dexHunterApi from '@/api/dexhunter-api';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardanoSvg from '@/assets/svg/cardano.svg';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
-const emit = defineEmits(['onSwap'])
+const emit = defineEmits(['onSwap']);
+
+const { t } = useTranslation();
+
+const isSwapEnabled = computed(() => {
+  return featureFlagsStore.state.flags.swapEnabled;
+});
 
 const { loggedWallet, tokens: resolvedAssets } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
@@ -252,15 +274,15 @@ const limitSplit = ref<number>(1);
 
 const swapButtonText = computed(() => {
   if (isInsufficientBalance.value) {
-    return 'INSUFFICIENT BALANCE';
+    return t('swap.insufficientBalance');
   } else if (swapType.value === 'limit') {
     if (limitType.value === 'one' || limitType.value === 'split' && limitSplit.value === 1) {
-      return 'PLACE ORDER';
+      return t('swap.placeOrder');
     } else if (limitType.value === 'split') {
-      return `PLACE ${limitSplit.value} ORDERS`;
+      return t('swap.placeOrders', { count: limitSplit.value });
     }
   }
-  return 'SWAP'
+  return t('swap.swap')
 })
 
 const isSwapDisabled = computed(() => {
@@ -387,7 +409,7 @@ const slippageDisplay = computed(() => {
 
 const pairPrice = computed(() => {
   if (poolError.value) {
-    return 'Pool Not Found'
+    return t('swap.poolNotFound')
   }
   const tokenA = selectedTokenA.value?.ticker;
   const tokenB = selectedTokenB.value?.ticker === 'ADA' ? tokenA : selectedTokenB.value?.ticker;
