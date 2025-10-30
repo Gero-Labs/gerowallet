@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { Blockchain, Network, PaginationParams, PaginatedResponse } from '@/models/types';
+import { Blockchain, Network, PaginationParams, PaginatedResponse, Tip } from '@/models/types';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
@@ -217,7 +217,7 @@ export default {
     network: string;
     provider: string;
     from: number;
-    to: any; // Block object
+    to: Tip;
     address: string;
     rewards_sum: string;
     controlled_amount: string;

@@ -3,7 +3,6 @@ import { Api } from '@/api/api';
 import { Tip, Blockchain, Provider, Network } from '@/models/types';
 import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
-import ablyService from '@/services/ably.service';
 import { chunkArray } from 'array-chunk-by-size';
 import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
@@ -64,7 +63,10 @@ export class SyncService {
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
         const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
         const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
-        await ablyService.publishToSyncChannel(chainEnum, networkEnum, {
+
+        // Use REST API instead of Ably publish to avoid rate limiting
+        // (Multiple wallet instances publishing to same Ably channel causes 429 errors)
+        const syncResponse = await blockchainApi.syncRest({
           chain: chainEnum,
           network: networkEnum,
           provider: Provider[this.walletBg.provider],
@@ -76,6 +78,18 @@ export class SyncService {
           withdrawable_amount,
           epoch,
         });
+
+        // Process the sync response immediately
+        if (syncResponse && syncResponse.success) {
+          await this.setSync(syncResponse);
+        } else {
+          console.error('Sync failed: REST sync returned unsuccessful response', {
+            success: syncResponse?.success,
+            address,
+            from,
+            toHeight: tip.height,
+          });
+        }
       }
     } catch (err) {
       debugLog(err);

@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { Api } from '@/api/api';
-import { Cardano, Serialization, util } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import {
   Bip32PrivateKey,
   Ed25519PrivateKey,
@@ -28,6 +28,7 @@ import {
 } from '@/models/types';
 import {
   addrToSignWith,
+  convertTransactionsForStorage,
   getAddress,
   getCcColdKey,
   getCcHotKey,
@@ -40,7 +41,8 @@ import {
   getStakeKey,
   hdPathToArray,
   keyHashFromAddress,
-  toPaymentCredential, toValueCore,
+  toPaymentCredential,
+  toValueCore,
 } from '@/chrome/serialization';
 import { decryptWithPassword } from '@/shared/utils/crypto';
 import WalletStore from '@/stores/walletStore';
@@ -62,13 +64,9 @@ import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
 import {
-  buildAndSignData,
-  convertTransactionsForStorage,
-  createCoseKey,
-  createSignDataBuilder,
+  buildSignatureAndCoseKey,
   toHexArray,
 } from '@/shared/utils/converter';
-import { COSESign1Builder } from '@emurgo/cardano-message-signing-browser';
 import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
@@ -1085,21 +1083,11 @@ export class WalletBg {
       const foundKey = keyArray.find((key: Key) => key.cred === keyHash);
       if (foundKey) {
         const accountKey = this.requestAccountKey(type, password, accountIndex, hdPathToArray(foundKey.path)[4]);
-        return this.buildSignatureAndCoseKey(addressBytes, payload, accountKey);
+        return buildSignatureAndCoseKey(addressBytes, payload, accountKey);
       }
     }
 
     throw DataSignError.ProofGeneration;
-  }
-
-  private buildSignatureAndCoseKey(addressBytes: Uint8Array<ArrayBufferLike>, payload: string, accountKey: Ed25519PrivateKey) {
-    const builder: COSESign1Builder = createSignDataBuilder(addressBytes, payload);
-    const toSign = builder.make_data_to_sign().to_bytes();
-    const coseKey = createCoseKey(addressBytes, accountKey.toPublic().hex());
-    return {
-      signature: buildAndSignData(builder, toSign, accountKey),
-      key: util.bytesToHex(coseKey.to_bytes())
-    };
   }
 
   isEnterpriseAddress(): boolean {
