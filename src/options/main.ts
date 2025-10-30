@@ -12,7 +12,8 @@ import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
 import walletStore from '@/stores/geroStore';
-import Notifications from '@voerro/vue-notifications'
+import Notifications from '@voerro/vue-notifications';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -33,13 +34,29 @@ function loadPersistedWallet(): Promise<void> {
   });
 }
 
-loadPersistedWallet().then(() => {
+async function initializeFeatureFlags(): Promise<void> {
+  const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
+  if (ldClientId) {
+    try {
+      await featureFlagsStore.initialize(ldClientId, {
+        key: 'isSwapEnabled',
+        name: 'isSwapEnabled',
+      });
+    } catch (error) {
+      console.error('Failed to initialize feature flags:', error);
+    }
+  } else {
+    console.warn('LaunchDarkly client ID not found in environment');
+  }
+}
+
+loadPersistedWallet().then(async () => {
+  await initializeFeatureFlags();
+
   Vue.config.productionTip = false;
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
-    // set default flavor of showdown
     flavor: 'github',
-    // set default options of showdown (will override the flavor options)
     options: {
       emoji: false,
     },

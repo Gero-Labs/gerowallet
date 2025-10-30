@@ -39,9 +39,7 @@
           </v-col>
           <v-col cols="6" class="pa-2" style="align-content: center;" v-if="!isSwapDisabled">
             <v-layout column style="align-items: center">
-              <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.SWAP"
-                     :disabled="isSwapDisabled"
-              >
+              <v-btn text plain class="px-0" height="60" width="60" @click="currentDialog = dialogs.SWAP">
                 <v-avatar tile size="50">
                   <v-img
                     :src="assets.swapSvg"
@@ -80,7 +78,12 @@
       <v-card-actions></v-card-actions>
     </v-card>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
-    <SwapDialog v-if="!isSwapDisabled" :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
+    <SwapDialog
+      v-if="!isSwapDisabled"
+      :isOpen="currentDialog === dialogs.SWAP"
+      :isSwapEnabled="isSwapEnabledByFeatureFlag"
+      @close="closeDialog"
+    ></SwapDialog>
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
   </div>
@@ -94,13 +97,7 @@ import SendDialog from "../dialogs/SendDialog.vue";
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-
-const props = defineProps({
-  utxos: {
-    type: Array,
-    default: () => [],
-  },
-});
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 const { loggedWallet } = toRefs(walletStore);
 
@@ -115,16 +112,22 @@ const dialogs = {
 
 const isBuyDisabled = computed(() => {
   if (loggedWallet.value) {
-    return !networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network)
+    return !networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
-  return true
+  return true;
 });
 
+// Check if swap is enabled by LaunchDarkly feature flag
+const isSwapEnabledByFeatureFlag = computed(() => {
+  return featureFlagsStore.state.flags.swapEnabled;
+});
+
+// Swap visibility is controlled by network support only
 const isSwapDisabled = computed(() => {
   if (loggedWallet.value) {
-    return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network)
+    return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
-  return true
+  return true;
 });
 
 const closeDialog = () => {

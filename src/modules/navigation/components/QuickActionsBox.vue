@@ -85,6 +85,10 @@
             ></v-img>
           </v-avatar>
           <span class="button-text">Swap</span>
+
+          <div v-if="!isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
+            <span>Off</span>
+          </div>
         </v-btn>
       </div>
 
@@ -110,7 +114,12 @@
       </div>
     </div>
     <ReceiveDialog :isOpen="currentDialog === dialogs.RECEIVE" @close="closeDialog"></ReceiveDialog>
-    <SwapDialog v-if="!isSwapDisabled" :isOpen="currentDialog === dialogs.SWAP" @close="closeDialog"></SwapDialog>
+    <SwapDialog
+      v-if="!isSwapDisabled"
+      :isOpen="currentDialog === dialogs.SWAP"
+      :isSwapEnabled="isSwapEnabledByFeatureFlag"
+      @close="closeDialog"
+    ></SwapDialog>
     <BuyDialog v-if="!isBuyDisabled" :isOpen="currentDialog === dialogs.BUY" @close="closeDialog"></BuyDialog>
     <SendDialog :isOpen="currentDialog === dialogs.SEND" @close="closeDialog"></SendDialog>
     <PerpetualsDialog v-if="!isPerpetualsDisabled" :isOpen="currentDialog === dialogs.PERPETUALS" @close="closeDialog"></PerpetualsDialog>
@@ -126,6 +135,7 @@ import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any
@@ -156,11 +166,21 @@ const isBuyDisabled = computed(() => {
   return true;
 });
 
-const isSwapDisabled = computed(() => {
+// Check if swap is enabled by LaunchDarkly feature flag
+const isSwapEnabledByFeatureFlag = computed(() => {
+  return featureFlagsStore.state.flags.swapEnabled;
+});
+
+// Check if swap is supported by network
+const isSwapSupportedByNetwork = computed(() => {
   if (loggedWallet.value) {
-    return !networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+    return networks.resolveSwapSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
-  return true;
+  return false;
+});
+
+const isSwapDisabled = computed(() => {
+  return !isSwapSupportedByNetwork.value;
 })
 
 const isPerpetualsDisabled = computed(() => {
@@ -401,5 +421,88 @@ const getButtonGlowStyle = (buttonType: string) => {
 
 .perpetuals-button .button-text {
   color: #B794F4;
+}
+
+/* Right corner ribbon "Off" badge */
+.ribbon {
+  position: absolute;
+  top: -0.375rem;
+  right: -0.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.ribbon span {
+  position: absolute;
+  display: block;
+  width: 40px;
+  padding: 2px 0;
+  background-color: #BD1550;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  text-transform: uppercase;
+  text-align: center;
+  right: -10px;
+  top: 3px;
+  transform: rotate(45deg);
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+
+@media (max-width: 768px) {
+  .ribbon {
+    top: -5px;
+    right: -10px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .ribbon span {
+    width: 35px;
+    font-size: 6.5px;
+    right: -8px;
+    top: 2.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ribbon {
+    top: -4px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .ribbon span {
+    width: 32px;
+    font-size: 6px;
+    right: -6px;
+    top: 2px;
+  }
+}
+
+.ribbon span::before,
+.ribbon span::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  z-index: -1;
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+  border-top: 2px solid #8B0E3C;
+}
+
+.ribbon span::before {
+  left: 0;
+}
+
+.ribbon span::after {
+  right: 0;
 }
 </style>
