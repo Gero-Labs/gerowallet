@@ -668,6 +668,9 @@ const prepareSwap = async () => {
   let swapRes
   const amount = Number(selectedTokenA.value['quantity'].replaceAll(',', ''))
   try {
+    // Register address with DexHunter before swapping (if not already registered)
+    await DexHunterStore.registerAddress(loggedWallet.value?.baseAddress);
+
     if (swapType.value === 'swap') {
       const slippage = slippageRef.value === 'unlimited' ? -1 : Number(slippageRef.value);
       swapRes = await dexHunterApi.swap(amount, loggedWallet.value?.baseAddress, selectedTokenA.value['unit'], selectedTokenB.value['unit'], slippage)

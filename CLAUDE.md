@@ -13,7 +13,6 @@
 - **Database**: Dexie 4.0.7 (IndexedDB wrapper) with versioned schemas
 - **Cardano Integration**:
   - `@cardano-sdk/core` v0.46.9 (primary, modern SDK - **preferred for new features**)
-  - `@emurgo/cardano-serialization-lib-browser` v12.1.0 (legacy, being phased out)
 - **Hardware Wallets**: Ledger (@cardano-foundation/ledgerjs-hw-app-cardano v7.1.4), Trezor (@trezor/connect-webextension v9.6.2), Keystone (@keystonehq/keystone-sdk v0.8.0)
 - **Real-time Communication**: Ably v2.11.0 (WebSocket-based blockchain updates)
 - **Cryptography**: WebAssembly for performance-critical operations (bip39, blake2b)
@@ -172,8 +171,6 @@ db.version(2).stores({ wallets: '++id, name, type, publicKey' });
 - Each wallet has its own isolated database to prevent data contamination
 
 ### 4. **Cardano Integration**
-**IMPORTANT**: The project is transitioning from Emurgo CSL to Cardano JS SDK:
-- Legacy: `@emurgo/cardano-serialization-lib-browser` (CSL)
 - Modern: `@cardano-sdk/core` (preferred for new features)
 - Conversion utilities in `cardanoJsSdkCbor.ts` for interoperability
 
@@ -927,7 +924,6 @@ export default pbkdf2Browser;
 ### Cardano Libraries
 - `@cardano-sdk/core` - Modern Cardano SDK (transaction building, serialization)
 - `@cardano-sdk/tx-construction` - Transaction construction utilities
-- `@emurgo/cardano-serialization-lib-browser` - Legacy CSL (WASM-based)
 - `@emurgo/cardano-message-signing-browser` - CIP-8 message signing
 
 ### Cryptography

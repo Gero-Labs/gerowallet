@@ -151,7 +151,6 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
-import { Transaction, TransactionOutput, TransactionOutputs, TransactionUnspentOutputs, TransactionWitnessSet } from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
@@ -169,9 +168,9 @@ import AssetsToSendStep from '../components/AssetsToSendStep.vue';
 import SummaryStep from '../components/SummaryStep.vue';
 // import { QrcodeStream } from "vue-qrcode-reader";
 import QRCodeStyling from 'qr-code-styling';
-import type { TransactionBody } from '@emurgo/cardano-serialization-lib-browser';
 import type { Step, Token, SendData, Collectible } from '@/modules/multisig/types/MultiSigTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import { Serialization } from '@cardano-sdk/core';
 
 
 const { t } = useTranslation();
@@ -200,8 +199,8 @@ const tooltip = ref({
   enabled: false,
   text: t('wallet.wrongSpendingPassword')
 });
-const txBody = ref<TransactionBody | undefined>();
-const txData = ref<Transaction | undefined>();
+const txBody = ref<Serialization.TransactionBody | undefined>();
+const txData = ref<Serialization.Transaction | undefined>();
 const txSubmitLoading = ref(false);
 const spendingPassword = ref('');
 const show1 = ref(false);
@@ -314,12 +313,12 @@ const onDecode = async (result: string) => {
   console.log(result);
   const signature = parseSignature(result);
   if (!txBody.value) return;
-  const signedTx = Transaction.new(
+  const signedTx = new Serialization.Transaction(
     txBody.value,
-    TransactionWitnessSet.from_bytes(Buffer.from(signature.witnessSet, "hex")),
+    Serialization.TransactionWitnessSet.fromCbor(signature.witnessSet),
     undefined
   );
-  console.log(signedTx.to_json());
+  console.log(signedTx.toCore());
   const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId);
   snackbar.fireSuccess(t('multisig.txSubmittedSuccess', { txId }));
@@ -433,8 +432,8 @@ const buildTx = (sendTokens: Token[]) => {
       });
     });
   }
-  const outputs = TransactionOutputs.new();
-  outputs.add(TransactionOutput.new(parseAddress(recipientAddress), assetsToValue(tokens)));
+  const outputs: Serialization.TransactionOutput[] = [];
+  outputs.push(new Serialization.TransactionOutput(parseAddress(recipientAddress), assetsToValue(tokens)));
   const transactionUnspentOutputs = TransactionUnspentOutputs.new();
   utxos.value.forEach((utxo) => transactionUnspentOutputs.add(toUTxO(utxo)));
   try {

@@ -7,17 +7,15 @@ import { hdPathToArray } from '@/chrome/serialization';
 import { NetworkInfo } from '@/utils/networks';
 import * as Crypto from '@cardano-sdk/crypto';
 import { TrezorKeyAgent } from '@cardano-sdk/hardware-trezor';
-import TrezorConnect from '@trezor/connect-web';
 import {
   AccountKeyDerivationPath,
   AddressType,
   CommunicationType,
   GroupedAddress,
   KeyRole,
+  KeyPurpose,
   util,
 } from '@cardano-sdk/key-management';
-import type { Manifest } from '@trezor/connect/lib/types/settings';
-import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
@@ -26,9 +24,7 @@ import { debugLog } from '@/utils/debug';
 const TREZOR_MANIFEST = {
   email: 'support@gerowallet.io',
   appUrl: window.location.origin,
-  appName: 'Gero Wallet',
-  appIcon: assets.geroLogo
-} as Manifest;
+};
 
 export default {
   _trezorInitialized: false,
@@ -39,32 +35,34 @@ export default {
       hardwareLoading.setText(i18n.t('wallet.connectingToTrezor') as string);
       hardwareLoading.setText(i18n.t('wallet.confirmExportingPublicKeys') as string);
 
-      console.log('[TREZOR] Initializing TrezorConnect directly with WebUSB...');
+      console.log('[TREZOR] Initializing Trezor transport...');
 
       await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.CONNECT_TREZOR,
         data: {},
       })
-      // Initialize TrezorConnect directly with WebUSB-only transport
-      await TrezorConnect.init({
-        lazyLoad: true,
+
+      // Initialize Trezor transport using TrezorKeyAgent
+      await TrezorKeyAgent.initializeTrezorTransport({
         manifest: TREZOR_MANIFEST,
-        connectSrc: 'https://connect.trezor.io/9/',
+        communicationType: CommunicationType.Web,
+        silentMode: false,
+        lazyLoad: true,
       });
 
       console.log('[TREZOR] Getting Cardano public key...');
-      // Get a public key directly from TrezorConnect
-      const result = await TrezorConnect.cardanoGetPublicKey({
-        path: path,
-        showOnTrezor: false,
+
+      // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
+      const pathParts = path.split('/');
+      const accountIndex = parseInt(pathParts[3].replace("'", ""));
+
+      // Get extended public key using TrezorKeyAgent
+      const hwPublicKey: Crypto.Bip32PublicKeyHex = await TrezorKeyAgent.getXpub({
+        accountIndex,
+        communicationType: CommunicationType.Web,
+        purpose: KeyPurpose.STANDARD,
       });
 
-      if (!result.success) {
-        throw new Error(`Trezor connection failed: ${(result.payload as any).error}`);
-      }
-
-      const payload = result.payload as unknown as { publicKey: string; chainCode: string };
-      const hwPublicKey: Crypto.Bip32PublicKeyHex = (payload.publicKey + payload.chainCode) as Crypto.Bip32PublicKeyHex;
       console.log('[TREZOR] Successfully got public key');
 
       const keys = [{
@@ -94,12 +92,11 @@ export default {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
-        // Use direct TrezorConnect.init to configure WebUSB-only transport
-        await TrezorConnect.init({
+        await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          popup: true, // Allow popups for device interactions
-          transports: ['WebUsbTransport'], // Only use WebUSB, avoid Bridge transport
-          lazyLoad: false
+          communicationType: CommunicationType.Web,
+          silentMode: false,
+          lazyLoad: false,
         });
         this._trezorInitialized = true;
       }
@@ -250,16 +247,15 @@ export default {
     };
   },
 
-  async signData(payload: string, network: any, accountIndex: number): Promise<any> {
+  async signData(_payload: string, network: any, accountIndex: number): Promise<any> {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
-        // Use direct TrezorConnect.init to configure WebUSB-only transport
-        await TrezorConnect.init({
+        await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          popup: true, // Allow popups for device interactions
-          transports: ['WebUsbTransport'], // Only use WebUSB, avoid Bridge transport
-          lazyLoad: false
+          communicationType: CommunicationType.Web,
+          silentMode: false,
+          lazyLoad: false,
         });
         this._trezorInitialized = true;
       }
