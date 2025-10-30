@@ -146,6 +146,9 @@ import { setWalletConfiguration } from '@/db/wallet-db';
 // Define emits
 const emit = defineEmits(['close']);
 
+// Translation
+const { t } = useTranslation();
+
 // Get store instance
 const { loggedWallet, config } = toRefs(walletStore);
 const { wallets } = toRefs(geroStore);
@@ -241,17 +244,19 @@ watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      // CRITICAL FIX: Load language file before switching
+      // CRITICAL FIX: Load language file before switching (race condition fix)
       const { loadLanguage } = await import('@/plugins/i18n');
       try {
         await loadLanguage(iso);
+        
+        // Update store and i18n locale ONLY after successful load
+        await WalletStore.setLocale(iso);
+        vmProxy.$i18n.locale = iso;
+        await vmProxy.$nextTick();
       } catch (error) {
         console.error(`Failed to load language ${iso}:`, error);
+        // Don't update store if load failed - will cause UI inconsistency
       }
-      
-      await WalletStore.setLocale(iso);
-      vmProxy.$i18n.locale = iso;
-      await vmProxy.$nextTick();
     }
   }
 }, { immediate: false });

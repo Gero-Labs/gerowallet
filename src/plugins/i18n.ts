@@ -1,5 +1,6 @@
 import Vue from 'vue';
 import VueI18n from 'vue-i18n';
+import { walletStore } from '@/stores/walletStore';
 
 // Vuetify locales - import all available
 import {
@@ -15,7 +16,7 @@ import {
   tr as vuetifyTr,
   zhHans as vuetifyCn,
   th as vuetifyTh,
-  pl as vuetifyPl,
+  cs as vuetifyCz,
   el as vuetifyGr,
   he as vuetifyHe,
 } from 'vuetify/src/locale';
@@ -33,24 +34,30 @@ const wrapWithVuetify = (translations: any, vuetifyLocale: any, rtl = false, loc
   ...translations,
 });
 
-// Vuetify locale mapping
+// Vuetify locale mapping (all 22 languages from languages.ts)
 const vuetifyLocales: Record<string, any> = {
-  cn: vuetifyCn,
-  de: vuetifyDe,
-  es: vuetifyEs,
-  fr: vuetifyFr,
-  gb: vuetifyEn,
-  gr: vuetifyGr,
-  he: vuetifyHe,
-  it: vuetifyIt,
-  jp: vuetifyJa,
-  nl: vuetifyNl,
-  pt: vuetifyPt,
-  pl: vuetifyPl,
-  ru: vuetifyRu,
-  th: vuetifyTh,
-  tr: vuetifyTr,
-  us: vuetifyEn,
+  cn: vuetifyCn, // Chinese
+  cz: vuetifyCz, // Czech - FIXED
+  de: vuetifyDe, // German
+  es: vuetifyEs, // Spanish
+  fr: vuetifyFr, // French
+  gb: vuetifyEn, // English (GB)
+  gr: vuetifyGr, // Greek
+  he: vuetifyHe, // Hebrew
+  hr: vuetifyEn, // Croatian - fallback to English
+  id: vuetifyEn, // Indonesian - fallback to English
+  in: vuetifyEn, // Hindi - fallback to English
+  it: vuetifyIt, // Italian
+  jp: vuetifyJa, // Japanese
+  nl: vuetifyNl, // Dutch
+  pk: vuetifyEn, // Urdu - fallback to English
+  pt: vuetifyPt, // Portuguese
+  ru: vuetifyRu, // Russian
+  th: vuetifyTh, // Thai
+  tr: vuetifyTr, // Turkish
+  tz: vuetifyEn, // Swahili - fallback to English
+  us: vuetifyEn, // English (US)
+  vn: vuetifyEn, // Vietnamese - fallback to English
 };
 
 // Initial messages with only US English
@@ -113,16 +120,33 @@ function getLocaleCode(lang: string): string {
 
 Vue.use(VueI18n);
 
+/**
+ * Get saved locale from Pinia store (centralized)
+ * FIXED: Use walletStore instead of direct localStorage access
+ */
 const getSavedLocale = (): string => {
   try {
+    // Use centralized store pattern (walletStore) instead of localStorage
+    const locale = walletStore.config?.locale;
+    if (locale) {
+      console.log('🌐 Found locale in walletStore:', locale);
+      return locale;
+    }
+
+    // Fallback: read from localStorage only if store is not initialized yet
+    // (e.g., during very first app start before store hydration)
     const savedConfig = localStorage.getItem('walletStore');
     if (savedConfig) {
       const config = JSON.parse(savedConfig);
-      return config?.config?.locale || 'us';
+      const fallbackLocale = config?.config?.locale || 'us';
+      console.log('🌐 Found locale in localStorage:', fallbackLocale);
+      return fallbackLocale;
     }
   } catch (e) {
     console.warn('Failed to load saved locale:', e);
   }
+
+  console.log('🌐 Using default locale: us');
   return 'us';
 };
 
@@ -136,10 +160,20 @@ const i18n: VueI18n = new VueI18n({
 
 // Load saved locale on initialization
 (async () => {
+  // Wait for store to be hydrated (especially after page refresh)
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   const savedLocale = getSavedLocale();
+  console.log('🌐 Initializing i18n with saved locale:', savedLocale);
+
   if (savedLocale !== 'us') {
-    await loadLanguage(savedLocale);
-    i18n.locale = savedLocale;
+    try {
+      await loadLanguage(savedLocale);
+      i18n.locale = savedLocale;
+      console.log('✅ Language loaded successfully:', savedLocale);
+    } catch (error) {
+      console.error('❌ Failed to load saved language:', savedLocale, error);
+    }
   }
 })();
 

@@ -22,18 +22,12 @@
   </v-menu>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
-import { toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import languages from '@/plugins/languages';
-import { geroStore } from '@/stores/geroStore';
 import { loadLanguage } from '@/plugins/i18n';
 
-
-const { t } = useTranslation();
-
-const { locale } = toRefs(geroStore);
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
 
@@ -41,33 +35,37 @@ const currentLanguage = computed(() => {
   return languages[instance?.proxy?.$i18n?.locale || 'us']
 });
 
+const currentLocale = computed(() => {
+  return walletStore.config?.locale || 'us';
+});
+
 watch(selectedLang, async (val) => {
   const localeKey = Object.keys(languages)[val]
   
-  // CRITICAL FIX: Lazy load language file before switching
+  // CRITICAL FIX: Load language file before switching (race condition fix)
   try {
     await loadLanguage(localeKey);
+    
+    // Update store and i18n locale ONLY after successful load
+    WalletStore.setLocale(localeKey);
+    if (instance?.proxy?.$i18n) {
+      instance.proxy.$i18n.locale = localeKey;
+    }
   } catch (error) {
     console.error(`Failed to load language ${localeKey}:`, error);
-    // Continue anyway - will fallback to English
-  }
-  
-  // Update store and i18n locale
-  walletStore.setLocale(localeKey)
-  if (instance?.proxy?.$i18n) {
-    instance.proxy.$i18n.locale = localeKey;
+    // Don't update store if load failed - will cause UI inconsistency
   }
 });
 
 onMounted(async () => {
-  selectedLang.value = Object.keys(languages).indexOf(locale.value)
+  selectedLang.value = Object.keys(languages).indexOf(currentLocale.value)
   
   // Load saved language on mount if not 'us'
-  if (locale.value !== 'us') {
+  if (currentLocale.value !== 'us') {
     try {
-      await loadLanguage(locale.value);
+      await loadLanguage(currentLocale.value);
     } catch (error) {
-      console.error(`Failed to load saved language ${locale.value}:`, error);
+      console.error(`Failed to load saved language ${currentLocale.value}:`, error);
     }
   }
 });

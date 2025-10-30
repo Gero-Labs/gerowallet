@@ -77,16 +77,18 @@ const isLoading = computed(() => {
 });
 watch(() => config.value?.locale, async (newLocale, oldLocale) => {
   if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
-    // CRITICAL FIX: Load language file before switching
+    // CRITICAL FIX: Load language file before switching (race condition fix)
     const { loadLanguage } = await import('@/plugins/i18n');
     try {
       await loadLanguage(newLocale);
+      
+      // Update i18n locale ONLY after successful load
+      vmProxy.$i18n.locale = newLocale;
+      console.log('🌐 Language changed globally to:', newLocale);
     } catch (error) {
       console.error(`Failed to load language ${newLocale}:`, error);
+      // Don't update i18n if load failed
     }
-    
-    vmProxy.$i18n.locale = newLocale;
-    console.log('🌐 Language changed globally to:', newLocale);
   }
 }, { immediate: true, deep: true });
 </script>
