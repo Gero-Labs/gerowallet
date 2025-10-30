@@ -56,10 +56,10 @@ const gradientClass = computed(() =>
       </div>
 
       <div class="text-container">
-        <div class="subtitle">Your New</div>
+        <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
         <div class="title">
-          <span class="title-regular">Single Pane of</span>
-          <span :class="['title-gradient', gradientClass]">&nbsp;Glass</span>
+          <span class="title-regular">{{ $t('welcome.singlePaneOf') }}</span>
+          <span :class="['title-gradient', gradientClass]">&nbsp;{{ $t('welcome.glass') }}</span>
         </div>
         <NetworkSelector @network-changed="onNetworkChanged" />
 
@@ -69,19 +69,19 @@ const gradientClass = computed(() =>
           large
           @click="enableCreateOrImportSeedPhrase"
         >
-          Create or Import Seed Phrase
+          {{ $t('welcome.createOrImportSeedPhrase') }}
         </GButton>
 
         <GoogleLogin :selected-network="selectedNetwork" />
 
         <div class="zkfold-credit">
-          <span>Powered by</span>
+          <span>{{ $t('welcome.poweredBy') }}</span>
           <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
         </div>
       </div>
     </div>
 
-    <div class="footer-left">&#169; 2025 A.D. Labs</div>
+    <div class="footer-left">&#169; 2025 {{ $t('welcome.adLabs') }}</div>
   </div>
 </template>
 

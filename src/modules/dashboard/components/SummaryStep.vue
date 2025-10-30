@@ -7,7 +7,7 @@
             <Select
               :value="sendData.selectedWallet"
               :items="[sendData.selectedWallet]"
-              label="From"
+              :label="$t('wallet.from')"
               :readonly="true"
             ></Select>
           </v-card-title>
@@ -16,7 +16,7 @@
             <DappAddress class="mb-4" :address="sendData.recipientAddress" :risk="risks?.addressRisk" :with-bg="false" />
             <v-icon>mdi-arrow-down-thin</v-icon>
             <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true" :with-bg="false">
-              You're giving
+              {{ $t('wallet.youreGiving') }}
               <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
                   <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
@@ -24,9 +24,9 @@
                   </v-icon>
                 </template>
                 <div>
-                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} and/or tokens<br>shown here will be </span>
-                  <span style="color: #FF7777">sent<br>from your wallet</span>
-                  <span> to the<br>address listed above.<br /><br />Once signed, this action<br>is irreversible.</span>
+                  <span v-if="loggedWallet">{{networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network)}} {{ $t('common.andOrTokensShownHere') }}<br></span>
+                  <span style="color: #FF7777">{{ $t('common.sentFromYourWallet') }}<br></span>
+                  <span> {{ $t('common.toTheAddressListedAbove') }}<br /><br />{{ $t('common.onceSignedIrreversible') }}</span>
                 </div>
               </v-tooltip>
             </TransactionCard>
@@ -36,13 +36,14 @@
       <v-col cols="6" style="align-content: center">
         <TransactionRisk class="pb-8" :risk="risks?.score" :loading="loading" />
         <div style="flex-flow: row; display: flex; justify-content: center;">
-          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="'Copy CBOR'"></CopyButton>
+          <CopyButton v-if="tx" x-small :value="getCborHex()" :title="$t('wallet.copyCBOR')"></CopyButton>
         </div>
       </v-col>
     </v-row>
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import TransactionRisk from '@/popup/modules/components/TransactionRisk.vue';

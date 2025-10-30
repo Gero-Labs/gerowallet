@@ -4,8 +4,8 @@
       <!-- Header -->
       <div class="modal-header">
         <div class="header-content">
-          <h2 class="modal-title">Manage Card</h2>
-          <p class="modal-subtitle">Securely view, block, or order your card</p>
+          <h2 class="modal-title">{{ t('card.manageCardTitle') }}</h2>
+          <p class="modal-subtitle">{{ t('card.manageCardSubtitleSecurely') }}</p>
         </div>
         <v-btn icon class="close-btn" @click="closeDialog">
           <v-icon>mdi-close</v-icon>
@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import BlockCard from './tabs/BlockCard.vue';
 import OrderPhysicalCard from './tabs/OrderPhysicalCard.vue';
@@ -53,10 +54,12 @@ interface Emits {
 
 const emit = defineEmits<Emits>();
 
+const { t } = useTranslation();
+
 const tabs = [
-  // { id: 'view', label: 'View Card Details' },
-  { id: 'block', label: 'Block Card' },
-  // { id: 'order', label: 'Order Physical Card' },
+  // { id: 'view', label: t('card.viewCardDetailsTab') },
+  { id: 'block', label: t('card.blockCardTab') },
+  // { id: 'order', label: t('card.orderPhysicalCardTab') },
 ];
 
 const activeTab = ref('block');

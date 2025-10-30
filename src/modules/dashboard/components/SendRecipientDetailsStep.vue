@@ -7,7 +7,7 @@
             <Select
               :value="sendData.selectedWallet"
               :items="[sendData.selectedWallet]"
-              label="Wallet"
+              :label="$t('wallet.wallet')"
               :readonly="true"
             ></Select>
           </v-col>
@@ -31,7 +31,7 @@
                     </v-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="color: white; font-size: 11px">
-                        {{ contacts && contacts[paymentAddress] != null ? 'Edit Contact' : 'Save Contact'}}
+                        {{ contacts && contacts[paymentAddress] != null ? $t('wallet.editContact') : $t('wallet.saveContact')}}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -39,7 +39,7 @@
               </template>
               <v-card>
                 <v-card-title>
-                  Contact Added
+                  {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
                   <v-btn icon small @click="saveContactMenu = false" :disabled="!valid">
                     <v-icon>
@@ -71,7 +71,7 @@
                           v-model="contact.name"
                           dense
                           outlined
-                          label="Name"
+                          :label="$t('wallet.name')"
                           hide-details
                           :maxlength="40"
                           counter="40"
@@ -83,7 +83,7 @@
                           v-model="contact.address"
                           dense
                           outlined
-                          label="Address"
+                          :label="$t('wallet.address')"
                           hide-details
                           :disabled="contacts && contacts[contact.address] != null"
                           :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
@@ -94,10 +94,10 @@
                 </v-card-text>
                 <v-card-actions class="justify-center">
                   <v-btn text @click="saveContactMenu = false" :disabled="!valid">
-                    Done
+                    {{ $t('wallet.done') }}
                   </v-btn>
                   <v-btn color="primary" text @click="removeCont">
-                    Remove
+                    {{ $t('wallet.remove') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -122,7 +122,7 @@
                     </v-avatar>
                     <v-list-item-content>
                       <v-list-item-title style="color: white; font-size: 11px">
-                        Contacts
+                        {{ $t('wallet.contacts') }}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
@@ -130,7 +130,7 @@
               </template>
               <v-card>
                 <v-card-title>
-                  Contacts
+                  {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
                   <v-btn icon small @click="contactsMenu = false">
                     <v-icon>
@@ -165,7 +165,7 @@
                 </v-avatar>
                 <v-list-item-content>
                   <v-list-item-title style="color: white; font-size: 11px">
-                    QR Scan
+                    {{ $t('wallet.qrScan') }}
                   </v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
@@ -175,8 +175,8 @@
             <v-textarea
               v-if="loggedWallet"
               v-model="recipientAddress"
-              label="Recipient Address"
-              :placeholder="`Enter a Recipient Address${loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? ' or an ADA Handle' : ''}`"
+              :label="$t('wallet.recipientAddress')"
+              :placeholder="loggedWallet.network === Network.MAINNET && loggedWallet.chain === Blockchain.CARDANO ? $t('wallet.enterRecipientOrHandle') : $t('wallet.enterRecipientAddress')"
               rows="3"
               outlined
               :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
@@ -224,6 +224,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, watch, nextTick } from 'vue';
 import Select from '@/shared/components/Select.vue';
 import rules from "@/utils/rules";
@@ -245,6 +246,8 @@ const emit = defineEmits(['updateRecipientAddress'])
 
 const { loggedWallet, contacts } = toRefs(walletStore)
 
+
+
 const form = ref<any>(null);
 const valid = ref<boolean>(false);
 const paymentAddress = ref<string>('');
@@ -259,9 +262,12 @@ const contact = ref<any>({
   address: '',
   img: undefined
 });
+
+const { t } = useTranslation();
+
 const contactsHeaders = ref<any[]>([
-  { text: 'Name', value: 'name' },
-  { text: 'Address', value: 'address' },
+  { text: t('common.name') as string, value: 'name' },
+  { text: t('common.address') as string, value: 'address' },
   { text: '', align: 'right', sortable: false, value: 'actions' },
 ]);
 

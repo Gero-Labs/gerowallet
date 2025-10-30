@@ -5,6 +5,7 @@ import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import i18n from '@/plugins/i18n';
 
 export function encrypt(text: string, password: string): string {
   return CryptoTS.AES.encrypt(text, password).toString();
@@ -26,7 +27,7 @@ export function decrypt(ciphertext: string, password: string): string {
  */
 export function encryptWithPassword(password, rootKeyBytes): string {
   if (!password || password.length === 0) {
-    throw new Error('Password len cannot be 0');
+    throw new Error(i18n.t('common.passwordCannotBeEmpty') as string);
   }
 
   // Convert data to bytes
@@ -71,7 +72,7 @@ export function encryptWithPassword(password, rootKeyBytes): string {
  */
 export function decryptWithPassword(password: string, encryptedData): Buffer {
   if (!password || password.length === 0) {
-    throw new Error('Password len cannot be 0');
+    throw new Error(i18n.t('common.passwordCannotBeEmpty') as string);
   }
 
   try {
@@ -102,7 +103,7 @@ export function decryptWithPassword(password: string, encryptedData): Buffer {
 
     return Buffer.from(decrypted);
   } catch (err) {
-    throw new Error('Wrong Passphrase');
+    throw new Error(i18n.t('common.wrongPassphrase') as string);
   }
 }
 

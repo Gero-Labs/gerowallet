@@ -2,20 +2,17 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Delegate Your Stake"
+    :title="$t('staking.delegateYourStake')"
     :loading="loading"
     :min-height="639"
-    :subtitle="`Secure the network and earn rewards by delegating your ${networks.resolveCurrencySymbol(
-      loggedWallet?.chain,
-      loggedWallet?.network
-    )} to a stake pool.`"
+    :subtitle="$t('staking.delegateSubtitle', { currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) })"
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="pool">
       <v-alert border="left" color="primary" type="info" prominent class="text-left">
         <ul>
-          <li>You can only delegate to one stake pool at a time</li>
-          <li>You can switch to delegate to a different stake pool at any time</li>
-          <li>You can cancel your delegation at any time</li>
+          <li>{{ $t('staking.youCanOnlyDelegateToOne') }}</li>
+          <li>{{ $t('staking.canSwitchPools') }}</li>
+          <li>{{ $t('staking.canCancelDelegation') }}</li>
         </ul>
       </v-alert>
       <v-list-item three-line>
@@ -40,11 +37,11 @@
             <v-card-title class="pt-0" style="color: white">{{
               pool.block_count?.toLocaleString('en-US')
             }}</v-card-title>
-            <v-card-subtitle class="text-left pb-2">Lifetime Blocks</v-card-subtitle>
+            <v-card-subtitle class="text-left pb-2">{{ $t('staking.lifetimeBlocks') }}</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
             <v-card-title class="pt-0" style="color: white">{{ pool.live_delegators }}</v-card-title>
-            <v-card-subtitle class="text-left pb-2">Live Delegators</v-card-subtitle>
+            <v-card-subtitle class="text-left pb-2">{{ $t('staking.liveDelegators') }}</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
             <v-card-title class="pt-0" style="color: white">{{
@@ -55,13 +52,13 @@
                 networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
               )
             }}</v-card-title>
-            <v-card-subtitle class="text-left pb-2">Live Stake</v-card-subtitle>
+            <v-card-subtitle class="text-left pb-2">{{ $t('staking.liveStake') }}</v-card-subtitle>
           </v-col>
           <v-col cols="12" md="6" sm="6">
             <v-card-title class="pt-0" style="color: white"
               >{{ pool.ros?.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}%</v-card-title
             >
-            <v-card-subtitle class="text-left pb-2">ROS</v-card-subtitle>
+            <v-card-subtitle class="text-left pb-2">{{ $t('staking.ros') }}</v-card-subtitle>
           </v-col>
         </v-row>
       </v-layout>
@@ -78,7 +75,7 @@
           </template>
         </v-progress-linear>
       </v-card-title>
-      <v-card-subtitle class="text-left pb-0">Live Saturation</v-card-subtitle>
+      <v-card-subtitle class="text-left pb-0">{{ $t('staking.liveSaturation') }}</v-card-subtitle>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0 px-3" v-if="pool && account" style="display: block">
       <v-form ref="formRef" v-model="valid">
@@ -87,12 +84,10 @@
             <h4>
               <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Delegation Amt.</span>
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.delegationAmt') }}</span>
                 </template>
                 <div>
-                  <div>Total amount of ADA from your wallet</div>
-                  <div>that will be delegated to the stake pool.</div>
-                  <div>This includes all available balance.</div>
+                  {{ $t('staking.delegationAmtTooltip') }}
                 </div>
               </v-tooltip>
             </h4>
@@ -111,12 +106,10 @@
             <h4>
               <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Epoch Yield</span>
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.epochYield') }}</span>
                 </template>
                 <div>
-                  <div>Estimated rewards you'll earn per epoch</div>
-                  <div>(~5 days) based on the pool's ROS</div>
-                  <div>(Return on Stake) rate and your delegation amount.</div>
+                  {{ $t('staking.epochYieldTooltip') }}
                 </div>
               </v-tooltip>
             </h4>
@@ -135,12 +128,12 @@
             <h4>
               <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Deposit Fee</span>
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.depositFee') }}</span>
                 </template>
                 <div>
-                  <div>One-time deposit required to register</div>
-                  <div>your stake credential on the Cardano network.</div>
-                  <div>This deposit is refundable when you deregister.</div>
+                  <div>{{ $t('staking.depositFeeDesc1') }}</div>
+                  <div>{{ $t('staking.depositFeeDesc2') }}</div>
+                  <div>{{ $t('staking.depositFeeDesc3') }}</div>
                 </div>
               </v-tooltip>
             </h4>
@@ -159,12 +152,10 @@
             <h4>
               <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">Tx Fee</span>
+                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.txFee') }}</span>
                 </template>
                 <div>
-                  <div>Network fee required to process</div>
-                  <div>this delegation transaction on</div>
-                  <div>the Cardano blockchain.</div>
+                  {{ $t('staking.txFeeTooltip') }}
                 </div>
               </v-tooltip>
             </h4>
@@ -190,7 +181,7 @@
               class="mb-0"
               style="width: 100%;"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
             <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet.type === WalletType.Normal && !isSubmit">
@@ -202,7 +193,7 @@
                   dense
                   v-model="spendingPassword"
                   outlined
-                  label="Spending Password"
+                  :label="$t('staking.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="passwordRules"
                   hide-details
@@ -222,9 +213,9 @@
             <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  text-left="USB"
+                  :text-left="$t('staking.usb')"
                   icon-left="mdi-usb"
-                  text-right="Bluetooth"
+                  :text-right="$t('staking.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="loading"
@@ -241,7 +232,7 @@
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              {{ isSubmit ? 'Submit Transaction' : 'Sign & Delegate' }}
+              {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndDelegate') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -267,24 +258,24 @@
         v-if="!keystoneScan"
         class="mt-10 mb-0"
       >
-        <b>Instructions</b>
+        <b>{{ $t('common.instructions') }}</b>
         <div v-if="loggedWallet?.type === WalletType.Keystone">
           <ul class="text-left" style="line-height: 1.5">
-            <li>Unlock your Keystone device.</li>
-            <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-            <li>Use your Keystone device to scan the QR code.</li>
-            <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+            <li>{{ $t('staking.unlockYourKeystone') }}</li>
+            <li>{{ $t('staking.selectOptionToScan') }} <v-icon small>mdi-line-scan</v-icon></li>
+            <li>{{ $t('staking.useKeystoneToScan') }}</li>
+            <li>{{ $t('staking.approveOnKeystone') }}</li>
           </ul>
         </div>
       </v-alert>
       <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
         <v-card-title>
-          Scan QR Code
+          {{ $t('wallet.scanQRCode') }}
         </v-card-title>
         <v-card-subtitle>
           <ul class="text-left" style="line-height: 1.5">
-            <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-            <li>Use a low density setting for animated QR codes if required.</li>
+            <li>{{ $t('wallet.adjustDistance') }}</li>
+            <li>{{ $t('wallet.useLowDensity') }}</li>
           </ul>
         </v-card-subtitle>
         <v-card-text class="text-center">
@@ -331,6 +322,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs, watch, computed } from 'vue';
 // import { nextTick } from 'vue'; // TODO: Needed for Keystone QR code functionality
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -351,6 +343,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import filters from '@/shared/utils/filters';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import ledgerUtils from '@/shared/utils/ledger';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -376,7 +371,7 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
@@ -554,7 +549,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     loading.value = false;
@@ -565,7 +560,7 @@ const signLedgerTx = async () => {
   loading.value = true;
   try {
     if (!props.tx) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -606,11 +601,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('staking.delegationTxSubmitted', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     loading.value = false;
     isSubmit.value = false;

@@ -2,14 +2,14 @@
   <div class="amount-input-step">
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Top up your Gero card balance</h2>
-      <p class="modal-subtitle">Swap your ADA to Euro with real-time exchange rate</p>
+      <h2 class="modal-title">{{ t('card.topUpCardBalance') }}</h2>
+      <p class="modal-subtitle">{{ t('card.swapAdaToEuro') }}</p>
     </div>
 
     <!-- Exchange Rate Table -->
     <div class="exchange-rate-table">
       <div class="rate-row">
-        <span class="rate-label">Today's Rate</span>
+        <span class="rate-label">{{ t('card.todaysRate') }}</span>
       </div>
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
@@ -20,7 +20,7 @@
 
     <!-- Wallet Balance -->
     <div class="wallet-balance">
-      <span class="balance-label">Your ADA Balance:</span>
+      <span class="balance-label">{{ t('card.yourAdaBalance') }}</span>
       <span class="balance-value">₳{{ adaBalance }}</span>
     </div>
 
@@ -35,7 +35,7 @@
       <!-- First Input (ADA or EUR based on switch state) -->
       <div class="amount-input-container">
         <div class="input-header">
-          <span class="input-label">Amount</span>
+          <span class="input-label">{{ t('card.amount') }}</span>
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '€' : '₳' }}</span>
@@ -61,7 +61,7 @@
       <!-- Second Input (EUR or ADA based on switch state) -->
       <div class="amount-input-container">
         <div class="input-header">
-          <span class="input-label">Amount</span>
+          <span class="input-label">{{ t('card.amount') }}</span>
         </div>
         <div class="input-content">
           <span class="currency-badge">{{ isSwitched ? '₳' : '€' }}</span>
@@ -81,9 +81,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
 import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 // Props
 interface Props {

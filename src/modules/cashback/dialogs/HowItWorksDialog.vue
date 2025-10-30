@@ -2,7 +2,7 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="How it Works?"
+    :title="$t('cashback.howItWorks')"
     subtitle=""
     :min-height="560"
     :height="560"
@@ -10,17 +10,17 @@
     :persistent="false"
   >
     <v-card-text class="px-0 pt-2 pb-0" style="z-index: 3; color: white">
-      Search for your favorite items and brands, browse through various categories, or explore our top brands to find exactly what you need.<br>
+      {{ $t('cashback.howItWorksStep1') }}<br>
       <br>
-      Once you've made your selection, complete your purchase using your preferred fiat payment method, such as a credit card, PayPal, Apple Pay, Google Pay, or other digital wallets.<br>
+      {{ $t('cashback.howItWorksStep2') }}<br>
       <br>
-      Within 48 hours, your crypto cashback will appear in the "pending rewards" area.<br>
+      {{ $t('cashback.howItWorksStep3') }}<br>
       <br>
-      After the specified lock period ends, simply check your pending cashback and claim your crypto rewards with a few clicks. The cashback will then be instantly transferred to your wallet.<br>
+      {{ $t('cashback.howItWorksStep4') }}<br>
       <br>
-      Enjoy up to 20% in crypto cashback on every purchase, making your shopping experience not only enjoyable but also highly rewarding.<br>
+      {{ $t('cashback.howItWorksStep5') }}<br>
       <br>
-      Note: Only cashback with a minimum USD value of $0.10, at the time of the reporting of the purchase, will be processed. Purchases that yield a cashback of less than $0.10 will be ignored
+      {{ $t('cashback.howItWorksNote') }}
     </v-card-text>
   </BaseDialog>
 </template>

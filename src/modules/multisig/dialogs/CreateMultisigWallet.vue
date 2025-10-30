@@ -4,9 +4,9 @@
     @close="closeDialog"
     :loading="loading"
     :min-height="0"
-    title="New Multisig Wallet"
+    :title="$t('multisig.newMultisigWallet')"
     scrollable
-    subtitle="A multisig wallet requires multiple parties signatures to authorize any transaction."
+    :subtitle="$t('multisig.multisigTransactionDescription')"
     :persistent="false"
   >
     <v-fade-transition>
@@ -17,36 +17,33 @@
     <v-card-title class="px-3">
       <v-alert border="left" color="primary" type="info" class="text-left"
         style="word-break: break-word; line-height: 1.3; font-style: italic; font-size: 14px;" prominent>
-        All signers will receive a request to review and sign the transaction
-        from their own wallets.<br>
-        The transaction will be submitted to the blockchain only
-        after all required signatures have been collected.
+        {{ $t('multisig.allSignersReceiveRequest') }}
       </v-alert>
     </v-card-title>
     <v-card-text class="px-3 pt-1">
       <v-row>
         <v-col cols="6">
-          <v-text-field label="Multisig Wallet Name" outlined dense v-model="multisigName" :error="!!multisigError"
+          <v-text-field :label="$t('multisig.multisigWalletName')" outlined dense v-model="multisigName" :error="!!multisigError"
             :error-messages="multisigError" :counter="40"
             :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]" @keyup="checkMultisigName" />
         </v-col>
         <v-col cols="6">
-          <v-select label="Min. Required Signers" dense v-model="requiredSigners" :items="signersArray" required
+          <v-select :label="$t('multisig.minimumRequiredSigners')" dense v-model="requiredSigners" :items="signersArray" required
             prepend-inner-icon="mdi-account-multiple-outline" outlined hide-details />
-          <div class="helper signers-note mt-2">The minimum signers required to execute a transaction</div>
+          <div class="helper signers-note mt-2">{{ $t('multisig.minimumSigners') }}</div>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-4">
         <v-col cols="12" v-for="(signer, index) in signers" :key="index">
           <v-row no-gutters>
             <v-col cols="12" class="multisig-title text-left pa-0 mb-4">
-              Signer {{ index + 1 }}<span v-if="signer.name">{{ ': ' + signer.name }}</span>
-              <div class="helper signers-note">{{ index === 0 && signer.address === baseAddress ? 'Current Wallet' : ''
+              {{ $t('multisig.signerNumber', { number: index + 1 }) }}<span v-if="signer.name">{{ ': ' + signer.name }}</span>
+              <div class="helper signers-note">{{ index === 0 && signer.address === baseAddress ? $t('multisig.currentWallet') : ''
                 }}</div>
             </v-col>
             <v-col cols="12" class="text-left pa-0 mb-2 d-flex align-center">
               <v-text-field class="no-margin-append-outer"
-                label="Singer wallet address"
+                :label="$t('multisig.signerAddress')"
                 v-model="signer.address"
                 outlined dense
                 :rules="[rules.required(), rules.paymentAddress(loggedWallet.value.network !== 'mainnet')]"
@@ -55,7 +52,7 @@
                 :error-messages="duplicateSignerError.message" @keyup="checkDuplicateSigner()">
               </v-text-field>
               <v-text-field v-if="index"
-                label="Singer name"
+                :label="$t('multisig.signerName')"
                 v-model="signer.name"
                 outlined
                 dense
@@ -73,7 +70,7 @@
                     </template>
                     <v-card>
                       <v-card-title>
-                        Contacts
+                        {{ $t('multisig.contacts') }}
                         <v-spacer></v-spacer>
                         <v-btn icon small @click="signer.menuOpen = false">
                           <v-icon>
@@ -116,13 +113,13 @@
                         <v-icon small>
                           mdi-plus
                         </v-icon>
-                        Add Contact
+                        {{ $t('multisig.addContact') }}
                       </v-list-item>
                       <v-list-item v-if="index > 1" @click="deleteSigner(index)">
                         <v-icon small>
                           mdi-delete
                         </v-icon>
-                        Remove
+                        {{ $t('common.remove') }}
                       </v-list-item>
                     </v-list>
                   </v-menu>
@@ -149,6 +146,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
@@ -163,6 +161,9 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import db from '@/db';
 import { resolvePaymentKeyHash } from '@/shared/utils/resolver';
 import { isPaymentAddress } from '@/chrome/serialization';
+
+
+const { t } = useTranslation();
 
 const props = defineProps<{ isOpen: boolean }>()
 const emit = defineEmits(['close']);
@@ -179,8 +180,8 @@ const signers = ref([
 ]);
 
 const contactsHeaders = ref([
-  { text: 'Name', value: 'name' },
-  { text: 'Address', value: 'address' },
+  { text: t('common.name'), value: 'name' },
+  { text: t('common.address'), value: 'address' },
   { text: '', align: 'right', sortable: false, value: 'actions' }
 ]);
 
@@ -240,7 +241,7 @@ function addSigner() {
 }
 
 function deleteSigner(index: number) {
-  if (confirm('Are you sure you want to remove this signer?')) {
+  if (confirm(t('multisig.confirmRemoveSigner'))) {
     signers.value.splice(index, 1);
   }
   requiredSigners.value = signers.value.length;
@@ -260,7 +261,7 @@ function saveContact(signer: any) {
   };
 
   contactStatus.value = {
-    message: 'Contact saved',
+    message: t('multisig.contactSaved'),
     type: 'success'
   };
 }
@@ -277,7 +278,7 @@ function removeCont(item: any, signer: any) {
     signer.menuOpen = false;
   }
   contactStatus.value = {
-    message: 'Contact removed',
+    message: t('multisig.contactRemoved'),
     type: 'error'
   };
 }
@@ -286,7 +287,7 @@ const checkMultisigName = async () => {
   multisigError.value = '';
   const multisigTable = await appWallet.db.table('multisig');
   const multisig = await multisigTable.get({ name: multisigName.value });
-  return multisig ? multisigError.value = 'A multisig wallet with this name already exists' : '';
+  return multisig ? multisigError.value = t('multisig.multisigAlreadyExists') : '';
 }
 
 const checkDuplicateSigner = async () => {
@@ -295,7 +296,7 @@ const checkDuplicateSigner = async () => {
   const duplicateSigners = singersArray.filter((s, i) => singersArray.indexOf(s) !== i);
   if (duplicateSigners.length > 0) {
     duplicateSignerError.value = {
-      message: 'Duplicate signer',
+      message: t('multisig.duplicateSigner'),
       duplicateAddresses: duplicateSigners.map(s => s.address)
     };
   }
@@ -328,7 +329,7 @@ async function createMultisigWallet() {
   const multisigDBName = `multisig-${scriptBaseAddr.slice(0, 21)}-${lodash.kebabCase(multisigName.value)}`;
   const existingDb = await db.checkIfDbExists(multisigDBName);
   if (existingDb) {
-    throw new Error('A multisig wallet with this name already exists');
+    throw new Error(t('multisig.multisigAlreadyExists'));
   }
 
   const scriptRewardAddress = Cardano.RewardAddress

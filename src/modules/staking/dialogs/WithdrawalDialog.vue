@@ -1,6 +1,6 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" title="Withdraw Staking Rewards" :loading="loading"
-              subtitle="Claim your accumulated rewards from staking. Confirm the details and enter your password to proceed.">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :min-height="300" :title="$t('staking.withdrawStakingRewards')" :loading="loading"
+              :subtitle="$t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         v-if="!account?.drep_id"
@@ -10,11 +10,9 @@
         prominent
         class="text-left mb-3"
       >
-        <strong>DRep Delegation Required</strong>
+        <strong>{{ $t('staking.drepDelegationRequiredTitle') }}</strong>
         <p class="mb-0 mt-2">
-          On Cardano, you must be delegated to a DRep (Delegated Representative) to withdraw staking rewards.
-          Please visit the <router-link to="/governance" style="color: white; font-weight: bold;">Governance tab</router-link>
-          to delegate to a DRep before withdrawing your rewards.
+          {{ $t('staking.drepDelegationRequiredDesc') }}
         </p>
       </v-alert>
       <v-alert
@@ -25,10 +23,10 @@
         class="text-left"
       >
         <ul>
-          <li>Staking rewards are earned by delegating your ADA to a stake pool.</li>
-          <li>Staking allows ADA holders to earn passive income.</li>
-          <li>Rewards are typically distributed every epoch (about every 5 days).</li>
-          <li>Rewards are automatically re-staked, so you don't need to withdraw them for your earnings to compound.</li>
+          <li>{{ $t('staking.rewardsEarnedByDelegating') }}</li>
+          <li>{{ $t('staking.stakingAllowsPassiveIncome') }}</li>
+          <li>{{ $t('staking.rewardsDistributedEveryEpoch') }}</li>
+          <li>{{ $t('staking.rewardsAutoRestaked') }}</li>
         </ul>
       </v-alert>
     </v-card-text>
@@ -36,7 +34,7 @@
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
-            <h4>Rewards Amount
+            <h4>{{ $t('staking.rewardsAmount') }}
               <v-btn x-small icon>
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
@@ -44,16 +42,16 @@
             <h4><strong>{{ toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Tx Fee</h4>
+            <h4>{{ $t('staking.txFee') }}</h4>
             <h4><strong>{{ toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Total</h4>
+            <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ toCurrency(withdrawals-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" v-if="!account?.drep_id">
             <v-btn color="primary" elevation="2" block to="/governance" class="mx-2">
-              Go to Governance to Delegate
+              {{ $t('staking.goToGovernanceDelegate') }}
             </v-btn>
           </v-col>
           <v-col cols="12" class="pt-6" v-else style="display: flex; justify-content: space-evenly;">
@@ -67,7 +65,7 @@
               class="mb-0"
               style="width: 100%;"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
             <v-tooltip
@@ -84,7 +82,7 @@
                   dense
                   v-model="spendingPassword"
                   outlined
-                  label="Spending Password"
+                  :label="$t('wallet.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="passwordRules"
                   hide-details
@@ -103,7 +101,7 @@
             </v-tooltip>
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="primary" elevation="0" @click="signWithdrawalTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
@@ -116,6 +114,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
@@ -131,6 +130,9 @@ import { walletStore } from '@/stores/walletStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -155,7 +157,7 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
@@ -235,7 +237,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing withdrawal transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'))
     return false;
   } finally {
     loading.value = false
@@ -246,7 +248,7 @@ const signLedgerTx = async () => {
   loading.value = true;
   try {
     if (!props.tx) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -288,11 +290,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Withdrawal Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('staking.withdrawalSubmitted', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting withdrawal transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     loading.value = false;
   }

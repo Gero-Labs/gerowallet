@@ -2,12 +2,16 @@
   <vue-highcharts v-if="chartOptions" :options="chartOptions" :highcharts="Highcharts"></vue-highcharts>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 
@@ -35,7 +39,7 @@ const chartOptions = computed(() => {
     endOnTick: false,
     legend:{ enabled:false },
     title: {
-      text: 'Rewards History',
+      text: t('staking.rewardsHistory'),
       floating: true,
       align: 'center',
       verticalAlign: 'top',
@@ -83,7 +87,7 @@ const chartOptions = computed(() => {
 
         return { x, y };
       },
-      headerFormat: '<b>Epoch {point.key}</b><br/>',
+      headerFormat: `<b>${t('staking.epoch')} {point.key}</b><br/>`,
       pointFormat: `{point.y} ${networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)}`,
       outside: false,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',

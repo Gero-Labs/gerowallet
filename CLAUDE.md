@@ -789,6 +789,36 @@ export default pbkdf2Browser;
 - `console.error()` - Actual errors that need attention (unhandled exceptions, critical failures)
 - Prefix logs with emoji/category for easy filtering (e.g., `⏱️ PERF:`, `🔐 Auth:`, `📡 API:`)
 
+### 6. **Internationalization (i18n)**
+- **Always use `$t()` for user-facing text** - All wording, labels, messages, and UI text must use the i18n translation function
+- **Never hardcode strings in templates or components** - Use translation keys from language files
+- **Pattern**: `$t('category.key')` in templates, `t('category.key')` in script setup (via `useTranslation()` composable)
+- **Type Safety**: The `$t()` method is typed to return `string` via `src/shims-vue-i18n.d.ts`
+- **Example**:
+  ```vue
+  <!-- Template -->
+  <v-btn>{{ $t('swap.swap') }}</v-btn>
+
+  <!-- Script setup -->
+  import { useTranslation } from '@/shared/composables/useTranslation';
+  const { t } = useTranslation();
+  const message = computed(() => t('swap.insufficientBalance'));
+  ```
+- **Translation files**: Located in `src/locales/` (e.g., `en.json`, `es.json`)
+- **Adding new translations**: Add keys to all language files to maintain consistency
+
+### 7. **Vuetify Components Best Practices**
+- **v-select: Always use `attach` prop** - Prevents menu from having absolute positioning issues when scrolling
+  ```vue
+  <v-select
+    :items="items"
+    v-model="selected"
+    attach
+  />
+  ```
+- **Why**: Without `attach`, the dropdown menu stays at a fixed position when the parent scrolls, causing misalignment
+- **Apply to**: All `v-select`, `v-autocomplete`, `v-combobox` components throughout the application
+
 ## Troubleshooting
 
 ### Build Issues

@@ -22,6 +22,7 @@
   </v-menu>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, onMounted } from 'vue';
 import networks from "@/utils/networks";
 

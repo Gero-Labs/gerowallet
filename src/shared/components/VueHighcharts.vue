@@ -7,6 +7,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
 import Highcharts from 'highcharts';
 // Using any for Highcharts types to avoid complex type issues

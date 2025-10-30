@@ -193,6 +193,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
@@ -201,6 +202,9 @@ import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   title: {

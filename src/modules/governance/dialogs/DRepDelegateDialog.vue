@@ -2,22 +2,19 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Delegate to a DRep"
+    :title="$t('governance.delegateToADRep')"
     :loading="loading"
     :min-height="660"
     :width="700"
-    :subtitle="`Delegating your ${networks.resolveCurrencyTicker(
-      loggedWallet?.chain,
-      loggedWallet?.network
-    )} to a Delegated Representative.`"
+    :subtitle="$t('governance.delegatingYourCurrency', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1" v-if="drep">
       <v-alert border="left" color="primary" type="info" prominent class="text-left">
         <ul>
-          <li>You can only delegate to one DRep at a time</li>
-          <li>You can switch to delegate to a different DRep at any time</li>
-          <li>You can cancel your delegation at any time</li>
+          <li>{{ $t('governance.youCanOnlyDelegateToOneDRep') }}</li>
+          <li>{{ $t('governance.canSwitchDRepAnytime') }}</li>
+          <li>{{ $t('governance.canCancelDRepDelegation') }}</li>
         </ul>
       </v-alert>
       <v-list-item three-line>
@@ -61,9 +58,9 @@
         </v-list-item-avatar>
       </v-list-item>
       <v-card-title class="pt-0" style="color: white" v-if="drep.delegators">{{ drep.delegators }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.delegators">Delegators</v-card-subtitle>
+      <v-card-subtitle class="text-left pb-2" v-if="drep.delegators">{{ $t('governance.delegators') }}</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white" v-if="drep.votes">{{ drep.votes }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.votes">Votes</v-card-subtitle>
+      <v-card-subtitle class="text-left pb-2" v-if="drep.votes">{{ $t('governance.votes') }}</v-card-subtitle>
       <v-card-title class="pt-0" style="color: white" v-if="drep.voting_power">{{
         toCurrency(
           drep.voting_power,
@@ -72,14 +69,14 @@
           networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)
         )
       }}</v-card-title>
-      <v-card-subtitle class="text-left pb-2" v-if="drep.voting_power">Voting Power</v-card-subtitle>
+      <v-card-subtitle class="text-left pb-2" v-if="drep.voting_power">{{ $t('governance.votingPower') }}</v-card-subtitle>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0 px-3" v-if="drep && account" style="display: block">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>
-              Delegation Amt.
+              {{ $t('staking.delegationAmt') }}
               <v-btn x-small icon>
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
@@ -96,7 +93,7 @@
             </h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>Deposit Fee</h4>
+            <h4>{{ $t('governance.depositFee') }}</h4>
             <h4>
               <strong>{{
                 toCurrency(
@@ -109,7 +106,7 @@
             </h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Tx Fee</h4>
+            <h4>{{ $t('governance.txFee') }}</h4>
             <h4>
               <strong>{{
                 toCurrency(
@@ -144,7 +141,7 @@
                   dense
                   v-model="spendingPassword"
                   outlined
-                  label="Spending Password"
+                  :label="$t('wallet.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="passwordRules"
                   hide-details
@@ -164,9 +161,9 @@
             <div v-else-if="loggedWallet.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
                 <ToggleSwitch
-                  text-left="USB"
+                  :text-left="$t('governance.usb')"
                   icon-left="mdi-usb"
-                  text-right="Bluetooth"
+                  :text-right="$t('governance.bluetooth')"
                   icon-right="mdi-bluetooth"
                   v-model="isBT"
                   :disabled="loading"
@@ -183,7 +180,7 @@
               class="mx-2"
               style="margin-bottom: 1px"
             >
-              {{ isSubmit ? 'Submit Transaction' : 'Sign & Delegate' }}
+              {{ isSubmit ? t('governance.submitTransaction') : t('governance.signAndDelegate') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -205,6 +202,8 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { ref, computed, watch } from 'vue';
 import { toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -251,7 +250,7 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
@@ -382,7 +381,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing DRep delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     loading.value = false;
@@ -393,7 +392,7 @@ const signLedgerTx = async () => {
   loading.value = true;
   try {
     if (!props.tx) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -434,11 +433,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`DRep Delegation Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('governance.drepDelegationTxSubmitted', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting DRep delegation transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     loading.value = false;
   }
@@ -465,7 +464,7 @@ const signAndSubmitDelegationTx = async () => {
     }
   } else if (loggedWallet.value?.type === WalletType.Keystone) {
     // TODO: Keystone hardware wallet support needs reimplementation with Cardano JS SDK
-    snackbar.setError('Keystone wallet support is coming soon for DRep delegation');
+    snackbar.setError(t('governance.keystoneComingSoon'));
   } else if (loggedWallet.value?.type === WalletType.Ledger) {
     if (!isSubmit.value) {
       const success = await signLedgerTx();
