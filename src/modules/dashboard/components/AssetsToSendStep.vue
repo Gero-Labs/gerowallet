@@ -22,18 +22,18 @@
             <v-card-actions class="justify-center text-center" v-if="missingTokens?.length > 0">
               <v-btn text class="add-token-button" @click="addToken">
                 <v-icon class="plus-icon" color="#00c7f3" small>mdi-plus</v-icon>
-                Add token
+                {{ $t('assets.addToken') }}
               </v-btn>
             </v-card-actions>
           </v-card>
         </v-col>
         <v-col cols="6" class="collectibles px-2" v-if="collectiblesCount> 0">
           <v-card flat outlined>
-            <v-card-title class="justify-center">Choose Collectibles</v-card-title>
+            <v-card-title class="justify-center">{{ $t('assets.chooseCollectibles') }}</v-card-title>
             <v-card-subtitle class="pb-0">
               <v-text-field
                 v-model="search"
-                placeholder="Search for collectibles"
+                :placeholder="$t('assets.searchCollectibles')"
                 outlined
                 dense
                 hide-details
@@ -69,7 +69,7 @@
                                     <v-chip x-small color="#F97066" class="px-2">
                                       <v-icon color="white" x-small style="margin-right: 3px">
                                         mdi-alert-decagram
-                                      </v-icon>Scam Token
+                                      </v-icon>{{ $t('assets.scamToken') }}
                                     </v-chip>
                                   </div>
                                   <div class="collectible-text-container">
@@ -116,6 +116,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, watch, onMounted } from "vue";
 import TokenSelector from '@/shared/components/TokenSelector.vue';
 import networks from '@/utils/networks';

@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    title="Google Wallet Set Up"
+    :title="$t('welcome.googleWalletSetup')"
     :subtitle="props.network?.title"
     :is-open="props.isOpen"
     @close="$emit('close')"
@@ -15,7 +15,7 @@
         <v-form ref="form" v-model="valid">
           <v-list-item class="pa-0" style="justify-self: center;">
             <v-list-item-avatar>
-              <v-img :src="props.googleAccount['picture']" alt="Google Account Profile Picture" />
+              <v-img :src="props.googleAccount['picture']" :alt="$t('wallet.googleAccountProfilePicture')" />
             </v-list-item-avatar>
             <v-list-item-content>
               <v-list-item-title>
@@ -38,8 +38,8 @@
             color="primary"
             v-model="newWallet.name"
             :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
-            label="Wallet Name"
-            placeholder="e.g. My New Wallet"
+            :label="$t('welcome.walletName')"
+            :placeholder="$t('welcome.walletNamePlaceholder')"
             required
           ></v-text-field>
           <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
@@ -51,7 +51,7 @@
             v-model="newWallet.password"
             :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
             :type="show1 ? 'text' : 'password'"
-            label="Password"
+            :label="$t('welcome.password')"
             required
             :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append="show1 = !show1"
@@ -62,9 +62,9 @@
             dense
             color="primary"
             v-model="newWallet.confirmPassword"
-            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
+            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || $t('welcome.passwordsMustMatch')]"
             :type="show2 ? 'text' : 'password'"
-            label="Confirm Password"
+            :label="$t('welcome.confirmPassword')"
             required
             :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
             @click:append="show2 = !show2"
@@ -109,6 +109,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import rules from '@/utils/rules';

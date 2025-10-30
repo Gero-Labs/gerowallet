@@ -14,7 +14,7 @@
       <!-- Welcome message -->
       <div class="welcome-section">
         <h1 class="hero-title">
-          {{ isNewUser ? 'Welcome to Gero Wallet!' : 'Your wallet is empty' }}
+          {{ isNewUser ? $t('dashboard.welcomeToGeroWallet') : $t('dashboard.emptyWallet') }}
         </h1>
 
         <p class="hero-subtitle">
@@ -36,12 +36,12 @@
               </v-icon>
               <div>
                 <h3 class="backup-title mb-1">
-                  {{ isBackupComplete ? 'Wallet Secured' : 'Secure Your Wallet' }}
+                  {{ isBackupComplete ? $t('dashboard.walletSecured') : $t('dashboard.secureYourWallet') }}
                 </h3>
                 <p class="backup-subtitle mb-0">
                   {{ isBackupComplete
-                    ? 'Your seed phrase has been safely backed up'
-                    : 'Back up your seed phrase to protect your funds'
+                    ? $t('dashboard.seedPhraseBackedUp')
+                    : $t('dashboard.backupSeedPhrase')
                   }}
                 </p>
               </div>
@@ -54,8 +54,7 @@
                 text
                 class="mb-3 backup-alert"
               >
-                Your 24-word seed phrase is the only way to recover your wallet.
-                Store it securely offline.
+                {{ $t('dashboard.seedPhraseRecoveryWarning') }}
               </v-alert>
 
               <div class="text-center">
@@ -65,10 +64,10 @@
                   class="backup-btn"
                 >
                   <v-icon left small>mdi-content-save</v-icon>
-                  Export Seed Phrase
+                  {{ $t('dashboard.exportSeedPhrase') }}
                 </v-btn>
                 <p class="mt-1 mb-0 text-caption backup-help-text">
-                  Quick and secure • Takes 2 minutes
+                  {{ $t('dashboard.quickAndSecure') }}
                 </p>
               </div>
             </template>
@@ -81,7 +80,7 @@
                 class="mb-0 backup-alert"
                 :icon="false"
               >
-                Great job! Your wallet is protected. Keep your seed phrase safe.
+                {{ $t('dashboard.greatJobProtected') }}
               </v-alert>
             </template>
           </v-card-text>
@@ -111,11 +110,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card-plus
                   </v-icon>
-                  <h3 class="feature-title">Buy {{ currencySymbol }}</h3>
-                  <p class="feature-description">Purchase with credit card</p>
+                  <h3 class="feature-title">{{ t('dashboard.buy') }} {{ currencySymbol }}</h3>
+                  <p class="feature-description">{{ t('dashboard.purchaseWithCreditCard') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Instant
+                  {{ t('dashboard.instant') }}
                 </v-chip>
               </div>
             </div>
@@ -140,8 +139,8 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-qrcode
                   </v-icon>
-                  <h3 class="feature-title">Receive</h3>
-                  <p class="feature-description">Share your address</p>
+                  <h3 class="feature-title">{{ t('dashboard.receiveAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.shareYourAddress') }}</p>
                 </div>
                 <v-chip
                   v-if="walletAddress"
@@ -151,7 +150,7 @@
                   @click.stop="copyToClipboard"
                 >
                   <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                  {{ copiedFeedback ? 'Copied!' : 'Copy Address' }}
+                  {{ copiedFeedback ? t('dashboard.copied') : t('dashboard.copyAddress') }}
                 </v-chip>
               </div>
             </div>
@@ -205,11 +204,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-credit-card
                   </v-icon>
-                  <h3 class="feature-title">Gero Card</h3>
-                  <p class="feature-description">Top up with ADA</p>
+                  <h3 class="feature-title">{{ t('dashboard.geroCard') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Coming Soon
+                  {{ t('dashboard.comingSoon') }}
                 </v-chip>
               </div>
             </div>
@@ -234,11 +233,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-clock
                   </v-icon>
-                  <h3 class="feature-title">Staking Rewards</h3>
-                  <p class="feature-description">Earn rewards by staking</p>
+                  <h3 class="feature-title">{{ t('dashboard.stakingRewards') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnRewardsByStakingShort') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Explore Staking
+                  {{ t('dashboard.exploreStaking') }}
                 </v-chip>
               </div>
             </div>
@@ -263,11 +262,11 @@
                   <v-icon size="48" :color="primaryColor" class="mb-3">
                     mdi-cash-refund
                   </v-icon>
-                  <h3 class="feature-title">Cashback</h3>
-                  <p class="feature-description">Earn cashback online</p>
+                  <h3 class="feature-title">{{ t('dashboard.cashbackAction') }}</h3>
+                  <p class="feature-description">{{ t('dashboard.earnCashbackOnline') }}</p>
                 </div>
                 <v-chip small :color="primaryColor" text-color="white">
-                  Browse Deals
+                  {{ t('dashboard.browseDeals') }}
                 </v-chip>
               </div>
             </div>
@@ -296,11 +295,15 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
@@ -352,9 +355,9 @@ const featureBackgroundImage = computed(() => {
 
 const subtitle = computed(() => {
   if (props.isNewUser) {
-    return `Let's get you started with some ${currencySymbol.value} to explore the ${blockchain.value} ecosystem`;
+    return t('dashboard.letsGetYouStarted', { currency: currencySymbol.value, blockchain: blockchain.value });
   }
-  return `Add ${currencySymbol.value} to start using your wallet and explore all features`;
+  return t('dashboard.addCurrencyToStart', { currency: currencySymbol.value });
 });
 
 const walletAddress = computed(() => loggedWallet.value?.baseAddress || '');

@@ -2,10 +2,10 @@
   <div class="partnership-badge-compact">
     <div class="badge-content">
       <div class="badge-left">
-        <img src="@/assets/svg/Icon-Kaiserex.svg" alt="Kaiserex" class="badge-icon" />
+        <img src="@/assets/svg/Icon-Kaiserex.svg" :alt="$t('card.kaiserex')" class="badge-icon" />
         <div class="badge-text">
-          <span class="badge-title">Powered by Kaiserex</span>
-          <span class="badge-subtitle">Licensed & Regulated Financial Services</span>
+          <span class="badge-title">{{ $t('card.poweredByKaiserex') }}</span>
+          <span class="badge-subtitle">{{ $t('card.licensedRegulated') }}</span>
         </div>
       </div>
       <div class="badge-links">
@@ -16,7 +16,7 @@
           class="badge-link"
           @click="trackKaiserexClick"
         >
-          Learn more
+          {{ $t('common.learnMore') }}
           <img src="@/modules/wallet/icons/arrow-right.svg" alt="arrow" class="link-arrow" />
         </a>
         <a

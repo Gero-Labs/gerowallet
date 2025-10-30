@@ -3,8 +3,8 @@
     <div class="auth-container">
       <!-- Header -->
       <div class="auth-header">
-        <h1 class="page-title">Get Your Gero Crypto Card</h1>
-        <p class="page-description">Choose an option below to get started with your crypto card order</p>
+        <h1 class="page-title">{{ t('card.getYourGeroCryptoCard') }}</h1>
+        <p class="page-description">{{ t('card.chooseOptionBelow') }}</p>
       </div>
 
       <!-- Auth Options Grid (3 columns) -->
@@ -17,24 +17,24 @@
             </div>
 
             <div class="option-content">
-              <h3 class="option-title">Get your Gero Card in just a few steps:</h3>
+              <h3 class="option-title">{{ t('card.getCardInSteps') }}</h3>
 
               <div class="option-features steps-list">
                 <div class="feature-item">
                   <span class="step-number-inline">1.</span>
-                  <span class="feature-text">Register on Kaiserex</span>
+                  <span class="feature-text">{{ t('card.registerOnKaiserex') }}</span>
                 </div>
                 <div class="feature-item">
                   <span class="step-number-inline">2.</span>
-                  <span class="feature-text">Activate your account via email</span>
+                  <span class="feature-text">{{ t('card.activateViaEmail') }}</span>
                 </div>
                 <div class="feature-item">
                   <span class="step-number-inline">3.</span>
-                  <span class="feature-text">Sign in and complete KYC</span>
+                  <span class="feature-text">{{ t('card.signInCompleteKYC') }}</span>
                 </div>
                 <div class="feature-item">
                   <span class="step-number-inline">4.</span>
-                  <span class="feature-text">Once approved, order your card!</span>
+                  <span class="feature-text">{{ t('card.onceApprovedOrder') }}</span>
                 </div>
               </div>
 
@@ -48,17 +48,17 @@
                   tabindex="0"
                   aria-label="View promotional details and fee information"
                 >
-                  <span class="clickable-text">Enjoy ZERO FEES until May 1st 2026 (6 months)</span>
+                  <span class="clickable-text">{{ t('card.enjoyZeroFeesSixMonths') }}</span>
                   <v-icon small class="info-icon">mdi-information-outline</v-icon>
                 </p>
                 <div class="option-features promo-list">
                   <div class="feature-item">
                     <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                    <span class="feature-text">0% monthly & issuance fees</span>
+                    <span class="feature-text">{{ t('card.zeroMonthlyFees') }}</span>
                   </div>
                   <div class="feature-item">
                     <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                    <span class="feature-text">0% fees on ADA-to-EUR conversions</span>
+                    <span class="feature-text">{{ t('card.zeroAdaEurFees') }}</span>
                   </div>
                 </div>
               </div>
@@ -76,27 +76,26 @@
           </div>
 
           <div class="option-content">
-            <h3 class="option-title">Register to order your card</h3>
+            <h3 class="option-title">{{ t('card.registerToOrderCard') }}</h3>
             <p class="option-description">
-              Create your Kaiserex account and complete the verification process to order your card.
+              {{ t('card.createKaiserexAccount') }}
             </p>
           </div>
 
           <div class="option-action">
             <p class="new-to-kaiserex">
-              New to
+              {{ t('card.newToKaiserex') }}
               <v-tooltip top :open-delay="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
                   <span v-bind="attrs" v-on="on" class="kaiserex-hover">Kaiserex</span>
                 </template>
                 <div class="tooltip-content">
-                  <strong>Kaiserex</strong> is Gero's trusted financial partner that handles card issuance,
-                  KYC verification, and payment processing for the Gero Crypto Card.
+                  {{ t('card.kaiserexTooltip') }}
                 </div>
               </v-tooltip>?
             </p>
             <GradientButton
-              text="Order Your Gero Card"
+              :text="t('card.orderYourGeroCard')"
               @click="handleRegister"
               class="full-width"
             />
@@ -115,30 +114,30 @@
             </div>
 
             <div class="option-content">
-              <h3 class="option-title">Already have a Kaiserex account?</h3>
+              <h3 class="option-title">{{ t('card.alreadyHaveAccount') }}</h3>
               <p class="option-description">
-                Sign in to your existing account to top up your card, order additional cards, or check your balance.
+                {{ t('card.signInTopUpCheck') }}
               </p>
 
               <div class="option-features">
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Check order status</span>
+                  <span class="feature-text">{{ t('card.checkOrderStatus') }}</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Top-up card with ADA</span>
+                  <span class="feature-text">{{ $t('card.topUpCardWithAda') }}</span>
                 </div>
                 <div class="feature-item">
                   <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">Order additional cards</span>
+                  <span class="feature-text">{{ t('card.orderAdditionalCards') }}</span>
                 </div>
               </div>
             </div>
 
             <div class="option-action">
               <SecondaryButton
-                :text="kaiserExLoading ? 'Signing In...' : 'Sign In'"
+                :text="kaiserExLoading ? t('card.signingIn') : t('card.signIn')"
                 :disabled="kaiserExLoading"
                 @click="handleLogin"
                 class="full-width gradient-text-button"
@@ -151,29 +150,29 @@
             <div class="form-header">
               <button @click="showLoginForm = false" class="back-button">
                 <v-icon small>mdi-arrow-left</v-icon>
-                Back
+                {{ t('common.back') }}
               </button>
-              <h3 class="form-title">Sign in to Kaiserex</h3>
-              <p class="form-description">Enter your credentials to continue with your card order.</p>
+              <h3 class="form-title">{{ t('card.signInToKaiserex') }}</h3>
+              <p class="form-description">{{ t('card.enterCredentialsToContinue') }}</p>
             </div>
 
             <div class="form-content">
               <div class="form-group">
-                <label class="form-label">Username or Email</label>
-                <input v-model="username" type="text" class="form-input" placeholder="Enter your username or email" />
+                <label class="form-label">{{ t('card.usernameOrEmail') }}</label>
+                <input v-model="username" type="text" class="form-input" :placeholder="t('card.enterUsernameOrEmail')" />
               </div>
 
               <div class="form-group">
-                <label class="form-label">Password</label>
-                <input v-model="password" type="password" class="form-input" placeholder="Enter your password" />
+                <label class="form-label">{{ t('card.password') }}</label>
+                <input v-model="password" type="password" class="form-input" :placeholder="t('card.enterPassword')" />
               </div>
 
               <div class="form-actions">
-                <GradientButton text="Sign In" @click="handleLoginSubmit" class="full-width" />
+                <GradientButton :text="t('card.signIn')" @click="handleLoginSubmit" class="full-width" />
               </div>
 
               <div class="forgot-password">
-                <button class="forgot-link">Forgot your password?</button>
+                <button class="forgot-link">{{ t('card.forgotPassword') }}</button>
               </div>
             </div>
           </div>
@@ -189,15 +188,15 @@
                 class="back-button"
               >
                 <v-icon small>mdi-arrow-left</v-icon>
-                Back
+                {{ t('common.back') }}
               </button>
-              <h3 class="form-title">Two-Factor Authentication</h3>
-              <p class="form-description">Enter the 6-digit code from your authenticator app to continue.</p>
+              <h3 class="form-title">{{ t('card.twoFactorAuthentication') }}</h3>
+              <p class="form-description">{{ t('card.enter6DigitCode') }}</p>
             </div>
 
             <div class="form-content">
               <div class="form-group">
-                <label class="form-label">Verification Code</label>
+                <label class="form-label">{{ t('card.verificationCode') }}</label>
                 <div class="code-input-container">
                   <input
                     v-for="(_, index) in twoFACode"
@@ -250,6 +249,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
@@ -258,6 +258,8 @@ import PromotionModal from './PromotionModal.vue';
 import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 const emit = defineEmits<{
   (e: 'auth-complete'): void;
 }>();
@@ -365,7 +367,7 @@ const handleCodeKeydown = (event: KeyboardEvent, index: number) => {
 
 const handleTwoFASubmit = async () => {
   if (!isCodeComplete.value) {
-    twoFAError.value = 'Please enter all 6 digits';
+    twoFAError.value = t('wallet.pleaseEnterAll6Digits');
     return;
   }
 
@@ -420,7 +422,7 @@ const handleResendCode = () => {
   console.log('Resending 2FA code...');
 
   // Show success message temporarily
-  twoFAError.value = 'New code sent to your authenticator app';
+  twoFAError.value = t('card.newCodeSent');
   setTimeout(() => {
     twoFAError.value = '';
   }, 3000);
@@ -515,7 +517,7 @@ const handleRegistrationComplete = () => {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-  height: 480px; // Fixed height for consistency
+  min-height: 480px; // Fixed height for consistency
 
   &:hover {
     border-color: rgba(0, 199, 243, 0.3);

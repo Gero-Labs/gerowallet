@@ -1,7 +1,7 @@
 <template>
   <div id="risk-wrap">
     <div id="risk-title">
-      Transaction Risk
+      {{ $t('security.transactionRisk') }}
       <v-tooltip bottom>
         <template v-slot:activator="{ on, attrs }">
           <v-icon
@@ -14,13 +14,12 @@
             mdi-information-outline
           </v-icon>
         </template>
-        <span>Cardano Shield provides<br>security insights on a<br><strong>best-effort</strong> basis.<br>
-          Accuracy is not<br>guaranteed, and users<br>should exercise their<br>own caution.</span>
+        <span>{{ $t('security.cardanoShieldNote') }}</span>
       </v-tooltip>
     </div>
 
     <div id="risk-indicator">
-      <img id="risk-level" alt="Risk Level" :src="icon" />
+      <img id="risk-level" :alt="$t('common.riskLevel')" :src="icon" />
 
       <div id="risk-loader" v-if="loading">
         <span class="custom-loader">
@@ -30,17 +29,21 @@
       <div id="risk-label" v-else>{{ label }}</div>
     </div>
     <div id="risk-powered">
-      <span>Powered by</span>
+      <span>{{ $t('security.poweredBy') }}</span>
       <a href="https://cardanoshield.com/" target="_blank">
-        <img alt="Cardano Shield" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
+        <img :alt="$t('common.cardanoShield')" :src="assets.cardanoShieldBigLogo" style="height: 30px" />
       </a>
     </div>
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import { DappScore } from '@/models/cardano-shield-types';
 import assets from '@/utils/assets';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   risk: {
@@ -56,16 +59,16 @@ const props = defineProps({
 console.log('TransactionRisk loading prop:', props.loading);
 
 const getLabel = (risk: string | undefined) => {
-  if (!risk) return 'N/A';
+  if (!risk) return t('common.na');
   switch (DappScore[risk as keyof typeof DappScore]) {
     case DappScore.low:
-      return 'LOW';
+      return t('common.low');
     case DappScore.medium:
-      return 'MED';
+      return t('common.medium');
     case DappScore.high:
-      return 'HIGH';
+      return t('common.high');
     default:
-      return 'N/A';
+      return t('common.na');
   }
 };
 

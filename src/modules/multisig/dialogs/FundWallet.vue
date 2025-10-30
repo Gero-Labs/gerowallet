@@ -1,6 +1,6 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Fund Wallet" :loading="txSubmitLoading" :min-height="0"
-    :subtitle="`Add ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to your multisig wallet.`">
+  <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.fundWallet')" :loading="txSubmitLoading" :min-height="0"
+    :subtitle="$t('multisig.fundWalletSubtitle', { asset: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })">
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
         <v-stepper-header>
@@ -40,24 +40,24 @@
       <v-overlay :absolute="true" opacity="0.99" :value="overlay" class="hardwareOverlay">
         <v-alert color="white" dense outlined type="info" prominent border="left" v-if="!keystoneScan"
           class="mt-10 mb-0">
-          <b>Instructions</b>
+          <b>{{ $t('multisig.instructions') }}</b>
           <div v-if="loggedWallet?.type === WalletType.Keystone">
             <ul class="text-left" style="line-height: 1.5">
-              <li>Unlock your Keystone device.</li>
-              <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-              <li>Use your Keystone device to scan the QR code.</li>
-              <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+              <li>{{ $t('multisig.unlockKeystoneDevice') }}</li>
+              <li>{{ $t('multisig.selectScanQROption') }} <v-icon small>mdi-line-scan</v-icon></li>
+              <li>{{ $t('multisig.useKeystoneToScan') }}</li>
+              <li>{{ $t('multisig.approveAndNext') }}</li>
             </ul>
           </div>
         </v-alert>
         <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
           <v-card-title>
-            Scan QR Code
+            {{ $t('multisig.scanQRCode') }}
           </v-card-title>
           <v-card-subtitle>
             <ul class="text-left" style="line-height: 1.5">
-              <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-              <li>Use a low density setting for animated QR codes if required.</li>
+              <li>{{ $t('multisig.adjustDistanceTap') }}</li>
+              <li>{{ $t('multisig.useLowDensity') }}</li>
             </ul>
           </v-card-subtitle>
           <v-card-text class="text-center">
@@ -116,7 +116,7 @@
         <v-tooltip v-model="tooltip.enabled" top color="red" v-if="loggedWallet?.type === WalletType.Normal">
           <template v-slot:activator="{ }">
             <v-text-field flat style="width: 295px" block dense v-model="spendingPassword" outlined
-              label="Spending Password" :type="show1 ? 'text' : 'password'" :rules="[rules.required()]" hide-details
+              :label="$t('wallet.spendingPassword')" :type="show1 ? 'text' : 'password'" :rules="[rules.required()]" hide-details
               class="mb-2" required :disabled="txSubmitLoading" @keydown.enter.prevent="nextStep">
               <template v-slot:append>
                 <v-icon @click="show1 = !show1" tabindex="-1">
@@ -129,7 +129,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="$t('multisig.usb')" icon-left="mdi-usb" :text-right="$t('multisig.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -147,6 +147,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
@@ -172,6 +173,9 @@ import type { TransactionBody } from '@emurgo/cardano-serialization-lib-browser'
 import type { Step, Token, SendData, Collectible } from '@/modules/multisig/types/MultiSigTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 
+
+const { t } = useTranslation();
+
 const props = defineProps<{
   isOpen: boolean;
 }>();
@@ -186,15 +190,15 @@ const addresses = ref(new Set()); // Placeholder
 
 
 const steps: Step[] = [
-  { name: 'recipientDetails', label: 'Recipient Details' },
-  { name: 'assetsToSend', label: 'Assets to Send' },
-  { name: 'summary', label: 'Summary' }
+  { name: 'recipientDetails', label: t('multisig.recipientDetails') },
+  { name: 'assetsToSend', label: t('multisig.assetsToSend') },
+  { name: 'summary', label: t('multisig.summary') }
 ];
 
 const currentStep = ref(1);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!'
+  text: t('wallet.wrongSpendingPassword')
 });
 const txBody = ref<TransactionBody | undefined>();
 const txData = ref<Transaction | undefined>();
@@ -318,7 +322,7 @@ const onDecode = async (result: string) => {
   console.log(signedTx.to_json());
   const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
   console.log(txId);
-  snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+  snackbar.fireSuccess(t('multisig.txSubmittedSuccess', { txId }));
   emit('close');
 };
 
@@ -362,7 +366,7 @@ const signAndSubmitTx = async () => {
       console.log(signedTx.to_json());
       const txId = await loggedWallet.value.submitTx(signedTx, utxos.value);
       console.log(txId);
-      snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${txId}`);
+      snackbar.fireSuccess(t('multisig.txSubmittedSuccess', { txId }));
       emit('close');
     } catch (e) {
       snackbar.setError(e as string);

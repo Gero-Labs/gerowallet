@@ -3,7 +3,7 @@
     <div v-if="isReadyToRender" class="portfolio-value-display">
       <div class="portfolio-header">
         <div class="portfolio-balance-section">
-          <div class="portfolio-label">Portfolio</div>
+          <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <div class="portfolio-amount-row">
             <div
               class="portfolio-amount"
@@ -74,10 +74,10 @@
                   </v-list-item-icon>
                   <v-list-item-content>
                     <v-list-item-title>
-                      {{ portfolioMode === 'full' ? 'Full Portfolio' : 'ADA Only' }}
+                      {{ portfolioMode === 'full' ? $t('dashboard.fullPortfolio') : $t('dashboard.adaOnly') }}
                     </v-list-item-title>
                     <v-list-item-subtitle style="font-size: 10px;">
-                      {{ portfolioMode === 'full' ? 'Switch to ADA balance' : 'Switch to full portfolio' }}
+                      {{ portfolioMode === 'full' ? $t('dashboard.switchToAdaBalance') : $t('dashboard.switchToFullPortfolio') }}
                     </v-list-item-subtitle>
                   </v-list-item-content>
                 </v-list-item>
@@ -91,7 +91,7 @@
                   <v-icon small :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
                 </v-list-item-icon>
                 <v-list-item-content>
-                  <v-list-item-title>Refresh Data</v-list-item-title>
+                  <v-list-item-title>{{ $t('dashboard.refreshData') }}</v-list-item-title>
                 </v-list-item-content>
               </v-list-item>
             </v-list>
@@ -101,18 +101,19 @@
     </div>
     <div v-if="globalLoading" class="loading-container">
       <v-progress-circular indeterminate color="primary" :size="50" :width="4"></v-progress-circular>
-      <div class="loading-text">Loading Chart</div>
+      <div class="loading-text">{{ $t('dashboard.loadingChart') }}</div>
     </div>
     <div id="highstock-chart" v-show="isReadyToRender" style="margin-top: 40px" :key="chartKey"></div>
     <v-card-text v-if="!hasAnyChartData && !globalLoading" style="font-size: 20px; align-content: center">
       <v-avatar size="24">
-        <v-img :src="assets.walletSvg" alt="Wallet"></v-img>
+        <v-img :src="assets.walletSvg" :alt="$t('common.wallet')"></v-img>
       </v-avatar>
-      <span>There seems to be no data in this wallet</span>
+      <span>{{ $t('dashboard.noDataInWallet') }}</span>
     </v-card-text>
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, onMounted, ref, watch, toRefs, nextTick } from 'vue';
 import { useTimeoutFn, tryOnBeforeUnmount } from '@vueuse/core';
 import Highstock from 'highcharts/highstock';
@@ -125,6 +126,9 @@ import { Blockchain } from '@/models/types';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+
+
+const { t } = useTranslation();
 const { convertFiat } = useCurrencyConverter();
 
 // Currency Types
@@ -144,11 +148,11 @@ interface CurrencyConfig {
 const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   [CurrencyType.ADA]: {
     symbol: '', // Will be defined dynamically
-    displayName: 'Native Currency',
+    displayName: t('dashboard.nativeCurrency'),
   },
   [CurrencyType.USD]: {
     symbol: '$',
-    displayName: 'US Dollar',
+    displayName: t('dashboard.usDollar'),
   },
   [CurrencyType.EUR]: {
     symbol: '€',

@@ -20,7 +20,7 @@
                   {{ $t('multisig.createMultisigWallet') }}
                 </v-btn>
                 <v-card-subtitle v-else class="multisig-description">
-                  {{ `You're reached your limit(${MAX_MULTISIG_WALLETS_PER_USER}) of multisig wallets` }}
+                  {{ $t('multisig.reachedLimit', { limit: MAX_MULTISIG_WALLETS_PER_USER }) }}
                 </v-card-subtitle>
                 <v-btn
                   v-show="Object.keys(getMultiSigWallet).length != 0"
@@ -33,7 +33,7 @@
                   {{ $t('multisig.newMultisigTransaction') }}
                 </v-btn>
               </v-card-title>
-              <v-card-subtitle class="multisig-description">{{ $t('multisig.description') }}</v-card-subtitle>
+              <v-card-subtitle class="multisig-description">{{ $t('multisig.multisigTransactionDescription') }}</v-card-subtitle>
               <v-card-text>
                 <v-row no-gutters>
                   <v-col cols="12">
@@ -87,7 +87,7 @@
                     </v-row>
                     <v-row>
                       <v-col cols="12">
-                        {{ 'Wallet Address: ' }}
+                        {{ $t('multisig.walletAddress') }}
                         {{ filters.shortenStringWithEllipsis(getMultiSigWallet.paymentAddress, 14) }}
                         <CopyButton
                           ref="copyAddress"
@@ -126,7 +126,7 @@
                 <v-text-field
                   v-model="search"
                   append-icon="mdi-magnify"
-                  label="Search"
+                  :label="$t('common.search')"
                   single-line
                   hide-details
                   outlined
@@ -136,12 +136,12 @@
               <v-col cols="3" class="text-center align-center justify-center">
                 <v-btn outlined color="#CCC" @click="selectDates" class="mt-1 text-caption text-capitalize">
                   <v-icon small left>mdi-calendar</v-icon>
-                  Select Dates
+                  {{ $t('multisig.selectDates') }}
                 </v-btn>
                 &nbsp;
                 <v-btn outlined color="#CCC" @click="applyFilters" class="mt-1 text-caption text-capitalize">
                   <v-icon small left>mdi-filter</v-icon>
-                  Apply Filters
+                  {{ $t('multisig.applyFilters') }}
                 </v-btn>
               </v-col>
             </v-row>
@@ -154,8 +154,8 @@
                   :items-per-page="10"
                   class="multisig-table"
                   :loading="loading"
-                  loading-text="Loading transactions..."
-                  no-data="No pending multisig transactions"
+                  :loading-text="$t('multisig.loadingTransactions')"
+                  :no-data-text="$t('multisig.noPendingTransactions')"
                   :search="search"
                   hide-default-footer
                 >
@@ -173,9 +173,9 @@
                     {{ item.status }}
                   </template>
                   <template v-slot:[`item.actions`]="{ item }">
-                    <v-btn v-if="item.status === 'Pending'" small outlined color="#CCC" @click="signTransaction(item)">
+                    <v-btn v-if="item.status === String(t('common.pending'))" small outlined color="#CCC" @click="signTransaction(item)">
                       <v-icon small left>mdi-check</v-icon>
-                      Sign
+                      {{ $t('multisig.sign') }}
                     </v-btn>
                     <span v-else> - </span>
                   </template>
@@ -207,6 +207,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
@@ -219,6 +220,9 @@ import FundWallet from '@/modules/multisig/dialogs/FundWallet.vue';
 import MultisigTransaction from '@/modules/multisig/dialogs/MultisigTransaction.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { Transaction, WalletInfo, MultisigWalletInterface } from '@/modules/multisig/types/MultiSigTypes';
+
+
+const { t } = useTranslation();
 
 const MAX_MULTISIG_WALLETS_PER_USER = 3;
 
@@ -243,11 +247,11 @@ const getMultiSigWallets = computed(() => []);
 
 // Headers for the data table
 const headers = [
-  { text: 'Date', value: 'date' },
-  { text: 'Amount', value: 'amount' },
-  { text: 'Recipient', value: 'recipient' },
-  { text: 'Status', value: 'status' },
-  { text: 'Actions', value: 'actions', sortable: false },
+  { text: String(t('common.date')), value: 'date' },
+  { text: String(t('common.amount')), value: 'amount' },
+  { text: String(t('common.recipient')), value: 'recipient' },
+  { text: String(t('common.status')), value: 'status' },
+  { text: String(t('common.actions')), value: 'actions', sortable: false },
 ];
 
 // Computed
@@ -267,7 +271,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
   return [
     {
       icon: assets.multisigDollar,
-      title: 'Balance',
+      title: String(t('common.balance')),
       value: currentBalance || 0,
       inlineValue: {
         display: false,
@@ -276,7 +280,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
     },
     {
       icon: assets.multisigTotal,
-      title: 'Total',
+      title: String(t('common.total')),
       value: total || 0,
       inlineValue: {
         display: true,
@@ -285,7 +289,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
     },
     {
       icon: assets.multisigPaid,
-      title: 'Paid',
+      title: String(t('multisig.paid')),
       value: paid || 0,
       inlineValue: {
         display: true,
@@ -294,7 +298,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
     },
     {
       icon: assets.multisigPending,
-      title: 'Pending',
+      title: String(t('common.pending')),
       value: pending || 0,
       inlineValue: {
         display: true,
@@ -303,7 +307,7 @@ const walletInfo = computed<WalletInfo[]>(() => {
     },
     {
       icon: assets.multisigExpired,
-      title: 'Expired',
+      title: String(t('multisig.expired')),
       value: expired || 0,
       inlineValue: {
         display: true,

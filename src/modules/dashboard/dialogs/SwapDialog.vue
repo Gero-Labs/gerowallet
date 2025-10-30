@@ -2,8 +2,8 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Swap"
-    subtitle="Effortlessly exchange tokens directly from your wallet."
+    :title="t('swap.title')"
+    :subtitle="t('swap.effortlesslyExchange')"
     :min-height="300"
     :width="550"
     :persistent="false"
@@ -14,8 +14,12 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from "@/shared/dialogs/BaseDialog.vue";
 import SwapWidget from '@/modules/swap/components/SwapWidget.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

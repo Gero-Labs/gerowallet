@@ -13,9 +13,18 @@ import App from './Sidepanel.vue';
 Vue.config.productionTip = false;
 Vue.use(VueRouter);
 
-new Vue({
-  vuetify,
-  i18n,
-  router,
-  render: h => h(App)
-}).$mount('#app');
+chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+  if (saved?.loggedWallet?.id && saved?.config?.locale) {
+    console.log('🌐 Sidepanel: Setting initial locale from storage:', saved.config.locale);
+    i18n.locale = saved.config.locale;
+  } else {
+    console.log('🌐 Sidepanel: Using default locale: us');
+  }
+  
+  new Vue({
+    vuetify,
+    i18n,
+    router,
+    render: h => h(App)
+  }).$mount('#app');
+});

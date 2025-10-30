@@ -74,7 +74,7 @@
                   <v-icon size="16">mdi-play-box-multiple</v-icon>
                 </v-btn>
               </template>
-              <span>Mini Player</span>
+              <span>{{ $t('navigation.miniPlayer') }}</span>
             </v-tooltip>
           </v-list-item-action>
 
@@ -85,7 +85,7 @@
               color="primary"
               x-small
             >
-              NEW
+              {{ $t('common.new') }}
             </v-chip>
           </v-list-item-action>
         </v-list-item>
@@ -111,7 +111,7 @@
                 color="primary"
                 x-small
                 outlined>
-                Soon
+                {{ $t('common.comingSoon') }}
               </v-chip>
             </v-list-item-title>
           </v-list-item-content>
@@ -157,6 +157,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
@@ -247,23 +248,25 @@ const items = computed((): NavigationItemUnion[] => {
   const isReferralEnabled = false;
   const hasActivitiesRewardsItems = isClaimRewardsEnabled || isCashbackEnabled || isReferralEnabled;
 
+  const { t } = useTranslation();
+  
   return [
-    { title: 'Dashboard', icon: assts.barChart, link: '/', enabled: true },
-    { title: 'Blog', icon: assts.blog, link: '/blog', enabled: true },
-    { header: 'Financial Hub', enabled: true },
-    { title: 'Transactions', icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
-    { title: 'Staking', icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
-    { title: 'Governance', icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Multisig', icon: assts.multisigTree, link: '/multisig', enabled: networks.resolveMultiSigSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: 'Gero Card', icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
-    { header: 'Activities & Rewards', enabled: hasActivitiesRewardsItems },
-    { title: 'Claim Rewards', icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
-    { title: 'Cashback', icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
-    { title: 'Referral', icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
+    { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
+    { title: t('navigation.blog'), icon: assts.blog, link: '/blog', enabled: true },
+    { header: t('navigation.financialHub'), enabled: true },
+    { title: t('navigation.transactions'), icon: assts.transactions, link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0 },
+    { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
+    { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
+    { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: networks.resolveMultiSigSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
+    { title: t('navigation.geroCard'), icon: assts.card, link: '/card', enabled: networks.resolveGeroCardSupport(loggedWallet.value?.chain, loggedWallet.value?.network), new: true },
+    { header: t('navigation.activitiesRewards'), enabled: hasActivitiesRewardsItems },
+    { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
+    { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
+    { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'Market', icon: assts.market, link: '/market', enabled: false },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
-    { header: 'Media', enabled: musicPlaylist.value?.length > 0 },
-    { title: 'Media Player', icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
+    { header: t('navigation.media'), enabled: musicPlaylist.value?.length > 0 },
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: musicPlaylist.value?.length > 0 },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },

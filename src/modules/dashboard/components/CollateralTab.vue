@@ -2,11 +2,10 @@
   <v-tab-item>
     <v-card flat class="transparent">
       <v-card-title class="px-0 text-left">
-        Setting Collateral for Smart Contract Interactions
+        {{ $t('settings.whatIsCollateral') }}
       </v-card-title>
       <v-card-subtitle class="px-0 text-left">
-        Gero automatically manages collateral using a UTxO with no tokens and a value between 5 and 20.
-        If none is available, use the 'Set Collateral' button to manually assign one.
+        {{ $t('settings.collateralDescription') }}
       </v-card-subtitle>
       <v-card-text class="text-left px-0">
         <v-data-table class="transparent" :items="collateralCandidate" :headers="headers" hide-default-footer disable-pagination :header-props="{ 'sort-icon': 'mdi-menu-up' }">
@@ -33,7 +32,7 @@
               :disabled="collateralCandidate.length !== 0"
               @click="setCollateral"
             >
-              Set Collateral
+              {{ $t('settings.setCollateral') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -42,6 +41,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { METHOD } from '@/chrome/config';
@@ -65,10 +65,12 @@ const { tip, epochParams } = toRefs(networkStore);
 
 
 // Reactive data
+const { t } = useTranslation();
+
 const headers = ref([
-  {text: 'UTxO', sortable: false, value: 'utxo'},
-  {text: 'Address', sortable: false, value: 'address'},
-  {text: 'Balance', sortable: false, value: 'balance'},
+  {text: t('settings.utxo'), sortable: false, value: 'utxo'},
+  {text: t('common.address'), sortable: false, value: 'address'},
+  {text: t('common.balance'), sortable: false, value: 'balance'},
 ]);
 
 const collateralCandidate = computed<any>(() => {
@@ -87,7 +89,7 @@ const setCollateral = async () => {
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     // Create a collateral output of 5 ADA
@@ -127,9 +129,9 @@ const setCollateral = async () => {
   } catch (error: any) {
     console.error('Error building collateral transaction:', error);
     if (error.message?.includes('UTxO Balance Insufficient')) {
-      snackbar.setError('Insufficient ADA to set collateral. You need at least 5 ADA.');
+      snackbar.setError(t('settings.insufficientAdaForCollateral'));
     } else {
-      snackbar.setError('Failed to build collateral transaction');
+      snackbar.setError(t('settings.failedToBuildCollateral'));
     }
   }
 };
@@ -147,7 +149,7 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Collateral Tx Set Successfully. Tx ID: ${txId}`);
+  snackbar.fireSuccess(t('settings.collateralTxSetSuccess', { txId }));
   console.log(txId)
   emit('close')
 }

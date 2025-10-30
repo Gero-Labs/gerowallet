@@ -17,11 +17,11 @@
           <v-avatar tile size="14">
             <v-img
               :src="assets.dollarShieldSvg"
-              alt="Buy"
+              :alt="$t('common.buy')"
               contain
             ></v-img>
           </v-avatar>
-          <span class="button-text">Buy / Sell</span>
+          <span class="button-text">{{ $t('navigation.buySell') }}</span>
         </v-btn>
       </div>
 
@@ -37,12 +37,12 @@
           <v-avatar tile size="14">
             <v-img
               :src="assets.sendSvg"
-              alt="Send"
+              :alt="$t('common.send')"
               contain
               style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Send</span>
+          <span class="button-text">{{ $t('navigation.send') }}</span>
         </v-btn>
       </div>
 
@@ -58,12 +58,12 @@
           <v-avatar tile size="14">
             <v-img
               :src="assets.qrCodeSvg"
-              alt="Receive"
+              :alt="$t('common.receive')"
               contain
               style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Receive</span>
+          <span class="button-text">{{ $t('navigation.receive') }}</span>
         </v-btn>
       </div>
 
@@ -79,12 +79,12 @@
           <v-avatar tile size="14">
             <v-img
               :src="assets.swapSvg"
-              alt="Swap"
+              :alt="$t('swap.swap')"
               contain
               style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Swap</span>
+          <span class="button-text">{{ $t('swap.swap') }}</span>
         </v-btn>
       </div>
 
@@ -100,12 +100,12 @@
           <v-avatar tile size="14">
             <v-img
               :src="assets.barChart"
-              alt="Perpetuals"
+              :alt="$t('perpetuals.perpetuals')"
               contain
               style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
             ></v-img>
           </v-avatar>
-          <span class="button-text">Perpetuals</span>
+          <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
         </v-btn>
       </div>
     </div>
@@ -117,6 +117,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, computed, ref, getCurrentInstance } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
@@ -126,6 +127,9 @@ import PerpetualsDialog from '@/modules/dashboard/dialogs/PerpetualsDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any

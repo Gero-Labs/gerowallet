@@ -29,17 +29,17 @@
                   <!-- Card Bottom Info -->
                   <div class="card-bottom" style="max-width: 310px">
                     <div class="card-holder">
-                      <p class="label">CARDHOLDER NAME</p>
-                      <p class="value">GERO WALLET</p>
+                      <p class="label">{{ t('card.cardholderName') }}</p>
+                      <p class="value">{{ t('card.geroWallet') }}</p>
                     </div>
                     <div class="card-cvv">
-                      <p class="label">CVV</p>
+                      <p class="label">{{ t('card.cvv') }}</p>
                       <p class="value">
                         {{ showCardDetails && card.cardDetails?.details?.cvc2 ? card.cardDetails.details.cvc2 : '***' }}
                       </p>
                     </div>
                     <div class="card-expiry">
-                      <p class="label">EXP.</p>
+                      <p class="label">{{ t('card.exp') }}</p>
                       <p class="value">{{ formatExpiryDate(card) }}</p>
                     </div>
                   </div>
@@ -54,7 +54,7 @@
                 small
               >
                 <v-icon small left>mdi-check-circle</v-icon>
-                Active
+                {{ t('card.active') }}
               </v-chip>
               <v-chip
                 v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
@@ -62,7 +62,7 @@
                 small
               >
                 <v-icon small left>mdi-clock-outline</v-icon>
-                Pending
+                {{ t('card.pending') }}
               </v-chip>
             </div>
           </div>
@@ -72,7 +72,7 @@
         <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center">
           <div class="balance-section" v-if="currentCardHasUUID">
             <div class="balance-container">
-              <p class="balance-label">Total Balance</p>
+              <p class="balance-label">{{ t('card.totalBalance') }}</p>
               <p class="balance-amount">
                 {{
                   cards[currentCardIndex]?.cardBalance?.currentBalance?.amount
@@ -87,8 +87,8 @@
               <!-- Action Buttons -->
               <div class="balance-actions">
                 <v-btn class="action-btn top-up-btn" variant="outlined" @click="handleTopUp">
-                  <img src="@/modules/wallet/icons/currency-euro.svg" alt="Top up" class="btn-icon" />
-                  Top up
+                  <img src="@/modules/wallet/icons/currency-euro.svg" :alt="$t('card.topUp')" class="btn-icon" />
+                  {{ t('card.topUp') }}
                 </v-btn>
                 <v-btn
                   class="action-btn eye-btn"
@@ -113,18 +113,18 @@
               </div>
               <div class="status-text-wrapper">
                 <div class="status-title-wrapper">
-                  <p class="status-title">Card Order in Progress</p>
+                  <p class="status-title">{{ t('card.cardOrderInProgress') }}</p>
                 </div>
                 <p class="status-subtitle">
-                  Your card order is being processed. <br />
-                  This process may take up to 24 hours
+                  {{ t('card.cardOrderProcessing') }} <br />
+                  {{ t('card.processingTime') }}
                 </p>
               </div>
             </v-card-text>
           </v-card>
           <div v-else class="order-card-section mt-10">
-            <h2 class="order-title">Get Your Gero Card</h2>
-            <p class="order-description">Spend your crypto anywhere with your Gero Card.</p>
+            <h2 class="order-title">{{ t('card.getYourGeroCard') }}</h2>
+            <p class="order-description">{{ t('card.spendCryptoAnywhere') }}</p>
 
             <!-- Promo and Button Row -->
             <div class="promo-button-row">
@@ -139,17 +139,17 @@
                   tabindex="0"
                   aria-label="View promotional details and fee information"
                 >
-                  <span class="clickable-text">Enjoy ZERO FEES until May 1st 2026</span>
+                  <span class="clickable-text">{{ t('card.enjoyZeroFeesUntil') }}</span>
                   <v-icon small class="info-icon">mdi-information-outline</v-icon>
                 </p>
                 <div class="promo-features">
                   <div class="promo-item">
                     <v-icon class="promo-icon">mdi-check-circle</v-icon>
-                    <span class="promo-text">0% monthly & issuance fees</span>
+                    <span class="promo-text">{{ t('card.zeroMonthlyFees') }}</span>
                   </div>
                   <div class="promo-item">
                     <v-icon class="promo-icon">mdi-check-circle</v-icon>
-                    <span class="promo-text">0% fees on ADA-to-EUR conversions</span>
+                    <span class="promo-text">{{ t('card.zeroAdaEurFees') }}</span>
                   </div>
                 </div>
               </div>
@@ -157,7 +157,7 @@
               <!-- Button -->
               <v-btn class="order-card-btn" large :loading="orderingCard" @click="showOrderCardConfirmationModal = true">
                 <v-icon left>mdi-credit-card-plus</v-icon>
-                Order New Card
+                {{ t('card.orderNewCard') }}
               </v-btn>
             </div>
           </div>
@@ -175,29 +175,30 @@
       :open="showConfirmationModal"
       @close="showConfirmationModal = false"
       @confirm="toggleCardVisibility"
-      :title="'View Card Details'"
-      :subtitle="'View the details of your card. This action cannot be undone.'"
+      :title="t('card.viewCardDetails')"
+      :subtitle="t('card.viewCardDetailsSubtitle')"
     />
     <!-- Confirmation Modal Manage Card-->
     <ConfirmationPasswordModal
       :open="showManageCardConfirmationModal"
       @close="showManageCardConfirmationModal = false"
       @confirm="showManageCardModal = true"
-      :title="'Manage Card'"
-      :subtitle="'Manage the details of your card. This action cannot be undone.'"
+      :title="t('card.manageCard')"
+      :subtitle="t('card.manageCardSubtitle')"
     />
     <!-- Confirmation Modal Order Card-->
     <ConfirmationPasswordModal
       :open="showOrderCardConfirmationModal"
       @close="showOrderCardConfirmationModal = false"
       @confirm="handleOrderCard"
-      :title="'Order New Card'"
-      :subtitle="'Are you sure you want to order a new Gero Card? This action will initiate the card ordering process.'"
+      :title="t('card.orderCardConfirmTitle')"
+      :subtitle="t('card.orderCardConfirmSubtitle')"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue';
 import ManageCardModal from './dashboard/ManageCardModal.vue';
 import TopUpModal from './dashboard/TopUpModal.vue';
@@ -205,6 +206,9 @@ import PromotionModal from './PromotionModal.vue';
 import cardStoreModule from '@/stores/modules/card';
 import ConfirmationPasswordModal from './dashboard/ConfirmationPasswordModal.vue';
 import snackbar from '@/plugins/snackbar';
+
+
+const { t } = useTranslation();
 
 const currentCardIndex = ref(0);
 const cardTiltStyle = ref<any>({});
@@ -252,7 +256,7 @@ const handleOrderCard = async () => {
     await cardStoreModule.fetchCardData();
 
     // Show success message
-    snackbar.fireSuccess(`Card ordered successfully! Your card is being processed.`);
+    snackbar.fireSuccess(t('card.cardOrderedSuccess'));
   } catch (error: any) {
     console.error('Failed to order card:', error);
 
@@ -262,17 +266,17 @@ const handleOrderCard = async () => {
 
     // Check if error.response.data is a string (direct error message)
     if (typeof error?.response?.data === 'string' && error.response.data) {
-      errorReason = '<b>Failed to order card.</b><br>' + error.response.data;
+      errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
     }
     // Otherwise check for object-based error formats
     else {
-      errorReason = 'Failed to order card. ' +
+      errorReason = t('card.failedToOrderCard') + ' ' +
         (error?.response?.data?.error?.message ||  // Laravel-style error object
         error?.response?.data?.error ||            // Direct error string in error field
         error?.response?.data?.reason ||           // Custom reason field
         error?.response?.data?.message ||          // Standard message field
         error?.message ||                          // Axios error message
-        'Please try again.'); // Fallback
+        t('card.pleaseTryAgain')); // Fallback
     }
 
     // Show error message with reason

@@ -27,11 +27,11 @@
               <!-- Overlay badges -->
               <div class="card-badges">
                 <v-chip small outlined class="quantity-chip">
-                  {{ Number(collection.quantity || 1).toLocaleString() }} items
+                  {{ Number(collection.quantity || 1).toLocaleString() }} {{ $t('assets.items') }}
                 </v-chip>
                 <v-chip v-if="collection.isScam" small color="error">
                   <v-icon left x-small>mdi-alert-decagram</v-icon>
-                  Scam
+                  {{ $t('assets.scam') }}
                 </v-chip>
               </div>
             </v-img>
@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
