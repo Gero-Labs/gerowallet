@@ -19,24 +19,17 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
-import filters from '@/shared/utils/filters';
-import { formatTime } from '@/shared/utils/converter';
+import { toRefs } from 'vue';
 import { musicStore } from '@/stores/musicStore';
 import VolumeBar from '@/modules/media-player/components/VolumeBar.vue';
 
-const { musicPlaylist, context } = toRefs(musicStore);
+const { context } = toRefs(musicStore);
 
-const progress = ref(0);
-const progressInterval = ref(null);
-const isDragStart = ref(false);
-
-const currentTrack = computed(() => {
-  if (musicPlaylist.value && context.value) {
-    return musicPlaylist.value[context.value.currentIndex];
-  }
-  return undefined;
-});
+function formatTime(secs: number): string {
+  const minutes = Math.floor(secs / 60) || 0;
+  const seconds = (secs - minutes * 60) || 0;
+  return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+}
 
 const onProgressChange = (currentValue: number) => {
   // Calculate the new seek position in seconds based on the slider value.

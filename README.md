@@ -19,7 +19,7 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 - **Build**: Vite 4.5.5 (4 separate configs for different contexts)
 - **State**: Custom Vue Observable stores
 - **Database**: Dexie 4.0.7 (IndexedDB)
-- **Cardano SDK**: @cardano-sdk/core v0.46.9 (modern), @emurgo/cardano-serialization-lib-browser v12.1.0 (legacy)
+- **Cardano SDK**: @cardano-sdk/core v0.46.9 (modern)
 - **Real-time**: Ably v2.11.0 (WebSocket blockchain updates)
 
 ## Prerequisites

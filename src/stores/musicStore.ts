@@ -1,5 +1,4 @@
 import Vue from 'vue';
-import { getArtists } from '@/shared/utils/converter';
 import { Howl } from 'howler';
 import { resolveIcon } from '@/shared/utils/resolver';
 import { getContextType } from '@/utils/storageSync';
@@ -39,7 +38,7 @@ const context = getContextType();
 // Function to clear music store data immediately
 function clearMusicStoreImmediately() {
   debugLog('MusicStore: Clearing immediately for wallet change');
-  
+
   // Stop any playing audio
   if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
     musicStore.context.audio.stop();
@@ -47,7 +46,7 @@ function clearMusicStoreImmediately() {
   if (musicStore.context.audio && typeof musicStore.context.audio.unload === 'function') {
     musicStore.context.audio.unload();
   }
-  
+
   // Clear the store data immediately (this will trigger UI updates)
   musicStore.musicPlaylist = undefined;
   musicStore.context = {
@@ -95,7 +94,7 @@ if (context === 'browser') {
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<MusicStore>) => {
     debugLog('📥 Received music store update:', updates);
-    
+
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in musicStore) {
@@ -144,13 +143,13 @@ function broadcastFromBackground(updates: Partial<MusicStore>) {
     if (serializedUpdates.context) {
       serializedUpdates.context = serializeContext(serializedUpdates.context);
     }
-    
+
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
-    
+
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || { 
+      const current = result[STORE_NAME] || {
         musicPlaylist: undefined,
         context: {
           img: undefined,
@@ -167,8 +166,8 @@ function broadcastFromBackground(updates: Partial<MusicStore>) {
           shown: false,
         }
       };
-      chrome.storage.local.set({ 
-        [STORE_NAME]: { ...current, ...serializedUpdates } 
+      chrome.storage.local.set({
+        [STORE_NAME]: { ...current, ...serializedUpdates }
       });
     });
   }
@@ -198,6 +197,12 @@ const MusicStoreModule = {
             } else if (Array.isArray(file.src)) {
               fileSrc = file.src.join('')
             }
+            const getArtists = (artists: any) => {
+              if (artists !== undefined && Array.isArray(artists)) {
+                return artists.join(', ');
+              }
+              return artists;
+            }
             return {
               id: nft.unit,
               artist: getArtists(nft.onchain_metadata.release?.artists) || nft.metadata?.name || nft.name,
@@ -215,32 +220,32 @@ const MusicStoreModule = {
         .filter(nft => nft.mediaType?.includes('audio'))
     )
   },
-  
+
   setMusicPlaylist(musicPlaylist) {
     musicStore.musicPlaylist = musicPlaylist;
     broadcastFromBackground({ musicPlaylist });
   },
-  
+
   setContext(context) {
     musicStore.context = context;
     broadcastFromBackground({ context: serializeContext(context) });
   },
-  
+
   setMinimized() {
     musicStore.context.minimized = true;
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   setMaximized() {
     musicStore.context.minimized = false;
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   setMediaPlayerShown(value) {
     musicStore.context.shown = value;
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   setTrack(index) {
     musicStore.context.currentIndex = index;
     if (musicStore.context.isPlaying) {
@@ -251,7 +256,7 @@ const MusicStoreModule = {
     }
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   initializeSound() {
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
@@ -287,38 +292,38 @@ const MusicStoreModule = {
       });
     }
   },
-  
-  
+
+
   step() {
     const sound = musicStore.context.audio;
-    
+
     if (!sound || typeof sound.seek !== 'function' || typeof sound.playing !== 'function') {
       return;
     }
-    
+
     musicStore.context.seek = Math.round(sound.seek()) || 0;
-    
+
     if (sound.playing()) {
       requestAnimationFrame(MusicStoreModule.step);
     }
   },
-  
+
   nextTrack() {
     const wasPlaying = musicStore.context.isPlaying;
     console.log('nextTrack called, wasPlaying:', wasPlaying);
-    
+
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
     }
-    
+
     if (musicStore.context.isShuffle) {
       musicStore.context.currentIndex = Math.floor(Math.random() * musicStore.musicPlaylist.length);
     } else {
       musicStore.context.currentIndex = (musicStore.context.currentIndex + 1) % musicStore.musicPlaylist.length;
     }
-    
+
     console.log('New track index:', musicStore.context.currentIndex);
-    
+
     if (wasPlaying) {
       console.log('Calling playTrack because music was playing');
       MusicStoreModule.playTrack();
@@ -326,38 +331,38 @@ const MusicStoreModule = {
       console.log('Calling initializeSound because music was paused');
       MusicStoreModule.initializeSound();
     }
-    
+
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   prevTrack() {
     const wasPlaying = musicStore.context.isPlaying;
-    
+
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
     }
-    
+
     musicStore.context.currentIndex = (musicStore.context.currentIndex - 1 + musicStore.musicPlaylist.length) % musicStore.musicPlaylist.length;
-    
+
     if (wasPlaying) {
       MusicStoreModule.playTrack();
     } else {
       MusicStoreModule.initializeSound();
     }
-    
+
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   toggleRepeat() {
     musicStore.context.isRepeat = !musicStore.context.isRepeat;
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   toggleShuffle() {
     musicStore.context.isShuffle = !musicStore.context.isShuffle;
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   playTrack() {
     console.log('playTrack called, current index:', musicStore.context.currentIndex);
     MusicStoreModule.initializeSound();
@@ -370,23 +375,23 @@ const MusicStoreModule = {
       console.log('Cannot play track - no audio or invalid track');
     }
   },
-  
+
   togglePlayPause() {
     if (!musicStore.musicPlaylist || !musicStore.musicPlaylist[musicStore.context.currentIndex]) {
       console.warn('No track selected');
       return;
     }
-    
+
     if (!musicStore.context.audio || typeof musicStore.context.audio.pause !== 'function' || typeof musicStore.context.audio.play !== 'function') {
       console.log('Initializing audio for current track');
       MusicStoreModule.initializeSound();
     }
-    
+
     if (!musicStore.context.audio || typeof musicStore.context.audio.pause !== 'function' || typeof musicStore.context.audio.play !== 'function') {
       console.warn('Audio initialization failed');
       return;
     }
-    
+
     if (musicStore.context.isPlaying) {
       musicStore.context.audio.pause();
       musicStore.context.isPlaying = false;
@@ -394,10 +399,10 @@ const MusicStoreModule = {
       musicStore.context.audio.play();
       musicStore.context.isPlaying = true;
     }
-    
+
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   setVolume(val) {
     if (musicStore.context.audio) {
       musicStore.context.volume = val;
@@ -405,10 +410,10 @@ const MusicStoreModule = {
     }
     broadcastFromBackground({ context: serializeContext(musicStore.context) });
   },
-  
+
   async logout() {
     console.log('MusicStore: Logout Called');
-    
+
     // Stop any playing audio
     if (musicStore.context.audio && typeof musicStore.context.audio.stop === 'function') {
       musicStore.context.audio.stop();
@@ -416,7 +421,7 @@ const MusicStoreModule = {
     if (musicStore.context.audio && typeof musicStore.context.audio.unload === 'function') {
       musicStore.context.audio.unload();
     }
-    
+
     // Clear the store data
     const clearedState: MusicStore = {
       musicPlaylist: undefined,
@@ -436,10 +441,10 @@ const MusicStoreModule = {
         shown: false,
       }
     };
-    
+
     Object.assign(musicStore, clearedState);
     broadcastFromBackground(clearedState);
-    
+
     // Clear from Chrome storage to prevent rehydration with old data
     if (chrome?.storage?.local) {
       try {
@@ -450,28 +455,28 @@ const MusicStoreModule = {
       }
     }
   },
-  
+
   // Expose the observable state
   state: musicStore,
-  
+
   // Utility method to get current state snapshot
   getSnapshot(): MusicStore {
-    return { 
+    return {
       musicPlaylist: musicStore.musicPlaylist,
       context: serializeContext(musicStore.context)
     };
   },
-  
+
   // Utility method to reset state
   reset() {
     return this.logout();
   },
-  
+
   // Utility method to check if player has playlist
   hasPlaylist(): boolean {
     return musicStore.musicPlaylist !== undefined && musicStore.musicPlaylist?.length > 0;
   },
-  
+
   // Utility method to get current track
   getCurrentTrack(): any {
     if (!musicStore.musicPlaylist || musicStore.context.currentIndex >= musicStore.musicPlaylist.length) {
@@ -479,7 +484,7 @@ const MusicStoreModule = {
     }
     return musicStore.musicPlaylist[musicStore.context.currentIndex];
   },
-  
+
   // Utility method to get playlist length
   getPlaylistLength(): number {
     return musicStore.musicPlaylist?.length || 0;

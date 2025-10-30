@@ -325,51 +325,31 @@ export class WalletManager {
         debugLog('✅ Ably connection established');
       }
 
-      // Subscribe to private channel (in background)
+      // TODO: Private channel subscription - Reserved for future push notifications
+      // Use cases: Multisig signatures, price alerts, governance updates
+      // Commented out for now since sync is handled via REST API
+      /*
       try {
         await ablyService.subscribeToPrivateChannel(address, {
-          onSync: async (msg: Ably.InboundMessage) => {
-            // OPTIMIZATION: Check mutex FIRST before any logging to reduce console spam
-            if (this.syncMutex.isLocked()) {
-              return; // Silent skip - mutex is locked, message will be redundant
-            }
-
-            try {
-              const syncObject = JSON.parse(msg.data);
-
-              // Validate SYNC message has newer tip before processing
-              if (syncObject?.block?.height) {
-                const currentTip = NetworkStore.state.tip;
-                if (currentTip && syncObject.block.height <= currentTip.blockNo) {
-                  return; // Silent skip - SYNC contains older or same tip
-                }
-              }
-
-              // Only log when we're actually processing
-              debugLog('SYNC::🔄 Processing SYNC message', msg.id || 'no-id');
-
-              this.syncMutex.runExclusive(async () => {
-                LoadingState.setText('');
-                LoadingState.setSyncing(true);
-
-                if (!ablyService.isTipProcessed(syncObject.block.hash)) {
-                  ablyService.markTipAsProcessed(syncObject.block.hash);
-                }
-                await walletBg.syncService.setSync(syncObject);
-                LoadingState.setSyncing(false);
-              });
-            } catch (e) {
-              console.error('SYNC::❌ Error processing sync message:', e);
-            }
-          },
           onMessage: async (msg: Ably.InboundMessage) => {
-            debugLog('SYNC::📬 General message received on private channel:', msg);
+            // TODO: Implement notification handlers
+            switch (msg.name) {
+              case 'MULTISIG_UPDATE':
+                // Handle multisig signature notifications
+                break;
+              case 'PRICE_ALERT':
+                // Handle price alert notifications
+                break;
+              default:
+                debugLog('📬 Unhandled message on private channel:', msg);
+            }
           }
         });
         console.log('✅ Subscribed to Ably private channel');
       } catch (error: any) {
-        console.warn('SYNC::⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
+        console.warn('⚠️ Failed to subscribe to private channel (non-critical):', error.message || error);
       }
+      */
 
       // Subscribe to group channel (in background)
       try {

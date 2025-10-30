@@ -201,13 +201,6 @@ import { assetsToValue, parseAddress, toUTxO } from '@/shared/utils/converter';
 import { buildTx as buildTransaction } from '@/shared/utils/builder';
 import rules from '@/utils/rules';
 import { Network, WalletType } from '@/models/types';
-import {
-  Transaction,
-  TransactionOutput,
-  TransactionOutputs,
-  TransactionUnspentOutputs,
-  TransactionWitnessSet,
-} from '@emurgo/cardano-serialization-lib-browser';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';

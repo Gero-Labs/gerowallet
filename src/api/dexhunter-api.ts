@@ -110,5 +110,11 @@ export default {
   },
   async mCap(unit: string): Promise<any> {
     return axiosInstance.get(`/api/v2/mcap/${unit}`);
+  },
+  async walletBalance(addresses: string[]): Promise<any> {
+    const requestBody = {
+      addresses
+    };
+    return axiosInstance.post(`/api/v2/swap/wallet`, requestBody);
   }
 }

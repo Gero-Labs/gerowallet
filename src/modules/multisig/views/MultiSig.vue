@@ -210,7 +210,6 @@
 import { ref, computed, onMounted, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 // import { multisigStore } from '@/stores/modules/multisig';
-import { NativeScript } from '@emurgo/cardano-serialization-lib-browser';
 import Dexie from 'dexie';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';

@@ -64,7 +64,10 @@ export class SyncService {
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
         const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
         const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
-        await ablyService.publishToSyncChannel(chainEnum, networkEnum, {
+
+        // Use REST API instead of Ably publish to avoid rate limiting
+        // (Multiple wallet instances publishing to same Ably channel causes 429 errors)
+        const syncResponse = await blockchainApi.syncRest({
           chain: chainEnum,
           network: networkEnum,
           provider: Provider[this.walletBg.provider],
@@ -76,6 +79,11 @@ export class SyncService {
           withdrawable_amount,
           epoch,
         });
+
+        // Process the sync response immediately
+        if (syncResponse && syncResponse.success) {
+          await this.setSync(syncResponse);
+        }
       }
     } catch (err) {
       debugLog(err);
