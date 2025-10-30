@@ -75,6 +75,7 @@
           height="28"
           @click="currentDialog = dialogs.SWAP"
           :style="getButtonGlowStyle('swap')"
+          :disabled="!isSwapEnabledByFeatureFlag"
         >
           <v-avatar tile size="14">
             <v-img
@@ -181,7 +182,7 @@ const isSwapSupportedByNetwork = computed(() => {
 
 const isSwapDisabled = computed(() => {
   return !isSwapSupportedByNetwork.value;
-})
+});
 
 const isPerpetualsDisabled = computed(() => {
   // Enable for Cardano mainnet and preprod for testing

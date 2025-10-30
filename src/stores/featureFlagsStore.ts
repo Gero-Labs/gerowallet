@@ -26,7 +26,7 @@ export const featureFlagsStore = {
   /**
    * Initialize LaunchDarkly and load feature flags
    */
-  async initialize(clientSideID: string, user?: { key: string; name?: string; email?: string }): Promise<void> {
+  async initialize(clientSideID: string): Promise<void> {
     if (featureFlagsState.isInitialized) {
       return;
     }
@@ -34,7 +34,7 @@ export const featureFlagsStore = {
     featureFlagsState.isLoading = true;
 
     try {
-      await launchDarklyService.initialize(clientSideID, user);
+      await launchDarklyService.initialize(clientSideID, 'gero-extension');
       this.loadFlags();
       this.subscribeToFlagChanges();
       featureFlagsState.isInitialized = true;
@@ -73,7 +73,7 @@ export const featureFlagsStore = {
    * Reset flags (disable all until reloaded from LaunchDarkly)
    */
   reset(): void {
-    featureFlagsState.flags = { swapEnabled: false };
+    Vue.set(featureFlagsState, 'flags', { swapEnabled: false });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
   },

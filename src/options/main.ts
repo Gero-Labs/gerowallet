@@ -35,13 +35,11 @@ function loadPersistedWallet(): Promise<void> {
 }
 
 async function initializeFeatureFlags(): Promise<void> {
+  //@ts-ignore
   const ldClientId = import.meta.env.VITE_LD_CLIENT_SIDE_ID;
   if (ldClientId) {
     try {
-      await featureFlagsStore.initialize(ldClientId, {
-        key: 'isSwapEnabled',
-        name: 'isSwapEnabled',
-      });
+      await featureFlagsStore.initialize(ldClientId);
     } catch (error) {
       console.error('Failed to initialize feature flags:', error);
     }

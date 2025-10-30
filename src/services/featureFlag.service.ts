@@ -2,23 +2,24 @@ import * as LDClient from 'launchdarkly-js-client-sdk';
 
 interface FeatureFlagConfig {
   clientSideID: string;
-  user?: {
-    key: string;
-    name?: string;
-    email?: string;
-  };
 }
+
+type FlagChangeCallback = (newValue: any, oldValue: any) => void;
 
 class FeatureFlagService {
   private client: LDClient.LDClient | null = null;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
   private config: FeatureFlagConfig | null = null;
+  private listeners = new Map<string, FlagChangeCallback[]>();
 
   /**
    * Initialize LaunchDarkly client
+   * @param clientSideID - LaunchDarkly client-side ID
+   * @param contextKey - Optional context key (defaults to 'anonymous-user')
+   * @returns Promise that resolves when initialization is complete
    */
-  async initialize(clientSideID: string, user?: { key: string; name?: string; email?: string }): Promise<void> {
+  async initialize(clientSideID: string, contextKey?: string): Promise<void> {
     // If already initializing, return the existing promise
     if (this.initializationPromise) {
       return this.initializationPromise;
@@ -26,38 +27,58 @@ class FeatureFlagService {
 
     // If already initialized with the same config, skip
     if (this.isInitialized && this.config?.clientSideID === clientSideID) {
-      return Promise.resolve();
+      return;
     }
 
-    this.initializationPromise = this._initialize(clientSideID, user);
+    // Start initialization and cache the promise
+    this.initializationPromise = (async () => {
+      try {
+        this.config = { clientSideID };
+
+        // Create context with proper key
+        const context = {
+          kind: 'user',
+          key: contextKey || 'anonymous-user',
+        };
+
+        this.client = LDClient.initialize(clientSideID, context);
+        await this.client.waitForInitialization(5); // 5 second timeout
+        this.isInitialized = true;
+
+        // Re-attach existing listeners after initialization
+        this.reattachListeners();
+      } catch (error) {
+        console.warn('🚩 FeatureFlag initialization failed, will use fallback values:', error);
+        // Don't throw - feature flags should degrade gracefully
+        // The service will return fallback values when getFlag() is called
+        this.isInitialized = false;
+        this.client = null;
+      } finally {
+        this.initializationPromise = null;
+      }
+    })();
+
     return this.initializationPromise;
   }
 
-  private async _initialize(clientSideID: string, user?: { key: string; name?: string; email?: string }): Promise<void> {
-    try {
-      this.config = {
-        clientSideID,
-        user,
-      };
+  /**
+   * Re-attach all registered listeners after client initialization
+   */
+  private reattachListeners(): void {
+    if (!this.client) return;
 
-      const ldUser: LDClient.LDUser = user || {
-        key: 'anonymous',
-        anonymous: true,
-      };
-
-      this.client = LDClient.initialize(clientSideID, ldUser);
-      await this.client.waitForInitialization();
-      this.isInitialized = true;
-    } catch (error) {
-      console.error('FeatureFlag connection failed:', error);
-      throw error;
-    } finally {
-      this.initializationPromise = null;
+    for (const [flagKey, callbacks] of this.listeners.entries()) {
+      for (const callback of callbacks) {
+        this.client.on(`change:${flagKey}`, callback);
+      }
     }
   }
 
   /**
    * Get a feature flag value
+   * @param flagKey - The feature flag key
+   * @param fallbackValue - Value to return if flag is not available
+   * @returns The flag value or fallback
    */
   getFlag<T>(flagKey: string, fallbackValue: T): T {
     if (!this.isInitialized || !this.client) {
@@ -67,22 +88,72 @@ class FeatureFlagService {
     try {
       return this.client.variation(flagKey, fallbackValue) as T;
     } catch (error) {
-      console.error(`Error getting feature flag "${flagKey}":`, error);
+      console.error(`🚩 Error getting feature flag "${flagKey}":`, error);
       return fallbackValue;
     }
   }
 
   /**
-   * Subscribe to flag changes
+   * Get all feature flags as an object
+   * @returns Object with all flag values
    */
-  onFlagChange(flagKey: string, callback: (newValue: any, oldValue: any) => void): void {
+  getAllFlags(): Record<string, any> {
     if (!this.isInitialized || !this.client) {
-      return;
+      return {};
     }
 
-    this.client.on(`change:${flagKey}`, (current: any, previous: any) => {
-      callback(current, previous);
-    });
+    try {
+      return this.client.allFlags();
+    } catch (error) {
+      console.error('🚩 Error getting all flags:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Subscribe to flag changes
+   * @param flagKey - The feature flag key to watch
+   * @param callback - Function to call when flag changes
+   * @returns Unsubscribe function
+   */
+  onFlagChange(flagKey: string, callback: FlagChangeCallback): () => void {
+    // Store callback for re-attachment on reconnection
+    if (!this.listeners.has(flagKey)) {
+      this.listeners.set(flagKey, []);
+    }
+    this.listeners.get(flagKey)!.push(callback);
+
+    // Attach listener if client is ready
+    if (this.isInitialized && this.client) {
+      this.client.on(`change:${flagKey}`, callback);
+    }
+
+    // Return unsubscribe function
+    return () => {
+      const callbacks = this.listeners.get(flagKey);
+      if (callbacks) {
+        const index = callbacks.indexOf(callback);
+        if (index > -1) {
+          callbacks.splice(index, 1);
+        }
+        // Clean up empty arrays
+        if (callbacks.length === 0) {
+          this.listeners.delete(flagKey);
+        }
+      }
+
+      // Remove from client if available
+      if (this.client) {
+        this.client.off(`change:${flagKey}`, callback);
+      }
+    };
+  }
+
+  /**
+   * Check if the service is initialized
+   */
+  isReady(): boolean {
+    return this.isInitialized && this.client !== null;
   }
 
   /**
@@ -93,9 +164,10 @@ class FeatureFlagService {
       await this.client.close();
       this.client = null;
       this.isInitialized = false;
+      this.config = null;
+      this.listeners.clear();
     }
   }
-
 }
 
 // Export singleton instance
