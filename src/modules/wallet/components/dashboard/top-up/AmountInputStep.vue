@@ -24,6 +24,12 @@
       <span class="balance-value">₳{{ adaBalance }}</span>
     </div>
 
+    <!-- Minimum Requirement Notice -->
+    <div class="minimum-notice">
+      <v-icon color="#00c7f3" size="16" class="notice-icon">mdi-information</v-icon>
+      <span class="notice-text">Minimum top-up amount: 2 ADA</span>
+    </div>
+
     <!-- Amount Input Section -->
     <div class="amount-section">
       <!-- First Input (ADA or EUR based on switch state) -->
@@ -325,6 +331,30 @@ watch(
   font-size: 14px;
   line-height: 1.43;
   color: #75e0a7;
+}
+
+.minimum-notice {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  justify-content: center;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(0, 199, 243, 0.1);
+  border: 1px solid rgba(0, 199, 243, 0.3);
+  border-radius: $border-radius-md;
+  width: fit-content;
+}
+
+.notice-icon {
+  flex-shrink: 0;
+}
+
+.notice-text {
+  font-family: Inter;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.43;
+  color: #00c7f3;
 }
 
 .amount-section {
