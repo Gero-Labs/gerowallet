@@ -4,7 +4,7 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 
 ## Overview
 
-**Gero Wallet** (v2.6.0) is a multi-chain light wallet providing:
+**Gero Wallet** (v2.6.1) is a multi-chain light wallet providing:
 - Portfolio management and real-time price tracking
 - Cardano staking and delegation
 - Governance participation (CIP-1694 DRep)
