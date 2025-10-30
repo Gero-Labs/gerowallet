@@ -1,12 +1,15 @@
 <template>
-  <button class="gradient-button" @click="$emit('click')">
-    <span class="button-text">{{ text }}</span>
+  <button class="gradient-button" @click="$emit('click')" :disabled="disabled || loading">
+    <v-progress-circular v-if="loading" indeterminate size="20" width="2" color="black" class="button-loader" />
+    <span v-if="!loading" class="button-text">{{ text }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
 interface Props {
   text: string;
+  disabled?: boolean;
+  loading?: boolean;
 }
 
 defineProps<Props>();
@@ -26,6 +29,17 @@ defineEmits<{
   overflow: hidden;
   border-radius: 8px;
   color: #0c0e12 !important; // Dark text color (override white from mixin)
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #1f242f;
+    color: #666 !important;
+
+    &::before {
+      display: none;
+    }
+  }
 }
 
 .gradient-button::before {
@@ -48,6 +62,11 @@ defineEmits<{
 }
 
 .button-text {
+  position: relative;
+  z-index: 1;
+}
+
+.button-loader {
   position: relative;
   z-index: 1;
 }
