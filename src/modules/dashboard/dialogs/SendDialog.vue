@@ -2,10 +2,10 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="emit('close')"
-    title="Quick Send"
+    :title="$t('wallet.quickSend')"
     :loading="txSubmitLoading"
     :min-height="0"
-    :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`"
+    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
     :persistent="false"
   >
     <v-card-title style="display: block;" class="py-0">
@@ -70,24 +70,24 @@
           v-if="!keystoneScan"
           class="mt-10 mb-0"
         >
-          <b>Instructions</b>
+          <b>{{ $t('wallet.instructions') }}</b>
           <div v-if="loggedWallet?.type === WalletType.Keystone">
             <ul class="text-left" style="line-height: 1.5">
-              <li>Unlock your Keystone device.</li>
-              <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-              <li>Use your Keystone device to scan the QR code.</li>
-              <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+              <li>{{ $t('wallet.unlockKeystone') }}</li>
+              <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+              <li>{{ $t('wallet.useKeystoneToScan') }}</li>
+              <li>{{ $t('wallet.approveAndScanNext') }}</li>
             </ul>
           </div>
         </v-alert>
         <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
           <v-card-title>
-            Scan QR Code
+            {{ $t('wallet.scanQRCode') }}
           </v-card-title>
           <v-card-subtitle>
             <ul class="text-left" style="line-height: 1.5">
-              <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-              <li>Use a low density setting for animated QR codes if required.</li>
+              <li>{{ $t('wallet.adjustDistance') }}</li>
+              <li>{{ $t('wallet.useLowDensity') }}</li>
             </ul>
           </v-card-subtitle>
           <v-card-text class="text-center">
@@ -147,7 +147,7 @@
               dense
               v-model="spendingPassword"
               outlined
-              label="Spending Password"
+              :label="$t('wallet.spendingPassword')"
               :type="show1 ? 'text' : 'password'"
               :rules="[rules.required()]"
               hide-details
@@ -167,7 +167,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -194,6 +194,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
@@ -205,7 +206,7 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 // import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { toRefs, onMounted, computed, ref, watch } from 'vue';
+import { toRefs, onMounted, computed, ref, watch, getCurrentInstance } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
 // import { UREncoder } from '@keystonehq/keystone-sdk';
@@ -227,6 +228,8 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
+const { t } = useTranslation();
+
 const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
@@ -244,20 +247,20 @@ const spendingPassword = ref<string>('');
 const steps = ref<any[]>([
   {
     name: 'recipientDetails',
-    label: 'Recipient Details',
+    label: t('wallet.recipientDetails'),
   },
   {
     name: 'assetsToSend',
-    label: 'Assets to Send',
+    label: t('wallet.assetsToSend'),
   },
   {
     name: 'summary',
-    label: 'Summary',
+    label: t('wallet.summary'),
   },
 ]);
 const tooltip = ref<any>({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref<string>('');
@@ -448,7 +451,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -472,11 +475,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     txSubmitLoading.value = false;
     isSubmit.value = false;
@@ -490,7 +493,7 @@ const signLedgerTx = async () => {
     console.log('Using Bluetooth connection:', isBT.value);
 
     if (!tx.value) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(

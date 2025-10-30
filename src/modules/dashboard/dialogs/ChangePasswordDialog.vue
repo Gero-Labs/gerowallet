@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
-    title="Spending Security Settings"
-    subtitle="Modify your Spending Security Settings"
+    :title="$t('dashboard.spendingSecuritySettings')"
+    :subtitle="$t('dashboard.modifySecuritySettings')"
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
@@ -17,7 +17,7 @@
         <v-text-field
           :append-icon="show1 ? 'mdi-eye-off' : 'mdi-eye'"
           :type="show1 ? 'text' : 'password'"
-          label="Current Password"
+          :label="$t('dashboard.currentPassword')"
           dense
           outlined
           v-model="currentPassword"
@@ -26,7 +26,7 @@
           style="width: 350px"
         ></v-text-field>
         <v-divider class="mb-3"></v-divider>
-        <h4 class="mb-3">Spending Lock Type</h4>
+        <h4 class="mb-3">{{ $t('wallet.spendingLockType') }}</h4>
         <v-btn-toggle class="mb-6" color="primary" dense v-model="spendingPasswordType" mandatory block>
           <v-btn value="password" class="px-5">
             <v-icon>mdi-form-textbox-password</v-icon>
@@ -41,22 +41,22 @@
         <v-text-field
           :append-icon="show2 ? 'mdi-eye-off' : 'mdi-eye'"
           :type="show2 ? 'text' : 'password'"
-          label="New Password"
+          :label="$t('dashboard.newPassword')"
           dense
           outlined
           v-model="newPassword"
-          :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter, (newPassword !== currentPassword) || 'New password must be different from current password']"
+          :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter, (newPassword !== currentPassword) || $t('dashboard.newPasswordMustDifferent')]"
           @click:append="show2 = !show2"
           style="width: 350px"
         ></v-text-field>
         <v-text-field
           :append-icon="show3 ? 'mdi-eye-off' : 'mdi-eye'"
           :type="show3 ? 'text' : 'password'"
-          label="Confirm New Password"
+          :label="$t('dashboard.confirmNewPassword')"
           dense
           outlined
           v-model="confirmNewPassword"
-          :rules="[rules.required(), (newPassword === confirmNewPassword) || 'Passwords must match']"
+          :rules="[rules.required(), (newPassword === confirmNewPassword) || $t('dashboard.passwordsMustMatch')]"
           @click:append="show3 = !show3"
           style="width: 350px"
         ></v-text-field>
@@ -69,12 +69,14 @@
         :disabled="!valid"
         @click="updateSpendingPassword"
       >
-        UPDATE PASSWORD
+        {{ $t('dashboard.updatePassword') }}
       </v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { getCurrentInstance, nextTick, ref, watch, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import rules from '@/utils/rules';
@@ -114,10 +116,10 @@ const updateSpendingPassword = async (): Promise<void> => {
   if (vmProxy.$refs.form.validate()) {
     try {
       await geroStoreDefault.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value, spendingPasswordType.value)
-      snackbar.fireSuccess("Spending password successfully changed.")
+      snackbar.fireSuccess(t('dashboard.spendingPasswordChanged'))
       emit('close')
     } catch (e) {
-      snackbar.setError("Wrong password. Please try again.")
+      snackbar.setError(t('common.wrongPassword'))
     }
   }
 }

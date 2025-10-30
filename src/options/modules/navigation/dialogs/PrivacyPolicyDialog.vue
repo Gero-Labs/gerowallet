@@ -773,7 +773,11 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

@@ -1,13 +1,13 @@
 <template>
   <v-card flat outlined>
     <v-card-title class="d-flex align-center">
-      Action Permissions
+      {{ $t('governance.actionPermissions') }}
 
       <v-tooltip bottom>
         <template v-slot:activator="{ on, attrs }">
           <v-icon v-bind="attrs" v-on="on" small class="ml-2">mdi-information-outline</v-icon>
         </template>
-        <span> See who can take restricted actions</span>
+        <span> {{ $t('governance.seeWhoCanTakeActions') }}</span>
       </v-tooltip>
     </v-card-title>
     <v-card-text>
@@ -15,10 +15,10 @@
         <template v-slot:default>
           <thead>
             <tr>
-              <th class="text-left text-caption font-weight-medium">Permission</th>
-              <th class="text-center text-caption font-weight-medium">Everyone</th>
-              <th class="text-center text-caption font-weight-medium">All Members</th>
-              <th class="text-center text-caption font-weight-medium">Admin</th>
+              <th class="text-left text-caption font-weight-medium">{{ $t('governance.permission') }}</th>
+              <th class="text-center text-caption font-weight-medium">{{ $t('governance.everyone') }}</th>
+              <th class="text-center text-caption font-weight-medium">{{ $t('governance.allMembers') }}</th>
+              <th class="text-center text-caption font-weight-medium">{{ $t('governance.admin') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -52,7 +52,10 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
+
+const { t } = useTranslation();
 
 interface Permission {
   name: string;
@@ -64,46 +67,43 @@ interface Permission {
 
 const permissions = ref<Permission[]>([
   {
-    name: 'Vote on Snapshot',
-    description: 'Who can cast votes and comment on a Snapshot Governance Action?',
+    name: t('governance.voteOnSnapshot'),
+    description: t('governance.voteOnSnapshotDesc'),
     everyone: true,
     allMembers: true,
     admin: true,
   },
   {
-    name: 'Create Snapshot',
-    description: 'Who can create a new Snapshot Governance Action?',
+    name: t('governance.createSnapshot'),
+    description: t('governance.createSnapshotDesc'),
     everyone: false,
     allMembers: false,
     admin: true,
   },
   {
-    name: 'Approve Snapshot',
-    description: 'Who can approve a Pending Snapshot Governance Action before it goes public to a community-wide vote?',
+    name: t('governance.approveSnapshot'),
+    description: t('governance.approveSnapshotDesc'),
     everyone: false,
     allMembers: false,
     admin: true,
   },
   {
-    name: 'Manage Snapshot',
-    description:
-      'Who can edit a Snapshot Governance Action? This includes changing the name, description, or options, as well as deleting Snapshots.',
+    name: t('governance.manageSnapshot'),
+    description: t('governance.manageSnapshotDesc'),
     everyone: false,
     allMembers: false,
     admin: true,
   },
   {
-    name: 'Approve Incentive',
-    description:
-      'Who can approve Pending Incentive Completions submitted by community members who completed Quests and Raids?',
+    name: t('governance.approveIncentive'),
+    description: t('governance.approveIncentiveDesc'),
     everyone: false,
     allMembers: false,
     admin: true,
   },
   {
-    name: 'Manage Incentive',
-    description:
-      'Who can edit an Incentive? This includes changing the name, description, and amount, as well as deleting Incentives.',
+    name: t('governance.manageIncentive'),
+    description: t('governance.manageIncentiveDesc'),
     everyone: false,
     allMembers: false,
     admin: true,

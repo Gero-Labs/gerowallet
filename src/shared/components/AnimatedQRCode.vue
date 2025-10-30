@@ -17,9 +17,13 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { UR, UREncoder } from '@keystonehq/keystone-sdk';
 import QRCode from 'qrcode';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   cbor: {

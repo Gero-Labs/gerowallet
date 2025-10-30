@@ -34,13 +34,13 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs } from 'vue'
+import { ref, computed, toRefs, watch, getCurrentInstance } from 'vue'
 import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import Loading, { loadingState } from '@/stores/loading';
 import DexHunterStore from '@/stores/dexHunterStore';
 import CoinGeckoStore from '@/stores/coinGeckoStore';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import XerberusStore from '@/stores/xerberusStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import RealFiStore from '@/stores/realFiStore';
@@ -66,13 +66,31 @@ console.log('📱 Options page initializing charli3 store:', Charli3Store);
 
 
 const { loading, isRestoring, text } = toRefs(loadingState);
+const { config } = toRefs(walletStore);
 
 const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
+const vmProxy = getCurrentInstance()!.proxy as any;
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
+watch(() => config.value?.locale, async (newLocale, oldLocale) => {
+  if (newLocale && vmProxy.$i18n && newLocale !== oldLocale) {
+    // CRITICAL FIX: Load language file before switching (race condition fix)
+    const { loadLanguage } = await import('@/plugins/i18n');
+    try {
+      await loadLanguage(newLocale);
+      
+      // Update i18n locale ONLY after successful load
+      vmProxy.$i18n.locale = newLocale;
+      console.log('🌐 Language changed globally to:', newLocale);
+    } catch (error) {
+      console.error(`Failed to load language ${newLocale}:`, error);
+      // Don't update i18n if load failed
+    }
+  }
+}, { immediate: true, deep: true });
 </script>
 <style lang="scss">
 .v-application {

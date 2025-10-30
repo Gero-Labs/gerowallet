@@ -7,7 +7,7 @@
       <v-row>
         <v-col cols="12" xl="8" lg="8">
           <v-card flat outlined class="liquid-glass">
-            <v-card-title>Swap</v-card-title>
+            <v-card-title>{{ $t('swap.swap') }}</v-card-title>
             <v-card-text class="text-center justify-center">
               <SwapWidget></SwapWidget>
             </v-card-text>
@@ -15,7 +15,7 @@
         </v-col>
         <v-col cols="12" xl="4" lg="4">
           <v-card flat outlined class="fill-height liquid-glass">
-            <v-card-title>Pending Orders</v-card-title>
+            <v-card-title>{{ $t('swap.pendingOrders') }}</v-card-title>
           </v-card>
         </v-col>
       </v-row>

@@ -54,6 +54,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import CreateWallet from '@/options/modules/welcome/dialogs/CreateWallet.vue';
 import PairHardwareWallet from '@/options/modules/welcome/dialogs/PairHardwareWallet.vue';

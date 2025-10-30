@@ -26,7 +26,11 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   value: {

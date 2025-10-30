@@ -1,6 +1,6 @@
 <template>
   <div class="block-card">
-      <h3 class="warning-title">PIN</h3>
+      <h3 class="warning-title">{{ t('card.pin') }}</h3>
       <div class="form-row">
         <div class="pin-section">
           <div class="pin-container">
@@ -19,10 +19,9 @@
       </div>
       <div class="block-content">
         <div class="warning-section">
-          <h3 class="warning-title">Temporarily block your card</h3>
+          <h3 class="warning-title">{{ t('card.temporarilyBlockCard') }}</h3>
           <p class="warning-text">
-            Blocking your card will immediately stop all transactions. This action can't be reversed instantly — you'll
-            need to contact our support team to unblock it.
+            {{ t('card.blockingCardWarning') }}
           </p>
         </div>
 
@@ -34,20 +33,24 @@
             :loading="loading"
             @click="handleConfirmBlock"
           >
-            {{ isCardBlocked ? 'Card Already Blocked' : 'Block Card' }}
+            {{ isCardBlocked ? t('card.cardAlreadyBlocked') : t('card.blockCard') }}
           </v-btn>
         </div>
       </div>
 
     <div class="help-section">
-      <p class="help-text">Need help? Contact our support team to unblock or replace your card.</p>
+      <p class="help-text">{{ t('card.needHelpContactSupport') }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted } from 'vue';
 import cardStoreModule from '@/stores/modules/card';
+
+
+const { t } = useTranslation();
 
 const loading = ref(false);
 const showPin = ref(false);

@@ -3,12 +3,12 @@
     <v-layout class="py-0" column>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Wallet Name</h3>
-          <span class="helper my-0">Edit your wallet name</span>
+          <h3 style="color: white">{{ $t('settings.walletName') }}</h3>
+          <span class="helper my-0">{{ $t('settings.editWalletName') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <EditableTextField
-            placeholder="e.g. My New Wallet"
+            :placeholder="$t('settings.walletNamePlaceholder')"
             :rules="[
               rules.required(),
               rules.minCharacters(3),
@@ -25,8 +25,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Wallet Profile Picture</h3>
-          <span class="helper">Choose a profile picture for your wallet</span>
+          <h3 style="color: white">{{ $t('settings.walletProfilePicture') }}</h3>
+          <span class="helper">{{ $t('settings.chooseProfilePicture') }}</span>
         </v-col>
         <v-col cols="5" class="d-flex justify-space-between" style="align-content: center; flex-flow: wrap">
           <v-row no-gutters>
@@ -37,14 +37,14 @@
             </v-col>
             <v-col cols="12" class="py-2">
               <v-btn block outlined color="grey" autocapitalize="on" @click="uploadPicture">
-                <span>Upload Picture</span>
+                <span>{{ $t('settings.uploadPicture') }}</span>
                 <v-icon right dark> mdi-cloud-upload-outline </v-icon>
               </v-btn>
               <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="onFileChange" />
             </v-col>
             <v-col cols="12" class="py-2">
               <v-btn block outlined color="grey" disabled>
-                <span>Choose NFT</span>
+                <span>{{ $t('settings.chooseNFT') }}</span>
                 <v-icon right dark> mdi-account-box-outline </v-icon>
               </v-btn>
             </v-col>
@@ -53,8 +53,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Currency Preference</h3>
-          <span class="helper">Choose your preferred currency</span>
+          <h3 style="color: white">{{ $t('settings.currencyPreference') }}</h3>
+          <span class="helper">{{ $t('settings.choosePreferredCurrency') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
@@ -71,8 +71,8 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Display Language</h3>
-          <span class="helper">Set the language for Gero Dashboard</span>
+          <h3 style="color: white">{{ $t('settings.displayLanguage') }}</h3>
+          <span class="helper">{{ $t('settings.setLanguageHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-select
@@ -108,21 +108,21 @@
       </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Region</h3>
-          <span class="helper">Choose region, affects dates & time</span>
+          <h3 style="color: white">{{ $t('settings.region') }}</h3>
+          <span class="helper">{{ $t('settings.regionHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
-          <v-text-field outlined disabled dense value="English (US)" hide-details></v-text-field>
+          <v-text-field outlined disabled dense :value="$t('settings.regionValue')" hide-details></v-text-field>
         </v-col>
       </v-row>
       <v-row no-gutters class="pt-2">
         <v-col cols="7" class="text-left">
-          <h3 style="color: white">Welcome Guide</h3>
-          <span class="helper">Display the introductory guide to help you navigate your wallet</span>
+          <h3 style="color: white">{{ $t('settings.welcomeGuide') }}</h3>
+          <span class="helper">{{ $t('settings.welcomeGuideHelper') }}</span>
         </v-col>
         <v-col cols="5" style="align-content: center">
           <v-btn block outlined color="grey" @click="showGuide">
-            <span>Show Guide</span>
+            <span>{{ $t('settings.showGuide') }}</span>
           </v-btn>
         </v-col>
       </v-row>
@@ -130,6 +130,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
@@ -144,6 +145,9 @@ import { setWalletConfiguration } from '@/db/wallet-db';
 
 // Define emits
 const emit = defineEmits(['close']);
+
+// Translation
+const { t } = useTranslation();
 
 // Get store instance
 const { loggedWallet, config } = toRefs(walletStore);
@@ -198,11 +202,11 @@ const avatar = computed(() => {
 
 // Validation functions
 const invalidWalletNames = () => {
-  return (value: string) => !otherWalletNames.value.includes(value) || 'Wallet name already taken.';
+  return (value: string): string | boolean => !otherWalletNames.value.includes(value) || t('settings.walletNameTaken');
 };
 
 const existedWalletName = () => {
-  return (value: string) => value !== loggedWallet.value.name || '';
+  return (value: string): string | boolean => value !== loggedWallet.value.name || '';
 };
 
 // Methods
@@ -236,15 +240,26 @@ const onFileChange = async (event: Event) => {
 };
 
 // Watchers
-watch(loc, val => {
+watch(loc, async (val) => {
   if (val) {
     const iso = Object.values(languages).find(value => value.name === val)?.iso;
     if (iso) {
-      WalletStore.setLocale(iso);
-      vmProxy.$i18n.locale = iso;
+      // CRITICAL FIX: Load language file before switching (race condition fix)
+      const { loadLanguage } = await import('@/plugins/i18n');
+      try {
+        await loadLanguage(iso);
+
+        // Update store and i18n locale ONLY after successful load
+        await WalletStore.setLocale(iso);
+        vmProxy.$i18n.locale = iso;
+        await vmProxy.$nextTick();
+      } catch (error) {
+        console.error(`Failed to load language ${iso}:`, error);
+        // Don't update store if load failed - will cause UI inconsistency
+      }
     }
   }
-});
+}, { immediate: false });
 
 // Lifecycle
 onMounted(() => {

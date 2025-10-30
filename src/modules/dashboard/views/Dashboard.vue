@@ -190,6 +190,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs, ref, getCurrentInstance, watch } from 'vue';
 import PortfolioChart from '../components/PortfolioChart.vue';
 import NoTokensCard from '../components/NoTokensCard.vue';
@@ -218,6 +219,9 @@ import networks from '@/utils/networks';
 import { getBalance } from '@/chrome/serialization';
 // import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 
+// Translation composable
+const { t } = useTranslation();
+
 // Router (Vue 2 style)
 const instance = getCurrentInstance();
 
@@ -243,8 +247,8 @@ const isLoading = ref(false);
 const carouselItems = ref<CarouselItem[]>([
   {
     id: 'gero-debit-card',
-    title: 'Gero Card',
-    subtitle: 'Top up ADA instantly!',
+    title: t('card.geroCard'),
+    subtitle: t('card.topUpAdaInstantly'),
     logoAlt: 'Gero Logo',
     backgroundImage: assets.debitCardBgImage,
     cardImage: assets.debitCardImage,
@@ -253,8 +257,8 @@ const carouselItems = ref<CarouselItem[]>([
   },
   {
     id: 'ada-cashback',
-    title: 'ADA Cashback',
-    subtitle: 'Pay online, and receive ADA Cashback! \n Click to see deals!',
+    title: t('cashback.adaCashback'),
+    subtitle: `${t('cashback.payOnlineReceiveCashback')} \n ${t('cashback.clickToSeeDeals')}`,
     logoAlt: 'Gero Logo',
     backgroundImage: assets.cashbackCarouselImage,
     cardImage: assets.cashbackImage,
@@ -267,8 +271,8 @@ const carouselItems = ref<CarouselItem[]>([
 const apexCarouselItems = ref<CarouselItem[]>([
   {
     id: 'apex-welcome',
-    title: 'Apex Fusion',
-    subtitle: 'Next-generation blockchain technology',
+    title: t('dashboard.apexFusion'),
+    subtitle: t('dashboard.nextGenerationBlockchain'),
     logo: assets.geroDashboardApex,
     logoAlt: 'Apex Fusion Logo',
     backgroundImage: assets.apexBgDashboard,
