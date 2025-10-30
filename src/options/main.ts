@@ -64,7 +64,7 @@ loadPersistedWallet().then(async () => {
   Vue.directive('click-outside', ClickOutside);
   Vue.component('notifications', Notifications);
 
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
       if (saved?.loggedWallet?.id && saved?.config?.locale) {
         console.log('🌐 Setting initial locale from storage:', saved.config.locale);
@@ -82,6 +82,4 @@ loadPersistedWallet().then(async () => {
       render: h => h(App)
     }).$mount('#app');
   });
-}
-
-initializeApp();
+});
