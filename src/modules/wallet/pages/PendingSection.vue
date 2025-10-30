@@ -23,11 +23,11 @@
               <path d="M12 6v6l4 2" stroke="#2DF0F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <h2 class="pending-title">Account Overview Pending</h2>
-          <p class="pending-description">Your account overview will be available once your card has been issued and activated.</p>
+          <h2 class="pending-title">{{ $t('card.accountOverviewPending') }}</h2>
+          <p class="pending-description">{{ $t('card.accountOverviewAvailableOnce') }}</p>
           <div class="pending-status">
             <div class="status-indicator"></div>
-            <span class="status-text">Processing your application...</span>
+            <span class="status-text">{{ $t('card.processingYourApplication') }}</span>
           </div>
         </div>
       </div>
@@ -40,6 +40,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import ApplicationStatusSection from '@/modules/wallet/components/ApplicationStatusSection.vue';
 // import AccountOverviewHeader from '@/modules/wallet/components/dashboard/AccountOverviewHeader.vue';
 // import BalanceCardsSection from '@/modules/wallet/components/dashboard/BalanceCardsSection.vue';

@@ -1,7 +1,7 @@
 <template>
   <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
     <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcome') }}
+      {{ $t('welcomeMessage') }}
     </v-card-title>
     <v-card-subtitle class="text-center px-6" style="font-size: 20px">
       {{ $t('chooseAWallet') }}
@@ -49,6 +49,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import { WalletType } from '@/models/types';
 import { computed, ref, toRefs, getCurrentInstance } from 'vue';
@@ -58,6 +59,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
+
+
+const { t } = useTranslation();
 
 const selectedWallet = ref<string | null>(null);
 

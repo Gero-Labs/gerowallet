@@ -19,18 +19,18 @@
             :complete="step > 1"
             step="1"
           >
-            Type
+            {{ $t('welcome.type') }}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step
             :complete="step > 2"
             step="2"
           >
-            Pairing
+            {{ $t('welcome.pairing') }}
           </v-stepper-step>
           <v-divider></v-divider>
           <v-stepper-step step="3">
-            Wallet Setup
+            {{ $t('welcome.walletSetup') }}
           </v-stepper-step>
         </v-stepper-header>
 
@@ -54,10 +54,10 @@
                           prominent
                           border="left"
                         >
-                          Hardware wallets, a type of cold wallet, provide one of the most secure ways to keep cryptocurrencies. They work by storing your private keys in an external, physical device (usually a USB or Bluetooth device)
+                          {{ $t('welcome.hardwareWalletDescription') }}
                         </v-alert>
                         <v-card-title class="justify-center" style="font-weight: 700; word-break: break-word">
-                          What Type of Hardware Wallet Would You Like to Connect With?
+                          {{ $t('welcome.hardwareWalletType') }}
                         </v-card-title>
                         <v-card-text class="text-center">
                           <v-item-group v-model="walletType" active-class="primary" class="pb-10">
@@ -92,7 +92,7 @@
                                           {{ item.support }}
                                         </v-card-subtitle>
                                         <v-card-subtitle class="pa-0">
-                                          <v-chip color="red" small v-if="!item.enabled">Soon</v-chip>
+                                          <v-chip color="red" small v-if="!item.enabled">{{ $t('welcome.soon') }}</v-chip>
                                         </v-card-subtitle>
                                         <v-scroll-y-transition>
                                           <v-icon color="white" style="position: absolute; right: 10px; bottom: 10px;" v-if="active">
@@ -126,7 +126,7 @@
                     elevation="0"
                     :disabled="!valid"
                   >
-                    Continue
+                    {{ $t('welcome.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -137,9 +137,9 @@
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 526px; min-height: 591px">
                 <v-card-text class="px-0 d-flex row no-gutters justify-space-around mt-2">
-                  <img v-if="walletType === WalletType.Ledger" :src="assets.connectLedgerSvg" alt="Connect Ledger">
-                  <img v-if="walletType === WalletType.Trezor" :src="assets.connectTrezorSvg" alt="Connect Trezor">
-                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="assets.connectKeystoneSvg" style="width: 230px; height: 126px" alt="Connect Keystone">
+                  <img v-if="walletType === WalletType.Ledger" :src="assets.connectLedgerSvg" :alt="$t('wallet.connectLedger')">
+                  <img v-if="walletType === WalletType.Trezor" :src="assets.connectTrezorSvg" :alt="$t('wallet.connectTrezor')">
+                  <img v-if="walletType === WalletType.Keystone && !keystoneScan" :src="assets.connectKeystoneSvg" style="width: 230px; height: 126px" :alt="$t('wallet.connectKeystone')">
                   <v-alert
                     color="white"
                     dense
@@ -148,40 +148,40 @@
                     prominent
                     border="left"
                   >
-                    <b>Instructions</b>
+                    <b>{{ $t('welcome.instructions') }}</b>
                     <div v-if="walletType === WalletType.Ledger">
                       <ul class="text-left" style="line-height: 1.5" >
-                        <li>Setup your {{walletType}} hardware wallet if it's new.</li>
-                        <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
-                        <li>Unlock the hardware wallet by entering your pin code on the device.</li>
-                        <li>Open the Cardano app on the hardware wallet.</li>
+                        <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
+                        <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
+                        <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
+                        <li>{{ $t('welcome.openCardanoApp') }}</li>
                       </ul>
                     </div>
                     <div v-if="walletType === WalletType.Trezor">
                       <ul class="text-left" style="line-height: 1.5" >
-                        <li>Setup your {{walletType}} hardware wallet if it's new.</li>
-                        <li>Install the Cardano app on your {{walletType}} if you haven't already.</li>
-                        <li>Unlock the hardware wallet by entering your pin code on the device.</li>
-                        <li>Open the Cardano app on the hardware wallet.</li>
+                        <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
+                        <li>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
+                        <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
+                        <li>{{ $t('welcome.openCardanoApp') }}</li>
                       </ul>
                     </div>
                     <div v-else-if="walletType === WalletType.Keystone && !keystoneScan">
                       <ul class="text-left" style="line-height: 1.5">
-                        <li>Unlock your Keystone device.</li>
-                        <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-                        <li>Use your Keystone device to scan the QR code.</li>
-                        <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+                        <li>{{ $t('welcome.unlockKeystone') }}</li>
+                        <li>{{ $t('welcome.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+                        <li>{{ $t('welcome.scanQRWithKeystone') }}</li>
+                        <li>{{ $t('welcome.approveOnKeystone') }}</li>
                       </ul>
                     </div>
                     <div v-else-if="walletType === WalletType.Keystone && keystoneScan">
                       <ul class="text-left" style="line-height: 1.5">
-                        <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-                        <li>Use a low density setting for animated QR codes if required.</li>
+                        <li>{{ $t('welcome.adjustDistance') }}</li>
+                        <li>{{ $t('welcome.lowDensitySetting') }}</li>
                       </ul>
                     </div>
                   </v-alert>
                   <div style="display: flex;" v-if="walletType === WalletType.Ledger">
-                    <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBluetooth" />
+                    <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBluetooth" />
                   </div>
                   <div id="qr-code" ref="qrCode" v-else-if="walletType === WalletType.Keystone && !keystoneScan"> </div>
                   <div class="qr-scanner" v-else-if="walletType === WalletType.Keystone && keystoneScan" style="height: 334px">
@@ -206,14 +206,14 @@
                     @click="backToStepOne"
                     elevation="0"
                   >
-                    Back
+                    {{ $t('welcome.back') }}
                   </v-btn>
                   <v-btn
                     color="primary"
                     @click="walletCreationStep2"
                     elevation="0"
                   >
-                    Continue
+                    {{ $t('welcome.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -223,20 +223,20 @@
             <v-form ref="form3" v-model="valid3">
               <v-card flat class="transparent d-flex row fill-height no-gutters" style="max-width: 534px; min-height: 591px" :disabled="creatingWalletLoader">
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
+                  <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">{{ $t('welcome.chooseNameToIdentify') }}
                   </h3>
                   <v-text-field
                     style="width: 100%"
                     v-model="newWallet.name"
                     dense
                     filled
-                    label="Wallet Name"
-                    placeholder="e.g. My New Wallet"
+                    :label="$t('welcome.walletName')"
+                    :placeholder="$t('welcome.walletNamePlaceholder')"
                     :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                     :disabled="creatingWalletLoader"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details :disabled="creatingWalletLoader">
                     <v-radio value="green">
                       <template v-slot:label>
@@ -290,8 +290,8 @@
                   >
                     <template v-slot:label>
                       <div>
-                        I have read and agree to the
-                        <a @click.stop href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true" target="_blank">Terms of Service</a>.
+                        {{ $t('welcome.agreeToTerms') }}
+                        <a @click.stop href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true" target="_blank">{{ $t('welcome.termsOfService') }}</a>.
                       </div>
                     </template>
                   </v-checkbox>
@@ -306,7 +306,7 @@
                     :disabled="!valid3 || creatingWalletLoader"
                     class=""
                   >
-                    Continue
+                    {{ $t('welcome.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -334,6 +334,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, getCurrentInstance, computed, nextTick } from 'vue';
 import rules from "@/utils/rules";
 import { purpose, Theme, WalletType } from '@/models/types';
@@ -361,6 +362,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits(['dialogChange']);
 
+const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy as any
 const router = vmProxy.$router;
 
@@ -385,25 +387,25 @@ const form3 = ref(null);
 
 const walletTypes = [
   {
-    name: 'Ledger',
-    description: 'The Ledger cryptocurrency hardware wallet made by Ledger, a company headquartered in Paris, France.',
+    name: t('wallet.ledger'),
+    description: t('wallet.ledgerDescription'),
     enabled: true,
     icon: assets.ledgerLogoSvg,
-    support: 'Nano S, Nano S Plus, Nano X'
+    support: t('wallet.ledgerSupport')
   },
   {
-    name: 'Trezor',
-    description: 'Trezor comes from SatoshiLabs, based in the Czech Republic.',
+    name: t('wallet.trezor'),
+    description: t('wallet.trezorDescription'),
     enabled: false,
     icon: assets.trezorLogoSvg,
-    support: 'Model T, Safe 3'
+    support: t('wallet.trezorSupport')
   },
   {
-    name: 'Keystone',
-    description: 'A Hong Kong-based firm provides a completely air-gapped, open-source QR code communication hardware wallet featuring a 4-inch touchscreen and a fingerprint scanner.',
+    name: t('wallet.keystone'),
+    description: t('wallet.keystoneDescription'),
     enabled: false,
     icon: assets.keystoneLogoSvg,
-    support: '3 Pro'
+    support: t('wallet.keystoneSupport')
   },
 ];
 

@@ -5,7 +5,7 @@
         <v-card class="transparent" flat>
           <v-tabs v-model="tab" centered icons-and-text background-color="transparent">
             <v-tab>
-              Gero DAO
+              {{ $t('governance.geroDAO') }}
               <v-avatar size="24">
                 <v-img
                   :src="assets.dao"
@@ -26,7 +26,7 @@
               </v-avatar>
             </v-tab>
             <v-tab>
-              Cardano Governance
+              {{ $t('governance.cardanoGovernance') }}
               <v-avatar size="24">
                 <v-img
                   :src="assets.cardanoSvg"

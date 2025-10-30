@@ -1,39 +1,39 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Warning - Continue with Caution!" ref="popupHeader" :show-website="!($route.query['website'] === 'undefined' || Object.keys(this.$route.query).length === 0)" :show-wallet="false">
-      <v-card-subtitle class="sub-title text-center my-2 py-2" style="color: #00221c; font-size: 19px">This website is blacklisted by Cardano Shield</v-card-subtitle>
+    <PopupHeader :title="String($t('navigation.warningContinueCaution'))" ref="popupHeader" :show-website="!($route.query['website'] === 'undefined' || Object.keys($route.query || {}).length === 0)" :show-wallet="false">
+      <v-card-subtitle class="sub-title text-center my-2 py-2" style="color: #00221c; font-size: 19px">{{ $t('navigation.websiteBlacklisted') }}</v-card-subtitle>
       <v-card-text class="d-flex flex-column justify-center py-0 px-3" id="main-content" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height:0;">
-        By checking the boxes below, you understand and acknowledge the following:
+        {{ $t('navigation.acknowledgeFollowing') }}
         <div class="checkboxes">
           <v-checkbox
             v-model="checkbox1"
-            label="This Website is blacklisted or suspected of being malicious and may be impersonating another legitimate website."
+            :label="$t('navigation.websiteBlacklistedWarning')"
             hide-details
             required
-            :rules="[v => !!v || 'You must agree to continue!']"
+            :rules="[v => !!v || $t('navigation.mustAgreeToContinue')]"
           />
           <v-checkbox
             v-model="checkbox2"
-            label="This Website may attempt to steal my funds by presenting false or misleading information"
+            :label="$t('navigation.websiteMayStealFunds')"
             hide-details
             required
-            :rules="[v => !!v || 'You must agree to continue!']"
+            :rules="[v => !!v || $t('navigation.mustAgreeToContinue')]"
           />
         </div>
       </v-card-text>
       <v-card-actions class="d-flex flex-column">
         <div class="my-2">
-          <v-btn id="report-btn" @click="reportSite">Report this site as safe!</v-btn>
+          <v-btn id="report-btn" @click="reportSite">{{ $t('navigation.reportSiteAsSafe') }}</v-btn>
         </div>
         <div class="my-2 d-flex" style="justify-content: space-between; width: 100%">
           <v-btn outlined @click="safety">
             <v-icon small class="mr-1">
               mdi-arrow-left
             </v-icon>
-            Back to Safety
+            {{ $t('navigation.backToSafety') }}
           </v-btn>
           <v-btn class="geroButton" @click="proceed" :disabled="!valid" style="text-transform: uppercase; color: black!important;">
-            Continue to site
+            {{ $t('navigation.continueToSite') }}
             <v-icon small class="mr-1" style="color: black!important;">
               mdi-arrow-right
             </v-icon>

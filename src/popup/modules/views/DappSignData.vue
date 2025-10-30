@@ -1,6 +1,6 @@
 <template>
   <v-form ref="form" v-model="valid" class="fill-height">
-    <PopupHeader title="Sign Data" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
+    <PopupHeader :title="String($t('navigation.signData'))" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
@@ -30,8 +30,8 @@
                     v-model="spendingPassword"
                     outlined
                     hide-details
-                    placeholder="Type your spending password"
-                    label="Spending Password"
+                    :placeholder="$t('navigation.typeYourSpendingPassword')"
+                    :label="$t('wallet.spendingPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required()]"
                     required
@@ -49,7 +49,7 @@
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Ledger" class="pt-3 pb-0">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('wallet.usb')" icon-left="mdi-usb" :text-right="$t('wallet.bluetooth')" icon-right="mdi-bluetooth" :value="isBT" @input="isBT = $event" :disabled="loading" />
               </v-card-subtitle>
             </v-col>
             <v-col cols="6">
@@ -65,7 +65,7 @@
                 @click="sign"
                 :loading="loading"
                 :disabled="!valid || loading">
-                {{txAutoSubmit ? 'Sign & Confirm' : !signature ? 'SIGN' : 'CONFIRM'}}
+                {{txAutoSubmit ? $t('wallet.signAndConfirm') : !signature ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
             </v-col>
           </v-row>
@@ -75,6 +75,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onMounted, toRefs, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
@@ -90,6 +91,8 @@ import { SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano/d
 import networks from '@/utils/networks';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 
+const { t } = useTranslation();
+
 const { loggedWallet, config, keys } = toRefs(walletStore);
 const vmProxy = getCurrentInstance()!.proxy as any;
 const spendingPassword = ref('');
@@ -99,7 +102,7 @@ const message = ref('');
 const valid = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!'
+  text: t('wallet.wrongSpendingPassword')
 });
 const isBT = ref(false);
 const loading = ref(false);
@@ -211,10 +214,10 @@ const sign = async () => {
         switch (error.code) {
           case 0x5515:
           case 0x6E11:
-            snackbar.setError('Ledger device is locked. Please unlock it and try again.');
+            snackbar.setError(String(t('wallet.ledgerDeviceLocked')));
             break;
           default:
-            snackbar.setError('Ledger device error: ' + error.message);
+            snackbar.setError(String(t('wallet.ledgerDeviceError', { message: error.message })));
         }
       } else {
         console.log(e);

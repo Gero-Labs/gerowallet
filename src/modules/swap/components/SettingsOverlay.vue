@@ -12,7 +12,7 @@
           <v-icon>mdi-cog</v-icon>
         </v-btn>
         <v-spacer></v-spacer>
-        Settings
+        {{ $t('swap.settings') }}
         <v-spacer></v-spacer>
         <v-btn small icon @click="closeOverlay">
           <v-icon>mdi-window-close</v-icon>
@@ -21,20 +21,20 @@
       <v-card-text class="d-flex justify-space-around justify-center flex-column" style="height: calc(100% - 48px)">
         <div class="d-flex justify-space-between justify-center">
           <span class="d-flex flex-column">
-            <span style="font-size: 13px; color: white">Slippage Tolerance</span>
+            <span style="font-size: 13px; color: white">{{ $t('swap.slippageTolerance') }}</span>
             <v-btn class="px-0 justify-start" text plain :ripple="false" small
                    style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                    href="https://www.investopedia.com/terms/s/slippage.asp" target="_blank">
-              Learn more
+              {{ $t('swap.learnMore') }}
             </v-btn>
           </span>
           <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="slippageToleranceType"
                         style="align-items: center;">
             <v-btn small color="black" :value="'auto'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
-              AUTO
+              {{ $t('swap.auto') }}
             </v-btn>
             <v-btn small color="black" :value="'custom'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
-              CUSTOM
+              {{ $t('swap.custom') }}
             </v-btn>
           </v-btn-toggle>
         </div>
@@ -82,7 +82,7 @@
         </div>
         <div class="d-flex justify-space-between justify-center">
                         <span class="d-flex flex-column">
-                          <span style="font-size: 13px; color: white">Unlimited Slippage</span>
+                          <span style="font-size: 13px; color: white">{{ $t('swap.unlimitedSlippage') }}</span>
                           <v-tooltip
                             v-model="unlimitedSlippageTooltipEnabled"
                             bottom
@@ -92,11 +92,11 @@
                                      style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                                      @click="unlimitedSlippageTooltipEnabled = true"
                                      v-click-outside="disableUnlimitedSlippageTooltip">
-                                Learn more
+                                {{ $t('swap.learnMore') }}
                               </v-btn>
                             </template>
                             <div style="width: 190px; word-break: break-word; font-size: 10px;">
-                              The order will be filled at any price and with no limits on slippage. Due to price changes from earlier orders, this could result in an unattractive price. Use with caution.
+                              {{ $t('swap.unlimitedSlippageWarning') }}
                             </div>
                           </v-tooltip>
                         </span>
@@ -123,11 +123,11 @@
                                      style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                                      @click="automaticSlippageTooltipEnabled = true"
                                      v-click-outside="disableAutomaticSlippageTooltip">
-                                Learn more
+                                {{ $t('common.learnMore') }}
                               </v-btn>
                             </template>
                             <div style="width: 190px; word-break: break-word; font-size: 10px;">
-                              The slippage tolerance is automatically adjusted based on the size of the swap to always account for the price impact plus a 1% buffer.
+                              {{ $t('swap.slippageToleranceDescription') }}
                             </div>
                           </v-tooltip>
                         </span>

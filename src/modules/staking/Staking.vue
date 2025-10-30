@@ -10,23 +10,23 @@
             <v-list-item two-line>
               <v-list-item-content>
                 <v-list-item-title class="staking-header">
-                  Available Stake Pools
+                  {{ $t('staking.availableStakePools') }}
                   <v-spacer></v-spacer>
                   <div class="staking-pro-toggle">
-                    <p class="mr-5 my-auto">PRO</p>
+                    <p class="mr-5 my-auto">{{ $t('staking.pro') }}</p>
                     <v-switch inset dense v-model="isPro" hide-details class="staking-switch"> </v-switch>
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
-                  Earn rewards by staking your
+                  {{ $t('staking.earnRewardsByStakingDesc') }}
                   {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with
                   {{ loggedWallet?.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
-                <v-card-title class="staking-support-title"> Consider supporting us </v-card-title>
+                <v-card-title class="staking-support-title"> {{ $t('staking.considerSupportingUsShort') }} </v-card-title>
                 <v-card-subtitle>
-                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">Stake with GERO</v-btn>
+                  <v-btn small class="geroButton" style="color: black!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -39,7 +39,7 @@
                   clearable
                   outlined
                   dense
-                  label="Search by pool name or ticker"
+                  :label="$t('staking.searchPoolNameTicker')"
                   prepend-inner-icon="mdi-magnify"
                   hide-details
                 >
@@ -49,7 +49,7 @@
                 <v-switch
                   dense
                   v-model="hideSaturated"
-                  label="Hide Saturated"
+                  :label="$t('staking.hideSaturated')"
                   hide-details
                   class="staking-filter-switch"
                 ></v-switch>
@@ -58,7 +58,7 @@
                 <v-switch
                   dense
                   v-model="pledgeMet"
-                  label="Pledge Met"
+                  :label="$t('staking.pledgeMet')"
                   hide-details
                   class="staking-filter-switch"
                 ></v-switch>
@@ -70,7 +70,7 @@
             <div v-if="poolsError" class="text-center py-4">
               <v-icon color="error" large>mdi-alert</v-icon>
               <p class="mt-2 error--text">{{ poolsError }}</p>
-              <v-btn @click="reloadWithFilters" color="primary">Retry</v-btn>
+              <v-btn @click="reloadWithFilters" color="primary">{{ $t('staking.retry') }}</v-btn>
             </div>
             <v-data-table
               v-if="isPro"
@@ -375,7 +375,7 @@
                     <v-card-text class="pt-0">
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span class="pool-card-label">Saturation</span>
+                          <span class="pool-card-label">{{ $t('staking.saturation') }}</span>
                         </v-col>
                         <v-col cols="7">
                           <v-progress-linear
@@ -391,7 +391,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span class="pool-card-label">Pledge</span>
+                          <span class="pool-card-label">{{ $t('staking.pledge') }}</span>
                         </v-col>
                         <v-col cols="7">
                           <v-chip x-small color="#085D3A" class="pool-pledge-chip" v-if="loggedWallet">
@@ -416,7 +416,7 @@
                       </v-row>
                       <v-row no-gutters>
                         <v-col cols="5">
-                          <span class="pool-card-label">Fees</span>
+                          <span class="pool-card-label">{{ $t('staking.fees') }}</span>
                         </v-col>
                         <v-col cols="7">
                           <span class="pool-card-value" v-if="pool && loggedWallet"
@@ -462,7 +462,8 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount, getCurrentInstance } from 'vue';
 import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
@@ -477,6 +478,9 @@ import filters from '@/shared/utils/filters';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
+
+
+const { t } = useTranslation();
 
 const { config, loggedWallet, account, utxos, keys } = toRefs(walletStore);
 const { epochParams, tip } = toRefs(networkStore);
@@ -544,18 +548,18 @@ const sortDesc = ref<boolean>(true);
 
 const headers = computed(() => {
   return [
-    { text: 'Name', sortable: true, align: 'left', value: 'name' },
+    { text: t('common.name'), sortable: true, align: 'left', value: 'name' },
     {
-      text: 'Delegators',
+      text: t('staking.delegators'),
       sortable: true,
       align: 'center d-none d-lg-table-cell',
       value: 'live_delegators',
       width: 122,
     },
-    { text: 'ROS (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
-    { text: 'Blocks', sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
+    { text: t('staking.ros') + ' (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
+    { text: t('staking.blocks'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
     {
-      text: 'Saturation',
+      text: t('staking.saturation'),
       sortable: true,
       align: 'center',
       value: 'live_saturation',
@@ -565,8 +569,8 @@ const headers = computed(() => {
         return value < 99;
       },
     },
-    { text: 'Fees', sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-    { text: 'Pledge', sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
+    { text: t('staking.fees'), sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
+    { text: t('staking.pledge'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
   ];
 });
 
@@ -637,7 +641,7 @@ async function delegate(row: any) {
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     const certificates: Cardano.Certificate[] = [];
@@ -688,9 +692,9 @@ async function delegate(row: any) {
   } catch (error: any) {
     console.error('Error building delegation transaction:', error);
     if (error.message?.includes('UTxO Balance Insufficient')) {
-      snackbar.setError('Insufficient ADA to complete staking transaction');
+      snackbar.setError(t('staking.insufficientAdaForStaking'));
     } else {
-      snackbar.setError('Failed to build delegation transaction');
+      snackbar.setError(t('staking.failedToBuildDelegation'));
     }
   }
 }

@@ -64,10 +64,24 @@ loadPersistedWallet().then(async () => {
   Vue.directive('click-outside', ClickOutside);
   Vue.component('notifications', Notifications);
 
-  new Vue({
-    vuetify,
-    i18n,
-    router,
-    render: h => h(App)
-  }).$mount('#app');
-});
+  return new Promise((resolve) => {
+    chrome.storage.local.get('walletStore', ({ walletStore: saved }) => {
+      if (saved?.loggedWallet?.id && saved?.config?.locale) {
+        console.log('🌐 Setting initial locale from storage:', saved.config.locale);
+        i18n.locale = saved.config.locale;
+      } else {
+        console.log('🌐 Using default locale: us');
+      }
+      resolve();
+    });
+  }).then(() => {
+    new Vue({
+      vuetify,
+      i18n,
+      router,
+      render: h => h(App)
+    }).$mount('#app');
+  });
+}
+
+initializeApp();

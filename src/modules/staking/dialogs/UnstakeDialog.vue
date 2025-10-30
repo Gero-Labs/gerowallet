@@ -3,8 +3,8 @@
     :isOpen="isOpen"
     @close="$emit('close')"
     :min-height="300"
-    title="Unstake from Pool"
-    subtitle="Deregister from your current staking pool delegation and withdraw your stake."
+    :title="$t('staking.unstakeFromPool')"
+    :subtitle="$t('staking.unstakeSubtitle')"
     :loading="loading"
     :persistent="false"
   >
@@ -16,14 +16,14 @@
         prominent
         class="text-left"
       >
-        Unstaking will also claim your rewards.<br>Please verify your unstake details and enter your spending password to proceed.
+        {{ $t('staking.unstakingWillClaimRewards') }}<br>{{ $t('staking.verifyUnstakeDetails') }}
       </v-alert>
     </v-card-text>
     <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
       <v-form ref="form" v-model="valid">
         <v-row no-gutters>
           <v-col :cols="cols">
-            <h4>Rewards Amount
+            <h4>{{ $t('staking.rewardsAmount') }}
               <v-btn x-small icon>
                 <v-icon small>mdi-information-outline</v-icon>
               </v-btn>
@@ -31,15 +31,15 @@
             <h4><strong>{{ filters.toCurrency(withdrawals) }}</strong></h4>
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
-            <h4>Deposit Fee Return</h4>
+            <h4>{{ $t('staking.depositFeeReturn') }}</h4>
             <h4><strong>{{ filters.toCurrency(depositFee) }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Tx Fee</h4>
+            <h4>{{ $t('staking.txFee') }}</h4>
             <h4><strong>{{ filters.toCurrency(tx?.body?.fee?.toString() || '0') }}</strong></h4>
           </v-col>
           <v-col :cols="cols">
-            <h4>Total</h4>
+            <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ filters.toCurrency(Number(withdrawals)+Number(depositFee)-Number(tx?.body?.fee?.toString() || '0')) }}</strong></h4>
           </v-col>
           <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
@@ -53,7 +53,7 @@
               class="mb-0"
               style="width: 100%;"
             >
-              <span>Transaction signed! Click submit to broadcast.</span>
+              <span>{{ $t('staking.transactionSigned') }}</span>
             </v-alert>
             <!-- Password input (hidden after signing) -->
             <v-tooltip
@@ -70,7 +70,7 @@
                   dense
                   v-model="spendingPassword"
                   outlined
-                  label="Spending Password"
+                  :label="$t('wallet.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="passwordRules"
                   hide-details
@@ -89,11 +89,11 @@
             </v-tooltip>
             <div v-else-if="loggedWallet?.type === WalletType.Ledger && !isSubmit" class="py-0" style="align-content: center;">
               <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-                <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
+                <ToggleSwitch :text-left="$t('staking.usb')" icon-left="mdi-usb" :text-right="$t('staking.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="loading" />
               </v-card-subtitle>
             </div>
             <v-btn color="#F97066" elevation="0" @click="signUnStakeTx" height="40" :disabled="loading || (!valid && !isSubmit)" :loading="loading" class="mx-2" style="margin-bottom: 1px">
-              {{ isSubmit ? 'Submit Transaction' : 'Sign & Unstake' }}
+              {{ isSubmit ? $t('staking.submitTransaction') : $t('staking.signAndUnstake') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -102,6 +102,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
@@ -117,6 +118,9 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import ledgerUtils from '@/shared/utils/ledger';
 import networks from '@/utils/networks';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {
@@ -141,7 +145,7 @@ const spendingPassword = ref('');
 const showPassword = ref(false);
 const tooltip = ref({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const valid = ref(false);
 const passwordRules = ref([rules.required()]);
@@ -234,7 +238,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     loading.value = false
@@ -245,7 +249,7 @@ const signLedgerTx = async () => {
   loading.value = true;
   try {
     if (!props.tx) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(props.tx);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -284,11 +288,11 @@ const submitTx = async () => {
     if (submitResult.data.error) {
       throw new Error(submitResult.data.error);
     }
-    snackbar.fireSuccess(`Unstake Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('staking.unstakeTxSubmitted', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting unstake transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error')
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'))
   } finally {
     loading.value = false
     isSubmit.value = false

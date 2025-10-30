@@ -26,7 +26,7 @@
                     flat
                     v-model="search"
                     :search-input.sync="search"
-                    placeholder="Search"
+                    :placeholder="$t('common.search')"
                     outlined
                     solo
                     dense

@@ -155,6 +155,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -189,7 +190,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits(['update:sortOptions']);
-
+const { t } = useTranslation();
 // Store references
 const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
@@ -202,12 +203,12 @@ const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Headers for the data table
 const headers = ref<any[]>([
-  { text: 'Asset', align: 'start', sortable: true, value: 'name' },
-  { text: 'Quantity', align: 'center', sortable: true, value: 'quantity', width: '102' },
-  { text: 'Price', align: 'center', sortable: true, value: 'price', width: '100' },
-  { text: 'Value', align: 'center', sortable: true, value: 'value', width: '88' },
-  { text: 'M. Cap', align: 'center', sortable: true, value: 'mcap', width: '104' },
-  { text: 'Allocation', align: 'center', sortable: true, value: 'allocation', width: '130' },
+  { text: String(t('common.asset')), align: 'start', sortable: true, value: 'name' },
+  { text: String(t('common.quantity')), align: 'center', sortable: true, value: 'quantity', width: '102' },
+  { text: String(t('common.price')), align: 'center', sortable: true, value: 'price', width: '100' },
+  { text: String(t('common.value')), align: 'center', sortable: true, value: 'value', width: '88' },
+  { text: String(t('common.marketCap')), align: 'center', sortable: true, value: 'mcap', width: '104' },
+  { text: String(t('common.allocation')), align: 'center', sortable: true, value: 'allocation', width: '130' },
 ]);
 
 // Pagination

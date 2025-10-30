@@ -1,7 +1,7 @@
 <template>
   <v-card class="transactions-card" outlined>
     <v-card-title>
-      Transactions
+      {{ t('card.transactions') }}
     </v-card-title>
     <v-card-text>
       <v-data-table
@@ -15,8 +15,8 @@
         :server-items-length="cardStore.cardHistoryMeta?.totalRecords || 0"
         hide-default-footer
         class="transactions-table"
-        no-data-text="No transactions yet"
-        loading-text="Loading transactions..."
+        :no-data-text="t('card.noTransactionsYet')"
+        :loading-text="t('card.loadingTransactions')"
       >
         <template v-slot:item.reference="{ item }">
           <v-list-item class="px-0">
@@ -74,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue';
 import type { CardTransactionHistory } from '@/models/card';
 import cardStore from '@/stores/modules/card';
@@ -89,13 +90,15 @@ const props = defineProps<Props>();
 
 const emit = defineEmits(['orderCard']);
 
+const { t } = useTranslation();
+
 // Define table headers
 const headers = [
-  { text: 'Date & Time', value: 'datetime', sortable: true, align: 'start', width: '150' },
-  { text: 'Category', value: 'category', sortable: false, align: 'start' },
-  { text: 'Transaction', value: 'name', sortable: false, align: 'start' },
-  { text: 'Reference', value: 'reference', sortable: true, align: 'start', width: '150' },
-  { text: 'Amount', value: 'amount', sortable: false, align: 'start' },
+  { text: t('card.dateTime'), value: 'datetime', sortable: true, align: 'start', width: '150' },
+  { text: t('card.category'), value: 'category', sortable: false, align: 'start' },
+  { text: t('card.transaction'), value: 'name', sortable: false, align: 'start' },
+  { text: t('card.reference'), value: 'reference', sortable: true, align: 'start', width: '150' },
+  { text: t('card.amount'), value: 'amount', sortable: false, align: 'start' },
 ];
 
 // Parse European date format DD.MM.YYYY HH:mm
@@ -182,17 +185,17 @@ const formattedTransactions = computed(() => {
 // Helper functions
 const getCategoryFromMCC = (mccCode: string): string => {
   const mccCategories: Record<string, string> = {
-    '4899': 'Subscriptions',
-    '5942': 'Ecommerce',
-    '5814': 'Food and dining',
-    '5411': 'Groceries',
-    '5541': 'Transportation',
-    '7011': 'Travel',
-    '8099': 'Entertainment',
-    '6012': 'Top-up', // Financial Institution - for ADA top-ups
+    '4899': t('card.subscriptions'),
+    '5942': t('card.ecommerce'),
+    '5814': t('card.foodAndDining'),
+    '5411': t('card.groceries'),
+    '5541': t('card.transportation'),
+    '7011': t('card.travel'),
+    '8099': t('card.entertainment'),
+    '6012': t('card.topUpCategory'),
   };
 
-  return mccCategories[mccCode] || 'Other';
+  return mccCategories[mccCode] || t('card.other');
 };
 
 const getCategoryClass = (category: string): string => {

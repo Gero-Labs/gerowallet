@@ -1,7 +1,7 @@
 <template>
   <div class="welcome-container">
     <div class="welcome-text">
-      <span class="welcome-title">Welcome back, </span>
+      <span class="welcome-title">{{ $t('wallet.welcomeBack') }}</span>
       <br />
       <span class="welcome-subtitle">{{ userName }}</span>
     </div>

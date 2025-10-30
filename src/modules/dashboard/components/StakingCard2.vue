@@ -4,13 +4,13 @@
       <router-link
         to="/staking"
         style="text-decoration: auto; color: white;"
-      >Staking</router-link>
+      >{{ $t('staking.staking') }}</router-link>
     </v-card-title>
     <v-card-text class="pa-0">
       <v-layout column>
         <v-row no-gutters class="staking2-header-row py-2">
           <v-col cols="6" class="px-2 text-center">
-            <span>Delegating to</span>
+            <span>{{ $t('staking.delegatingTo') }}</span>
             <div v-if="currentPool" class="d-flex align-center justify-center">
               <v-avatar size="28" class="mr-2">
                 <v-img :src="JSON.parse(currentPool?.pool_extended_info)?.info?.url_png_icon_64x64" alt="pool logo" contain/>
@@ -34,7 +34,7 @@
 
                 <v-card class="social-dropdown-card">
                   <v-card-title class="py-2 px-3">
-                    <span class="subtitle-2">Pool Links</span>
+                    <span class="subtitle-2">{{ $t('staking.poolLinks') }}</span>
                   </v-card-title>
                   <v-divider></v-divider>
                   <v-list dense class="social-links-list">
@@ -48,7 +48,7 @@
                         <v-icon small>mdi-web</v-icon>
                       </v-list-item-icon>
                       <v-list-item-content>
-                        <v-list-item-title class="social-link-text">Website</v-list-item-title>
+                        <v-list-item-title class="social-link-text">{{ $t('staking.website') }}</v-list-item-title>
                       </v-list-item-content>
                     </v-list-item>
 
@@ -62,7 +62,7 @@
                         <v-icon small>mdi-facebook</v-icon>
                       </v-list-item-icon>
                       <v-list-item-content>
-                        <v-list-item-title class="social-link-text">Facebook</v-list-item-title>
+                        <v-list-item-title class="social-link-text">{{ $t('staking.facebook') }}</v-list-item-title>
                       </v-list-item-content>
                     </v-list-item>
 
@@ -92,7 +92,7 @@
                         <v-icon small>mdi-youtube</v-icon>
                       </v-list-item-icon>
                       <v-list-item-content>
-                        <v-list-item-title class="social-link-text">YouTube</v-list-item-title>
+                        <v-list-item-title class="social-link-text">{{ $t('staking.youtube') }}</v-list-item-title>
                       </v-list-item-content>
                     </v-list-item>
 
@@ -108,7 +108,7 @@
                         </v-avatar>
                       </v-list-item-icon>
                       <v-list-item-content>
-                        <v-list-item-title class="social-link-text">Discord</v-list-item-title>
+                        <v-list-item-title class="social-link-text">{{ $t('staking.discord') }}</v-list-item-title>
                       </v-list-item-content>
                     </v-list-item>
 
@@ -124,7 +124,7 @@
                         </v-avatar>
                       </v-list-item-icon>
                       <v-list-item-content>
-                        <v-list-item-title class="social-link-text">Telegram</v-list-item-title>
+                        <v-list-item-title class="social-link-text">{{ $t('staking.telegram') }}</v-list-item-title>
                       </v-list-item-content>
                     </v-list-item>
                   </v-list>
@@ -133,7 +133,7 @@
             </div>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
-            <span>Total</span>
+            <span>{{ $t('common.total') }}</span>
             <h4 class="staking2-amount-value" v-if="loggedWallet && account">
               {{
                 filters.toCurrency(
@@ -148,7 +148,7 @@
             </h4>
           </v-col>
           <v-col cols="3" class="px-2 text-center">
-            <span>Rewards</span>
+            <span>{{ $t('staking.rewards') }}</span>
             <h4 class="staking2-amount-value">
               {{
                 filters.toCurrency(
@@ -165,13 +165,13 @@
           <v-col cols="6" class="px-4">
             <v-row no-gutters class="pt-2 pb-2">
               <v-col cols="4" class="staking2-stat-col">
-                <h4>ROS</h4>
+                <h4>{{ $t('staking.ros') }}</h4>
                 <span class="staking2-stat-value">{{
                   currentPool?.ros ? currentPool.ros.toFixed(2) + '%' : '0%'
                 }}</span>
               </v-col>
               <v-col cols="4" class="staking2-stat-col" v-if="currentPool">
-                <h4>Pledge</h4>
+                <h4>{{ $t('staking.pledge') }}</h4>
                 <div class="staking2-pledge-container">
                   <span class="staking2-pledge-text">{{
                     filters.toCurrency(
@@ -193,7 +193,7 @@
                 </div>
               </v-col>
               <v-col cols="4" class="staking2-stat-col" v-if="loggedWallet && currentPool">
-                <h4>Fees</h4>
+                <h4>{{ $t('staking.fees') }}</h4>
                 <span class="staking2-fees-text"
                   >{{ currentPool.margin + '%' }} /
                   {{
@@ -214,7 +214,7 @@
                 <strong class="staking2-stake-amount">{{
                   filters.toCurrency(currentPool.active_stake, false, 1, '₳', '', true)
                 }}</strong>
-                <h4 class="staking2-saturation-title">Saturation</h4>
+                <h4 class="staking2-saturation-title">{{ $t('staking.saturation') }}</h4>
                 <strong
                   v-if="Number(currentPool.active_stake) - Number(currentPool.live_stake) > 100000000"
                   class="staking2-stake-change-up"
@@ -275,7 +275,7 @@
               class="staking2-no-rewards text-center pa-4"
             >
               <v-progress-circular v-if="loadingTxs" :indeterminate="true"></v-progress-circular>
-              <span v-else>No Rewards Yet</span>
+              <span v-else>{{ $t('staking.noRewardsYet') }}</span>
             </v-card-text>
             <div class="staking2-chart-container" v-else>
               <RewardsChart :chart-data="rewardsChartData" class="staking2-chart"></RewardsChart>
@@ -295,7 +295,7 @@
               outlined
               class="staking2-unstake-btn"
             >
-              <span class="staking2-unstake-text">Unstake</span>
+              <span class="staking2-unstake-text">{{ $t('staking.unstake') }}</span>
             </v-btn>
           </v-col>
           <v-col cols="6" class="pl-3">
@@ -310,7 +310,7 @@
                   v-bind="attrs"
                   v-on="on"
                 >
-                  Withdraw
+                  {{ $t('staking.withdraw') }}
                 </v-btn>
               </template>
               <span>DRep delegation required to withdraw rewards. Visit the Governance tab to delegate.</span>
@@ -324,7 +324,7 @@
               block
               :class="isApex ? 'apexButton' : 'geroButton'"
             >
-              Withdraw
+              {{ $t('staking.withdraw') }}
             </v-btn>
             <v-btn
               v-else
@@ -334,7 +334,7 @@
               disabled
               block
               class="staking2-no-rewards-btn">
-              <span class="staking2-no-rewards-text">No Rewards</span>
+              <span class="staking2-no-rewards-text">{{ $t('staking.noRewards') }}</span>
             </v-btn>
           </v-col>
         </v-row>
@@ -446,17 +446,17 @@ const unstake = async () => {
   try {
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('common.epochParametersNotAvailable'));
     }
 
     // Check if stake key is registered
     if (!account.value?.active) {
-      throw new Error('Cannot unstake: stake key is not registered');
+      throw new Error(t('common.cannotUnstake'));
     }
 
     // Check if keys are loaded
     if (!keys.value || !keys.value.stake || keys.value.stake.length === 0) {
-      throw new Error('Wallet keys not available. Please reload the extension.');
+      throw new Error(t('common.walletKeysNotAvailable'));
     }
 
     const certificates: Cardano.Certificate[] = [];
