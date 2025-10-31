@@ -89,7 +89,7 @@
     "qrcode": "^1.5.4",
     "tiny-fifo-cache": "^1.0.1",
     "tldts": "^6.1.59",
-    "vue": "^2.7.16",
+    "vue": "^3.5.22",
     "vue-class-component": "^7.2.3",
     "vue-flag-icon": "^2.1.0",
     "vue-i18n": "^8.28.2",
