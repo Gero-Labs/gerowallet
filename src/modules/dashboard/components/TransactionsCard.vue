@@ -313,12 +313,10 @@ const searchInput = ref<string>('');
 const debouncedSearch = ref<string>('');
 
 // Debounce function to update debouncedSearch after user stops typing using VueUse
+// VueUse's useDebounceFn returns a function with a cancel() method
 const debouncedUpdateSearch = useDebounceFn((value: string) => {
   debouncedSearch.value = value;
 }, 300); // 300ms debounce delay
-
-// Type assertion for cancel method (VueUse returns debounced function with cancel)
-const debouncedUpdateSearchWithCancel = debouncedUpdateSearch as typeof debouncedUpdateSearch & { cancel: () => void };
 
 // Watch searchInput and trigger debounced update
 watch(searchInput, (newValue) => {
@@ -1141,7 +1139,9 @@ onUnmounted(() => {
     scrollContainer.value.removeEventListener('scroll', handleScroll);
   }
   // Cancel any pending debounced search updates (VueUse provides cancel method)
-  debouncedUpdateSearchWithCancel.cancel();
+  if ('cancel' in debouncedUpdateSearch && typeof debouncedUpdateSearch.cancel === 'function') {
+    debouncedUpdateSearch.cancel();
+  }
 });
 </script>
 <style scoped>
