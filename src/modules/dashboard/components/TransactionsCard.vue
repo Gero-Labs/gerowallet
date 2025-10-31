@@ -219,7 +219,7 @@
               </td>
             </tr>
             <!-- End of list indicator for infinite scroll -->
-            <tr v-else-if="props.isFullList && hasReachedEnd && !search" class="no-hover">
+            <tr v-else-if="props.isFullList && hasReachedEnd && !debouncedSearch" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <span class="text-caption text--secondary">
                   {{ displayedTransactions.length > 0 ? $t('transactions.noMoreTransactions') : $t('transactions.noTransactionsFound') }}
@@ -271,6 +271,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useDebounceFn } from '@vueuse/core';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -306,7 +307,29 @@ const activityHeaders = computed(() => [
 const transactionInfo = ref<any>(null);
 const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
-const search = ref<string>('');
+
+// Search input and debounced search value
+const searchInput = ref<string>('');
+const debouncedSearch = ref<string>('');
+
+// Debounce function to update debouncedSearch after user stops typing using VueUse
+// VueUse's useDebounceFn returns a function with a cancel() method
+const debouncedUpdateSearch = useDebounceFn((value: string) => {
+  debouncedSearch.value = value;
+}, 300); // 300ms debounce delay
+
+// Watch searchInput and trigger debounced update
+watch(searchInput, (newValue) => {
+  debouncedUpdateSearch(newValue);
+});
+
+// Computed search property for v-model binding
+const search = computed({
+  get: () => searchInput.value,
+  set: (value: string) => {
+    searchInput.value = value;
+  },
+});
 
 // Infinite scroll variables
 const displayedTransactions = ref<any[]>([]);
@@ -336,8 +359,8 @@ const state = computed(() => vmProxy.$route.path);
 
 const transactions = computed<any[]>(() => {
   const filtered = txs.value.filter((tx: any) => {
-    if (search.value) {
-      const searchLower = search.value.toLowerCase();
+    if (debouncedSearch.value) {
+      const searchLower = debouncedSearch.value.toLowerCase();
 
       // Check transaction ID
       const matchesId = tx.id.toLowerCase().includes(searchLower);
@@ -590,9 +613,9 @@ const resetInfiniteScroll = async () => {
   await loadMoreTransactions();
 };
 
-// Watch for search term changes to reset infinite scroll
+// Watch for debounced search term changes to reset infinite scroll
 watch(
-  () => search.value,
+  () => debouncedSearch.value,
   async () => {
     if (props.isFullList) {
       await resetInfiniteScroll();
@@ -1114,6 +1137,10 @@ onUnmounted(() => {
   }
   if (scrollContainer.value) {
     scrollContainer.value.removeEventListener('scroll', handleScroll);
+  }
+  // Cancel any pending debounced search updates (VueUse provides cancel method)
+  if ('cancel' in debouncedUpdateSearch && typeof debouncedUpdateSearch.cancel === 'function') {
+    debouncedUpdateSearch.cancel();
   }
 });
 </script>
