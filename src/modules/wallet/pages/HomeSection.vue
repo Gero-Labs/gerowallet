@@ -2,7 +2,7 @@
   <div class="home-section">
     <div class="content-wrapper">
       <HeroSection />
-      <ExchangeRateSection/>
+      <!-- <ExchangeRateSection/> -->
       <div class="dashboard-layout" v-if="selectedCard">
         <!-- <div class="left-column"> -->
         <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
