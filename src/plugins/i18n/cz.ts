@@ -497,7 +497,7 @@ export default {
   'common.trustedAddress': 'Trusted Address',
   'common.tryAgain': 'Try again',
   'common.type': 'Type',
-  'common.underMaintenance': 'We\'re currently undergoing maintenance.<br>Please check back soon.',
+  'common.underMaintenance': 'We\'re currently undergoing maintenance. Please check back soon.',
   'common.unknown': 'Unknown',
   'common.upload': 'Upload',
   'common.uploadIdFirst': 'Please upload an ID document first.',
@@ -1711,4 +1711,4 @@ export default {
   'welcome.welcomeTo': 'Welcome to',
   'welcome.youllUseThisToLogin': 'You\\\'ll use this to log into your wallet and make transactions.',
   'welcome.yourNew': 'Your New',
-}
+}

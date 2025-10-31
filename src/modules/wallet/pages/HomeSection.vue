@@ -2,7 +2,7 @@
   <div class="home-section">
     <div class="content-wrapper">
       <HeroSection />
-
+      <!-- <ExchangeRateSection/> -->
       <div class="dashboard-layout" v-if="selectedCard">
         <!-- <div class="left-column"> -->
         <RecentTransactionsSection :transactions="cardHistoryRecords" :loading="loading" />
@@ -28,6 +28,7 @@ import RecentTransactionsSection from '../components/dashboard/RecentTransaction
 import HeroSection from '../components/HeroSection.vue';
 import KaiserexPartnershipBadge from '../components/KaiserexPartnershipBadge.vue';
 import { useIntervalFn } from '@vueuse/core';
+import ExchangeRateSection from '@/modules/wallet/components/dashboard/ExchangeRateSection.vue';
 
 const { t } = useTranslation();
 const loading = ref(false);
