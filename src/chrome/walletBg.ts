@@ -8,7 +8,7 @@ import {
   Hash28ByteBase16,
 } from '@cardano-sdk/crypto';
 import { HexBlob } from '@cardano-sdk/util';
-import { APIError, DataSignError, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, TxSendError, TxSignError } from '@/chrome/config';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -24,7 +24,6 @@ import {
   Tip,
   WalletType,
   WalletTypePurpose,
-  Key,
 } from '@/models/types';
 import {
   addrToSignWith,
@@ -41,7 +40,6 @@ import {
   getStakeKey,
   hdPathToArray,
   keyHashFromAddress,
-  toPaymentCredential,
   toValueCore,
 } from '@/chrome/serialization';
 import { decryptWithPassword } from '@/shared/utils/crypto';
@@ -63,15 +61,13 @@ import CoinGeckoStore from '@/stores/coinGeckoStore';
 import MusicStore from '@/stores/musicStore';
 import SyncService from '@/services/sync.service';
 import { LoaderFactory } from '@/db/loaders';
-import {
-  buildSignatureAndCoseKey,
-  toHexArray,
-} from '@/shared/utils/converter';
 import { Buffer } from 'buffer';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { decrypt } from '@/shared/utils/crypto';
 import { Hash32ByteBase16 } from '@cardano-sdk/crypto';
 import { debugLog } from '@/utils/debug';
+import { cip8 } from '@cardano-sdk/key-management';
+import type { GroupedAddress } from '@cardano-sdk/key-management';
 
 let blockchainDb: Dexie = null;
 
@@ -780,8 +776,12 @@ export class WalletBg {
       if (!found) {
         consecutiveUnused++; // Increment unused address counter if no match is found
       }
-      // If we've resolved all missing addresses, we can break earlyCardano.
-      if (usedAddresses.length === resolvedAddresses.length) {
+      // Early exit optimization: If we've found all used addresses AND scanned 20 consecutive
+      // unused addresses after the last used one, we can stop early.
+      // This maintains BIP44 gap limit compliance while avoiding unnecessary scanning.
+      if (usedAddresses.length > 0 &&
+          usedAddresses.length === resolvedAddresses.length &&
+          consecutiveUnused >= BIP44_SCAN_SIZE) {
         break;
       }
       addressIndex++; // Move to the next address index
@@ -1047,47 +1047,98 @@ export class WalletBg {
     accountIndex: number,
     keys: Keys,
   ) {
-    // Parse address once and reuse
-    const addr: Cardano.PaymentAddress | Cardano.RewardAccount = addrToSignWith(address);
-    const cardanoAddr = Cardano.Address.fromBech32(addr);
-    const addressBytes = toHexArray(cardanoAddr.toBytes());
-    const credential: Cardano.Credential = toPaymentCredential(cardanoAddr);
-    const keyHash: string = credential.hash;
+    // Use Cardano SDK's cip30signData implementation directly (same as Lace)
+    // This ensures 100% compatibility with the Cardano SDK standard
 
-    // Determine key type based on address type
-    const isRewardAccount = Cardano.isRewardAccount(addr);
-    const addressType = cardanoAddr.getType();
+    const signWith = addrToSignWith(address);
+    const knownAddresses = this.convertKeysToGroupedAddresses(keys, accountIndex);
 
-    // Map address type to key types to search (in priority order)
-    let keyTypesToSearch: Array<{ type: 'payment' | 'change' | 'stake' | 'drep'; keyArray: Key[] }>;
+    // Create a minimal KeyAgent-like object that implements the required interface
+    const keyAgent = {
+      derivePublicKey: async (derivationPath: { role: number; index: number }) => {
+        // Derive public key based on role
+        if (derivationPath.role === ChainDerivations.DREP) {
+          return getDrepKey(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.CHIMERIC_ACCOUNT) {
+          return getStakeKey(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.EXTERNAL) {
+          return getPaymentKeyExternal(this.publicKey, derivationPath.index).hex();
+        } else if (derivationPath.role === ChainDerivations.INTERNAL) {
+          return getPaymentKeyInternal(this.publicKey, derivationPath.index).hex();
+        }
+        throw new Error(`Unknown derivation role: ${derivationPath.role}`);
+      },
+      signBlob: async (derivationPath: { role: number; index: number }, blob: string) => {
+        // Determine key type from role
+        let keyType: 'payment' | 'change' | 'stake' | 'drep';
+        if (derivationPath.role === ChainDerivations.DREP) {
+          keyType = 'drep';
+        } else if (derivationPath.role === ChainDerivations.CHIMERIC_ACCOUNT) {
+          keyType = 'stake';
+        } else if (derivationPath.role === ChainDerivations.EXTERNAL) {
+          keyType = 'payment';
+        } else if (derivationPath.role === ChainDerivations.INTERNAL) {
+          keyType = 'change';
+        } else {
+          throw new Error(`Unknown derivation role: ${derivationPath.role}`);
+        }
 
-    if (isRewardAccount) {
-      // Reward account -> stake key
-      keyTypesToSearch = [{ type: 'stake', keyArray: keys.stake }];
-    } else if (addressType === Cardano.AddressType.RewardKey || addressType === Cardano.AddressType.RewardScript) {
-      // DRep or stake key
-      keyTypesToSearch = [
-        { type: 'drep', keyArray: keys.drep129 },
-        { type: 'stake', keyArray: keys.stake }
-      ];
-    } else {
-      // Payment address -> payment or change key
-      keyTypesToSearch = [
-        { type: 'payment', keyArray: keys.payment },
-        { type: 'change', keyArray: keys.change }
-      ];
-    }
+        // Get the private key
+        const privateKey = this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
 
-    // Search for matching key in the determined key types
-    for (const { type, keyArray } of keyTypesToSearch) {
-      const foundKey = keyArray.find((key: Key) => key.cred === keyHash);
-      if (foundKey) {
-        const accountKey = this.requestAccountKey(type, password, accountIndex, hdPathToArray(foundKey.path)[4]);
-        return buildSignatureAndCoseKey(addressBytes, payload, accountKey);
+        // Sign the blob
+        const signature = privateKey.sign(HexBlob(blob));
+
+        return {
+          publicKey: privateKey.toPublic().hex(),
+          signature: signature.hex()
+        };
       }
-    }
+    };
 
-    throw DataSignError.ProofGeneration;
+    // Call SDK's cip30signData function (same as Lace does)
+    // Type assertion: cip30signData only uses derivePublicKey and signBlob from KeyAgent
+    return await cip8.cip30signData(keyAgent as any, {
+      knownAddresses,
+      signWith,
+      payload: HexBlob(payload)
+    });
+  }
+
+  /**
+   * Convert Gero's Keys structure to SDK's GroupedAddress[] format
+   * @private
+   */
+  private convertKeysToGroupedAddresses(keys: Keys, accountIndex: number): GroupedAddress[] {
+    const networkId = this.networkId();
+    const stakeAddress = this.stakeAddress;
+    const groupedAddresses: GroupedAddress[] = [];
+
+    // Convert payment addresses
+    keys.payment.forEach((key) => {
+      groupedAddresses.push({
+        type: ChainDerivations.EXTERNAL, // AddressType.External = 0
+        index: hdPathToArray(key.path)[4],
+        networkId,
+        accountIndex,
+        address: key.address,
+        rewardAccount: stakeAddress,
+      });
+    });
+
+    // Convert change addresses
+    keys.change.forEach((key) => {
+      groupedAddresses.push({
+        type: ChainDerivations.INTERNAL, // AddressType.Internal = 1
+        index: hdPathToArray(key.path)[4],
+        networkId,
+        accountIndex,
+        address: key.address,
+        rewardAccount: stakeAddress,
+      });
+    });
+
+    return groupedAddresses;
   }
 
   isEnterpriseAddress(): boolean {
