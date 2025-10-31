@@ -44,9 +44,21 @@
 
         <!-- Amount column -->
         <template v-slot:item.amount="{ item }">
-          <span class="amount" :class="{ negative: item.amount < 0 }">
-            {{ filters.toCurrency(item.amount, true, 2, item.currency, '', true, 0) }}
-          </span>
+          <v-list-item class="px-0">
+            <v-list-item-content class="px-0">
+              <v-list-item-title class="px-0">
+                <span class="amount" :class="{ negative: item.amount < 0 }">
+                  {{ filters.toCurrency(item.amount, true, 2, item.currency, '', true, 0) }}
+                </span>
+              </v-list-item-title>
+              <v-list-item-subtitle 
+                v-if="item.isTopUp && item.adaAmount" 
+                class="px-0 ada-equivalent"
+              >
+                ₳{{ filters.toCurrency(item.adaAmount, false, 2, '', '', false, 0) }}
+              </v-list-item-subtitle>
+            </v-list-item-content>
+          </v-list-item>
         </template>
 
         <!-- Category column -->
@@ -91,6 +103,11 @@ const props = defineProps<Props>();
 const emit = defineEmits(['orderCard']);
 
 const { t } = useTranslation();
+
+// Exchange rate from store (same as AmountInputStep.vue)
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy) || 0;
+});
 
 // Define table headers
 const headers = [
@@ -141,6 +158,14 @@ const formattedTransactions = computed(() => {
     const categoryClass = getCategoryClass(category);
     const categoryDotClass = getCategoryDotClass(category);
 
+    // Check if this is a top-up transaction (MCC code '6012')
+    const isTopUp = tx.mcc.code === '6012';
+
+    // Calculate ADA equivalent for top-up transactions
+    const adaAmount = isTopUp && EXCHANGE_RATE.value > 0
+      ? tx.amount.amount / EXCHANGE_RATE.value
+      : null;
+
     // Parse date and convert to local time
     const localDate = parseEuropeanDate(tx.createTime);
 
@@ -173,6 +198,8 @@ const formattedTransactions = computed(() => {
       categoryClass,
       categoryDotClass,
       reference: tx.reference,
+      isTopUp,
+      adaAmount,
     };
   });
 
@@ -348,6 +375,16 @@ const handlePageChange = (page: number) => {
     &.negative {
       color: var(--v-error-base);
     }
+  }
+
+  // ADA equivalent styling (for top-ups)
+  .ada-equivalent {
+    font-family: $font-family-primary;
+    font-weight: $font-weight-normal;
+    font-size: $font-size-xs;
+    line-height: 1.5;
+    color: $text-muted;
+    margin-top: 2px;
   }
 
   // Category badge styling
