@@ -5,7 +5,10 @@
     </div>
 
     <div class="exchange-rate-content">
-      <div class="rate-item" v-for="rate in exchangeRates" :key="rate.id">
+      <div v-if="loadingError" class="error-message">
+        {{ $t('common.failed') }}: {{ $t('card.exchangeRate') }}
+      </div>
+      <div v-else class="rate-item" v-for="rate in exchangeRates" :key="rate.id">
         <div class="d-flex flex-column">
           <div class="rate-info">
             <div class="currency-icon">
@@ -18,13 +21,6 @@
           </div>
           <div class="last-updated">{{ $t('dashboard.lastUpdated') }}: {{ lastUpdated }}</div>
         </div>
-        <!-- 
-        <div class="rate-change">
-          <div class="change-indicator" :class="rate.trend">
-            <img :src="rate.trendIcon" :alt="rate.trend" class="trend-icon" />
-            <span class="change-percentage">{{ rate.change }}</span>
-          </div>
-        </div> -->
       </div>
     </div>
   </v-card>
@@ -34,11 +30,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import type { ExchangeRate } from '@/models/types';
 import cardStore from '@/stores/modules/card';
-import trendUpSvg from '@/assets/svg/trend-up-01.svg';
 import currencyEuro from '@/modules/wallet/icons/currency-euro.svg?url';
-import { useTranslation } from '@/shared/composables/useTranslation';
-
-const { t } = useTranslation();
 
 // Get exchange rate from store
 const EXCHANGE_RATE = computed(() => {
@@ -61,13 +53,14 @@ const exchangeRates = computed<ExchangeRate[]>(() => [
     value: formattedRateValue.value,
     currency: 'EUR',
     icon: currencyEuro,
-    change: '—', // Change percentage would need historical data to calculate
-    trend: 'positive' as 'positive' | 'negative',
-    trendIcon: trendUpSvg,
+    change: '—', // Not displayed in UI (trend section removed)
+    trend: 'positive' as 'positive' | 'negative', // Not displayed in UI
+    trendIcon: '', // Not displayed in UI (unused import removed)
   },
 ]);
 
-const lastUpdated = ref('Today, 15:42');
+const lastUpdated = ref('');
+const loadingError = ref(false);
 
 const updateLastUpdated = () => {
   const now = new Date();
@@ -78,20 +71,23 @@ const updateLastUpdated = () => {
 
 // Watch for exchange rate changes and update timestamp
 watch(
-  () => cardStore.state.exchangeRate,
+  () => cardStore.state.exchangeRate?.buy,
   () => {
-    if (cardStore.state.exchangeRate) {
+    if (cardStore.state.exchangeRate?.buy) {
       updateLastUpdated();
+      loadingError.value = false;
     }
-  },
-  { deep: true }
+  }
 );
 
 onMounted(() => {
   updateLastUpdated();
   // Fetch exchange rate if not already loaded
   if (!cardStore.state.exchangeRate) {
-    cardStore.getExchangeRate().catch(console.error);
+    cardStore.getExchangeRate().catch((err) => {
+      console.error(err);
+      loadingError.value = true;
+    });
   }
 });
 </script>
@@ -179,40 +175,15 @@ onMounted(() => {
         }
       }
 
-      .rate-change {
-        display: flex;
-        justify-content: center;
-        align-items: center;
+    }
 
-        .change-indicator {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-
-          &.positive {
-            .change-percentage {
-              color: #079455;
-            }
-          }
-
-          &.negative {
-            .change-percentage {
-              color: #f04438;
-            }
-          }
-
-          .trend-icon {
-            width: 20px;
-            height: 20px;
-          }
-
-          .change-percentage {
-            font-family: $font-family-primary;
-            font-weight: $font-weight-medium;
-            font-size: $font-size-sm;
-          }
-        }
-      }
+    .error-message {
+      font-family: $font-family-primary;
+      font-weight: $font-weight-medium;
+      font-size: 12px;
+      color: #f04438;
+      text-align: center;
+      padding: $spacing-md;
     }
 
     .last-updated {
