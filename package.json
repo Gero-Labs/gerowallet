@@ -128,7 +128,7 @@
     "css-loader": "^7.1.2",
     "deepmerge": "^4.3.1",
     "dotenv-cli": "^8.0.0",
-    "eslint": "^7.32.0",
+    "eslint": "^9.38.0",
     "eslint-plugin-vue": "^8.1.1",
     "esno": "^4.8.0",
     "fs-extra": "^11.3.0",
