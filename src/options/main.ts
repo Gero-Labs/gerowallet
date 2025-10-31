@@ -11,9 +11,38 @@ import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
 import { ClickOutside } from 'vuetify/lib/directives';
 import App from './App.vue';
-import walletStore from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
 import Notifications from '@voerro/vue-notifications';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { geroStore } from '@/stores/geroStore';
+import { loadingState } from '@/stores/loading';
+
+function loadPersistedLoadingState(): Promise<void> {
+  return new Promise(resolve => {
+    try {
+      chrome.storage.local.get('loadingState', ({ loadingState: saved }) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Chrome storage error loading loadingState:', chrome.runtime.lastError.message);
+          resolve();
+          return;
+        }
+        if (saved) {
+          // Use Vue.set() to ensure proper reactivity for all properties
+          Object.keys(saved).forEach(key => {
+            if (key in loadingState) {
+              Vue.set(loadingState, key, saved[key]);
+            }
+          });
+          console.log('💾 Hydrated loadingState from storage (main.ts):', saved);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn('Error loading persisted loadingState:', error);
+      resolve();
+    }
+  });
+}
 
 function loadPersistedWallet(): Promise<void> {
   return new Promise(resolve => {
@@ -24,11 +53,52 @@ function loadPersistedWallet(): Promise<void> {
           resolve();
           return;
         }
-        if (saved) Object.assign(walletStore, saved);
+        if (saved) {
+          // Use Vue.set() to ensure proper reactivity for all properties
+          Object.keys(saved).forEach(key => {
+            if (key in walletStore) {
+              Vue.set(walletStore, key, saved[key]);
+            }
+          });
+          console.log('💾 Hydrated walletStore from storage (main.ts)');
+        }
         resolve();
       });
     } catch (error) {
       console.warn('Error loading persisted wallet:', error);
+      resolve();
+    }
+  });
+}
+
+function loadPersistedGeroStore(): Promise<void> {
+  return new Promise(resolve => {
+    try {
+      chrome.storage.local.get('geroStore', ({ geroStore: saved }) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Chrome storage error loading geroStore:', chrome.runtime.lastError.message);
+          resolve();
+          return;
+        }
+        if (saved) {
+          // Use Vue.set() to ensure proper reactivity for nested objects
+          if (saved.wallets) {
+            // Make each wallet reactive individually
+            Object.keys(saved.wallets).forEach(key => {
+              Vue.set(geroStore.wallets, key, saved.wallets[key]);
+            });
+          }
+          if (saved.network) Vue.set(geroStore, 'network', saved.network);
+          if (saved.config) Vue.set(geroStore, 'config', saved.config);
+
+          console.log('💾 Hydrated geroStore from storage (main.ts):', Object.keys(saved.wallets || {}).length, 'wallets');
+          console.log('💾 geroStore.wallets after Vue.set:', geroStore.wallets);
+          console.log('💾 geroStore.wallets keys:', Object.keys(geroStore.wallets || {}));
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.warn('Error loading persisted geroStore:', error);
       resolve();
     }
   });
@@ -48,7 +118,7 @@ async function initializeFeatureFlags(): Promise<void> {
   }
 }
 
-loadPersistedWallet().then(() => {
+Promise.all([loadPersistedWallet(), loadPersistedGeroStore(), loadPersistedLoadingState()]).then(() => {
   // Initialize feature flags in background (non-blocking)
   // This prevents delaying app startup if LaunchDarkly is slow/down
   initializeFeatureFlags().catch((error) => {

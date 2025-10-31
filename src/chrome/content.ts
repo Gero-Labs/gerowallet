@@ -1,5 +1,6 @@
 import { Messaging } from './messaging';
-import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
+// Dynamic import to avoid Firefox compatibility issues
+// import { bringInitContentScript } from '@bringweb3/chrome-extension-kit';
 import { getAddressBech32, promptLogin } from '@/chrome/webpage';
 
 const getWalletAddress = async (): Promise<string> => {
@@ -37,107 +38,118 @@ function shouldInject() {
 }
 
 async function injectBring() {
-  await bringInitContentScript({
-    switchWallet: false,
-    text: 'lower',
-    getWalletAddress,
-    promptLogin,
-    walletAddressListeners: ['gero:login', 'gero:logout'],
-    theme: 'dark',
-    darkTheme: {
-      // font
-      fontUrl: 'https://fonts.googleapis.com/css2?family=Inter&display=swap',
-      fontFamily: '\'Inter\', system-ui',
-      // Popup
-      popupBg: '#141414',
-      popupShadow: '',
-      // Primary button
-      primaryBtnBg: 'linear-gradient(to right, #00c7f3, #00fad5)',
-      primaryBtnFC: '#041417',
-      primaryBtnFW: '600',
-      primaryBtnFS: '14px',
-      primaryBtnBorderC: 'transparent',
-      primaryBtnBorderW: '0',
-      primaryBtnRadius: '8px',
-      // Secondary button
-      secondaryBtnBg: 'transparent',
-      secondaryBtnFS: '12px',
-      secondaryBtnFW: '500',
-      secondaryBtnFC: 'white',
-      secondaryBtnBorderC: 'rgba(149, 176, 178, 0.50)',
-      secondaryBtnBorderW: '2px',
-      secondaryBtnRadius: '8px',
-      // Markdown
-      markdownBg: '#07131766',
-      markdownFS: '12px',
-      markdownFC: '#DADCE5',
-      markdownBorderW: '0',
-      markdownRadius: '4px',
-      markdownBorderC: 'black',
-      markdownScrollbarC: '#DADCE5',
-      // Wallet address
-      walletBg: '#1a1a1a',
-      walletFS: '10px',
-      walletFW: '400',
-      walletFC: 'white',
-      walletBorderC: 'white',
-      walletBorderW: '0',
-      walletRadius: '4px',
-      // Details of offering
-      detailsBg: '#1a1a1a',
-      detailsTitleFS: '15px',
-      detailsTitleFW: '600',
-      detailsTitleFC: 'white',
-      detailsSubtitleFS: '14px',
-      detailsSubtitleFW: '500',
-      detailsSubtitleFC: '#A8ADBF',
-      detailsRadius: '8px',
-      detailsBorderW: '0',
-      detailsBorderC: 'transparent',
-      detailsAmountFC: '#00DFF3',
-      detailsAmountFW: '700',
-      // Overlay
-      overlayBg: '#192E34E6',
-      overlayFS: '13px',
-      overlayFW: '400',
-      overlayFC: '#DADCE5',
-      loaderBg: '#0A2EC0',
-      // Optout \ Turn off
-      optoutBg: '#192E34',
-      optoutFS: '14px',
-      optoutFW: '400',
-      optoutFC: 'white',
-      optoutRadius: '56px',
-      // X Button and close buttons
-      closeFS: '9px',
-      closeFW: '300',
-      closeFC: '#B9BBBF',
-      // Token name
-      tokenBg: 'transparent',
-      tokenFS: '13px',
-      tokenFW: '600',
-      tokenFC: '#DADCE5',
-      tokenBorderW: '2px',
-      tokenBorderC: '#DADCE5',
-      // Notification popup
-      notificationFS: '14px',
-      notificationFW: '500',
-      notificationFC: 'white',
-      notificationBtnBg: 'linear-gradient(135deg, #00DFF3 0%, #FDFC47 100%)',
-      notificationBtnFS: '12px',
-      notificationBtnFW: '500',
-      notificationBtnFC: '#041417',
-      notificationBtnBorderW: '0',
-      notificationBtnBorderC: 'transparent',
-      notificationBtnRadius: '8px',
-      activateTitleFS: '--activate-title-f-s',
-      activateTitleFW: '--activate-title-f-w',
-      activateTitleFC: '--activate-title-f-c',
-      activateTitleBoldFS: '--activate-title-bold-f-s',
-      activateTitleBoldFW: '--activate-title-bold-f-w',
-      activateTitleBoldFC: '--activate-title-bold-f-c',
-    }
-  });
+  // @ts-ignore - EXTENSION env var is injected at build time
+  if (import.meta.env.VITE_EXTENSION === 'firefox') {
+    console.log('ℹ️ Bring cashback not supported in Firefox (content script)');
+    return;
+  }
+
+  try {
+    const { bringInitContentScript } = await import('@bringweb3/chrome-extension-kit');
+    await bringInitContentScript({
+      switchWallet: false,
+      text: 'lower',
+      getWalletAddress,
+      promptLogin,
+      walletAddressListeners: ['gero:login', 'gero:logout'],
+      theme: 'dark',
+      darkTheme: {
+        // font
+        fontUrl: 'https://fonts.googleapis.com/css2?family=Inter&display=swap',
+        fontFamily: '\'Inter\', system-ui',
+        // Popup
+        popupBg: '#141414',
+        popupShadow: '',
+        // Primary button
+        primaryBtnBg: 'linear-gradient(to right, #00c7f3, #00fad5)',
+        primaryBtnFC: '#041417',
+        primaryBtnFW: '600',
+        primaryBtnFS: '14px',
+        primaryBtnBorderC: 'transparent',
+        primaryBtnBorderW: '0',
+        primaryBtnRadius: '8px',
+        // Secondary button
+        secondaryBtnBg: 'transparent',
+        secondaryBtnFS: '12px',
+        secondaryBtnFW: '500',
+        secondaryBtnFC: 'white',
+        secondaryBtnBorderC: 'rgba(149, 176, 178, 0.50)',
+        secondaryBtnBorderW: '2px',
+        secondaryBtnRadius: '8px',
+        // Markdown
+        markdownBg: '#07131766',
+        markdownFS: '12px',
+        markdownFC: '#DADCE5',
+        markdownBorderW: '0',
+        markdownRadius: '4px',
+        markdownBorderC: 'black',
+        markdownScrollbarC: '#DADCE5',
+        // Wallet address
+        walletBg: '#1a1a1a',
+        walletFS: '10px',
+        walletFW: '400',
+        walletFC: 'white',
+        walletBorderC: 'white',
+        walletBorderW: '0',
+        walletRadius: '4px',
+        // Details of offering
+        detailsBg: '#1a1a1a',
+        detailsTitleFS: '15px',
+        detailsTitleFW: '600',
+        detailsTitleFC: 'white',
+        detailsSubtitleFS: '14px',
+        detailsSubtitleFW: '500',
+        detailsSubtitleFC: '#A8ADBF',
+        detailsRadius: '8px',
+        detailsBorderW: '0',
+        detailsBorderC: 'transparent',
+        detailsAmountFC: '#00DFF3',
+        detailsAmountFW: '700',
+        // Overlay
+        overlayBg: '#192E34E6',
+        overlayFS: '13px',
+        overlayFW: '400',
+        overlayFC: '#DADCE5',
+        loaderBg: '#0A2EC0',
+        // Optout \ Turn off
+        optoutBg: '#192E34',
+        optoutFS: '14px',
+        optoutFW: '400',
+        optoutFC: 'white',
+        optoutRadius: '56px',
+        // X Button and close buttons
+        closeFS: '9px',
+        closeFW: '300',
+        closeFC: '#B9BBBF',
+        // Token name
+        tokenBg: 'transparent',
+        tokenFS: '13px',
+        tokenFW: '600',
+        tokenFC: '#DADCE5',
+        tokenBorderW: '2px',
+        tokenBorderC: '#DADCE5',
+        // Notification popup
+        notificationFS: '14px',
+        notificationFW: '500',
+        notificationFC: 'white',
+        notificationBtnBg: 'linear-gradient(135deg, #00DFF3 0%, #FDFC47 100%)',
+        notificationBtnFS: '12px',
+        notificationBtnFW: '500',
+        notificationBtnFC: '#041417',
+        notificationBtnBorderW: '0',
+        notificationBtnBorderC: 'transparent',
+        notificationBtnRadius: '8px',
+        activateTitleFS: '--activate-title-f-s',
+        activateTitleFW: '--activate-title-f-w',
+        activateTitleFC: '--activate-title-f-c',
+        activateTitleBoldFS: '--activate-title-bold-f-s',
+        activateTitleBoldFW: '--activate-title-bold-f-w',
+        activateTitleBoldFC: '--activate-title-bold-f-c',
+      }
+    });
+  } catch (error) {
+    console.warn('⚠️ Bring cashback initialization failed (content script):', error);
+  }
 }
 
 // Store listener reference for cleanup

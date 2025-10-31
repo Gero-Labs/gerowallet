@@ -201,6 +201,15 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
   const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
 
+  console.log('🧭 Router guard:', {
+    to: to.path,
+    from: from.path,
+    isLoggedIn,
+    loggedWallet: WalletStore.state.loggedWallet,
+    needsAuth,
+    isWelcome
+  });
+
   // Prevent redirect loops: if we're already being redirected to welcome, just allow it
   if (isWelcome && from.path === '/') {
     return next();
@@ -212,12 +221,15 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
+    console.log('🧭 Redirecting to welcome (not logged in)');
     return next({ path: redirectTo });
   }
   if (isWelcome && isLoggedIn) {
     // already logged in → don't show welcome again
+    console.log('🧭 Redirecting to dashboard (already logged in)');
     return next({ path: '/' });
   }
+  console.log('🧭 Allowing navigation');
   next();
 });
 

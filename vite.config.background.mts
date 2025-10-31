@@ -41,18 +41,20 @@ export default defineConfig({
     // Service worker compatibility
     'typeof document': '"undefined"',
     'typeof window': '"undefined"',
+    // Firefox extension flag (from EXTENSION environment variable)
+    'import.meta.env.VITE_EXTENSION': JSON.stringify(process.env.EXTENSION || ''),
     // Note: 'global' is handled by nodePolyfills plugin from sharedConfig
     // Don't define it here to avoid conflicts with terser minification
   },
   build: {
-    minify: isDev ? false : 'terser',
+    minify: false, // Temporarily disabled for Firefox debugging
     target: 'es2020',
     assetsDir: '.',
     watch: isDev ? {} : undefined,
     outDir: r('extension/background'),
     cssCodeSplit: false,
     emptyOutDir: false,
-    sourcemap: isDev ? 'inline' : false,
+    sourcemap: true, // Enable source maps for debugging
     chunkSizeWarningLimit: 10000,
     ...(isDev ? {} : {
       terserOptions: {
@@ -229,6 +231,68 @@ export default pbkdf2Browser;
                 chunk.code = chunk.code.replace(
                   /const\s+(\w+)\s*=\s*new\s+TextDecoder\(/g,
                   'const $1 = new (globalThis.TextDecoder)('
+                );
+
+                // Fix gopd (get-own-property-descriptor) polyfill issue in Firefox
+                // When gopd test fails, it sets gopd to null, which breaks getAugmentedNamespace
+                // Solution: ensure gopd always has a fallback to Object.getOwnPropertyDescriptor
+                chunk.code = chunk.code.replace(
+                  /var gopd = \$gOPD\$1;/g,
+                  'var gopd = $gOPD$1 || Object.getOwnPropertyDescriptor;'
+                );
+
+                // Fix WASM loading errors in Firefox background scripts
+                // Firefox requires chrome.runtime.getURL() for extension resources
+                // Replace self.location.href-based URL construction with chrome.runtime.getURL()
+                chunk.code = chunk.code.replace(
+                  /const __vite__wasmUrl = ([^;]+);/g,
+                  (match, urlExpression) => {
+                    // Extract WASM filename from the URL expression
+                    const wasmFileMatch = urlExpression.match(/"([^"]+\.wasm)"/);
+                    if (wasmFileMatch) {
+                      const wasmFile = wasmFileMatch[1];
+                      return `const __vite__wasmUrl = (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL) ? chrome.runtime.getURL("background/${wasmFile}") : ${urlExpression};`;
+                    }
+                    return match;
+                  }
+                );
+
+                // Wrap WASM initialization in try/catch for graceful fallback
+                chunk.code = chunk.code.replace(
+                  /(const __vite__wasmModule = await __vite__initWasm\(\{)/g,
+                  'let __vite__wasmModule; let __vite__wasmLoaded = false; try { __vite__wasmModule = await __vite__initWasm({'
+                );
+                chunk.code = chunk.code.replace(
+                  /(}, __vite__wasmUrl\);)/g,
+                  '}, __vite__wasmUrl); __vite__wasmLoaded = true; } catch(e) { console.warn("WASM loading failed (Firefox compatibility):", e); __vite__wasmModule = { memory: null }; }'
+                );
+
+                // Wrap WASM-dependent initialization code in try/catch
+                // This prevents crashes when WASM fails to load
+                chunk.code = chunk.code.replace(
+                  /(const CoseLabel = \{[\s\S]*?Label\.new_text[\s\S]*?\};)/g,
+                  'let CoseLabel; try { CoseLabel = { address: Label.new_text("address"), crv: Label.new_int(Int.new_i32(-1)), x: Label.new_int(Int.new_i32(-2)) }; } catch(e) { console.warn("CoseLabel initialization failed:", e); CoseLabel = {}; }'
+                );
+
+                // Fix getAugmentedNamespace for native functions in Firefox
+                // Firefox throws when trying to access .prototype of native built-in functions
+                // Need to wrap both Reflect.construct and prototype assignment
+                chunk.code = chunk.code.replace(
+                  /var a = function a2\(\) \{[^}]+if \(typeof this !== "undefined" && this instanceof a2\) \{[^}]+return Reflect\.construct\(f, arguments, this\.constructor\);[^}]+\}[^}]+return f\.apply\(this, arguments\);[^}]+\};/g,
+                  `var a = function a2() {
+        try {
+          if (typeof this !== "undefined" && this instanceof a2) {
+            return Reflect.construct(f, arguments, this.constructor);
+          }
+        } catch(e) {
+          // Firefox: Reflect.construct fails with native functions
+        }
+        return f.apply(this, arguments);
+      };`
+                );
+                chunk.code = chunk.code.replace(
+                  /(a\.prototype = f\.prototype;)/g,
+                  'try { a.prototype = f.prototype; } catch(e) { /* Firefox: native functions don\'t have accessible prototype */ }'
                 );
               }
             }

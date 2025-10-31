@@ -441,9 +441,14 @@ export class WalletManager {
 
       // Close extension popups and cleanup subscriptions
       this.closeAllOtherExtensionPopups();
-      // Clean up alarms
-      if (chrome?.alarms?.onAlarm?.hasListeners()) {
-        chrome.alarms.onAlarm.removeListener(alarmListener);
+      // Clean up alarms (Firefox doesn't have hasListeners method)
+      if (chrome?.alarms?.onAlarm) {
+        try {
+          // Try to remove listener (works in both Chrome and Firefox)
+          chrome.alarms.onAlarm.removeListener(alarmListener);
+        } catch (e) {
+          // Firefox may throw if listener doesn't exist, ignore
+        }
       }
 
       // Clean up Ably service

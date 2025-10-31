@@ -73,7 +73,13 @@ const enableCreateOrImportSeedPhrase = (): void => {
 };
 
 const availableWallets = computed(() => {
-  return Object.values(wallets.value)?.filter(
+  const walletsArray = Object.values(wallets.value || {});
+  console.log('🔍 Welcome.vue - availableWallets computed:', {
+    walletsValue: wallets.value,
+    walletsArray,
+    arrayLength: walletsArray.length
+  });
+  return walletsArray.filter(
     (wallet: any) => networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet?.type !== WalletType.Google
   );
 });

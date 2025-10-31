@@ -73,21 +73,17 @@ if (context === 'browser') {
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
     debugLog('📥 Received wallet store update:', updates);
 
-    // Apply updates to the observable state
+    // Apply updates using Vue.set for proper reactivity
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {
-        (walletStore as any)[key] = updates[key as keyof WalletStore];
+        Vue.set(walletStore, key, updates[key as keyof WalletStore]);
       }
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(walletStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated wallet store from storage');
-    }
-  });
+  // NOTE: Initial hydration is now handled synchronously in src/options/main.ts
+  // via loadPersistedWallet() before Vue mounts. This ensures data displays
+  // immediately without race conditions.
 }
 
 // Promise-based storage hydration for backward compatibility

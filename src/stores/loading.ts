@@ -37,28 +37,22 @@ if (context === 'browser') {
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
     console.log('📥 Received loading store update:', updates);
+    console.log('📥 Before update - loadingState.connected:', loadingState.connected);
 
-    // Apply updates to the observable state
+    // Apply updates using Vue.set for proper reactivity
     Object.keys(updates).forEach(key => {
       if (key in loadingState) {
-        (loadingState as any)[key] = updates[key as keyof LoadingState];
+        Vue.set(loadingState, key, updates[key as keyof LoadingState]);
+        console.log(`📥 Set ${key} to:`, updates[key as keyof LoadingState]);
       }
     });
+
+    console.log('📥 After update - loadingState.connected:', loadingState.connected);
   });
 
-  // Initial hydration from chrome.storage
-  // This is important because the port connection might happen AFTER critical state changes
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      // Hydrate from storage immediately - this ensures we have the latest persisted state
-      Object.assign(loadingState, result[STORE_NAME]);
-      console.log('💾 Hydrated loading store from storage:', {
-        connected: result[STORE_NAME].connected,
-        connecting: result[STORE_NAME].connecting,
-        full: result[STORE_NAME]
-      });
-    }
-  });
+  // NOTE: Initial hydration is now handled synchronously in src/options/main.ts
+  // via loadPersistedLoadingState() before Vue mounts. This ensures connection state
+  // displays immediately without race conditions.
 }
 
 // Debounced storage write to reduce I/O operations
@@ -69,8 +63,12 @@ let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
  */
 function broadcastFromBackground(updates: Partial<LoadingState>, immediate = false) {
   if (context === 'background') {
-    // Apply updates locally first
-    Object.assign(loadingState, updates);
+    // Apply updates locally using Vue.set for proper reactivity
+    Object.keys(updates).forEach(key => {
+      if (key in loadingState) {
+        Vue.set(loadingState, key, updates[key as keyof LoadingState]);
+      }
+    });
 
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);

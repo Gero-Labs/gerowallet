@@ -54,13 +54,9 @@ if (context === 'browser') {
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(geroStore, result[STORE_NAME]);
-      debugLog('💾 Hydrated gero store from storage');
-    }
-  });
+  // NOTE: Initial hydration is now handled synchronously in src/options/main.ts
+  // via loadPersistedGeroStore() before Vue mounts. This ensures wallet list
+  // displays immediately without race conditions.
 }
 
 /**

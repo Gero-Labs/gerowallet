@@ -6,9 +6,16 @@ type ManifestWithOAuth2 = Manifest.WebExtensionManifest & {
 
 const manifest: ManifestWithOAuth2 = browser.runtime.getManifest() as ManifestWithOAuth2;
 
-const { client_id, scopes }: { client_id: string; scopes: string[] } = manifest.oauth2!;
+// OAuth2 is only available in Chrome builds (not Firefox)
+const client_id = manifest.oauth2?.client_id || '';
+const scopes = manifest.oauth2?.scopes || [];
 
 export async function signInWithGoogle(): Promise<{accessToken: string; idToken: string}> {
+  // Check if OAuth2 is available (Chrome only)
+  if (!manifest.oauth2) {
+    throw new Error('Google OAuth2: Not supported in this browser (Firefox does not support oauth2 manifest field)');
+  }
+
   const redirectUri: string = browser.identity.getRedirectURL();
   const authUrl: URL = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', client_id);

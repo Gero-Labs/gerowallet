@@ -10,7 +10,8 @@ import {
   TARGET,
   TxSendError,
 } from '@/chrome/config';
-import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
+// Dynamic import to avoid Firefox compatibility issues
+// import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   getPublicKey,
   submitTx,
@@ -67,14 +68,26 @@ loadWallets().then(async () => {
 //@ts-ignore
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
-(async () => {
-  await bringInitBackground({
-    isEnabledByDefault: true,
-    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-    cashbackPagePath: '/index.html#/cashback'
-  })
-})();
+// Bring cashback initialization (Chrome only, excluded from Firefox builds)
+// @ts-ignore - EXTENSION env var is injected at build time
+if (import.meta.env.VITE_EXTENSION !== 'firefox') {
+  (async () => {
+    try {
+      const { bringInitBackground } = await import('@bringweb3/chrome-extension-kit');
+      await bringInitBackground({
+        isEnabledByDefault: true,
+        identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
+        apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
+        cashbackPagePath: '/index.html#/cashback'
+      })
+      console.log('✅ Bring cashback initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Bring cashback initialization failed:', error);
+    }
+  })();
+} else {
+  console.log('ℹ️ Bring cashback not supported in Firefox');
+}
 
 // Initialize background store messaging (the import alone initializes it)
 console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
@@ -1392,6 +1405,13 @@ const openUI = async () => {
   await openDashboard();
 };
 
-chrome.action.onClicked.addListener(openUI);
+// Handle browser action clicks - compatible with both MV2 (Firefox) and MV3 (Chrome)
+if (chrome.action) {
+  // Manifest V3 (Chrome)
+  chrome.action.onClicked.addListener(openUI);
+} else if (chrome.browserAction) {
+  // Manifest V2 (Firefox)
+  chrome.browserAction.onClicked.addListener(openUI);
+}
 
 app.listen();

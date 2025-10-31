@@ -15,6 +15,8 @@ export default defineConfig({
     // https://github.com/vitejs/vite/issues/9320
     // https://github.com/vitejs/vite/issues/9186
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+    // Firefox extension flag (from EXTENSION environment variable)
+    'import.meta.env.VITE_EXTENSION': JSON.stringify(process.env.EXTENSION || ''),
   },
   build: {
     target: 'es2022',
