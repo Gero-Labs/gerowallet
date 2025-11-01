@@ -2072,7 +2072,7 @@ const perpetualPositions = computed(() => positions.value);
 
 // Reactive positions that update when ADA price changes
 const positions = computed(() => {
-  console.log('🔍 [PerpetualsDialog] Positions computed - rawPositions.value:', {
+  debugLog('🔍 [PerpetualsDialog] Positions computed - rawPositions.value:', {
     length: rawPositions.value.length,
     hasData: rawPositions.value.length > 0,
     allPositions: rawPositions.value,
@@ -2080,7 +2080,7 @@ const positions = computed(() => {
   });
 
   if (!rawPositions.value.length) {
-    console.log('🔍 [PerpetualsDialog] No rawPositions available, returning empty array');
+    debugLog('🔍 [PerpetualsDialog] No rawPositions available, returning empty array');
     return [];
   }
 
@@ -2090,7 +2090,7 @@ const positions = computed(() => {
   // rather than an exclusive filter
   const filteredPositions = rawPositions.value;
 
-  console.log('🔍 [PerpetualsDialog] Processing positions:', {
+  debugLog('🔍 [PerpetualsDialog] Processing positions:', {
     count: filteredPositions.length,
     positions: filteredPositions
   });
@@ -2099,7 +2099,7 @@ const positions = computed(() => {
     // Re-process position data with the current price
     const processedData = processPositionData(position);
 
-    console.log(`🔍 [PerpetualsDialog] Processed position ${index}:`, {
+    debugLog(`🔍 [PerpetualsDialog] Processed position ${index}:`, {
       id: position.id,
       status: position.status,
       processedData

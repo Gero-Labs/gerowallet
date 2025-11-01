@@ -36,7 +36,7 @@ if (context === 'browser') {
 
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<LoadingState>) => {
-    console.log('📥 Received loading store update:', updates);
+    debugLog('📥 Received loading store update:', updates);
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
@@ -52,7 +52,7 @@ if (context === 'browser') {
     if (result[STORE_NAME]) {
       // Hydrate from storage immediately - this ensures we have the latest persisted state
       Object.assign(loadingState, result[STORE_NAME]);
-      console.log('💾 Hydrated loading store from storage:', {
+      debugLog('💾 Hydrated loading store from storage:', {
         connected: result[STORE_NAME].connected,
         connecting: result[STORE_NAME].connecting,
         full: result[STORE_NAME]
@@ -83,7 +83,7 @@ function broadcastFromBackground(updates: Partial<LoadingState>, immediate = fal
         storageWriteTimeout = null;
       }
       chrome.storage.local.set({ [STORE_NAME]: loadingState });
-      console.log('💾 LoadingState persisted immediately:', updates);
+      debugLog('💾 LoadingState persisted immediately:', updates);
     } else {
       // Debounced storage write for other updates to reduce I/O
       if (storageWriteTimeout) {
@@ -164,13 +164,13 @@ export default {
 
   setConnected: createSetter('connected', (v) => {
     if (loadingState.connected !== v) {
-      console.log(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
+      debugLog(`🔗 Connection state changed to ${v ? 'connected' : 'disconnected'}`);
     }
   }),
 
   setConnecting: createSetter('connecting', (v) => {
     if (loadingState.connecting !== v) {
-      console.log(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
+      debugLog(`🔌 Connecting state changed to ${v ? 'connecting' : 'idle'}`);
     }
   }),
 
