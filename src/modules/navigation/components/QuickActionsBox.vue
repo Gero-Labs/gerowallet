@@ -111,7 +111,7 @@
             ></v-img>
           </v-avatar>
           <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
-          <div v-if="!loadingPerpetuals" class="ribbon top-right" aria-hidden="true">
+          <div v-if="connectionStatus != 'connected'" class="ribbon top-right" aria-hidden="true">
             <span>{{ $t('common.down') }}</span>
           </div>
         </v-btn>

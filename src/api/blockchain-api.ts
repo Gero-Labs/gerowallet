@@ -225,7 +225,7 @@ export default {
     epoch?: number;
   }) {
     try {
-      const { data, status } = await axiosInstance.post('/api/sync', syncRequest);
+      const { data, status } = await axiosInstance.post('/api/sync2', syncRequest);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error: any | AxiosError) {

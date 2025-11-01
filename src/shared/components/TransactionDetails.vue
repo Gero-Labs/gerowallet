@@ -786,6 +786,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
+const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 const { currentDRep } = toRefs(governanceStoreActions.state);
 const { currentPool } = toRefs(stakingStoreActions.state);

@@ -28,33 +28,6 @@ export class Api {
     );
   }
 
-  async sync(
-    from: number,
-    to: any,
-    address: string,
-    rewards_sum: string,
-    controlled_amount: string,
-    withdrawable_amount: string
-  ): Promise<any> {
-    try {
-      const { data, status } = await this.axiosInstance.post(`/api/sync`, {
-        chain: this.chain,
-        network: this.network,
-        provider: this.provider,
-        from,
-        to,
-        address,
-        rewards_sum,
-        controlled_amount,
-        withdrawable_amount,
-      });
-      if (status === 200) return data;
-      throw parseHttpError(data);
-    } catch (error) {
-      throw parseHttpError(error);
-    }
-  }
-
   async getAccountInfo(rewardAddress: string) {
     try {
       const { data, status } = await this.axiosInstance.get(
