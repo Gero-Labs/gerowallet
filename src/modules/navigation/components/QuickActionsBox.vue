@@ -66,7 +66,6 @@
           <span class="button-text">{{ $t('navigation.receive') }}</span>
         </v-btn>
       </div>
-
       <div v-if="isSwapSupportedByNetwork" class="action-button-wrapper">
         <v-btn
           ref="swapButton"
@@ -76,6 +75,7 @@
           @click="currentDialog = dialogs.SWAP"
           :style="getButtonGlowStyle('swap')"
           :disabled="!isSwapEnabledByFeatureFlag"
+          :loading="loadingSwap"
         >
           <v-avatar tile size="14">
             <v-img
@@ -86,12 +86,11 @@
             ></v-img>
           </v-avatar>
           <span class="button-text">{{ $t('swap.swap') }}</span>
-          <div v-if="!isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
+          <div v-if="!loadingSwap && !isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
             <span>{{ $t('common.off') }}</span>
           </div>
         </v-btn>
       </div>
-
       <div v-if="!isPerpetualsDisabled" class="action-button-wrapper">
         <v-btn
           ref="perpetualsButton"
@@ -100,6 +99,8 @@
           height="28"
           @click="currentDialog = dialogs.PERPETUALS"
           :style="getButtonGlowStyle('perpetuals')"
+          :disabled="connectionStatus !== 'connected'"
+          :loading="loadingPerpetuals"
         >
           <v-avatar tile size="14">
             <v-img
@@ -110,6 +111,9 @@
             ></v-img>
           </v-avatar>
           <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
+          <div v-if="!loadingPerpetuals" class="ribbon top-right" aria-hidden="true">
+            <span>{{ $t('common.down') }}</span>
+          </div>
         </v-btn>
       </div>
     </div>
@@ -135,8 +139,10 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { priceStore } from '@/stores/priceStore';
 
 const { loggedWallet } = toRefs(walletStore);
+const { connectionStatus } = toRefs(priceStore);
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentDialog = ref(null);
@@ -164,6 +170,15 @@ const isBuyDisabled = computed(() => {
   }
   return true;
 });
+
+// Loading state for swap feature flag
+const loadingSwap = computed(() => {
+  return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
+});
+
+const loadingPerpetuals = computed(() => {
+  return priceStore.connectionStatus === 'connecting'
+})
 
 // Check if swap is enabled by LaunchDarkly feature flag
 const isSwapEnabledByFeatureFlag = computed(() => {

@@ -35,7 +35,7 @@
                     :type="showPassword ? 'text' : 'password'"
                     :rules="[rules.required()]"
                     required
-                    @keydown.enter.stop="confirm"
+                    @keydown.enter.stop="sign"
                   >
                     <template v-slot:append>
                       <v-icon @click="showPassword = !showPassword" tabindex="-1">

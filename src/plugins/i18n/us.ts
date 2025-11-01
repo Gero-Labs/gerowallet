@@ -389,6 +389,7 @@ export default {
   'common.details': 'Details',
   'common.done': 'Done',
   'common.duration': 'Duration',
+  'common.down': 'DOWN',
   'common.edit': 'Edit',
   'common.editContact': 'Edit Contact',
   'common.epochParametersNotAvailable': 'Epoch parameters not available',
