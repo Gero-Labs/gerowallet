@@ -24,7 +24,7 @@ export interface PriceStore {
 export const priceStore = Vue.observable<PriceStore>({
   adaUsd: null,
   isConnected: false,
-  connectionStatus: 'disconnected'
+  connectionStatus: 'connecting'
 });
 
 class PriceService {
