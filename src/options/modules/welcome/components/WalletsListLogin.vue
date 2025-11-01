@@ -1,10 +1,10 @@
 <template>
   <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
     <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcomeMessage') }}
+      {{ $t('welcome.welcomeMessage') }}
     </v-card-title>
     <v-card-subtitle class="text-center px-6" style="font-size: 20px">
-      {{ $t('chooseAWallet') }}
+      {{ $t('welcome.chooseAWallet') }}
     </v-card-subtitle>
     <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
