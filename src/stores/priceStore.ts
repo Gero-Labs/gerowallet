@@ -35,25 +35,27 @@ class PriceService {
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
+      // Re-register the ticker callback in case of HMR
+      this.registerTickerCallback();
       return;
     }
 
     try {
       debugLog('🦑 Initializing price service...');
       priceStore.connectionStatus = 'connecting';
-      // Set up ticker update handler
-      krakenWebSocketService.onTicker((ticker: PriceData) => {
-        priceStore.adaUsd = ticker;
-        priceStore.isConnected = true;
-        priceStore.connectionStatus = 'connected';
-        debugLog('🦑 Price updated:', `$${ticker.lastPrice}`);
-      });
+
+      // Register ticker callback
+      this.registerTickerCallback();
 
       // Connect to Kraken WebSocket
       await krakenWebSocketService.connect();
 
       // Subscribe to ADA/USD ticker
       krakenWebSocketService.subscribeToAdaUsd();
+
+      // Set to connected after successful connection
+      Vue.set(priceStore, 'connectionStatus', 'connected');
+      Vue.set(priceStore, 'isConnected', true);
 
       this.isInitialized = true;
       debugLog('🦑 Price service initialized successfully');
@@ -62,6 +64,27 @@ class PriceService {
       console.error('🦑 Failed to initialize price service:', error);
       priceStore.connectionStatus = 'error';
       priceStore.isConnected = false;
+    }
+  }
+
+  /**
+   * Register ticker update callback
+   * Extracted to support HMR re-registration
+   */
+  private registerTickerCallback(): void {
+    krakenWebSocketService.onTicker((ticker: PriceData) => {
+      Vue.set(priceStore, 'adaUsd', ticker);
+      Vue.set(priceStore, 'isConnected', true);
+      Vue.set(priceStore, 'connectionStatus', 'connected');
+      // Use debugLog to reduce console noise for frequent price updates
+      debugLog('🦑 Price updated:', `$${ticker.lastPrice}`);
+    });
+
+    // If Kraken is already connected, set status immediately
+    if (krakenWebSocketService.getConnectionStatus()) {
+      Vue.set(priceStore, 'connectionStatus', 'connected');
+      Vue.set(priceStore, 'isConnected', true);
+      console.log('🦑 Kraken already connected, setting status to connected');
     }
   }
 
@@ -115,6 +138,17 @@ class PriceService {
 
 // Create singleton instance
 const priceService = new PriceService();
+
+// Handle HMR (Hot Module Replacement) - re-register callback with updated priceStore instance
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    debugLog('🦑 PriceStore HMR: Re-registering ticker callback...');
+    // Re-register callback if already initialized
+    if (priceService['isInitialized']) {
+      priceService['registerTickerCallback']();
+    }
+  });
+}
 
 export { priceService };
 export default priceService;

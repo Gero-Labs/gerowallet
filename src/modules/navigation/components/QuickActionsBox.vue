@@ -99,8 +99,8 @@
           height="28"
           @click="currentDialog = dialogs.PERPETUALS"
           :style="getButtonGlowStyle('perpetuals')"
-          :disabled="connectionStatus !== 'connected'"
-          :loading="loadingPerpetuals"
+          :disabled="priceStore.connectionStatus !== 'connected'"
+          :loading="priceStore.connectionStatus === 'connecting'"
         >
           <v-avatar tile size="14">
             <v-img
@@ -111,7 +111,7 @@
             ></v-img>
           </v-avatar>
           <span class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
-          <div v-if="connectionStatus != 'connected'" class="ribbon top-right" aria-hidden="true">
+          <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
             <span>{{ $t('common.down') }}</span>
           </div>
         </v-btn>
@@ -142,7 +142,6 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import { priceStore } from '@/stores/priceStore';
 
 const { loggedWallet } = toRefs(walletStore);
-const { connectionStatus } = toRefs(priceStore);
 const vmProxy = getCurrentInstance()!.proxy as any
 
 const currentDialog = ref(null);
@@ -175,10 +174,6 @@ const isBuyDisabled = computed(() => {
 const loadingSwap = computed(() => {
   return featureFlagsStore.state.isLoading || !featureFlagsStore.state.isInitialized;
 });
-
-const loadingPerpetuals = computed(() => {
-  return priceStore.connectionStatus === 'connecting'
-})
 
 // Check if swap is enabled by LaunchDarkly feature flag
 const isSwapEnabledByFeatureFlag = computed(() => {
