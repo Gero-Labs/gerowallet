@@ -59,7 +59,7 @@
                         <v-card-title class="justify-center" style="font-weight: 700; word-break: break-word">
                           {{ $t('welcome.hardwareWalletType') }}
                         </v-card-title>
-                        <v-card-text class="text-center">
+                        <v-card-text class="text-center px-0">
                           <v-item-group v-model="walletType" active-class="primary" class="pb-10">
                             <v-row no-gutters>
                               <v-col
@@ -68,7 +68,7 @@
                                 cols="12"
                                 sm="4"
                                 xs="12"
-                                class="pa-0"
+                                class="pa-1"
                               >
                                 <v-item v-slot="{ active, toggle }" :value="item.name">
                                   <v-hover>
@@ -529,7 +529,7 @@ const walletCreationStep3 = async () => {
         method: MessageTypes.LOGIN,
         data: { wallet },
       });
-      
+
       if (response && !response.error) {
         nextTick(() => {
           resetDialog();

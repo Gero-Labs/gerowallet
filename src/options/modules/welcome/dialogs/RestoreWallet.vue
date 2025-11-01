@@ -5,14 +5,13 @@
     scrollable
     max-width="850"
     min-height="742"
-    :persistent="persistent"
   >
     <v-card class="py-0 rounded-xxl transparent fill-height">
       <v-stepper v-model="step" flat style="background-color: transparent; height: 100%" non-linear>
         <v-stepper-header style="box-shadow: none">
           <v-stepper-step :complete="step > 1" step="1"> {{ $t('welcome.seedPhrase') }} </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="step > 2" step="2"> {{ $t('walletSetup') }} </v-stepper-step>
+          <v-stepper-step :complete="step > 2" step="2"> {{ $t('welcome.walletSetup') }} </v-stepper-step>
         </v-stepper-header>
 
         <v-stepper-items>
@@ -287,7 +286,6 @@ const newWallet = ref({
 });
 const valid2 = ref<boolean>(false);
 const creatingWalletLoader = ref<boolean>(false);
-const persistent = ref<boolean>(false);
 const seedPhraseLength = ref<string>('24');
 const emptySeedPhrase: string[] = Array(Number(seedPhraseLength.value)).fill('');
 const recoverySeedPhrase = ref<string[]>(emptySeedPhrase);
@@ -367,7 +365,6 @@ const pasteFromClipboard = async () => {
 const walletCreationStep1 = () => {
   if (form.value?.validate()) {
     step.value = 2;
-    persistent.value = true;
   }
 };
 
@@ -389,7 +386,7 @@ const walletCreationStep2 = async () => {
         method: MessageTypes.LOGIN,
         data: { wallet },
       });
-      
+
       if (response && !response.error) {
         vmProxy.$nextTick(() => {
           router.push('/').catch(err => {
@@ -427,7 +424,6 @@ const resetDialog = () => {
   valid2.value = false;
   creatingWalletLoader.value = false;
   recoverySeedPhrase.value = emptySeedPhrase;
-  persistent.value = false;
 };
 
 // Lifecycle
