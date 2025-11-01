@@ -1,7 +1,7 @@
 <template>
   <div class="footer-legal">
     <GButton color="white" text :ripple="false" class="footer-btn" @click="handlePrivacyClick">
-      {{ $t('privacyPolicy') }}
+      {{ $t('welcome.privacyPolicy') }}
     </GButton>
     <v-divider vertical></v-divider>
     <GButton
@@ -12,7 +12,7 @@
       href="https://www.gerowallet.io/_files/ugd/79567a_718ec62866234a2689831a9e5c632725.pdf?index=true"
       target="_blank"
     >
-      {{ $t('termsOfService') }}
+      {{ $t('welcome.termsOfService') }}
     </GButton>
     <v-divider vertical></v-divider>
     <GButton color="white" text :ripple="false" class="footer-btn" @click="changeLogDialog = true">
