@@ -151,6 +151,7 @@ export class TransactionsLoader extends BaseLoader {
       () => walletDB.table('transactions').toArray(),
       async (newTransactions: any[]) => {
         Loading.setLoadingTxs(true);
+        console.log('new TXs', newTransactions)
         try {
           // Check for the old transaction format and trigger migration if needed
           if (await this.detectAndHandleOldTransactionFormat(newTransactions)) {

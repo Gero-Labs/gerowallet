@@ -9,7 +9,6 @@
     scrollable
     max-width="850"
     :min-height="0"
-    :persistent="persistent"
   >
     <v-card-text class="px-0 py-2" style="justify-items: center;">
       <v-form ref="form" v-model="valid">
@@ -146,7 +145,6 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, reactive, nextTick, getCurrentInstance } from 'vue';
 import rules from "@/utils/rules";
 import { Theme } from "@/models/types";
@@ -158,13 +156,11 @@ import { MessageTypes } from '@/models/MessageTypes';
 
 interface Props {
   isOpen: boolean;
-  persistent: boolean;
   network: any;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isOpen: false,
-  persistent: false,
 });
 
 const emit = defineEmits(['close']);
@@ -220,7 +216,7 @@ const walletCreationStep = async () => {
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
-    
+
     if (response && !response.error) {
       vmProxy.$nextTick(() => {
         resetDialog();
