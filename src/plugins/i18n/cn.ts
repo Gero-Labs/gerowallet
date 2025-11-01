@@ -1697,6 +1697,7 @@ export default {
   'welcome.singlePaneOf': 'Single Pane of',
   'welcome.soon': 'Soon',
   'welcome.spendingPassword': 'Spending Password',
+  'welcome.privacyPolicy': '',
   'welcome.termsOfService': 'Terms of Service',
   'welcome.type': 'Type',
   'welcome.understandPasswordRecovery': 'I understand that GeroWallet cannot recover this password for me.',
