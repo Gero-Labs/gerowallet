@@ -1,5 +1,164 @@
+<template>
+  <BaseDialog
+    :title="$t('welcome.googleWalletSetup')"
+    :subtitle="props.network?.title"
+    :is-open="props.isOpen"
+    @close="$emit('close')"
+    content-class="rounded-xxl dialogStyle"
+    scrollable
+    max-width="850"
+    :min-height="0"
+    :persistent="props.persistent"
+  >
+    <v-card-text class="pa-0" style="position: relative;">
+      <v-container class="pa-1 pb-2" style="max-width: 534px;">
+        <v-form ref="form" v-model="valid">
+          <v-list-item class="pa-0" style="justify-self: center;">
+            <v-list-item-avatar>
+              <v-img :src="props.googleAccount['picture']" :alt="$t('wallet.googleAccountProfilePicture')" />
+            </v-list-item-avatar>
+            <v-list-item-content>
+              <v-list-item-title>
+                {{ props.googleAccount['name']}}
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ props.googleAccount['email']}}
+              </v-list-item-subtitle>
+            </v-list-item-content>
+            <v-list-item-avatar>
+              <v-icon size="x-large" color="primary">mdi-check-circle</v-icon>
+            </v-list-item-avatar>
+          </v-list-item>
+          <v-divider class="mb-2"></v-divider>
+          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your wallet.</h3>
+          <v-text-field
+            filled
+            dense
+            color="primary"
+            v-model="newWallet.name"
+            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
+            :label="$t('welcome.walletName')"
+            :placeholder="$t('welcome.walletNamePlaceholder')"
+            required
+            :disabled="activationInProgress"
+          ></v-text-field>
+          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
+          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet and make transactions.</h3>
+          <v-text-field
+            filled
+            dense
+            color="primary"
+            v-model="newWallet.password"
+            :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase,rules.containSpecialCharacter]"
+            :type="show1 ? 'text' : 'password'"
+            :label="$t('welcome.password')"
+            required
+            :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+            @click:append="show1 = !show1"
+            :disabled="activationInProgress"
+          ></v-text-field>
+
+          <v-text-field
+            filled
+            dense
+            color="primary"
+            v-model="newWallet.confirmPassword"
+            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || $t('welcome.passwordsMustMatch')]"
+            :type="show2 ? 'text' : 'password'"
+            :label="$t('welcome.confirmPassword')"
+            required
+            :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
+            @click:append="show2 = !show2"
+            :disabled="activationInProgress"
+          ></v-text-field>
+
+          <v-checkbox
+            class="mt-0"
+            dense
+            color="primary"
+            v-model="newWallet.termsChecked"
+            :rules="[rules.required()]"
+            label="I understand that Gero cannot recover this password for me."
+            required
+            hide-details
+            :disabled="activationInProgress"
+          ></v-checkbox>
+
+          <v-checkbox
+            class="mt-0"
+            dense
+            color="primary"
+            v-model="newWallet.recoverPasswordChecked"
+            :rules="[rules.required()]"
+            label="I have read and agree to the Terms of Service."
+            required
+            hide-details
+            :disabled="activationInProgress"
+          ></v-checkbox>
+        </v-form>
+      </v-container>
+
+      <!-- Activation Progress Overlay -->
+      <div v-if="activationInProgress" class="activation-overlay">
+        <v-card class="activation-card elevation-12">
+          <v-card-text class="pa-6">
+            <v-container>
+              <v-row class="justify-center">
+                <v-col cols="12" class="text-center">
+                  <v-progress-circular
+                    :size="70"
+                    :width="7"
+                    color="primary"
+                    indeterminate
+                  ></v-progress-circular>
+                </v-col>
+              </v-row>
+              <v-row class="justify-center mt-4">
+                <v-col cols="12" class="text-center">
+                  <h2 class="white--text mb-2">{{ activationStatus }}</h2>
+                  <p class="text--secondary" v-if="activationStep === 'proof'">
+                    Generating zero-knowledge proof...<br>This may take 5-10 minutes.
+                    <br />
+                    <small v-if="pollingAttempts > 0">Checked {{ pollingAttempts }} time{{ pollingAttempts === 1 ? '' : 's' }}</small>
+                  </p>
+                  <p class="text--secondary" v-if="activationStep === 'blockchain'">
+                    Submitting activation transaction to Cardano blockchain...
+                  </p>
+                  <p class="text--secondary" v-if="activationStep === 'complete'">
+                    Your wallet is now ready to use!
+                  </p>
+                </v-col>
+              </v-row>
+              <v-row class="justify-center mt-2" v-if="activationError">
+                <v-col cols="12" class="text-center">
+                  <v-alert type="error" text>
+                    {{ activationError }}
+                  </v-alert>
+                </v-col>
+              </v-row>
+            </v-container>
+          </v-card-text>
+        </v-card>
+      </div>
+    </v-card-text>
+    <v-card-actions class="justify-center">
+      <v-btn
+        style="color: black!important;"
+        class="geroButton"
+        variant="flat"
+        :loading="creatingWalletLoader"
+        :disabled="!valid || creatingWalletLoader || activationInProgress"
+        @click="walletCreation"
+      >
+        CREATE WALLET
+      </v-btn>
+    </v-card-actions>
+  </BaseDialog>
+</template>
 <script setup lang="ts">
-import { ref, onMounted, watch, getCurrentInstance, nextTick } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { ref, onMounted, watch, getCurrentInstance, reactive, nextTick } from 'vue';
 import { Theme } from '@/models/types';
 import rules from '@/utils/rules';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -23,7 +182,7 @@ interface NewWallet {
 interface Props {
   isOpen: boolean;
   persistent: boolean;
-  googleAccount: {};
+  googleAccount: { };
   tokens: {
     idToken: string,
     accessToken: string,
@@ -32,6 +191,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
 const emit = defineEmits(['close']);
 
 const vmProxy = getCurrentInstance()!.proxy as any
@@ -44,7 +204,17 @@ const valid = ref<boolean>(false);
 const creatingWalletLoader = ref(false);
 const persistent = ref(false);
 
-let newWallet = ref<NewWallet>({
+// Activation state
+const activationInProgress = ref(false);
+const activationStep = ref<'proof' | 'blockchain' | 'complete'>('proof');
+const activationStatus = ref('');
+const activationError = ref('');
+const pollingAttempts = ref(0);
+const maxPollingAttempts = ref(60); // 30 minutes max (30 seconds * 60)
+const abortController = ref<AbortController | null>(null);
+const currentActivationId = ref<string | null>(null);
+
+let newWallet = reactive<NewWallet>({
   name: '',
   icon: '',
   theme: Theme.GERO,
@@ -52,119 +222,134 @@ let newWallet = ref<NewWallet>({
   confirmPassword: '',
   termsChecked: false,
   recoverPasswordChecked: false,
-  chain: props.network?.blockchain,
+  chain: props.network?.chain,
   network: props.network?.network
 });
 
-
-watch(() => props.isOpen, (newValue, _oldValue) => {
+watch(() => props.isOpen, async (newValue, _oldValue) => {
   if (!newValue) {
+    // If dialog is closed during activation, abort the process
+    if (activationInProgress.value && currentActivationId.value) {
+      console.log('🚫 Wallet activation aborted by user - marking as inactive');
+      // Mark activation as aborted in chrome storage
+      await chrome.storage.local.set({ [`activation_${currentActivationId.value}`]: { active: false } });
+      currentActivationId.value = null;
+    }
     resetDialog();
   }
 })
 
 watch(() => props.googleAccount, (newValue, _oldValue) => {
-  newWallet.value.name = newValue['email']?.split('@')[0];
-  newWallet.value.icon = newValue['picture'];
+  newWallet.name = newValue['email']?.split('@')[0];
+  newWallet.icon = newValue['picture'];
 })
 
 onMounted(() => {
   if (props.googleAccount) {
-    newWallet.value.name = props.googleAccount['email']?.split('@')[0];
-    newWallet.value.icon = props.googleAccount['picture'];
+    newWallet.name = props.googleAccount['email']?.split('@')[0];
+    newWallet.icon = props.googleAccount['picture'];
   }
 })
 
 const walletCreation = async (): Promise<void> => {
   creatingWalletLoader.value = true;
-  try {
-    // Use the improved zkFold service for wallet creation
-    const zkFold = new (await import('@/shared/utils/zkFold')).ZkFold();
-    
-    // Set tokens directly from props instead of triggering another OAuth popup
-    zkFold.accessToken.value = props.tokens.accessToken;
-    zkFold.idToken.value = props.tokens.idToken;
-    zkFold.profile.value = props.googleAccount;
+  activationError.value = '';
 
-    // Create the wallet using zkFold service
-    const walletResult = await zkFold.createWallet({
-      name: newWallet.value.name,
-      icon: newWallet.value.icon,
-      theme: newWallet.value.theme,
-      password: newWallet.value.password,
-      chain: props.network?.blockchain,
-      network: props.network?.network,
+  try {
+    // Step 1: Activate the wallet with ZK proof (this will create wallet in DB if successful)
+    console.log('Starting Google wallet creation and activation...');
+    activationInProgress.value = true;
+    activationStep.value = 'proof';
+    activationStatus.value = 'Generating cryptographic proof...';
+
+    // Generate unique activation ID for abort tracking
+    const activationId = `google-wallet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    currentActivationId.value = activationId;
+
+    // Create AbortController
+    abortController.value = new AbortController();
+
+    // Store activation ID in chrome storage so background can check if aborted
+    await chrome.storage.local.set({ [`activation_${activationId}`]: { active: true } });
+
+    // zkFold prover URL (TODO: Move to env variable)
+    const proverURL = 'https://wallet-prover.zkfold.io';
+
+    const activationResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.ACTIVATE_GOOGLE_WALLET,
+      data: {
+        activationId, // Pass activation ID for abort checking
+        // Pass wallet creation data (wallet will be created AFTER proof succeeds)
+        walletData: {
+          name: newWallet.name,
+          icon: newWallet.icon,
+          theme: newWallet.theme,
+          password: newWallet.password,
+          chain: newWallet.chain,
+          network: newWallet.network,
+          jwt: props.tokens.idToken,
+        },
+        proverURL,
+      },
     });
 
-    // Create wallet in local database (fallback to original method)
-    const wallet = await GeroStore.createNewGoogleWallet(
-      newWallet.value.name,
-      newWallet.value.icon,
-      newWallet.value.theme,
-      newWallet.value.password,
-      props.network?.blockchain,
-      props.network?.network,
-      props.tokens.idToken
-    );
+    if (!activationResponse || !activationResponse.data || !activationResponse.data.success) {
+      throw new Error(activationResponse?.error || 'Wallet activation failed');
+    }
 
-    // Update wallet address
-    
+    // Step 2: Activation successful - wallet is now created in DB
+    activationStep.value = 'complete';
+    activationStatus.value = 'Wallet activated successfully!';
+    console.log('Wallet activated:', activationResponse.data);
+    const walletId = activationResponse.data.walletId;
 
-    emit('close');
-    
-    // Login with the newly created wallet
-    await Messaging.sendToBackgroundFromOptions({
+    // Refresh wallets list from DB
+    await GeroStore.refreshWallets();
+
+    // Wait a moment to show success message
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Step 3: Login to the wallet
+    const walletToLogin = GeroStore.state.wallets[walletId];
+
+    if (!walletToLogin) {
+      throw new Error('Wallet not found after creation');
+    }
+
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
-      data: { wallet },
-    }).then(() => {
+      data: { wallet: walletToLogin },
+    });
+
+    if (response && !response.error) {
+      emit('close');
       nextTick(() => {
         resetDialog();
-        router.push('/')
-      })
-    });
-
-    console.log('✅ Google wallet created successfully:', {
-      walletId: wallet,
-      address: walletResult?.address
-    });
-  } catch (error) {
-    console.error('❌ Error creating Google wallet:', error);
-    
-    // Fallback to original wallet creation method
-    try {
-      const wallet = await GeroStore.createNewGoogleWallet(
-        newWallet.value.name,
-        newWallet.value.icon,
-        newWallet.value.theme,
-        newWallet.value.password,
-        props.network?.blockchain,
-        props.network?.network,
-        props.tokens.idToken
-      );
-      
-      emit('close');
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.LOGIN,
-        data: { wallet },
-      }).then(() => {
-        nextTick(() => {
-          resetDialog();
-          router.push('/')
-        })
+        router.push('/').catch(err => {
+          if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+            console.error('Navigation error:', err);
+          }
+        });
       });
-      
-      console.log('✅ Google wallet created using fallback method');
-    } catch (fallbackError) {
-      console.error('❌ Fallback wallet creation also failed:', fallbackError);
-      throw fallbackError;
+    } else if (response?.error) {
+      console.warn('Login response error:', response.error);
+      emit('close');
+      nextTick(() => {
+        resetDialog();
+        router.push('/').catch(() => {});
+      });
     }
+  } catch (error) {
+    console.error('Error creating/activating wallet:', error);
+    activationError.value = error.message || 'An error occurred during wallet creation/activation';
+    activationInProgress.value = false;
   } finally {
     creatingWalletLoader.value = false;
   }
 };
 
 const resetDialog = (): void => {
-  newWallet.value = {
+  newWallet = {
     name: '',
     icon: '',
     theme: Theme.GERO,
@@ -172,7 +357,7 @@ const resetDialog = (): void => {
     confirmPassword: '',
     termsChecked: false,
     recoverPasswordChecked: false,
-    chain: props.network?.blockchain,
+    chain: props.network?.chain,
     network: props.network?.network
   };
   valid.value = false;
@@ -183,64 +368,25 @@ const resetDialog = (): void => {
   })
 };
 </script>
+<style scoped>
+.activation-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  padding: 20px;
+}
 
-<template>
-  <BaseDialog title="Google Wallet Set Up" :subtitle="props.network?.title" :is-open="props.isOpen"
-    @close="$emit('close')" content-class="rounded-xxl dialogStyle" scrollable max-width="850" :min-height="0"
-    :persistent="props.persistent">
-    <v-card-text class="pa-0">
-      <v-container class="pa-1 pb-2" style="max-width: 534px;">
-        <v-form ref="form" v-model="valid">
-          <v-list-item class="pa-0" style="justify-self: center;">
-            <v-list-item-avatar>
-              <v-img :src="props.googleAccount['picture']" alt="Google Account Profile Picture" />
-            </v-list-item-avatar>
-            <v-list-item-content>
-              <v-list-item-title>
-                {{ props.googleAccount['name'] }}
-              </v-list-item-title>
-              <v-list-item-subtitle>
-                {{ props.googleAccount['email'] }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-avatar>
-              <v-icon size="x-large" color="primary">mdi-check-circle</v-icon>
-            </v-list-item-avatar>
-          </v-list-item>
-          <v-divider class="mb-2"></v-divider>
-          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">Choose a name to help you identify your
-            wallet.</h3>
-          <v-text-field filled dense color="primary" v-model="newWallet.name"
-            :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]" label="Wallet Name"
-            placeholder="e.g. My New Wallet" required></v-text-field>
-          <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your spending password</h2>
-          <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">You'll use this to log into your wallet
-            and make transactions.</h3>
-          <v-text-field filled dense color="primary" v-model="newWallet.password"
-            :rules="[rules.required(), rules.spaceNotAllowed, rules.minCharacters(10), rules.oneOrMoreNumbers, rules.containCapital, rules.containLowerCase, rules.containSpecialCharacter]"
-            :type="show1 ? 'text' : 'password'" label="Password" required
-            :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" @click:append="show1 = !show1"></v-text-field>
-
-          <v-text-field filled dense color="primary" v-model="newWallet.confirmPassword"
-            :rules="[rules.required(), (newWallet.password === newWallet.confirmPassword) || 'Passwords must match']"
-            :type="show2 ? 'text' : 'password'" label="Confirm Password" required
-            :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'" @click:append="show2 = !show2"></v-text-field>
-
-          <v-checkbox class="mt-0" dense color="primary" v-model="newWallet.termsChecked" :rules="[rules.required()]"
-            label="I understand that Gero cannot recover this password for me." required hide-details></v-checkbox>
-
-          <v-checkbox class="mt-0" dense color="primary" v-model="newWallet.recoverPasswordChecked"
-            :rules="[rules.required()]" label="I have read and agree to the Terms of Service." required
-            hide-details></v-checkbox>
-        </v-form>
-      </v-container>
-    </v-card-text>
-    <v-card-actions class="justify-center">
-      <v-btn style="color: black!important;" class="geroButton" variant="flat" :loading="creatingWalletLoader"
-        :disabled="!valid || creatingWalletLoader" @click="walletCreation">
-        CREATE WALLET
-      </v-btn>
-    </v-card-actions>
-  </BaseDialog>
-</template>
+.activation-card {
+  max-width: 500px;
+  width: 100%;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border-radius: 16px !important;
+}
+</style>

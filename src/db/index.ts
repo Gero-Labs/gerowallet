@@ -1,8 +1,14 @@
 import Dexie, { DexieError } from 'dexie';
-import { blockChainDBSchema, blockChainDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
-import { getDb } from './gero-db';
+import {
+  blockChainDBSchema,
+  blockChainDBVersion,
+  walletDBSchema,
+  walletDBVersion,
+} from '@/db/schema';
+import { debugLog } from '@/utils/debug';
 
 let db: Dexie = null
+
 const blockchainDbCache: Map<string, Dexie> = new Map();
 
 export async function getBlockchainDb(chain: string, network: string): Promise<Dexie> {
@@ -19,7 +25,7 @@ export async function getBlockchainDb(chain: string, network: string): Promise<D
     blockchainDbCache.set(dbName, db);
     return db;
   } catch (error: DexieError | any) {
-    console.debug('Blockchain database error:', error);
+    debugLog('Blockchain database error:', error)
     if (error.name === 'NoSuchDatabaseError') {
       const db: Dexie = new Dexie(dbName);
       db.version(blockChainDBVersion).stores(blockChainDBSchema);
@@ -28,7 +34,7 @@ export async function getBlockchainDb(chain: string, network: string): Promise<D
       return db;
     } else {
       console.error('Error opening blockchain database:', error);
-      return null;
+      return null
     }
   }
 }
@@ -46,38 +52,22 @@ export default {
   async getAllWallets() {
     return db['wallets'].toArray();
   },
-
-  async getGoogleWalletWithEmail(email: string) {
-    if (!db) {
-      db = await getDb();
-    }
-    try {
-      const wallets = await db['wallets'].where('userId').equals(email).toArray();
-      if (wallets && wallets.length > 0) {
-        return wallets[0];
-      }
-    } catch (e) {
-      console.error('Error fetching Google wallet with email:', e);
-      return null;
-    }
-  },
-
   async checkAndCreateBlockchainDatabase(dbName: string) {
     try {
       // Attempt to open the database
       const db: Dexie = new Dexie(dbName);
       return db.open();
     } catch (error: DexieError | any) {
-      console.log(error);
+      console.log(error)
       if (error.name === 'NoSuchDatabaseError') {
         // Database does not exist, create it
         const db: Dexie = new Dexie(dbName);
-        this.setBlockchainDBVersionSchema(db);
+        this.setBlockchainDBVersionSchema(db)
         return db.open();
       } else {
         // Handle other errors
         console.error('Error opening database:', error);
-        return null;
+        return null
       }
     }
   },
@@ -85,10 +75,10 @@ export default {
     db.version(blockChainDBVersion).stores(blockChainDBSchema);
   },
   setWalletDBVersionSchema(db: Dexie) {
-    console.log('setWalletDBVersionSchema');
+    console.log('setWalletDBVersionSchema')
     db.version(walletDBVersion).stores(walletDBSchema);
   },
   async checkIfDbExists(dbName: string) {
-    return await Dexie.exists(dbName);
-  },
+    return Dexie.exists(dbName);
+  }
 };

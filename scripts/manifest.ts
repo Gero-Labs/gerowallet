@@ -12,7 +12,6 @@ dotenv.config({
 interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
   oauth2?: {
     client_id: string;
-    client_secret: string;
     scopes: string[];
   };
   key?: string;
@@ -22,8 +21,6 @@ interface ManifestWithOAuth2 extends Manifest.WebExtensionManifest {
 const key = process.env.MANIFEST_KEY;
 //@ts-ignore
 const client_id = process.env.GOOGLE_CLIENT_ID;
-//@ts-ignore
-const client_secret = process.env.GOOGLE_CLIENT_SECRET;
 //@ts-ignore
 const isBeta: boolean = process.env.VITE_IS_BETA === 'true';
 
@@ -57,7 +54,6 @@ async function getManifest() {
     },
     oauth2: {
       client_id,
-      client_secret,
       scopes:[
         "openid",
         "profile",
@@ -71,7 +67,8 @@ async function getManifest() {
       }
       : {
         service_worker: './background/index.js',
-        type: 'module'
+        // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
+        // This was causing "Failed to resolve module specifier" errors
       },
     permissions: [
       'tabs',
@@ -80,6 +77,7 @@ async function getManifest() {
       'storage',
       'favicon',
       'alarms',
+      'cookies',
       'unlimitedStorage',
       'webNavigation',
       'notifications',
@@ -105,8 +103,8 @@ async function getManifest() {
     ],
     content_security_policy: {
       extension_pages: isDev ?
-        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://dev.gerowallet.io https://guardarian.com/ https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://sandbox-api.bringweb3.io http://localhost:* ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/; media-src http://localhost:* data:; object-src 'self'`
-        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com/oauth2/v3/userinfo https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io/ wss://api.gerowallet.io/ https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/; media-src https://api.gerowallet.io/ data:; object-src 'self'`
+        `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://localhost:*; font-src 'self' https://fonts.gstatic.com/ http://localhost:*; connect-src https://dev.gerowallet.io https://guardarian.com/ https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com https://api.handle.me/ https://media.bringweb3.io/ https://sandbox-api.bringweb3.io https://*.launchdarkly.com wss://*.launchdarkly.com http://localhost:* ws://localhost:* https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm https://api.cardanoshield.com/api/ data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  http: data: ; frame-src http://localhost:* https://*.moonpay.com https://connect.trezor.io/ https://www.kaiserex.com/ https://kaiserex.com/ https://forms.zohopublic.eu/; media-src https://dev.gerowallet.io http://localhost:* data:; object-src 'self'`
+        : `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' https://fonts.gstatic.com/; connect-src https://api.coingecko.com https://analytics-snekfun.splash.trade wss://*.ably.net wss://*.ably-realtime.com https://*.ably-realtime.com https://*.ably.io wss://*.ably.io wss://ws.kraken.com https://api.kraken.com https://www.googleapis.com https://api.handle.me/ https://media.bringweb3.io/ https://api.bringweb3.io https://api.gerowallet.io wss://api.gerowallet.io https://*.launchdarkly.com wss://*.launchdarkly.com https://api.cardanoshield.com data:; style-src * 'unsafe-inline' 'self'  blob: ; img-src 'self'  https: data: ; frame-src https://api.gerowallet.io/ https://guardarian.com/ https://*.moonpay.com/ https://connect.trezor.io/ https://www.kaiserex.com/ https://kaiserex.com/ https://forms.zohopublic.eu/; media-src https://api.gerowallet.io https://dev.gerowallet.io data:; object-src 'self'`
     },
   }
 
