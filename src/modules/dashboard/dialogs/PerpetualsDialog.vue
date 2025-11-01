@@ -1945,7 +1945,6 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
 
       if (!pairKey || !data.result[pairKey]) {
         console.warn('[StrikeFinance] No OHLC data found for ADA/USD');
-        return generateSimpleOHLCData();
       }
 
       const krakenData = data.result[pairKey];
@@ -1964,75 +1963,20 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
 
     } catch (error) {
       console.error('[StrikeFinance] Failed to fetch ADA data from Kraken:', error);
-      return generateSimpleOHLCData();
+
+      // Check if error indicates Kraken service is unavailable
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('EService:Unavailable') ||
+          errorMessage.includes('service is currently unavailable') ||
+          errorMessage.includes('Service:Unavailable')) {
+        console.log('🦑 Detected Kraken service unavailable error, marking as down');
+        priceStore.connectionStatus = 'disconnected';
+        priceStore.isConnected = false;
+      }
     }
-  } else {
-    // For other tokens, use TapTools/DexHunter
-    return fetchTokenHistoryFromDexHunter(ticker);
   }
+  return []
 };
-
-// Fetch token price history from DexHunter API
-const fetchTokenHistoryFromDexHunter = async (
-  ticker: string
-): Promise<CandlestickDataPoint[]> => {
-  try {
-    debugLog(`[StrikeFinance] Fetching ${ticker} price history from DexHunter/TapTools`);
-
-    // Since the TradingViewChart component now handles the fetching,
-    // we can just return the empty array and let the component handle it
-    return [];
-  } catch (error) {
-    console.warn(`[StrikeFinance] Failed to fetch ${ticker} data:`, error);
-    return generateSimpleOHLCData();
-  }
-};
-
-// Generate simple OHLC data based on the current ADA price
-const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
-  const data: CandlestickDataPoint[] = [];
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-
-  let currentPrice = perpetualsPrice.value?.lastPrice || 0.58; // Use real ADA price or fallback
-
-  for (let i = 23; i >= 0; i--) {
-    const time = Math.floor((now - i * oneHour) / 1000) as Time;
-
-    // Generate realistic OHLC data
-    const volatility = 0.015; // 1.5% max hourly movement
-    const hourlyChange = (Math.random() - 0.5) * volatility; // Random walk
-
-    // Calculate open price (previous close or current)
-    const open = currentPrice;
-
-    // Generate high and low around the open price
-    const spread = Math.abs(hourlyChange) * 2; // Price spread for the hour
-    const high = open + Math.random() * spread;
-    const low = Math.max(0.01, open - Math.random() * spread); // Keep price positive
-
-    // Close price with trend
-    const close = Math.max(0.01, open * (1 + hourlyChange));
-
-    // Ensure high is highest and low is lowest
-    const actualHigh = Math.max(open, close, high);
-    const actualLow = Math.min(open, close, low);
-
-    data.push({
-      time,
-      open: Number(open.toFixed(4)),
-      high: Number(actualHigh.toFixed(4)),
-      low: Number(actualLow.toFixed(4)),
-      close: Number(close.toFixed(4)),
-    });
-
-    // Update current price for next iteration
-    currentPrice = close;
-  }
-
-  return data;
-};
-
 
 const onChartReady = (chartInstance: IChartApi) => {
   chart.value = chartInstance;
@@ -2401,7 +2345,6 @@ watch(
             debugLog("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
           } catch (error) {
             console.error("Failed to initialize chart data:", error);
-            chartData.value = generateSimpleOHLCData();
           }
         })(),
         // Price service initialization (non-blocking)
@@ -3125,8 +3068,6 @@ onMounted(async () => {
     );
   } catch (error) {
     console.error("Failed to initialize chart data:", error);
-    // Fallback to simple price data
-    chartData.value = generateSimpleOHLCData();
   }
 
   // Enable the chart after a brief delay to ensure the component is ready
