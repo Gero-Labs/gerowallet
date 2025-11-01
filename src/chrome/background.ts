@@ -1,6 +1,7 @@
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 import {
   APIError,
   METHOD,
@@ -33,7 +34,11 @@ import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { walletStore, hydrateWalletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { deserializeCardanoJsSdkTx, deserializeWitness, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { HexBlob } from '@cardano-sdk/util';
+import { debugLog } from '@/utils/debug';
+import { generateWalletProof, getPaymentKeyHash } from '@/shared/utils/zkfold';
+import zkFoldApi from '@/api/zk-fold.api';
 
 if (import.meta.hot) {
   // @ts-expect-error for background HMR
@@ -75,30 +80,30 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 
 // Initialize background store messaging (the import alone initializes it)
 console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
-const currentVersion: string = chrome.runtime.getManifest().version;
+// const currentVersion: string = chrome.runtime.getManifest().version;
 
-if (!isBeta) {
-  chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'update') {
-      chrome.notifications.create('updateNotification', {
-        type: 'image',
-        title: 'Extension Updated',
-        message: `Gero Dashboard has been updated to version ${currentVersion}!`,
-        iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/2.6.0.png'),
-      });
-    }
-  });
-  chrome.notifications.onClicked.addListener(function(notificationId) {
-    if (notificationId === 'updateNotification') {
-      // Perform your action here, for example, open a URL in a new tab
-      chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
-
-      // Optionally, clear the notification if needed
-      chrome.notifications.clear(notificationId);
-    }
-  });
-}
+// if (!isBeta) {
+//   chrome.runtime.onInstalled.addListener((details) => {
+//     if (details.reason === 'update') {
+//       chrome.notifications.create('updateNotification', {
+//         type: 'image',
+//         title: 'Extension Updated',
+//         message: `Gero Dashboard has been updated to version ${currentVersion}!`,
+//         iconUrl: chrome.runtime.getURL('public/logo128.png'),
+//         imageUrl: chrome.runtime.getURL('public/2.6.1.png'),
+//       });
+//     }
+//   });
+//   chrome.notifications.onClicked.addListener(function(notificationId) {
+//     if (notificationId === 'updateNotification') {
+//       // Perform your action here, for example, open a URL in a new tab
+//       chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
+//
+//       // Optionally, clear the notification if needed
+//       chrome.notifications.clear(notificationId);
+//     }
+//   });
+// }
 
 export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
@@ -138,7 +143,7 @@ function clearProcessedDomains() {
 // const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
 
 // Use Chrome alarms API for reliable cleanup in service workers
-chrome.alarms.create('clearProcessedDomains', { 
+chrome.alarms.create('clearProcessedDomains', {
   delayInMinutes: 24 * 60, // 24 hours
   periodInMinutes: 24 * 60 // repeat every 24 hours
 });
@@ -156,12 +161,22 @@ let lastFullscreenTabId = -1;
 const app = Messaging.createBackgroundController();
 
 async function handleBlacklisted(request: any, tabId: number) {
+  // Check if website protection is enabled
+  const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
+    ? walletStore.config.websiteProtection
+    : true; // Default to enabled
+  if (!websiteProtectionEnabled) {
+    return 'skip';
+  }
+
   let urlStatus;
   try {
     const response = await urlScan(request.origin);
     urlStatus = await response.json();
     console.log('urlScan', urlStatus);
-    if (urlStatus === 'blacklist' || urlStatus === 'suspicious') {
+    if (urlStatus === 'blacklist'
+      // || urlStatus === 'suspicious'
+    ) {
       // Send the overlay message immediately
       await chrome.tabs.sendMessage(tabId, { action: 'showOverlay', url: request.origin });
 
@@ -182,6 +197,9 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
     const url = new URL(details.url);
     const origin = url.origin;
     const domain = getDomain(url.hostname);
+    if (!domain) {
+      return;
+    }
 
     const request = {
       id: 'unique_id_' + Date.now(), // Generate a unique id
@@ -200,6 +218,8 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'approved') {
         processedDomains.add(domain);
         await chrome.storage.local.set({ processedDomains: Array.from(processedDomains) });
+      } else if (res === 'skip') {
+        // nothing
       } else {
         console.log(res['error'])
       }
@@ -371,12 +391,31 @@ interface WhitelistedEntry {
   id: number;
 }
 
+// In-memory cache for bringDomains with 4-hour TTL
+let bringDomainsCache: { data: string[] | null; timestamp: number } = { data: null, timestamp: 0 };
+const BRING_DOMAINS_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+
 async function isWhitelisted(origin: string): Promise<boolean> {
-  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps
-  console.log(whitelisted)
-  const bringDomains = await getStorage('bring_relevantDomains')
+  const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps;
   if (whitelisted.find(el => origin.includes(el.domain))) return true;
-  return !!(bringDomains && bringDomains.find(el => origin.includes(el)));
+
+  // Only check bringDomains for Cardano Mainnet
+  const loggedWallet = WalletStore.state.loggedWallet;
+  if (!networks.resolveCashbackSupport(loggedWallet?.chain, loggedWallet?.network)) {
+    return false;
+  }
+
+  // Check if cached data is still valid
+  const now = Date.now();
+  let bringDomains = bringDomainsCache.data;
+
+  if (!bringDomains || (now - bringDomainsCache.timestamp) > BRING_DOMAINS_CACHE_TTL) {
+    // Cache expired or doesn't exist, fetch new data
+    bringDomains = await (globalThis as any).bringCache?.getReadable('relevantDomains');
+    bringDomainsCache = { data: bringDomains, timestamp: now };
+  }
+
+  return !!(bringDomains && bringDomains.find((el: string) => origin.includes(el)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -421,7 +460,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
-  console.log('getUtxos', request)
+  console.log('getUtxos::Request', request)
   try {
     const utxosFromStorage: Cardano.Utxo[] = WalletStore.state.utxos;
     const collateral = WalletStore.state.collateral;
@@ -433,6 +472,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
     } else {
       res = null
     }
+    console.log('getUtxos::Response', res)
     sendResponse({
       id: request.id,
       data: res,
@@ -450,9 +490,15 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  debugLog('[CIP-30] getCollateral::Request', request);
   const storedUtxos = WalletStore.state.utxos;
+  debugLog('[CIP-30] Stored UTXOs for collateral:', {
+    count: storedUtxos?.length || 0,
+    hasUtxos: !!storedUtxos && storedUtxos.length > 0
+  });
   try {
-    const utxos: string[] =  getCollateral(request.data.params, storedUtxos)
+    const utxos: string[] = getCollateral(request.data.params, storedUtxos)
+    debugLog('[CIP-30] getCollateral::Response', { count: utxos?.length || 0 });
     sendResponse({
       id: request.id,
       data: utxos,
@@ -460,6 +506,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   } catch (e) {
+    debugLog('[CIP-30] getCollateral::Error', e);
     sendResponse({
       id: request.id,
       error: e,
@@ -467,10 +514,11 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
       sender: SENDER.extension,
     });
   }
+  return true; // IMPORTANT: return true for async handlers
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
-  console.log('getUsedAddresses', request)
+  debugLog('getUsedAddresses::Request', request)
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
@@ -482,6 +530,7 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
       })
     }
     const addresses = getUsedAddresses(WalletStore.state.keys, request?.data?.paginate);
+    console.log('getUsedAddresses::Response', addresses)
     sendResponse({
       id: request.id,
       data: addresses,
@@ -626,19 +675,38 @@ app.add(METHOD.signData, (request, sendResponse) => {
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
+  // Create a deep copy of the request to prevent mutations from affecting subsequent sign attempts
+  const requestCopy = JSON.parse(JSON.stringify(request));
+
   let responsePromise: Promise<any>;
   if (WalletStore.state.config.useSidePanel) {
     const url =
       `index.html#/${POPUP.signTx}` +
-      `?website=${encodeURIComponent(request.origin)}` +
-      `&tabId=${request.send.tab.id}`;
-    responsePromise = openSidebar(request.send.tab.id, url).then((tabId) =>
-      Messaging.sendToSidePanelInternal(tabId, request)
+      `?website=${encodeURIComponent(requestCopy.data.origin)}` +
+      `&tabId=${requestCopy.send.tab.id}`;
+
+    responsePromise = openSidebar(requestCopy.send.tab.id, url).then((tabId) =>
+      Messaging.sendToSidePanelInternal(tabId, requestCopy)
     );
   } else {
-    const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`);
+    // Force close any existing SignTx popups before opening a new one
+    // This prevents browser reuse of popup windows
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const window of windows) {
+      if (window.type === 'popup') {
+        for (const tab of window.tabs) {
+          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
+            await chrome.windows.remove(window.id);
+            break;
+          }
+        }
+      }
+    }
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.data.origin)}`
+    );
     responsePromise = focusOrCreatePopup(popupURL, 470, 852).then((tab) =>
-      Messaging.sendToPopupInternal(tab.id, request)
+      Messaging.sendToPopupInternal(tab.id, requestCopy)
     );
   }
   responsePromise
@@ -931,14 +999,6 @@ app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
   }
 });
 
-const getStorage = (key) =>
-  new Promise<any>((res, rej) =>
-    chrome.storage.local.get(key, (result) => {
-      if (chrome.runtime.lastError) rej(undefined);
-      res(key ? result[key] : result);
-    }),
-  );
-
 // Check if a specific tab is open
 const checkTabOpen = (tabId) => {
   return new Promise((resolve) => {
@@ -1025,6 +1085,143 @@ app.addToOptions(MessageTypes.SIGN_WITH_GOOGLE, async (request, sendResponse) =>
   }
 });
 
+app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    console.log('🔐 Activating Google wallet...');
+    const { walletData, proverURL, activationId } = request.data;
+
+    if (!walletData) {
+      throw new Error('Wallet data is required');
+    }
+
+    const { name, icon, theme, password, chain, network, jwt } = walletData;
+
+    if (!jwt) {
+      throw new Error('JWT not found');
+    }
+
+    if (!password) {
+      throw new Error('Password is required');
+    }
+
+    console.log('🔐 Creating wallet:', name);
+
+    // Import required utilities
+    const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
+    const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
+    const { encryptPrivateKey } = await import('../shared/utils/crypto');
+
+    // Extract user ID from JWT
+    const parts = jwt.split(".");
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const userId = payload.email;
+
+    // Generate random 96 bytes for BIP32 Ed25519 key
+    const randomBytes = new Uint8Array(96);
+    crypto.getRandomValues(randomBytes);
+    const rootKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
+
+    // Encrypt the root key with password
+    const encryptedPrivateKey = encryptPrivateKey(rootKey, password);
+
+    // Get the public key for account #0
+    const accountIndex = 0;
+    const bip32Ed25519 = await SodiumBip32Ed25519.create();
+    const xpubHex = bip32Ed25519.getBip32PublicKey(
+      rootKey.derive([
+        WalletTypePurpose.CIP1852,
+        CoinTypes.CARDANO,
+        HARDENED + accountIndex
+      ]).hex()
+    );
+
+    // Derive payment key (m/1852'/1815'/0'/0/0)
+    const accountKey = rootKey.derive([
+      WalletTypePurpose.CIP1852,
+      CoinTypes.CARDANO,
+      HARDENED + accountIndex,
+    ]);
+    const paymentKey = accountKey.derive([0, 0]);
+
+    // Generate proof (with activationId for abort checking)
+    console.log('🔐 Generating ZK proof (this may take several minutes)...');
+    const proof = await generateWalletProof(proverURL, jwt, paymentKey, activationId);
+
+    // Activate wallet via zkFold backend
+    const paymentKeyHash = getPaymentKeyHash(paymentKey);
+
+    console.log('🔐 background.ts - paymentKeyHash before API call:', paymentKeyHash);
+    console.log('🔐 background.ts - paymentKeyHash type:', typeof paymentKeyHash);
+    console.log('🔐 background.ts - paymentKeyHash length:', paymentKeyHash.length);
+
+    console.log('🔐 Activating wallet on blockchain...');
+    const result = await zkFoldApi.activateWallet(jwt, paymentKeyHash, proof);
+
+    console.log('✅ Wallet activated successfully!');
+    console.log('📍 Wallet address:', result.address);
+    console.log('📝 Activation tx:', result.tx);
+
+    // NOW create the wallet in DB (ONLY after successful proof and activation)
+    const { getDb, createNewWalletDb, getLatestWalletByOrder } = await import('../db/gero-db');
+    const db = await getDb();
+
+    let order = await getLatestWalletByOrder();
+    if (order == null) {
+      order = 1;
+    } else {
+      order++;
+    }
+
+    const walletId = await db['wallets'].add({
+      name,
+      icon,
+      type: WalletType.Google,
+      theme,
+      order,
+      encryptedPrivateKey,
+      publicKey: xpubHex,
+      passwordLastUpdate: new Date(),
+      chain,
+      network,
+      userId,
+      jwt,
+    });
+
+    console.log('✅ Wallet created in DB with ID:', walletId);
+
+    // Create wallet-specific database
+    await createNewWalletDb(walletId, false);
+    console.log('✅ Wallet database created');
+
+    // Update geroStore
+    const { default: GeroStore } = await import('../stores/geroStore');
+    await GeroStore.refreshWallets();
+
+    sendResponse({
+      id: request.id,
+      data: {
+        success: true,
+        walletId,
+        address: result.address,
+        txHash: result.tx,
+        txFee: result.tx_fee,
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (err) {
+    console.error('❌ Wallet activation failed:', err);
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: (err instanceof Error ? err.message : String(err)) || 'Wallet activation failed',
+    });
+  }
+  return true; // Keep message channel open for async response
+});
+
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
     console.log('verify spending password', request);
@@ -1049,7 +1246,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
     console.error('Error verifying spending password:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1066,7 +1263,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.payload,
         request.data.password,
         request.data.accountIndex || 0,
-        request.data.isUsb
+        WalletStore.state.keys
       );
       sendResponse({
         id: request.id,
@@ -1086,7 +1283,7 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     console.error('Error signing Data:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1139,7 +1336,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
     console.error('Error signing transaction:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1154,16 +1351,28 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
       // Handle different transaction input formats
       let txCbor: string;
       if (request.data.txCbor && request.data.witnessHex) {
-        // Combine transaction CBOR with witness
-        const tx = deserializeCardanoJsSdkTx(request.data.txCbor);
-        const witness = deserializeWitness(request.data.witnessHex);
+        console.log('original Cbor', request.data.txCbor)
+        console.log('witnessHex', request.data.witnessHex)
+        const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
+        const existingWitness = serializableTx.witnessSet();
+        const existingWitnessCore = existingWitness.toCore();
+        const newWitnesses: Cardano.Witness = Serialization.TransactionWitnessSet.fromCbor(request.data.witnessHex).toCore();
 
-        const signedTx = {
-          ...tx,
-          witness: witness
-        };
+        // Merge existing signatures with new signatures
+        const mergedSignatures = new Map([
+          ...(existingWitnessCore.signatures?.entries() || []),
+          ...newWitnesses.signatures.entries()
+        ]);
 
-        txCbor = serializeCardanoJsSdkTx(signedTx);
+        existingWitness.setVkeys(
+          Serialization.CborSet.fromCore(
+            [...mergedSignatures.entries()],
+            Serialization.VkeyWitness.fromCore,
+          ),
+        );
+        serializableTx.setWitnessSet(existingWitness);
+        txCbor = serializableTx.toCbor();
+        console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
         txCbor = request.data.txCbor;
@@ -1197,10 +1406,41 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
     console.error('Error submitting transaction:', error);
     sendResponse({
       id: request.id,
-      data: { error: error instanceof Error ? error.message : 'Unknown error' },
+      data: { error: getErrorMessage(error) },
       target: TARGET,
       sender: SENDER.extension,
     });
+  }
+});
+
+app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
+  try {
+    console.log('restore', request)
+    const currentWallet = await walletManager.restore(request.data.wallet);
+    if (currentWallet) {
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } else {
+      sendResponse({
+        id: request.id,
+        data: { success: false },
+        target: TARGET,
+        sender: SENDER.extension,
+      })
+    }
+  } catch (err) {
+    console.log('login error', err)
+    sendResponse({
+      id: request.id,
+      data: { success: false },
+      target: TARGET,
+      sender: SENDER.extension,
+      error: err,
+    })
   }
 });
 

@@ -1,3 +1,48 @@
+<template>
+  <div class="welcome-glass-panel">
+    <div class="welcome-content">
+      <div class="logo-container">
+        <div
+          class="logo"
+          :style="{
+            backgroundImage: `url(${logo})`,
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            width: '122px',
+            height: '138px',
+          }"
+        />
+      </div>
+
+      <div class="text-container">
+        <div class="subtitle">{{ $t('welcome.yourNew') }}</div>
+        <div class="title">
+          <span class="title-regular">{{ $t('welcome.singlePaneOf') }}</span>
+          <span :class="['title-gradient', gradientClass]">&nbsp;{{ $t('welcome.glass') }}</span>
+        </div>
+        <NetworkSelector @network-changed="onNetworkChanged" />
+
+        <GButton
+          block
+          :class="['create-btn', isApex ? 'apexButton transition' : 'geroButton transition']"
+          large
+          @click="enableCreateOrImportSeedPhrase"
+        >
+          {{ $t('welcome.createOrImportSeedPhrase') }}
+        </GButton>
+
+        <GoogleLogin :selected-network="selectedNetwork" />
+
+        <div class="zkfold-credit">
+          <span>{{ $t('welcome.poweredBy') }}</span>
+          <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-left">&#169; 2025 {{ $t('welcome.adLabs') }}</div>
+  </div>
+</template>
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { geroDashboardApex, geroDashboard, zkFold } from '@/utils/assets';
@@ -38,53 +83,6 @@ const gradientClass = computed(() =>
   isApex.value ? 'apex-gradient-text' : 'gradient-text'
 );
 </script>
-
-<template>
-  <div class="welcome-glass-panel">
-    <div class="welcome-content">
-      <div class="logo-container">
-        <div
-          class="logo"
-          :style="{
-            backgroundImage: `url(${logo})`,
-            backgroundSize: 'contain',
-            backgroundRepeat: 'no-repeat',
-            width: '122px',
-            height: '138px',
-          }"
-        />
-      </div>
-
-      <div class="text-container">
-        <div class="subtitle">Your New</div>
-        <div class="title">
-          <span class="title-regular">Single Pane of</span>
-          <span :class="['title-gradient', gradientClass]">&nbsp;Glass</span>
-        </div>
-        <NetworkSelector @network-changed="onNetworkChanged" />
-
-        <GButton
-          block
-          :class="['create-btn', isApex ? 'apexButton transition' : 'geroButton transition']"
-          large
-          @click="enableCreateOrImportSeedPhrase"
-        >
-          Create or Import Seed Phrase
-        </GButton>
-
-        <GoogleLogin :selected-network="selectedNetwork" />
-
-        <div class="zkfold-credit">
-          <span>Powered by</span>
-          <v-img :src="zkFold" contain class="zkfold-logo"></v-img>
-        </div>
-      </div>
-    </div>
-
-    <div class="footer-left">&#169; 2025 A.D. Labs</div>
-  </div>
-</template>
-
 <style scoped>
 .welcome-left-column {
   width: 38%;
