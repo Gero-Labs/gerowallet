@@ -46,20 +46,20 @@ if (import.meta.hot) {
 }
 
 loadConfig().then(() => {
-  console.log('Gero Config loaded')
+  debugLog('Gero Config loaded')
 })
 loadWallets().then(async () => {
-  console.log('Wallets loaded')
+  debugLog('Wallets loaded')
 
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
-  console.log('Wallet store hydrated, checking for logged wallet...');
+  debugLog('Wallet store hydrated, checking for logged wallet...');
 
   if (walletStore.loggedWallet) {
-    console.log('Login in wallet: ', walletStore.loggedWallet.name);
+    debugLog('Login in wallet: ', walletStore.loggedWallet.name);
     await walletManager.login(walletStore.loggedWallet);
   } else {
-    console.log('No logged wallet found after hydration');
+    debugLog('No logged wallet found after hydration');
     Loading.setLoading(false)
   }
 });
@@ -77,7 +77,7 @@ const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 })();
 
 // Initialize background store messaging (the import alone initializes it)
-console.log('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
+debugLog('📡 Background store messaging handler initialized:', backgroundStoreMessaging);
 // const currentVersion: string = chrome.runtime.getManifest().version;
 
 // if (!isBeta) {
@@ -132,7 +132,7 @@ function clearProcessedDomains() {
     if (chrome.runtime.lastError) {
       console.error('Error removing processedDomains from storage:', chrome.runtime.lastError);
     } else {
-      console.log('Processed domains have been cleared.');
+      debugLog('Processed domains have been cleared.');
     }
   });
 }
@@ -152,7 +152,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-console.log('Background Loaded');
+debugLog('Background Loaded');
 
 let lastFullscreenTabId = -1;
 

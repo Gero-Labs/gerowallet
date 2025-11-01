@@ -86,6 +86,13 @@ if (context === 'browser') {
     if (result[STORE_NAME]) {
       Object.assign(walletStore, result[STORE_NAME]);
       debugLog('💾 Hydrated wallet store from storage');
+
+      // Initialize price service if wallet is logged in
+      if (result[STORE_NAME].loggedWallet && result[STORE_NAME].loggedWallet.chain === 'Cardano') {
+        priceService.initialize().catch(error => {
+          console.error('Failed to initialize price service on hydration:', error);
+        });
+      }
     }
   });
 }
