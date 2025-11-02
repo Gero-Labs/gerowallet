@@ -27,7 +27,7 @@
       <div class="modal-actions">
         <div class="actions-content">
           <div class="password-section">
-            <label class="input-label">Enter Password to confirm action*</label>
+            <label class="input-label">{{ t('card.enterPasswordToConfirm') }}</label>
             <v-text-field
               v-model="password"
               type="password"
@@ -41,7 +41,7 @@
           </div>
 
           <div class="buttons-section">
-            <SecondaryButton text="Cancel" @click="closeModal()" />
+            <SecondaryButton :text="t('common.cancel')" @click="closeModal()" />
             <GradientButton :text="confirmButtonText" @click="confirmAction" />
           </div>
         </div>
@@ -51,9 +51,12 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import SecondaryButton from '../SecondaryButton.vue';
 import GradientButton from '../GradientButton.vue';
+
+const { t } = useTranslation();
 
 interface Props {
   open: boolean;
@@ -69,9 +72,9 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  title: 'Confirm Action',
-  subtitle: 'Please enter your password to continue.',
-  confirmButtonText: 'Confirm',
+  title: t('wallet.confirmAction'),
+  subtitle: t('wallet.pleaseEnterPasswordToContinue'),
+  confirmButtonText: t('common.confirm'),
   action: 'default',
 });
 

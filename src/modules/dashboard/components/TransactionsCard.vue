@@ -1,7 +1,10 @@
 <template>
-  <v-card outlined class="fill-height liquid-glass" :loading="loadingTxs">
-    <v-card-title class="pb-2">
-      Transactions
+  <v-card outlined class="fill-height liquid-glass d-flex flex-column" :loading="loadingTxs">
+    <v-card-title class="pb-2 flex-grow-0">
+      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: white"
+        >{{ $t('transactions.title') }}</router-link
+      >
+      <span v-else>{{ $t('transactions.title') }}</span>
       <v-spacer />
       <!-- Search box -->
       <v-text-field
@@ -10,15 +13,15 @@
         flat
         solo
         hide-details
-        placeholder="Search"
+        :placeholder="$t('transactions.search')"
         prepend-inner-icon="mdi-magnify"
         clearable
         style="max-width: 200px"
         class="top-level-search"
       ></v-text-field>
     </v-card-title>
-    <v-card-text class="pa-0 text-center">
-      <div :class="{ 'table-container': props.isFullList }">
+    <v-card-text class="pa-0 text-center flex-grow-1 d-flex flex-column">
+      <div :class="{ 'table-container': props.isFullList }" class="flex-grow-1">
         <v-data-table
           :header-props="{ 'sort-icon': 'mdi-menu-up' }"
           :items="displayedTransactions"
@@ -37,17 +40,24 @@
               <v-list-item-content class="px-0 py-1">
                 <v-list-item-title class="activity-title">
                   <span class="activity-text">{{ getTransactionStatus(item) }}</span>
+                  <v-tooltip v-if="item.pending" content-class="custom-tooltip" top>
+                    <template v-slot:activator="{ on, attrs }">
+                      <span v-bind="attrs" v-on="on" class="pending-indicator"></span>
+                    </template>
+                    <span>{{ $t('dashboard.transactionPendingConfirmation') }}</span>
+                  </v-tooltip>
                 </v-list-item-title>
                 <v-list-item-subtitle class="activity-date">
-                  <v-tooltip top>
+                  <v-tooltip content-class="custom-tooltip" top>
                     <template v-slot:activator="{ on, attrs }">
                       <span v-bind="attrs" v-on="on">
                         {{ time.format(new Date(item.tx_timestamp * 1000)) }}
                       </span>
                     </template>
                     <span>
-                      {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}<br />
-                      Epoch: {{ item.epoch_no }}
+                      {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}
+                      <br v-if="item.epoch_no" />
+                      {{ item.epoch_no ? `${$t('transactions.epoch')}: ${item.epoch_no}` : '' }}
                     </span>
                   </v-tooltip>
                 </v-list-item-subtitle>
@@ -59,7 +69,16 @@
                     class="px-1"
                     color="red"
                     style="margin-right: 4px !important"
-                    >Stake Registration</v-chip
+                    >{{ $t('transactions.stakeRegistration') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isStakeDeRegistration(item)"
+                    x-small
+                    outlined
+                    class="px-1"
+                    color="red"
+                    style="margin-right: 4px !important"
+                    >{{ $t('transactions.stakeDeregistration') }}</v-chip
                   >
                   <v-chip
                     v-if="isWithdrawal(item)"
@@ -68,17 +87,92 @@
                     class="px-1"
                     color="blue"
                     style="margin-right: 4px !important"
-                    >Withdrawal</v-chip
+                    >{{ $t('transactions.withdrawal') }}</v-chip
                   >
                   <v-chip
+                    v-if="isCashback(item)"
                     outlined
                     class="px-1"
                     x-small
-                    color="#FEC84B"
+                    color="#E77DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    v-if="item.pending"
-                    >Pending</v-chip
+                    >{{ $t('cashback.cashback') }}</v-chip
                   >
+                  <v-chip
+                    v-if="getContactName(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#FF9800"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ getContactName(item) }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isInternalTransfer(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#9C27B0"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('common.internal') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isStrike(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#26FAB0"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.strike') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isDexHunter(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#007DFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.dexHunter') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isMinswap(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#89AAFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.minswap') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isJpgStore(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#ffdb24"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >jpg.store</v-chip
+                  >
+                  <v-chip
+                    v-if="isWingRiders(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#e5e7eb"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.wingRiders') }}</v-chip
+                  >
+                  <v-chip
+                    v-if="isMuesliSwap(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="#5B4EFF"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.muesliswap') }}</v-chip
+                  >
+                  <span v-if="isVyFi(item)" class="vyfi-chip"></span>
+                  <span v-if="isSundaeSwap(item)" class="sundaeswap-chip" :data-label="$t('transactions.sundaeswap')"></span>
+                  <span v-if="isSplash(item)" class="splash-chip" :data-label="$t('transactions.splash')"></span>
                 </v-list-item-subtitle>
               </v-list-item-content>
             </v-list-item>
@@ -102,7 +196,7 @@
               >
                 {{
                   filters.toCurrency(
-                    item.ada,
+                    item.ada ?? 0,
                     true,
                     0,
                     networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
@@ -111,8 +205,8 @@
                   )
                 }}
               </div>
-              <div style="font-size: 12px; color: #c4c4c4">
-                {{ filters.toCurrency(item.ada * adaPrice, true, 0, '$', '', false, 6) }}
+              <div style="font-size: 12px; color: #c4c4c4; white-space: nowrap">
+                {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
               </div>
             </div>
           </template>
@@ -121,14 +215,14 @@
             <tr v-if="props.isFullList && isLoadingMore" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
-                <span class="ml-2">Loading more transactions...</span>
+                <span class="ml-2">{{ $t('transactions.loadingMoreTransactions') }}</span>
               </td>
             </tr>
             <!-- End of list indicator for infinite scroll -->
-            <tr v-else-if="props.isFullList && hasReachedEnd && !search" class="no-hover">
+            <tr v-else-if="props.isFullList && hasReachedEnd && !debouncedSearch" class="no-hover">
               <td :colspan="activityHeaders.length" class="text-center pa-4">
                 <span class="text-caption text--secondary">
-                  {{ displayedTransactions.length > 0 ? 'No more transactions to load' : 'No transactions found' }}
+                  {{ displayedTransactions.length > 0 ? $t('transactions.noMoreTransactions') : $t('transactions.noTransactionsFound') }}
                 </span>
               </td>
             </tr>
@@ -138,23 +232,23 @@
                 <div ref="intersectionTarget" style="height: 1px"></div>
               </td>
             </tr>
-            <!-- Pagination for non-full list mode -->
-            <tr v-if="!props.isFullList && transactions.length > itemsPerPage" class="no-hover">
-              <td :colspan="activityHeaders.length" class="text-center pa-0 ma-0">
-                <v-pagination
-                  v-model="currentPage"
-                  :length="Math.ceil(transactions.length / itemsPerPage)"
-                  :total-visible="7"
-                  circle
-                  class="compact-pagination ma-0"
-                  @input="handlePageChange"
-                ></v-pagination>
-              </td>
-            </tr>
           </template>
         </v-data-table>
       </div>
     </v-card-text>
+    <v-card-actions
+      v-if="!props.isFullList && transactions.length > itemsPerPage"
+      class="pa-0 no-hover text-center justify-center"
+    >
+      <v-pagination
+        v-model="currentPage"
+        :length="Math.ceil(transactions.length / itemsPerPage)"
+        :total-visible="7"
+        circle
+        class="compact-pagination ma-0"
+        @input="handlePageChange"
+      ></v-pagination>
+    </v-card-actions>
     <TransactionDetailsDialog
       v-if="transactionInfo && state === '/' && !selectedTransaction"
       :transactionInfo="transactionInfo"
@@ -163,7 +257,8 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, getCurrentInstance, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
@@ -171,12 +266,17 @@ import networks from '@/utils/networks';
 import time from '@/plugins/time';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useDebounceFn } from '@vueuse/core';
 
+const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
+
+// Get instance for i18n
+const { t } = useTranslation();
 const props = defineProps({
   selectedTransaction: {
     type: Object,
@@ -190,26 +290,46 @@ const props = defineProps({
 
 const emit = defineEmits(['row-click']);
 
-const { transactions: txs, loggedWallet } = toRefs(walletStore);
+const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
-const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
-
 // Use Kraken WebSocket price for ADA, fallback to network store price
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
 
-const activityHeaders = ref([
-  { text: 'Activity', align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
-  { text: 'Amount', align: 'center text-nowrap', sortable: false, value: 'amount' },
+const activityHeaders = computed(() => [
+  { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
+  { text: t('transactions.amount'), align: 'center text-nowrap', sortable: false, value: 'amount' },
   { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: 110 },
 ]);
 
 const transactionInfo = ref<any>(null);
 const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
-const search = ref<string>('');
+
+// Search input and debounced search value
+const searchInput = ref<string>('');
+const debouncedSearch = ref<string>('');
+
+// Debounce function to update debouncedSearch after user stops typing using VueUse
+// VueUse's useDebounceFn returns a function with a cancel() method
+const debouncedUpdateSearch = useDebounceFn((value: string) => {
+  debouncedSearch.value = value;
+}, 300); // 300ms debounce delay
+
+// Watch searchInput and trigger debounced update
+watch(searchInput, (newValue) => {
+  debouncedUpdateSearch(newValue);
+});
+
+// Computed search property for v-model binding
+const search = computed({
+  get: () => searchInput.value,
+  set: (value: string) => {
+    searchInput.value = value;
+  },
+});
 
 // Infinite scroll variables
 const displayedTransactions = ref<any[]>([]);
@@ -237,19 +357,49 @@ const itemsPerBatch = computed(() => {
 const vmProxy = getCurrentInstance()!.proxy as any;
 const state = computed(() => vmProxy.$route.path);
 
-const transactions = computed(() => {
+const transactions = computed<any[]>(() => {
   const filtered = txs.value.filter((tx: any) => {
-    if (search.value) {
-      return (
-        tx.id.toLowerCase().includes(search.value.toLowerCase()) ||
-        tx.assets.some((asset: any) => {
-          const assetInfo = assets.value[asset.unit] as any;
-          return (
-            assetInfo?.metadata?.name?.toLowerCase().includes(search.value.toLowerCase()) ||
-            assetInfo?.metadata?.ticker?.toLowerCase().includes(search.value.toLowerCase())
-          );
-        })
-      );
+    if (debouncedSearch.value) {
+      const searchLower = debouncedSearch.value.toLowerCase();
+
+      // Check transaction ID
+      const matchesId = tx.id.toLowerCase().includes(searchLower);
+
+      // Check assets
+      const matchesAsset = tx.assets.some((asset: any) => {
+        const assetInfo = assets.value[asset.unit] as any;
+        return (
+          assetInfo?.metadata?.name?.toLowerCase().includes(searchLower) ||
+          assetInfo?.metadata?.ticker?.toLowerCase().includes(searchLower)
+        );
+      });
+
+      // Check DEX/platform chips
+      const matchesChip =
+        ('minswap'.includes(searchLower) && isMinswap(tx)) ||
+        ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
+        ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
+        ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
+        ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
+        ('splash'.includes(searchLower) && isSplash(tx)) ||
+        ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
+        ('strike'.includes(searchLower) && isStrike(tx)) ||
+        ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
+        ('cashback'.includes(searchLower) && isCashback(tx)) ||
+        ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
+        ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
+        ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
+        ('pending'.includes(searchLower) && tx.pending) ||
+        tx.body?.certificates?.some((cert: any) => {
+          const certType = cert.__typename;
+          return certType.toLowerCase().includes(searchLower);
+        });
+
+      // Check contact name
+      const contactName = getContactName(tx);
+      const matchesContact = contactName && contactName.toLowerCase().includes(searchLower);
+
+      return matchesId || matchesAsset || matchesChip || matchesContact;
     }
     return tx;
   });
@@ -263,7 +413,7 @@ const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
 const preloadTransactionStatuses = async (transactions: any[]): Promise<void> => {
-  const promises = transactions.map(async (item) => {
+  const promises = transactions.map(async item => {
     const txId = item.id;
 
     // Skip if already loaded
@@ -283,8 +433,7 @@ const preloadTransactionStatuses = async (transactions: any[]): Promise<void> =>
 
     addFundTransferStatus(item, statuses);
 
-    const finalStatus = statuses.join(', ');
-    transactionStatuses.value[txId] = finalStatus;
+    transactionStatuses.value[txId] = statuses.join(', ');
   });
 
   await Promise.all(promises);
@@ -303,15 +452,20 @@ const getCertificateBaseStatus = (certificateType: string): string => {
   switch (certificateType) {
     case Cardano.CertificateType.StakeRegistrationDelegation:
     case Cardano.CertificateType.StakeDelegation:
-      return 'Delegating to Pool';
+      return t('transactions.delegatingToPool');
+    case Cardano.CertificateType.Unregistration:
     case Cardano.CertificateType.StakeDeregistration:
-      return 'Stake Deregistration';
+      return t('transactions.stakeDeregistration');
     case Cardano.CertificateType.RegisterDelegateRepresentative:
-      return 'DRep Registration';
+      return t('dashboard.dRepRegistration');
     case Cardano.CertificateType.VoteDelegation:
-      return 'Vote Delegation';
+      return t('transactions.voteDelegation');
+    case Cardano.CertificateType.VoteRegistrationDelegation:
+      return t('transactions.voteRegistrationDelegation');
+    case Cardano.CertificateType.StakeVoteRegistrationDelegation:
+      return t('transactions.stakeVoteRegistration');
     case Cardano.CertificateType.UnregisterDelegateRepresentative:
-      return 'DRep Deregistration';
+      return t('dashboard.dRepDeregistration');
     default:
       return '';
   }
@@ -322,12 +476,20 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
   const baseStatus = getCertificateBaseStatus(certificate.__typename);
 
   // For delegation certificates, try to get enhanced status with pool ticker
-  if ((certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
-       certificate.__typename === Cardano.CertificateType.StakeDelegation) && loadPoolData) {
+  if (
+    (certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
+      certificate.__typename === Cardano.CertificateType.StakeDelegation) &&
+    loadPoolData
+  ) {
     const pool = await getPoolByIdFromApi(certificate.poolId);
     if (pool && pool.ticker) {
-      return 'Delegating to ' + pool.ticker;
+      return t('transactions.delegatingTo', { pool: pool.ticker });
     }
+  } else if (
+    certificate.__typename === Cardano.CertificateType.Unregistration ||
+    certificate.__typename === Cardano.CertificateType.StakeDeregistration
+  ) {
+    return t('transactions.stakeDeregistration');
   }
 
   return baseStatus;
@@ -335,14 +497,33 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
 
 // Add fund transfer status if applicable
 const addFundTransferStatus = (item: any, statuses: string[]): void => {
-  if (item.receivedAmount - item.sentAmount > 0) {
-    if (!item.body?.certificates) {
-      statuses.push('Received Funds');
-    }
-  } else {
-    if (!item.body?.certificates) {
-      statuses.push('Sent Funds');
-    }
+  // Skip if transaction has certificates (delegation, registration, etc.)
+  if (item.body?.certificates && item.body.certificates.length > 0) {
+    return;
+  }
+
+  const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
+  const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
+  const hasReceivedTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity > 0);
+  const hasSentTokens = item.assets?.some((asset: any) => asset.unit !== 'lovelace' && asset.quantity < 0);
+
+  // Build smart status message
+  if (hasReceivedFunds && hasReceivedTokens) {
+    statuses.push(t('transactions.receivedFundsAndTokens'));
+  } else if (hasSentFunds && hasSentTokens) {
+    statuses.push(t('transactions.sentFundsAndTokens'));
+  } else if (hasReceivedFunds && hasSentTokens) {
+    statuses.push(t('transactions.receivedFundsAndSentTokens'));
+  } else if (hasSentFunds && hasReceivedTokens) {
+    statuses.push(t('transactions.sentFundsAndReceivedTokens'));
+  } else if (hasReceivedFunds) {
+    statuses.push(t('transactions.receivedFunds'));
+  } else if (hasSentFunds) {
+    statuses.push(t('transactions.sentFunds'));
+  } else if (hasReceivedTokens) {
+    statuses.push(t('transactions.receivedTokens'));
+  } else if (hasSentTokens) {
+    statuses.push(t('transactions.sentTokens'));
   }
 };
 
@@ -384,7 +565,7 @@ const loadMoreTransactions = async () => {
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
-  let newTransactions = [];
+  let newTransactions: any[];
 
   if (props.isFullList) {
     // Infinite scroll mode
@@ -429,36 +610,63 @@ const resetInfiniteScroll = async () => {
   // Clear cached transaction statuses
   transactionStatuses.value = {};
 
-  if (props.isFullList) {
-    await loadMoreTransactions();
-  } else {
-    await loadMoreTransactions();
-  }
+  await loadMoreTransactions();
 };
 
-// Watch for search term changes to reset infinite scroll
+// Watch for debounced search term changes to reset infinite scroll
 watch(
-  () => search.value,
+  () => debouncedSearch.value,
   async () => {
-    await resetInfiniteScroll();
+    if (props.isFullList) {
+      await resetInfiniteScroll();
+    }
   }
 );
 
 // Watch for transactions changes to reset infinite scroll
+// Only reset if the transaction count changes (not for status updates)
+const transactionCount = ref(0);
+watch(
+  () => transactions.value.length,
+  async (newLength, oldLength) => {
+    // Only reset if transaction count actually changed
+    if (newLength !== oldLength) {
+      transactionCount.value = newLength;
+      await resetInfiniteScroll();
+
+      // Recreate intersection observer after reset
+      if (props.isFullList) {
+        if (intersectionObserver.value) {
+          intersectionObserver.value.disconnect();
+        }
+        await nextTick();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setupIntersectionObserver();
+      }
+    }
+  }
+);
+
+// Watch for changes in transaction data (e.g., pending status updates)
+// This updates displayed transactions without clearing the table
 watch(
   () => transactions.value,
-  async () => {
-    await resetInfiniteScroll();
-
-    // Recreate intersection observer after reset
-    if (props.isFullList) {
-      if (intersectionObserver.value) {
-        intersectionObserver.value.disconnect();
+  (newTransactions, oldTransactions) => {
+    // Only update if it's a data change (not a count change)
+    if (newTransactions.length === oldTransactions?.length) {
+      // Update displayed transactions to reflect changes (like pending -> confirmed)
+      if (!props.isFullList) {
+        // Pagination mode - update the current page
+        const start = (currentPage.value - 1) * itemsPerPage.value;
+        const end = start + itemsPerPage.value;
+        displayedTransactions.value = transactions.value.slice(start, end);
+      } else {
+        // Infinite scroll mode - update existing items while maintaining scroll position
+        const currentLength = displayedTransactions.value.length;
+        displayedTransactions.value = transactions.value.slice(0, currentLength);
       }
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
-      setupIntersectionObserver();
     }
+    // If length changed, the other watcher will handle it
   },
   { deep: true }
 );
@@ -535,6 +743,334 @@ const isWithdrawal = item => {
   );
 };
 
+const getContactName = item => {
+  // Check if contacts are available (contacts is an object, not an array)
+  if (!contacts.value || !item.utxo) {
+    return null;
+  }
+
+  // Create a map of contact addresses to names
+  const contactMap = new Map<string, string>();
+  Object.values(contacts.value).forEach((contact: any) => {
+    if (contact.address && contact.name) {
+      contactMap.set(contact.address, contact.name);
+    }
+  });
+
+  // Check if there are any contacts to compare
+  if (contactMap.size === 0) {
+    return null;
+  }
+
+  // Check inputs for contact addresses
+  for (const input of item.utxo.inputs || []) {
+    if (contactMap.has(input.address)) {
+      return contactMap.get(input.address);
+    }
+  }
+
+  // Check outputs for contact addresses
+  for (const output of item.body?.outputs || []) {
+    if (contactMap.has(output.address)) {
+      return contactMap.get(output.address);
+    }
+  }
+
+  return null;
+};
+
+const isInternalTransfer = item => {
+  // Check if keys are available
+  if (!keys.value || !item.utxo) {
+    return false;
+  }
+
+  // Collect all wallet addresses from keys
+  const walletAddresses = new Set<string>();
+
+  // Add payment addresses
+  if (keys.value.payment) {
+    keys.value.payment.forEach(key => {
+      if (key.address) {
+        walletAddresses.add(key.address);
+      }
+    });
+  }
+
+  // Add change addresses
+  if (keys.value.change) {
+    keys.value.change.forEach(key => {
+      if (key.address) {
+        walletAddresses.add(key.address);
+      }
+    });
+  }
+
+  // Check if there are any addresses to compare
+  if (walletAddresses.size === 0) {
+    return false;
+  }
+
+  // Check all input addresses
+  const allInputsInternal = item.utxo.inputs?.every((input: any) => walletAddresses.has(input.address));
+
+  // Check all output addresses
+  const allOutputsInternal = item.body?.outputs?.every((output: any) => walletAddresses.has(output.address));
+
+  // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
+  return allInputsInternal && allOutputsInternal;
+};
+
+const isStrike = item => {
+  // Strike Finance perpetual trading transactions
+  const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
+  const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
+
+  // Check for Strike contract address (primary indicator of platform interaction)
+  const hasStrikeAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === STRIKE_CONTRACT_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === STRIKE_CONTRACT_ADDRESS);
+
+  // Check for Strike script hash in witness (indicates contract execution)
+  const hasStrikeScript = item.witness?.scripts?.some(
+    script => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
+  );
+
+  // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
+  return hasStrikeAddress || hasStrikeScript;
+};
+
+const isDexHunter = item => {
+  // Check for DexHunter order contract address (primary indicator)
+  const DEXHUNTER_ORDER_ADDRESS =
+    'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
+  const hasDexHunterOrderAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_ORDER_ADDRESS);
+
+  // Check for DexHunter fee address (indicates completed trade)
+  const DEXHUNTER_FEE_ADDRESS =
+    'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
+  const hasDexHunterFeeAddress = item.body?.outputs?.some((output: any) => output.address === DEXHUNTER_FEE_ADDRESS);
+
+  // Check metadata for DexHunter Trade message (indicates trade execution)
+  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  const hasDexHunterMetadata =
+    msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
+
+  // Only tag as DexHunter if there's actual platform interaction
+  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata;
+};
+
+const isMinswap = item => {
+  // Minswap V1 addresses
+  const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
+  const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
+    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
+
+  // Minswap V2 order contract address
+  const MINSWAP_V2_ORDER_ADDRESS =
+    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
+
+  // Check for Minswap order contract addresses (indicates DEX interaction)
+  const hasMinswapOrderAddress =
+    item.utxo?.inputs?.some(
+      (input: any) =>
+        input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
+        input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
+        input.address === MINSWAP_V2_ORDER_ADDRESS
+    ) ||
+    item.body?.outputs?.some(
+      (output: any) =>
+        output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
+        output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
+        output.address === MINSWAP_V2_ORDER_ADDRESS
+    );
+
+  // Check for Minswap metadata message (indicates platform interaction)
+  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
+
+  // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
+  const hasMinswapInOutputDatum = item.body?.outputs?.some((output: any) =>
+    output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  );
+
+  // Check for Minswap pool NFT policy in witness datums (indicates pool interaction)
+  const hasMinswapInWitnessDatum = item.witness?.datums?.some((datum: any) =>
+    datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
+  );
+
+  // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
+  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum;
+};
+
+const isJpgStore = item => {
+  // Check for jpg.store marketplace script address
+  const JPGSTORE_SCRIPT_ADDRESS =
+    'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
+
+  // Check for jpg.store Ask V1 Contract address (inputs only)
+  const JPGSTORE_ASK_V1_ADDRESS =
+    'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
+
+  const hasJpgStoreAddress =
+    item.utxo?.inputs?.some(
+      (input: any) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
+    ) || item.body?.outputs?.some((output: any) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+
+  // Check for jpg.store auxiliary data structure (fields 0-10, 30)
+  const hasJpgStoreMetadata =
+    item.auxiliaryData?.blob &&
+    (item.auxiliaryData.blob[0] ||
+      item.auxiliaryData.blob[1] ||
+      item.auxiliaryData.blob[2] ||
+      item.auxiliaryData.blob[3] ||
+      item.auxiliaryData.blob[4] ||
+      item.auxiliaryData.blob[5] ||
+      item.auxiliaryData.blob[6] ||
+      item.auxiliaryData.blob[7] ||
+      item.auxiliaryData.blob[8] ||
+      item.auxiliaryData.blob[9] ||
+      item.auxiliaryData.blob[10] ||
+      item.auxiliaryData.blob[30]);
+
+  // Check for datum hash (indicating a marketplace listing)
+  const hasDatumHash = item.body?.outputs?.some((output: any) => output.datumHash);
+
+  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash);
+};
+
+const isWingRiders = item => {
+  // WingRiders V1 order address
+  const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
+
+  // WingRiders V2 order address
+  const WINGRIDERS_V2_ORDER_ADDRESS = 'addr1w8qnfkpe5e99m7umz4vxnmelxs5qw5dxytmfjk964rla98q605wte';
+
+  // Check for WingRiders order contract addresses (indicates DEX interaction)
+  const hasWingRidersOrderAddress =
+    item.utxo?.inputs?.some(
+      (input: any) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
+    ) ||
+    item.body?.outputs?.some(
+      (output: any) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
+    );
+
+  // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
+  const hasWingRidersV1InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
+    );
+
+  // Check for WingRiders V2 pool validity asset policy in datum CBOR (indicates pool interaction)
+  const hasWingRidersV2InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
+    );
+
+  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum;
+};
+
+const isVyFi = item => {
+  // Check for VyFi metadata message (indicates platform interaction)
+  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  return typeof msg === 'string' && msg.includes('VyFi');
+};
+
+const isSundaeSwap = item => {
+  // SundaeSwap V1 addresses
+  const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
+  const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
+
+  // SundaeSwap V3 pool address (primary indicator)
+  const SUNDAESWAP_V3_POOL_ADDRESS =
+    'addr1x8srqftqemf0mjlukfszd97ljuxdp44r372txfcr75wrz26rnxqnmtv3hdu2t6chcfhl2zzjh36a87nmd6dwsu3jenqsslnz7e';
+
+  // Check for SundaeSwap contract addresses (indicates DEX interaction)
+  return (
+    item.utxo?.inputs?.some(
+      (input: any) =>
+        input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
+        input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
+        input.address === SUNDAESWAP_V3_POOL_ADDRESS
+    ) ||
+    item.body?.outputs?.some(
+      (output: any) =>
+        output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
+        output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
+        output.address === SUNDAESWAP_V3_POOL_ADDRESS
+    )
+  );
+};
+
+const isSplash = item => {
+  // Splash DEX batcher key (primary indicator)
+  const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
+
+  // Splash order script hash
+  const SPLASH_ORDER_SCRIPT_HASH = '464eeee89f05aff787d40045af2a40a83fd96c513197d32fbc54ff02';
+
+  // Check for Splash batcher key in required signatures (indicates DEX interaction)
+  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some((sig: any) => sig === SPLASH_BATCHER_KEY);
+
+  // Check for Splash order script in witness scripts
+  const hasSplashScript = item.witness?.scripts?.some((script: any) => script?.hash === SPLASH_ORDER_SCRIPT_HASH);
+
+  return hasSplashBatcherKey || hasSplashScript;
+};
+
+const isMuesliSwap = item => {
+  // MuesliSwap order address
+  const MUESLISWAP_ORDER_ADDRESS =
+    'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
+
+  // Check for MuesliSwap order contract address (indicates DEX interaction)
+  const hasMuesliSwapOrderAddress =
+    item.utxo?.inputs?.some((input: any) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
+    item.body?.outputs?.some((output: any) => output.address === MUESLISWAP_ORDER_ADDRESS);
+
+  // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
+  const hasMuesliSwapV1InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
+    );
+
+  // Check for MuesliSwap V2 pool NFT policy in datum CBOR (indicates pool interaction)
+  const hasMuesliSwapV2InDatum =
+    item.witness?.datums?.some((datum: any) =>
+      datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
+    ) ||
+    item.body?.outputs?.some((output: any) =>
+      output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
+    );
+
+  // Check for MuesliSwap factory token in assets (indicates pool interaction)
+  const hasMuesliSwapFactoryToken = item.assets?.some((asset: any) =>
+    asset.unit?.includes('de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f4d7565736c69537761705f414d4d')
+  );
+
+  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken;
+};
+
+const isCashback = item => {
+  return !!item.utxo?.inputs?.some(input =>
+    [
+      'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
+      'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd',
+    ].includes(input.address)
+  );
+};
+
 const isStakeRegistration = item => {
   return (
     item.body?.certificates?.length > 0 &&
@@ -546,12 +1082,23 @@ const isStakeRegistration = item => {
   );
 };
 
+const isStakeDeRegistration = item => {
+  return (
+    item.body?.certificates?.length > 0 &&
+    item.body.certificates.some(
+      certificate =>
+        certificate.__typename === Cardano.CertificateType.Unregistration ||
+        certificate.__typename === Cardano.CertificateType.StakeDeregistration
+    )
+  );
+};
+
 const getColor = item => {
   if (item.status === 'Pending') {
     return '#FEC84B';
-  } else if (getTransactionStatus(item).includes('Received') || item.ada > 0) {
+  } else if (item.ada > 0) {
     return '#47cd89';
-  } else if (getTransactionStatus(item).includes('Sent') || item.ada < 0) {
+  } else if (item.ada < 0) {
     return '#F97066';
   }
   return '';
@@ -591,6 +1138,10 @@ onUnmounted(() => {
   if (scrollContainer.value) {
     scrollContainer.value.removeEventListener('scroll', handleScroll);
   }
+  // Cancel any pending debounced search updates (VueUse provides cancel method)
+  if ('cancel' in debouncedUpdateSearch && typeof debouncedUpdateSearch.cancel === 'function') {
+    debouncedUpdateSearch.cancel();
+  }
 });
 </script>
 <style scoped>
@@ -624,8 +1175,8 @@ onUnmounted(() => {
 
 .transactions-table tbody tr td {
   height: 50px !important;
-  padding-top: 0px !important;
-  padding-bottom: 0px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   vertical-align: middle !important;
   text-align: center !important;
 }
@@ -856,6 +1407,186 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
+/* VyFi gradient text and border - matches v-chip x-small */
+.vyfi-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 1px;
+  margin-bottom: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  border-radius: 12px;
+  background: transparent;
+  cursor: default;
+  vertical-align: middle;
+  height: 16px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition-duration: 0.28s;
+  transition-property: box-shadow, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vyfi-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 12px;
+  padding: 1px;
+  background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
+  mask-composite: exclude;
+}
+
+.vyfi-chip::after {
+  content: 'VyFi';
+  position: relative;
+  z-index: 1;
+  padding: 0 4px;
+  display: inline-block;
+  background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  height: 14px;
+  line-height: 14px;
+}
+
+.vyfi-chip:hover {
+  background-color: #ffffff0d;
+}
+
+/* SundaeSwap gradient text and border - matches v-chip x-small */
+.sundaeswap-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 1px;
+  margin-bottom: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  border-radius: 12px;
+  background: transparent;
+  cursor: default;
+  vertical-align: middle;
+  height: 16px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition-duration: 0.28s;
+  transition-property: box-shadow, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sundaeswap-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 12px;
+  padding: 1px;
+  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
+  mask-composite: exclude;
+}
+
+.sundaeswap-chip::after {
+  content: 'SundaeSwap';
+  position: relative;
+  z-index: 1;
+  padding: 0 4px;
+  display: inline-block;
+  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  height: 14px;
+  line-height: 14px;
+}
+
+.sundaeswap-chip:hover {
+  background-color: #ffffff0d;
+}
+
+/* Splash gradient text and border - matches v-chip x-small */
+.splash-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 1px;
+  margin-bottom: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  border-radius: 12px;
+  background: transparent;
+  cursor: default;
+  vertical-align: middle;
+  height: 16px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition-duration: 0.28s;
+  transition-property: box-shadow, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.splash-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 12px;
+  padding: 1px;
+  background: linear-gradient(90deg, #0059ff, #00fff6);
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, padding-box;
+  mask-composite: exclude;
+}
+
+.splash-chip::after {
+  content: attr(data-label);
+  position: relative;
+  z-index: 1;
+  padding: 0 4px;
+  display: inline-block;
+  background: linear-gradient(90deg, #0059ff, #00fff6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  height: 14px;
+  line-height: 14px;
+}
+
+.splash-chip:hover {
+  background-color: #ffffff0d;
+}
+
 @media (max-width: 600px) {
   .top-level-search {
     order: 2 !important;
@@ -865,6 +1596,29 @@ onUnmounted(() => {
 
   .table-container {
     max-height: calc(100vh - 150px);
+  }
+}
+
+/* Pending indicator - pulsing yellow circle */
+.pending-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #FEC84B;
+  margin-left: 6px;
+  animation: pulse-pending 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-pending {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
   }
 }
 </style>

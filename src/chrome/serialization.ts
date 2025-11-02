@@ -13,10 +13,6 @@ import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import * as CryptoTS from 'crypto-ts';
-import cryptoRandomString from 'crypto-random-string';
-import { decrypt_with_password, encrypt_with_password } from '@emurgo/cardano-serialization-lib-browser';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
@@ -62,14 +58,21 @@ export function isPaymentAddress(address: string): boolean {
   return Cardano.Address.isValid(address) || Cardano.Address.isValidByron(address);
 }
 
-export function toValue(assets: any[], lovelace: string): Serialization.Value {
-  const tokenMap = assets.reduce((map, asset) => {
-    const assetId: Cardano.AssetId = Cardano.AssetId.fromParts(asset.policy_id, asset.asset_name);
-    const current = map.get(assetId) ?? BigInt(0);
-    map.set(assetId, current + BigInt(asset.quantity));
-    return map;
-  }, new Map<Cardano.AssetId, bigint>());
-  return new Serialization.Value(BigInt(lovelace), tokenMap)
+export function toValueCore(amount: { unit: string; quantity: string; }[]): Cardano.Value {
+  const value: Cardano.Value = {
+    coins: BigInt(0),
+    assets: new Map<Cardano.AssetId, bigint>()
+  };
+  amount.forEach(amt => {
+    if (amt.unit === 'lovelace') {
+      value.coins = BigInt(amt.quantity);
+    } else {
+      const assetId: Cardano.AssetId = Cardano.AssetId(amt.unit);
+      const current: bigint = value.assets?.get(assetId) ?? BigInt(0);
+      value.assets?.set(assetId, current + BigInt(amt.quantity));
+    }
+  });
+  return value;
 }
 
 export function toStakeCredential(address: Cardano.Address): Cardano.Credential {
@@ -308,17 +311,39 @@ export function getUtxos(
   return selectedUtxos;
 }
 
-export function getBalance(utxos: any[], collateral: any): Serialization.Value {
-  const assets: any[] = []
-  let lovelace = 0;
-  if (collateral) {
-    utxos = utxos.filter(utxo => !(utxo.tx_hash === collateral.tx_hash && utxo.tx_index === collateral.tx_index))
+export function getBalance(utxos: Cardano.Utxo[], collateral: Cardano.Utxo): Serialization.Value {
+  let accumulatedValue: Serialization.Value = new Serialization.Value(BigInt(0));
+  if (utxos && collateral) {
+    utxos = utxos.filter((utxo: Cardano.Utxo) => !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index))
   }
-  utxos.forEach(utxo => {
-    assets.push(...utxo.asset_list)
-    lovelace += Number(utxo.value)
+  utxos.forEach((utxo: Cardano.Utxo) => {
+    // Ensure coins is BigInt and assets is a Map (handle deserialization from storage)
+    let utxoValue = utxo[1].value;
+
+    // Convert coins to BigInt if it's a string
+    const coins = typeof utxoValue.coins === 'string' ? BigInt(utxoValue.coins) : BigInt(utxoValue.coins);
+
+    // Convert assets to Map if it's a plain object
+    let assets: Map<Cardano.AssetId, bigint> | undefined = undefined;
+    if (utxoValue.assets) {
+      if (utxoValue.assets instanceof Map) {
+        assets = utxoValue.assets;
+      } else {
+        // Convert plain object to Map
+        assets = new Map<Cardano.AssetId, bigint>();
+        Object.entries(utxoValue.assets).forEach(([assetId, quantity]) => {
+          assets!.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        });
+      }
+    }
+
+    const value: Serialization.Value = Serialization.Value.fromCore({
+      coins,
+      assets
+    });
+    accumulatedValue = coalesceValueQuantities([accumulatedValue, value]);
   })
-  return toValue(assets, lovelace.toString());
+  return accumulatedValue;
 }
 
 export function coalesceValueQuantities(quantities: Serialization.Value[]): Serialization.Value {
@@ -391,18 +416,26 @@ const getFilterAmount = (amount: string): bigint => {
     return filterAmount;
 };
 
-export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: any[]): string[] {
+export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {}, storedUtxos: Cardano.Utxo[]): string[] {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
     error.info = 'No UTXOs available in wallet.';
     throw error;
   }
-  let filteredUtxos = storedUtxos.filter(utxo => Array.isArray(utxo.asset_list) && utxo.asset_list.length === 0)
+
+  // Filter for pure ADA UTXOs (no assets) suitable for collateral
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut has value: { coins: bigint, assets?: Map }
+  let filteredUtxos = storedUtxos.filter(utxo => {
+    const txOut = utxo[1];
+    return !txOut.value.assets || txOut.value.assets.size === 0;
+  });
+
   if (filteredUtxos.length === 0) {
     const error = APIError.InvalidRequest;
-    error.info = 'No UTXOs available in wallet.';
+    error.info = 'No pure ADA UTXOs available for collateral.';
     throw error;
   }
+
   if (amount) {
     let filterAmount = MAX_COLLATERAL_AMOUNT;
     try {
@@ -412,14 +445,16 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
       error.info = (e as Error)?.message || 'Unknown error';
       throw error;
     }
-    const utxos = [];
+
+    const utxos: Cardano.Utxo[] = [];
     let totalCoins = 0n;
     for (const utxo of filteredUtxos) {
-      const coin = utxo.value;
-      totalCoins += BigInt(coin);
+      const coins = utxo[1].value.coins;
+      totalCoins += BigInt(coins);
       utxos.push(utxo);
       if (totalCoins >= filterAmount) break;
     }
+
     if (totalCoins < filterAmount) {
       const error = APIError.Refused;
       error.info = 'not enough coins in configured collateral UTxOs';
@@ -427,7 +462,11 @@ export function getCollateral({ amount = new Serialization.Value(MAX_COLLATERAL_
     }
     filteredUtxos = utxos;
   }
-  return filteredUtxos.map((utxo) => toUTxO(utxo).toCbor());
+
+  // Convert Cardano.Utxo to CBOR strings
+  return filteredUtxos.map((utxo) => {
+    return Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor();
+  });
 }
 
 export function getUsedAddresses(keys: any, paginate?: Paginate): HexBlob[] {
@@ -472,40 +511,65 @@ function paginateArray(array: HexBlob[], paginate?: Paginate): HexBlob[] {
   return array.slice(start, end);
 }
 
+// Track pending popup creations to prevent race conditions
+const pendingPopups = new Map<string, Promise<chrome.tabs.Tab>>();
+
 export async function focusOrCreatePopup(url: string, width: number, height: number): Promise<chrome.tabs.Tab> {
-  const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
-  let existingWindow = null;
-  let tabb: chrome.tabs.Tab;
-  // Iterate through each window and its tabs to find the URL
-  for (const window of windows) {
-    if (window.type === 'popup') {
-      for (const tab of window.tabs) {
-        if (tab.url === url) {
-          existingWindow = window;
-          tabb = tab;
-          break;
-        }
-      }
-      if (existingWindow) break;
-    }
+  // Check if we're already creating a popup for this URL
+  if (pendingPopups.has(url)) {
+    console.log('⏳ Popup already being created for:', url);
+    return pendingPopups.get(url);
   }
 
-  if (existingWindow) {
-    // Focus on the existing window
-    await chrome.windows.update(existingWindow.id, { focused: true });
-    return tabb;
-  } else {
-    // Create a new window with the specified URL
-    const window: chrome.windows.Window = await chrome.windows.create({
-      url: url,
-      type: 'popup',
-      focused: true,
-      ...POPUP_WINDOW,
-      width: width,
-      height: height,
-    });
-    return window.tabs[0];
-  }
+  // Create the popup promise
+  const popupPromise = (async () => {
+    try {
+      const windows: chrome.windows.Window[] = await chrome.windows.getAll({ populate: true });
+      let existingWindow = null;
+      let tabb: chrome.tabs.Tab;
+
+      // Iterate through each window and its tabs to find the URL
+      for (const window of windows) {
+        if (window.type === 'popup') {
+          for (const tab of window.tabs) {
+            if (tab.url === url) {
+              existingWindow = window;
+              tabb = tab;
+              break;
+            }
+          }
+          if (existingWindow) break;
+        }
+      }
+
+      if (existingWindow) {
+        // Focus on the existing window
+        console.log('✅ Focusing existing popup:', url);
+        await chrome.windows.update(existingWindow.id, { focused: true });
+        return tabb;
+      } else {
+        // Create a new window with the specified URL
+        console.log('🆕 Creating new popup:', url);
+        const window: chrome.windows.Window = await chrome.windows.create({
+          url: url,
+          type: 'popup',
+          focused: true,
+          ...POPUP_WINDOW,
+          width: width,
+          height: height,
+        });
+        return window.tabs[0];
+      }
+    } finally {
+      // Clean up the pending popup tracking after creation
+      pendingPopups.delete(url);
+    }
+  })();
+
+  // Store the promise to prevent concurrent creations
+  pendingPopups.set(url, popupPromise);
+
+  return popupPromise;
 }
 
 export async function submitTx(tx: string, chain: string, network: string): Promise<Response>  {
@@ -663,26 +727,158 @@ export function keyHashFromAddress(address: string): Hash28ByteBase16 {
   return undefined;
 }
 
-export function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): string {
-  const privateKey = encryptWithPassword(password, rootKey.bytes());
-  return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
-}
+/**
+ * Creates legacy UTXO structure from Cardano JS SDK transaction format
+ * This is needed for TransactionDetails component compatibility and transaction calculations
+ * @param tx - Transaction with Cardano JS SDK body structure
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Legacy UTXO structure with inputs and outputs
+ */
+export function createUtxoStructure(tx: any, utxos: Cardano.Utxo[]): any {
+  const inputs: any[] = [];
+  const outputs: any[] = [];
 
-export function encryptWithPassword(password, rootKeyBytes): string {
-  const passwordHex = Buffer.from(password).toString('hex');
-  const rootKeyHex = Buffer.from(rootKeyBytes, 'hex').toString('hex');
-  const salt = cryptoRandomString({ length: 2 * 32 });
-  const nonce = cryptoRandomString({ length: 2 * 12 });
-  return encrypt_with_password(passwordHex, salt, nonce, rootKeyHex);
-}
+  // Convert inputs from Cardano JS SDK format to legacy format
+  // For inputs, we need to find the actual UTXO values from our UTXO set
+  if (tx.body?.inputs) {
+    tx.body.inputs.forEach((input: any) => {
+      // Try to find the corresponding UTXO from provided UTXOs
+      const utxo = utxos.find((utxo: any) =>
+        utxo[0].txId === input.txId && utxo[0].index === input.index
+      );
 
-export function decryptWithPassword(password: string, privateKey): Buffer {
-  const passwordHex = Buffer.from(password).toString('hex');
-  let decryptedHex;
-  try {
-    decryptedHex = decrypt_with_password(passwordHex, privateKey);
-  } catch (err) {
-    throw new Error('Wrong Passphrase');
+      let address = '';
+      let amount: any[] = [];
+
+      if (utxo) {
+        // Use the actual UTXO data
+        address = utxo[1].address;
+        amount = [{
+          unit: 'lovelace',
+          quantity: Number(utxo[1].value.coins)
+        }];
+
+        if (utxo[1].value.assets && utxo[1].value.assets.size > 0) {
+          utxo[1].value.assets.forEach((quantity: bigint, assetId: string) => {
+            amount.push({
+              unit: assetId,
+              quantity: Number(quantity)
+            });
+          });
+        }
+      }
+
+      inputs.push({
+        tx_hash: input.txId,
+        output_index: input.index,
+        address: address,
+        amount: amount
+      });
+    });
   }
-  return Buffer.from(decryptedHex, 'hex');
+
+  // Convert outputs from Cardano JS SDK format to legacy format
+  if (tx.body?.outputs) {
+    tx.body.outputs.forEach((output: any, index: number) => {
+      const amount: any[] = [{
+        unit: 'lovelace',
+        quantity: Number(output.value.coins)
+      }];
+
+      // Convert assets map to array format
+      if (output.value.assets && output.value.assets.size > 0) {
+        output.value.assets.forEach((quantity: bigint, assetId: string) => {
+          amount.push({
+            unit: assetId,
+            quantity: Number(quantity)
+          });
+        });
+      }
+
+      outputs.push({
+        output_index: index,
+        address: output.address,
+        amount: amount
+      });
+    });
+  }
+
+  return {
+    inputs,
+    outputs
+  };
+}
+
+/**
+ * Converts transactions to database schema format
+ * Handles various transaction formats including Cardano JS SDK and legacy formats
+ * @param txs - Array of transactions to convert
+ * @param utxos - Current wallet UTXOs for input resolution
+ * @returns Array of converted transactions ready for database storage
+ */
+export function convertTransactionsForStorage(txs: any[], utxos: Cardano.Utxo[]): any[] {
+  return txs.map(tx => {
+    // Check if this is already a properly formatted transaction with utxo data
+    if (tx.id && tx.utxo) {
+      return tx;
+    }
+
+    // If transaction has id and Cardano JS SDK structure but no utxo, create utxo structure
+    if (tx.id && tx.body && !tx.utxo) {
+      return {
+        ...tx,
+        utxo: createUtxoStructure(tx, utxos)
+      };
+    }
+
+    // Check if this is a transaction from sync with deserialized body
+    if (tx.body && tx.cbor) {
+      // Transaction is already deserialized from sync process
+      // Just need to ensure it has the id field
+      const txId = tx.tx_hash || tx.id;
+      return {
+        ...tx,
+        id: txId
+      };
+    }
+
+    // Check if this is a raw transaction with CBOR that needs full conversion
+    if (tx.cbor && !tx.body) {
+      try {
+        // Use the already imported Serialization from the top of the file
+        // Deserialize the transaction
+        const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(tx.cbor));
+        const txId = tx.tx_hash || Serialization.Transaction.fromCore(txDeserialized).getId();
+
+        // Return the transaction in the expected database format
+        return {
+          id: txId,
+          tx_hash: txId,
+          block_hash: tx.block_hash || '',
+          block_height: tx.block_height || 0,
+          absolute_slot: tx.absolute_slot || 0,
+          tx_timestamp: tx.tx_timestamp || Math.floor(Date.now() / 1000),
+          tx_size: tx.tx_size || 0,
+          epoch_no: tx.epoch_no || 0,
+          cbor: tx.cbor,
+          body: txDeserialized.body,
+          witness: txDeserialized.witness,
+          auxiliaryData: txDeserialized.auxiliaryData,
+          isValid: txDeserialized.isValid !== false,
+          pending: false,
+          // Include UTXO data if available from sync
+          utxo: tx.utxo
+        };
+      } catch (e) {
+        console.error('Error deserializing transaction CBOR:', e);
+        // Fallback: ensure it at least has an id
+        const fallbackId = tx.tx_hash || tx.hash || 'fallback_' + Date.now();
+        return { ...tx, id: fallbackId };
+      }
+    }
+
+    // Legacy format - just ensure it has an id
+    const txId = tx.tx_hash || tx.hash || 'unknown_' + Date.now();
+    return { ...tx, id: txId };
+  });
 }

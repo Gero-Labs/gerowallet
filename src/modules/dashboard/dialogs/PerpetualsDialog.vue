@@ -3,11 +3,13 @@
     <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Strike Perpetuals"
-    subtitle="Trade perpetual futures with leverage on Cardano"
-    :min-height="0"
+    :title="t('perpetuals.strikePerpetuals').toString()"
+    :subtitle="t('perpetuals.tradePerpetualFutures').toString()"
+    :min-height="734"
+    :height="734"
     :width="1100"
     :scrollable="true"
+    :persistent="false"
   >
     <v-card-text class="pt-1 dialog-content-container" style="z-index: 4">
       <v-row>
@@ -18,7 +20,7 @@
             style="margin-top: 5px; margin-bottom: 5px;"
           >
             <h4 class="column-title compact">{{ tickerSymbol }}/USD</h4>
-            <span class="chart-timeframe">24H Price Action</span>
+            <span class="chart-timeframe">{{ t('perpetuals.24hPriceAction') }}</span>
           </div>
 
           <!-- TradingView ADA/USD Histogram Chart -->
@@ -47,19 +49,19 @@
             >
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">My Positions</span>
+                  <span class="tab-text">{{ t('perpetuals.positions') }}</span>
                   <span v-if="positions.length > 0" class="tab-count ml-1">{{ positions.length }}</span>
                 </div>
               </v-tab>
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">Limit Orders</span>
+                  <span class="tab-text">{{ t('perpetuals.limitOrders') }}</span>
                   <span v-if="limitOrders.length > 0" class="tab-count ml-1">{{ limitOrders.length }}</span>
                 </div>
               </v-tab>
               <v-tab class="tab-item">
                 <div class="d-flex align-items-center">
-                  <span class="tab-text">All Orders</span>
+                  <span class="tab-text">{{ t('perpetuals.history') }}</span>
                   <span v-if="history.length > 0" class="tab-count ml-1">{{ history.length }}</span>
                 </div>
               </v-tab>
@@ -88,15 +90,15 @@
                   color="#26FAB0"
                   size="40"
                 />
-                <p class="mt-3">Loading positions...</p>
+                <p class="mt-3">{{ t('perpetuals.loadingPositions') }}</p>
               </div>
 
               <!-- Empty state -->
               <div v-else-if="positions.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-chart-line</v-icon>
-                <p class="mt-2">No open positions</p>
+                <p class="mt-2">{{ t('perpetuals.noOpenPositions') }}</p>
                 <p class="mt-1 text-caption">
-                  Your perpetual positions will appear here
+                  {{ t('perpetuals.yourPerpetualPositions') }}
                 </p>
               </div>
 
@@ -144,6 +146,7 @@
                     class="text-center pa-0 ma-0"
                   >
                     <v-pagination
+                      color="#26FAB0"
                       v-model="currentPositionsPage"
                       :length="
                           Math.ceil(positions.length / positionsPerPage)
@@ -151,7 +154,7 @@
                       :total-visible="5"
                       circle
                       class="compact-pagination ma-0"
-                    ></v-pagination>
+                    />
                   </td>
                 </tr>
               </template>
@@ -172,7 +175,7 @@
                   >
                     <v-img
                       :src="getPositionTrendIcon(item)"
-                      alt="P&L trend"
+                      :alt="t('perpetuals.pnlTrend')"
                     />
                   </v-avatar>
                 </div>
@@ -226,7 +229,7 @@
                       </div>
                     </template>
                     <div class="fees-tooltip-content">
-                      <div class="fees-title">Position Breakdown</div>
+                      <div class="fees-title">{{ t('perpetuals.positionBreakdown') }}</div>
                       <div class="position-main-info">
                         <div
                           style="
@@ -279,7 +282,7 @@
                           "
                       >
                         <div class="fee-item">
-                          <span>Opening Fee:</span>
+                          <span>{{ t('perpetuals.openingFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -290,7 +293,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Hourly Borrow Fee:</span>
+                          <span>{{ t('perpetuals.hourlyBorrowFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -307,7 +310,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Next Hourly Fee Update:</span>
+                          <span>{{ t('perpetuals.nextHourlyFeeUpdate') }}</span>
                           <span
                             style="
                                 color: #26fab0;
@@ -323,7 +326,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Liquidation After Hourly:</span>
+                          <span>{{ t('perpetuals.liquidationAfterHourly') }}</span>
                           <span
                           >${{
                               formatPriceWithMinDigits(
@@ -336,7 +339,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Accumulated Borrow Fee:</span>
+                          <span>{{ t('perpetuals.accumulatedBorrowFee') }}</span>
                           <span
                           >${{
                               calculatePositionFees(
@@ -347,7 +350,7 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>PNL:</span>
+                          <span>{{ t('perpetuals.pnlLabel') }}</span>
                           <span
                             :class="
                                 calculatePositionFees(
@@ -376,7 +379,7 @@
                               border-top: 1px solid rgba(255, 255, 255, 0.1);
                             "
                         >
-                          <span><strong>PNL With Fees:</strong></span>
+                          <span><strong>{{ t('perpetuals.pnlWithFees') }}</strong></span>
                           <span
                             :class="calculatePositionFees(item, perpetualsPrice?.lastPrice)?.pnlWithFees >= 0 ? 'profit' : 'loss'"
                             style="font-weight: 600"
@@ -388,7 +391,7 @@
                         </div>
                       </div>
                       <div v-else class="fee-item">
-                        <span>Tooltip unavailable - missing market data</span>
+                        <span>{{ t('perpetuals.tooltipUnavailable') }}</span>
                       </div>
                     </div>
                   </v-tooltip>
@@ -437,7 +440,7 @@
                             ? assets.trendDownSvg
                             : assets.arrowRightSvg
                         "
-                      alt="trend"
+                      :alt="t('perpetuals.trend')"
                     />
                   </v-avatar>
                   <div class="pnl-values-compact">
@@ -492,15 +495,15 @@
                   color="#26FAB0"
                   size="40"
                 />
-                <p class="mt-3">Loading limit orders...</p>
+                <p class="mt-3">{{ t('perpetuals.loadingLimitOrders') }}</p>
               </div>
 
               <!-- Empty state -->
               <div v-else-if="limitOrders.length === 0" class="empty-state">
                 <v-icon size="48" color="grey">mdi-target</v-icon>
-                <p class="mt-2">No limit orders</p>
+                <p class="mt-2">{{ t('perpetuals.noLimitOrders') }}</p>
                 <p class="mt-1 text-caption">
-                  Your pending limit orders will appear here
+                  {{ t('perpetuals.yourPendingLimitOrders') }}
                 </p>
               </div>
 
@@ -576,22 +579,21 @@
 
                   <template v-slot:[`item.status`]="{ item }">
                     <v-chip
-                      :color="getOrderStatusColor(item.status)"
+                      :color="getPositionStatusColor(item.status)"
                       x-small
                       label
                       class="status-chip"
                     >
-                      {{ (item.status || 'unknown').toUpperCase() }}
+                      {{ (item.status || t('perpetuals.unknown')).toUpperCase() }}
                     </v-chip>
                   </template>
 
                   <template v-slot:[`item.actions`]="{ item }">
                     <div class="d-flex justify-center">
                       <v-btn
-                        v-if="item.status === 'pending'"
-                        x-small
                         color="error"
-                        outlined
+                        text
+                        x-small
                         @click="cancelLimitOrder(item)"
                         :loading="cancellingOrders[`${item.outRef.txHash}#${item.outRef.outputIndex}`]"
                         class="close-position-btn-compact mr-1"
@@ -601,163 +603,124 @@
                       </v-btn>
                     </div>
                   </template>
-
-                  <template v-slot:body.append>
-                    <tr v-if="limitOrders.length > positionsPerPage" class="no-hover">
-                      <td :colspan="limitOrderHeaders.length" class="text-center pa-0 ma-0">
-                        <v-pagination
-                          v-model="currentLimitOrdersPage"
-                          :length="Math.ceil(limitOrders.length / positionsPerPage)"
-                          :total-visible="5"
-                          circle
-                          class="compact-pagination ma-0"
-                        ></v-pagination>
-                      </td>
-                    </tr>
-                  </template>
                 </v-data-table>
               </div>
             </v-tab-item>
 
             <!-- History Tab -->
             <v-tab-item>
-              <!-- Loading state -->
-              <div v-if="loadingHistory" class="loading-state">
-                <v-progress-circular
-                  indeterminate
-                  color="#26FAB0"
-                  size="40"
-                />
-                <p class="mt-3">Loading history...</p>
-              </div>
+              <v-card class="transparent history-card-container">
+                <v-card-text class="pa-0 history-card-content">
+                  <!-- Loading state -->
+                  <div v-if="loadingHistory" class="loading-state">
+                    <v-progress-circular
+                      indeterminate
+                      color="#26FAB0"
+                      size="40"
+                    />
+                    <p class="mt-3">{{ t('perpetuals.loadingHistory') }}</p>
+                  </div>
 
-              <!-- Empty state -->
-              <div v-else-if="history.length === 0" class="empty-state">
-                <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
-                <p class="mt-2">No orders found</p>
-                <p class="mt-1 text-caption">
-                  All your positions and orders will appear here
-                </p>
-              </div>
+                  <!-- Empty state -->
+                  <div v-else-if="history.length === 0" class="empty-state">
+                    <v-icon size="48" color="grey">mdi-format-list-bulleted</v-icon>
+                    <p class="mt-2">{{ t('perpetuals.noHistory') }}</p>
+                    <p class="mt-1 text-caption">
+                      {{ t('perpetuals.allPositionsAndOrders') }}
+                    </p>
+                  </div>
 
-              <!-- History table -->
-              <div v-else class="positions-table">
-                <v-data-table
-                  dense
-                  class="transparent positions-data-table"
-                  :headers="historyHeaders"
-                  :items="paginatedHistory"
-                  :items-per-page="-1"
-                  hide-default-footer
-                  :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-                >
-                  <!-- Custom headers with padding -->
-                  <template v-slot:[`header.asset`]="{ header }">
-                    <span style="padding-left: 12px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.positionType`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.entryPrice`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.finalPnl`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.status`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
-                  <template v-slot:[`header.closedTime`]="{ header }">
-                    <span style="padding: 0 8px">{{ header.text }}</span>
-                  </template>
+                  <!-- History table -->
+                  <div v-else class="positions-table">
+                    <v-data-table
+                      dense
+                      class="transparent positions-data-table"
+                      :headers="historyHeaders"
+                      :items="paginatedHistory"
+                      :items-per-page="positionsPerPage"
+                      hide-default-footer
+                      :header-props="{ 'sort-icon': 'mdi-menu-up' }"
+                    >
+                      <!-- Custom headers with padding -->
+                      <template v-slot:[`header.action`]="{ header }">
+                        <span style="padding-left: 12px">{{ header.text }}</span>
+                      </template>
 
-                  <template v-slot:[`item.asset`]="{ item }">
-                    <div class="d-flex align-items-center pl-2">
-                      <div class="asset-info d-flex flex-column justify-center">
-                        <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
-                        <div class="asset-leverage text-caption text--secondary text-center">{{ item.leverage }}x</div>
-                      </div>
-                    </div>
-                  </template>
 
-                  <template v-slot:[`item.positionType`]="{ item }">
-                    <v-chip
-                      v-if="item.position || item.type"
-                      :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
-                      x-small
-                      label
-                      class="ultra-compact-chip"
-                      :style="(item.position || item.type)?.toUpperCase() === 'LONG'
+                      <template v-slot:[`item.asset`]="{ item }">
+                        <div class="d-flex align-items-center pl-2">
+                          <div class="asset-info d-flex flex-column justify-center">
+                            <div class="asset-name text-center">{{ item.asset?.ticker || 'ADA' }}</div>
+                          </div>
+                        </div>
+                      </template>
+
+                      <template v-slot:[`item.action`]="{ item }">
+                        <v-chip
+                          x-small
+                          label
+                          class="ultra-compact-chip"
+                          :style="(item.position || item.type)?.toUpperCase() === 'LONG'
                         ? 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%) !important; color: #10b981 !important; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'
                         : 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%) !important; color: #ef4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 9px !important; height: 20px !important; padding: 0 6px !important;'"
-                    >
-                      {{ (item.position || item.type)?.toUpperCase() }}
-                    </v-chip>
-                  </template>
+                          :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'"
+                        >
+                          <v-icon class="mr-1" x-small :color="(item.position || item.type)?.toUpperCase() === 'LONG' ? 'success' : 'error'">{{
+                              item.action?.includes('Limit') ? "mdi-target"
+                                : "mdi-flash"
+                            }}</v-icon>
+                          {{ (item.action)?.toUpperCase() }}
+                        </v-chip>
+                      </template>
 
-                  <template v-slot:[`item.entryPrice`]="{ item }">
-                    <div class="price-values-compact">
-                      <div class="entry-price">${{ (item.entryPrice || item.price)?.toFixed(2) || '0.00' }}</div>
-                    </div>
-                  </template>
-
-                  <template v-slot:[`item.finalPnl`]="{ item }">
-                    <div class="d-flex align-items-center justify-center">
-                      <v-avatar tile size="10" class="mr-1 trend-icon-centered">
-                        <v-img
-                          :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
-                          alt="trend"
-                        />
-                      </v-avatar>
-                      <div class="pnl-values-compact">
-                        <div :class="(item.pnl || 0) >= 0 ? 'profit' : 'loss'">
-                          {{ formatCurrency(item.pnl || 0) }}
+                      <template v-slot:[`item.entryPrice`]="{ item }">
+                        <div class="price-values-compact">
+                          <div class="entry-price">${{ (item.entryPrice || item.price)?.toFixed(2) || '0.00' }}</div>
                         </div>
-                      </div>
-                    </div>
-                  </template>
+                      </template>
 
-                  <template v-slot:[`item.status`]="{ item }">
-                    <v-chip
-                      :color="getPositionStatusColor(item.status)"
-                      x-small
-                      label
-                      class="status-chip"
-                    >
-                      {{ (item.status || 'unknown').toUpperCase() }}
-                    </v-chip>
-                  </template>
-
-                  <template v-slot:[`item.closedTime`]="{ item }">
-                    <div class="text-caption">
-                      {{ item.enteredPositionTime ? formatDate(item.enteredPositionTime) : '-' }}
-                    </div>
-                  </template>
-
-                  <template v-slot:body.append>
-                    <tr v-if="history.length > positionsPerPage" class="no-hover">
-                      <td :colspan="historyHeaders.length" class="text-center pa-0 ma-0">
-                        <v-pagination
-                          v-model="currentHistoryPage"
-                          :length="Math.ceil(history.length / positionsPerPage)"
-                          :total-visible="5"
-                          circle
-                          class="compact-pagination ma-0"
-                        ></v-pagination>
-                      </td>
-                    </tr>
-                  </template>
-                </v-data-table>
-              </div>
+                      <template v-slot:[`item.finalPnl`]="{ item }">
+                        <div class="d-flex align-items-center justify-center">
+                          <v-avatar tile size="10" class="mr-1 trend-icon-centered">
+                            <v-img
+                              :src="(item.pnl || 0) > 0 ? assets.trendUpSvg : (item.pnl || 0) < 0 ? assets.trendDownSvg : assets.arrowRightSvg"
+                              :alt="t('perpetuals.trend')"
+                            />
+                          </v-avatar>
+                          <div class="pnl-values-compact">
+                            <div :class="(item.pnl || 0) > 0 ? 'profit' : (item.pnl) == 0 ? 'even' : 'loss'">
+                              {{ formatCurrency(item.pnl || 0) }}
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                      <template v-slot:[`item.closedTime`]="{ item }">
+                        <div class="text-caption">
+                          {{ item.enteredPositionTime ? formatDate(item.enteredPositionTime) : '-' }}
+                        </div>
+                      </template>
+                    </v-data-table>
+                  </div>
+                </v-card-text>
+                <v-card-actions v-if="history.length > positionsPerPage" class="text-center justify-center">
+                  <v-pagination
+                    color="#26FAB0"
+                    v-model="currentHistoryPage"
+                    :length="Math.ceil(history.length / positionsPerPage)"
+                    :total-visible="7"
+                    circle
+                    class="compact-pagination ma-0"
+                  />
+                </v-card-actions>
+              </v-card>
             </v-tab-item>
           </v-tabs-items>
-
         </v-col>
         <v-col cols="4">
           <div
             class="d-flex align-items-center justify-space-between mb-2"
           >
-            <h4 class="column-title compact" style="align-content: center;">Open New Position</h4>
+            <h4 class="column-title compact" style="align-content: center;">{{ t('perpetuals.openNewPosition') }}</h4>
             <!-- Real-time ADA Price Ticker -->
             <div
               class="ada-ticker-compact-corner"
@@ -819,7 +782,7 @@
 
           <!-- Step 1: Position Direction -->
             <div class="form-section compact">
-              <div class="form-label compact">Position Direction</div>
+              <div class="form-label compact">{{ t('perpetuals.positionDirection') }}</div>
               <v-btn-toggle
                 mandatory
                 active-class="geroButton"
@@ -834,7 +797,7 @@
                   class="position-btn long-btn compact flex-btn"
                 >
                   <v-icon x-small class="mr-1">mdi-trending-up</v-icon>
-                  LONG
+                  {{ $t('perpetuals.long') }}
                 </v-btn>
                 <v-btn
                   value="SHORT"
@@ -843,14 +806,14 @@
                   class="position-btn short-btn compact flex-btn"
                 >
                   <v-icon x-small class="mr-1">mdi-trending-down</v-icon>
-                  SHORT
+                  {{ $t('perpetuals.short') }}
                 </v-btn>
               </v-btn-toggle>
             </div>
 
             <!-- Step 2: Order Type -->
             <div class="form-section compact">
-              <div class="form-label compact">Order Type</div>
+              <div class="form-label compact">{{ t('perpetuals.orderType') }}</div>
               <v-btn-toggle
                 mandatory
                 :active-class="
@@ -916,6 +879,7 @@
                 outlined
                 :class="{
                     'short-position': positionData.position === 'SHORT',
+                    'invalid-input': limitPriceValidation.isInvalid
                   }"
               >
                 <v-card-text class="pa-1">
@@ -942,12 +906,21 @@
                   </div>
                 </v-card-text>
               </v-card>
+
+              <!-- Limit Price Validation Warning -->
+              <div
+                v-if="limitPriceValidation.isInvalid && positionData.limitPrice > 0"
+                class="limit-price-warning mt-2"
+              >
+                <v-icon small color="#f59e0b" class="mr-1">mdi-alert</v-icon>
+                <span class="warning-text">{{ limitPriceValidation.message }}</span>
+              </div>
             </div>
 
             <!-- Step 3: Collateral Amount -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between">
-                <div class="form-label compact">Collateral</div>
+                <div class="form-label compact">{{ t('perpetuals.collateral') }}</div>
                 <span class="available-balance compact"
                 >Available: {{ availableAdaBalance }} ADA</span
                 >
@@ -988,7 +961,7 @@
             <!-- Step 4: Leverage -->
             <div class="form-section compact">
               <div class="d-flex align-center justify-space-between mb-1">
-                <div class="form-label compact">Leverage</div>
+                <div class="form-label compact">{{ t('perpetuals.leverage') }}</div>
                 <div
                   class="leverage-display compact"
                   :class="{
@@ -1039,10 +1012,10 @@
                       >mdi-shield-check</v-icon
                       >
                       <span class="tp-sl-title compact"
-                      >Take Profit / Stop Loss</span
+                      >{{ t('perpetuals.takeProfitStopLoss') }}</span
                       >
                       <span class="tp-sl-subtitle compact"
-                      >(Optional)</span
+                      >({{ $t('common.optional') }})</span
                       >
                     </div>
                   </v-expansion-panel-header>
@@ -1052,7 +1025,7 @@
                     <!-- Take Profit -->
                     <div class="mb-2">
                       <div class="form-label small compact">
-                        Take Profit Price
+                        {{ t('perpetuals.takeProfitPrice') }}
                       </div>
                       <v-card
                         class="input-card small compact"
@@ -1091,7 +1064,7 @@
                     <!-- Stop Loss -->
                     <div class="mb-2">
                       <div class="form-label small compact">
-                        Stop Loss Price
+                        {{ t('perpetuals.stopLossPrice') }}
                       </div>
                       <v-card
                         class="input-card small compact"
@@ -1166,7 +1139,7 @@
                           <v-icon x-small class="mr-1"
                           >mdi-information</v-icon
                           >
-                          View Fees
+                          {{ t('perpetuals.viewFees') }}
                         </v-btn>
                       </template>
                       <div class="fees-tooltip-content">
@@ -1177,18 +1150,18 @@
                                 positionData.position === 'SHORT',
                             }"
                         >
-                          Trading Fees
+                          {{ t('perpetuals.tradingFees') }}
                         </div>
                         <div class="fee-item">
-                          <span>Opening Fee:</span>
+                          <span>{{ t('perpetuals.openingFee') }}</span>
                           <span>0.1%</span>
                         </div>
                         <div class="fee-item">
-                          <span>Hourly Borrow Fee:</span>
+                          <span>{{ t('perpetuals.hourlyBorrowFee') }}</span>
                           <span>~0.001%</span>
                         </div>
                         <div class="fee-item">
-                          <span>Accumulated Borrow Fee:</span>
+                          <span>{{ t('perpetuals.accumulatedBorrowFee') }}</span>
                           <span
                           >{{
                               (accumulatedBorrowFee * 100).toFixed(4)
@@ -1196,14 +1169,14 @@
                           >
                         </div>
                         <div class="fee-item">
-                          <span>Network Fee:</span>
+                          <span>{{ t('perpetuals.networkFee') }}</span>
                           <span>~2-5 ADA</span>
                         </div>
                       </div>
                     </v-tooltip>
                   </div>
                   <div class="summary-row compact">
-                    <span>Position Size:</span>
+                    <span>{{ t('perpetuals.positionSize') }}:</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1214,7 +1187,7 @@
                     >
                   </div>
                   <div class="summary-row compact">
-                    <span>Notional Value:</span>
+                    <span>{{ t('perpetuals.notionalValue') }}</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1225,7 +1198,7 @@
                     >
                   </div>
                   <div class="summary-row compact">
-                    <span>Est. Liquidation Price:</span>
+                    <span>{{ t('perpetuals.estLiqPrice') }}</span>
                     <span
                       class="summary-value"
                       :class="{
@@ -1245,7 +1218,7 @@
               color="primary"
               block
               @click="openPosition"
-              :loading="loading"
+              :loading="loading || openingPosition"
               :disabled="!canOpenPosition"
               class="open-position-btn enhanced compact"
               :class="{
@@ -1266,10 +1239,10 @@
 
     <!-- Powered by Strike Finance Footer - positioned at dialog bottom -->
     <div class="d-flex align-center justify-center py-2 dialog-footer">
-      <span class="powered-by-text mr-2">Powered by</span>
+      <span class="powered-by-text mr-2">{{ t('perpetuals.poweredBy') }}</span>
       <img
         src="https://app.strikefinance.org/logo.svg"
-        alt="Strike Finance Logo"
+        :alt="t('perpetuals.strikeLogo').toString()"
         class="strike-logo"
         @error="onLogoError"
       />
@@ -1284,7 +1257,7 @@
   >
     <v-card>
       <v-card-title class="headline">
-        Update Position
+        {{ t('perpetuals.updatePosition') }}
       </v-card-title>
 
       <v-card-text>
@@ -1302,7 +1275,7 @@
 
           <v-text-field
             v-model="updatePositionData.stopLossPrice"
-            label="Stop Loss Price (USD)"
+            :label="t('perpetuals.stopLossPriceUsd')"
             type="number"
             step="0.01"
             min="0"
@@ -1315,7 +1288,7 @@
 
           <v-text-field
             v-model="updatePositionData.takeProfitPrice"
-            label="Take Profit Price (USD)"
+            :label="t('perpetuals.takeProfitPriceUsd')"
             type="number"
             step="0.01"
             min="0"
@@ -1333,13 +1306,13 @@
           text
           @click="updatePositionDialog = false"
         >
-          Cancel
+          {{ t('perpetuals.cancel') }}
         </v-btn>
         <v-btn
           color="primary"
           @click="updatePosition"
         >
-          Update
+          {{ t('perpetuals.update') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -1348,23 +1321,24 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import assets from '@/utils/assets';
-import {
+import strikeFinanceApi, {
   Asset,
-  ClosePerpetualRequest,
-  CreatePerpetualRequest,
-  PerpetualPosition,
-  LimitOrder,
   CancelLimitOrderRequest,
-  UpdatePositionRequest,
+  ClosePerpetualRequest,
   CreateLimitOrderRequest,
+  CreatePerpetualRequest,
+  LimitOrder,
+  PerpetualPosition,
+  UpdatePositionRequest,
 } from '@/api/strike-finance.api';
-import strikeFinanceApi from '@/api/strike-finance.api';
 import type { IChartApi, Time } from 'lightweight-charts';
 import { priceService, priceStore } from '@/stores/priceStore';
 import { AxiosResponse } from 'axios';
@@ -1372,6 +1346,7 @@ import { Messaging } from '@/chrome/messaging';
 import { METHOD } from '@/chrome/config';
 import snackbar from '@/plugins/snackbar';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 interface CandlestickDataPoint {
   time: Time;
@@ -1403,7 +1378,7 @@ const calculateAccumulatedBorrowFee = (
   hourlyBorrowFee: number,
   enteredPositionTime: number
 ) => {
-  const currentTime = Date.now() + 300000; // Add 5 minutes (300000ms) for a validity interval
+  const currentTime = Date.now() + 300000; // Add 5 minutes (300,000 ms) for a validity interval
   const hoursElapsed = (currentTime - enteredPositionTime) / (1000 * 60 * 60);
   return hourlyBorrowFee * hoursElapsed;
 };
@@ -1547,7 +1522,7 @@ const formatPercentage = (value: number, totalPositionValue: number) => {
 // Format currency - exactly matching React component
 const formatCurrency = (value: number) => {
   const formattedValue = Math.abs(value).toFixed(
-    Math.max(2, Math.abs(value) < 0.01 ? 4 : 2)
+    Math.max(2, Math.abs(value) < 0.01 ? 2 : 2)
   );
   return value < 0 ? `-$${formattedValue}` : `$${formattedValue}`;
 };
@@ -1970,7 +1945,6 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
 
       if (!pairKey || !data.result[pairKey]) {
         console.warn('[StrikeFinance] No OHLC data found for ADA/USD');
-        return generateSimpleOHLCData();
       }
 
       const krakenData = data.result[pairKey];
@@ -1984,80 +1958,25 @@ const generateChartData = async (): Promise<CandlestickDataPoint[]> => {
         close: parseFloat(candle[4])
       })).sort((a: any, b: any) => a.time - b.time);
 
-      console.debug(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
+      debugLog(`[StrikeFinance] Fetched ${chartData.length} candles from Kraken for ADA/USD`);
       return chartData;
 
     } catch (error) {
       console.error('[StrikeFinance] Failed to fetch ADA data from Kraken:', error);
-      return generateSimpleOHLCData();
+
+      // Check if error indicates Kraken service is unavailable
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('EService:Unavailable') ||
+          errorMessage.includes('service is currently unavailable') ||
+          errorMessage.includes('Service:Unavailable')) {
+        console.log('🦑 Detected Kraken service unavailable error, marking as down');
+        priceStore.connectionStatus = 'disconnected';
+        priceStore.isConnected = false;
+      }
     }
-  } else {
-    // For other tokens, use TapTools/DexHunter
-    return fetchTokenHistoryFromDexHunter(ticker);
   }
+  return []
 };
-
-// Fetch token price history from DexHunter API
-const fetchTokenHistoryFromDexHunter = async (
-  ticker: string
-): Promise<CandlestickDataPoint[]> => {
-  try {
-    console.debug(`[StrikeFinance] Fetching ${ticker} price history from DexHunter/TapTools`);
-
-    // Since the TradingViewChart component now handles the fetching,
-    // we can just return the empty array and let the component handle it
-    return [];
-  } catch (error) {
-    console.warn(`[StrikeFinance] Failed to fetch ${ticker} data:`, error);
-    return generateSimpleOHLCData();
-  }
-};
-
-// Generate simple OHLC data based on the current ADA price
-const generateSimpleOHLCData = (): CandlestickDataPoint[] => {
-  const data: CandlestickDataPoint[] = [];
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
-
-  let currentPrice = perpetualsPrice.value?.lastPrice || 0.58; // Use real ADA price or fallback
-
-  for (let i = 23; i >= 0; i--) {
-    const time = Math.floor((now - i * oneHour) / 1000) as Time;
-
-    // Generate realistic OHLC data
-    const volatility = 0.015; // 1.5% max hourly movement
-    const hourlyChange = (Math.random() - 0.5) * volatility; // Random walk
-
-    // Calculate open price (previous close or current)
-    const open = currentPrice;
-
-    // Generate high and low around the open price
-    const spread = Math.abs(hourlyChange) * 2; // Price spread for the hour
-    const high = open + Math.random() * spread;
-    const low = Math.max(0.01, open - Math.random() * spread); // Keep price positive
-
-    // Close price with trend
-    const close = Math.max(0.01, open * (1 + hourlyChange));
-
-    // Ensure high is highest and low is lowest
-    const actualHigh = Math.max(open, close, high);
-    const actualLow = Math.min(open, close, low);
-
-    data.push({
-      time,
-      open: Number(open.toFixed(4)),
-      high: Number(actualHigh.toFixed(4)),
-      low: Number(actualLow.toFixed(4)),
-      close: Number(close.toFixed(4)),
-    });
-
-    // Update current price for next iteration
-    currentPrice = close;
-  }
-
-  return data;
-};
-
 
 const onChartReady = (chartInstance: IChartApi) => {
   chart.value = chartInstance;
@@ -2071,7 +1990,7 @@ const onChartReady = (chartInstance: IChartApi) => {
           const containerWidth = chartContainer.clientWidth;
           const containerHeight = 160;
 
-          console.debug("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
+          debugLog("PerpetualsDialog: Initial chart resize to", containerWidth, "x", containerHeight);
 
           chart.value.applyOptions({
             width: containerWidth,
@@ -2102,7 +2021,7 @@ const startChartUpdates = () => {
   }
 
   // Chart component handles its own updates for all tickers
-  console.debug(
+  debugLog(
     `Chart updates for ${tickerSymbol.value} handled by TradingViewChart component`
   );
 
@@ -2122,7 +2041,7 @@ const startBorrowFeeUpdates = () => {
   // Update accumulated borrow fees every minute to reflect real-time changes
   borrowFeeUpdateInterval = setInterval(() => {
     borrowFeeUpdateTrigger.value += 1; // Trigger reactivity for computed values
-    console.debug("Updated real-time accumulated borrow fees");
+    debugLog("Updated real-time accumulated borrow fees");
   }, 60000); // Every 60 seconds
 
   // Update countdown every second for a real-time display
@@ -2148,41 +2067,49 @@ const stopChartUpdates = () => {
   }
 };
 
+// Alias for positions - used for checking if position still exists during polling
+const perpetualPositions = computed(() => positions.value);
+
 // Reactive positions that update when ADA price changes
 const positions = computed(() => {
-  console.debug('🔍 Positions computed - rawPositions.value:', {
+  debugLog('🔍 [PerpetualsDialog] Positions computed - rawPositions.value:', {
     length: rawPositions.value.length,
     hasData: rawPositions.value.length > 0,
-    firstPosition: rawPositions.value[0] || 'none'
+    allPositions: rawPositions.value,
+    allStatuses: rawPositions.value.map(p => ({ id: p.id, status: p.status }))
   });
 
   if (!rawPositions.value.length) {
-    console.debug('🔍 No rawPositions available, returning empty array');
+    debugLog('🔍 [PerpetualsDialog] No rawPositions available, returning empty array');
     return [];
   }
 
-  return rawPositions.value.map((position, index) => {
+  // For Positions tab: show all positions regardless of status
+  // The API should only return active positions, not completed/closed ones
+  // If we need to filter, we should use an inclusive filter (e.g., status === 'ACTIVE')
+  // rather than an exclusive filter
+  const filteredPositions = rawPositions.value;
+
+  debugLog('🔍 [PerpetualsDialog] Processing positions:', {
+    count: filteredPositions.length,
+    positions: filteredPositions
+  });
+
+  return filteredPositions.map((position, index) => {
     // Re-process position data with the current price
     const processedData = processPositionData(position);
 
+    debugLog(`🔍 [PerpetualsDialog] Processed position ${index}:`, {
+      id: position.id,
+      status: position.status,
+      processedData
+    });
+
     // Return an enhanced position with updated calculations
-    const enhanced = {
+    return {
       ...position,
       ...processedData,
     };
-
-    // Debug what the table will receive
-    console.debug('📋 Table Position Data:', {
-      index,
-      positionSize: enhanced.positionSize,
-      currentPrice: enhanced.currentPrice,
-      pnl: enhanced.pnl,
-      totalFees: enhanced.totalFees,
-      currentPositionValueUsd: enhanced.currentPositionValueUsd,
-      'Should show in table': `$${enhanced.currentPositionValueUsd?.toFixed(2) || 'N/A'}`
-    });
-
-    return enhanced;
   });
 });
 
@@ -2192,10 +2119,14 @@ const tickerSymbol = computed(() => {
 });
 
 const closingPositions = ref<Record<string, boolean>>({});
+const closingPositionIntervals = ref<Record<string, number>>({});
 const loadingPositions = ref(false);
 const limitOrders = ref<LimitOrder[]>([]);
 const loadingLimitOrders = ref(false);
 const cancellingOrders = ref<Record<string, boolean>>({});
+const cancellingOrderIntervals = ref<Record<string, number>>({});
+const openingPosition = ref(false);
+const openingPositionInterval = ref<number | null>(null);
 const activeTab = ref(0);
 const history = ref<any[]>([]);
 const loadingHistory = ref(false);
@@ -2216,7 +2147,7 @@ onBeforeUnmount(() => {
 
 // Pagination for positions table (consistent with TokensTab.vue)
 const currentPositionsPage = ref(1);
-const positionsPerPage = ref(5); // Match tokens table default
+const positionsPerPage = ref(7); // Match tokens table default
 
 // Computed for paginated positions
 const paginatedPositions = computed(() => {
@@ -2263,36 +2194,36 @@ const positionData = ref({
 // Table headers for positions - ultra-compact for more space
 const positionHeaders = ref([
   {
-    text: "Asset",
+    text: String(t('perpetuals.asset')),
     align: "start",
     sortable: true,
     value: "asset",
     width: "35",
   },
   {
-    text: "Side",
+    text: String(t('perpetuals.side')),
     align: "center",
     sortable: true,
     value: "positionType",
     width: "28",
   },
   {
-    text: "Value",
+    text: String(t('perpetuals.value')),
     align: "center",
     sortable: true,
     value: "currentValue",
     width: "42",
   },
   {
-    text: "Entry/Mark",
+    text: String(t('perpetuals.entryMark')),
     align: "center",
     sortable: true,
     value: "entryPrice",
     width: "52",
   },
-  { text: "P&L", align: "center", sortable: true, value: "pnlWithFees", width: "42" },
+  { text: String(t('perpetuals.pnl')), align: "center", sortable: true, value: "pnlWithFees", width: "42" },
   {
-    text: "Collateral",
+    text: String(t('perpetuals.collateral')),
     align: "center",
     sortable: true,
     value: "collateral",
@@ -2304,35 +2235,35 @@ const positionHeaders = ref([
 // Limit Order Headers
 const limitOrderHeaders = ref([
   {
-    text: "Asset",
+    text: String(t('perpetuals.asset')),
     align: "start",
     sortable: true,
     value: "asset",
     width: "25",
   },
   {
-    text: "Side",
+    text: String(t('perpetuals.side')),
     align: "center",
     sortable: true,
     value: "positionType",
     width: "20",
   },
   {
-    text: "Price",
+    text: String(t('perpetuals.price')),
     align: "center",
     sortable: true,
     value: "limitPrice",
     width: "22",
   },
   {
-    text: "Collateral",
+    text: String(t('perpetuals.collateral')),
     align: "center",
     sortable: true,
     value: "collateral",
     width: "25",
   },
   {
-    text: "Status",
+    text: String(t('perpetuals.status')),
     align: "center",
     sortable: true,
     value: "status",
@@ -2344,46 +2275,39 @@ const limitOrderHeaders = ref([
 // History Headers
 const historyHeaders = ref([
   {
-    text: "Asset",
+    text: String(t('perpetuals.type')),
     align: "start",
     sortable: true,
-    value: "asset",
-    width: "20",
+    value: "action",
+    width: "164",
   },
   {
-    text: "Side",
+    text: String(t('perpetuals.asset')),
     align: "center",
     sortable: true,
-    value: "positionType",
-    width: "15",
+    value: "asset",
+    width: "10",
   },
   {
-    text: "Entry Price",
-    align: "center",
+    text: String(t('perpetuals.entryPrice')),
+    align: "start",
     sortable: true,
     value: "entryPrice",
     width: "20",
   },
   {
-    text: "Final P&L",
+    text: String(t('perpetuals.pnl')),
     align: "center",
     sortable: true,
     value: "finalPnl",
     width: "20",
   },
   {
-    text: "Status",
-    align: "center",
-    sortable: true,
-    value: "status",
-    width: "15",
-  },
-  {
-    text: "Date",
+    text: String(t('perpetuals.date')),
     align: "center",
     sortable: true,
     value: "closedTime",
-    width: "20",
+    width: "126",
   },
 ]);
 
@@ -2407,10 +2331,10 @@ watch(
   () => props.isOpen,
   async (newVal) => {
     if (newVal) {
-      console.debug("PerpetualsDialog: Dialog opened, optimizing load sequence");
+      debugLog("PerpetualsDialog: Dialog opened, optimizing load sequence");
 
       // Start positions loading immediately for the main tab
-      const positionsPromise = loadPositions();
+      const positionsPromise = loadPositions(false);
 
       // Start background tasks in parallel
       const backgroundTasks = Promise.allSettled([
@@ -2418,10 +2342,9 @@ watch(
         (async () => {
           try {
             chartData.value = await generateChartData();
-            console.debug("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
+            debugLog("PerpetualsDialog: Initialized chart data with", chartData.value.length, "points");
           } catch (error) {
             console.error("Failed to initialize chart data:", error);
-            chartData.value = generateSimpleOHLCData();
           }
         })(),
         // Price service initialization (non-blocking)
@@ -2429,14 +2352,14 @@ watch(
           if (!priceService.isConnected()) {
             try {
               await priceService.initialize();
-              console.debug("PerpetualsDialog: Price service initialized");
+              debugLog("PerpetualsDialog: Price service initialized");
             } catch (error) {
               console.warn("PerpetualsDialog: Failed to initialize price service:", error);
             }
           }
         })(),
         // Load secondary tab data
-        loadLimitOrders(),
+        loadLimitOrders(false),
         loadHistory()
       ]);
 
@@ -2444,7 +2367,7 @@ watch(
       setTimeout(async () => {
         await nextTick();
         shouldFetchChartData.value = true;
-        console.debug("PerpetualsDialog: Enabled chart data fetching");
+        debugLog("PerpetualsDialog: Enabled chart data fetching");
         startChartUpdates();
       }, 10);
 
@@ -2458,14 +2381,14 @@ watch(
               const containerWidth = chartContainer.clientWidth;
               const containerHeight = 160; // Fixed height as specified
 
-              console.debug("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
+              debugLog("PerpetualsDialog: Resizing chart to", containerWidth, "x", containerHeight);
 
               chart.value.applyOptions({
                 width: containerWidth,
                 height: containerHeight,
               });
               chart.value.timeScale().fitContent();
-              console.debug("PerpetualsDialog: Chart resized successfully");
+              debugLog("PerpetualsDialog: Chart resized successfully");
             }
           } catch (error) {
             console.warn("PerpetualsDialog: Failed to resize chart:", error);
@@ -2479,11 +2402,41 @@ watch(
       // Let background tasks complete without blocking the UI
       backgroundTasks.catch(() => {}); // Silent catch for background tasks
 
-      console.debug("PerpetualsDialog: Fast load sequence completed");
+      debugLog("PerpetualsDialog: Fast load sequence completed");
     } else {
-      console.debug("PerpetualsDialog: Dialog closed, stopping updates");
+      debugLog("PerpetualsDialog: Dialog closed, stopping updates");
       shouldFetchChartData.value = false;
       stopChartUpdates();
+
+      // Clean up all position closing polling intervals
+      Object.entries(closingPositionIntervals.value).forEach(([positionKey, intervalId]) => {
+        debugLog(`[StrikeFinance] Clearing polling interval for position ${positionKey}`);
+        clearInterval(intervalId);
+      });
+      closingPositionIntervals.value = {};
+
+      // Reset all closing position states
+      closingPositions.value = {};
+
+      // Clean up all order cancelling polling intervals
+      Object.entries(cancellingOrderIntervals.value).forEach(([orderKey, intervalId]) => {
+        debugLog(`[StrikeFinance] Clearing polling interval for order ${orderKey}`);
+        clearInterval(intervalId);
+      });
+      cancellingOrderIntervals.value = {};
+
+      // Reset all cancelling order states
+      cancellingOrders.value = {};
+
+      // Clean up opening position polling interval
+      if (openingPositionInterval.value !== null) {
+        debugLog(`[StrikeFinance] Clearing polling interval for opening position`);
+        clearInterval(openingPositionInterval.value);
+        openingPositionInterval.value = null;
+      }
+
+      // Reset opening position state
+      openingPosition.value = false;
     }
   }
 );
@@ -2493,7 +2446,7 @@ watch(
   () => perpetualsPrice.value?.lastPrice,
   (newPrice, oldPrice) => {
     if (newPrice !== oldPrice && rawPositions.value.length > 0) {
-      console.debug(
+      debugLog(
         `🦑 💰 Kraken ADA price updated: $${oldPrice} → $${newPrice} - Recalculating ${rawPositions.value.length} positions`
       );
     }
@@ -2531,7 +2484,7 @@ const updateDebouncedCalculations = () => {
       const liqPrice = currentAdaPrice * (1 + adjustedLiquidationMargin);
       debouncedLiquidationPrice.value = `$${liqPrice.toFixed(4)}`;
     }
-  }, 50); // 50ms debounce for smooth UI updates
+  }, 50); // 50 ms debounce for smooth UI updates
 };
 
 // Fast computed for immediate slider response
@@ -2568,6 +2521,35 @@ watch(
   }
 );
 
+// Limit price validation
+const limitPriceValidation = computed(() => {
+  const currentPrice = Number(perpetualsPrice.value?.lastPrice || 0);
+  const limitPrice = positionData.value.limitPrice;
+  const position = positionData.value.position;
+
+  if (!limitPrice || limitPrice <= 0 || !currentPrice) {
+    return { isInvalid: false, message: '' };
+  }
+
+  // For LONG positions: limit price should be BELOW current price
+  if (position === 'LONG' && limitPrice >= currentPrice) {
+    return {
+      isInvalid: true,
+      message: `Long limit price must be below current price ($${currentPrice.toFixed(4)})`
+    };
+  }
+
+  // For SHORT positions: limit price should be ABOVE current price
+  if (position === 'SHORT' && limitPrice <= currentPrice) {
+    return {
+      isInvalid: true,
+      message: `Short limit price must be above current price ($${currentPrice.toFixed(4)})`
+    };
+  }
+
+  return { isInvalid: false, message: '' };
+});
+
 const canOpenPosition = computed(() => {
   const hasRequiredFields =
     positionData.value.asset &&
@@ -2577,7 +2559,9 @@ const canOpenPosition = computed(() => {
 
   // Additional validation for LIMIT orders
   if (positionData.value.orderType === "LIMIT") {
-    return hasRequiredFields && positionData.value.limitPrice > 0;
+    return hasRequiredFields &&
+           positionData.value.limitPrice > 0 &&
+           !limitPriceValidation.value.isInvalid;
   }
 
   return hasRequiredFields;
@@ -2619,7 +2603,7 @@ const openPosition = async () => {
       snackbar.setError(error.response?.data?.error || error.message);
     } else {
       console.error("Failed to open position:", error);
-      snackbar.setError(`Failed to open position: ${error.message}`);
+      snackbar.setError(`${t('perpetuals.failedToOpenPosition')}: ${error.message}`);
     }
     // TODO: Show user-friendly error notification
   } finally {
@@ -2644,22 +2628,22 @@ const openMarketPosition = async (walletAddress: string) => {
     takeProfitPrice: positionData.value.takeProfitPrice,
   };
 
-  console.debug('[StrikeFinance] Opening position with request:', openPositionRequest);
+  debugLog('[StrikeFinance] Opening position with request:', openPositionRequest);
+
+  // Get initial position count to detect new position
+  const initialPositionCount = positions.value.length;
+
   const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openPosition(openPositionRequest);
   const txCbor: string = cborResponse.data['cbor'];
-
   // Sign the transaction with partial signing to add user's witness
   const signaturesRes: any = await Messaging.sendToBackground({
     method: METHOD.signTx,
-    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
   });
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
   } else {
-    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-    const txId = txResponse.data['txHash'];
-    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-    console.log(txId)
+    await submit(txCbor, signaturesRes.data);
     positionData.value = {
       asset: "ADA/USD",
       collateralAmount: 0,
@@ -2670,7 +2654,37 @@ const openMarketPosition = async (walletAddress: string) => {
       stopLossPrice: 0,
       takeProfitPrice: 0,
     };
-    await loadPositions();
+
+    // Set loading state and start polling for the new position
+    openingPosition.value = true;
+    debugLog(`[StrikeFinance] Starting polling for new market position`);
+
+    let pollAttempts = 0;
+    const maxPollAttempts = 24; // 2-minute max (24 * 5 seconds)
+
+    openingPositionInterval.value = window.setInterval(async () => {
+      pollAttempts++;
+      debugLog(`[StrikeFinance] Polling for new position (attempt ${pollAttempts}/${maxPollAttempts})`);
+
+      await loadPositions(false); // Don't show loading spinner
+
+      // Check if a new position appeared
+      const hasNewPosition = positions.value.length > initialPositionCount;
+
+      if (hasNewPosition || pollAttempts >= maxPollAttempts) {
+        if (hasNewPosition) {
+          debugLog(`[StrikeFinance] New position detected, stopping poll`);
+        } else {
+          console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
+        }
+
+        if (openingPositionInterval.value !== null) {
+          clearInterval(openingPositionInterval.value);
+          openingPositionInterval.value = null;
+        }
+        openingPosition.value = false;
+      }
+    }, 5000);
   }
 }
 
@@ -2691,23 +2705,23 @@ const openLimitPosition = async (walletAddress: string) => {
     limitUSDPrice: positionData.value.limitPrice,
   };
 
-  console.debug('[StrikeFinance] Opening limit position with request:', openPositionRequest);
+  debugLog('[StrikeFinance] Opening limit position with request:', openPositionRequest);
+
+  // Get initial limit order count to detect new order
+  const initialOrderCount = limitOrders.value.length;
+
   const cborResponse: AxiosResponse<string> = await strikeFinanceApi.openLimitOrder(openPositionRequest);
   const txCbor: string = cborResponse.data['cbor'];
 
   // Sign the transaction with partial signing to add user's witness
   const signaturesRes: any = await Messaging.sendToBackground({
     method: METHOD.signTx,
-    data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+    data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
   });
   if (signaturesRes.error) {
     snackbar.setError(signaturesRes.error.info)
   } else {
-    // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
-    const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-    const txId = txResponse.data['txHash'];
-    snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-    console.log(txId)
+    await submit(txCbor, signaturesRes.data);
     positionData.value = {
       asset: "ADA/USD",
       collateralAmount: 0,
@@ -2718,7 +2732,37 @@ const openLimitPosition = async (walletAddress: string) => {
       stopLossPrice: 0,
       takeProfitPrice: 0,
     };
-    await loadLimitOrders();
+
+    // Set loading state and start polling for the new limit order
+    openingPosition.value = true;
+    debugLog(`[StrikeFinance] Starting polling for new limit order`);
+
+    let pollAttempts = 0;
+    const maxPollAttempts = 24; // 2 minutes max (24 * 5 seconds)
+
+    openingPositionInterval.value = window.setInterval(async () => {
+      pollAttempts++;
+      debugLog(`[StrikeFinance] Polling for new limit order (attempt ${pollAttempts}/${maxPollAttempts})`);
+
+      await loadLimitOrders(false); // Don't show loading spinner
+
+      // Check if a new limit order appeared
+      const hasNewOrder = limitOrders.value.length > initialOrderCount;
+
+      if (hasNewOrder || pollAttempts >= maxPollAttempts) {
+        if (hasNewOrder) {
+          debugLog(`[StrikeFinance] New limit order detected, stopping poll`);
+        } else {
+          console.warn(`[StrikeFinance] Max poll attempts reached, stopping poll`);
+        }
+
+        if (openingPositionInterval.value !== null) {
+          clearInterval(openingPositionInterval.value);
+          openingPositionInterval.value = null;
+        }
+        openingPosition.value = false;
+      }
+    }, 5000);
   }
 }
 
@@ -2736,7 +2780,12 @@ const closePosition = async (position: PerpetualPosition) => {
     return;
   }
 
-  closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = true;
+  const positionKey = `${position.outRef.txHash}#${position.outRef.outputIndex}`;
+  closingPositions.value[positionKey] = true;
+
+  // Store polling interval ID for cleanup
+  let pollingIntervalId: number | null = null;
+
   try {
     const closeRequest: ClosePerpetualRequest = {
       address: loggedWallet.value?.baseAddress,
@@ -2755,20 +2804,60 @@ const closePosition = async (position: PerpetualPosition) => {
     // Sign the transaction with partial signing to add user's witness
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
-    } else {
-      // const witnessSet: Serialization.TransactionWitnessSet = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signaturesRes.data));
-      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-      const txId = txResponse.data['txHash'];
-      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-      console.log(txId)
-      //TODO remove position
+      return;
     }
-    // Reload positions after a successful close
-    await loadPositions();
+    await submit(txCbor, signaturesRes.data);
+
+    // Start polling for position closure
+    const maxPollingAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    let pollingAttempts = 0;
+
+    pollingIntervalId = window.setInterval(async () => {
+      pollingAttempts++;
+      console.log(`[StrikeFinance] Polling for position closure (attempt ${pollingAttempts}/${maxPollingAttempts})`);
+
+      try {
+        await loadPositions(false);
+
+        // Check if position is still in the list
+        const stillExists = perpetualPositions.value.some(
+          p => p.outRef.txHash === position.outRef.txHash &&
+               p.outRef.outputIndex === position.outRef.outputIndex
+        );
+
+        if (!stillExists) {
+          // Position successfully closed
+          console.log('[StrikeFinance] Position successfully closed');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          closingPositions.value[positionKey] = false;
+          snackbar.fireSuccess(String(t('perpetuals.positionClosedSuccess')));
+        } else if (pollingAttempts >= maxPollingAttempts) {
+          // Max attempts reached
+          console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          closingPositions.value[positionKey] = false;
+        }
+      } catch (error) {
+        console.error('[StrikeFinance] Error during position polling:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Store interval ID for cleanup on dialog close
+    if (!closingPositionIntervals.value) {
+      closingPositionIntervals.value = {};
+    }
+    closingPositionIntervals.value[positionKey] = pollingIntervalId;
+
   } catch (error) {
     console.error("[StrikeFinance]  Failed to close position - detailed error:", {
       error,
@@ -2783,18 +2872,23 @@ const closePosition = async (position: PerpetualPosition) => {
         enteredPositionTime: position.enteredPositionTime,
       }
     });
-    snackbar.setError('Failed to Close Position');
-  } finally {
-    closingPositions.value[`${position.outRef.txHash}#${position.outRef.outputIndex}`] = false;
+    snackbar.setError(String(t('perpetuals.failedToClosePosition')));
+    closingPositions.value[positionKey] = false;
+
+    // Clean up polling interval on error
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = null;
+    }
   }
 };
 
-const submit = async (cborHex: string) => {
+const submit = async (cborHex: string, witnessSetHex?: string) => {
   const submitResult = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SUBMIT_TX,
     data: {
       txCbor: cborHex,
-      witnessHex: null,
+      witnessHex: witnessSetHex || null,
       utxos: utxos.value
     }
   }) as { data: { txId?: string; error?: string } };
@@ -2802,7 +2896,7 @@ const submit = async (cborHex: string) => {
     throw new Error(submitResult.data.error);
   }
   const txId = submitResult.data.txId;
-  snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
+  snackbar.fireSuccess(t('perpetuals.txSentSuccess', { txId }));
   console.log(txId)
 }
 
@@ -2824,27 +2918,27 @@ const getPositionTrendIcon = (position: any) => {
   }
 };
 
-const loadPositions = async () => {
+const loadPositions = async (withLoading: boolean = true) => {
   const walletAddress = loggedWallet.value?.baseAddress;
 
   if (!walletAddress) {
     console.warn("No wallet address available");
     return;
   }
-  loadingPositions.value = true;
+  if (withLoading) loadingPositions.value = true;
   try {
-    console.debug('[StrikeFinance]  Loading positions for wallet:', walletAddress);
+    debugLog('[StrikeFinance]  Loading positions for wallet:', walletAddress);
     const res: AxiosResponse<PerpetualPosition[]> = await strikeFinanceApi.getPositions(walletAddress);
     if (res.status !== 200) {
       throw new Error(`Failed to load positions: ${res.statusText}`);
     }
     rawPositions.value = res.data
-    console.debug('[StrikeFinance]  Fetched positions from API:', rawPositions.value);
+    debugLog('[StrikeFinance]  Fetched positions from API:', rawPositions.value);
   } catch (error) {
     console.error("Failed to load positions:", (error as any)?.message || error);
     rawPositions.value = [];
   } finally {
-    loadingPositions.value = false;
+    if (withLoading) loadingPositions.value = false;
   }
 };
 
@@ -2859,35 +2953,46 @@ const loadHistory = async () => {
   }
   loadingHistory.value = true;
   try {
-    console.debug('[StrikeFinance] Loading all orders for wallet:', walletAddress);
+    debugLog('[StrikeFinance] Loading perpetual history for wallet:', walletAddress);
 
-    // Load both positions and limit orders concurrently
-    const [positionsRes, limitOrdersRes] = await Promise.all([
-      strikeFinanceApi.getPositions(walletAddress),
-      strikeFinanceApi.getLimitOrders(walletAddress)
-    ]);
+    const historyRes = await strikeFinanceApi.getPerpetualHistory(walletAddress);
+    const transactions = historyRes.data?.transactions || [];
 
-    const allPositions = positionsRes.data || [];
-    const allLimitOrders = limitOrdersRes.data || [];
+    // Map API response to match table structure
+    const mappedHistory = transactions.map(tx => ({
+      asset: {
+        ticker: tx.assetTicker,
+      },
+      leverage: Math.round(tx.positionSize / tx.collateralAmount) || 1, // Calculate leverage from position size
+      orderType: tx.type?.toUpperCase() || 'MARKET',
+      position: tx.positionType?.toUpperCase() || 'LONG',
+      type: tx.positionType?.toUpperCase() || 'LONG',
+      entryPrice: tx.enteredPrice,
+      price: tx.enteredPrice,
+      pnl: tx.pnl,
+      status: tx.status?.toLowerCase() || 'unknown',
+      enteredPositionTime: tx.time,
+      txHash: tx.txHash,
+      description: tx.description,
+      action: tx.action,
+      collateralAmount: tx.collateralAmount,
+      positionSize: tx.positionSize,
+      currentPrice: tx.currentPrice,
+      contract: tx.contract,
+      pair: tx.pair,
+      originalTxHash: tx.originalTxHash,
+    }));
 
-    // Combine positions and limit orders into one array
-    // Add a 'type' field to distinguish between them
-    const combinedOrders = [
-      ...allPositions.map(pos => ({ ...pos, orderType: 'position' })),
-      ...allLimitOrders.map(order => ({ ...order, orderType: 'limit' }))
-    ];
+    history.value = mappedHistory;
 
-    history.value = combinedOrders;
-
-    console.debug('[StrikeFinance] All orders loaded:', {
-      positions: allPositions.length,
-      limitOrders: allLimitOrders.length,
-      total: combinedOrders.length
+    debugLog('[StrikeFinance] Perpetual history loaded:', {
+      transactions: transactions.length,
+      mapped: mappedHistory.length
     });
 
-    console.debug('[StrikeFinance] Status breakdown:',
-      combinedOrders.reduce((acc, item) => {
-        acc[item.status] = (acc[item.status] || 0) + 1;
+    debugLog('[StrikeFinance] Action breakdown:',
+      mappedHistory.reduce((acc, item) => {
+        acc[item.action] = (acc[item.action] || 0) + 1;
         return acc;
       }, {})
     );
@@ -2903,8 +3008,6 @@ const loadHistory = async () => {
 // Tab change handler
 const onTabChange = (tabIndex: number) => {
   activeTab.value = tabIndex;
-  // Data is already loaded on mount, so just track the active tab
-  console.debug('[StrikeFinance] Switching to tab:', tabIndex);
 };
 
 // Refresh the current tab
@@ -2913,16 +3016,6 @@ const refreshCurrentTab = () => {
     case 0: loadPositions(); break;
     case 1: loadLimitOrders(); break;
     case 2: loadHistory(); break;
-  }
-};
-
-// Helper functions for status colors
-const getOrderStatusColor = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'pending': return 'warning';
-    case 'filled': return 'success';
-    case 'cancelled': return 'error';
-    default: return 'grey';
   }
 };
 
@@ -2935,7 +3028,7 @@ const getPositionStatusColor = (status: string) => {
     case 'liquidated': return 'error';    // Red for liquidated positions
     case 'pending': return 'warning';     // Orange for pending positions
     case 'cancelled':
-    case 'canceled': return 'grey';       // Grey for cancelled orders
+    case 'canceled': return 'grey';       // Grey for canceled orders
     default: return 'grey';               // Grey for unknown statuses
   }
 };
@@ -2968,22 +3061,20 @@ onMounted(async () => {
   // Initialize chart data with real ADA data
   try {
     chartData.value = await generateChartData();
-    console.debug(
+    debugLog(
       "PerpetualsDialog: Initialized chart data with",
       chartData.value.length,
       "points"
     );
   } catch (error) {
     console.error("Failed to initialize chart data:", error);
-    // Fallback to simple price data
-    chartData.value = generateSimpleOHLCData();
   }
 
   // Enable the chart after a brief delay to ensure the component is ready
   setTimeout(async () => {
     await nextTick();
     shouldFetchChartData.value = true;
-    console.debug("PerpetualsDialog: Enabled chart data fetching");
+    debugLog("PerpetualsDialog: Enabled chart data fetching");
     startChartUpdates();
   }, 100);
 });
@@ -2993,16 +3084,15 @@ onBeforeUnmount(() => {
 });
 
 // Load limit orders
-const loadLimitOrders = async () => {
+const loadLimitOrders = async (withLoading: boolean = true) => {
   const walletAddress = loggedWallet.value?.baseAddress;
   if (!walletAddress) return;
-
-  loadingLimitOrders.value = true;
+  if (withLoading) loadingLimitOrders.value = true;
   try {
     const response = await strikeFinanceApi.getLimitOrders(walletAddress);
     limitOrders.value = response.data;
-    console.debug('[StrikeFinance] Loaded limit orders:', limitOrders.value);
-    console.debug('[StrikeFinance] Limit orders data structure:', limitOrders.value.map(order => ({
+    debugLog('[StrikeFinance] Loaded limit orders:', limitOrders.value);
+    debugLog('[StrikeFinance] Limit orders data structure:', limitOrders.value.map(order => ({
       id: order.id,
       position: order.position,
       asset: order.asset,
@@ -3015,13 +3105,13 @@ const loadLimitOrders = async () => {
 
     // Log first order completely to see all available fields
     if (limitOrders.value.length > 0) {
-      console.debug('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
+      debugLog('[StrikeFinance] First limit order complete structure:', limitOrders.value[0]);
     }
   } catch (error) {
     console.error('Failed to load limit orders:', error);
     limitOrders.value = [];
   } finally {
-    loadingLimitOrders.value = false;
+    if (withLoading) loadingLimitOrders.value = false;
   }
 };
 
@@ -3030,53 +3120,97 @@ const cancelLimitOrder = async (order: LimitOrder) => {
     console.error('Invalid order data for cancelling');
     return;
   }
-  cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = true;
+
+  const orderKey = `${order.outRef.txHash}#${order.outRef.outputIndex}`;
+  cancellingOrders.value[orderKey] = true;
+
+  // Store polling interval ID for cleanup
+  let pollingIntervalId: number | null = null;
+
   const cancelRequest: CancelLimitOrderRequest = {
     address: loggedWallet.value?.baseAddress,
     asset: {
-      policyId: order.asset.asset.policyId,
-      assetName: order.asset.asset.assetName,
+      policyId: "",
+      assetName: "",
     },
     outRef: {
       txHash: order.outRef.txHash,
       outputIndex: order.outRef.outputIndex,
     }
   };
+
   try {
     const cborResponse: AxiosResponse<string> = await strikeFinanceApi.cancelLimitOrder(cancelRequest);
     const txCbor: string = cborResponse.data['cbor'];
+
     // Sign the transaction with partial signing to add user's witness
     const signaturesRes: any = await Messaging.sendToBackground({
       method: METHOD.signTx,
-      data: { tx: txCbor, partialSign: true, mergeWitnesses: false },
+      data: { tx: txCbor, partialSign: true, origin: 'https://gerowallet.io/', mergeWitnesses: false },
     });
     if (signaturesRes.error) {
       snackbar.setError(signaturesRes.error.info)
-    } else {
-      const txResponse = await strikeFinanceApi.submitTx(txCbor, signaturesRes.data)
-      const txId = txResponse.data['txHash'];
-      snackbar.fireSuccess(`Tx Sent Successfully. Tx ID: ${txId}`);
-      console.log(txId)
-      //TODO remove order
+      return;
     }
-    // Reload limit orders
-    await loadLimitOrders();
+    await submit(txCbor, signaturesRes.data);
+
+    // Start polling for order cancellation
+    const maxPollingAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    let pollingAttempts = 0;
+
+    pollingIntervalId = window.setInterval(async () => {
+      pollingAttempts++;
+      console.log(`[StrikeFinance] Polling for order cancellation (attempt ${pollingAttempts}/${maxPollingAttempts})`);
+
+      try {
+        await loadLimitOrders(false);
+
+        // Check if order is still in the list
+        const stillExists = limitOrders.value.some(
+          o => o.outRef.txHash === order.outRef.txHash &&
+               o.outRef.outputIndex === order.outRef.outputIndex
+        );
+
+        if (!stillExists) {
+          // Order successfully cancelled
+          console.log('[StrikeFinance] Order successfully cancelled');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          cancellingOrders.value[orderKey] = false;
+          snackbar.fireSuccess(String(t('perpetuals.orderCancelledSuccess')));
+        } else if (pollingAttempts >= maxPollingAttempts) {
+          // Max attempts reached
+          console.warn('[StrikeFinance] Max polling attempts reached, stopping poll');
+          if (pollingIntervalId) {
+            clearInterval(pollingIntervalId);
+            pollingIntervalId = null;
+          }
+          cancellingOrders.value[orderKey] = false;
+        }
+      } catch (error) {
+        console.error('[StrikeFinance] Error during order polling:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Store interval ID for cleanup on dialog close
+    if (!cancellingOrderIntervals.value) {
+      cancellingOrderIntervals.value = {};
+    }
+    cancellingOrderIntervals.value[orderKey] = pollingIntervalId;
+
   } catch (error: any) {
     console.error("[StrikeFinance] Failed to cancel limit order", error);
-    snackbar.setError(`Failed to Cancel Limit Order ${error.message}`);
-  } finally {
-    cancellingOrders.value[`${order.outRef.txHash}#${order.outRef.outputIndex}`] = false;
-  }
-};
+    snackbar.setError(`${t('perpetuals.failedToCancelLimitOrder')} ${error.message}`);
+    cancellingOrders.value[orderKey] = false;
 
-// Open the update position dialog
-const openUpdatePositionDialog = (position: PerpetualPosition) => {
-  selectedPosition.value = position;
-  updatePositionData.value = {
-    stopLossPrice: position.stopLossPrice || 0,
-    takeProfitPrice: position.takeProfitPrice || 0
-  };
-  updatePositionDialog.value = true;
+    // Clean up polling interval on error
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = null;
+    }
+  }
 };
 
 // Update position
@@ -3097,9 +3231,9 @@ const updatePosition = async () => {
       })
     };
 
-    console.debug('[StrikeFinance] Updating position:', updateRequest);
+    debugLog('[StrikeFinance] Updating position:', updateRequest);
     const cborResponse = await strikeFinanceApi.updatePosition(updateRequest);
-    console.debug('[StrikeFinance] Update position response:', cborResponse.data);
+    debugLog('[StrikeFinance] Update position response:', cborResponse.data);
 
     // Close the dialog and reload positions
     updatePositionDialog.value = false;
@@ -3442,6 +3576,11 @@ const getCollateralAmount = (item: any) => {
   font-weight: 600 !important;
 }
 
+.even {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
 /* Reload button matching SwapWidget */
 ::v-deep .v-btn--icon {
   background: rgba(255, 255, 255, 0.05) !important;
@@ -3450,6 +3589,27 @@ const getCollateralAmount = (item: any) => {
 
 ::v-deep .v-btn--icon:hover {
   background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Fix refresh button loading spinner size */
+::v-deep .refresh-btn-external .v-btn__loader {
+  width: 12px !important;
+  height: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  justify-self: anchor-center;
+  align-self: anchor-center;
+}
+
+::v-deep .refresh-btn-external .v-btn__loader .v-progress-circular {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+::v-deep .refresh-btn-external .v-btn__loader .v-progress-circular svg {
+  width: 12px !important;
+  height: 12px !important;
 }
 
 /* Status colors */
@@ -3550,6 +3710,8 @@ const getCollateralAmount = (item: any) => {
   border: 1px solid rgba(38, 250, 176, 0.1);
   border-radius: 4px;
   padding: 2px;
+  margin: 2px 0px;
+  height: 274px;
 }
 
 .positions-data-table {
@@ -3932,6 +4094,15 @@ const getCollateralAmount = (item: any) => {
 
 .input-card.short-position:hover {
   border-color: rgba(255, 82, 82, 0.4) !important;
+}
+
+.input-card.invalid-input {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  background-color: rgba(245, 158, 11, 0.05) !important;
+}
+
+.input-card.invalid-input:hover {
+  border-color: rgba(245, 158, 11, 0.7) !important;
 }
 
 .input-card.small {
@@ -4451,5 +4622,38 @@ const getCollateralAmount = (item: any) => {
   height: 20px !important;
   padding: 0 8px !important;
   min-width: auto !important;
+}
+
+/* Limit Price Validation Warning */
+.limit-price-warning {
+  display: flex;
+  align-items: center;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  animation: fadeIn 0.3s ease;
+}
+
+.limit-price-warning .warning-text {
+  color: #f59e0b;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.limit-price-warning .v-icon {
+  flex-shrink: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

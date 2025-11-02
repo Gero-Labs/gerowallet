@@ -46,7 +46,9 @@
   </v-form>
 </template>
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+const { t } = useTranslation();
+import { ref, watch, computed } from 'vue';
 import snackbar from '@/plugins/snackbar';
 
 interface Props {
@@ -94,7 +96,7 @@ const saveEditing = () => {
     return
   }
   emit('onSave', value.value)
-  snackbar.fireSuccess("Wallet name updated successfully.")
+  snackbar.fireSuccess(t('settings.walletNameUpdated'))
   disabled.value = true
 }
 

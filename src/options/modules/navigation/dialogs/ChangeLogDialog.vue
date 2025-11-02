@@ -52,11 +52,15 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
 import packageJson from '@/../package.json';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   isOpen: {

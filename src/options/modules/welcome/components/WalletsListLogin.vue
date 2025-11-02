@@ -1,13 +1,13 @@
 <template>
   <v-card class="transparent-override" flat style="max-width: 600px; margin: auto; box-shadow: unset!important; background: transparent!important;">
     <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
-      {{ $t('welcome') }}
+      {{ $t('welcome.welcomeMessage') }}
     </v-card-title>
     <v-card-subtitle class="text-center px-6" style="font-size: 20px">
-      {{ $t('chooseAWallet') }}
+      {{ $t('welcome.chooseAWallet') }}
     </v-card-subtitle>
-    <v-card-text class="px-4 pa-0 mt-4" style="max-height: 374px; overflow-y: auto; background: transparent!important;">
-      <v-list nav dense class="pa-2 wallet-list" style="min-height: 51px;">
+    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 376px; overflow-y: auto; background: transparent!important;">
+      <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
           <v-list-item class="wallet-row" v-for="(item, i) in availableWallets" :key="i" @click="submitLogin(item.id)">
             <v-list-item-icon style="height: 40px" class="mr-4">
@@ -49,6 +49,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 import { Wallet, WalletType } from '@/models/types';
 import { computed, ref, toRefs, getCurrentInstance } from 'vue';
@@ -57,6 +58,10 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
+import { debugLog } from '@/utils/debug';
+
+
+const { t } = useTranslation();
 
 const selectedWallet = ref<string | null>(null);
 
@@ -86,42 +91,45 @@ const submitLogin = async (walletId: string): Promise<void> => {
   try {
     const wallet = (Object.values(wallets.value) as Wallet[]).filter((wallet: Wallet) => networks.resolveNetwork(wallet?.chain, wallet?.network)).find((wal: Wallet) => wal.id === walletId);
 
-    await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
       data: { wallet },
     });
 
-    // Wait for storage synchronization to complete before navigation
-    // Poll for loggedWallet to be set (indicating login is complete)
-    const maxWaitTime = 5000; // 5 seconds max wait
-    const pollInterval = 50; // 50ms intervals
-    const startTime = Date.now();
-
-    while (!loggedWallet.value && (Date.now() - startTime) < maxWaitTime) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    if (!loggedWallet.value) {
-      console.error('❌ Login failed: Wallet not found in store after timeout');
+    // OPTIMIZATION: Trust the background response instead of polling for up to 5 seconds
+    // The background script sets the store and returns success/failure
+    if (!response || (response as any).error) {
+      console.error('❌ Login failed:', (response as any)?.error || 'Unknown error');
       return;
     }
 
-    console.debug('✅ Login synchronized, wallet logged in:', !!loggedWallet.value);
+    // Small delay to ensure store messaging has propagated (100ms vs 5000ms max before)
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    debugLog('✅ Login complete, wallet logged in:', !!loggedWallet.value);
 
     const queryParams = vmProxy.$route.query;
-    console.debug('🧭 Starting navigation, current route:', vmProxy.$route.path);
-    console.debug('🧭 Query params:', queryParams);
+    debugLog('🧭 Starting navigation, current route:', vmProxy.$route.path);
+    debugLog('🧭 Query params:', queryParams);
 
     if (queryParams['redirect']) {
       const redirectPath = decodeURIComponent(queryParams['redirect'].toString());
-      console.debug('🧭 Navigating to redirect path:', redirectPath);
-      await vmProxy.$router.push(redirectPath);
+      debugLog('🧭 Navigating to redirect path:', redirectPath);
+      await vmProxy.$router.push(redirectPath).catch(err => {
+        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+          console.error('Navigation error:', err);
+        }
+      });
     } else {
-      console.debug('🧭 Navigating to home page: /');
-      await vmProxy.$router.push("/");
+      debugLog('🧭 Navigating to home page: /');
+      await vmProxy.$router.push("/").catch(err => {
+        if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+          console.error('Navigation error:', err);
+        }
+      });
     }
 
-    console.debug('🧭 Navigation completed, new route:', vmProxy.$route.path);
+    debugLog('🧭 Navigation completed, new route:', vmProxy.$route.path);
   } catch (error) {
     console.error(error);
   }

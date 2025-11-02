@@ -1,14 +1,14 @@
 <template>
   <v-card flat outlined>
-    <v-card-title> Members </v-card-title>
+    <v-card-title> {{ $t('governance.members') }} </v-card-title>
     <v-card-text>
-      <div v-if="Object.keys(members).length === 0" class="text-center">There are currently no members.</div>
+      <div v-if="Object.keys(members).length === 0" class="text-center">{{ $t('governance.noMembersYet') }}</div>
       <v-simple-table v-else dense class="transparent">
         <template v-slot:default>
           <thead>
             <tr>
-              <th class="text-left text-caption font-weight-medium">Member Address</th>
-              <th class="text-center text-caption font-weight-medium">Last Activity</th>
+              <th class="text-left text-caption font-weight-medium">{{ $t('governance.memberAddress') }}</th>
+              <th class="text-center text-caption font-weight-medium">{{ $t('governance.lastActivity') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -38,11 +38,14 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref } from 'vue';
 import { onMounted } from 'vue';
 import clarityApi from '@/api/clarity-api';
 import snackbar from '@/plugins/snackbar';
 
+
+const { t } = useTranslation();
 const members = ref<Record<string, number>>({});
 
 const formatAddress = (address: string): string => {
@@ -62,7 +65,7 @@ const formatDate = (timestamp: number): string => {
 const copyToClipboard = async (address: string): Promise<void> => {
   try {
     await navigator.clipboard.writeText(address);
-    snackbar.fireSuccess('Address copied to clipboard');
+    snackbar.fireSuccess(t('common.addressCopied'));
   } catch (error) {
     console.error('Failed to copy address:', error);
   }

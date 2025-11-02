@@ -1,68 +1,68 @@
 import { Key, Keys } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import hardwareLoading from '@/plugins/hardwareLoading';
+import i18n from '@/plugins/i18n';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { hdPathToArray } from '@/chrome/serialization';
 import { NetworkInfo } from '@/utils/networks';
 import * as Crypto from '@cardano-sdk/crypto';
 import { TrezorKeyAgent } from '@cardano-sdk/hardware-trezor';
-import TrezorConnect from '@trezor/connect-web';
 import {
   AccountKeyDerivationPath,
   AddressType,
   CommunicationType,
   GroupedAddress,
   KeyRole,
+  KeyPurpose,
   util,
 } from '@cardano-sdk/key-management';
-import type { Manifest } from '@trezor/connect/lib/types/settings';
-import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { debugLog } from '@/utils/debug';
 
 // Trezor Connect manifest configuration
 const TREZOR_MANIFEST = {
   email: 'support@gerowallet.io',
   appUrl: window.location.origin,
-  appName: 'Gero Wallet',
-  appIcon: assets.geroLogo
-} as Manifest;
+};
 
 export default {
   _trezorInitialized: false,
 
   async initTrezor(path: string) {
     try {
-      hardwareLoading.setText('Retrieving Hardware Wallet Name ...');
-      hardwareLoading.setText('Connecting to Trezor Device ...');
-      hardwareLoading.setText('Please Confirm Exporting Hardware Wallet Public Keys on Your Trezor Device.');
+      hardwareLoading.setText(i18n.t('wallet.retrievingHardwareWalletName') as string);
+      hardwareLoading.setText(i18n.t('wallet.connectingToTrezor') as string);
+      hardwareLoading.setText(i18n.t('wallet.confirmExportingPublicKeys') as string);
 
-      console.log('[TREZOR] Initializing TrezorConnect directly with WebUSB...');
+      console.log('[TREZOR] Initializing Trezor transport...');
 
       await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.CONNECT_TREZOR,
         data: {},
       })
-      // Initialize TrezorConnect directly with WebUSB-only transport
-      await TrezorConnect.init({
-        lazyLoad: true,
+
+      // Initialize Trezor transport using TrezorKeyAgent
+      await TrezorKeyAgent.initializeTrezorTransport({
         manifest: TREZOR_MANIFEST,
-        connectSrc: 'https://connect.trezor.io/9/',
+        communicationType: CommunicationType.Web,
+        silentMode: false,
+        lazyLoad: true,
       });
 
       console.log('[TREZOR] Getting Cardano public key...');
-      // Get a public key directly from TrezorConnect
-      const result = await TrezorConnect.cardanoGetPublicKey({
-        path: path,
-        showOnTrezor: false,
+
+      // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
+      const pathParts = path.split('/');
+      const accountIndex = parseInt(pathParts[3].replace("'", ""));
+
+      // Get extended public key using TrezorKeyAgent
+      const hwPublicKey: Crypto.Bip32PublicKeyHex = await TrezorKeyAgent.getXpub({
+        accountIndex,
+        communicationType: CommunicationType.Web,
+        purpose: KeyPurpose.STANDARD,
       });
 
-      if (!result.success) {
-        throw new Error(`Trezor connection failed: ${(result.payload as any).error}`);
-      }
-
-      const payload = result.payload as unknown as { publicKey: string; chainCode: string };
-      const hwPublicKey: Crypto.Bip32PublicKeyHex = (payload.publicKey + payload.chainCode) as Crypto.Bip32PublicKeyHex;
       console.log('[TREZOR] Successfully got public key');
 
       const keys = [{
@@ -78,7 +78,7 @@ export default {
       };
     } catch (error: any) {
       console.error('[TREZOR] Initialization failed:', error);
-      snackbar.setError(error.message || 'Failed to connect to Trezor device');
+      snackbar.setError(error.message || i18n.t('wallet.failedToConnectTrezor') as string);
       throw error;
     }
   },
@@ -92,12 +92,11 @@ export default {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
-        // Use direct TrezorConnect.init to configure WebUSB-only transport
-        await TrezorConnect.init({
+        await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          popup: true, // Allow popups for device interactions
-          transports: ['WebUsbTransport'], // Only use WebUSB, avoid Bridge transport
-          lazyLoad: false
+          communicationType: CommunicationType.Web,
+          silentMode: false,
+          lazyLoad: false,
         });
         this._trezorInitialized = true;
       }
@@ -188,7 +187,7 @@ export default {
       }
     });
 
-    console.debug('[TREZOR] Created known addresses:', knownAddresses.length);
+    debugLog('[TREZOR] Created known addresses:', knownAddresses.length);
     return knownAddresses;
   },
 
@@ -248,16 +247,15 @@ export default {
     };
   },
 
-  async signData(payload: string, network: any, accountIndex: number): Promise<any> {
+  async signData(_payload: string, network: any, accountIndex: number): Promise<any> {
     try {
       // Ensure Trezor transport is initialized
       if (!this._trezorInitialized) {
-        // Use direct TrezorConnect.init to configure WebUSB-only transport
-        await TrezorConnect.init({
+        await TrezorKeyAgent.initializeTrezorTransport({
           manifest: TREZOR_MANIFEST,
-          popup: true, // Allow popups for device interactions
-          transports: ['WebUsbTransport'], // Only use WebUSB, avoid Bridge transport
-          lazyLoad: false
+          communicationType: CommunicationType.Web,
+          silentMode: false,
+          lazyLoad: false,
         });
         this._trezorInitialized = true;
       }
@@ -308,7 +306,7 @@ export default {
   async getAppVersion(): Promise<{ major: number; minor: number; patch: number; }> {
     try {
       if (!this._trezorInitialized) {
-        throw new Error('Trezor not initialized');
+        throw new Error(i18n.t('common.trezorNotInitialized') as string);
       }
 
       // Note: TrezorKeyAgent doesn't expose version info directly
@@ -316,7 +314,7 @@ export default {
       return { major: 2, minor: 0, patch: 0 };
     } catch (error) {
       console.warn('[TREZOR] Failed to get app version:', error);
-      throw new Error('Failed to get Trezor app version');
+      throw new Error(i18n.t('common.failedToGetTrezorVersion') as string);
     }
   }
 };

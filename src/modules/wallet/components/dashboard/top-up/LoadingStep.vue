@@ -7,8 +7,8 @@
 
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Loading your top up</h2>
-      <p class="modal-subtitle">It should be done within 1-2 minutes</p>
+      <h2 class="modal-title">{{ t('card.loadingTopUp') }}</h2>
+      <p class="modal-subtitle">{{ t('card.shouldBeDoneWithin') }}</p>
     </div>
 
     <!-- Loading Section -->
@@ -46,6 +46,7 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, onMounted, onUnmounted } from 'vue';
 
 // Props
@@ -67,14 +68,16 @@ const progress = ref(0);
 const interval = ref<number | null>(null);
 const currentStep = ref(0);
 
+const { t } = useTranslation();
+
 // Processing steps with realistic timings
 const steps = [
-  { text: 'Preparing ADA transaction...', duration: 2000 }, // 0-14%
-  { text: 'Sending ADA to exchange wallet...', duration: 4000 }, // 14-43%
-  { text: 'Confirming ADA transaction on blockchain...', duration: 3000 }, // 43-65%
-  { text: 'Converting ADA to EUR at current rate...', duration: 2500 }, // 65-83%
-  { text: 'Transferring EUR to your Gero Card...', duration: 2000 }, // 83-97%
-  { text: 'Updating card balance...', duration: 500 } // 97-100%
+  { text: t('card.preparingAdaTransaction'), duration: 2000 }, // 0-14%
+  { text: t('card.sendingAdaToExchange'), duration: 4000 }, // 14-43%
+  { text: t('card.confirmingAdaTransaction'), duration: 3000 }, // 43-65%
+  { text: t('card.convertingAdaToEur'), duration: 2500 }, // 65-83%
+  { text: t('card.transferringEurToCard'), duration: 2000 }, // 83-97%
+  { text: t('card.updatingCardBalance'), duration: 500 } // 97-100%
 ];
 
 const visibleSteps = ref([

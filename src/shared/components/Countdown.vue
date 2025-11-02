@@ -35,7 +35,11 @@
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+
+
+const { t } = useTranslation();
 
 const props = defineProps({
   deadline: {

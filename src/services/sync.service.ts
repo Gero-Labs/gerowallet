@@ -1,15 +1,15 @@
 import Dexie, { IndexableType, Table } from 'dexie';
 import { Api } from '@/api/api';
-import { Tip, Blockchain, Provider } from '@/models/types';
+import { Tip, Blockchain, Provider, Network } from '@/models/types';
 import LoadingState from '@/stores/loading';
 import NetworkStore from '@/stores/networkStore';
-import ablyService from '@/services/ably.service';
 import { chunkArray } from 'array-chunk-by-size';
-import { Serialization } from '@cardano-sdk/core';
+import { Serialization, Cardano } from '@cardano-sdk/core';
 import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
-import type * as Cardano from '@cardano-sdk/core/dist/cjs/Cardano';
+import { debugLog } from '@/utils/debug';
+import blockchainApi from '@/api/blockchain-api';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -61,9 +61,14 @@ export class SyncService {
         const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
 
         const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch)
-        await ablyService.publishToSyncChannel(this.walletBg.chain, this.walletBg.network, {
-          chain: this.walletBg.chain,
-          network: this.walletBg.network,
+        const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
+        const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
+
+        // Use REST API instead of Ably publish to avoid rate limiting
+        // (Multiple wallet instances publishing to same Ably channel causes 429 errors)
+        const syncResponse = await blockchainApi.syncRest({
+          chain: chainEnum,
+          network: networkEnum,
           provider: Provider[this.walletBg.provider],
           from,
           to: tip,
@@ -73,9 +78,118 @@ export class SyncService {
           withdrawable_amount,
           epoch,
         });
+
+        // Process the sync response immediately
+        if (syncResponse && syncResponse.success) {
+          await this.setSync(syncResponse);
+        } else {
+          console.error('Sync failed: REST sync returned unsuccessful response', {
+            success: syncResponse?.success,
+            address,
+            from,
+            toHeight: tip.height,
+          });
+        }
       }
     } catch (err) {
-      console.debug(err);
+      debugLog(err);
+    }
+  }
+
+  /**
+   * Perform a fast REST sync to get latest blockchain data immediately
+   * This is useful during wallet login to prevent tip-related errors
+   * @param tip - Optional blockchain tip to sync to
+   */
+  async syncViaRest(tip?: Tip) {
+    try {
+      const syncStart = performance.now();
+      console.log('⏱️ PERF: syncViaRest START');
+
+      if (!tip) {
+        tip = await this.api.getTip();
+      }
+
+      const lastSyncInfo = await this.walletBg.getLastSyncInfo();
+      if (!lastSyncInfo) {
+        LoadingState.setRestoring(true);
+        try {
+          await this.walletBg.restore(tip);
+        } finally {
+          LoadingState.setRestoring(false);
+        }
+        console.log(`⏱️ PERF: syncViaRest (restore) took ${performance.now() - syncStart}ms`);
+        return;
+      }
+
+      // Only sync if tip is newer
+      if (tip.height <= lastSyncInfo['height']) {
+        debugLog('syncViaRest: Tip is not newer, skipping sync');
+
+        // IMPORTANT: Even if we skip sync, we MUST set the tip in NetworkStore
+        // to prevent "Cannot read properties of null (reading 'slot')" errors
+        NetworkStore.setTip({
+          blockNo: tip.height,
+          slot: tip.slot,
+          hash: tip.hash,
+          time: tip.time,
+          epoch: tip.epoch,
+          epoch_slot: tip.epoch_slot || 0,
+        });
+
+        console.log(`⏱️ PERF: syncViaRest (skipped, tip set) took ${performance.now() - syncStart}ms`);
+        return;
+      }
+
+      const promises = [];
+      promises.push(this.syncGenesis());
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
+
+      const prevAccountInfo = await this.walletBg.getAccountInfo();
+      const latestTxBlockHeight = await this.getLatestTransactionBlockHeight();
+      const from = latestTxBlockHeight + 1 || 0;
+      let address: string;
+      if (this.walletBg.isEnterpriseAddress()) {
+        address = this.walletBg.baseAddress;
+      } else {
+        address = this.walletBg.stakeAddress;
+      }
+      const rewards_sum = prevAccountInfo?.rewards_sum ? prevAccountInfo?.rewards_sum : "0";
+      const controlled_amount = prevAccountInfo?.controlled_amount ? prevAccountInfo?.controlled_amount : "0";
+      const withdrawable_amount = prevAccountInfo?.withdrawable_amount ? prevAccountInfo?.withdrawable_amount : "0";
+
+      const epoch = await this.walletBg.getEpochProtocolIfNotExists(tip.epoch);
+      const chainEnum: string = Object.keys(Blockchain).find(key => Blockchain[key] === this.walletBg.chain);
+      const networkEnum: string = Object.keys(Network).find(key => Network[key] === this.walletBg.network);
+
+      // Call REST sync API directly
+      const restStart = performance.now();
+      const syncResponse = await blockchainApi.syncRest({
+        chain: chainEnum,
+        network: networkEnum,
+        provider: Provider[this.walletBg.provider],
+        from,
+        to: tip,
+        address,
+        rewards_sum,
+        controlled_amount,
+        withdrawable_amount,
+        epoch,
+      });
+      console.log(`⏱️ PERF: REST sync API call took ${performance.now() - restStart}ms`);
+
+      // Process the sync response
+      if (syncResponse && syncResponse.success) {
+        await this.setSync(syncResponse);
+        console.log(`⏱️ PERF: syncViaRest TOTAL took ${performance.now() - syncStart}ms`);
+      } else {
+        console.warn('REST sync returned unsuccessful response:', syncResponse);
+      }
+    } catch (err) {
+      console.error('syncViaRest error:', err);
+      debugLog(err);
     }
   }
 
@@ -132,7 +246,7 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
-      console.debug('setSync', syncObject);
+      debugLog('setSync', syncObject);
       NetworkStore.setTip({
         blockNo: syncObject.block.height,
         slot: syncObject.block.slot,
@@ -159,7 +273,7 @@ export class SyncService {
             await genesisTable.put({ id: 0, ...res.data });
             NetworkStore.setGenesis(res.data)
           } else {
-            console.debug(res.status)
+            debugLog(res.status)
             console.warn(parseHttpError(res))
           }
         } catch (error) {
@@ -218,23 +332,33 @@ export class SyncService {
         res = await this.api.getAccountTransactions(this.walletBg.stakeAddress, height);
       }
       if (res && Array.isArray(res)) {
+        const txMap: Map<string, any> = res.reduce((map, tx: any) => {
+          map.set(tx.tx_hash, tx);
+          return map;
+        }, new Map<string, any>());
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);
         const smallerArrays: string[][] = chunkArray({ input: txHashes, bytesSize: 4000 });
         smallerArrays.forEach(smallerArray => {
           promises.push(this.api.getTransactionsCbor(smallerArray).then(txCborsResult => {
             if (txCborsResult.status == 200) {
-              return txCborsResult.data.map(txCbor => {
-                const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+              return txCborsResult.data.map((txCbor: any) => {
+                let txDeserialized: Cardano.Tx | {} = {};
+                if (txCbor.cbor) {
+                  txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor.cbor));
+                }
+                const tx = txMap.get(txCbor.tx_hash);
                 return {
+                  tx_hash: txCbor.tx_hash,
                   utxo: txCbor.utxo,
                   block_hash: txCbor.block_hash,
-                  block_height: txCbor.block_height,
+                  block_height: txCbor.block_height || tx.block_height,
                   epoch_no: txCbor.epoch_no,
                   absolute_slot: txCbor.absolute_slot,
-                  tx_timestamp: txCbor.tx_timestamp,
+                  tx_timestamp: txCbor.tx_timestamp || tx.block_time,
                   tx_size: txCbor.tx_size,
                   cbor: txCbor.cbor,
+                  pending: false, // Transactions from blockchain are confirmed (not pending)
                   ...txDeserialized,
                 }
               })
@@ -246,7 +370,7 @@ export class SyncService {
         return txsCborResults;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
   }
 
@@ -318,11 +442,11 @@ export class SyncService {
     try {
       const res: AxiosResponse = await this.api.getAssetsInfo(units);
       if (res.status === 200 && res.data.length > 0) {
-        console.debug(res.data);
+        debugLog(res.data);
         return res.data;
       }
     } catch (e) {
-      console.debug(e);
+      debugLog(e);
     }
     return null;
   }
@@ -339,7 +463,7 @@ export class SyncService {
       const transactionsTable = db.table('transactions');
 
       if (!transactionsTable) {
-        console.debug('No transactions table found');
+        debugLog('No transactions table found');
         return 0;
       }
 
@@ -347,7 +471,7 @@ export class SyncService {
       const transactions = await transactionsTable.toArray();
 
       if (!transactions || transactions.length === 0) {
-        console.debug('No transactions found');
+        debugLog('No transactions found');
         return 0;
       }
 
@@ -357,11 +481,11 @@ export class SyncService {
       });
 
       const blockHeight = latestTx.block_height || 0;
-      console.debug(`Latest transaction block height: ${blockHeight}`);
+      debugLog(`Latest transaction block height: ${blockHeight}`);
       return blockHeight;
 
     } catch (e) {
-      console.debug('Error getting latest transaction block height:', e);
+      debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
   }

@@ -9,8 +9,9 @@ import {
   UREncoder,
 } from '@keystonehq/keystone-sdk';
 import { DerivationAlgorithm } from '@keystonehq/bc-ur-registry/src/extended/DerivationSchema';
-import { Address, BaseAddress, Credential, Transaction, TransactionInputs } from '@emurgo/cardano-serialization-lib-browser';
 import { Options } from 'qr-code-styling/lib/types';
+import logo128Url from '@/assets/img/bkp/logo128.png';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 
 const sdk: KeystoneSDK = new KeystoneSDK();
 
@@ -27,14 +28,13 @@ export const parseSignature = (decodedQRCode: string): CardanoSignature => {
   return sdk.cardano.parseSignature(URDecoder.decode(decodedQRCode));
 }
 
-export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, addresses): any => {
-  const getOwnedUtxos = (txInputs: TransactionInputs, xfp: string) => {
+export const createKeystoneSignRequest = (tx: Serialization.Transaction, walletData, utxos, addresses): any => {
+  const getOwnedUtxos = (txInputs: readonly Serialization.TransactionInput[], xfp: string) => {
     const keystoneUtxos = [];
     const extraSigners = [];
 
-    for (let i = 0; i < txInputs.len(); i++) {
-      const input = txInputs.get(i);
-      const inputTxHash = Buffer.from(input.transaction_id().to_bytes()).toString('hex');
+    txInputs.forEach((input: Serialization.TransactionInput) => {
+      const inputTxHash = input.transactionId();
       const inputTxIndex = input.index();
       const utxo = utxos.find(utxo => inputTxHash === utxo.tx_hash && utxo.tx_index === inputTxIndex);
       if (utxo) {
@@ -47,40 +47,39 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
           address: utxo.payment_addr.bech32,
         })
       }
-    }
+    });
 
-    if ((tx.body().certs() && tx.body().certs().len() > 0) || (tx.body().withdrawals() && tx.body().withdrawals().len() > 0)) {
-      const credsNeeded = new Set<Credential>();
+    if ((tx.body().certs() && tx.body().certs().size() > 0) || (tx.body().withdrawals() && tx.body().withdrawals().size > 0)) {
+      const credsNeeded = new Set<Cardano.Credential>();
       if (tx.body().certs()) {
-        for (let i = 0 ; i < tx.body().certs().len() ; i++) {
-          const cert = tx.body().certs().get(i)
-          const stakeRegistrationAndDelegation = cert.as_stake_registration_and_delegation()
+        tx.body().certs().values().forEach((cert) => {
+          const stakeRegistrationAndDelegation = cert.asStakeRegistrationDelegationCert();
           if (stakeRegistrationAndDelegation) {
-            credsNeeded.add(stakeRegistrationAndDelegation.stake_credential())
+            credsNeeded.add(stakeRegistrationAndDelegation.stakeCredential())
           }
-          const stakeDelegation = cert.as_stake_delegation()
+          const stakeDelegation = cert.asStakeDelegation();
           if (stakeDelegation) {
-            credsNeeded.add(stakeDelegation.stake_credential())
+            credsNeeded.add(stakeDelegation.stakeCredential())
           }
-          const stakeDeregistration = cert.as_stake_deregistration()
+          const stakeDeregistration = cert.asStakeDeregistration()
           if (stakeDeregistration) {
-            credsNeeded.add(stakeDeregistration.stake_credential())
+            credsNeeded.add(stakeDeregistration.stakeCredential())
           }
           // TODO More
-        }
+        })
       }
       if (tx.body().withdrawals()) {
-        for (let i = 0 ; i < tx.body().withdrawals().len() ; i++) {
-          const bigNum = tx.body().withdrawals().get(walletData.stakeAddress)
+        tx.body().withdrawals().keys().forEach((rewardAccount) => {
+          const bigNum = tx.body().withdrawals().get(rewardAccount)
           if (bigNum) {
-            const keyAddress = Address.from_bech32(walletData.stakeAddress);
-            credsNeeded.add(BaseAddress.from_address(keyAddress).stake_cred())
+            const keyAddress = Cardano.Address.fromBech32(walletData.stakeAddress);
+            credsNeeded.add(Cardano.BaseAddress.fromAddress(keyAddress).getStakeCredential())
           }
-        }
+        })
       }
       credsNeeded.forEach((cred) => {
         extraSigners.push({
-          keyHash: cred.to_keyhash().to_hex(),
+          keyHash: cred.hash,
           xfp,
           keyPath: "m/1852'/1815'/0'/2/0"
         });
@@ -89,7 +88,7 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
     return {keystoneUtxos, extraSigners}
   }
   const xfp = walletData.xfp ?? "";
-  const res = getOwnedUtxos(tx.body().inputs(), xfp)
+  const res = getOwnedUtxos(tx.body().inputs().values(), xfp)
   // let txInputs: TransactionInputs = tx.body().inputs();
   // // if (!txInputs) {
   // //   const { utxoList } = getFilteredUtxoList(appAccount, false);
@@ -98,14 +97,12 @@ export const createKeystoneSignRequest = (tx: Transaction, walletData, utxos, ad
   const req = {
     origin: 'gerowallet',
     requestId: crypto.randomUUID(),
-    signData: Buffer.from(tx.to_bytes()),
+    signData: Buffer.from(tx.toCbor(), 'hex'),
     utxos: res.keystoneUtxos,
     extraSigners: res.extraSigners
   };
-  const req_json = JSON.parse(JSON.stringify(req));
   return sdk.cardano.generateSignRequest(req)
 }
-import logo128Url from '@/assets/img/bkp/logo128.png';
 
 export const qrCodeOptions = (encodedUR: string, size: number): Options => {
   return {

@@ -2,11 +2,12 @@
   <BaseDialog
     :isOpen="isOpen"
     @close="$emit('close')"
-    title="Settings"
-    subtitle="Modify wallet and extension configuration settings"
+    :title="t('settings.settings')"
+    :subtitle="t('settings.modifyWalletAndExtension')"
     :loading="loading"
     :min-height="0"
     scrollable
+    :persistent="false"
   >
     <v-card-title class="px-2 py-0">
       <v-tabs
@@ -53,6 +54,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed } from 'vue'
 import BaseDialog             from '@/shared/dialogs/BaseDialog.vue'
 import ContactsTab            from '@/modules/dashboard/components/ContactsTab.vue'
@@ -62,6 +64,8 @@ import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDapp
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
 import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
+
+const { t } = useTranslation();
 
 // Props & Emitting
 const props = defineProps<{ isOpen: boolean }>()
@@ -73,22 +77,22 @@ const hasBackup = computed(() => walletStoreDefault.hasBackup())
 // Read the actual backup‐enabled flag (defaults to true)
 const getBackup = computed(() => walletStoreDefault.getBackup())
 
-// Show a badge if user *should* back up
+// Show a badge if the user *should* back up
 const shouldBackup = computed(() => hasBackup.value && !getBackup.value)
 
 // Local reactive state
 const tab     = ref<string | null>(null)
 const loading = ref(false)
 
-// Build your tabs array, injecting the dynamic badge
+// Build your tab array, injecting the dynamic badge
 const tabs = computed(() => [
-  { label: 'Profile', value: 'profile' },
+  { label: t('settings.profile'), value: 'profile' },
   // { label: 'Password', value: 'password' },
-  { label: 'Collateral', value: 'collateral', disabled: false },
-  { label: 'Contacts', value: 'contacts', disabled: false },
-  { label: 'Dapps', value: 'connectedDapps', disabled: false },
-  { label: 'Security', value: 'security', disabled: false, badge: shouldBackup.value },
-  { label: 'Advanced', value: 'advanced', disabled: false },
+  { label: t('settings.collateral'), value: 'collateral', disabled: false },
+  { label: t('settings.contacts'), value: 'contacts', disabled: false },
+  { label: t('settings.dapps'), value: 'connectedDapps', disabled: false },
+  { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value },
+  { label: t('settings.advanced'), value: 'advanced', disabled: false },
 ])
 
 // Handle loading events from AdvancedSettingsTab

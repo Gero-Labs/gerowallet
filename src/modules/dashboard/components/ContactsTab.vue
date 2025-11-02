@@ -12,8 +12,8 @@
       <template v-slot:top>
         <v-toolbar flat class="transparent my-2">
           <v-toolbar-title>
-            Add, Edit or Delete contacts<br/>
-            <span class="subtitle">Contacts can be selected in the various send screens to save time</span>
+            {{ $t('common.addEditDeleteContacts') }}<br/>
+            <span class="subtitle">{{ $t('common.contactsHelper') }}</span>
           </v-toolbar-title>
           <v-spacer></v-spacer>
           <v-dialog
@@ -26,7 +26,7 @@
                 v-bind="attrs"
                 v-on="on"
               >
-                Add Contact
+                {{ $t('common.addContact') }}
               </v-btn>
             </template>
             <v-form ref="form" v-model="valid">
@@ -47,7 +47,7 @@
                           outlined
                           dense
                           v-model="editedItem.name"
-                          label="Name"
+                          :label="$t('common.name')"
                           :maxlength="40"
                           counter="40"
                           :rules="[rules.required(), rules.maxCharacters(40), rules.minCharacters(3)]"
@@ -58,7 +58,7 @@
                           outlined
                           dense
                           v-model="editedItem.address"
-                          label="Address"
+                          :label="$t('common.address')"
                           :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
                         ></v-text-field>
                       </v-col>
@@ -72,14 +72,14 @@
                     text
                     @click="close"
                   >
-                    Cancel
+                    {{ $t('common.cancel') }}
                   </v-btn>
                   <v-btn
                     color="primary"
                     @click="save"
                     :disabled="!valid"
                   >
-                    Save
+                    {{ $t('common.save') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -87,11 +87,11 @@
           </v-dialog>
           <v-dialog v-model="dialogDelete" max-width="500px">
             <v-card>
-              <v-card-title>Are you sure you want to delete this item?</v-card-title>
+              <v-card-title>{{ $t('common.areYouSureDelete') }}</v-card-title>
               <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn color="primary" text @click="closeDelete">Cancel</v-btn>
-                <v-btn color="primary" @click="deleteItemConfirm">OK</v-btn>
+                <v-btn color="primary" text @click="closeDelete">{{ $t('common.cancel') }}</v-btn>
+                <v-btn color="primary" @click="deleteItemConfirm">{{ $t('common.ok') }}</v-btn>
                 <v-spacer></v-spacer>
               </v-card-actions>
             </v-card>
@@ -120,6 +120,7 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import filters from '@/shared/utils/filters';
@@ -131,15 +132,16 @@ import { addOrUpdateContact, removeContact } from '@/db/wallet-db';
 const { loggedWallet, contacts } = toRefs(walletStore);
 
 // Reactive data
+const { t } = useTranslation();
 const valid = ref<boolean>(false);
 const dialog = ref<boolean>(false);
 const dialogDelete = ref<boolean>(false);
 const editedAddress = ref<string | null>(null);
 
 const headers = ref([
-  { text: 'Name', value: 'name', width: '20%' },
-  { text: 'Address', value: 'address', width: '75%' },
-  { text: 'Actions', value: 'actions', sortable: false, width: '5%' },
+  { text: t('common.name'), value: 'name', width: '20%' },
+  { text: t('common.address'), value: 'address', width: '75%' },
+  { text: t('common.actions'), value: 'actions', sortable: false, width: '5%' },
 ]);
 
 const editedItem = ref({
@@ -155,7 +157,7 @@ const defaultItem = {
 // Computed properties (contacts is now directly from store)
 
 const formTitle = computed(() => {
-  return editedAddress.value === null ? 'New Contact' : 'Edit Contact';
+  return editedAddress.value === null ? t('common.newContact') : t('common.editContact');
 });
 
 // Watchers

@@ -2,7 +2,6 @@ import { crc8 } from 'crc';
 import { jsonToPlutusData } from '@/chrome/serialization';
 import { Asset, Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob, isNotNil } from '@cardano-sdk/util';
-import { TextDecoder } from 'web-encoding';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import DexHunterStore from '@/stores/dexHunterStore';
 import NetworkStore from '@/stores/networkStore';
@@ -10,39 +9,22 @@ import { CID } from 'multiformats/cid';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
+import { debugLog } from '@/utils/debug';
+import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
-// Import assets from centralized location
-let greenSvg = '';
-let purpleSvg = '';
-let pinkSvg = '';
-let orangeSvg = '';
-let blueSvg = '';
-let greySvg = '';
-let errorImage = '';
-
-if (!isServiceWorker) {
-  try {
-    // Use centralized assets instead of require
-    import('@/utils/assets').then(assets => {
-      greenSvg = assets.default.greenSvg;
-      purpleSvg = assets.default.purpleSvg;
-      pinkSvg = assets.default.pinkSvg;
-      orangeSvg = assets.default.orangeSvg;
-      blueSvg = assets.default.blueSvg;
-      greySvg = assets.default.greySvg;
-      errorImage = assets.default.errorImage;
-    }).catch(e => {
-      console.warn('Failed to load assets:', e);
-    });
-  } catch (e) {
-    // Fallback if imports fail
-    console.warn('Failed to load assets:', e);
-  }
-}
+// Import assets from a centralized location (static import)
+// In service worker context, these will be empty strings and the bundler will tree-shake the unused module
+const greenSvg = isServiceWorker ? '' : assetsModule.greenSvg;
+const purpleSvg = isServiceWorker ? '' : assetsModule.purpleSvg;
+const pinkSvg = isServiceWorker ? '' : assetsModule.pinkSvg;
+const orangeSvg = isServiceWorker ? '' : assetsModule.orangeSvg;
+const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
+const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
+const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
 
 function detectCIDVersion(cidStr: string) {
   try {
@@ -126,7 +108,7 @@ function cip68Label(asset_name: any): number | null {
 
 function resolveCip68(onchain_metadata_extra: any, label: number, metadata) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(JSON.parse(onchain_metadata_extra)[label]);
-  const metadataJson: Asset.NftMetadata = fromPlutusData(plutusData.toCore());
+  const metadataJson: Asset.NftMetadata | any = fromPlutusData(plutusData.toCore());
   metadata = metadataJson;
   if (metadataJson.otherProperties) {
     metadata = {
@@ -142,12 +124,12 @@ const getConditionalValidators = (strict: boolean) => ({
     if (typeof name === 'string') return true;
     if (typeof name === 'undefined') {
       if (strict) {
-        console.debug('Invalid PlutusData: "name" is required');
+        debugLog('Invalid PlutusData: "name" is required');
         return false;
       }
       return true;
     }
-    console.debug('Invalid PlutusData: "name" must be utf8 bounded bytes');
+    debugLog('Invalid PlutusData: "name" must be utf8 bounded bytes');
     return false;
   },
   isValidDatumShape: (plutusData: Cardano.PlutusData | undefined): plutusData is Cardano.ConstrPlutusData => {
@@ -157,7 +139,7 @@ const getConditionalValidators = (strict: boolean) => ({
       plutusData.constructor === 0n &&
       plutusData.fields.items.length >= minNumberOfFields;
     if (!isValid)
-      console.debug(
+      debugLog(
         `Invalid PlutusData: expecting ConstrPlutusData with 0th constructor and ${minNumberOfFields} items`
       );
     return isValid;
@@ -200,6 +182,10 @@ const tryConvertPlutusMapToUtf8Record = (map: Cardano.PlutusMap): Partial<Record
       record[keyAsStr] = tryConvertPlutusDataToUtf8List(value)
     } else if (Cardano.util.isPlutusBoundedBytes(value)) {
       record[keyAsStr] = tryConvertPlutusDataToUtf8String(value);
+    } else {
+      // Include all other PlutusData types (PlutusMap, PlutusBigInt, etc.)
+      // This is important for CIP68 metadata fields like decimals: { "int": 6 }
+      record[keyAsStr] = value;
     }
   }
   return record;
@@ -213,7 +199,7 @@ const tryCoerce = <T,>(value: string | Cardano.PlutusData | undefined, ctor: (v:
   try {
     return ctor(value);
   } catch (error) {
-    console.warn(error instanceof Error ? error.message : error);
+    console.warn(error && typeof error === 'object' && 'message' in error ? String(error.message) : error);
     return undefined;
   }
 };
@@ -275,7 +261,7 @@ const mapFile = (file: Cardano.PlutusData): Asset.NftMetadataFile | undefined =>
 export const fromPlutusData = (
   plutusData: Cardano.PlutusData | undefined,
   strict = false
-): Asset.NftMetadata | null => {
+): Asset.NftMetadata | any => {
   const conditionalValidators = getConditionalValidators(strict);
   if (!conditionalValidators.isValidDatumShape(plutusData)) {
     return null;
@@ -283,12 +269,12 @@ export const fromPlutusData = (
 
   const [nftMetadata, version] = plutusData.fields.items;
   if (!Cardano.util.isPlutusMap(nftMetadata) || !Cardano.util.isPlutusBigInt(version)) {
-    console.debug('Invalid PlutusData: expecting a map at [0] and integer at [1]');
+    debugLog('Invalid PlutusData: expecting a map at [0] and integer at [1]');
     return null;
   }
 
   const nftMetadataRecord = tryConvertPlutusMapToUtf8Record(nftMetadata);
-  const { name, image, mediaType, description, files, ...additionalProperties } = nftMetadataRecord;
+  const { name, image, mediaType, description, files, decimals, ticker, url, logo, legal, ...additionalProperties } = nftMetadataRecord;
 
   if (!conditionalValidators.isNameValid(name)) {
     return null;
@@ -296,9 +282,28 @@ export const fromPlutusData = (
 
   let imageAsUri: Asset.Uri = undefined
   if (typeof image !== 'string') {
-    console.debug('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
+    debugLog('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
   } else {
     imageAsUri = tryCoerce(image, Asset.Uri);
+  }
+
+  // Extract decimals from PlutusData - it's stored as a map with "int" key
+  let decimalsValue: number | undefined = undefined;
+  if (decimals) {
+    if (Cardano.util.isPlutusMap(decimals)) {
+      // CIP68 stores decimals as a map: { "int": 6 }
+      const decimalsRecord = tryConvertPlutusMapToUtf8Record(decimals);
+      const intValue = decimalsRecord['int'];
+      if (Cardano.util.isPlutusBigInt(intValue)) {
+        decimalsValue = Number(intValue);
+      } else if (typeof intValue === 'string') {
+        decimalsValue = parseInt(intValue, 10);
+      }
+    } else if (Cardano.util.isPlutusBigInt(decimals)) {
+      decimalsValue = Number(decimals);
+    } else if (typeof decimals === 'string') {
+      decimalsValue = parseInt(decimals, 10);
+    }
   }
 
   return {
@@ -307,6 +312,11 @@ export const fromPlutusData = (
     image: imageAsUri,
     mediaType: tryCoerce(mediaType, Asset.ImageMediaType),
     name: name || '',
+    decimals: decimalsValue,
+    ticker: asString(ticker),
+    url: asString(url),
+    logo: asString(logo),
+    legal: asString(legal),
     otherProperties: undefinedIfEmpty(mapOtherProperties(additionalProperties)),
     version: version.toString()
   };
@@ -360,11 +370,21 @@ export function resolveAsset(token: any): any {
     const label: number = cip68Label(asset_name)
     if (label && asset) {
       if (asset.onchain_metadata_extra && asset.onchain_metadata_extra[label]) {
-        asset.metadata = resolveCip68(asset.onchain_metadata_extra, label, metadata);
+        const cip68Data = resolveCip68(asset.onchain_metadata_extra, label, metadata);
+        if (label === 222) {
+          onchain_metadata = cip68Data
+          asset.onchain_metadata = cip68Data
+          name = cip68Data.name
+          img = cip68Data.image
+        } else {
+          asset.metadata = cip68Data
+        }
         if (label === 333 && asset.metadata && !asset.metadata.decimals) {
           const token = structuredClone(DexHunterStore.state.dexHunterTokens[asset.asset])
           if (token?.decimals) {
             asset.metadata.decimals = token.decimals
+          } else {
+            asset.metadata.decimals = 0
           }
         }
       }
@@ -441,7 +461,7 @@ export function resolveAsset(token: any): any {
 export function findCollectionName(collectible) {
   let projectName: string = ''
   if (collectible?.onchain_metadata) {
-    const collectionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project');
+    const collectionKey: string = Object.keys(collectible.onchain_metadata).find(key => key.toLowerCase() === 'collection' || key.toLowerCase() === 'project' || key.toLowerCase() === 'name');
     if (collectionKey) {
       projectName = collectible.onchain_metadata[collectionKey]
     }
@@ -627,25 +647,27 @@ export function analyzeTransactionForSignatures(
 
   // Check for certificates (staking operations and governance)
   if (transaction.body.certificates && transaction.body.certificates.length > 0) {
-    console.debug('🔍 Analyzing certificates for required signatures:');
+    console.log('🔧 Analyzing certificates for required signatures:');
     for (const certificate of transaction.body.certificates) {
-      console.debug(`  Certificate type: ${certificate.__typename}`);
+      console.log(`🔧   Certificate type: ${certificate.__typename}`);
 
       if (certificate.__typename === Cardano.CertificateType.StakeRegistration ||
           certificate.__typename === Cardano.CertificateType.StakeDeregistration ||
+          certificate.__typename === Cardano.CertificateType.Registration ||
+          certificate.__typename === Cardano.CertificateType.Unregistration ||
           certificate.__typename === Cardano.CertificateType.StakeDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
-        // Need stake key signature for both staking and governance operations
-        console.debug(`  Adding stake key signer for certificate: ${certificate.__typename}`);
+        // Need stake key signature for both staking and governance operations (including Conway-era certificates)
+        console.log(`🔧   Adding stake key signer for certificate: ${certificate.__typename}`);
         requiredSigners.push({
           derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
           type: 'stake'
         });
       } else {
-        console.debug(`  Unknown certificate type, no signer added: ${certificate.__typename}`);
+        console.log(`🔧   Unknown certificate type, no signer added: ${certificate.__typename}`);
       }
     }
   }
@@ -664,10 +686,11 @@ export function analyzeTransactionForSignatures(
   }
 
   // Check for required signers field
+  // Only check for signatures that belong to this wallet (for multisig support)
   if (transaction.body.requiredExtraSignatures && transaction.body.requiredExtraSignatures.length > 0) {
-    console.debug('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
+    debugLog('🔍 Checking requiredExtraSignatures:', transaction.body.requiredExtraSignatures);
     for (const keyHash of transaction.body.requiredExtraSignatures) {
-      console.debug(`🔍 Looking for required key hash: ${keyHash}`);
+      debugLog(`🔍 Looking for required key hash: ${keyHash}`);
       let foundMatch = false;
 
       // Search through all known addresses in the wallet store keys
@@ -680,33 +703,24 @@ export function analyzeTransactionForSignatures(
         if (addressArray && Array.isArray(addressArray)) {
           for (const addressInfo of addressArray) {
             if (addressInfo && (addressInfo.cred)) {
-              console.debug(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
+              debugLog(`🔍 Comparing required: ${keyHash} vs wallet: ${addressInfo.cred} (${addressType})`);
               // Compare key hash directly from wallet store
               // Use cred field if keyHash is not available (this is the actual field name in WalletStore)
               if (keyHash === addressInfo.cred) {
                 const pathArray = parseDerivationPath(addressInfo.path);
-                console.debug(`🔍 Full parsed path: [${pathArray.join(',')}]`);
-                console.debug(`🔍 Should be: [0, 0] for external address index 0`);
+                debugLog(`🔍 Full parsed path: [${pathArray.join(',')}]`);
+                debugLog(`🔍 Should be: [0, 0] for external address index 0`);
                 requiredSigners.push({
                   derivationPath: pathArray,
                   type: addressType === 'stake' ? 'stake' : 'payment'
                 });
                 foundMatch = true;
-                console.debug(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
+                debugLog(`✅ Found matching key for ${keyHash} in ${addressType} addresses at path ${addressInfo.path}`);
                 break;
               }
             }
           }
         }
-      }
-
-      // Log if we couldn't find a matching key
-      if (!foundMatch) {
-        console.warn(`Could not find wallet key for required signature: ${keyHash}`);
-        console.debug('Available address types:', Object.keys(addresses));
-        console.debug('Payment addresses:', addresses.payment?.map(a => ({ keyHash: a.cred, path: a.path })));
-        console.debug('Change addresses:', addresses.change?.map(a => ({ keyHash: a.cred, path: a.path })));
-        console.debug('Stake addresses:', addresses.stake?.map(a => ({ keyHash: a.cred, path: a.path })));
       }
     }
   }

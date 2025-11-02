@@ -11,21 +11,24 @@
             <img src="@/modules/wallet/icons/waiting.svg" alt="waiting" />
           </div>
           <div class="heading-and-supporting-text">
-            <h3 class="heading">We're reviewing your application</h3>
+            <h3 class="heading">{{ t('card.reviewingApplication') }}</h3>
             <p class="supporting-text">
-              Thanks for submitting your details. Our team is reviewing your application and will get back to you
-              shortly. You'll receive an email as soon as there's an update.
+              {{ t('card.reviewingApplicationDesc') }}
             </p>
           </div>
         </div>
-        <SecondaryButton text="Contact Support" @click="handleContactSupport" />
+        <!-- <SecondaryButton text="Contact Support" @click="handleContactSupport" /> -->
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import SecondaryButton from './SecondaryButton.vue';
+
+
+const { t } = useTranslation();
 
 const handleContactSupport = () => {
   console.log('Contact support clicked');

@@ -1,5 +1,14 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="$emit('close')" title="Deal Details" subtitle="" :min-height="600" :height="620" :width="500">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="$emit('close')"
+    :title="$t('cashback.dealDetails')"
+    subtitle=""
+    :min-height="600"
+    :height="620"
+    :width="500"
+    :persistent="false"
+  >
     <v-card-title class="pa-0">
       <v-list-item v-if="retailer" class="px-0">
         <v-list-item-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="60" v-if="retailer.img">
@@ -16,12 +25,12 @@
       </v-list-item>
     </v-card-title>
     <v-card-title class="px-1 pt-0 pb-2" style="font-size: 14px">
-      Cashback Terms & Exclusions
+      {{ $t('cashback.cashbackTermsExclusions') }}
     </v-card-title>
     <v-card-text class="px-4 pt-2 pb-0 cashbackTerms" style="z-index: 1; border-radius: 10px; background-color: #0f0f0f">
       <div v-if="loading" style="width: 100%; height: 100%; align-content: center" class="text-center" >
         <v-progress-circular color="primary" size="80" width="8" indeterminate ></v-progress-circular>
-        <div class="pt-4">Loading ...</div>
+        <div class="pt-4">{{ $t('common.loading') }}...</div>
       </div>
       <VueShowdown v-else :markdown="fileContent" flavor="vanilla" :options="{ emoji: true }"/>
     </v-card-text>
@@ -32,8 +41,8 @@
         :disabled="disabled || !retailerUrl"
         style="color: black!important;"
         @click="startShopping()"
-      >Start Shopping</v-btn>
-      <v-card-subtitle class="pa-0 pt-3">By clicking Start Shopping, I accept the terms above.</v-card-subtitle>
+      >{{ $t('cashback.startShopping') }}</v-btn>
+      <v-card-subtitle class="pa-0 pt-3">{{ $t('cashback.startShoppingTerms') }}</v-card-subtitle>
     </v-card-actions>
   </BaseDialog>
 </template>
@@ -51,7 +60,7 @@ const props = defineProps({
     default: false,
   },
   retailer: {
-    type: Object
+    type: Object as () => any,
   },
   retailerTermsBasePath: {
     type: String,
@@ -102,7 +111,7 @@ const activate = async () => {
     }
     const response = await cashbackApi.activate(
       props.retailer.id,
-      baseAddress.value,
+      loggedWallet.value.baseAddress,
       networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network),
       search
     );

@@ -5,14 +5,13 @@
     scrollable
     max-width="850"
     min-height="742"
-    :persistent="persistent"
   >
     <v-card class="py-0 rounded-xxl transparent fill-height">
       <v-stepper v-model="step" flat style="background-color: transparent; height: 100%" non-linear>
         <v-stepper-header style="box-shadow: none">
-          <v-stepper-step :complete="step > 1" step="1"> Recovery Phrase </v-stepper-step>
+          <v-stepper-step :complete="step > 1" step="1"> {{ $t('welcome.seedPhrase') }} </v-stepper-step>
           <v-divider></v-divider>
-          <v-stepper-step :complete="step > 2" step="2"> Wallet Setup </v-stepper-step>
+          <v-stepper-step :complete="step > 2" step="2"> {{ $t('welcome.walletSetup') }} </v-stepper-step>
         </v-stepper-header>
 
         <v-stepper-items>
@@ -25,11 +24,10 @@
               >
                 <v-card-text class="px-0 pb-0 justify-space-around no-gutters">
                   <v-alert color="primary" dense outlined type="info" prominent border="left" class="mb-2">
-                    Enter your wallet recovery phrase word for word.<br />Make sure you enter the words in the correct
-                    order. Also ensure nobody is looking at your screen.
+                    {{ $t('welcome.recoveryPhraseAlert') }}
                   </v-alert>
                   <v-row no-gutters class="pb-2">
-                    <strong style="align-content: center; color: white">Choose recovery phrase length</strong>
+                    <strong style="align-content: center; color: white">{{ $t('welcome.chooseRecoveryPhraseLength') }}</strong>
                     <v-spacer></v-spacer>
                     <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
                       <v-btn small value="12">
@@ -69,7 +67,7 @@
                   <!--                  </v-btn>-->
                   <v-spacer></v-spacer>
                   <v-btn color="primary" @click="walletCreationStep1" elevation="0" :disabled="!valid">
-                    Continue
+                    {{ $t('wallet.continue') }}
                   </v-btn>
                 </v-card-actions>
               </v-card>
@@ -85,20 +83,20 @@
                 :disabled="creatingWalletLoader"
               >
                 <v-card-text class="px-0 d-flex row justify-space-around no-gutters">
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Set up your wallet name</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.setUpWalletName') }}</h2>
                   <h3 class="text-left px-0 pb-3" style="font-size: 1.1em; width: 100%">
-                    Choose a name to help you identify your wallet.
+                    {{ $t('welcome.chooseNameToIdentify') }}
                   </h3>
                   <v-text-field
                     style="width: 100%"
                     v-model="newWallet.name"
                     dense
                     filled
-                    label="Wallet Name"
-                    placeholder="e.g. My New Wallet"
+                    :label="$t('welcome.walletName')"
+                    :placeholder="$t('welcome.walletNamePlaceholder')"
                     :rules="[rules.required(), rules.minCharacters(3), rules.maxCharacters(40)]"
                   ></v-text-field>
-                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Wallet Icon</h2>
+                  <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">{{ $t('welcome.walletIcon') }}</h2>
                   <v-radio-group v-model="newWallet.icon" row mandatory class="no-gutters mt-2 mb-2" hide-details>
                     <v-radio value="green">
                       <template v-slot:label>
@@ -155,7 +153,7 @@
                     dense
                     v-model="newWallet.password"
                     filled
-                    label="Spending Password"
+                    :label="$t('wallet.spendingPassword')"
                     :type="show1 ? 'text' : 'password'"
                     :rules="[
                       rules.required(),
@@ -178,11 +176,11 @@
                     dense
                     v-model="newWallet.confirmPassword"
                     filled
-                    label="Confirm Password"
+                    :label="$t('welcome.confirmPassword')"
                     :type="show2 ? 'text' : 'password'"
                     :rules="[
                       rules.required(),
-                      newWallet.password === newWallet.confirmPassword || 'Passwords must match',
+                      newWallet.password === newWallet.confirmPassword || $t('welcome.passwordsMustMatch'),
                     ]"
                   >
                     <template v-slot:append>
@@ -196,7 +194,7 @@
                     class="mt-0 text-left"
                     hide-details
                     v-model="newWallet.recoverPasswordChecked"
-                    label="I understand that GeroWallet cannot recover this password for me."
+                    :label="$t('welcome.understandPasswordRecovery')"
                     :rules="[newWallet.recoverPasswordChecked]"
                   ></v-checkbox>
                   <v-checkbox
@@ -241,6 +239,7 @@
   </v-dialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, onUnmounted, getCurrentInstance } from 'vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
@@ -287,7 +286,6 @@ const newWallet = ref({
 });
 const valid2 = ref<boolean>(false);
 const creatingWalletLoader = ref<boolean>(false);
-const persistent = ref<boolean>(false);
 const seedPhraseLength = ref<string>('24');
 const emptySeedPhrase: string[] = Array(Number(seedPhraseLength.value)).fill('');
 const recoverySeedPhrase = ref<string[]>(emptySeedPhrase);
@@ -367,7 +365,6 @@ const pasteFromClipboard = async () => {
 const walletCreationStep1 = () => {
   if (form.value?.validate()) {
     step.value = 2;
-    persistent.value = true;
   }
 };
 
@@ -385,14 +382,27 @@ const walletCreationStep2 = async () => {
         props.network.network
       );
       dialogLocal.value = false;
-      await Messaging.sendToBackgroundFromOptions({
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.LOGIN,
         data: { wallet },
-      }).then(() => {
-        vmProxy.$nextTick(() => {
-          router.push('/');
-        });
       });
+
+      if (response && !response.error) {
+        vmProxy.$nextTick(() => {
+          router.push('/').catch(err => {
+            // Suppress redirect errors (expected when already on target route)
+            if (err.name !== 'NavigationDuplicated' && !err.message?.includes('Redirected')) {
+              console.error('Navigation error:', err);
+            }
+          });
+        });
+      } else if (response?.error) {
+        console.warn('Login response error:', response.error);
+        // Still navigate even if there's a connection error, as the wallet might have been created
+        vmProxy.$nextTick(() => {
+          router.push('/').catch(() => {});
+        });
+      }
     } catch (error) {
       console.error('Error creating wallet:', error);
     } finally {
@@ -414,7 +424,6 @@ const resetDialog = () => {
   valid2.value = false;
   creatingWalletLoader.value = false;
   recoverySeedPhrase.value = emptySeedPhrase;
-  persistent.value = false;
 };
 
 // Lifecycle

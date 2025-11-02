@@ -33,24 +33,23 @@
     >
       <v-card>
         <v-card-title>
-          Remove Dapp Access
+          {{ $t('settings.removeDappAccess') }}
         </v-card-title>
-        <v-card-text v-if="itemToDelete">Are you sure you want to remove Dapp access for <strong style="color: white">{{itemToDelete.domain}}</strong>?
-          This action cannot be undone.</v-card-text>
+        <v-card-text v-if="itemToDelete">{{ $t('settings.removeDappConfirm', { domain: itemToDelete.domain }) }}</v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn
             text
             @click="confirmRemoveDialog = false"
           >
-            No
+            {{ $t('common.no') }}
           </v-btn>
           <v-btn
             color="primary"
             text
             @click="remove"
           >
-            Yes
+            {{ $t('common.yes') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -58,8 +57,12 @@
   </v-tab-item>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, toRefs } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, connectedDapps } = toRefs(walletStore);
 
@@ -69,7 +72,7 @@ const itemToDelete = ref<any>(undefined);
 const transaction = ref<string>('');
 
 const headers = ref([
-  { text: "Domain", align: "start", sortable: true, value: "domain", width: '99%'},
+  { text: t('settings.domain'), align: "start", sortable: true, value: "domain", width: '99%'},
   { text: "", align: "start", sortable: false, value: "actions" },
 ]);
 

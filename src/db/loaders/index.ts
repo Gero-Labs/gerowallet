@@ -28,6 +28,7 @@ export class LoaderFactory {
       getDb: () => Promise<Dexie>;
       getBlockchainDb: () => Promise<Dexie>;
       setUtxosAndAddresses: (transactions: any[]) => Promise<void>;
+      triggerResync?: () => Promise<void>;
     }
   ) {}
 
@@ -45,8 +46,6 @@ export class LoaderFactory {
       'epoch_params',
       new EpochParamsLoader(
         this.walletContext.getBlockchainDb.bind(this.walletContext),
-        this.walletContext.chain,
-        this.walletContext.network
       )
     );
 

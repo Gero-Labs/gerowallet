@@ -23,29 +23,51 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, getCurrentInstance } from 'vue';
-import { toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import WalletStore from '@/stores/walletStore';
 import languages from '@/plugins/languages';
-import { geroStore } from '@/stores/geroStore';
+import { loadLanguage } from '@/plugins/i18n';
 
-const { locale } = toRefs(geroStore);
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
 
 const currentLanguage = computed(() => {
-  return languages[instance?.proxy?.$i18n?.locale || 'en']
+  return languages[instance?.proxy?.$i18n?.locale || 'us']
 });
 
-watch(selectedLang, (val) => {
+const currentLocale = computed(() => {
+  return walletStore.config?.locale || 'us';
+});
+
+watch(selectedLang, async (val) => {
   const localeKey = Object.keys(languages)[val]
-  walletStore.setLocale(localeKey)
-  if (instance?.proxy?.$i18n) {
-    instance.proxy.$i18n.locale = Object.keys(languages)[val];
+  
+  // CRITICAL FIX: Load language file before switching (race condition fix)
+  try {
+    await loadLanguage(localeKey);
+    
+    // Update store and i18n locale ONLY after successful load
+    WalletStore.setLocale(localeKey);
+    if (instance?.proxy?.$i18n) {
+      instance.proxy.$i18n.locale = localeKey;
+    }
+  } catch (error) {
+    console.error(`Failed to load language ${localeKey}:`, error);
+    // Don't update store if load failed - will cause UI inconsistency
   }
 });
 
-onMounted(() => {
-  selectedLang.value = Object.keys(languages).indexOf(locale.value)
+onMounted(async () => {
+  selectedLang.value = Object.keys(languages).indexOf(currentLocale.value)
+  
+  // Load saved language on mount if not 'us'
+  if (currentLocale.value !== 'us') {
+    try {
+      await loadLanguage(currentLocale.value);
+    } catch (error) {
+      console.error(`Failed to load saved language ${currentLocale.value}:`, error);
+    }
+  }
 });
 </script>
 <style>

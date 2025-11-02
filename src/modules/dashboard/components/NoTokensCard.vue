@@ -1,10 +1,12 @@
 <template>
   <v-card outlined class="card-container justify-center liquid-glass">
-    <v-card-title class="subtitle-1">Welcome to Gero Dashboard</v-card-title>
+    <v-card-title class="subtitle-1">{{ $t('dashboard.welcomeToDashboard') }}</v-card-title>
 
     <section v-if="!hasAssets" class="mb-10">
-      <p class="display-1">Let's start by getting some {{ assetType }} into your wallet!</p>
-      <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">Claim your {{ assetType }} tokens with your Wallet by using the DApp below</p>
+      <p class="display-1">{{ $t('dashboard.letsGetStarted', { assetType }) }}</p>
+      <p class="subtitle-1" v-if="assetType === Blockchain.APEX_PRIME">
+        {{ $t('dashboard.claimYourTokens', { assetType }) }}
+      </p>
       <v-btn class="claim-apex-button" v-if="assetType === Blockchain.APEX_PRIME"></v-btn>
     </section>
 
@@ -13,80 +15,87 @@
       :class="{ 'no-apex': !hasAssets }"
     >
       <div class="stake-apex-info">
-        <h1 class="display-1">Stake Your {{assetType}} and Earn Rewards</h1>
-        <v-card-text class="subtitle-1" v-if="loggedWallet"
-          >Earn rewards by staking your {{assetType}} tokens with {{loggedWallet?.chain}}'s extensive network of stake pools.</v-card-text
-        >
+        <h1 class="display-1">{{ $t('dashboard.stakeYourAssets', { assetType }) }}</h1>
+        <v-card-text class="subtitle-1" v-if="loggedWallet">
+          {{ $t('dashboard.earnRewardsByStaking', { assetType, chain: loggedWallet?.chain }) }}
+        </v-card-text>
         <p class="subtitle-1 support-us-text" v-if="geroPoolExists">
-          Consider supporting us by delegating your stake to GERO and start earning as soon as current epoch!
+          {{ $t('dashboard.considerSupportingUs') }}
         </p>
 
         <div class="d-flex align-center justify-center flex-column">
-          <v-btn class="stake-button-gero" v-if="geroPoolExists" @click="delegateToGero">Stake with GERO</v-btn>
-          <v-btn class="stake-button-pools" to="/staking">Browse Stake Pools</v-btn>
+          <v-btn class="stake-button-gero" v-if="geroPoolExists" @click="delegateToGero">{{ $t('dashboard.stakeWithGero') }}</v-btn>
+          <v-btn class="stake-button-pools" to="/staking">{{ $t('dashboard.browseStakePools') }}</v-btn>
         </div>
       </div>
 
-      <h2 class="error-message">You need to have {{assetType}} in your wallet before staking!</h2>
+      <h2 class="error-message">{{ $t('dashboard.needTokensBeforeStaking', { assetType }) }}</h2>
     </section>
-    <DelegateDialog :isOpen="isDelegateDialogOpen" @close="isDelegateDialogOpen = false" :pool="selectedPool" :tx="txData"></DelegateDialog>
+    <DelegateDialog
+      :isOpen="isDelegateDialogOpen"
+      @close="isDelegateDialogOpen = false"
+      :pool="selectedPool"
+      :tx="txData"
+    ></DelegateDialog>
   </v-card>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
-import {Blockchain} from "@/models/types";
-import networks from "@/utils/networks";
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { computed, ref, toRefs, getCurrentInstance } from 'vue';
+import { Blockchain } from '@/models/types';
+import networks from '@/utils/networks';
 import { Cardano } from '@cardano-sdk/core';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import stakingStore from '@/stores/stakingStore';
+import { buildCardanoTransaction } from '@/shared/utils/builder';
+import snackbar from '@/plugins/snackbar';
+
+
+const { t } = useTranslation();
 
 const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
-const { tip, epochParams } = toRefs(networkStore);
+const { epochParams, tip } = toRefs(networkStore);
 
 const isDelegateDialogOpen = ref(false);
 const selectedPool = ref<any>(null);
 const txData = ref<Cardano.Tx | null>(null);
 const geroPoolExists = computed(() => {
   if (loggedWallet.value) {
-    return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network)
+    return !!networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
   }
-  return false
+  return false;
 });
 
 const assetType = computed(() => {
   if (!loggedWallet.value) {
-    return ''
+    return '';
   }
-  return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network)
+  return networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
 });
 
 const hasAssets = computed(() => {
-  return !!account.value
+  return !!account.value;
 });
+
 const delegateToGero = async () => {
-  if (!loggedWallet.value) {
-    return;
-  }
-
-  const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
-  if (!poolId) {
-    return;
-  }
-
-  // Create a mock pool object for the dialog
-  selectedPool.value = {
-    pool_id_bech32: poolId,
-    pool_id: poolId,
-    ticker: 'GERO',
-    name: 'GERO Pool'
-  };
+  if (!loggedWallet.value) return;
 
   try {
+    const poolId = networks.resolvePool(loggedWallet.value?.chain, loggedWallet.value?.network);
+    await stakingStore.loadPoolById(loggedWallet.value, poolId);
+
+    if (!stakingStore.state.currentPool) {
+      snackbar.setError(t('errors.unknownError'));
+      return;
+    }
+
+    selectedPool.value = stakingStore.state.currentPool;
+
     // Check if we have epoch parameters
     if (!epochParams.value) {
-      throw new Error('Epoch parameters not available');
+      throw new Error(t('errors.networkError'));
     }
 
     const certificates: Cardano.Certificate[] = [];
@@ -97,10 +106,11 @@ const delegateToGero = async () => {
       hash: keys.value.stake[0].cred,
     };
 
-    const cardanoPoolId = Cardano.PoolId(poolId);
+    const poolIdBech32 = Cardano.PoolId(selectedPool.value.pool_id_bech32);
 
     // Use proper deposit from epoch parameters - ensure BigInt conversion
     const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
+
     let certificate;
     let implicitCoin = BigInt(0);
 
@@ -109,7 +119,7 @@ const delegateToGero = async () => {
       certificate = {
         __typename: Cardano.CertificateType.StakeRegistrationDelegation,
         stakeCredential,
-        poolId: cardanoPoolId,
+        poolId: poolIdBech32,
         deposit: stakeKeyDepositLovelace,
       };
       implicitCoin = stakeKeyDepositLovelace; // Deposit required
@@ -118,13 +128,12 @@ const delegateToGero = async () => {
       certificate = {
         __typename: Cardano.CertificateType.StakeDelegation,
         stakeCredential,
-        poolId: cardanoPoolId,
+        poolId: poolIdBech32,
       };
     }
-
     certificates.push(certificate);
 
-    // Use the generic transaction builder
+    // Build the delegation transaction
     txData.value = await buildCardanoTransaction({
       certificates,
       utxos: utxos.value,
@@ -135,9 +144,13 @@ const delegateToGero = async () => {
     });
 
     isDelegateDialogOpen.value = true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error building delegation transaction:', error);
-    // You might want to show an error message to the user here
+    if (error.message?.includes('UTxO Balance Insufficient')) {
+      snackbar.setError(t('errors.insufficientBalance'));
+    } else {
+      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
+    }
   }
 };
 </script>

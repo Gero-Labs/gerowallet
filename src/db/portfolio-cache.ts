@@ -2,6 +2,10 @@ import { getDb } from '@/db/wallet-db';
 import tapToolsApi from '@/api/tap-tools-api';
 import { walletStore } from '@/stores/walletStore';
 import { getTimeframeBasedOnExpiry } from '@/shared/utils/timeframe';
+import { debugLog } from '@/utils/debug';
+
+// TypeScript types for portfolio data points
+export type PortfolioDataPoint = [timestamp: number, value: number];
 
 export interface PortfolioChartsEntry {
   id?: number;
@@ -23,11 +27,55 @@ const DEFAULT_CACHE_TIME = 4 * 60 * 60 * 1000; // 4 hours
  * Get wallet database for current logged wallet
  */
 async function getWalletDb(): Promise<any> {
-  const walletId = walletStore.loggedWallet?.id;
-  if (!walletId) {
-    throw new Error('No wallet logged in');
+  try {
+    const walletId = walletStore.loggedWallet?.id;
+    if (!walletId) {
+      debugLog('No wallet logged in for portfolio cache');
+      return null;
+    }
+    return await getDb(walletId);
+  } catch (error) {
+    console.warn('Error getting wallet database for portfolio cache:', error);
+    return null;
   }
-  return getDb(walletId);
+}
+
+/**
+ * Check if portfolio_charts table exists in the database
+ * This is needed for old users who might not have the table yet
+ */
+async function hasPortfolioChartsTable(db: any): Promise<boolean> {
+  try {
+    if (!db || !db.tables) return false;
+
+    // Check if the table exists in the database schema
+    const tableNames = db.tables.map((table: any) => table.name);
+    return tableNames.includes('portfolio_charts');
+  } catch (error) {
+    console.warn('Error checking for portfolio_charts table:', error);
+    return false;
+  }
+}
+
+/**
+ * Safely access portfolio_charts table with error handling
+ * Returns null if table doesn't exist (for old users)
+ */
+async function safeGetPortfolioTable(db: any): Promise<any> {
+  try {
+    if (!db) return null;
+
+    const hasTable = await hasPortfolioChartsTable(db);
+    if (!hasTable) {
+      debugLog('portfolio_charts table does not exist yet (old wallet database)');
+      return null;
+    }
+
+    return db.table('portfolio_charts');
+  } catch (error) {
+    console.warn('Error accessing portfolio_charts table:', error);
+    return null;
+  }
 }
 
 export class PortfolioCacheService {
@@ -56,7 +104,7 @@ export class PortfolioCacheService {
   /**
    * Professional data merging with deduplication and validation
    */
-  private mergePortfolioData(existingData: any[], newData: any[]): any[] {
+  private mergePortfolioData(existingData: PortfolioDataPoint[], newData: PortfolioDataPoint[]): PortfolioDataPoint[] {
     const dataMap = new Map<number, number>();
 
     // Add existing data first (preserve history)
@@ -75,31 +123,44 @@ export class PortfolioCacheService {
 
     // Convert to sorted array
     return Array.from(dataMap.entries())
-      .map(([timestamp, value]) => [timestamp, value])
+      .map(([timestamp, value]): PortfolioDataPoint => [timestamp, value])
       .sort((a, b) => a[0] - b[0]);
   }
 
   /**
    * Get cached portfolio data for address and currency
    */
-  async getCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[] | null> {
+  async getCachedData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[] | null> {
     if (!this.enableCache || !address) {
       return null;
     }
 
     try {
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        debugLog('Database not available for cache retrieval');
+        return null;
+      }
+
       const now = Date.now();
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        return null; // Table doesn't exist for old users
+      }
 
       // Try composite index first, fallback to individual queries if schema mismatch
       let entry;
       try {
-        entry = await db.table('portfolio_charts').where(['address', 'currency']).equals([address, currency]).first();
+        entry = await portfolioTable.where(['address', 'currency']).equals([address, currency]).first();
       } catch (schemaError: any) {
         if (schemaError.name === 'SchemaError') {
           console.warn('Composite index not available, using fallback method for cache lookup');
           // Fallback: query by address and filter by currency
-          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
+          const entries = await portfolioTable.where('address').equals(address).toArray();
           entry = entries.find(e => e.currency === currency);
         } else {
           throw schemaError;
@@ -147,13 +208,19 @@ export class PortfolioCacheService {
   /**
    * Save portfolio data to cache
    */
-  async saveToCache(address: string, currency: 'ADA' | 'USD' | 'EUR', data: any[]): Promise<void> {
+  async saveToCache(address: string, currency: 'ADA' | 'USD' | 'EUR', data: PortfolioDataPoint[]): Promise<void> {
     if (!this.enableCache || !address || !data) {
       return;
     }
 
     try {
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        console.warn('Database not available for cache save');
+        return;
+      }
       const now = Date.now();
       const expiresAt = now + this.cacheTimeMs;
 
@@ -170,11 +237,18 @@ export class PortfolioCacheService {
 
 
 
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available, skipping cache save');
+        return; // Table doesn't exist for old users
+      }
+
       // Remove existing entry if exists
       await this.removeCachedData(address, currency);
 
       // Add new entry
-      await db.table('portfolio_charts').add(entry);
+      await portfolioTable.add(entry);
     } catch (error) {
       console.error('Error saving portfolio data to cache:', error);
     }
@@ -187,21 +261,36 @@ export class PortfolioCacheService {
     try {
       const db = await getWalletDb();
 
-      // Try composite index first, fallback to individual queries if schema mismatch
+      // Guard against undefined db
+      if (!db) {
+        console.warn('Database not available for cache removal');
+        return;
+      }
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available, skipping cache removal');
+        return; // Table doesn't exist for old users
+      }
+
+      // Use simple approach: query by address and filter by currency
+      // Avoid composite index as it causes issues in browser context
       try {
-        await db.table('portfolio_charts').where(['address', 'currency']).equals([address, currency]).delete();
-      } catch (schemaError: any) {
-        if (schemaError.name === 'SchemaError') {
-          console.warn('Composite index not available, using fallback method for cache removal');
-          // Fallback: query by address and filter by currency
-          const entries = await db.table('portfolio_charts').where('address').equals(address).toArray();
-          const entriesToDelete = entries.filter(entry => entry.currency === currency);
-          for (const entry of entriesToDelete) {
-            await db.table('portfolio_charts').delete(entry.id);
+        const entries = await portfolioTable.where('address').equals(address).toArray();
+        const entriesToDelete = entries.filter(entry => entry.currency === currency);
+        for (const entry of entriesToDelete) {
+          // Guard against entries without id (should not happen but be defensive)
+          if (entry.id !== undefined && entry.id !== null) {
+            await portfolioTable.delete(entry.id);
+          } else {
+            console.warn('Found portfolio cache entry without id, cannot delete:', entry);
           }
-        } else {
-          throw schemaError;
         }
+        debugLog(`🗑️ Delete successful`);
+      } catch (error: any) {
+        console.error(`🗑️ Error during delete:`, error);
+        throw error;
       }
     } catch (error) {
       console.error('Error removing cached portfolio data:', error);
@@ -214,7 +303,21 @@ export class PortfolioCacheService {
   async clearAddressCache(address: string): Promise<void> {
     try {
       const db = await getWalletDb();
-      await db.table('portfolio_charts').where('address').equals(address).delete();
+
+      // Guard against undefined db
+      if (!db) {
+        debugLog('Database not available for cache clearing');
+        return;
+      }
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available, skipping cache clearing');
+        return; // Table doesn't exist for old users
+      }
+
+      await portfolioTable.where('address').equals(address).delete();
     } catch (error) {
       console.error('Error clearing address cache:', error);
     }
@@ -238,11 +341,25 @@ export class PortfolioCacheService {
   async cleanupExpiredCache(address: string): Promise<number> {
     try {
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        debugLog('Database not available for cache cleanup');
+        return 0;
+      }
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available, skipping cache cleanup');
+        return 0; // Table doesn't exist for old users
+      }
+
       const now = Date.now();
-      const expiredEntries = await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).toArray();
+      const expiredEntries = await portfolioTable.where('expiresAt').belowOrEqual(now).toArray();
 
       if (expiredEntries.length > 0) {
-        await db.table('portfolio_charts').where('expiresAt').belowOrEqual(now).delete();
+        await portfolioTable.where('expiresAt').belowOrEqual(now).delete();
       }
 
       return expiredEntries.length;
@@ -306,41 +423,76 @@ export class PortfolioCacheService {
   /**
    * Load portfolio data with caching
    */
-  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> {
+  async loadPortfolioData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
     if (!address) {
       return [];
     }
 
     // Check cache first
     const cachedData = await this.getCachedData(address, currency);
-    if (cachedData) {
-      console.log(`Cache hit for ${currency}, returning cached data`);
-      return cachedData;
+
+    // If we have valid cached data, check if it's recent enough
+    if (cachedData && cachedData.length > 0) {
+      // Validate data points before processing
+      const validData = cachedData.filter(point =>
+        Array.isArray(point) &&
+        typeof point[0] === 'number' &&
+        !isNaN(point[0]) &&
+        typeof point[1] === 'number' &&
+        !isNaN(point[1])
+      );
+
+      if (validData.length === 0) {
+        debugLog('No valid data points in cache, fetching fresh data');
+        return null;
+      }
+
+      // Find the latest timestamp in cached data using Math.max for better performance
+      const maxCachedTimestamp = Math.max(...validData.map(point => point[0]));
+
+      const now = Date.now();
+      const cacheAgeMinutes = (now - maxCachedTimestamp) / (1000 * 60);
+
+      // If cache is fresh (less than 15 minutes old), use it
+      if (cacheAgeMinutes < 15) {
+        return validData;
+      }
+      // Cache is stale, continue to fetch fresh data below
     }
 
-    console.log(`Cache miss for ${currency}, need to load from API`);
 
     // Determine timeframe based on existing expired data
     let timeframe = 'all'; // default
 
     try {
       const db = await getWalletDb();
-      const existingEntry = await db
-        .table('portfolio_charts')
-        .where(['address', 'currency'])
-        .equals([address, currency])
-        .first();
 
-      if (existingEntry && existingEntry.expiresAt) {
-        const now = Date.now();
-        if (now > existingEntry.expiresAt) {
-          // Data expired, determine timeframe based on expiry time
-          // But always use at least 30d for good chart data
-          const calculatedTimeframe = getTimeframeBasedOnExpiry(existingEntry.expiresAt);
-          timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
+      if (db) {
+        const portfolioTable = await safeGetPortfolioTable(db);
+        if (portfolioTable) {
+          const existingEntry = await portfolioTable
+            .where(['address', 'currency'])
+            .equals([address, currency])
+            .first();
+
+          if (existingEntry && existingEntry.expiresAt) {
+            const now = Date.now();
+            if (now > existingEntry.expiresAt) {
+              // Data expired, determine timeframe based on expiry time
+              // But always use at least 30d for good chart data
+              const calculatedTimeframe = getTimeframeBasedOnExpiry(existingEntry.expiresAt);
+              timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
+            }
+          } else {
+            // No existing data, use full year for initial load
+            timeframe = '1y';
+          }
+        } else {
+          // Table doesn't exist, use default timeframe
+          timeframe = '1y';
         }
       } else {
-        // No existing data, use full year for initial load
+        // No database available, use default timeframe
         timeframe = '1y';
       }
     } catch (error) {
@@ -348,7 +500,7 @@ export class PortfolioCacheService {
       console.warn('Error checking existing data for timeframe calculation:', error);
     }
 
-    // Load from API with determined timeframe
+    // Load from API with a determined timeframe
     try {
       const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, timeframe);
 
@@ -362,17 +514,22 @@ export class PortfolioCacheService {
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
-        const existingEntry = await db
-          .table('portfolio_charts')
-          .where(['address', 'currency'])
-          .equals([address, currency])
-          .first();
 
-        if (existingEntry && existingEntry.data) {
-          if (Array.isArray(existingEntry.data)) {
-            existingData = existingEntry.data;
-          } else if (typeof existingEntry.data === 'string') {
-            existingData = JSON.parse(existingEntry.data);
+        if (db) {
+          const portfolioTable = await safeGetPortfolioTable(db);
+          if (portfolioTable) {
+            const existingEntry = await portfolioTable
+              .where(['address', 'currency'])
+              .equals([address, currency])
+              .first();
+
+            if (existingEntry && existingEntry.data) {
+              if (Array.isArray(existingEntry.data)) {
+                existingData = existingEntry.data;
+              } else if (typeof existingEntry.data === 'string') {
+                existingData = JSON.parse(existingEntry.data);
+              }
+            }
           }
         }
       } catch (error) {
@@ -399,9 +556,9 @@ export class PortfolioCacheService {
    * Load all portfolio data for address with smart caching
    */
   async loadAllPortfolioData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     if (!address) {
       return { adaData: [], usdData: [], eurData: [] };
@@ -410,11 +567,37 @@ export class PortfolioCacheService {
     try {
       const db = await getWalletDb();
 
+      // Guard against undefined db
+      if (!db) {
+        debugLog('Database not available for loading all portfolio data');
+        return { adaData: [], usdData: [], eurData: [] };
+      }
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available, skipping cache load');
+        // For old users without the table, just load fresh data
+        const currenciesToLoad = ['ADA', 'USD', 'EUR'] as const;
+        const loadPromises = currenciesToLoad.map(async currency => {
+          try {
+            const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, '1y');
+            return data.map((item: any) => [item.time * 1000, item.value]);
+          } catch (error) {
+            console.error(`Error loading ${currency} portfolio data:`, error);
+            return [];
+          }
+        });
+
+        const [adaData, usdData, eurData] = await Promise.all(loadPromises);
+        return { adaData, usdData, eurData };
+      }
+
       // Load cache data in parallel for better performance
       const [cachedAda, cachedUsd, cachedEur] = await Promise.all([
-        db.table('portfolio_charts').where(['address', 'currency']).equals([address, 'ADA']).first(),
-        db.table('portfolio_charts').where(['address', 'currency']).equals([address, 'USD']).first(),
-        db.table('portfolio_charts').where(['address', 'currency']).equals([address, 'EUR']).first(),
+        portfolioTable.where(['address', 'currency']).equals([address, 'ADA']).first(),
+        portfolioTable.where(['address', 'currency']).equals([address, 'USD']).first(),
+        portfolioTable.where(['address', 'currency']).equals([address, 'EUR']).first(),
       ]);
 
       // Determine what needs to be loaded
@@ -448,7 +631,7 @@ export class PortfolioCacheService {
         try {
           const loadPromises = currenciesToLoad.map(async currency => {
             try {
-              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency);
+              const { data } = await tapToolsApi.getPortfolioTrendedValue(address, currency, '1y');
 
               // Simple conversion to array format
               const processedData = data.map((item: any) => [item.time * 1000, item.value]);
@@ -496,9 +679,9 @@ export class PortfolioCacheService {
    * Refresh portfolio data (ignores cache)
    */
   async refreshPortfolioData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     await this.clearAddressCache(address);
     return this.loadAllPortfolioData(address);
@@ -523,23 +706,42 @@ export class PortfolioCacheService {
         };
       }
       const db = await getWalletDb();
+
+      // Guard against undefined db
+      if (!db) {
+        debugLog('Database not available for cache status check');
+        return {
+          ada: { hasData: false, dataPoints: 0, expiresAt: null },
+          usd: { hasData: false, dataPoints: 0, expiresAt: null },
+          eur: { hasData: false, dataPoints: 0, expiresAt: null },
+        };
+      }
+
+      // Safely get the portfolio table
+      const portfolioTable = await safeGetPortfolioTable(db);
+      if (!portfolioTable) {
+        debugLog('portfolio_charts table not available for cache status check');
+        return {
+          ada: { hasData: false, dataPoints: 0, expiresAt: null },
+          usd: { hasData: false, dataPoints: 0, expiresAt: null },
+          eur: { hasData: false, dataPoints: 0, expiresAt: null },
+        };
+      }
+
       const now = Date.now();
 
       // Load data for all currencies
-      const adaEntry = await db
-        .table('portfolio_charts')
+      const adaEntry = await portfolioTable
         .where(['address', 'currency'])
         .equals([address, 'ADA'])
         .first();
 
-      const usdEntry = await db
-        .table('portfolio_charts')
+      const usdEntry = await portfolioTable
         .where(['address', 'currency'])
         .equals([address, 'USD'])
         .first();
 
-      const eurEntry = await db
-        .table('portfolio_charts')
+      const eurEntry = await portfolioTable
         .where(['address', 'currency'])
         .equals([address, 'EUR'])
         .first();
@@ -592,50 +794,66 @@ export class PortfolioCacheService {
   /**
    * Force load specific currency data (ignores cache)
    */
-  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<any[]> {
+  async forceLoadCurrencyData(address: string, currency: 'ADA' | 'USD' | 'EUR'): Promise<PortfolioDataPoint[]> {
     try {
       // Determine timeframe based on existing expired data before removing it
       let timeframe = 'all'; // default
 
       try {
         const db = await getWalletDb();
-        const existingEntry = await db
-          .table('portfolio_charts')
-          .where(['address', 'currency'])
-          .equals([address, currency])
-          .first();
 
-        if (existingEntry && existingEntry.expiresAt) {
-          const now = Date.now();
-          if (now > existingEntry.expiresAt) {
-            // Data expired, determine timeframe based on expiry time
-            // But always use at least 30d for good chart data
-            const calculatedTimeframe = getTimeframeBasedOnExpiry(existingEntry.expiresAt);
-            timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
+        if (db) {
+          const portfolioTable = await safeGetPortfolioTable(db);
+          if (portfolioTable) {
+            const existingEntry = await portfolioTable
+              .where(['address', 'currency'])
+              .equals([address, currency])
+              .first();
+
+            if (existingEntry && existingEntry.expiresAt) {
+              const now = Date.now();
+              if (now > existingEntry.expiresAt) {
+                // Data expired, determine timeframe based on expiry time
+                // But always use at least 30d for good chart data
+                const calculatedTimeframe = getTimeframeBasedOnExpiry(existingEntry.expiresAt);
+                timeframe = ['24h', '7d'].includes(calculatedTimeframe) ? '30d' : calculatedTimeframe;
+              }
+            } else {
+              // No existing data, use full year for an initial load
+              timeframe = '1y';
+            }
+          } else {
+            // Table doesn't exist, use default timeframe
+            timeframe = '1y';
           }
         } else {
-          // No existing data, use full year for initial load
+          // No database available, use default timeframe
           timeframe = '1y';
         }
       } catch (error) {
         console.warn('Error checking existing data for timeframe calculation in force load:', error);
       }
 
-      // Get existing data before removing cache entry
+      // Get existing data before removing the cache entry
       let existingData: any[] = [];
       try {
         const db = await getWalletDb();
-        const existingEntry = await db
-          .table('portfolio_charts')
-          .where(['address', 'currency'])
-          .equals([address, currency])
-          .first();
 
-        if (existingEntry && existingEntry.data) {
-          if (Array.isArray(existingEntry.data)) {
-            existingData = existingEntry.data;
-          } else if (typeof existingEntry.data === 'string') {
-            existingData = JSON.parse(existingEntry.data);
+        if (db) {
+          const portfolioTable = await safeGetPortfolioTable(db);
+          if (portfolioTable) {
+            const existingEntry = await portfolioTable
+              .where(['address', 'currency'])
+              .equals([address, currency])
+              .first();
+
+            if (existingEntry && existingEntry.data) {
+              if (Array.isArray(existingEntry.data)) {
+                existingData = existingEntry.data;
+              } else if (typeof existingEntry.data === 'string') {
+                existingData = JSON.parse(existingEntry.data);
+              }
+            }
           }
         }
       } catch (error) {
@@ -664,12 +882,12 @@ export class PortfolioCacheService {
   }
 
   /**
-   * Load missing data only (doesn't touch existing cache)
+   * Load missing data only (doesn't touch the existing cache)
    */
   async loadMissingData(address: string): Promise<{
-    adaData: any[];
-    usdData: any[];
-    eurData: any[];
+    adaData: PortfolioDataPoint[];
+    usdData: PortfolioDataPoint[];
+    eurData: PortfolioDataPoint[];
   }> {
     const status = await this.getCacheStatus(address);
     const currenciesToLoad: ('ADA' | 'USD' | 'EUR')[] = [];
@@ -702,8 +920,8 @@ export class PortfolioCacheService {
   }
 }
 
-// Export singleton instance with default settings (1 minute cache for testing)
-export const portfolioCacheService = new PortfolioCacheService();
+// Export a singleton instance with default settings (1-minute cache for testing)
+export const portfolioCacheService: PortfolioCacheService = new PortfolioCacheService();
 
 // Export utility functions for common use cases
 export const createPortfolioCacheService = (cacheTimeHours: number = 4, enableCache: boolean = true) => {

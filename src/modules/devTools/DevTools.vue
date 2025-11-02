@@ -17,7 +17,14 @@
                 </v-textarea>
               </v-col>
               <v-col cols="6" class="px-3">
-                <pre style="white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 400px; overflow-y: auto;">{{txJson}}</pre>
+                <v-card outlined class="my-1" v-if="txJson">
+                  <v-card-title class="pa-1" style="position: absolute; right: 0">
+                    <CopyButton :value="txJson" small></CopyButton>
+                  </v-card-title>
+                  <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+                    <pre style="white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 400px; overflow-y: auto;">{{txJson}}</pre>
+                  </v-card-text>
+                </v-card>
               </v-col>
             </v-row>
           </v-card-text>
@@ -163,6 +170,7 @@ import { ref, computed, watch } from 'vue';
 import { Cardano, Serialization, util } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 const txCborHex = ref<string>('')
 const tx = ref<Cardano.Tx>(null)

@@ -5,43 +5,43 @@
         Transaction ID:
         <a
           class="ml-1"
-          style="color: #00dff3; align-items: center"
-          :href="`https://cexplorer.io/tx/${transactionInfo['id']}`"
+          :style="isApex ? {color: '#dc753e', alignItems: 'center' } : {color: '#00c7f3', alignItems: 'center'  }"
+          :href="transactionUrl"
           target="_blank"
         >
           {{ filters.truncate(transactionInfo['id']) }}</a
         >
-        <CopyButton x-small :value="transactionInfo['id']" class="ml-1" />
+        <CopyButton x-small :value="transactionInfo['id']" class="ml-1 mt-1" />
         <v-spacer />
         <v-btn color="error" x-small outlined @click="isReportDialogOpen = true"> Report Transaction </v-btn>
       </div>
       <div>
         Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>
       </div>
-      <div>
+      <div v-if="transactionInfo.epoch_no">
         Epoch: <span class="value-text">{{ transactionInfo.epoch_no }}</span>
       </div>
       <div>
         Tx Size: <span class="value-text">{{ filters.humanFileSize(transactionInfo['tx_size']) }}</span>
       </div>
-      <div>
+      <div v-if="transactionInfo['block_hash']">
         Block ID:
-        <a style="color: #00dff3" :href="`https://cexplorer.io/block/${transactionInfo['block_hash']}`" target="_blank">
+        <a :style="isApex ? {color: '#dc753e' } : {color: '#00c7f3' }" :href="blockUrl" target="_blank">
           {{ filters.truncate(transactionInfo['block_hash']) }}</a
         >
         <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
       </div>
-      <div>
+      <div v-if="transactionInfo['block_height']">
         Block Height: <span class="value-text">{{ transactionInfo['block_height']?.toLocaleString('en-US') }}</span>
       </div>
-      <div>
-        Network Fee: <span style="color: #ff8e8e">{{ filters.toCurrency(transactionInfo.body['fee']) }}</span>
+      <div v-if="transactionInfo.body?.fee">
+        Network Fee: <span style="color: #ff8e8e">{{ filters.toCurrency(transactionInfo.body?.fee) }}</span>
       </div>
       <div style="align-items: center">
         {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}
         <span
           :style="{
-            color: Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E',
+            color: Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E',
           }"
         >
           <span style="margin-right: 4px">
@@ -56,9 +56,9 @@
               pill
               outlined
               style="margin-bottom: 2px"
-              class="mr-1"
+              class="mr-1 pl-0"
               :key="`asset_${index}`"
-              :color="Number(transactionInfo['ada']) > 0 ? '#00DFF3' : '#FF8E8E'"
+              :color="Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E'"
             >
               <v-avatar v-if="asset.img" left>
                 <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
@@ -74,6 +74,7 @@
                   </template>
                 </v-img>
               </v-avatar>
+              <span v-else class="ml-2"></span>
               {{
                 filters.toCurrency(
                   asset.quantity,
@@ -98,7 +99,7 @@
       <v-expansion-panel style="background-color: #1e273ab3">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-bank-transfer</v-icon>
             </div>
             <h3>UTxOs</h3>
@@ -226,7 +227,7 @@
                     </td>
                     <td class="text-right">
                       <div style="color: #00dff3">
-                        <v-chip pill class="pl-0" outlined color="#00DFF3" style="margin: 2px !important">
+                        <v-chip pill class="pl-0" outlined :color="isApex ? '#dc753e' : '#00c7f3'" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
                               :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
@@ -263,7 +264,7 @@
                             pill
                             class="pl-0"
                             outlined
-                            color="#00DFF3"
+                            :color="isApex ? '#dc753e' : '#00c7f3'"
                             :key="`output${index}_asset_${assetIndex}`"
                             style="margin: 2px !important"
                           >
@@ -304,7 +305,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.certificates?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-certificate-outline</v-icon>
             </div>
             <h3>Certificates ({{ transactionInfo?.body?.certificates?.length }})</h3>
@@ -337,6 +338,12 @@
                     <td class="text-left grey--text">Stake Credential Type</td>
                     <td class="text-left">
                       {{ getCredentialType(certificate.stakeCredential.type) }}
+                    </td>
+                  </tr>
+                  <tr v-if="certificate?.deposit">
+                    <td class="text-left grey--text">Deposit</td>
+                    <td class="text-left">
+                      {{ filters.toCurrency(certificate.deposit, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)) }}
                     </td>
                   </tr>
                   <tr v-if="certificate.poolId">
@@ -410,10 +417,10 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['auxiliaryData']">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMetadata(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
             <h3>Metadata</h3>
@@ -425,18 +432,18 @@
               <CopyButton :value="getMetadata(transactionInfo)" small></CopyButton>
             </v-card-title>
             <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
-              <pre>{{ JSON.stringify(transactionInfo['auxiliaryData']['blob'], null, 2) }}</pre>
+              <pre>{{ getMetadata(transactionInfo) }}</pre>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo['assets_minted']?.length > 0">
+      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMint(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-code-block-tags</v-icon>
             </div>
-            <h3>Assets Minted ({{ transactionInfo['assets_minted']?.length }})</h3>
+            <h3>Assets Minted/Burned ({{ getMint(transactionInfo)?.length }})</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -444,40 +451,40 @@
             <v-card-text class="px-0">
               <v-simple-table class="transparent" dense>
                 <thead class="grey--text">
-                  <tr>
-                    <td class="text-left">Policy Id</td>
-                    <td class="text-left">Asset Name</td>
-                    <td class="text-left">Fingerprint</td>
-                    <td class="text-left">Quantity</td>
-                  </tr>
+                <tr>
+                  <td class="text-left">Policy Id</td>
+                  <td class="text-left">Asset Name</td>
+                  <td class="text-left">Fingerprint</td>
+                  <td class="text-left">Quantity</td>
+                </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(asset_minted, index) in transactionInfo['assets_minted']" :key="`asset_minted_${index}`">
-                    <td class="text-left">
-                      {{ filters.truncate(asset_minted.policy_id)
-                      }}<CopyButton
-                        v-if="asset_minted"
-                        x-small
-                        class="ml-1"
-                        :value="asset_minted.policy_id"
-                      ></CopyButton>
-                    </td>
-                    <td class="text-left">
-                      {{ getAssetName(asset_minted, false) }}
-                    </td>
-                    <td class="text-left">
-                      {{ getFingerprint(asset_minted)
-                      }}<CopyButton x-small class="ml-1" :value="getFingerprint(asset_minted)"></CopyButton>
-                    </td>
-                    <td class="text-center">
-                      {{
-                        (
-                          Number(asset_minted.quantity) /
-                          (asset_minted.decimals ? Math.pow(10, asset_minted.decimals) : 1)
-                        )?.toLocaleString('en-US', { maximumFractionDigits: 6 })
-                      }}
-                    </td>
-                  </tr>
+                <tr v-for="(mint, index) in getMint(transactionInfo)" :key="`asset_minted_${index}`">
+                  <td class="text-left">
+                    {{ filters.truncate(mint.policyId) }}
+                    <CopyButton
+                      v-if="mint"
+                      x-small
+                      class="ml-1"
+                      :value="mint.policyId"
+                    ></CopyButton>
+                  </td>
+                  <td class="text-left">
+                    {{ mint.assetName }}
+                  </td>
+                  <td class="text-left">
+                    {{ filters.truncate(mint.fingerprint) }}
+                    <CopyButton x-small class="ml-1" :value="mint.fingerprint"></CopyButton>
+                  </td>
+                  <td class="text-center">
+                    {{
+                      (
+                        Number(mint.quantity) /
+                        (mint.decimals ? Math.pow(10, mint.decimals) : 1)
+                      )?.toLocaleString('en-US', { maximumFractionDigits: 6 })
+                    }}
+                  </td>
+                </tr>
                 </tbody>
               </v-simple-table>
             </v-card-text>
@@ -487,7 +494,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.withdrawals?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-bank-transfer-out</v-icon>
             </div>
             <h3>Withdrawals ({{ transactionInfo?.body?.withdrawals?.length }})</h3>
@@ -526,10 +533,10 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.witness?.redeemers?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-file-sign</v-icon>
             </div>
-            <h3>Contracts ({{ transactionInfo.witness?.redeemers?.length }})</h3>
+            <h3>Witness</h3>
           </div>
         </v-expansion-panel-header>
         <v-expansion-panel-content class="content-container">
@@ -609,12 +616,52 @@
               </v-simple-table>
             </v-card-text>
           </v-card>
+          <v-card
+            flat
+            v-for="(script, index) in getScripts(transactionInfo.witness.scripts)"
+            :key="`scripts_${index}`"
+            class="mb-2 transparent"
+          >
+            <v-card-title>{{ `Script #${index + 1}` }}</v-card-title>
+            <v-card-text>
+              <v-simple-table dense style="background-color: transparent">
+                <tbody>
+                <tr>
+                  <td class="text-left grey--text">Type</td>
+                  <td class="text-left">
+                    {{ scriptType(script.language()) }}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="text-left grey--text">Hash</td>
+                  <td class="text-left">
+                    {{ filters.truncate(script.hash()) }}
+                    <CopyButton v-if="script.hash()" x-small class="ml-1" :value="script.hash()"></CopyButton>
+                  </td>
+                </tr>
+                <tr v-if="Cardano.isPlutusScript(script.toCore())">
+                  <td class="text-left grey--text">Bytes</td>
+                  <td class="text-left">
+                    <v-card outlined class="my-1">
+                      <v-card-title class="pa-1" style="position: absolute; right: 0">
+                        <CopyButton :value="getScriptDataBytes(script.toCore())" small></CopyButton>
+                      </v-card-title>
+                      <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+                        <pre style="white-space: pre-wrap; word-wrap: anywhere; overflow-wrap: anywhere;">{{ filters.truncate(getScriptDataBytes(script.toCore())) }}</pre>
+                      </v-card-text>
+                    </v-card>
+                  </td>
+                </tr>
+                </tbody>
+              </v-simple-table>
+            </v-card-text>
+          </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.collaterals">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-cash</v-icon>
             </div>
             <h3>Collateral</h3>
@@ -674,7 +721,7 @@
       <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.referenceInputs">
         <v-expansion-panel-header>
           <div class="header-container">
-            <div class="received-arrow-container">
+            <div class="received-arrow-container" :style="receivedArrowStyle">
               <v-icon color="#333741">mdi-clipboard-list-outline</v-icon>
             </div>
             <h3>Reference Inputs</h3>
@@ -717,6 +764,7 @@
   </v-card-text>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import filters from '@/shared/utils/filters';
@@ -730,6 +778,7 @@ import governanceStoreActions from '@/stores/governanceStore';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
+import { Blockchain, Network } from '@/models/types';
 
 interface Props {
   transactionInfo: any;
@@ -737,6 +786,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
+const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 const { currentDRep } = toRefs(governanceStoreActions.state);
 const { currentPool } = toRefs(stakingStoreActions.state);
@@ -746,6 +796,11 @@ const panels = ref<any[]>([]);
 const isExpanded = ref<boolean>(false);
 const isReportDialogOpen = ref<boolean>(false);
 const currentPoolMeta = ref<any>('');
+
+const isApex = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
+    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
+});
 
 function findLovelace(io: { unit: string; quantity: number }[]) {
   const tok = io.find(t => t.unit === 'lovelace');
@@ -775,6 +830,31 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData) => {
     },
     2
   );
+};
+
+const getScripts = (scripts: Cardano.Script[]) => {
+  return scripts?.map(script => {
+    return Serialization.Script.fromCore(script);
+  });
+};
+
+const getScriptDataBytes = (script: Cardano.Script) => {
+  return (script as Cardano.PlutusScript).bytes
+}
+
+const scriptType = (scriptLanguage: number) => {
+  switch (scriptLanguage) {
+    case 0:
+      return t('transactions.native')
+    case 1:
+      return t('transactions.plutusV1');
+    case 2:
+      return t('transactions.plutusV2');
+    case 3:
+      return t('transactions.plutusV3');
+    default:
+      return t('common.unknown');
+  }
 };
 
 const getAssetName = (unit: string, checkAscii: boolean) => {
@@ -846,9 +926,27 @@ const getAssetChip = (asset: any) => {
   );
 };
 
+const getMint = (transactionInfo: any) => {
+  if (transactionInfo.body?.mint) {
+    const mintArray = []
+    Object.entries(transactionInfo.body.mint).forEach(([unit, quantity]) => {
+      const assetId = Cardano.AssetId(unit)
+      mintArray.push({
+        assetId,
+        assetName: getAssetName(unit, true),
+        policyId: Cardano.AssetId.getPolicyId(assetId),
+        fingerprint: Cardano.AssetFingerprint.fromParts(Cardano.AssetId.getPolicyId(assetId), Cardano.AssetId.getAssetName(assetId)),
+        quantity: quantity,
+      })
+    });
+    return mintArray;
+  }
+  return null;
+}
+
 const getMetadata = (transactionInfo: any) => {
   return JSON.stringify(
-    Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData().metadata().toCore(),
+    Serialization.Transaction.fromCbor(transactionInfo.cbor).auxiliaryData()?.metadata()?.toCore(),
     (_key, value) => {
       if (value instanceof Map) {
         return Array.from(value.entries()).reduce((obj, [key, value]) => {
@@ -865,13 +963,13 @@ const getMetadata = (transactionInfo: any) => {
   );
 };
 
-const getFingerprint = (asset: any) => {
-  return filters.truncate(Cardano.AssetFingerprint.fromParts(asset.policy_id, asset.asset_name));
-};
-
 const txAssets = computed(() => {
   if (props.transactionInfo) {
-    return [...props.transactionInfo['receivedAssets'], ...props.transactionInfo['sentAssets']]
+    // Guard against missing asset arrays (pending transactions may not have these fields yet)
+    const receivedAssets = props.transactionInfo['receivedAssets'] || [];
+    const sentAssets = props.transactionInfo['sentAssets'] || [];
+
+    return [...receivedAssets, ...sentAssets]
       .filter((asset: any) => asset.policy_id !== '')
       .reduce((map: Record<string, any>, asset: any) => {
         map[asset.unit] = resolveAsset(asset);
@@ -883,6 +981,11 @@ const txAssets = computed(() => {
 });
 
 const receivedAssets = computed(() => {
+  // Guard against undefined assets (pending transactions may not have this field yet)
+  if (!props.transactionInfo['assets'] || !Array.isArray(props.transactionInfo['assets'])) {
+    return [];
+  }
+
   const assts = props.transactionInfo['assets']
     .filter((asset: any) => asset.policy_id !== '')
     .map((asset: any) => {
@@ -896,6 +999,37 @@ const receivedAssets = computed(() => {
   const asstsResolved = !isExpanded.value ? assts.slice(0, 2) : assts;
   residue.value = assts.slice(2);
   return asstsResolved;
+});
+
+const transactionUrl = computed(() => {
+  const txId = props.transactionInfo['id'];
+  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
+    return `https://apexscan.org/en/transaction/${txId}/summary/`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
+    return `https://cexplorer.io/tx/${txId}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
+    return `https://preprod.cexplorer.io/tx/${txId}`;
+  }
+  return null;
+});
+
+const blockUrl = computed(() => {
+  const blockHash = props.transactionInfo['block_hash'];
+  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
+    return `https://apexscan.org/en/block/${blockHash}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
+    return `https://cexplorer.io/block/${blockHash}`;
+  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
+    return `https://preprod.cexplorer.io/block/${blockHash}`;
+  }
+  return `https://cexplorer.io/block/${blockHash}`;
+});
+
+const receivedArrowStyle = computed(() => {
+  if (isApex.value) {
+    return 'background: linear-gradient(to right, #F8A282, #FECB82);';
+  }
+  return 'background: linear-gradient(to right, #00c7f3, #00fad5);';
 });
 
 const getCertificateType = (certificate: Cardano.Certificate) => {
@@ -966,6 +1100,7 @@ watch(
   () => props.transactionInfo,
   async () => {
     const value = props.transactionInfo;
+    console.log(value)
     if (!value) return;
     const dRep = value.body?.certificates?.find((certificate: any) => certificate.dRep)?.dRep;
     const poolId = value.body?.certificates?.find((certificate: any) => certificate.poolId)?.poolId;

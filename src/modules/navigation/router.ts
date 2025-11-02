@@ -23,7 +23,7 @@ const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
-const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue');
+// const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 
 import WalletStore from '@/stores/walletStore';
@@ -164,15 +164,16 @@ const routes = [
       requiresAuth: false,
     },
   },
-  {
-    path: '/multisig',
-    name: 'multisig',
-    component: MultiSig,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: false,
-    },
-  },
+  // MultiSig route disabled - under maintenance
+  // {
+  //   path: '/multisig',
+  //   name: 'multisig',
+  //   component: MultiSig,
+  //   meta: {
+  //     layout: ContentLayout,
+  //     requiresAuth: false,
+  //   },
+  // },
   {
     path: '/card',
     name: 'card',
@@ -218,6 +219,14 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next({ path: '/' });
   }
   next();
+});
+
+// Handle navigation errors globally (suppresses redirect errors in console)
+router.onError((error) => {
+  const isNavigationFailure = error.message.includes('Redirected') || error.message.includes('navigation guard');
+  if (!isNavigationFailure) {
+    console.error('Router error:', error);
+  }
 });
 
 export default router;

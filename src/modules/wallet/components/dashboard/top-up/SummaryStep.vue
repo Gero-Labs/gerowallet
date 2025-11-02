@@ -2,24 +2,24 @@
   <div class="summary-step">
     <!-- Title and Subtitle -->
     <div class="header-text">
-      <h2 class="modal-title">Fee & Order Summary</h2>
-      <p class="modal-subtitle">Confirm your preferred payment</p>
+      <h2 class="modal-title">{{ t('card.feeOrderSummary') }}</h2>
+      <p class="modal-subtitle">{{ t('card.confirmPreferredPayment') }}</p>
     </div>
 
     <!-- Exchange Rate Table -->
     <div class="exchange-rate-table">
       <div class="rate-row">
-        <span class="rate-label">Today's Rate</span>
+        <span class="rate-label">{{ t('card.todaysRate') }}</span>
       </div>
       <div class="rate-row">
         <span class="rate-value">₳1 ADA</span>
         <span class="rate-equals">=</span>
-        <span class="rate-value">€0.65 EUR</span>
+        <span class="rate-value">€{{ EXCHANGE_RATE?.toFixed(2) }} EUR</span>
       </div>
     </div>
 
     <!-- GERO Info -->
-    <div class="gero-info-container">
+    <!-- <div class="gero-info-container">
       <div class="gero-info-row">
         <span class="gero-info-label">Your $GERO Balance:</span>
         <span class="gero-info-value">{{ geroBalance }} GERO</span>
@@ -28,14 +28,14 @@
         <span class="gero-info-label">Your Tier:</span>
         <span class="gero-tier-badge" :class="geroTier.toLowerCase()">{{ geroTier }}</span>
       </div>
-    </div>
+    </div> -->
 
     <!-- Summary Section -->
     <div class="summary-section">
       <!-- Fee Payment Options -->
       <div class="summary-container">
         <div class="summary-header">
-          <span class="summary-label">Fee Payment</span>
+          <span class="summary-label">{{ t('card.feePayment') }}</span>
           <div class="fee-options">
             <div
               class="fee-option"
@@ -47,7 +47,7 @@
               </div>
               <span class="fee-option-text">ADA</span>
             </div>
-            <div
+            <!-- <div
               class="fee-option"
               :class="{ selected: selectedFeeOption === 'GERO' }"
               @click="selectedFeeOption = 'GERO'"
@@ -56,14 +56,14 @@
                 <div class="radio-dot"></div>
               </div>
               <span class="fee-option-text">$GERO</span>
-            </div>
+            </div> -->
           </div>
         </div>
 
         <!-- Transfer Details -->
         <div class="transfer-details">
           <div class="transfer-row">
-            <span class="transfer-label">Transfer Amount</span>
+            <span class="transfer-label">{{ t('card.transferAmount') }}</span>
             <div class="transfer-amount">
               <span class="amount-value">₳{{ adaAmount || '1000' }}</span>
               <span class="currency-badge">ADA</span>
@@ -71,15 +71,17 @@
           </div>
 
           <div class="transfer-row">
-            <span class="transfer-label">Transfer Fee</span>
-            <span class="fee-amount">{{ selectedFeeOption === 'GERO' ? '₳0.00 ADA' : '₳1.23 ADA' }}</span>
+            <span class="transfer-label">{{ t('card.transferFee') }}</span>
+            <span class="fee-amount">₳0.00 ADA</span>
           </div>
 
           <div class="divider"></div>
 
           <div class="transfer-row">
-            <span class="transfer-label">Total Spend</span>
-            <span class="total-amount">₳{{ (parseFloat(adaAmount || '1000') + (selectedFeeOption === 'GERO' ? 0 : 1.23)).toFixed(2) }} ADA</span>
+            <span class="transfer-label">{{ t('card.totalSpend') }}</span>
+            <span class="total-amount"
+              >₳{{ Number(adaAmount).toFixed(2) }} ADA</span
+            >
           </div>
         </div>
       </div>
@@ -87,23 +89,22 @@
       <!-- You Receive Section -->
       <div class="summary-container">
         <div class="transfer-row">
-          <span class="transfer-label">Card will receive exactly</span>
-          <span class="receive-amount">€{{ eurAmount || '654.03' }} EUR</span>
+          <span class="transfer-label">{{ t('card.cardWillReceiveExactly') }}</span>
+          <span class="receive-amount">€{{ eurAmount || '1' }} EUR</span>
         </div>
       </div>
     </div>
 
-    <!-- Password Input -->
-    <div class="password-section">
-      <label class="password-label">Enter Password to confirm transaction*</label>
-      <input v-model="password" type="password" placeholder="**********" class="password-input" />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
+import cardStore from '@/stores/modules/card';
+
+const { t } = useTranslation();
 
 // Props
 interface Props {
@@ -121,7 +122,12 @@ const emit = defineEmits<{
 
 // Reactive data
 const password = ref('');
-const selectedFeeOption = ref('GERO');
+const selectedFeeOption = ref('ADA');
+
+// Exchange rate
+const EXCHANGE_RATE = computed(() => {
+  return Number(cardStore.state.exchangeRate?.buy);
+});
 
 // Computed properties for GERO token info
 const geroBalance = computed(() => {
@@ -144,11 +150,11 @@ const geroBalance = computed(() => {
 // Determine GERO tier based on balance
 const geroTier = computed(() => {
   const balance = parseFloat(geroBalance.value);
-  
+
   // Force Gold tier for now since user has GERO tokens
   // TODO: Implement proper tier calculation based on actual requirements
   if (balance > 0) return 'Gold';
-  
+
   // Tier thresholds (example values - adjust as needed)
   // if (balance >= 10000) return 'Gold';
   // if (balance >= 5000) return 'Silver';
@@ -297,7 +303,7 @@ watch(selectedFeeOption, updateFeeOption);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75E0A7;
+  color: #75e0a7;
 }
 
 .gero-tier-badge {
@@ -308,22 +314,22 @@ watch(selectedFeeOption, updateFeeOption);
   padding: 4px 12px;
   border-radius: 16px;
   text-transform: uppercase;
-  
+
   &.gold {
-    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
     color: #000;
   }
-  
+
   &.silver {
-    background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%);
+    background: linear-gradient(135deg, #c0c0c0 0%, #808080 100%);
     color: #000;
   }
-  
+
   &.bronze {
-    background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%);
-    color: #FFF;
+    background: linear-gradient(135deg, #cd7f32 0%, #8b4513 100%);
+    color: #fff;
   }
-  
+
   &.none {
     background: #333741;
     color: #cecfd2;

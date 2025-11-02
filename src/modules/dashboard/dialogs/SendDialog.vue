@@ -1,6 +1,13 @@
 <template>
-  <BaseDialog :isOpen="isOpen" @close="emit('close')" title="Quick Send" :loading="txSubmitLoading" :min-height="0"
-              :subtitle="`Send ${networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network)} or other assets to another wallet.`">
+  <BaseDialog
+    :isOpen="isOpen"
+    @close="emit('close')"
+    :title="$t('wallet.quickSend')"
+    :loading="txSubmitLoading"
+    :min-height="0"
+    :subtitle="$t('wallet.quickSendSubtitle', { currency: networks.resolveCurrencyTicker(loggedWallet?.chain, loggedWallet?.network) })"
+    :persistent="false"
+  >
     <v-card-title style="display: block;" class="py-0">
       <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
         <v-stepper-header>
@@ -63,24 +70,24 @@
           v-if="!keystoneScan"
           class="mt-10 mb-0"
         >
-          <b>Instructions</b>
+          <b>{{ $t('wallet.instructions') }}</b>
           <div v-if="loggedWallet?.type === WalletType.Keystone">
             <ul class="text-left" style="line-height: 1.5">
-              <li>Unlock your Keystone device.</li>
-              <li>Select the option to scan a QR code. <v-icon small>mdi-line-scan</v-icon></li>
-              <li>Use your Keystone device to scan the QR code.</li>
-              <li>Approve on the Keystone device and then click 'Next' to scan it with Gero.</li>
+              <li>{{ $t('wallet.unlockKeystone') }}</li>
+              <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+              <li>{{ $t('wallet.useKeystoneToScan') }}</li>
+              <li>{{ $t('wallet.approveAndScanNext') }}</li>
             </ul>
           </div>
         </v-alert>
         <v-card flat class="transparent" v-else-if="loggedWallet?.type === WalletType.Keystone && keystoneScan">
           <v-card-title>
-            Scan QR Code
+            {{ $t('wallet.scanQRCode') }}
           </v-card-title>
           <v-card-subtitle>
             <ul class="text-left" style="line-height: 1.5">
-              <li>Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning</li>
-              <li>Use a low density setting for animated QR codes if required.</li>
+              <li>{{ $t('wallet.adjustDistance') }}</li>
+              <li>{{ $t('wallet.useLowDensity') }}</li>
             </ul>
           </v-card-subtitle>
           <v-card-text class="text-center">
@@ -140,7 +147,7 @@
               dense
               v-model="spendingPassword"
               outlined
-              label="Spending Password"
+              :label="$t('wallet.spendingPassword')"
               :type="show1 ? 'text' : 'password'"
               :rules="[rules.required()]"
               hide-details
@@ -160,7 +167,7 @@
         </v-tooltip>
         <div v-else-if="loggedWallet?.type === WalletType.Ledger" class="pb-4" style="align-content: center;">
           <v-card-subtitle class="pa-0 text-center justify-center pt-0" style="color: white">
-            <ToggleSwitch text-left="USB" icon-left="mdi-usb" text-right="Bluetooth" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
+            <ToggleSwitch :text-left="$t('dashboard.usb')" icon-left="mdi-usb" :text-right="$t('dashboard.bluetooth')" icon-right="mdi-bluetooth" v-model="isBT" :disabled="txSubmitLoading" />
           </v-card-subtitle>
         </div>
       </div>
@@ -187,6 +194,7 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import SendRecipientDetailsStep from '../components/SendRecipientDetailsStep.vue';
@@ -198,7 +206,7 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import snackbar from '@/plugins/snackbar';
 // import { createKeystoneSignRequest, parseSignature, qrCodeOptions } from '@/shared/utils/keystone';
-import { toRefs, onMounted, computed, ref, watch } from 'vue';
+import { toRefs, onMounted, computed, ref, watch, getCurrentInstance } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 // import { QrcodeStream } from "vue-qrcode-reader";
 // import { UREncoder } from '@keystonehq/keystone-sdk';
@@ -207,7 +215,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { serializeCardanoJsSdkTx, BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -220,13 +228,15 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
+const { t } = useTranslation();
+
 const { loggedWallet, utxos, tokens: resolvedAssets, keys } = toRefs(walletStore)
 const { tip, epochParams } = toRefs(networkStore)
 
 const currentStep = ref<number>(1);
 const sendData = ref<any>({
   selectedTokens: [],
-  selectedCollectibles: [],
+  selectedCollectibles: {},
   recipientAddress: '',
   selectedWallet: {},
   minAda: 0,
@@ -237,20 +247,20 @@ const spendingPassword = ref<string>('');
 const steps = ref<any[]>([
   {
     name: 'recipientDetails',
-    label: 'Recipient Details',
+    label: t('wallet.recipientDetails'),
   },
   {
     name: 'assetsToSend',
-    label: 'Assets to Send',
+    label: t('wallet.assetsToSend'),
   },
   {
     name: 'summary',
-    label: 'Summary',
+    label: t('wallet.summary'),
   },
 ]);
 const tooltip = ref<any>({
   enabled: false,
-  text: 'Wrong Spending Password!',
+  text: t('wallet.wrongSpendingPassword'),
 });
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const txCbor = ref<string>('');
@@ -259,6 +269,7 @@ const isSubmit = ref<boolean>(false);
 const txSubmitLoading = ref<boolean>(false);
 const show1 = ref<boolean>(false);
 const isBT = ref<boolean>(false);
+const isCalculatingMax = ref<boolean>(false);
 
 // Debug watcher for Bluetooth toggle
 watch(isBT, (newValue) => {
@@ -282,7 +293,8 @@ const tokens = computed(() => {
         quantity: "0",
         balance: token.quantity,
         decimals: token.metadata.decimals,
-        unit: token.unit
+        unit: token.unit,
+        verified: token.verified
       }
     })
     tokens.sort((a,b) => {
@@ -307,7 +319,11 @@ const isValid = computed(() => {
     if (!txValid.value) {
       return false;
     }
-    const hasZeroQuantity = (items) => items?.some(item => Number(item.quantity) === 0);
+    const hasZeroQuantity = (items) => {
+      // Handle both arrays and objects
+      const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
+      return itemsArray.some(item => Number(item.quantity) === 0 || Number(item.toSendQuantity) === 0);
+    };
     return !(hasZeroQuantity(sendData.value.selectedTokens) || hasZeroQuantity(sendData.value.selectedCollectibles));
   }
   if (currentStep.value === 3) {
@@ -332,6 +348,7 @@ const resetData = () => {
   txCbor.value = ''
   txWitnesses.value = ''
   isSubmit.value = false
+  txValid.value = false  // Reset tx validation state
   const currencyTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network)
   const foundAsset = tokens.value.find(token => token.ticker === currencyTicker)
   if (foundAsset) {
@@ -339,9 +356,11 @@ const resetData = () => {
   }
   sendData.value = {
     selectedTokens: [foundAsset],
-    selectedCollectibles: [],
+    selectedCollectibles: {},
     recipientAddress: '',
     selectedWallet: loggedWallet.value,
+    minAda: 0,
+    adaShortage: 0
   };
   console.log(sendData.value)
 }
@@ -432,7 +451,7 @@ const signTx = async (): Promise<boolean> => {
     return true;
   } catch (e) {
     console.error('Error signing send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
     return false;
   } finally {
     txSubmitLoading.value = false;
@@ -456,11 +475,11 @@ const submitTx = async () => {
       throw new Error(submitResult.data.error);
     }
 
-    snackbar.fireSuccess(`Tx Submitted Successfully. Tx ID: ${submitResult.data.txId}`);
+    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
     emit('close');
   } catch (e) {
     console.error('Error submitting send transaction:', e);
-    snackbar.setError(e instanceof Error ? e.message : 'Unknown error');
+    snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
   } finally {
     txSubmitLoading.value = false;
     isSubmit.value = false;
@@ -474,7 +493,7 @@ const signLedgerTx = async () => {
     console.log('Using Bluetooth connection:', isBT.value);
 
     if (!tx.value) {
-      throw new Error('No transaction to sign');
+      throw new Error(t('common.noTransactionToSign'));
     }
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -566,8 +585,10 @@ async function buildTx(sendTokens) {
     });
   }
 
-  if (sendData.value.selectedCollectibles.length > 0) {
-    sendData.value.selectedCollectibles.forEach(collectible => {
+  // selectedCollectibles is an object, convert to array
+  const collectiblesArray = Object.values(sendData.value.selectedCollectibles);
+  if (collectiblesArray.length > 0) {
+    collectiblesArray.forEach(collectible => {
       assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
     });
   }
@@ -590,7 +611,7 @@ async function buildTx(sendTokens) {
       tip: tip.value
     });
 
-    sendData.value.minAda = 0;
+    // Don't reset minAda here - it's set by the watch based on selected NFTs
     sendData.value.adaShortage = 0;
     txValid.value = true;
     console.log('Built transaction:', tx.value);
@@ -626,44 +647,167 @@ function updateRecipientAddress(address) {
 }
 
 function selectCollectible(collectible) {
+  console.log('selectCollectible called:', collectible.name);
   if (sendData.value.selectedCollectibles[collectible.name]) {
     vmProxy.$delete(sendData.value.selectedCollectibles, collectible.name);
+    console.log('Removed collectible:', collectible.name);
   } else {
     vmProxy.$set(sendData.value.selectedCollectibles, collectible.name, collectible);
+    console.log('Added collectible:', collectible.name);
   }
+  console.log('Current selectedCollectibles:', sendData.value.selectedCollectibles);
+  console.log('Object.values:', Object.values(sendData.value.selectedCollectibles));
 }
 
 async function setMax(index) {
+  isCalculatingMax.value = true; // Disable watch while calculating max
+
   const sendTokensCopy = JSON.parse(JSON.stringify(sendData.value.selectedTokens));
   const selectedToken = sendTokensCopy[index];
+  const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network);
 
-  if (selectedToken.decimals) {
-    selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
-  } else {
-    selectedToken.quantity = Number(selectedToken.balance);
+  // For non-ADA tokens, just use the full balance
+  if (selectedToken.ticker !== nativeTicker) {
+    if (selectedToken.decimals) {
+      selectedToken.quantity = Number(filters.toCurrency(sendTokensCopy[index].balance, false, sendTokensCopy[index].decimals, '', '', false, sendTokensCopy[index].decimals).replaceAll(",",""));
+    } else {
+      selectedToken.quantity = Number(selectedToken.balance);
+    }
+    await tryBuildMaxTx(sendTokensCopy, index);
+    isCalculatingMax.value = false;
+    return;
   }
-  await tryBuildMaxTx(sendTokensCopy, index);
+
+  // For ADA, use two-phase approach: coarse search (1 ADA) then fine-tune (1 lovelace)
+  const totalBalance = BigInt(selectedToken.balance);
+  const ADA_STEP = BigInt(1_000_000); // 1 ADA steps for coarse search
+  const LOVELACE_STEP = BigInt(1); // 1 lovelace steps for fine-tuning
+  const MAX_BUFFER = BigInt(100_000_000); // Stop after 100 ADA buffer
+
+  let buffer = BigInt(0);
+  let coarseAmount = BigInt(0);
+
+  // Phase 1: Coarse search with 1 ADA steps
+  console.log('Phase 1: Coarse search with 1 ADA steps...');
+  while (buffer <= MAX_BUFFER) {
+    const attemptAmount = totalBalance - buffer;
+
+    if (attemptAmount <= BigInt(0)) {
+      break;
+    }
+
+    if (selectedToken.decimals) {
+      selectedToken.quantity = Number(filters.toCurrency(Number(attemptAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
+    } else {
+      selectedToken.quantity = Number(attemptAmount);
+    }
+
+    try {
+      await buildTx(sendTokensCopy);
+      // Success! Found a working amount
+      coarseAmount = attemptAmount;
+      console.log(`✓ Coarse MAX found: ${Number(attemptAmount) / 1000000} ADA (buffer: ${Number(buffer) / 1000000} ADA)`);
+      break;
+    } catch (e) {
+      // Failed - try 1 ADA less
+      buffer += ADA_STEP;
+    }
+  }
+
+  if (coarseAmount === BigInt(0)) {
+    console.log('Could not find working amount in coarse search');
+    isCalculatingMax.value = false;
+    return;
+  }
+
+  // Phase 2: Binary search fine-tuning (try to add up to 1 ADA back)
+  console.log('Phase 2: Binary search fine-tuning...');
+  let low = coarseAmount;
+  let high = coarseAmount + ADA_STEP;
+  if (high > totalBalance) {
+    high = totalBalance;
+  }
+  let finalAmount = coarseAmount;
+
+  // Binary search with up to 20 iterations (enough for 1 lovelace precision in 1 ADA range)
+  for (let iteration = 0; iteration < 20 && high - low > BigInt(1); iteration++) {
+    const mid = (low + high) / BigInt(2);
+
+    if (selectedToken.decimals) {
+      selectedToken.quantity = Number(filters.toCurrency(Number(mid), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",",""));
+    } else {
+      selectedToken.quantity = Number(mid);
+    }
+
+    try {
+      await buildTx(sendTokensCopy);
+      // Success! Try higher
+      finalAmount = mid;
+      low = mid;
+      console.log(`✓ Binary search: ${Number(mid) / 1000000} ADA works (range: ${Number(high - low)} lovelace)`);
+    } catch (e) {
+      // Failed - try lower
+      high = mid;
+      console.log(`✗ Binary search: ${Number(mid) / 1000000} ADA failed (range: ${Number(high - low)} lovelace)`);
+    }
+  }
+
+  console.log(`✓ Final MAX found: ${Number(finalAmount) / 1000000} ADA (added ${Number(finalAmount - coarseAmount)} lovelace to coarse result)`);
+
+
+  console.log('MAX ADA calculation completed:', {
+    totalBalance: totalBalance.toString(),
+    finalAmount: finalAmount.toString(),
+    finalAmountADA: Number(finalAmount) / 1000000
+  });
+
+  // Update the quantity and then immediately re-enable the watch
+  // The watch will run once with the final amount
+  // Convert to string to match CurrencyTextField prop type
+  if (selectedToken.decimals) {
+    sendData.value.selectedTokens[index].quantity = filters.toCurrency(Number(finalAmount), false, selectedToken.decimals, '', '', false, selectedToken.decimals).replaceAll(",","");
+  } else {
+    sendData.value.selectedTokens[index].quantity = String(Number(finalAmount));
+  }
+
+  // Re-enable watch AFTER setting the final amount
+  // Wait a tick to ensure the update is processed
+  await new Promise(resolve => setTimeout(resolve, 0));
+  isCalculatingMax.value = false;
 }
 
 async function tryBuildMaxTx(tokens, index) {
   try {
     await buildTx(tokens)
   } catch (e) {
-    if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
-      const maxBalance = Number(match[2]) - Number(match[3])
-      sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-    } else if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-      const match = e.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
-      console.log(match)
-      const adaMinBalance = match[2]
-      const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network))
-      if (nativeToken) {
-        nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
-        sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
+    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
+    console.log('tryBuildMaxTx error:', errorMessage);
+
+    if (errorMessage.includes('Insufficient input in transaction.')) {
+      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      if (match) {
+        const maxBalance = Number(match[2]) - Number(match[3])
+        sendData.value.selectedTokens[index].quantity = `${Number(filters.toCurrency(maxBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
       }
+    } else if (errorMessage.includes('less than the minimum UTXO value')) {
+      const match = errorMessage.match(/Value (\d+) less than the minimum UTXO value (\d+)/);
+      if (match) {
+        const adaMinBalance = match[2]
+        const nativeToken = sendData.value.selectedTokens.find(token => token.ticker === networks.resolveCurrencyTicker(loggedWallet.value.chain, loggedWallet.value.network))
+        if (nativeToken) {
+          nativeToken.quantity = `${Number(filters.toCurrency(adaMinBalance, false, 6, '', '', false, 6).replaceAll(",", ""))}`
+          sendData.value.selectedTokens[index].quantity = `${Number(tokens[index].balance)}`
+        }
+      }
+    } else if (errorMessage.includes('UTxO Fully Depleted')) {
+      // When all UTXOs are depleted, we can't send the full balance
+      // Reduce the amount by a small margin and try again
+      const currentQty = Number(tokens[index].quantity);
+      const reducedQty = currentQty * 0.95; // Reduce by 5%
+      sendData.value.selectedTokens[index].quantity = `${reducedQty.toFixed(6)}`;
+      console.log('UTxO Fully Depleted - reduced amount to:', reducedQty);
     } else {
-      console.log(e)
+      console.error('Unhandled error in tryBuildMaxTx:', e);
     }
   }
 }
@@ -674,24 +818,126 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-watch(sendData, async (val) => {
+// Watch only the properties that should trigger recalculation, not minAda itself
+watch(() => ({
+  selectedTokens: sendData.value.selectedTokens,
+  selectedCollectibles: sendData.value.selectedCollectibles,
+  recipientAddress: sendData.value.recipientAddress
+}), async (val) => {
+  // Skip if we're calculating max - the setMax function handles building the tx
+  if (isCalculatingMax.value) {
+    return;
+  }
+
   try {
-    console.log('build tx')
-    if (!val['recipientAddress']) {
+    // selectedCollectibles is an object, not an array
+    const collectiblesArray = val.selectedCollectibles ? Object.values(val.selectedCollectibles) : [];
+
+    console.log('build tx', {
+      tokens: val.selectedTokens.length,
+      collectibles: collectiblesArray.length
+    })
+    if (!val.recipientAddress) {
       return;
     }
-    await buildTx(val['selectedTokens'])
+
+    // Calculate minimum ADA required for any assets (tokens or NFTs) if selected
+    // Only count non-native assets (exclude ADA/tADA)
+    const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+    const hasNonNativeAssets = collectiblesArray.length > 0 ||
+      val.selectedTokens.some(token => token?.unit && token.ticker !== nativeTicker);
+
+    if (hasNonNativeAssets && epochParams.value && val.recipientAddress) {
+      try {
+        console.log('Calculating minAda for assets:', {
+          collectibles: collectiblesArray.length,
+          tokens: val.selectedTokens.filter(t => t?.unit).length
+        });
+
+        // Build the asset map for both collectibles and tokens
+        const assetsMap = new Map<Cardano.AssetId, bigint>();
+
+        // Add collectibles to assets map
+        collectiblesArray.forEach(collectible => {
+          console.log('Adding collectible:', collectible.unit, collectible.toSendQuantity);
+          assetsMap.set(collectible.unit as Cardano.AssetId, BigInt(collectible.toSendQuantity));
+        });
+
+        // Add tokens (non-ADA) to assets map
+        // Only add tokens that are NOT the native currency (ADA/tADA)
+        const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
+        val.selectedTokens.forEach(token => {
+          if (token?.unit && token.ticker !== nativeTicker) { // Skip ADA/native currency
+            const quantity = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
+            if (quantity > 0) {
+              console.log('Adding token:', token.unit, quantity);
+              assetsMap.set(token.unit as Cardano.AssetId, BigInt(quantity));
+            }
+          }
+        });
+
+        console.log('Assets map size:', assetsMap.size);
+        console.log('Recipient address:', val.recipientAddress);
+        console.log('coinsPerUtxoByte:', epochParams.value.coinsPerUtxoByte);
+
+        // Create a mock output with all assets to calculate min ADA
+        const mockOutput: Cardano.TxOut = {
+          address: val.recipientAddress as Cardano.PaymentAddress,
+          value: {
+            coins: BigInt(0) as Cardano.Lovelace, // We're calculating the minimum, so start with 0
+            assets: assetsMap
+          }
+        };
+
+        console.log('Mock output created with assets:', assetsMap.size);
+
+        // Use the actual protocol function to calculate minimum ADA
+        const minAdaLovelace = BrowserTxConstruction.minAdaRequired(
+          mockOutput,
+          BigInt(epochParams.value.coinsPerUtxoByte)
+        );
+
+        sendData.value.minAda = Number(minAdaLovelace) / 1000000;
+        console.log('Calculated minAda for all assets (accurate):', sendData.value.minAda, 'ADA');
+      } catch (error) {
+        console.error('Error calculating minAda:', error);
+        console.error('Error stack:', error instanceof Error ? error.stack : error);
+        sendData.value.minAda = 0;
+      }
+    } else {
+      sendData.value.minAda = 0;
+    }
+
+    await buildTx(val.selectedTokens)
     txValid.value = true
   } catch(e) {
-    console.error(e)
-    if (typeof e === 'string' && e.includes('less than the minimum UTXO value')) {
-      const match = e.match(/minimum UTXO value (\d+)/);
+    console.error('Build tx error:', e)
+    const errorMessage = typeof e === 'string' ? e : (e?.message || e?.toString() || '');
+    console.log('Error message:', errorMessage);
+
+    if (errorMessage.includes('less than the minimum UTXO value') || errorMessage.includes('OutputTooSmallUTxO')) {
+      const match = errorMessage.match(/minimum UTXO value (\d+)/);
       const number = match ? parseInt(match[1], 10) : null;
-      sendData.value.minAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
-    } else if (typeof e === 'string' && e.includes('Insufficient input in transaction.')) {
-      const match = e.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
+      if (number) {
+        const errorMinAda = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""));
+        console.log('Transaction builder reported minAda:', errorMinAda, 'but we calculated:', sendData.value.minAda);
+        // Only update if the error value is higher (more conservative)
+        if (errorMinAda > sendData.value.minAda) {
+          sendData.value.minAda = errorMinAda;
+          console.log('Updated minAda from error to:', sendData.value.minAda);
+        }
+      }
+    } else if (errorMessage.includes('Insufficient input in transaction.')) {
+      const match = errorMessage.match(/{ada in inputs: (\d+), ada in outputs: (\d+), fee (\d+)/);
       const number = parseInt(match[2], 10) - parseInt(match[1], 10)
       sendData.value.adaShortage = Number(filters.toCurrency(number, false, 6, '', '', false, 6).replaceAll(",", ""))
+      console.log('Set adaShortage to:', sendData.value.adaShortage);
+    } else if (errorMessage.includes('UTxO Fully Depleted')) {
+      // This can happen when trying to send all ADA - just mark as invalid, user needs to reduce amount
+      console.log('UTxO Fully Depleted - cannot build transaction with current amount');
+    } else if (errorMessage.includes('Maximum Input Count Exceeded')) {
+      // Wallet has too many small UTXOs - user needs to reduce the amount
+      console.log('Maximum Input Count Exceeded - wallet has too many small UTXOs, reduce amount');
     }
     txValid.value = false
   }
